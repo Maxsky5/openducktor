@@ -1,8 +1,4 @@
-import {
-  listCodexSessionMetadataPage,
-  getCodexSessionMetadata,
-  readLatestCodexTurnTime,
-} from "./codex-session-metadata";
+import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import {
@@ -23,7 +19,6 @@ import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveSnapshot,
-  type AgentSessionMetadata,
   type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
   isAgentSessionTranscriptEventType,
@@ -42,7 +37,6 @@ import type {
   AgentPendingQuestionRequest,
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
-  AgentSessionMetadataPort,
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
@@ -59,7 +53,6 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
-  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   PolicyBoundSessionRef,
   ReadSessionRuntimeSnapshotInput,
@@ -244,11 +237,7 @@ const toLivePendingQuestion = (
 };
 
 export class CodexAppServerAdapter
-  implements
-    AgentCatalogPort,
-    AgentSessionMetadataPort,
-    AgentSessionPort,
-    AgentWorkspaceInspectionPort
+  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
   private readonly runtimeClients: CodexRuntimeClientResolver;
   private readonly sessionEvents = new CodexSessionEventBus();
@@ -1091,17 +1080,6 @@ export class CodexAppServerAdapter
       );
     }
     return thread;
-  }
-
-  async loadSessionMetadata(input: LoadAgentSessionMetadataInput): Promise<AgentSessionMetadata> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "read session metadata");
-    this.querySession(input, runtimeId);
-    await this.readScopedThread(client, input);
-    const { repoPath, runtimeKind, workingDirectory, externalSessionId } = input;
-    return {
-      ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
-      lastActivityAt: await readLatestCodexTurnTime(client, externalSessionId),
-    };
   }
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {

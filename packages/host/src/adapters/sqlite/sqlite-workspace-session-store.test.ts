@@ -407,6 +407,7 @@ describe("SQLite Workspace Session store", () => {
       ...original,
       generatedTitle: "First message",
       updatedAt: 30,
+      lastActivityAt: 30,
       selectedModel,
     });
     const database = new Database(harness.databasePath);

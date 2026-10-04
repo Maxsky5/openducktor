@@ -1,6 +1,5 @@
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { parseTimestamp } from "@/lib/timestamps";
 import { projectSessionTranscriptActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-activity";
 import { projectSessionSnapshotActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
 import type { WorkspaceActivitySession, WorkspaceSessionFault } from "./workspace-activity-state";
@@ -63,11 +62,7 @@ export const applyWorkspaceActivityEnvelope = (
     if (!session) {
       return current;
     }
-    const projected = projectSessionTranscriptActivity(session, envelope.event);
-    const next =
-      projected === session && !session.untimedStatusChange
-        ? session
-        : withActivityTime({ ...projected, untimedStatusChange: false }, envelope.event.timestamp);
+    const next = projectSessionTranscriptActivity(session, envelope.event);
     // Terminal events can clear pending input before their next snapshot arrives.
     if (
       next.preview &&
@@ -149,9 +144,6 @@ const toActivitySession = (
     stopRequestedAt: null,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
-    lastActivityAt: current?.lastActivityAt ?? null,
-    untimedStatusChange:
-      current !== undefined && (current.untimedStatusChange || current.status !== activity.status),
     // Only a snapshot sets or clears it, so transcript events keep a failed status read.
     statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
     preview,
@@ -168,25 +160,6 @@ const withoutFault = (
   const next = new Map(faults);
   next.delete(key);
   return next;
-};
-
-/**
- * Record when an event changed the session's activity facts.
- *
- * Streaming output does not move the time, so a running session keeps the
- * time its run started, and a settled session keeps the time it settled.
- * The host can send a status change in a snapshot before the event that caused
- * it, so the event after an untimed status change also records its time.
- */
-const withActivityTime = (
-  session: WorkspaceActivitySession,
-  timestamp: string,
-): WorkspaceActivitySession => {
-  const time = parseTimestamp(timestamp);
-  if (time === null || (session.lastActivityAt !== null && session.lastActivityAt >= time)) {
-    return session;
-  }
-  return { ...session, lastActivityAt: time };
 };
 
 const faultReason = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>

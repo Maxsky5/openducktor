@@ -11,7 +11,6 @@ export const unexpectedRuntimeQueries = {
   loadSessionHistory: () => Effect.die(new Error("Unexpected query: loadSessionHistory")),
   loadSessionTodos: () => Effect.die(new Error("Unexpected query: loadSessionTodos")),
   loadSessionDiff: () => Effect.die(new Error("Unexpected query: loadSessionDiff")),
-  loadSessionMetadata: () => Effect.die(new Error("Unexpected query: loadSessionMetadata")),
   loadFileStatus: () => Effect.die(new Error("Unexpected query: loadFileStatus")),
 } satisfies AgentRuntimeQueryAdapterPort;
 
@@ -33,9 +32,6 @@ export const unexpectedNativeRuntimeQueries = {
   },
   loadSessionDiff: async () => {
     throw new Error("Unexpected query: loadSessionDiff");
-  },
-  loadSessionMetadata: async () => {
-    throw new Error("Unexpected query: loadSessionMetadata");
   },
   loadFileStatus: async () => {
     throw new Error("Unexpected query: loadFileStatus");

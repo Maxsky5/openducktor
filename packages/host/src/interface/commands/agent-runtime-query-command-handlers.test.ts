@@ -163,36 +163,3 @@ test("exposes only the normalized query commands", () => {
       .sort(),
   );
 });
-
-test("reads session metadata only for a workflow session and rejects an invalid time", async () => {
-  const ref = { ...directoryInput, externalSessionId: "native-session" };
-  const metadataInput = {
-    ...ref,
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-  } as const;
-  let lastActivityAt: number | null = 1_790_000_000_000.5;
-  const metadataHandlers = createAgentRuntimeQueryCommandHandlers(
-    {
-      ...unexpectedRuntimeQueries,
-      loadSessionMetadata: () => Effect.sync(() => ({ ref, lastActivityAt })),
-    },
-    () => Effect.succeed(previewCatalog),
-  );
-
-  const invalidTime = await Effect.runPromise(
-    Effect.flip(metadataHandlers.agent_runtime_load_session_metadata({ input: metadataInput })),
-  );
-  expect(invalidTime.failure.code).toBe("invalid_runtime_response");
-
-  lastActivityAt = null;
-  expect(
-    await Effect.runPromise(
-      metadataHandlers.agent_runtime_load_session_metadata({ input: metadataInput }),
-    ),
-  ).toEqual({ ref, lastActivityAt: null });
-
-  const missingScope = await Effect.runPromise(
-    Effect.flip(metadataHandlers.agent_runtime_load_session_metadata({ input: ref })),
-  );
-  expect(missingScope.failure.code).toBe("invalid_input");
-});

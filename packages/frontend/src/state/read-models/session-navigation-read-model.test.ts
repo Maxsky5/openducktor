@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  AgentSessionMetadata,
-  AgentSessionRecord,
-  TaskCard,
-  WorkspaceSession,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard, WorkspaceSession } from "@openducktor/contracts";
 import type {
   WorkspaceSessionFault,
   WorkspaceSessionLiveFacts,
@@ -61,7 +56,6 @@ const facts = (overrides: Partial<WorkspaceSessionLiveFacts> = {}): WorkspaceSes
   activityState: "idle",
   pendingQuestion: false,
   pendingPermission: false,
-  lastActivityAt: null,
   fault: null,
   statusUnavailableReason: null,
   ...overrides,
@@ -95,14 +89,12 @@ const sources = ({
   sessionsByTask = {},
   chats = [],
   live = liveReady(),
-  metadata = [],
   owner = workspace(),
 }: {
   tasks?: TaskCard[];
   sessionsByTask?: Record<string, SessionNavigationRead<AgentSessionRecord[]>>;
   chats?: WorkspaceSession[];
   live?: WorkspaceSessionLiveState;
-  metadata?: [string, SessionNavigationRead<AgentSessionMetadata>][];
   owner?: SessionNavigationWorkspace;
 }): SessionNavigationWorkspaceSources => ({
   workspace: owner,
@@ -110,7 +102,6 @@ const sources = ({
   taskSessions: new Map(Object.entries(sessionsByTask)),
   workspaceSessions: ready(chats),
   live,
-  metadata: new Map(metadata),
 });
 
 const groupKeys = (entries: readonly SessionNavigationEntry[]) => entries.map((entry) => entry.key);
@@ -119,29 +110,18 @@ const groupsOf = (model: ReturnType<typeof buildSessionNavigationModel>) =>
   Object.fromEntries(model.groups.map((group) => [group.id, groupKeys(group.entries)]));
 
 describe("Task grouping", () => {
-  test("uses native activity to pick an older role session after restart", () => {
+  test("uses stored activity to pick an older role session after restart", () => {
     const input = sources({
       tasks: [createTaskCardFixture({ id: "task-1", status: "human_review" })],
       sessionsByTask: {
         "task-1": ready([
-          record("builder", { startedAt: "2026-09-30T08:00:00.000Z" }),
+          record("builder", {
+            startedAt: "2026-09-30T08:00:00.000Z",
+            lastActivityAt: Date.parse("2026-09-30T13:00:00.000Z"),
+          }),
           record("qa", { role: "qa", startedAt: "2026-09-30T10:00:00.000Z" }),
         ]),
       },
-      metadata: [
-        [
-          key("builder"),
-          ready({
-            ref: {
-              repoPath: "/repos/alpha",
-              externalSessionId: "builder",
-              runtimeKind: "codex",
-              workingDirectory: "/repos/alpha",
-            },
-            lastActivityAt: Date.parse("2026-09-30T13:00:00.000Z"),
-          }),
-        ],
-      ],
     });
     const grouped = buildSessionNavigationModel([input], "task");
     expect(groupsOf(grouped)).toEqual({
@@ -188,9 +168,15 @@ describe("Task grouping", () => {
     "keeps input requests and one current session: $ids",
     ({ ids, asking, running, needs, working, recent }) => {
       const records = {
-        "old-idle": record("old-idle", { startedAt: "2026-09-30T06:00:00.000Z" }),
+        "old-idle": record("old-idle", {
+          startedAt: "2026-09-30T06:00:00.000Z",
+          lastActivityAt: Date.parse("2026-09-30T13:00:00.000Z"),
+        }),
         "new-idle": record("new-idle", { startedAt: "2026-09-30T10:00:00.000Z" }),
-        "old-running": record("old-running", { startedAt: "2026-09-30T08:00:00.000Z" }),
+        "old-running": record("old-running", {
+          startedAt: "2026-09-30T08:00:00.000Z",
+          lastActivityAt: Date.parse("2026-09-30T13:00:00.000Z"),
+        }),
         "new-running": record("new-running", { startedAt: "2026-09-30T09:00:00.000Z" }),
         question: record("question", { startedAt: "2026-09-30T11:00:00.000Z" }),
         permission: record("permission", { startedAt: "2026-09-30T12:00:00.000Z" }),
@@ -211,10 +197,9 @@ describe("Task grouping", () => {
             key(id),
             facts({
               activityState: "running",
-              lastActivityAt: id === "old-running" ? Date.parse("2026-09-30T13:00:00.000Z") : null,
             }),
           ]),
-          [key("old-idle"), facts({ lastActivityAt: Date.parse("2026-09-30T13:00:00.000Z") })],
+          [key("old-idle"), facts()],
         ]),
       });
       const model = buildSessionNavigationModel([input], "task");
@@ -506,50 +491,32 @@ describe("buildSessionNavigationModel", () => {
     ]);
   });
 
-  test("orders by the newest known activity and labels start-time-only entries", () => {
+  test("orders by saved activity and uses creation dates for legacy records", () => {
     const task = createTaskCardFixture({ id: "task-1", status: "human_review" });
-    const nativeTime = Date.parse("2026-09-30T09:00:00.000Z");
-    const observedTime = Date.parse("2026-09-30T11:00:00.000Z");
+    const savedTime = Date.parse("2026-09-30T09:00:00.000Z");
+    const recentTime = Date.parse("2026-09-30T11:00:00.000Z");
     const model = buildSessionNavigationModel(
       [
         sources({
           tasks: [task],
           sessionsByTask: {
             "task-1": ready([
-              record("native", { startedAt: "2026-09-01T08:00:00.000Z" }),
-              record("observed", { startedAt: "2026-09-01T08:00:00.000Z" }),
+              record("native", {
+                startedAt: "2026-09-01T08:00:00.000Z",
+                lastActivityAt: savedTime,
+              }),
+              record("observed", {
+                startedAt: "2026-09-01T08:00:00.000Z",
+                lastActivityAt: recentTime,
+              }),
               record("start-only", { startedAt: "2026-09-30T10:00:00.000Z" }),
             ]),
           },
-          chats: [chat("chat", { updatedAt: Date.parse("2026-09-30T10:30:00.000Z") })],
-          live: liveReady([[key("observed"), facts({ lastActivityAt: observedTime })]]),
-          metadata: [
-            [
-              key("native"),
-              ready({
-                ref: {
-                  repoPath: "/repos/alpha",
-                  runtimeKind: "codex",
-                  workingDirectory: "/repos/alpha",
-                  externalSessionId: "native",
-                },
-                lastActivityAt: nativeTime,
-              }),
-            ],
-            [
-              key("observed"),
-              ready({
-                ref: {
-                  repoPath: "/repos/alpha",
-                  runtimeKind: "codex",
-                  workingDirectory: "/repos/alpha",
-                  externalSessionId: "observed",
-                },
-                lastActivityAt: nativeTime,
-              }),
-            ],
-            [key("start-only"), { status: "error", message: "Runtime is not running." }],
+          chats: [
+            chat("chat", { lastActivityAt: Date.parse("2026-09-30T10:30:00.000Z") }),
+            chat("legacy", { updatedAt: Date.parse("2026-10-01T12:00:00.000Z") }),
           ],
+          live: liveReady([[key("observed"), facts()]]),
         }),
       ],
       "none",
@@ -561,13 +528,14 @@ describe("buildSessionNavigationModel", () => {
       "workspace_session:alpha:chat",
       `task_session:alpha:${key("start-only")}`,
       `task_session:alpha:${key("native")}`,
+      "workspace_session:alpha:legacy",
     ]);
-    expect(recent[0]?.time).toEqual({ kind: "activity", at: observedTime });
+    expect(recent[0]?.time).toEqual({ kind: "activity", at: recentTime });
     expect(recent[2]?.time).toEqual({
       kind: "started",
       at: Date.parse("2026-09-30T10:00:00.000Z"),
-      activityTimeIssue: "Runtime is not running.",
     });
+    expect(recent[4]?.time).toEqual({ kind: "started", at: chat("legacy").createdAt });
   });
 
   test("keeps known attention but no confirmed running or idle state when live status is lost", () => {

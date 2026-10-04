@@ -1,15 +1,12 @@
 import type {
-  AgentSessionMetadata,
   AgentSessionRecord,
   SidebarSessionGrouping,
   TaskCard,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import type { LoadAgentSessionMetadataInput } from "@openducktor/core";
 import { type QueryObserverResult, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import {
   buildSessionNavigationModel,
@@ -18,7 +15,6 @@ import {
   type SessionNavigationSourceIssue,
   type SessionNavigationWorkspace,
 } from "@/state/read-models/session-navigation-read-model";
-import { agentSessionMetadataQueryOptions } from "@/state/queries/agent-session-metadata";
 import {
   normalizeAgentSessionTaskIds,
   retryAgentSessionListQueries,
@@ -82,49 +78,9 @@ export function useSessionNavigationModel(
     combine: combineTaskSessionReads,
   });
 
-  const metadataTargets = useMemo(
-    () =>
-      workspaces.flatMap((workspace, index) => {
-        const read = taskReads[index];
-        if (read?.status !== "ready") return [];
-        return read.data.flatMap((task) => {
-          const list = listReadByKey.get(
-            agentSessionListTargetKey({ repoPath: workspace.repoPath, taskId: task.id }),
-          );
-          if (list?.status !== "ready") return [];
-          return list.data.map((record): MetadataTarget => ({
-            workspaceId: workspace.workspaceId,
-            input: {
-              repoPath: workspace.repoPath,
-              runtimeKind: record.runtimeKind,
-              workingDirectory: record.workingDirectory,
-              externalSessionId: record.externalSessionId,
-              sessionScope: { kind: "workflow", taskId: task.id, role: record.role },
-            },
-          }));
-        });
-      }),
-    [listReadByKey, taskReads, workspaces],
-  );
-  const metadataReads = useQueries({
-    queries: metadataTargets.map((target) => agentSessionMetadataQueryOptions(target.input)),
-    combine: toReads<AgentSessionMetadata>,
-  });
-
   const live = useWorkspaceSessionLiveSnapshot();
 
   const model = useMemo(() => {
-    const metadataByWorkspaceId = new Map<
-      string,
-      Map<string, SessionNavigationRead<AgentSessionMetadata>>
-    >();
-    metadataTargets.forEach((target, index) => {
-      const read = metadataReads[index];
-      if (!read) return;
-      const reads = metadataByWorkspaceId.get(target.workspaceId) ?? new Map();
-      reads.set(agentSessionIdentityKey(target.input), read);
-      metadataByWorkspaceId.set(target.workspaceId, reads);
-    });
     return buildSessionNavigationModel(
       workspaces.map((workspace, index) => {
         const tasks = taskReads[index] ?? { status: "loading" };
@@ -147,21 +103,11 @@ export function useSessionNavigationModel(
             live.sessionRecordsError,
           ),
           live: live.statesByWorkspaceId.get(workspace.workspaceId) ?? { kind: "unknown" },
-          metadata: metadataByWorkspaceId.get(workspace.workspaceId) ?? new Map(),
         };
       }),
       grouping,
     );
-  }, [
-    grouping,
-    listReadByKey,
-    live,
-    metadataReads,
-    metadataTargets,
-    taskReads,
-    workspaceSessionReads,
-    workspaces,
-  ]);
+  }, [grouping, listReadByKey, live, taskReads, workspaceSessionReads, workspaces]);
 
   const retrySource = useCallback(
     (issue: SessionNavigationSourceIssue): void => {
@@ -247,5 +193,3 @@ const withRecordStreamError = (
   }
   return { ...read, refreshError: sessionRecordsError };
 };
-
-type MetadataTarget = { workspaceId: string; input: LoadAgentSessionMetadataInput };

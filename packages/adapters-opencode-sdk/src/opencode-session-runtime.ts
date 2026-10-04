@@ -13,7 +13,6 @@ import type {
   AgentCatalogPort,
   AgentSessionQueryParentPort,
   AgentSessionHistoryPort,
-  AgentSessionMetadataPort,
   AgentWorkspaceInspectionPort,
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -106,7 +105,6 @@ export type PreparedOpencodeSessionRuntime = {
   readonly sessionImport: RuntimeSessionImportPort;
   readonly queries: AgentCatalogPort &
     AgentSessionHistoryPort &
-    AgentSessionMetadataPort &
     AgentWorkspaceInspectionPort &
     AgentSessionQueryParentPort;
   readonly connection: OpencodeSessionRuntimeConnection;

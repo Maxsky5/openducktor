@@ -89,6 +89,7 @@ const agentSessionRecordFields = {
   externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
   startedAt: z.string(),
+  lastActivityAt: z.number().int().nonnegative().optional(),
   runtimeKind: runtimeKindSchema,
   workingDirectory: nonEmptyStringSchema,
   selectedModel: z.preprocess(

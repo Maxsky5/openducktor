@@ -105,6 +105,11 @@ export type WorkflowDocumentRepository = {
   }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
 };
 export type AgentSessionRepository = {
+  recordAgentSessionActivity(input: {
+    repoPath: string;
+    identity: AgentSessionIdentity;
+    occurredAt: number;
+  }): Effect.Effect<TaskAgentSessions | null, TaskStoreError>;
   listAgentSessionsForTasks(input: {
     repoPath: string;
     taskIds: string[];

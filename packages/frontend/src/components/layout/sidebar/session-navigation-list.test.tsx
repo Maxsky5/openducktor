@@ -177,7 +177,7 @@ describe("SessionNavigationList", () => {
         recent: [
           workspaceSessionEntry("chat"),
           taskSessionEntry("started", {
-            time: { kind: "started", at: NOW - 2 * 3_600_000, activityTimeIssue: null },
+            time: { kind: "started", at: NOW - 2 * 3_600_000 },
           }),
         ],
       }),
@@ -189,7 +189,7 @@ describe("SessionNavigationList", () => {
     fireEvent.focus(started);
     await waitFor(() =>
       expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain(
-        "Started 2h ago. Latest activity time is unknown.",
+        "Started 2h ago",
       ),
     );
   });

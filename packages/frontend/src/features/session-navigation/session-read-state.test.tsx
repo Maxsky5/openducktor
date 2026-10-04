@@ -152,7 +152,6 @@ const createHarness = ({ taskSession = false } = {}) => {
                 refreshError: null,
               },
               live: live.statesByWorkspaceId.get(workspace.workspaceId) ?? { kind: "unknown" },
-              metadata: new Map(),
             })),
         ),
       [live, scope],

@@ -16,8 +16,6 @@ const session = (
   stopRequestedAt: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  lastActivityAt: null,
-  untimedStatusChange: false,
   statusUnavailableReason: null,
   ...overrides,
 });
@@ -125,11 +123,10 @@ describe("foldWorkspaceSessionLiveFacts", () => {
   test("attributes subagent questions, permissions, time, and faults to the root", () => {
     const result = facts(
       [
-        session("root", { status: "running", lastActivityAt: 100 }),
+        session("root", { status: "running" }),
         session("child", {
           parentKey: "root",
           pendingQuestions: [{}],
-          lastActivityAt: 300,
         }),
         session("grandchild", { parentKey: "child", pendingApprovals: [{}] }),
       ],
@@ -141,7 +138,6 @@ describe("foldWorkspaceSessionLiveFacts", () => {
       activityState: "waiting_input",
       pendingQuestion: true,
       pendingPermission: true,
-      lastActivityAt: 300,
       fault: "child stream failed",
       statusUnavailableReason: null,
     });
@@ -159,12 +155,12 @@ describe("foldWorkspaceSessionLiveFacts", () => {
   test("keeps separate roots and reports their own activity", () => {
     const result = facts([
       session("running", { status: "starting" }),
-      session("failed", { status: "error", lastActivityAt: 20 }),
+      session("failed", { status: "error" }),
       session("idle"),
     ]);
 
     expect(result.get("running")?.activityState).toBe("starting");
-    expect(result.get("failed")).toMatchObject({ activityState: "error", lastActivityAt: 20 });
+    expect(result.get("failed")).toMatchObject({ activityState: "error" });
     expect(result.get("idle")).toMatchObject({
       activityState: "idle",
       pendingQuestion: false,

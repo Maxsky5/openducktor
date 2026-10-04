@@ -3,7 +3,6 @@ import {
   getAgentSessionActivityState,
   isAgentSessionActivityWorking,
 } from "@/lib/agent-session-activity-state";
-import { laterTime } from "@/lib/timestamps";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentSessionTranscriptActivityFacts } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-activity";
 
@@ -19,13 +18,6 @@ export type WorkspaceActivitySession = AgentSessionTranscriptActivityFacts & {
   /** Identity key of the parent session when this session is a subagent. */
   parentKey: string | null;
   executionEpisodeId?: string | undefined;
-  /** Epoch milliseconds of the latest observed event that changed this session's activity. */
-  lastActivityAt: number | null;
-  /**
-   * True after a snapshot changed the status. A snapshot has no event time, so the next
-   * transcript event of the session gives that change its time.
-   */
-  untimedStatusChange: boolean;
   /** Why the status of this session is not current, after a failed status read. */
   statusUnavailableReason: string | null;
   /** Small live preview data. This keeps no transcript, messages, or context usage. */
@@ -124,15 +116,13 @@ const isArchivedBranch = (
 /**
  * Live facts of one reported root session.
  *
- * Subagent pending input and activity time count for the root that owns them,
+ * Subagent pending input counts for the root that owns it,
  * so a sidebar entry shows the attention of its whole conversation.
  */
 export type WorkspaceSessionLiveFacts = {
   activityState: AgentSessionActivityState;
   pendingQuestion: boolean;
   pendingPermission: boolean;
-  /** Epoch milliseconds of the latest observed activity change in the conversation. */
-  lastActivityAt: number | null;
   fault: string | null;
   /** Why the status of the root session is not current, after a failed status read. */
   statusUnavailableReason: string | null;
@@ -168,7 +158,6 @@ type MutableLiveFacts = {
   statusUnavailableReason: string | null;
   pendingQuestion: boolean;
   pendingPermission: boolean;
-  lastActivityAt: number | null;
   fault: string | null;
 };
 
@@ -185,12 +174,10 @@ export const foldWorkspaceSessionLiveFacts = (
       statusUnavailableReason: sessions.get(ownerKey)?.statusUnavailableReason ?? null,
       pendingQuestion: false,
       pendingPermission: false,
-      lastActivityAt: null,
       fault: null,
     };
     owner.pendingQuestion ||= session.pendingQuestions.length > 0;
     owner.pendingPermission ||= session.pendingApprovals.length > 0;
-    owner.lastActivityAt = laterTime(owner.lastActivityAt, session.lastActivityAt);
     owner.fault ??= faults.get(key)?.message ?? null;
     owners.set(ownerKey, owner);
   }
@@ -206,7 +193,6 @@ export const foldWorkspaceSessionLiveFacts = (
       }),
       pendingQuestion: owner.pendingQuestion,
       pendingPermission: owner.pendingPermission,
-      lastActivityAt: owner.lastActivityAt,
       fault: owner.fault,
       statusUnavailableReason: owner.statusUnavailableReason,
     });

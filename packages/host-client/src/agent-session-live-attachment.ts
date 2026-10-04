@@ -7,6 +7,7 @@ type AgentSessionLiveAttachment = {
 
 export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
   switch (envelope.type) {
+    case "task_session_records_updated":
     case "snapshot":
     case "transcript_gap":
     case "fault":

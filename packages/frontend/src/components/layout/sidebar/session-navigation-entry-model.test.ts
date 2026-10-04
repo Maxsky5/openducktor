@@ -29,11 +29,11 @@ describe("session navigation entry model", () => {
     expect(
       sessionEntryTimeText(
         taskSessionEntry("started", {
-          time: { kind: "started", at: NOW - 30_000, activityTimeIssue: "Runtime is stopped." },
+          time: { kind: "started", at: NOW - 30_000 },
         }),
         NOW,
       ),
-    ).toBe("Started just now. Latest activity time is unknown. Runtime is stopped.");
+    ).toBe("Started just now");
     expect(sessionEntryTimeText(blockedTaskEntry("ci"), NOW)).toBeNull();
   });
 });

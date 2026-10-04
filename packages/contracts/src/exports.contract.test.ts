@@ -43,8 +43,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionHistorySystemPromptContextSchema",
   "agentRuntimeLoadSessionHistoryInputSchema",
   "agentRuntimeLoadSessionDiffInputSchema",
-  "agentRuntimeLoadSessionMetadataInputSchema",
-  "agentSessionMetadataSchema",
   "agentRuntimeSearchFilesInputSchema",
   "AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS",
   "AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES",

@@ -10,7 +10,6 @@ import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
-  agentSessionWorkflowScopeSchema,
   runtimeWorkingDirectoryRefSchema,
 } from "./agent-session-schemas";
 import { codexEffectivePolicySchema, type CodexEffectivePolicy } from "./config-schemas";
@@ -106,21 +105,6 @@ export const agentRuntimeSearchFilesInputSchema = runtimeWorkingDirectoryRefSche
   query: z.string(),
 });
 export type AgentRuntimeSearchFilesInput = z.infer<typeof agentRuntimeSearchFilesInputSchema>;
-export const agentRuntimeLoadSessionMetadataInputSchema = agentSessionLiveRefSchema.extend({
-  sessionScope: agentSessionWorkflowScopeSchema,
-});
-export type AgentRuntimeLoadSessionMetadataInput = z.infer<
-  typeof agentRuntimeLoadSessionMetadataInputSchema
->;
-export const agentSessionMetadataSchema = z
-  .object({
-    ref: agentSessionLiveRefSchema,
-    /** Latest native session activity in epoch milliseconds, or null when the runtime has none. */
-    lastActivityAt: z.number().int().nonnegative().nullable(),
-  })
-  .strict();
-export type AgentSessionMetadata = z.infer<typeof agentSessionMetadataSchema>;
-
 export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown> = {
   command: string;
   inputSchema: z.ZodType<Input>;
@@ -157,11 +141,6 @@ export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
     command: "agent_runtime_load_session_diff",
     inputSchema: agentRuntimeLoadSessionDiffInputSchema,
     responseSchema: agentFileDiffsSchema,
-  },
-  loadSessionMetadata: {
-    command: "agent_runtime_load_session_metadata",
-    inputSchema: agentRuntimeLoadSessionMetadataInputSchema,
-    responseSchema: agentSessionMetadataSchema,
   },
   fileStatus: {
     command: "agent_runtime_file_status",

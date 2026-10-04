@@ -154,7 +154,6 @@ describe("createWorkspaceActivityObserver", () => {
           ]),
           workspaceSessions: { status: "ready", data: [], refreshError: null },
           live,
-          metadata: new Map(),
         },
       ]);
       return model.groups.flatMap((group) => group.entries)[0]?.status;
@@ -202,103 +201,6 @@ describe("createWorkspaceActivityObserver", () => {
 
     harness.emit("/alpha", { type: "session_upsert", session: running });
     expect(statusOfSession()).toEqual({ kind: "running" });
-  });
-
-  test("moves a session that ran up in Recent when the host sends its status before its event", () => {
-    const harness = createHarness();
-    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
-    const olderTask = createTaskCardFixture({
-      id: "task-a",
-      title: "Older",
-      status: "in_progress",
-    });
-    const newerTask = createTaskCardFixture({
-      id: "task-b",
-      title: "Newer",
-      status: "in_progress",
-    });
-    const ready = <Data>(data: Data) => ({ status: "ready" as const, data, refreshError: null });
-    const savedSession = (externalSessionId: string) => ({
-      externalSessionId,
-      role: "build" as const,
-      runtimeKind,
-      workingDirectory: "/alpha",
-      startedAt: "2026-09-15T08:00:00.000Z",
-      selectedModel: null,
-    });
-    const nativeTime = (externalSessionId: string, at: string) =>
-      [
-        agentSessionIdentityKey({ externalSessionId, runtimeKind, workingDirectory: "/alpha" }),
-        ready({ ref: snapshot("/alpha", externalSessionId).ref, lastActivityAt: Date.parse(at) }),
-      ] as const;
-    const recent = () => {
-      const live = harness.observer.getSessionLiveSnapshot().statesByWorkspaceId.get("alpha");
-      if (!live) throw new Error("Expected live state for alpha.");
-      const model = buildSessionNavigationModel([
-        {
-          workspace: {
-            workspaceId: "alpha",
-            workspaceName: "Alpha",
-            repoPath: "/alpha",
-            abbreviation: null,
-            tileColor: null,
-            iconDataUrl: null,
-          },
-          tasks: ready([olderTask, newerTask]),
-          taskSessions: new Map([
-            [olderTask.id, ready([savedSession("a")])],
-            [newerTask.id, ready([savedSession("b")])],
-          ]),
-          workspaceSessions: ready([]),
-          live,
-          metadata: new Map([
-            nativeTime("a", "2026-09-15T10:01:00.000Z"),
-            nativeTime("b", "2026-09-15T11:00:00.000Z"),
-          ]),
-        },
-      ]);
-      return model.groups
-        .find((group) => group.id === "recent")
-        ?.entries.map((entry) => [entry.title, entry.time]);
-    };
-    const ref = snapshot("/alpha", "a").ref;
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a"), snapshot("/alpha", "b")],
-    });
-
-    // The host publishes each state change before the transcript event that caused it.
-    harness.emit("/alpha", {
-      type: "session_upsert",
-      session: snapshot("/alpha", "a", { activity: "running" }),
-    });
-    harness.emit("/alpha", {
-      type: "transcript_event",
-      event: {
-        type: "session_status",
-        externalSessionId: "a",
-        timestamp: "2026-09-15T12:00:00.000Z",
-        sessionRef: ref,
-        status: { type: "busy", message: null },
-      },
-    });
-    harness.emit("/alpha", { type: "session_upsert", session: snapshot("/alpha", "a") });
-    harness.emit("/alpha", {
-      type: "transcript_event",
-      event: {
-        type: "session_status",
-        externalSessionId: "a",
-        timestamp: "2026-09-15T12:05:00.000Z",
-        sessionRef: ref,
-        status: { type: "idle" },
-      },
-    });
-
-    expect(recent()).toEqual([
-      ["Older", { kind: "activity", at: Date.parse("2026-09-15T12:05:00.000Z") }],
-      ["Newer", { kind: "activity", at: Date.parse("2026-09-15T11:00:00.000Z") }],
-    ]);
   });
 
   test("reports per-root live facts and keeps known facts while observation is unavailable", async () => {

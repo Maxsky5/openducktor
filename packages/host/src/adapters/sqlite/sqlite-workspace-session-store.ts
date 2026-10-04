@@ -28,8 +28,8 @@ const validateRecord = (value: WorkspaceSession) =>
 
 const decodeRecord = (row: WorkspaceSessionRow) =>
   Effect.try({
-    try: () =>
-      workspaceSessionSchema.parse({
+    try: () => {
+      const record = {
         id: row.id,
         runtimeKind: row.runtimeKind,
         externalSessionId: row.externalSessionId,
@@ -39,9 +39,12 @@ const decodeRecord = (row: WorkspaceSessionRow) =>
         generatedTitle: row.generatedTitle,
         manualTitle: row.manualTitle,
         createdAt: row.createdAt,
+        lastActivityAt: row.lastActivityAt ?? undefined,
         updatedAt: row.updatedAt,
         archivedAt: row.archivedAt,
-      }),
+      };
+      return workspaceSessionSchema.parse(record);
+    },
     catch: (cause) =>
       new HostValidationError({
         message: `Stored Workspace Session ${row.id} is invalid.`,
@@ -59,6 +62,7 @@ const encodeRecord = (record: WorkspaceSession): WorkspaceSessionRow => ({
   generatedTitle: record.generatedTitle,
   manualTitle: record.manualTitle,
   createdAt: record.createdAt,
+  lastActivityAt: record.lastActivityAt ?? null,
   updatedAt: record.updatedAt,
   archivedAt: record.archivedAt,
 });
@@ -360,6 +364,10 @@ export const createSqliteWorkspaceSessionStore = (
           ...current,
           generatedTitle: current.generatedTitle ?? input.generatedTitle,
           updatedAt: Math.max(current.updatedAt, activity.occurredAt),
+          lastActivityAt: Math.max(
+            current.lastActivityAt ?? current.createdAt,
+            activity.occurredAt,
+          ),
           selectedModel: input.selectedModel ?? current.selectedModel,
         }));
       }),
@@ -373,6 +381,10 @@ export const createSqliteWorkspaceSessionStore = (
         return yield* update(input, "workspaceSessionStore.recordActivity", (current) => ({
           ...current,
           updatedAt: Math.max(current.updatedAt, activity.occurredAt),
+          lastActivityAt: Math.max(
+            current.lastActivityAt ?? current.createdAt,
+            activity.occurredAt,
+          ),
         }));
       }),
   };

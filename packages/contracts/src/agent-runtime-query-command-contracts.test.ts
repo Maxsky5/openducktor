@@ -69,30 +69,6 @@ test("requires a positive history limit and preserves prompt context and diff an
   ).toBe("turn");
 });
 
-test("requires a workflow scope for session metadata and returns epoch milliseconds or null", () => {
-  const { inputSchema, responseSchema } = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionMetadata;
-  const input = {
-    ...ref,
-    runtimeKind: "codex",
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-  };
-  expect(inputSchema.parse(input)).toEqual(input);
-  expect(inputSchema.safeParse({ ...input, sessionScope: { kind: "repository" } }).success).toBe(
-    false,
-  );
-  expect(inputSchema.safeParse({ ...ref, runtimeKind: "codex" }).success).toBe(false);
-  expect(inputSchema.safeParse({ ...input, runtimePolicy: { kind: "codex" } }).success).toBe(false);
-
-  const liveRef = { ...ref, runtimeKind: "codex" };
-  expect(responseSchema.parse({ ref: liveRef, lastActivityAt: 1_790_000_000_000 })).toEqual({
-    ref: liveRef,
-    lastActivityAt: 1_790_000_000_000,
-  });
-  expect(responseSchema.parse({ ref: liveRef, lastActivityAt: null }).lastActivityAt).toBeNull();
-  for (const lastActivityAt of [-1, 1.5, "2026-09-30T00:00:00Z"])
-    expect(responseSchema.safeParse({ ref: liveRef, lastActivityAt }).success).toBe(false);
-});
-
 test("retires native frontend query bridges", () => {
   expect(
     HOST_COMMAND_NAMES.some(

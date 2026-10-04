@@ -6,6 +6,7 @@ import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
   listAgentSessionsForTasks,
+  recordAgentSessionActivity,
   updateAgentSessionModel,
   upsertAgentSession,
 } from "./sqlite-task-agent-sessions";
@@ -307,6 +308,16 @@ export const createSqliteTaskRepository = ({
             return yield* applyTaskPatch(transaction, input, now());
           }),
         ),
+      );
+    },
+    recordAgentSessionActivity(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.recordAgentSessionActivity",
+        ({ session }) =>
+          session.transaction("sqliteTaskRepository.recordAgentSessionActivity", (transaction) =>
+            recordAgentSessionActivity(transaction, input),
+          ),
       );
     },
     upsertAgentSession(input) {

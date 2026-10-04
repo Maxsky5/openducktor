@@ -27,7 +27,7 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 
 `RuntimeRoute` can be `local_http`, `stdio`, or `host_service`. A `local_http` route must use the loopback host `localhost`, `127.0.0.1`, or `::1`. Never persist a route. `RuntimeTransport` carries request-scoped `local_http` and `stdio` connections. A host service can resolve inside its host adapter without a new public transport type.
 
-`AgentSessionRecord` stores only the external session ID, role, start time, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
+`AgentSessionRecord` stores the external session ID, role, start time, optional `lastActivityAt`, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
 
 The live-session adapter owns the normalized snapshot, transcript, current context use, pending approvals and questions, child links, and native reply IDs. Keep this state out of SQLite and renderer caches.
 
@@ -81,9 +81,11 @@ Restoring an idle Claude session must not publish new activity. Publish startup 
 
 Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse the native controller that owns its session state. Route frontend reads through `HostClient`. Check that queries do not resume sessions or change live state. Test reads during live updates and runtime replacement.
 
-`loadSessionMetadata` reads the latest native activity time of one saved task session for the session list. It checks the native session's exact ID and working directory. It does not resume or attach the session. A missing session or a changed directory is a typed query error, not a null time. The host checks workflow ownership first and still allows the read after task cleanup removes the session's managed worktree.
+The host saves `lastActivityAt` in task and workspace session records as epoch milliseconds. The session list reads that field through its existing record queries. Older task records use `startedAt`; older workspace records use `createdAt`. Never read native metadata or load a transcript to get a navigation date.
 
-The time must not move when OpenDucktor only views or inspects a session. OpenCode reports the session update time. Codex reports the time of the latest turn, because a resume that applies thread settings also moves the thread update time. Claude reports the latest root conversation message time. Its SDK writes title and bookkeeping records on restore and shutdown, so the transcript write time is not an activity time. Read Claude timestamps through the supported SDK import into an in-memory store. Process root entries in batches, keep only the latest time, and omit subagent transcripts. Return a null time when conversation timestamps are absent. A Claude read such as the context usage read must not persist the resumed session.
+`agent-session-activity-persistence.ts` saves dates from the ordered live stream at message and turn boundaries. New pending input uses the host clock because request snapshots have no event timestamp. Child activity updates its saved root. Saves use the full session identity and never move the date backwards. Task activity saves do not change the task's edit time. Committed records reach the frontend through the existing live channel.
+
+Restore baselines, repeated status reports, title and model edits, streamed text, and idle connection cleanup do not change activity dates. Claude writes native bookkeeping records on restore and shutdown; do not use those records as activity. A context usage read must not persist a resumed Claude session.
 
 Before you map a feature, inspect official SDK types, protocol docs, or runtime source. Check startup, config, auth, models, sessions, activity, history, tools, approvals, questions, context, catalogs, and optional features. Keep a capability off when the public runtime contract lacks the needed data.
 

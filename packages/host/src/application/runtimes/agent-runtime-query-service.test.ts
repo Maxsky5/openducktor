@@ -42,7 +42,6 @@ const harness = async (
   const calls: unknown[] = [];
   let beforeModels = async () => {};
   let snapshots: AgentSessionLiveSnapshot[] = [];
-  let metadataRefSessionId: string | null = null;
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeKind, runtimeId: "runtime-1" },
@@ -71,20 +70,6 @@ const harness = async (
           Effect.sync(() => {
             calls.push(input);
             return [];
-          }),
-        loadSessionMetadata: (input) =>
-          Effect.sync(() => {
-            calls.push(input);
-            const { repoPath, runtimeKind, workingDirectory, externalSessionId } = input;
-            return {
-              ref: {
-                repoPath,
-                runtimeKind,
-                workingDirectory,
-                externalSessionId: metadataRefSessionId ?? externalSessionId,
-              },
-              lastActivityAt: 1_790_000_000_000,
-            };
           }),
       },
       readSnapshot: (ref) =>
@@ -179,9 +164,6 @@ const harness = async (
     runtime: runtime!,
     setSnapshots: (next: AgentSessionLiveSnapshot[]) => {
       snapshots = next;
-    },
-    setMetadataRefSessionId: (next: string) => {
-      metadataRefSessionId = next;
     },
   };
 };
@@ -494,59 +476,4 @@ test("reads cold child history through native lineage and an existing ODT owners
     }),
   );
   expect(h.calls).toHaveLength(1);
-});
-
-for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
-  test(`${runtimeKind} reads owned session metadata through the canonical repository`, async () => {
-    const h = await harness(runtimeKind);
-    const input = {
-      repoPath: "/alias",
-      runtimeKind,
-      workingDirectory,
-      externalSessionId: "root",
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
-    } as const;
-
-    await expect(Effect.runPromise(h.service.loadSessionMetadata(input))).resolves.toEqual({
-      ref: { repoPath, runtimeKind, workingDirectory, externalSessionId: "root" },
-      lastActivityAt: 1_790_000_000_000,
-    });
-    expect(h.calls).toEqual([{ ...input, repoPath }]);
-  });
-}
-
-test("rejects session metadata for an unowned session or another role before the runtime read", async () => {
-  const h = await harness("codex");
-  const input = {
-    repoPath,
-    runtimeKind: "codex",
-    workingDirectory,
-    externalSessionId: "root",
-    sessionScope: { kind: "workflow", taskId: "task", role: "build" },
-  } as const;
-  for (const request of [
-    { ...input, externalSessionId: "unowned" },
-    { ...input, sessionScope: { ...input.sessionScope, role: "qa" as const } },
-  ]) {
-    const failure = await Effect.runPromise(Effect.flip(h.service.loadSessionMetadata(request)));
-    expect(failure.failure.code).toBe("scope_mismatch");
-  }
-  expect(h.calls).toHaveLength(0);
-});
-
-test("rejects session metadata that the runtime returns for another session", async () => {
-  const h = await harness("claude");
-  h.setMetadataRefSessionId("other");
-  const failure = await Effect.runPromise(
-    Effect.flip(
-      h.service.loadSessionMetadata({
-        repoPath,
-        runtimeKind: "claude",
-        workingDirectory,
-        externalSessionId: "root",
-        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
-      }),
-    ),
-  );
-  expect(failure.failure.code).toBe("invalid_runtime_response");
 });

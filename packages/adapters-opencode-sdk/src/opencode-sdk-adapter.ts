@@ -1,7 +1,6 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionControlUpdateTitleInput,
-  type AgentSessionMetadata,
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -15,7 +14,6 @@ import type {
   AgentFileSearchResult,
   AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
-  AgentSessionMetadataPort,
   AgentSessionPort,
   AgentSessionRuntimePolicy,
   AgentSessionSummary,
@@ -29,7 +27,6 @@ import type {
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
-  LoadAgentSessionMetadataInput,
   LoadAgentSessionTodosInput,
   PolicyBoundSessionRef,
   ReplyApprovalInput,
@@ -155,11 +152,7 @@ type SendActivityListener = (
 ) => Promise<void>;
 
 export class OpencodeSdkAdapter
-  implements
-    AgentCatalogPort,
-    AgentSessionMetadataPort,
-    AgentSessionPort,
-    AgentWorkspaceInspectionPort
+  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
   private readonly resolveCreationSettings: OpencodeSdkAdapterOptions["resolveCreationSettings"];
   private readonly restorePermissions: SessionPermissionRestorer;
@@ -776,18 +769,6 @@ export class OpencodeSdkAdapter
       ...runtime,
       externalSessionId: input.externalSessionId,
     });
-  }
-
-  async loadSessionMetadata(input: LoadAgentSessionMetadataInput): Promise<AgentSessionMetadata> {
-    const runtime = await this.resolveRuntimeClientInput(input, "read session metadata");
-    const retained = this.sessions.get(input.externalSessionId);
-    if (retained) this.assertRetainedQuerySession(input, runtime, retained);
-    const target = await this.readSession(input, runtime, "read session metadata");
-    const { repoPath, runtimeKind, workingDirectory, externalSessionId } = input;
-    return {
-      ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
-      lastActivityAt: target.time.updated,
-    };
   }
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {

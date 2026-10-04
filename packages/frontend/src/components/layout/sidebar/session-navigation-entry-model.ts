@@ -82,8 +82,7 @@ export const sessionEntryStatusText = (entry: SessionNavigationEntry): string =>
 export const sessionEntryTimeText = (entry: SessionNavigationEntry, now: number): string | null => {
   if (entry.time.kind === "activity") return `Active ${formatElapsedAgo(now - entry.time.at)}`;
   if (entry.time.kind === "none") return null;
-  const issue = entry.time.activityTimeIssue ? ` ${entry.time.activityTimeIssue}` : "";
-  return `Started ${formatElapsedAgo(now - entry.time.at)}. Latest activity time is unknown.${issue}`;
+  return `Started ${formatElapsedAgo(now - entry.time.at)}`;
 };
 
 export const sessionEntryShortTime = (entry: SessionNavigationEntry, now: number): string | null =>

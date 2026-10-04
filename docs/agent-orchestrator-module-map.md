@@ -69,7 +69,9 @@ One command module owns session control. Task and workspace policy adapters supp
 
 `AgentSessionMessageAcceptedError` retains a validated native message, its exact session reference, and the failed host stage. All runtime control adapters preserve acceptance across later live updates. The shared live module also preserves acceptance when the runtime detaches before the send returns. The shared command uses the same error for a failed metadata save. The router sends its `agent_session_message_accepted` failure through the existing host error contract. A rejection or invalid native response does not prove acceptance.
 
-`WorkspaceSessionStorePort.recordAcceptedMessage` validates and saves the generated title, monotonic activity time, and optional accepted model in one existing SQLite transaction. The workspace persistence policy publishes the returned record after commit. A publication failure cannot undo the save. Model-settings changes retain the stored `profileId`, including after compensation.
+`WorkspaceSessionStorePort.recordAcceptedMessage` validates and saves the generated title, monotonic `lastActivityAt`, and optional accepted model in one existing SQLite transaction. The workspace persistence policy publishes the returned record after commit. A publication failure cannot undo the save. Model-settings changes retain the stored `profileId`, including after compensation.
+
+`agent-session-activity-persistence.ts` saves task and workspace activity from the ordered live stream. It tracks parent links, new input requests, status changes, and the latest final message. It keeps no transcript. Task saves publish the committed session list through `task_session_records_updated`; workspace saves use the existing updated-record event. Neither path reads native metadata or history.
 
 ## Host runtime lifecycle
 
@@ -392,8 +394,8 @@ Rules:
 - Only a successful, current empty session read adds a blocked task without a saved session.
 - New task keeps the workspace that was active when it opened. It names that workspace and blocks creation while another workspace is active.
 - The expanded sidebar keeps New task as a split button. The collapsed sidebar has one plus button that opens the action menu, with New task first. Both menus show action labels without descriptions or a heading. Closing a creation dialog restores keyboard focus to its action.
-- Activity time comes from observed activity changes, the native session metadata read, and the saved workspace session update time. A start time orders an entry only when no activity time is known, and the list labels it as a start time.
-- An observed activity change takes the time of its transcript event. A live snapshot has no event time. When a snapshot changes the status before the transcript event that caused it, that event gives the change its time. Streaming output, repeated status reports, and snapshot receipt do not move the time.
+- Activity time comes from the record's `lastActivityAt`. Older task sessions use `startedAt`; older workspace sessions use `createdAt`. The list labels those dates as start times. Metadata edits do not change the date.
+- The host saves activity at message and turn boundaries, using the event timestamp. New input requests use the host clock because their snapshots have no event timestamp. Restore baselines, streaming output, repeated status reports, and idle cleanup do not move the date.
 - Navigation does not load history, start sessions, resume sessions, or change runtime state.
 
 ## Startup sequence

@@ -4,7 +4,6 @@ import type {
   SidebarSessionGrouping,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import type { LoadAgentSessionMetadataInput } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -61,6 +60,7 @@ const chat = (id: string, workingDirectory: string, updatedAt: number): Workspac
   generatedTitle: `Chat ${id}`,
   manualTitle: null,
   createdAt: updatedAt,
+  lastActivityAt: updatedAt,
   updatedAt,
   archivedAt: null,
 });
@@ -69,7 +69,6 @@ const facts = (overrides: Partial<WorkspaceSessionLiveFacts>): WorkspaceSessionL
   activityState: "idle",
   pendingQuestion: false,
   pendingPermission: false,
-  lastActivityAt: null,
   fault: null,
   statusUnavailableReason: null,
   ...overrides,
@@ -94,24 +93,19 @@ test("joins session sources across workspaces and changes grouping without more 
     [
       "blocked",
       [
-        record("older", "/alpha", "2026-09-28T08:00:00.000Z"),
-        record("latest", "/alpha", "2026-09-29T08:00:00.000Z"),
+        {
+          ...record("older", "/alpha", "2026-09-28T08:00:00.000Z"),
+          lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z"),
+        },
+        {
+          ...record("latest", "/alpha", "2026-09-29T08:00:00.000Z"),
+          lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z"),
+        },
       ],
     ],
     ["build", [record("beta-build", "/beta", "2026-09-30T06:00:00.000Z")]],
   ]);
-  const readMetadata = mock(async (input: LoadAgentSessionMetadataInput) => {
-    if (input.externalSessionId === "beta-build") throw new Error("Codex is not running.");
-    return {
-      ref: {
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-      },
-      lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z"),
-    };
-  });
+  const readHistory = mock(async () => []);
   const readSessions = mock(async (_repoPath: string, taskIds: string[]) => {
     if (taskIds.includes("closed")) throw new Error("The closed task's worktree was removed.");
     return taskIds.map((taskId) => ({ taskId, agentSessions: sessionsByTask.get(taskId) ?? [] }));
@@ -125,7 +119,7 @@ test("joins session sources across workspaces and changes grouping without more 
           workspaceId === "alpha"
             ? [chat("running", "/alpha", Date.parse("2026-09-30T07:00:00.000Z"))]
             : [chat("quiet", "/beta", Date.parse("2026-09-30T10:00:00.000Z"))],
-        agentRuntimeLoadSessionMetadata: readMetadata,
+        agentRuntimeLoadSessionHistory: readHistory,
       },
     }),
   );
@@ -183,18 +177,10 @@ test("joins session sources across workspaces and changes grouping without more 
   expect(recent?.entries[2]?.time).toEqual({
     kind: "started",
     at: Date.parse("2026-09-30T06:00:00.000Z"),
-    activityTimeIssue: "Codex is not running.",
   });
-  expect(readMetadata).toHaveBeenCalledWith({
-    repoPath: "/alpha",
-    runtimeKind: "codex",
-    workingDirectory: "/alpha",
-    externalSessionId: "older",
-    sessionScope: { kind: "workflow", taskId: "blocked", role: "build" },
-  });
+  expect(readHistory).not.toHaveBeenCalled();
   expect(readSessions.mock.calls.flatMap(([, taskIds]) => taskIds)).not.toContain("closed");
   const sessionReads = readSessions.mock.calls.length;
-  const metadataReads = readMetadata.mock.calls.length;
   rerender("task");
   expect(result.current.entryCount).toBe(4);
   expect(result.current.groups[2]?.entries.map((entry) => entry.title)).toEqual([
@@ -204,7 +190,7 @@ test("joins session sources across workspaces and changes grouping without more 
   rerender("none");
   expect(result.current.entryCount).toBe(5);
   expect(readSessions).toHaveBeenCalledTimes(sessionReads);
-  expect(readMetadata).toHaveBeenCalledTimes(metadataReads);
+  expect(readHistory).not.toHaveBeenCalled();
 });
 
 test("reports a failed batch session read and reads it again on retry", async () => {
@@ -222,15 +208,6 @@ test("reports a failed batch session read and reads it again on retry", async ()
           }));
         },
         workspaceSessionListActive: async () => [],
-        agentRuntimeLoadSessionMetadata: async (input) => ({
-          ref: {
-            repoPath: input.repoPath,
-            runtimeKind: input.runtimeKind,
-            workingDirectory: input.workingDirectory,
-            externalSessionId: input.externalSessionId,
-          },
-          lastActivityAt: null,
-        }),
       },
     }),
   );
@@ -272,15 +249,6 @@ test("keeps cached task sessions listed while the batch read of a new task fails
           throw new Error("Session records are locked.");
         },
         workspaceSessionListActive: async () => [],
-        agentRuntimeLoadSessionMetadata: async (input) => ({
-          ref: {
-            repoPath: input.repoPath,
-            runtimeKind: input.runtimeKind,
-            workingDirectory: input.workingDirectory,
-            externalSessionId: input.externalSessionId,
-          },
-          lastActivityAt: null,
-        }),
       },
     }),
   );

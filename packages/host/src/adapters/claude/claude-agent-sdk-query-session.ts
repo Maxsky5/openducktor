@@ -1,8 +1,7 @@
 import { type AgentSessionRef, assertAgentRuntimeQuerySession } from "@openducktor/core";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeSessionStore } from "./claude-agent-sdk-types";
-import { claudeSessionRef, fromPromise } from "./claude-agent-sdk-utils";
-import { loadClaudeSessionMetadata } from "./claude-session-metadata";
+import { claudeSessionRef } from "./claude-agent-sdk-utils";
 
 export const resolveClaudeQuerySession = (
   store: Pick<ClaudeSessionStore, "get">,
@@ -19,13 +18,3 @@ export const resolveClaudeQuerySession = (
   }
   return { target, session };
 };
-
-/** Checks a retained session against the requested scope, then reads its saved metadata. */
-export const readClaudeMetadata = (
-  store: Pick<ClaudeSessionStore, "get">,
-  input: AgentSessionRef,
-) =>
-  fromPromise("claudeRuntime.loadSessionMetadata", async () => {
-    resolveClaudeQuerySession(store, input);
-    return loadClaudeSessionMetadata(input);
-  });

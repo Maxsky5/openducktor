@@ -1,6 +1,5 @@
 import {
   DEFAULT_APPEARANCE_SETTINGS,
-  type AgentSessionMetadata,
   type AgentSessionRecord,
   type RuntimeKind,
   type SidebarSessionGrouping,
@@ -20,7 +19,7 @@ import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-stat
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
 import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
-import { laterTime, parseTimestamp } from "@/lib/timestamps";
+import { parseTimestamp } from "@/lib/timestamps";
 import {
   workspaceSessionIdentity,
   workspaceSessionTitle,
@@ -49,8 +48,6 @@ export type SessionNavigationWorkspaceSources = {
   taskSessions: ReadonlyMap<string, SessionNavigationRead<AgentSessionRecord[]>>;
   workspaceSessions: SessionNavigationRead<WorkspaceSession[]>;
   live: WorkspaceSessionLiveState;
-  /** Native activity times by task session identity key. */
-  metadata: ReadonlyMap<string, SessionNavigationRead<AgentSessionMetadata>>;
 };
 
 export type SessionNavigationAttentionReason = "question" | "permission" | "blocked";
@@ -71,7 +68,7 @@ export type SessionNavigationStatus =
  */
 export type SessionNavigationTime =
   | { kind: "activity"; at: number }
-  | { kind: "started"; at: number; activityTimeIssue: string | null }
+  | { kind: "started"; at: number }
   | { kind: "none" };
 
 /**
@@ -217,21 +214,10 @@ const sessionStatus = (
   return { kind: "settled", failed: facts?.activityState === "error" };
 };
 
-const taskSessionTime = (
-  record: AgentSessionRecord,
-  facts: WorkspaceSessionLiveFacts | null,
-  metadata: SessionNavigationRead<AgentSessionMetadata> | undefined,
-): SessionNavigationTime => {
-  const nativeTime = metadata?.status === "ready" ? metadata.data.lastActivityAt : null;
-  const activityAt = laterTime(facts?.lastActivityAt ?? null, nativeTime);
-  if (activityAt !== null) return { kind: "activity", at: activityAt };
+const taskSessionTime = (record: AgentSessionRecord): SessionNavigationTime => {
+  if (record.lastActivityAt !== undefined) return { kind: "activity", at: record.lastActivityAt };
   const startedAt = parseTimestamp(record.startedAt);
-  if (startedAt === null) return { kind: "none" };
-  return {
-    kind: "started",
-    at: startedAt,
-    activityTimeIssue: metadata?.status === "error" ? metadata.message : null,
-  };
+  return startedAt === null ? { kind: "none" } : { kind: "started", at: startedAt };
 };
 
 /** The latest started saved session carries the Blocked reason of its task. */
@@ -313,11 +299,7 @@ const taskEntries = (
           }).tone,
           attention,
           status: sessionStatus(live, liveFacts),
-          time: taskSessionTime(
-            record,
-            facts,
-            sources.metadata.get(agentSessionIdentityKey(identity)),
-          ),
+          time: taskSessionTime(record),
           fault: liveFacts.fault,
           context: { kind: "task", task, sessions: read.data },
         },
@@ -366,8 +348,10 @@ const workspaceEntries = (sources: SessionNavigationWorkspaceSources): SessionNa
           workflowTone: null,
           attention: liveAttention(facts),
           status: sessionStatus(live, liveFacts),
-          // The saved update time moves with each accepted message and final reply.
-          time: { kind: "activity", at: Math.max(facts?.lastActivityAt ?? 0, record.updatedAt) },
+          time:
+            record.lastActivityAt === undefined
+              ? { kind: "started", at: record.createdAt }
+              : { kind: "activity", at: record.lastActivityAt },
           fault: liveFacts.fault,
           context: { kind: "workspace", session: record },
         },

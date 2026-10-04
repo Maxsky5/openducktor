@@ -21,6 +21,7 @@ import {
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { fileDiffSchema } from "./git-schemas";
+import { taskAgentSessionsSchema } from "./session-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
@@ -147,6 +148,12 @@ export const agentSessionLiveScopeSchema = z
 export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
+  taskAgentSessionsSchema
+    .extend({
+      type: z.literal("task_session_records_updated"),
+      repoPath: nonEmptyStringSchema,
+    })
+    .strict(),
   z
     .object({
       type: z.literal("snapshot"),

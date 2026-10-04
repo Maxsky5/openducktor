@@ -33,8 +33,6 @@ export const createClaudeRuntimeQueryAdapter = (
       read("load session todos", input, () => service.loadSessionTodos(input)),
     loadSessionDiff: (input) =>
       read("load session diff", input, () => service.loadSessionDiff(input)),
-    loadSessionMetadata: (input) =>
-      read("load session metadata", input, () => service.loadSessionMetadata(input)),
     loadFileStatus: (input) => read("load file status", input, () => service.loadFileStatus(input)),
   };
 };

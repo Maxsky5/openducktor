@@ -1,6 +1,5 @@
 import type { CodexAppServerThread, WorkspaceSessionExternal } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
-import { isCodexUnmaterializedThreadError } from "./codex-app-server-shared";
 import type { CodexAppServerClient } from "./types";
 
 const isRoot = (thread: CodexAppServerThread): boolean => {
@@ -80,36 +79,6 @@ export const listCodexSessionMetadataPage = async (
       : null,
   };
 };
-/**
- * Reads when the latest turn of a thread ended, or when it started while it still runs.
- *
- * The thread update time is not an activity time. A resume that applies thread settings, such
- * as a context usage read, also moves it.
- */
-export const readLatestCodexTurnTime = async (
-  client: CodexAppServerClient,
-  threadId: string,
-): Promise<number | null> => {
-  let turns: Awaited<ReturnType<CodexAppServerClient["threadTurnsList"]>>;
-  try {
-    turns = await client.threadTurnsList({
-      threadId,
-      cursor: null,
-      limit: 1,
-      sortDirection: "desc",
-      itemsView: "notLoaded",
-    });
-  } catch (cause) {
-    // A thread without a first user message has no turn, so it has no activity time.
-    if (isCodexUnmaterializedThreadError(cause)) return null;
-    throw cause;
-  }
-  const latest = turns.data[0];
-  const seconds = latest ? (latest.completedAt ?? latest.startedAt) : null;
-  // Codex reports turn times in Unix seconds.
-  return seconds === null ? null : seconds * 1000;
-};
-
 export const getCodexSessionMetadata = async (
   client: CodexAppServerClient,
   ref: SessionRef,

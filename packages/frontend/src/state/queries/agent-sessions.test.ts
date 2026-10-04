@@ -12,6 +12,7 @@ import {
   refreshAgentSessionListQuery,
   removeAgentSessionListQueries,
   retryAgentSessionListQueries,
+  updateAgentSessionListQuery,
 } from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
@@ -33,6 +34,50 @@ const createReadPort = (
 });
 
 describe("agent session query cache helpers", () => {
+  test("a saved activity update wins over an older batch without another host read", async () => {
+    const queryClient = new QueryClient();
+    const batch =
+      Promise.withResolvers<
+        Awaited<ReturnType<AgentSessionReadPort["agentSessionsListForTasks"]>>
+      >();
+    const read = mock(() => batch.promise);
+    const hydration = hydrateAgentSessionListQueries(
+      queryClient,
+      "/repo",
+      ["task-1"],
+      createReadPort(read),
+    );
+    const updated = { ...sessionFixture, lastActivityAt: Date.parse("2026-10-04T10:00:00Z") };
+    updateAgentSessionListQuery(queryClient, "/repo", {
+      taskId: "task-1",
+      agentSessions: [updated],
+    });
+    batch.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+    await hydration;
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([updated]);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  test("a saved activity update cancels an older per-task read", async () => {
+    const queryClient = new QueryClient();
+    const old = Promise.withResolvers<AgentSessionRecord[]>();
+    const reading = queryClient.fetchQuery(
+      agentSessionListQueryOptions("/repo", "task-1", { agentSessionsList: () => old.promise }),
+    );
+    const cancelled = reading.catch(() => undefined);
+    const updated = { ...sessionFixture, lastActivityAt: Date.parse("2026-10-04T10:00:00Z") };
+    updateAgentSessionListQuery(queryClient, "/repo", {
+      taskId: "task-1",
+      agentSessions: [updated],
+    });
+    old.resolve([sessionFixture]);
+    await cancelled;
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([updated]);
+  });
   test("hydration query keys normalize task ordering, whitespace, duplicates, and empty IDs", () => {
     expect(agentSessionQueryKeys.hydration("/repo", [" task-2 ", "", "task-1", "task-2"])).toEqual([
       "agent-sessions",

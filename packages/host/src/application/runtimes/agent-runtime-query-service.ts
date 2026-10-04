@@ -3,7 +3,6 @@ import type {
   RuntimeDescriptor,
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type {
@@ -140,23 +139,6 @@ export const createAgentRuntimeQueryService = (
       read("loadSessionTodos", input, (queries, request) => queries.loadSessionTodos(request)),
     loadSessionDiff: (input) =>
       read("loadSessionDiff", input, (queries, request) => queries.loadSessionDiff(request)),
-    loadSessionMetadata: (input) =>
-      read("loadSessionMetadata", input, (queries, request) =>
-        queries
-          .loadSessionMetadata(request)
-          .pipe(
-            Effect.flatMap((metadata) =>
-              agentSessionRefsEqual(metadata.ref, request)
-                ? Effect.succeed(metadata)
-                : runtimeQueryError(
-                    "loadSessionMetadata",
-                    request,
-                    "invalid_runtime_response",
-                    "The runtime returned metadata for a different session. Check the host runtime logs.",
-                  ),
-            ),
-          ),
-      ),
     loadFileStatus: (input) =>
       read("loadFileStatus", input, (queries, request) => queries.loadFileStatus(request)),
   };
@@ -206,8 +188,7 @@ export const createAgentRuntimeQueryService = (
 };
 
 /** Saved workflow sessions stay readable after task cleanup removes their managed worktree. */
-const readsSavedSession = (method: QueryMethod): boolean =>
-  method === "loadSessionHistory" || method === "loadSessionMetadata";
+const readsSavedSession = (method: QueryMethod): boolean => method === "loadSessionHistory";
 
 const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean => {
   const { promptInput, optionalSurfaces, history } = runtime.capabilities;
@@ -222,8 +203,6 @@ const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean
       return optionalSurfaces.supportsTodos;
     case "loadSessionDiff":
       return optionalSurfaces.supportsDiff;
-    case "loadSessionMetadata":
-      return true;
     case "loadFileStatus":
       return optionalSurfaces.supportsFileStatus;
   }

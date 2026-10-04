@@ -21,7 +21,6 @@ const facts = (
   activityState,
   pendingQuestion: activityState === "waiting_input",
   pendingPermission: false,
-  lastActivityAt: null,
   fault: null,
   statusUnavailableReason: null,
   ...overrides,
