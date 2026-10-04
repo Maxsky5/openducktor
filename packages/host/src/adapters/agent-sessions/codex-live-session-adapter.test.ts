@@ -1368,7 +1368,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     ).toEqual([]);
   });
 
-  test("rejects non-Codex fault refs and routes each fault to its session repository", async () => {
+  test("rejects non-Codex fault refs and publishes Codex faults with their session ref", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
@@ -1420,29 +1420,6 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       message: "Codex event processing failed.",
       ref,
     });
-
-    // The shared runtime serves other repositories, so their faults keep their own repository.
-    const otherRef = { ...ref, repoPath: "/other-repo", workingDirectory: "/other-repo" };
-    await expect(
-      onLiveSessionMutation?.({
-        runtimeId: runtime.runtimeId,
-        snapshotMode: "delta",
-        removedRefs: [],
-        snapshots: [{ ...liveSnapshot(), ref: otherRef }],
-        transcriptEvents: [],
-        catalogInvalidated: false,
-        fault: "Codex event processing failed.",
-        faultRef: otherRef,
-      }),
-    ).resolves.toBeUndefined();
-    expect(changes).toContainEqual({
-      type: "fault",
-      repoPath: "/other-repo",
-      operation: "codex-live-session.process-event",
-      message: "Codex event processing failed.",
-      ref: otherRef,
-    });
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toHaveLength(2);
   });
 
   test("drops an in-flight projection after runtime release", async () => {

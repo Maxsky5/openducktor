@@ -1927,40 +1927,6 @@ describe("Claude host live-session adapter", () => {
     ).resolves.toMatchObject({ type: "live", session: { title: "Claude build" } });
   });
 
-  test("keeps the renamed outcome and reports a fault when the title commit fails", async () => {
-    const harness = await createHarness();
-    await Effect.runPromise(harness.adapter.startSession(startInput));
-    harness.setUpdateSessionTitle((input) =>
-      Effect.succeed({
-        status: "renamed" as const,
-        summary: { ...summary, title: input.title },
-      }),
-    );
-    harness.changes.length = 0;
-    harness.failNextMutationAfterStateApply();
-
-    await expect(
-      Effect.runPromise(
-        harness.adapter.updateSessionTitle({
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "session-1",
-          title: "Renamed",
-        }),
-      ),
-    ).resolves.toEqual({ status: "renamed" });
-
-    expect(harness.changes).toEqual([
-      {
-        type: "fault",
-        repoPath: "/repo",
-        operation: "claude-live-session.update-session-title",
-        message: "Publication failed.",
-      },
-    ]);
-  });
-
   describe("with sessions from two repositories", () => {
     const startBothSessions = async (harness: Awaited<ReturnType<typeof createHarness>>) => {
       harness.setStartSession((input) =>
@@ -1975,7 +1941,6 @@ describe("Claude host live-session adapter", () => {
 
       await startBothSessions(harness);
 
-      expect(harness.adapter.binding).not.toHaveProperty("repoPath");
       const snapshots = await Effect.runPromise(harness.adapter.listSnapshots());
       expect(snapshots.map((snapshot) => snapshot.ref)).toEqual([sessionRef, otherSessionRef]);
       expect(

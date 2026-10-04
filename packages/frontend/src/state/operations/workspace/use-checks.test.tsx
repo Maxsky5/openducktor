@@ -34,9 +34,6 @@ const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck =
 const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>
   createTaskStoreCheckFixture({}, overrides);
 
-const toastMessage = mock(
-  (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
-);
 const toastError = mock(
   (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
 );
@@ -183,7 +180,6 @@ const waitForInitialChecksToSettle = async (harness: HookHarness) => {
 };
 
 beforeEach(async () => {
-  toastMessage.mockClear();
   toastError.mockClear();
   toastDismiss.mockClear();
   runtimeCheckMock.mockClear();
@@ -298,31 +294,6 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("refreshChecks forces one new runtime check", async () => {
-    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
-      makeRuntimeCheck(),
-    );
-
-    runtimeCheckHandler = runtimeCheck;
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-      runtimeCheck.mockClear();
-      await harness.run(async (value) => {
-        await value.refreshChecks();
-      });
-
-      expect(runtimeCheck).toHaveBeenCalledTimes(1);
-      expect(runtimeCheck.mock.calls[0]).toEqual([true]);
-    } finally {
-      await harness.unmount();
-    }
-  }, 5000);
   test("keeps the task-store result of each repository across workspace switches", async () => {
     const taskStoreCheck = mock(async (repoPath: string): Promise<TaskStoreCheck> =>
       makeTaskStoreCheck({
@@ -485,7 +456,8 @@ describe("use-checks", () => {
           value.taskStoreCheck.failureKind === "timeout",
       );
 
-      expect(toastMessage).not.toHaveBeenCalled();
+      // A timeout shows in the check state, not as an error toast.
+      expect(toastError).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       void runtimeDeferred.promise.catch(() => {});

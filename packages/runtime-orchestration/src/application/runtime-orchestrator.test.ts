@@ -4,7 +4,7 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { Data, Effect } from "effect";
+import { Data, Deferred, Effect, Fiber, FiberId } from "effect";
 import { RuntimeSettingsError } from "../errors";
 import { planSettingsChange } from "../domain/runtime-lifecycle-plan";
 import type { RuntimeDriver, RuntimeDrivers, RuntimeHandle } from "../ports/runtime-driver";
@@ -19,7 +19,10 @@ const settingsWith = (enabled: Partial<Record<RuntimeKind, string>>): RuntimeSet
   claude: { enabled: "claude" in enabled, executablePath: enabled.claude ?? "" },
 });
 
-const session = (externalSessionId: string): AgentSessionLiveSnapshot => ({
+const session = (
+  externalSessionId: string,
+  overrides: Partial<AgentSessionLiveSnapshot> = {},
+): AgentSessionLiveSnapshot => ({
   ref: {
     repoPath: "/repos/alpha",
     runtimeKind: "opencode",
@@ -32,6 +35,7 @@ const session = (externalSessionId: string): AgentSessionLiveSnapshot => ({
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
+  ...overrides,
 });
 
 const createHarness = (saved: RuntimeSettings) => {
@@ -150,23 +154,73 @@ describe("runtime orchestrator", () => {
     ]);
   });
 
-  test("restarts only with a confirmation of the current impact", async () => {
+  const reviewThenRestart = async (
+    before: ReadonlyArray<AgentSessionLiveSnapshot>,
+    after: ReadonlyArray<AgentSessionLiveSnapshot>,
+  ) => {
     const harness = createHarness(settingsWith({ opencode: "opencode" }));
     await Effect.runPromise(harness.orchestrator.initialize());
     await harness.waitForReady("opencode");
+    harness.sessions.push(...before);
     const reviewed = await Effect.runPromise(harness.orchestrator.restartImpact("opencode"));
-    expect(reviewed.workspaces).toEqual([]);
-
-    // New running work after the review needs a new review.
-    harness.sessions.push(session("new-work"));
-    const changed = await Effect.runPromise(
+    harness.sessions.splice(0, harness.sessions.length, ...after);
+    const result = await Effect.runPromise(
       harness.orchestrator.restart("opencode", reviewed.confirmation),
     );
-    if (changed.type !== "impact_changed") throw new Error("The impact must change.");
-    expect(changed.impact.workspaces[0]?.workspaceName).toBe("Alpha");
+    return { harness, reviewed, result };
+  };
+
+  const runningTurn = session("s1", { executionEpisodeId: "turn-1" });
+
+  test.each([
+    {
+      label: "progress in the reviewed turn",
+      after: session("s1", { executionEpisodeId: "turn-1", title: "Renamed" }),
+    },
+    { label: "the reviewed turn finishing", after: session("s1", { activity: "idle" }) },
+  ])("restart keeps a confirmation after $label", async ({ after }) => {
+    const { harness, result } = await reviewThenRestart([runningTurn], [after]);
+
+    expect(result).toMatchObject({ type: "completed", status: { state: "ready" } });
+    expect(harness.events).toEqual(["start:opencode-1", "stop:opencode-1", "start:opencode-2"]);
+  });
+
+  test.each([
+    { label: "a new running session", before: [], after: session("s1") },
+    {
+      label: "a reviewed idle session starting a turn",
+      before: [session("s1", { activity: "idle" })],
+      after: session("s1"),
+    },
+    {
+      label: "a new turn in a reviewed running session",
+      before: [runningTurn],
+      after: session("s1", { executionEpisodeId: "turn-2" }),
+    },
+    {
+      label: "a new pending approval",
+      before: [runningTurn],
+      after: session("s1", {
+        activity: "waiting_for_permission",
+        executionEpisodeId: "turn-1",
+        pendingApprovals: [{ requestId: "approval-1", requestType: "runtime_tool", title: "Run" }],
+      }),
+    },
+  ])("restart needs a new review after $label", async ({ before, after }) => {
+    const { harness, reviewed, result } = await reviewThenRestart(before, [after]);
+    if (result.type !== "impact_changed") throw new Error("The impact must change.");
+    expect(result.impact.workspaces[0]?.workspaceName).toBe("Alpha");
+    expect(harness.events).toEqual(["start:opencode-1"]);
+
+    // A confirmation is single-use, even when the work returns to the reviewed state.
+    harness.sessions.splice(0, harness.sessions.length, ...before);
+    const reused = await Effect.runPromise(
+      harness.orchestrator.restart("opencode", reviewed.confirmation),
+    );
+    if (reused.type !== "impact_changed") throw new Error("A used confirmation must fail.");
 
     const restarted = await Effect.runPromise(
-      harness.orchestrator.restart("opencode", changed.impact.confirmation),
+      harness.orchestrator.restart("opencode", reused.impact.confirmation),
     );
     expect(restarted).toMatchObject({ type: "completed", status: { state: "ready" } });
     expect(harness.events).toEqual(["start:opencode-1", "stop:opencode-1", "start:opencode-2"]);
@@ -210,6 +264,25 @@ describe("runtime orchestrator", () => {
     expect(applied).toEqual([
       { kind: "codex", effect: "start", outcome: "applied", message: null },
     ]);
+  });
+
+  test("an interrupted settings change releases its reservation", async () => {
+    const harness = createHarness(settingsWith({ opencode: "opencode" }));
+    const entered = Deferred.unsafeMake<void>(FiberId.none);
+    const changing = Effect.runFork(
+      harness.orchestrator.withSettingsChange(["opencode", "codex"], () =>
+        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+      ),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    const reserveAgain = harness.orchestrator.withSettingsChange(["opencode", "codex"], () =>
+      Effect.succeed("reserved"),
+    );
+    await expect(Effect.runPromise(reserveAgain)).rejects.toThrow("already running");
+
+    await Effect.runPromise(Fiber.interrupt(changing));
+
+    await expect(Effect.runPromise(reserveAgain)).resolves.toBe("reserved");
   });
 
   test("probes a session only through the driver of a ready runtime", async () => {

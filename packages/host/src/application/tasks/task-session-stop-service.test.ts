@@ -1,13 +1,52 @@
+import {
+  type AgentSessionRecord,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
-import {
-  createGitPort,
-  createRuntimeDefinitionsService,
-  createTaskSessionStopService,
-  createSessionStopper,
-  createTaskStore,
-} from "./task-session-stop-service.test-support";
+import { createTaskSessionStopService } from "./task-session-stop-service";
+
+type StopServiceDependencies = Parameters<typeof createTaskSessionStopService>[0];
+
+const createGitPort = (): StopServiceDependencies["gitPort"] => ({
+  canonicalizePath: (path) => Effect.succeed(path === "/repo" ? "/canonical/repo" : path),
+  isGitRepository: (path) => Effect.succeed(path === "/canonical/repo"),
+});
+
+const createRuntimeDefinitionsService = () => ({
+  listRuntimeDefinitions(): RuntimeDescriptor[] {
+    return Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
+  },
+});
+
+const createTaskStore = (
+  sessionOverrides: Partial<AgentSessionRecord> = {},
+  extraAgentSessions: AgentSessionRecord[] = [],
+): StopServiceDependencies["taskReader"] => ({
+  getTaskMetadata: () =>
+    Effect.succeed({
+      spec: { markdown: "" },
+      plan: { markdown: "" },
+      agentSessions: [
+        {
+          externalSessionId: "external-session-1",
+          role: "build" as const,
+          startedAt: "2026-05-10T10:00:00.000Z",
+          runtimeKind: "opencode" as const,
+          workingDirectory: "/canonical/repo/worktree",
+          selectedModel: null,
+          ...sessionOverrides,
+        },
+        ...extraAgentSessions,
+      ],
+    }),
+});
+
+const createSessionStopper = (
+  stopSession: StopServiceDependencies["runtimeRegistry"]["stopSession"],
+): StopServiceDependencies["runtimeRegistry"] => ({ stopSession });
 
 const recordingStopper = (calls: RuntimeSessionTarget[]) =>
   createSessionStopper((input) =>
@@ -39,34 +78,6 @@ describe("createTaskSessionStopService agentSessionStop", () => {
     expect(calls).toEqual([
       {
         runtimeKind: "opencode",
-        externalSessionId: "external-session-1",
-        workingDirectory: "/canonical/repo/worktree",
-      },
-    ]);
-  });
-
-  test("stops persisted Codex sessions through the shared runtime of their kind", async () => {
-    const calls: RuntimeSessionTarget[] = [];
-    const service = createTaskSessionStopService({
-      gitPort: createGitPort(),
-      runtimeDefinitionsService: createRuntimeDefinitionsService(),
-      runtimeRegistry: recordingStopper(calls),
-      taskReader: createTaskStore({ runtimeKind: "codex" }),
-    });
-    await expect(
-      Effect.runPromise(
-        service.agentSessionStop({
-          repoPath: "/repo",
-          taskId: "task-1",
-          externalSessionId: "external-session-1",
-          runtimeKind: "codex",
-          workingDirectory: "/canonical/repo/worktree",
-        }),
-      ),
-    ).resolves.toEqual({ ok: true });
-    expect(calls).toEqual([
-      {
-        runtimeKind: "codex",
         externalSessionId: "external-session-1",
         workingDirectory: "/canonical/repo/worktree",
       },

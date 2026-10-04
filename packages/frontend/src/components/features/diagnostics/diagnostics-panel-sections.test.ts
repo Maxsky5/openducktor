@@ -10,7 +10,6 @@ import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { earlierResultNotice } from "./diagnostics-check-section";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 import { DiagnosticsStatusPill } from "./diagnostics-status";
@@ -83,7 +82,6 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("/repo-a");
     expect(html).toContain("Repository setup");
     expect(html).toContain("Task store");
-    expect(html).not.toContain("OpenDucktor MCP connections");
   });
 
   test("labels values kept after a failed refresh as an earlier result", () => {
@@ -99,7 +97,8 @@ describe("DiagnosticsPanelSections", () => {
       },
     });
 
-    expect(html).toContain(earlierResultNotice("2026-02-22T08:00:00.000Z"));
+    expect(html).toContain("Showing the result from ");
+    expect(html).toContain("It may be out of date.");
     expect(html).toContain(
       "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
     );

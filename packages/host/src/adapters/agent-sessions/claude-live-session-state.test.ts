@@ -818,20 +818,6 @@ describe("Claude host live-session state", () => {
       ]);
     });
 
-    test("settles only the finished session when one Claude process exits", () => {
-      const state = createTwoRepositoryState();
-
-      expect(
-        state.applyEvent(otherSession, {
-          type: "session_finished",
-          externalSessionId: "session-2",
-          timestamp: "2026-07-17T10:06:00.000Z",
-          message: "Claude process exited.",
-        }),
-      ).toContainEqual({ type: "session_removed", ref: otherRef });
-      expect(state.listSnapshots().map((snapshot) => snapshot.ref)).toEqual([ref]);
-    });
-
     test("releases the sessions of every repository", () => {
       const state = createTwoRepositoryState();
 

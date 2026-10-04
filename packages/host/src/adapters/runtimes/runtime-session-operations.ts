@@ -11,14 +11,12 @@ import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 import { stopCodexSession } from "../codex/codex-session-stop";
 import { probeOpenCodeSessionStatus, stopOpenCodeSession } from "./runtime-registry-probes";
 
-export type ClaudeRuntimeSessionOperationsPort =
-  | {
-      stopSession(input: RuntimeSessionTarget): Effect.Effect<void, unknown>;
-      probeSessionStatus(
-        input: RuntimeSessionTarget,
-      ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, unknown>;
-    }
-  | undefined;
+export type ClaudeRuntimeSessionOperationsPort = {
+  stopSession(input: RuntimeSessionTarget): Effect.Effect<void, unknown>;
+  probeSessionStatus(
+    input: RuntimeSessionTarget,
+  ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, unknown>;
+};
 
 export type RuntimeSessionOperations = {
   stopSession(
@@ -34,8 +32,8 @@ export type RuntimeSessionOperations = {
 export type RuntimeSessionOperationsByKind = Record<RuntimeKind, RuntimeSessionOperations>;
 
 export type CreateRuntimeSessionOperationsInput = {
-  codexAppServer?: Pick<CodexAppServerPort, "request">;
-  claudeAgentSdk?: ClaudeRuntimeSessionOperationsPort;
+  codexAppServer: Pick<CodexAppServerPort, "request">;
+  claudeAgentSdk: ClaudeRuntimeSessionOperationsPort;
 };
 
 const toClaudeSessionOperationError = (
@@ -60,18 +58,13 @@ const createOpenCodeSessionOperations = (): RuntimeSessionOperations => ({
 });
 
 const createCodexSessionOperations = (
-  codexAppServer: Pick<CodexAppServerPort, "request"> | undefined,
+  codexAppServer: Pick<CodexAppServerPort, "request">,
 ): RuntimeSessionOperations => ({
   stopSession(input, runtime) {
     return Effect.gen(function* () {
-      const appServer = yield* requireCodexAppServer(
-        codexAppServer,
-        "runtimeRegistry.stopCodexSession",
-        "Codex session stop requires the Codex app-server port.",
-      );
       const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
       return yield* stopCodexSession({
-        codexAppServer: appServer,
+        codexAppServer,
         runtimeId,
         externalSessionId: input.externalSessionId,
         workingDirectory: input.workingDirectory,
@@ -80,14 +73,9 @@ const createCodexSessionOperations = (
   },
   probeSessionStatus(input, runtime) {
     return Effect.gen(function* () {
-      const appServer = yield* requireCodexAppServer(
-        codexAppServer,
-        "runtimeRegistry.probeSessionStatus",
-        "Codex session status probing requires the Codex app-server port.",
-      );
       const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
       return yield* probeCodexSessionStatus({
-        codexAppServer: appServer,
+        codexAppServer,
         runtimeId,
         externalSessionId: input.externalSessionId,
         workingDirectory: input.workingDirectory,
@@ -100,90 +88,42 @@ const createClaudeSessionOperations = (
   claudeAgentSdk: ClaudeRuntimeSessionOperationsPort,
 ): RuntimeSessionOperations => ({
   stopSession(input) {
-    return Effect.gen(function* () {
-      const sdk = yield* requireClaudeAgentSdk(
-        claudeAgentSdk,
-        "runtimeRegistry.stopClaudeSession",
-        "Claude session stop requires the Claude Agent SDK service.",
-      );
-      return yield* sdk
-        .stopSession(input)
-        .pipe(
-          Effect.mapError((cause) =>
-            toClaudeSessionOperationError(
-              "claudeAgentSdk",
-              "runtimeRegistry.stopClaudeSession",
-              cause,
-            ),
+    return claudeAgentSdk
+      .stopSession(input)
+      .pipe(
+        Effect.mapError((cause) =>
+          toClaudeSessionOperationError(
+            "claudeAgentSdk",
+            "runtimeRegistry.stopClaudeSession",
+            cause,
           ),
-        );
-    });
+        ),
+      );
   },
   probeSessionStatus(input) {
-    return Effect.gen(function* () {
-      const sdk = yield* requireClaudeAgentSdk(
-        claudeAgentSdk,
-        "runtimeRegistry.probeClaudeSessionStatus",
-        "Claude session status probing requires the Claude Agent SDK service.",
-      );
-      return yield* sdk
-        .probeSessionStatus(input)
-        .pipe(
-          Effect.mapError((cause) =>
-            toClaudeSessionOperationError(
-              "claudeAgentSdk",
-              "runtimeRegistry.probeClaudeSessionStatus",
-              cause,
-            ),
+    return claudeAgentSdk
+      .probeSessionStatus(input)
+      .pipe(
+        Effect.mapError((cause) =>
+          toClaudeSessionOperationError(
+            "claudeAgentSdk",
+            "runtimeRegistry.probeClaudeSessionStatus",
+            cause,
           ),
-        );
-    });
+        ),
+      );
   },
 });
 
 export const createRuntimeSessionOperations = ({
   codexAppServer,
   claudeAgentSdk,
-}: CreateRuntimeSessionOperationsInput = {}) =>
+}: CreateRuntimeSessionOperationsInput) =>
   ({
     opencode: createOpenCodeSessionOperations(),
     codex: createCodexSessionOperations(codexAppServer),
     claude: createClaudeSessionOperations(claudeAgentSdk),
   }) satisfies RuntimeSessionOperationsByKind;
-
-const requireClaudeAgentSdk = (
-  claudeAgentSdk: ClaudeRuntimeSessionOperationsPort,
-  operation: string,
-  message: string,
-) => {
-  if (claudeAgentSdk) {
-    return Effect.succeed(claudeAgentSdk);
-  }
-  return Effect.fail(
-    new HostResourceError({
-      resource: "claudeAgentSdk",
-      operation,
-      message,
-    }),
-  );
-};
-
-const requireCodexAppServer = (
-  codexAppServer: Pick<CodexAppServerPort, "request"> | undefined,
-  operation: string,
-  message: string,
-) => {
-  if (codexAppServer) {
-    return Effect.succeed(codexAppServer);
-  }
-  return Effect.fail(
-    new HostResourceError({
-      resource: "codexAppServer",
-      operation,
-      message,
-    }),
-  );
-};
 
 const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
   Effect.gen(function* () {

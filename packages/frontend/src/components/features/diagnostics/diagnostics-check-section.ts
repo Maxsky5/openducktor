@@ -36,10 +36,9 @@ const CHECK_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
-export const formatCheckTime = (isoTime: string): string =>
-  CHECK_TIME_FORMAT.format(new Date(isoTime));
+const formatCheckTime = (isoTime: string): string => CHECK_TIME_FORMAT.format(new Date(isoTime));
 
-export const earlierResultNotice = (observedAt: string): string =>
+const earlierResultNotice = (observedAt: string): string =>
   `Showing the result from ${formatCheckTime(observedAt)}. It may be out of date.`;
 
 export const runtimeLabel = (runtimeDefinitions: RuntimeDescriptor[], kind: RuntimeKind): string =>

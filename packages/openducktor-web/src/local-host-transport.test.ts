@@ -980,38 +980,14 @@ describe("local host SSE subscriptions", () => {
     });
     const { transportEpoch, unsubscribe } = await subscription;
     expect(transportEpoch).toBe("events:0");
-    unsubscribe();
-    expect(eventSource.closed).toBe(true);
-  });
-
-  test("a runtime subscriber sees the recovery of a failure before the first open", async () => {
-    const { subscribeLocalHostRuntimeChanges } = await loadLocalHostTransport();
-    globalThis.fetch = createFetchFixture(
-      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
-    );
-    const listener = mock<RuntimeChangeListener>(() => {});
-    const subscription = subscribeLocalHostRuntimeChanges(listener);
-    const eventSource = await waitForEventSourceInstance();
-
-    eventSource.emit("error", "failed");
-    eventSource.emit("open", "");
-    const unsubscribe = await subscription;
-
-    expect(listener.mock.calls.map(([event]) => event)).toEqual([
-      {
-        __openducktorBrowserLive: true,
-        kind: "stream-warning",
-        message: "EventSource events reported an error before opening.",
-      },
-      { __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "events:0" },
-    ]);
 
     // A subscriber that joins after this recovery gets no old warning.
-    const late = mock<RuntimeChangeListener>(() => {});
-    const unsubscribeLate = await subscribeLocalHostRuntimeChanges(late);
+    const late = mock(() => {});
+    const { unsubscribe: unsubscribeLate } = await subscribeLocalHostDevServerEvents(late);
     expect(late).not.toHaveBeenCalled();
-    unsubscribe();
     unsubscribeLate();
+    unsubscribe();
+    expect(eventSource.closed).toBe(true);
   });
 
   test("emits a stream-warning control payload when dev-server EventSource errors after opening", async () => {

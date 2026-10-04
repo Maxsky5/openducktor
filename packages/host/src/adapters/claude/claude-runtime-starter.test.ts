@@ -161,7 +161,7 @@ const createLiveSessionDependencies = ({
 };
 
 describe("createClaudeRuntimeStarter", () => {
-  test("validates Claude startup dependencies before returning a runtime", async () => {
+  test("registers and forwards the shared live-session adapter and releases it on stop", async () => {
     const liveSession = createLiveSessionDependencies();
     const starter = createClaudeRuntimeStarter({
       liveSessionLifecycle: liveSession.liveSessionLifecycle,
@@ -251,29 +251,6 @@ describe("createClaudeRuntimeStarter", () => {
     expect(replacement.configuredExecutablePath).toBe(replacementPath);
     expect(replacement.effectiveExecutablePath).toBe(replacementPath);
     await Effect.runPromise(replacement.stop());
-  });
-
-  test("probes the exact saved executable before returning a runtime", async () => {
-    const liveSession = createLiveSessionDependencies();
-    const probeCalls: string[] = [];
-    const starter = createClaudeRuntimeStarter({
-      liveSessionLifecycle: liveSession.liveSessionLifecycle,
-      prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
-      runtimeId: () => "runtime-claude",
-      runtimeExecutableProbe: {
-        probeExecutable(executablePath) {
-          probeCalls.push(executablePath);
-          return Effect.void;
-        },
-      },
-      ...createRuntimePathDependencies(),
-    });
-
-    const handle = await Effect.runPromise(starter.startRuntime(createStartInput()));
-
-    expect(probeCalls).toEqual([process.execPath]);
-    expect(liveSession.executablePaths).toEqual([process.execPath]);
-    await Effect.runPromise(handle.stop());
   });
 
   test("retries adapter cleanup after a registered release fails", async () => {

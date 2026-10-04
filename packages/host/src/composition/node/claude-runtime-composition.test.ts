@@ -167,7 +167,6 @@ describe("createClaudeRuntimeComposition", () => {
       first.runtime.runtimeId,
       replacement.runtime.runtimeId,
     ]);
-    expect(calls.adapters[0]?.binding).not.toHaveProperty("repoPath");
     await Effect.runPromise(replacement.stop());
     expect(calls.released).toBe(2);
   });

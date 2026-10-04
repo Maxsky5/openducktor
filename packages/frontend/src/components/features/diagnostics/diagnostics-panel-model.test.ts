@@ -11,7 +11,6 @@ import {
   createObservedCheckFixture,
   createTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { earlierResultNotice } from "./diagnostics-check-section";
 import {
   type BuildDiagnosticsPanelModelInput,
   buildDiagnosticsPanelModel,
@@ -321,7 +320,8 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(git.errors).toEqual([
       "Git check failed: Runtime check failed. Select Refresh to try again.",
     ]);
-    expect(git.notice).toBe(earlierResultNotice("2026-02-22T07:00:00.000Z"));
+    expect(git.notice).toStartWith("Showing the result from ");
+    expect(git.notice).toEndWith(". It may be out of date.");
     expect(git.value).toBe("2.50.1");
 
     const taskStore = workspaceCheck(model, "task-store");
@@ -329,7 +329,9 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(taskStore.errors).toEqual([
       "Task store check failed: Task store check failed. Select Refresh to try again.",
     ]);
-    expect(taskStore.notice).toBe(earlierResultNotice("2026-02-22T07:30:00.000Z"));
+    expect(taskStore.notice).toEndWith(". It may be out of date.");
+    // Each notice names the time of its own check.
+    expect(taskStore.notice).not.toBe(git.notice);
     expect(taskStore.details.map((detail) => detail.label)).toEqual(["Database"]);
 
     expect(model.criticalReasons).toEqual([...git.errors, ...taskStore.errors]);
@@ -375,7 +377,8 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(mcpBridge.errors).toEqual([
       "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
     ]);
-    expect(mcpBridge.notice).toBe(earlierResultNotice("2026-02-22T08:00:00.000Z"));
+    expect(mcpBridge.notice).toStartWith("Showing the result from ");
+    expect(mcpBridge.notice).toEndWith(". It may be out of date.");
     expect(mcpBridge.details).toEqual([
       { label: "Address", value: "http://127.0.0.1:1", isPath: true },
     ]);
@@ -384,6 +387,19 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.hasHostBlockingFailure).toBe(true);
     expect(model.hasWorkspaceBlockingFailure).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
+  });
+
+  test("puts a critical issue ahead of a check in progress", () => {
+    const model = buildDiagnosticsPanelModel(
+      createInput({
+        runtimeStatus: createHostRuntimeStatusContextValue({ isLoading: true, isCurrent: false }),
+        hostMcpBridgeCheck: { data: null, error: "Bridge check failed." },
+      }),
+    );
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.overview.tone).toBe("critical");
   });
 
   test("puts setup warnings after loading", () => {

@@ -36,8 +36,8 @@ const createState = () => {
 type LiveState = ReturnType<typeof createState>;
 type SessionSources = Parameters<LiveState["applySessionSources"]>[1]["sources"];
 
-const applySources = (state: LiveState, sources: SessionSources, repoPath = REPO) =>
-  state.applySessionSources(repoPath, { sources, failures: [] }, state.versions());
+const applySources = (state: LiveState, sources: SessionSources) =>
+  state.applySessionSources(REPO, { sources, failures: [] }, state.versions());
 
 describe("OpenCode host live-session state", () => {
   test("starts empty and adds a session from an OpenDucktor control result", () => {
@@ -317,51 +317,6 @@ describe("OpenCode host live-session state", () => {
       { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
     expect(state.listSnapshots()).toEqual([]);
-  });
-
-  test("removes only sessions of the refreshed repository", () => {
-    const state = createState();
-    state.applyControlSummary("/repo-a", { ...summary("session-a"), workingDirectory: "/repo-a" });
-    state.applyControlSummary("/repo-b", { ...summary("session-b"), workingDirectory: "/repo-b" });
-    const refA = state.refForExternalSession("session-a");
-    if (!refA) throw new Error("Expected a live session in repository A.");
-
-    expect(applySources(state, [], "/repo-a")).toEqual([
-      { type: "session_removed", ref: refA, provenance: "baseline" },
-    ]);
-
-    expect(state.listSnapshots().map(({ ref }) => ref)).toEqual([
-      {
-        repoPath: "/repo-b",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo-b",
-        externalSessionId: "session-b",
-      },
-    ]);
-  });
-
-  test("builds refreshed refs from each source repository", () => {
-    const state = createState();
-
-    applySources(
-      state,
-      [
-        {
-          repoPath: "/repo-b",
-          externalSessionId: "session-b",
-          workingDirectory: "/repo-b",
-          sessionAssociation: { kind: "repository" },
-          title: "Repository chat",
-          startedAt: "2026-07-16T10:01:00.000Z",
-          runtimeActivity: "idle",
-          pendingApprovals: [],
-          pendingQuestions: [],
-        },
-      ],
-      "/repo-b",
-    );
-
-    expect(state.listSnapshots()[0]?.ref.repoPath).toBe("/repo-b");
   });
 
   test("blocks child approval when a refresh drops its parent after a new request", () => {

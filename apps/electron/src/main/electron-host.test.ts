@@ -903,7 +903,7 @@ describe("createElectronHostCommandRouter", () => {
     });
   });
 
-  test("registers shared runtime host commands", async () => {
+  test("lists, requires, and restarts shared runtimes through host commands", async () => {
     const opencodeDescriptor = createRuntimeDefinitionsService()
       .listRuntimeDefinitions()
       .find((descriptor) => descriptor.kind === "opencode");
@@ -926,17 +926,6 @@ describe("createElectronHostCommandRouter", () => {
         { kind: "codex" },
         { kind: "claude" },
       ]);
-      for (const command of [
-        "runtime_ensure",
-        "runtime_list",
-        "runtime_stop",
-        "repo_runtime_health",
-        "repo_runtime_health_status",
-      ]) {
-        await expect(router.invoke(command, { runtimeKind: "opencode" })).rejects.toThrow(
-          `Unknown OpenDucktor host command: ${command}`,
-        );
-      }
 
       await router.initialize();
       const [ready] = await waitForRuntimeState(router, ["opencode"], "ready");

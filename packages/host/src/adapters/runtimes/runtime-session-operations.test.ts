@@ -9,11 +9,8 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import { createClaudeAgentSdkSessionStore } from "../claude/claude-agent-sdk-session-store";
-import { createClaudeQueryFixture } from "../claude/claude-agent-sdk-session-io.test-support";
-import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
-import type { ClaudeSession } from "../claude/claude-agent-sdk-types";
 import {
   type CreateRuntimeSessionOperationsInput,
   createRuntimeSessionOperations,
@@ -93,13 +90,24 @@ const sessionTarget = (runtimeKind: RuntimeKind, externalSessionId = "session-1"
   workingDirectory: "/repo/worktree",
 });
 
+const unusedPort = (): never => {
+  throw new Error("This test does not use this port.");
+};
+
+const createOperations = (operationsInput: Partial<CreateRuntimeSessionOperationsInput>) =>
+  createRuntimeSessionOperations({
+    codexAppServer: { request: unusedPort },
+    claudeAgentSdk: { stopSession: unusedPort, probeSessionStatus: unusedPort },
+    ...operationsInput,
+  });
+
 const stopSession = (
   runtime: RuntimeInstanceSummary,
-  operationsInput: CreateRuntimeSessionOperationsInput = {},
+  operationsInput: Partial<CreateRuntimeSessionOperationsInput> = {},
   externalSessionId = "session-1",
 ) =>
   Effect.runPromise(
-    createRuntimeSessionOperations(operationsInput)[runtime.kind].stopSession(
+    createOperations(operationsInput)[runtime.kind].stopSession(
       sessionTarget(runtime.kind, externalSessionId),
       runtime,
     ),
@@ -108,11 +116,11 @@ const stopSession = (
 const probeSession = (
   runtime: RuntimeInstanceSummary,
   runtimeKind: RuntimeKind,
-  operationsInput: CreateRuntimeSessionOperationsInput = {},
+  operationsInput: Partial<CreateRuntimeSessionOperationsInput> = {},
   externalSessionId = "session-1",
 ) =>
   Effect.runPromise(
-    createRuntimeSessionOperations(operationsInput)[runtimeKind].probeSessionStatus(
+    createOperations(operationsInput)[runtimeKind].probeSessionStatus(
       sessionTarget(runtimeKind, externalSessionId),
       runtime,
     ),
@@ -126,94 +134,22 @@ const claudeRuntime: RuntimeInstanceSummary = {
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
 };
 
-const createSession = (repoPath: string, externalSessionId: string): ClaudeSession => ({
-  acceptedUserMessages: [],
-  activeSdkUserTurnCount: 1,
-  abortController: new AbortController(),
-  activity: "running",
-  externalSessionId,
-  input: {
-    repoPath,
-    runtimeKind: "claude",
-    workingDirectory: `${repoPath}/worktree`,
-    runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "repository" },
-    systemPrompt: "Help",
-  },
-  model: undefined,
-  pendingApprovals: new Map(),
-  pendingQuestions: new Map(),
-  queuedSdkMessages: [],
-  pendingUserTurnCount: 0,
-  query: createClaudeQueryFixture({}),
-  queue: new AsyncInputQueue(),
-  runtimeId: "runtime-claude",
-  startedAt: "2026-07-17T10:01:00.000Z",
-  summary: {
-    externalSessionId,
-    runtimeKind: "claude",
-    workingDirectory: `${repoPath}/worktree`,
-    sessionAssociation: { kind: "repository" },
-    startedAt: "2026-07-17T10:01:00.000Z",
-    status: "running",
-  },
-  streamAssistantMessageOrdinal: 0,
-  streamAssistantMessageIdsByBlockIndex: new Map(),
-  subagentMessageIdsByTaskId: new Map(),
-  subagentTaskIdsByToolUseId: new Map(),
-  toolEndedAtMsByCallId: new Map(),
-  toolInputsByCallId: new Map(),
-  toolMessageIdsByCallId: new Map(),
-  toolNamesByCallId: new Map(),
-  toolStartedAtMsByCallId: new Map(),
-  todosById: new Map(),
-});
-
 describe("Claude runtime session operations", () => {
-  test("stops and probes a session of the shared Claude service without a repository", async () => {
-    const sessionStore = createClaudeAgentSdkSessionStore();
-    sessionStore.set(createSession("/repo-a", "session-a"));
-    sessionStore.set(createSession("/repo-b", "session-b"));
-    const sessionOperations = createRuntimeSessionOperations({ claudeAgentSdk: sessionStore });
-    const target = {
-      runtimeKind: "claude" as const,
-      externalSessionId: "session-b",
-      workingDirectory: "/repo-b/worktree",
-    };
-
-    await expect(
-      Effect.runPromise(sessionOperations.claude.probeSessionStatus(target, claudeRuntime)),
-    ).resolves.toEqual({ supported: true, hasLiveSession: true });
-    await Effect.runPromise(sessionOperations.claude.stopSession(target, claudeRuntime));
-
-    expect(sessionStore.get("session-b")).toBeUndefined();
-    expect(sessionStore.get("session-a")?.activity).toBe("running");
-    await expect(
-      Effect.runPromise(sessionOperations.claude.probeSessionStatus(target, claudeRuntime)),
-    ).resolves.toEqual({ supported: true, hasLiveSession: false });
-  });
-
   test("reports an unknown Claude session as a resource failure", async () => {
-    const sessionOperations = createRuntimeSessionOperations({
-      claudeAgentSdk: createClaudeAgentSdkSessionStore(),
+    const error = await Effect.runPromise(
+      createOperations({ claudeAgentSdk: createClaudeAgentSdkSessionStore() })
+        .claude.stopSession(sessionTarget("claude", "missing"), claudeRuntime)
+        .pipe(Effect.flip),
+    );
+
+    expect(error).toBeInstanceOf(HostResourceError);
+    expect(error).toMatchObject({
+      resource: "claudeAgentSdk",
+      operation: "runtimeRegistry.stopClaudeSession",
+      message: "Unknown Claude session 'missing'.",
     });
-
-    await expect(
-      Effect.runPromise(
-        sessionOperations.claude.stopSession(
-          {
-            runtimeKind: "claude",
-            externalSessionId: "missing",
-            workingDirectory: "/repo/worktree",
-          },
-          claudeRuntime,
-        ),
-      ),
-    ).rejects.toThrow("Unknown Claude session 'missing'.");
   });
-});
 
-describe("Claude runtime session routing", () => {
   test("routes Claude session stop and status probes through the Claude Agent SDK service", async () => {
     const stops: unknown[] = [];
     const probes: unknown[] = [];
@@ -235,15 +171,6 @@ describe("Claude runtime session routing", () => {
     });
     expect(stops).toEqual([sessionTarget("claude")]);
     expect(probes).toEqual([sessionTarget("claude")]);
-  });
-
-  test("fails Claude session operations without the Claude Agent SDK service", async () => {
-    await expect(probeSession(claudeRuntime, "claude")).rejects.toThrow(
-      "Claude session status probing requires the Claude Agent SDK service.",
-    );
-    await expect(stopSession(claudeRuntime)).rejects.toThrow(
-      "Claude session stop requires the Claude Agent SDK service.",
-    );
   });
 });
 
@@ -531,10 +458,7 @@ describe("Codex runtime session operations", () => {
     ).rejects.toThrow('"data"');
   });
 
-  test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
-    await expect(stopSession(createCodexRuntime())).rejects.toThrow(
-      "Codex session stop requires the Codex app-server port.",
-    );
+  test("fails Codex stop without a Codex runtime route", async () => {
     await expect(
       stopSession(
         createCodexRuntime({

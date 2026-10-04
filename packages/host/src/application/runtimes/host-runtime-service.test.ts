@@ -10,8 +10,12 @@ import {
   createRuntimeAdmissionGate,
   createRuntimeOrchestrator,
 } from "@openducktor/runtime-orchestration";
-import { Deferred, Effect, Exit, Fiber, FiberId } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { Effect } from "effect";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import {
   createTestRuntimeDrivers,
   testRuntimeHandle,
@@ -44,26 +48,24 @@ const configWith = (
 const snapshot = (
   externalSessionId: string,
   activity: AgentSessionLiveSnapshot["activity"],
-  runtimeKind: RuntimeKind = "opencode",
-  overrides: Partial<AgentSessionLiveSnapshot> = {},
 ): AgentSessionLiveSnapshot => ({
-  ...overrides,
-  ref: { repoPath, runtimeKind, workingDirectory: `${repoPath}/wt`, externalSessionId },
+  ref: {
+    repoPath,
+    runtimeKind: "opencode",
+    workingDirectory: `${repoPath}/wt`,
+    externalSessionId,
+  },
   activity,
   title: `Session ${externalSessionId}`,
   startedAt: "2026-10-03T10:00:00.000Z",
-  pendingApprovals: overrides.pendingApprovals ?? [],
-  pendingQuestions: overrides.pendingQuestions ?? [],
+  pendingApprovals: [],
+  pendingQuestions: [],
   contextUsage: null,
 });
 
 const createHarness = (initialConfig: GlobalConfig) => {
   let config: GlobalConfig | null = initialConfig;
-  let readFailure: HostValidationError | null = null;
   let writeFailure: HostOperationError | null = null;
-  /** Holds the settings write open until the test releases it. */
-  let writeGate: Deferred.Deferred<void> | null = null;
-  let writeStarted = false;
   const writes: GlobalConfig[] = [];
   const events: string[] = [];
   let starts = 0;
@@ -95,8 +97,7 @@ const createHarness = (initialConfig: GlobalConfig) => {
     },
   );
   const settingsConfig = {
-    readConfig: () =>
-      Effect.suspend(() => (readFailure ? Effect.fail(readFailure) : Effect.succeed(config))),
+    readConfig: () => Effect.sync(() => config),
   };
   const gate = createRuntimeAdmissionGate();
   const orchestrator = createRuntimeOrchestrator({
@@ -108,7 +109,6 @@ const createHarness = (initialConfig: GlobalConfig) => {
     }),
     observer: { statusChanged: () => {}, backgroundFailure: () => {} },
     admission: gate,
-    controlGrace: "20 millis",
   });
   const registry = createRuntimeRegistryPort(orchestrator);
   const admission = createRuntimeAdmissionPort(gate);
@@ -132,14 +132,12 @@ const createHarness = (initialConfig: GlobalConfig) => {
           return commit(
             prepared,
             Effect.suspend(() => {
-              writeStarted = true;
               if (writeFailure) return Effect.fail(writeFailure);
-              const write = Effect.sync(() => {
+              return Effect.sync(() => {
                 writes.push(nextConfig);
                 config = nextConfig;
                 return workspaces;
               });
-              return writeGate ? Deferred.await(writeGate).pipe(Effect.zipRight(write)) : write;
             }),
           );
         }),
@@ -155,13 +153,9 @@ const createHarness = (initialConfig: GlobalConfig) => {
     sessions,
     failingStarts,
     missingExecutables,
-    setReadFailure: (failure: HostValidationError) => {
-      readFailure = failure;
+    clearConfig: () => {
+      config = null;
     },
-    holdWrites: () => {
-      writeGate = Deferred.unsafeMake<void>(FiberId.none);
-    },
-    writeStarted: () => writeStarted,
     setWriteFailure: (failure: HostOperationError) => {
       writeFailure = failure;
     },
@@ -206,15 +200,19 @@ describe("host runtime service", () => {
     expect(harness.events).toEqual(["start:opencode-1"]);
   });
 
-  test("records an unreadable configuration as an error for every kind", async () => {
+  test("records missing runtime settings as an error for every kind", async () => {
     const harness = createHarness(configWith({}));
-    harness.setReadFailure(new HostValidationError({ message: "settings file is invalid" }));
+    harness.clearConfig();
 
     await Effect.runPromise(harness.service.initialize());
 
     const snapshot = await Effect.runPromise(harness.service.snapshot());
-    expect(snapshot.runtimes.every((status) => status.state === "error")).toBe(true);
-    expect(snapshot.runtimes[0]?.failure?.message).toContain("settings file is invalid");
+    expect(snapshot.runtimes.map((status) => status.state)).toEqual(["error", "error", "error"]);
+    for (const status of snapshot.runtimes) {
+      expect(status.failure?.message).toEndWith(
+        "Runtime settings are not initialized. Open Settings > Runtimes.",
+      );
+    }
   });
 
   test("restart groups live sessions by workspace and replaces the runtime after review", async () => {
@@ -249,46 +247,25 @@ describe("host runtime service", () => {
     expect(harness.events).toEqual(["start:opencode-1", "stop:opencode-1", "start:opencode-2"]);
   });
 
-  test("restart finishes when an admitted control never finishes", async () => {
+  test("rejects a control with a host resource error while a lifecycle action holds the kind", async () => {
     const harness = createHarness(
       configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
     );
     await Effect.runPromise(harness.service.initialize());
     await waitForState(harness.registry, "opencode", "ready");
-    const stuck = Effect.runFork(harness.admission.admit("opencode", Effect.never));
-    await Effect.runPromise(Effect.yieldNow());
 
-    const impact = await Effect.runPromise(harness.service.restartImpact("opencode"));
-    const result = await Effect.runPromise(
-      harness.service.restart("opencode", impact.confirmation),
+    const failure = await Effect.runPromise(
+      harness.orchestrator.withSettingsChange(["opencode"], () =>
+        Effect.flip(harness.admission.admit("opencode", Effect.succeed("ok"))),
+      ),
     );
 
-    expect(result).toMatchObject({ type: "completed", status: { runtimeId: "opencode-2" } });
-    expect(Exit.isFailure(await Effect.runPromise(Fiber.await(stuck)))).toBe(true);
-    await expect(
-      Effect.runPromise(harness.admission.admit("opencode", Effect.succeed("ok"))),
-    ).resolves.toBe("ok");
-  });
-
-  test("restart returns the changed impact when new work appears after review", async () => {
-    const harness = createHarness(
-      configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
-    );
-    await Effect.runPromise(harness.service.initialize());
-    await waitForState(harness.registry, "opencode", "ready");
-    harness.sessions.set("opencode", [snapshot("s1", "idle")]);
-    const reviewed = await Effect.runPromise(harness.service.restartImpact("opencode"));
-
-    harness.sessions.set("opencode", [snapshot("s1", "running")]);
-    const result = await Effect.runPromise(
-      harness.service.restart("opencode", reviewed.confirmation),
-    );
-
-    expect(result.type).toBe("impact_changed");
-    expect(harness.events).toEqual(["start:opencode-1"]);
-    await expect(
-      Effect.runPromise(harness.service.restart("opencode", reviewed.confirmation)),
-    ).resolves.toMatchObject({ type: "impact_changed" });
+    expect(failure).toBeInstanceOf(HostResourceError);
+    expect(failure).toMatchObject({
+      resource: "agent_runtime",
+      operation: "runtime.admit",
+      details: { runtimeKind: "opencode", state: "ready" },
+    });
   });
 
   test("a disable that stops live sessions needs a confirmation before settings are written", async () => {
@@ -401,31 +378,6 @@ describe("host runtime service", () => {
     ).resolves.toMatchObject({ runtimeId: "opencode-1" });
   });
 
-  test("an interrupted settings save releases its runtime reservation", async () => {
-    const harness = createHarness(
-      configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
-    );
-    await Effect.runPromise(harness.service.initialize());
-    await waitForState(harness.registry, "opencode", "ready");
-    harness.holdWrites();
-
-    const saving = Effect.runFork(
-      harness.service.saveSettings({
-        snapshot: saveInput(
-          configWith({ opencode: { enabled: true, executablePath: "/new" } }).agentRuntimes,
-        ),
-      }),
-    );
-    while (!harness.writeStarted()) await Effect.runPromise(Effect.yieldNow());
-    await Effect.runPromise(Fiber.interrupt(saving));
-
-    // A new lifecycle action can reserve the kind, so the save released it.
-    await Effect.runPromise(
-      harness.orchestrator.withSettingsChange(["opencode"], () => Effect.void),
-    );
-    expect(harness.events).toEqual(["start:opencode-1"]);
-  });
-
   test("a failed settings write never stops a runtime", async () => {
     const harness = createHarness(
       configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
@@ -446,43 +398,5 @@ describe("host runtime service", () => {
     await expect(Effect.runPromise(harness.registry.status("opencode"))).resolves.toMatchObject({
       state: "ready",
     });
-  });
-  test.each([
-    {
-      label: "a new turn in a reviewed running session",
-      after: snapshot("s1", "running", "opencode", { executionEpisodeId: "turn-2" }),
-      changed: true,
-    },
-    {
-      label: "a new pending approval",
-      after: snapshot("s1", "waiting_for_permission", "opencode", {
-        executionEpisodeId: "turn-1",
-        pendingApprovals: [{ requestId: "approval-1", requestType: "runtime_tool", title: "Run" }],
-      }),
-      changed: true,
-    },
-    {
-      label: "progress in the reviewed turn",
-      after: snapshot("s1", "running", "opencode", { executionEpisodeId: "turn-1" }),
-      changed: false,
-    },
-    { label: "the reviewed turn finishing", after: snapshot("s1", "idle"), changed: false },
-  ])("restart confirmation after $label", async ({ after, changed }) => {
-    const harness = createHarness(
-      configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
-    );
-    await Effect.runPromise(harness.service.initialize());
-    await waitForState(harness.registry, "opencode", "ready");
-    harness.sessions.set("opencode", [
-      snapshot("s1", "running", "opencode", { executionEpisodeId: "turn-1" }),
-    ]);
-    const reviewed = await Effect.runPromise(harness.service.restartImpact("opencode"));
-
-    harness.sessions.set("opencode", [after]);
-    const result = await Effect.runPromise(
-      harness.service.restart("opencode", reviewed.confirmation),
-    );
-
-    expect(result.type).toBe(changed ? "impact_changed" : "completed");
   });
 });

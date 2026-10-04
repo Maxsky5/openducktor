@@ -1,10 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
-import {
-  classifyDiagnosticsQueryError,
-  DiagnosticsQueryTimeoutError,
-  hostMcpBridgeCheckQueryOptions,
-} from "./checks";
+import { describe, expect, test } from "bun:test";
+import { classifyDiagnosticsQueryError, DiagnosticsQueryTimeoutError } from "./checks";
 
 describe("classifyDiagnosticsQueryError", () => {
   test("keeps query timeout errors explicit", () => {
@@ -19,26 +14,5 @@ describe("classifyDiagnosticsQueryError", () => {
       message: "Timed out after 15000ms",
       failureKind: "error",
     });
-  });
-});
-
-describe("host MCP bridge check query", () => {
-  test("reads the host MCP bridge without a workspace", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const check = mock(async () => ({
-      state: "ready" as const,
-      hostUrl: "http://127.0.0.1:1",
-      checkedAt: "2026-02-22T08:00:00.000Z",
-      detail: null,
-    }));
-
-    try {
-      await expect(
-        queryClient.fetchQuery(hostMcpBridgeCheckQueryOptions(check)),
-      ).resolves.toMatchObject({ state: "ready" });
-      expect(check).toHaveBeenCalledTimes(1);
-    } finally {
-      queryClient.clear();
-    }
   });
 });

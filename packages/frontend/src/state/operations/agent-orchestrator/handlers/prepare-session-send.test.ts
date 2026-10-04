@@ -52,7 +52,7 @@ const createPrepareSend = (
 };
 
 describe("prepare session send", () => {
-  test("builds the durable session prompt without starting a runtime", async () => {
+  test("builds the durable session prompt from the task and workspace prompt overrides", async () => {
     const { promptOverrideReads, prepareSend } = createPrepareSend();
 
     const result = await prepareSend(buildWorkflowSession({ status: "idle" }), {

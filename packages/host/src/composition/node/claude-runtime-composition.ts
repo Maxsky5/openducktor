@@ -17,10 +17,8 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
-type ClaudeRuntimeSessionOperations = Exclude<ClaudeRuntimeSessionOperationsPort, undefined>;
-
 export type ClaudeRuntimeComposition = {
-  sessionOperations: ClaudeRuntimeSessionOperations;
+  sessionOperations: ClaudeRuntimeSessionOperationsPort;
   runtimeStarter: RuntimeStarterPort;
 };
 
