@@ -129,6 +129,11 @@
   --sidebar-accent: oklch(0.208 0.042 265.755); /* ~slate-900 – active nav */
   --sidebar-accent-foreground: oklch(1 0 0);
   --sidebar-muted-foreground: oklch(0.554 0.046 257.417);
+  --sidebar-read-foreground: color-mix(
+    in oklch,
+    var(--sidebar-muted-foreground) 85%,
+    var(--foreground)
+  );
   --sidebar-primary: oklch(0.5 0.31 277.49);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-ring: oklch(0.5 0.31 277.49);
@@ -385,6 +390,7 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-read-foreground: var(--sidebar-read-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-ring: var(--sidebar-ring);

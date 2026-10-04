@@ -1,7 +1,9 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { Folder, LayoutGrid } from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 import type { ReactElement } from "react";
+import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type SessionNavigationScope = "current" | "all";
@@ -24,6 +26,34 @@ export function SessionScopeSwitch({
   const currentLabel = workspace
     ? `Show sessions of ${workspace.workspaceName}`
     : "No workspace is selected";
+  const allLabel = "Show sessions of all workspaces";
+  if (compact) {
+    const all = scope === "all";
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={allLabel}
+              aria-pressed={all}
+              disabled={all && !workspace}
+              className={cn(
+                "size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground",
+                all && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent",
+              )}
+              onClick={() => onScopeChange(all ? "current" : "all")}
+            >
+              <LayoutGrid className="size-4" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{all ? currentLabel : allLabel}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
   return (
     <RadioGroup
       aria-label="Session list scope"
@@ -40,25 +70,17 @@ export function SessionScopeSwitch({
         disabled={!workspace}
         aria-label={currentLabel}
         title={currentLabel}
-        className={cn("min-w-0 text-foreground/70", compact && "px-0")}
+        className="min-w-0 text-foreground/70"
       >
-        {compact ? (
-          <Folder className="size-4" aria-hidden="true" />
-        ) : (
-          <span className="truncate">{workspace?.workspaceName ?? "No workspace"}</span>
-        )}
+        <span className="truncate">{workspace?.workspaceName ?? "No workspace"}</span>
       </RadioGroupSegmentItem>
       <RadioGroupSegmentItem
         value="all"
-        aria-label="Show sessions of all workspaces"
-        title="Show sessions of all workspaces"
-        className={cn("min-w-0 text-foreground/70", compact && "px-0")}
+        aria-label={allLabel}
+        title={allLabel}
+        className="min-w-0 text-foreground/70"
       >
-        {compact ? (
-          <LayoutGrid className="size-4" aria-hidden="true" />
-        ) : (
-          <span className="truncate">All workspaces</span>
-        )}
+        <span className="truncate">All workspaces</span>
       </RadioGroupSegmentItem>
     </RadioGroup>
   );

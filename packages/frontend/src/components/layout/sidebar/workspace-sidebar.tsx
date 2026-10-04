@@ -173,26 +173,28 @@ export function WorkspaceSidebar({
                   <PanelLeftClose className="size-4" />
                 </Button>
               </div>
-              <SidebarNavigation onBeforeNavigate={guardTransition} />
-              <SessionCreateSplitAction />
-              <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <SessionScopeSwitch
-                    scope={scope}
-                    onScopeChange={setScope}
-                    workspace={activeWorkspace}
-                  />
-                </div>
-                <SessionGroupingToggle
-                  grouping={grouping}
-                  onChange={changeGrouping}
-                  disabled={groupingDisabled}
+              <div className="flex flex-col gap-1.5">
+                <SidebarNavigation onBeforeNavigate={guardTransition} />
+                <SessionCreateSplitAction />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
+              <div className="min-w-0 flex-1">
+                <SessionScopeSwitch
+                  scope={scope}
+                  onScopeChange={setScope}
+                  workspace={activeWorkspace}
                 />
               </div>
+              <SessionGroupingToggle
+                grouping={grouping}
+                onChange={changeGrouping}
+                disabled={groupingDisabled}
+              />
             </div>
             <div
               ref={sessionsRegionRef}
-              className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3"
+              className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
               data-sidebar-scroll-region="sessions"
             >
               <SessionNavigationList
@@ -235,22 +237,24 @@ export function WorkspaceSidebar({
                 <PanelLeftOpen className="size-4" />
               </Button>
             </div>
-            <div className="flex w-full flex-col items-center gap-2">
+            <div className="flex w-full flex-col items-center gap-1.5">
               <SidebarNavigation compact onBeforeNavigate={guardTransition} />
               <SessionCreateSplitAction compact />
             </div>
-            <SessionScopeSwitch
-              scope={scope}
-              onScopeChange={setScope}
-              workspace={activeWorkspace}
-              compact
-            />
-            {scope === "all" ? (
-              <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
-            ) : null}
+            <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
+              <SessionScopeSwitch
+                scope={scope}
+                onScopeChange={setScope}
+                workspace={activeWorkspace}
+                compact
+              />
+              {scope === "all" ? (
+                <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
+              ) : null}
+            </div>
             <div
               ref={sessionsRegionRef}
-              className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto border-t border-sidebar-border px-0.5 pb-2 pt-3"
+              className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
             >
               <SessionNavigationRail
                 key={listScopeKey}
@@ -261,14 +265,15 @@ export function WorkspaceSidebar({
                 onRetry={retrySource}
               />
             </div>
-            <div className="flex w-full items-center justify-center gap-1 border-t border-sidebar-border pt-2">
-              <SettingsModal
-                triggerClassName="size-6 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                triggerIconOnly
-              />
+            <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
               <DiagnosticsPanel
-                triggerClassName="size-6 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
+                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
                 triggerVariant="icon"
+              />
+              <SettingsModal
+                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
+                triggerSize="icon"
+                triggerIconOnly
               />
             </div>
           </div>

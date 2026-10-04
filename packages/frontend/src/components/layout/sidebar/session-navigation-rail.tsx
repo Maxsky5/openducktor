@@ -3,6 +3,7 @@ import { useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import { useSessionUnread } from "@/features/session-navigation/session-read-state";
 import { cn } from "@/lib/utils";
 import type {
   SessionNavigationEntry,
@@ -112,6 +113,7 @@ function SessionRailIcon({
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
+  const unread = useSessionUnread(entry);
   const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();
   return (
@@ -133,6 +135,7 @@ function SessionRailIcon({
         <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
         <SessionEntryStatusDot
           entry={entry}
+          unread={unread}
           id={readStatusId}
           className="absolute -left-0.5 -top-0.5"
         />
@@ -158,7 +161,7 @@ function SessionRailGroup({
   const label = SESSION_GROUP_LABELS[group.id];
   return (
     <SessionPresence as="section" label={label} className="w-full">
-      <div className="flex w-full flex-col items-center gap-2 pb-4">
+      <div className="flex w-full flex-col items-center gap-1 pb-4">
         <p className="flex w-full flex-wrap items-center justify-center gap-1 text-center text-[10px] font-medium leading-tight text-sidebar-foreground">
           <span>{label}</span>
           <span

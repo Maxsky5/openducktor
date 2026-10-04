@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, lazy, type MouseEvent, type ReactElement, Suspense } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { lazy, type MouseEvent, type ReactElement, Suspense } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { SidebarNavigation } from "./sidebar-navigation";
-import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 type RoutePath = "/sessions" | "/kanban";
 
@@ -95,51 +93,18 @@ describe("SidebarNavigation", () => {
     );
   });
 
-  test("offers only the Kanban page link", () => {
-    renderSidebarRoutingScenario({ initialRoute: "/sessions" });
-
-    expect(screen.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
-      "Kanban",
-    ]);
-  });
-
-  test("renders text labels in default mode", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, {}),
-      ),
+  test.each([
+    ["expanded", false, "Kanban"],
+    ["collapsed", true, ""],
+  ] as const)("keeps an accessible Kanban link with %s sidebar labels", (_mode, compact, text) => {
+    render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <SidebarNavigation compact={compact} />
+      </MemoryRouter>,
     );
 
-    expect(html).toContain("Kanban");
-    expect(html).toContain("gap-2");
-  });
-
-  test("hides text labels in compact mode but keeps aria labels", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { compact: true }),
-      ),
-    );
-
-    expect(html).toContain('aria-label="Kanban"');
-    expect(html).not.toContain("gap-2");
-    expect(html).toContain("justify-center");
-  });
-
-  test("uses selected styles while navigation is activated", () => {
-    const className = sidebarNavLinkClassName({
-      compact: false,
-      isActive: false,
-      isActivated: true,
-    });
-
-    expect(className).toContain("bg-sidebar-accent");
-    expect(className).toContain("text-sidebar-accent-foreground");
-    expect(className).not.toContain("hover:bg-accent");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(text);
   });
 
   test("shows Kanban as selected immediately while declarative routing to Kanban is still suspended", () => {
@@ -150,6 +115,10 @@ describe("SidebarNavigation", () => {
     expect(screen.getByLabelText("Current route").textContent).toBe("/sessions");
     expect(screen.getByTestId("sessions-route")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kanban" }).className).toContain("bg-sidebar-accent");
+    expect(screen.getByRole("link", { name: "Kanban" }).className).toContain(
+      "text-sidebar-accent-foreground",
+    );
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain("hover:bg-accent");
   });
 
   for (const modifiedClickCase of MODIFIED_CLICK_CASES) {

@@ -1,7 +1,7 @@
 import { Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
-import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
+import { cn } from "@/lib/utils";
 
 const KANBAN_ROUTE = "/kanban";
 
@@ -74,7 +74,15 @@ export function SidebarNavigation({
         title="Kanban"
         aria-label="Kanban"
         onClick={activateRoute}
-        className={({ isActive }) => sidebarNavLinkClassName({ compact, isActive, isActivated })}
+        className={({ isActive }) =>
+          cn(
+            "flex h-9 cursor-pointer items-center rounded-md text-sm font-medium",
+            compact ? "size-9 justify-center" : "gap-2 px-3",
+            isActive || isActivated
+              ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+              : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground",
+          )
+        }
       >
         <Columns3 className="size-4" />
         {compact ? null : "Kanban"}

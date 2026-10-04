@@ -3,6 +3,7 @@ import { type ReactElement, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import { useSessionUnread } from "@/features/session-navigation/session-read-state";
 import { cn } from "@/lib/utils";
 import type {
   SessionNavigationEntry,
@@ -140,7 +141,13 @@ function SessionRow({
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
+  const unread = useSessionUnread(entry);
   const needsAttention = entry.attention.length > 0;
+  let titleClassName = "text-foreground";
+  if (needsAttention) titleClassName = "text-warning-muted";
+  else if (entry.status.kind === "settled" && !unread) {
+    titleClassName = "text-sidebar-read-foreground";
+  }
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();
@@ -168,7 +175,7 @@ function SessionRow({
         )}
       >
         <span className="flex w-full min-w-0 items-center gap-2">
-          <SessionEntryStatusDot entry={entry} id={readStatusId} />
+          <SessionEntryStatusDot entry={entry} unread={unread} id={readStatusId} />
           <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-4 text-sidebar-foreground">
             {entry.workspace.workspaceName}
           </span>
@@ -192,7 +199,7 @@ function SessionRow({
           <span
             className={cn(
               "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
-              needsAttention ? "text-warning-muted" : "text-foreground",
+              titleClassName,
             )}
           >
             {entry.title}
@@ -225,7 +232,7 @@ function SessionGroupSection({
   const label = SESSION_GROUP_LABELS[group.id];
   return (
     <SessionPresence as="section" label={label}>
-      <div className="flex flex-col gap-2 pb-4">
+      <div className="flex flex-col gap-1 pb-4">
         <button
           type="button"
           aria-expanded={!collapsed}

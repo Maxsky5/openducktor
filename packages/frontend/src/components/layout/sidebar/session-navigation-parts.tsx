@@ -3,7 +3,6 @@ import type { ReactElement } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
-import { useSessionUnread } from "@/features/session-navigation/session-read-state";
 import { cn } from "@/lib/utils";
 import type {
   SessionNavigationEntry,
@@ -118,6 +117,7 @@ export function SessionSelectionIndicator({ className }: { className?: string })
 
 type SessionEntryStatusDotProps = {
   entry: SessionNavigationEntry;
+  unread: boolean;
   id: string;
   className?: string;
 };
@@ -125,10 +125,10 @@ type SessionEntryStatusDotProps = {
 /** Activity and read state share one fixed space in both sidebar layouts. */
 export function SessionEntryStatusDot({
   entry,
+  unread,
   id,
   className,
 }: SessionEntryStatusDotProps): ReactElement {
-  const unread = useSessionUnread(entry);
   const waiting = entry.attention.length > 0;
   const running = entry.status.kind === "running" && !waiting;
   const readLabel = unread ? "Unread session" : "Session read";

@@ -25,23 +25,37 @@ describe("SessionScopeSwitch", () => {
     expect(onScopeChange).toHaveBeenCalledWith("all");
   });
 
-  test("keeps both scope choices and identifies the current workspace in compact mode", () => {
-    render(
+  test("toggles the compact scope with one button and shows when all workspaces are selected", () => {
+    const onScopeChange = mock((_scope: "current" | "all") => {});
+    const { rerender } = render(
       <SessionScopeSwitch
-        scope="all"
-        onScopeChange={() => {}}
+        scope="current"
+        onScopeChange={onScopeChange}
         workspace={alphaWorkspace}
         compact
       />,
     );
 
-    const current = screen.getByRole("radio", { name: "Show sessions of openducktor" });
-    expect(current.title).toBe("Show sessions of openducktor");
-    expect(
-      screen
-        .getByRole("radio", { name: "Show sessions of all workspaces" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    const toggle = screen.getByRole("button", {
+      name: "Show sessions of all workspaces",
+      pressed: false,
+    });
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(toggle);
+    expect(onScopeChange).toHaveBeenLastCalledWith("all");
+
+    rerender(
+      <SessionScopeSwitch
+        scope="all"
+        onScopeChange={onScopeChange}
+        workspace={alphaWorkspace}
+        compact
+      />,
+    );
+
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(onScopeChange).toHaveBeenLastCalledWith("current");
   });
 
   test("identifies a missing workspace and blocks the current-workspace choice", () => {

@@ -1125,7 +1125,7 @@ describe("AppShell session navigation", () => {
     });
 
     expect(screen.queryByRole("button", { name: "2 workspaces are not listed" })).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show sessions of all workspaces" }));
     fireEvent.click(await screen.findByRole("button", { name: "2 workspaces are not listed" }));
 
     const details = await screen.findByRole("dialog");
@@ -1272,13 +1272,23 @@ describe("AppShell session navigation", () => {
 
     expect(
       screen
-        .getByRole("radio", { name: "Show sessions of all workspaces" })
-        .getAttribute("aria-checked"),
+        .getByRole("button", { name: "Show sessions of all workspaces" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByRole("button", { name: /Chat theirs/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
     const menu = await screen.findByRole("dialog");
     expect(within(menu).getByRole("button", { name: "New task" })).toBeTruthy();
+
+    fireEvent.keyDown(menu, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Show sessions of all workspaces" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+    expect(
+      screen
+        .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 });
