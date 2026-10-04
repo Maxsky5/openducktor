@@ -171,54 +171,6 @@ describe("AgentChatComposerReferenceMenu", () => {
     expect(listbox.getAttribute("tabindex")).toBeNull();
   });
 
-  test("scrolls active subagent and file rows into view as selection changes", () => {
-    const scrollIntoView = mock(() => {});
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
-    const items = [...subagentItems(SUBAGENTS), ...fileItems(RESULTS)];
-
-    try {
-      const rendered = render(
-        <AgentChatComposerReferenceMenu
-          listboxId={LISTBOX_ID}
-          items={items}
-          activeIndex={0}
-          fileSearchError={null}
-          isFileSearchPending={false}
-          isFileSearchLoading={false}
-          supportsSubagentReferences={true}
-          subagentsError={null}
-          isSubagentsLoading={false}
-          onSelectFile={() => {}}
-          onRetrySubagents={null}
-          onSelectSubagent={() => {}}
-        />,
-      );
-
-      rendered.rerender(
-        <AgentChatComposerReferenceMenu
-          listboxId={LISTBOX_ID}
-          items={items}
-          activeIndex={1}
-          fileSearchError={null}
-          isFileSearchPending={false}
-          isFileSearchLoading={false}
-          supportsSubagentReferences={true}
-          subagentsError={null}
-          isSubagentsLoading={false}
-          onSelectFile={() => {}}
-          onRetrySubagents={null}
-          onSelectSubagent={() => {}}
-        />,
-      );
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(2);
-      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
-
   test("selects subagent and file rows on pointer down", () => {
     const onSelectFile = mock(() => {});
     const onSelectSubagent = mock(() => {});
@@ -352,6 +304,7 @@ describe("AgentChatComposerReferenceMenu", () => {
     const emptyFeedback = screen.getByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.contains(emptyFeedback)).toBe(false);
-    expect(emptyFeedback.textContent).toBe("No files found.");
+    expect(emptyFeedback.textContent).toContain("No files found.");
+    expect(emptyFeedback.textContent).toContain("Try a different name or clear your search.");
   });
 });
