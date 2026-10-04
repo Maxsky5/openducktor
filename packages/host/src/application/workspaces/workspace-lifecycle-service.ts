@@ -121,27 +121,38 @@ export const createWorkspaceLifecycleService = ({
       return repoConfig;
     });
 
-  const assertNoBlockingActivity = (configuredRepoPath: string, lifecycleRepoPath: string) =>
+  const assertNoBlockingActivity = (repoPath: string) =>
     Effect.gen(function* () {
-      const blockers = yield* activity.inspect({ configuredRepoPath, lifecycleRepoPath });
+      const blockers = yield* activity.inspect(repoPath);
       if (blockers.length > 0) {
         return yield* Effect.fail(
           new HostValidationError({
             message: blockingActivityMessage(blockers),
             field: "workspaceId",
-            details: { blockers, repoPath: configuredRepoPath },
+            details: { blockers, repoPath },
           }),
         );
       }
     });
 
-  const resolveWorkspaceLifecyclePath = (repoPath: string) =>
-    settingsConfig.canonicalizePath(repoPath).pipe(
-      Effect.catchTag("HostOperationError", (error) =>
-        // Workspace setup stores the canonical path. Keep it if the directory is missing.
-        hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(repoPath) : Effect.fail(error),
-      ),
-    );
+  const assertWorkspacePathUnchanged = (repoPath: string) =>
+    Effect.gen(function* () {
+      const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoPath).pipe(
+        Effect.catchTag("HostOperationError", (error) =>
+          // Workspace setup stores the canonical path. Keep it if the directory is missing.
+          hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(repoPath) : Effect.fail(error),
+        ),
+      );
+      if (canonicalRepoPath !== repoPath) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace repository path resolved to a different location: ${canonicalRepoPath}. Restore the original repository path and retry.`,
+            field: "repoPath",
+            details: { expectedRepoPath: repoPath, canonicalRepoPath },
+          }),
+        );
+      }
+    });
 
   const persistProgress = (
     workspaceId: string,
@@ -178,10 +189,9 @@ export const createWorkspaceLifecycleService = ({
       removeTaskWorktrees: boolean;
     },
     repoConfig: RepoConfig,
-    lifecycleRepoPath: string,
   ) =>
     Effect.gen(function* () {
-      yield* assertNoBlockingActivity(repoConfig.repoPath, lifecycleRepoPath);
+      yield* assertNoBlockingActivity(repoConfig.repoPath);
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,
         expectedRepoPath: input.expectedRepoPath,
@@ -193,7 +203,7 @@ export const createWorkspaceLifecycleService = ({
         repoPath: repoConfig.repoPath,
         workspaceId: input.workspaceId,
       });
-      yield* activity.releaseSessions(lifecycleRepoPath);
+      yield* activity.releaseSessions(repoConfig.repoPath);
 
       const removedWorktrees: string[] = [];
       let phase = startedRecord.phase;
@@ -309,9 +319,9 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
+        yield* assertWorkspacePathUnchanged(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          lifecycleRepoPath,
+          repoConfig.repoPath,
           "close",
           runUnderReservation(
             {
@@ -321,7 +331,7 @@ export const createWorkspaceLifecycleService = ({
             },
             () =>
               Effect.gen(function* () {
-                yield* assertNoBlockingActivity(repoConfig.repoPath, lifecycleRepoPath);
+                yield* assertNoBlockingActivity(repoConfig.repoPath);
                 const catalog = yield* workspaceSettingsService.closeWorkspace(
                   input.workspaceId,
                   input.expectedRepoPath,
@@ -364,9 +374,9 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
+        yield* assertWorkspacePathUnchanged(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          lifecycleRepoPath,
+          repoConfig.repoPath,
           "remove",
           runUnderReservation(
             {
@@ -374,7 +384,7 @@ export const createWorkspaceLifecycleService = ({
               repoPath: repoConfig.repoPath,
               workspaceId: input.workspaceId,
             },
-            () => executeRemoval(input, repoConfig, lifecycleRepoPath),
+            () => executeRemoval(input, repoConfig),
           ),
         );
       });

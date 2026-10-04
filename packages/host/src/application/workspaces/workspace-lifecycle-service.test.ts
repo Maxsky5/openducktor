@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -281,20 +281,16 @@ describe("workspace lifecycle service", () => {
   );
 
   test.each([
-    ["close", "existing alias"],
-    ["remove", "existing alias"],
+    ["close", "existing repository"],
+    ["remove", "existing repository"],
     ["close", "deleted repository"],
     ["remove", "deleted repository"],
   ] as const)("%s preserves activity guards for the %s path", async (operation, targetState) => {
     const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
-    const alias = join(directory, "alias");
     try {
-      const repository = join(directory, "repository");
-      await mkdir(repository);
-      await symlink(repository, alias, "junction");
-      const canonicalRepoPath = await realpath(repository);
-      if (targetState === "deleted repository") await rm(repository, { recursive: true });
-      const configuredRepoPath = targetState === "existing alias" ? alias : canonicalRepoPath;
+      const canonicalRepoPath = await realpath(directory);
+      if (targetState === "deleted repository") await rm(directory, { recursive: true });
+      const configuredRepoPath = canonicalRepoPath;
       const config = repoConfig({
         repoPath: configuredRepoPath,
         devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
@@ -386,6 +382,54 @@ describe("workspace lifecycle service", () => {
     }
   });
 
+  test.each(["close", "remove"] as const)(
+    "%s rejects a repository path replaced by a symlink before inspecting or changing workspace data",
+    async (operation) => {
+      const directory = await mkdtemp(join(tmpdir(), "odt-workspace-replaced-"));
+      try {
+        const repository = join(directory, "repository");
+        const otherRepository = join(directory, "other-repository");
+        await mkdir(repository);
+        await mkdir(otherRepository);
+        const repoPath = await realpath(repository);
+        await rename(repository, join(directory, "moved-repository"));
+        await symlink(otherRepository, repository, "junction");
+
+        const inspect = mock(() => Effect.succeed([]));
+        const releaseSessions = mock(() => Effect.void);
+        const closeWorkspace = mock(() => Effect.succeed(catalog()));
+        const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
+        const removeWorkspaceTaskAssets = mock(() => Effect.void);
+        const settingsConfig = createSettingsConfigAdapter();
+        const service = createService({
+          activity: { inspect, releaseSessions },
+          getRepoConfig: () => Effect.succeed(repoConfig({ repoPath })),
+          canonicalizePath: settingsConfig.canonicalizePath,
+          closeWorkspace,
+          beginWorkspaceRemoval,
+          removeWorkspaceTaskAssets,
+        });
+        const input = { workspaceId: "ws", expectedRepoPath: repoPath };
+        await expect(
+          Effect.runPromise(
+            operation === "close"
+              ? service.closeWorkspace(input).pipe(Effect.asVoid)
+              : service
+                  .removeWorkspace({ ...input, removeTaskWorktrees: false })
+                  .pipe(Effect.asVoid),
+          ),
+        ).rejects.toThrow("Workspace repository path resolved to a different location");
+        expect(inspect).not.toHaveBeenCalled();
+        expect(releaseSessions).not.toHaveBeenCalled();
+        expect(closeWorkspace).not.toHaveBeenCalled();
+        expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+        expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   test.each([
     ["close", "EACCES"],
     ["remove", "EACCES"],
@@ -474,22 +518,18 @@ describe("workspace lifecycle service", () => {
   });
 
   test.each([
-    ["close", "existing alias"],
-    ["remove", "existing alias"],
+    ["close", "existing repository"],
+    ["remove", "existing repository"],
     ["close", "deleted repository"],
     ["remove", "deleted repository"],
   ] as const)(
     "%s rejects canonical task lifecycle work for the %s path",
     async (operation, targetState) => {
       const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
-      const alias = join(directory, "alias");
       try {
-        const repository = join(directory, "repository");
-        await mkdir(repository);
-        await symlink(repository, alias, "junction");
-        const canonicalRepoPath = await realpath(repository);
-        if (targetState === "deleted repository") await rm(repository, { recursive: true });
-        const configuredRepoPath = targetState === "existing alias" ? alias : canonicalRepoPath;
+        const canonicalRepoPath = await realpath(directory);
+        if (targetState === "deleted repository") await rm(directory, { recursive: true });
+        const configuredRepoPath = canonicalRepoPath;
         const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
         const closeWorkspace = mock(() => Effect.succeed(catalog()));
         const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
