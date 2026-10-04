@@ -26,6 +26,8 @@ The Node HTTP server streams eligible text responses of at least 1 KiB through g
 
 Live event streams, binary files, responses that already have a content encoding, partial responses, and responses with `Cache-Control: no-transform` bypass compression. Clients that do not advertise gzip support receive uncompressed content.
 
+HEAD does not read a body to choose gzip. For eligible text responses without a declared length, a client that accepts gzip receives no Content-Encoding or ETag. The server cancels the body without reading it. Static files have a known length, so their HEAD and 304 metadata use the same encoding decision as GET.
+
 Published installs serve Vite assets with content hashes in their names with `Cache-Control: public, max-age=31536000, immutable`. HTML and other application files require revalidation with an ETag. Unchanged files return `304` without a body. A new build changes the HTML validator and the URLs of changed hashed assets.
 
 Runtime configuration keeps `Cache-Control: no-store` and has no ETag. Each request reads the current backend URL and app token.

@@ -133,15 +133,48 @@ test("keeps short bodies small and compresses larger bodies with or without a le
           assert.equal(result.body.length, bytes.length);
           assert.equal(Number(result.headers["content-length"]), bytes.length);
         }
+        const head = await request(server.port, "/", headers, "HEAD");
+        assert.equal(head.body.length, 0);
         if (mode === "known") {
-          const head = await request(server.port, "/", headers, "HEAD");
-          assert.equal(head.body.length, 0);
           assert.equal(head.headers["content-encoding"], result.headers["content-encoding"]);
           assert.equal(head.headers["content-length"], result.headers["content-length"]);
           assert.equal(head.headers.etag, result.headers.etag);
+        } else {
+          assert.equal(head.headers["content-encoding"], undefined);
+          assert.equal(head.headers["content-length"], undefined);
+          assert.equal(head.headers.etag, undefined);
         }
       }
     }
+  } finally {
+    await server.stop(true);
+  }
+});
+
+test("ends unknown-length HEAD without reading a pending body", { timeout: 1000 }, async () => {
+  const cancelled = Promise.withResolvers<void>();
+  const server = await startNodeFetchServer({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            cancelled.resolve();
+          },
+        }),
+        { headers: { "content-type": "text/plain", etag: '"body-tag"' } },
+      ),
+    onError: (cause) => {
+      throw cause;
+    },
+  });
+  try {
+    const head = await request(server.port, "/", { "Accept-Encoding": "gzip" }, "HEAD");
+    assert.equal(head.body.length, 0);
+    assert.equal(head.headers["content-encoding"], undefined);
+    assert.equal(head.headers.etag, undefined);
+    await cancelled.promise;
   } finally {
     await server.stop(true);
   }

@@ -218,6 +218,11 @@ const writeResponse = async (
   const length = headers.get("content-length");
   let gzip =
     eligible && acceptsGzip(request) && (length === null || Number(length) >= MIN_GZIP_BYTES);
+  if (gzip && request.method === "HEAD" && length === null) {
+    // Omit metadata that needs a GET body read to choose.
+    gzip = false;
+    headers.delete("etag");
+  }
   // SAFETY: Node uses the standard stream API; Bun adds unused helper types.
   let body =
     request.method !== "HEAD" && response.body
