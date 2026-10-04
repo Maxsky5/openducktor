@@ -7,6 +7,7 @@ import type {
 import { Effect } from "effect";
 import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
+  hasNestedNodeErrorCode,
   HostOperationError,
   type HostOperationErrorAggregate,
   HostValidationError,
@@ -16,12 +17,13 @@ import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort, SettingsConfigError } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
-import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import type { TerminalService } from "../terminals/terminal-service";
+import type {
+  WorkspaceActivityBlocker,
+  WorkspaceActivityPort,
+} from "./workspace-activity-inspector";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 import {
@@ -38,16 +40,6 @@ export type WorkspaceLifecycleError =
   | WorktreeFileError
   | WorkspaceSettingsError
   | WorkspaceWorktreeInventoryError;
-
-export type WorkspaceActivityBlocker = {
-  kind: "agent-session" | "dev-server" | "terminal";
-  label: string;
-};
-
-export type WorkspaceActivityPort = {
-  inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
-  releaseSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
-};
 
 export type WorkspaceStoragePort = {
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
@@ -103,121 +95,6 @@ type CreateWorkspaceLifecycleServiceInput = {
 const blockingActivityMessage = (blockers: WorkspaceActivityBlocker[]): string =>
   `Stop the running work before closing or removing this workspace: ${blockers.map(({ label }) => label).join("; ")}.`;
 
-const toHostOperationError = (operation: string, message: string, cause: unknown) =>
-  new HostOperationError({
-    operation,
-    message,
-    cause: cause instanceof Error ? cause : new Error(String(cause)),
-  });
-
-export const createWorkspaceActivityInspector = ({
-  agentSessionLiveStateService,
-  devServerService,
-  terminalService,
-}: {
-  agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
-  devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
-  terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
-}): WorkspaceActivityPort => ({
-  inspect: (repoPath) =>
-    Effect.gen(function* () {
-      const blockers: WorkspaceActivityBlocker[] = [];
-      const sessions = yield* agentSessionLiveStateService
-        .list({ repoPath })
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(
-              "workspace.inspectAgentSessions",
-              `Failed to inspect agent sessions for ${repoPath}. Stop the running work and retry.`,
-              cause,
-            ),
-          ),
-        );
-      for (const session of sessions) {
-        if (session.activity !== "idle") {
-          blockers.push({
-            kind: "agent-session",
-            label: `agent session ${session.ref.externalSessionId} is ${session.activity}`,
-          });
-        }
-      }
-
-      const devServerActivity = yield* devServerService
-        .inspectWorkspaceActivity({ repoPath })
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(
-              "workspace.inspectDevServers",
-              `Failed to inspect dev servers for ${repoPath}. Stop the running work and retry.`,
-              cause,
-            ),
-          ),
-        );
-      for (const owner of devServerActivity.activeOwners) {
-        blockers.push({
-          kind: "dev-server",
-          label: `dev server for ${owner.kind === "task" ? `task ${owner.taskId}` : `Workspace Session ${owner.sessionId}`} is active; stop its servers first`,
-        });
-      }
-
-      const terminalActivity = yield* terminalService
-        .inspectWorkspaceActivity(repoPath)
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(
-              "workspace.inspectTerminals",
-              `Failed to inspect terminals for ${repoPath}. Close the affected terminals and retry.`,
-              cause,
-            ),
-          ),
-        );
-      for (const terminalId of terminalActivity.activeTerminalIds) {
-        blockers.push({
-          kind: "terminal",
-          label: `terminal ${terminalId} is running a command`,
-        });
-      }
-      for (const terminalId of terminalActivity.unknownTerminalIds) {
-        blockers.push({
-          kind: "terminal",
-          label: `terminal ${terminalId} activity cannot be verified`,
-        });
-      }
-
-      return blockers;
-    }),
-  releaseSessions: (repoPath) =>
-    Effect.gen(function* () {
-      const sessions = yield* agentSessionLiveStateService
-        .list({ repoPath })
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(
-              "workspace.releaseAgentSessions",
-              `Failed to list agent sessions before removing ${repoPath}. Retry removal.`,
-              cause,
-            ),
-          ),
-        );
-      yield* Effect.forEach(
-        sessions,
-        (session) =>
-          agentSessionLiveStateService
-            .releaseSession(session.ref)
-            .pipe(
-              Effect.mapError((cause) =>
-                toHostOperationError(
-                  "workspace.releaseAgentSessions",
-                  `Failed to release agent session ${session.ref.externalSessionId} before removing ${repoPath}. Retry removal.`,
-                  cause,
-                ),
-              ),
-            ),
-        { discard: true },
-      );
-    }),
-});
-
 export const createWorkspaceLifecycleService = ({
   activity,
   admission,
@@ -253,6 +130,25 @@ export const createWorkspaceLifecycleService = ({
             message: blockingActivityMessage(blockers),
             field: "workspaceId",
             details: { blockers, repoPath },
+          }),
+        );
+      }
+    });
+
+  const assertWorkspacePathUnchanged = (repoPath: string) =>
+    Effect.gen(function* () {
+      const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoPath).pipe(
+        Effect.catchTag("HostOperationError", (error) =>
+          // Workspace setup stores the canonical path. Keep it if the directory is missing.
+          hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(repoPath) : Effect.fail(error),
+        ),
+      );
+      if (canonicalRepoPath !== repoPath) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace repository path resolved to a different location: ${canonicalRepoPath}. Restore the original repository path and retry.`,
+            field: "repoPath",
+            details: { expectedRepoPath: repoPath, canonicalRepoPath },
           }),
         );
       }
@@ -423,9 +319,9 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
+        yield* assertWorkspacePathUnchanged(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          canonicalRepoPath,
+          repoConfig.repoPath,
           "close",
           runUnderReservation(
             {
@@ -478,9 +374,9 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
+        yield* assertWorkspacePathUnchanged(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
-          canonicalRepoPath,
+          repoConfig.repoPath,
           "remove",
           runUnderReservation(
             {
