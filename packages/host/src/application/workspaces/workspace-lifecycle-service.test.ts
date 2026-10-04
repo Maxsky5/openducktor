@@ -160,7 +160,6 @@ const createService = ({
   removeWorktree = () => Effect.void,
   canonicalizePath = (path: string) => Effect.succeed(path),
   pathExists = () => Effect.succeed(true),
-  resolveWorkspaceLifecyclePath = (path: string) => Effect.succeed(path),
   resolvedPathKind = "descendant" as const,
 }: {
   activity?: WorkspaceActivityPort;
@@ -190,7 +189,6 @@ const createService = ({
   removeWorktree?: GitPort["removeWorktree"];
   canonicalizePath?: GitPort["canonicalizePath"];
   pathExists?: SettingsConfigPort["pathExists"];
-  resolveWorkspaceLifecyclePath?: SettingsConfigPort["resolveWorkspaceLifecyclePath"];
   resolvedPathKind?: "descendant" | "outside";
 } = {}) => {
   const storage: WorkspaceStoragePort = {
@@ -212,7 +210,6 @@ const createService = ({
       defaultWorktreeBasePath: (workspaceId) => `/managed/${workspaceId}`,
       join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
       pathExists,
-      resolveWorkspaceLifecyclePath,
       readConfig: () => Effect.succeed(null),
       resolveConfiguredPath: (path) => path,
     }),
@@ -260,7 +257,6 @@ describe("workspace lifecycle service", () => {
         getRepoConfig: () => Effect.succeed(repoConfig({ repoPath })),
         pathExists: settingsConfig.pathExists,
         canonicalizePath: settingsConfig.canonicalizePath,
-        resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
         closeWorkspace,
         removeWorkspaceRegistration,
         removeWorkspaceTaskAssets,
@@ -285,126 +281,131 @@ describe("workspace lifecycle service", () => {
   );
 
   test.each([
-    ["close", "existing"],
-    ["remove", "existing"],
-    ["close", "deleted"],
-    ["remove", "deleted"],
-  ] as const)(
-    "%s preserves activity guards for a symlink workspace with target %s",
-    async (operation, targetState) => {
-      const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
-      const alias = join(directory, "alias");
-      try {
-        const repository = join(directory, "repository");
-        await mkdir(repository);
-        await symlink(repository, alias, "junction");
-        const canonicalRepoPath = await realpath(repository);
-        if (targetState === "deleted") await rm(repository, { recursive: true });
-        const config = repoConfig({
-          repoPath: alias,
-          devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
-        });
-        const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-        const resolveRuntime = createDevServerRuntimeResolver({
-          groups,
-          retiredOrder: { revision: null },
-          taskWorktreeService: undefined,
-          workspaceSessions: undefined,
-          workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({}),
-        });
-        const { runtime } = await Effect.runPromise(
-          resolveRuntime(
-            { repoPath: alias, owner: { kind: "task", taskId: "task-1" } },
-            false,
-            config,
-          ),
-        );
-        runtime.unresolvedStops.add("web");
-        let terminalActivity: "active" | "unknown" | "idle" = "idle";
-        const releaseSessions = mock(() => Effect.void);
-        const activity = createWorkspaceActivityInspector({
-          agentSessionLiveStateService: {
-            list: () => Effect.succeed([]),
-            releaseSession: () => Effect.void,
-          },
-          devServerService: {
-            inspectWorkspaceActivity: ({ repoPath }) =>
-              Effect.succeed(inspectDevServerWorkspaceActivity(groups, repoPath)),
-          },
-          terminalService: {
-            inspectWorkspaceActivity: (repoPath) =>
-              Effect.succeed({
-                activeTerminalIds:
-                  repoPath === canonicalRepoPath && terminalActivity === "active"
-                    ? ["terminal-1"]
-                    : [],
-                unknownTerminalIds:
-                  repoPath === canonicalRepoPath && terminalActivity === "unknown"
-                    ? ["terminal-1"]
-                    : [],
-              }),
-          },
-        });
-        const closeWorkspace = mock(() => Effect.succeed(catalog()));
-        const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
-        const settingsConfig = createSettingsConfigAdapter();
-        const service = createService({
-          activity: { ...activity, releaseSessions },
-          getRepoConfig: () => Effect.succeed(config),
-          canonicalizePath: settingsConfig.canonicalizePath,
-          resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
-          pathExists: settingsConfig.pathExists,
-          closeWorkspace,
-          removeWorkspaceRegistration,
-        });
-        const input = { workspaceId: "ws", expectedRepoPath: alias };
-        const lifecycle =
-          operation === "close"
-            ? service.closeWorkspace(input).pipe(Effect.asVoid)
-            : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid);
+    ["close", "existing alias"],
+    ["remove", "existing alias"],
+    ["close", "deleted repository"],
+    ["remove", "deleted repository"],
+  ] as const)("%s preserves activity guards for the %s path", async (operation, targetState) => {
+    const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
+    const alias = join(directory, "alias");
+    try {
+      const repository = join(directory, "repository");
+      await mkdir(repository);
+      await symlink(repository, alias, "junction");
+      const canonicalRepoPath = await realpath(repository);
+      if (targetState === "deleted repository") await rm(repository, { recursive: true });
+      const configuredRepoPath = targetState === "existing alias" ? alias : canonicalRepoPath;
+      const config = repoConfig({
+        repoPath: configuredRepoPath,
+        devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+      });
+      const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
+      const resolveRuntime = createDevServerRuntimeResolver({
+        groups,
+        retiredOrder: { revision: null },
+        taskWorktreeService: undefined,
+        workspaceSessions: undefined,
+        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({}),
+      });
+      const { runtime } = await Effect.runPromise(
+        resolveRuntime(
+          { repoPath: configuredRepoPath, owner: { kind: "task", taskId: "task-1" } },
+          false,
+          config,
+        ),
+      );
+      runtime.unresolvedStops.add("web");
+      let terminalActivity: "active" | "unknown" | "idle" = "idle";
+      const releaseSessions = mock(() => Effect.void);
+      const activity = createWorkspaceActivityInspector({
+        agentSessionLiveStateService: {
+          list: () => Effect.succeed([]),
+          releaseSession: () => Effect.void,
+        },
+        devServerService: {
+          inspectWorkspaceActivity: ({ repoPath }) =>
+            Effect.succeed(inspectDevServerWorkspaceActivity(groups, repoPath)),
+        },
+        terminalService: {
+          inspectWorkspaceActivity: (repoPath) =>
+            Effect.succeed({
+              activeTerminalIds:
+                repoPath === canonicalRepoPath && terminalActivity === "active"
+                  ? ["terminal-1"]
+                  : [],
+              unknownTerminalIds:
+                repoPath === canonicalRepoPath && terminalActivity === "unknown"
+                  ? ["terminal-1"]
+                  : [],
+            }),
+        },
+      });
+      const closeWorkspace = mock(() => Effect.succeed(catalog()));
+      const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
+      const settingsConfig = createSettingsConfigAdapter();
+      const service = createService({
+        activity: { ...activity, releaseSessions },
+        getRepoConfig: () => Effect.succeed(config),
+        canonicalizePath: settingsConfig.canonicalizePath,
+        pathExists: settingsConfig.pathExists,
+        closeWorkspace,
+        removeWorkspaceRegistration,
+      });
+      const input = { workspaceId: "ws", expectedRepoPath: configuredRepoPath };
+      const lifecycle =
+        operation === "close"
+          ? service.closeWorkspace(input).pipe(Effect.asVoid)
+          : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid);
 
-        await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
-          "dev server for task task-1 is active",
-        );
-        groups.clear();
-        terminalActivity = "active";
-        await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
-          "terminal terminal-1 is running a command",
-        );
-        terminalActivity = "unknown";
-        await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
-          "terminal terminal-1 activity cannot be verified",
-        );
-        expect(closeWorkspace).not.toHaveBeenCalled();
-        expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
-        expect(releaseSessions).not.toHaveBeenCalled();
+      await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
+        "dev server for task task-1 is active",
+      );
+      groups.clear();
+      terminalActivity = "active";
+      await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
+        "terminal terminal-1 is running a command",
+      );
+      terminalActivity = "unknown";
+      await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
+        "terminal terminal-1 activity cannot be verified",
+      );
+      expect(closeWorkspace).not.toHaveBeenCalled();
+      expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
+      expect(releaseSessions).not.toHaveBeenCalled();
 
-        terminalActivity = "idle";
-        await Effect.runPromise(lifecycle);
-        if (operation === "close") {
-          expect(closeWorkspace).toHaveBeenCalledWith("ws", alias);
-        } else {
-          expect(releaseSessions).toHaveBeenCalledWith(canonicalRepoPath);
-          expect(removeWorkspaceRegistration).toHaveBeenCalledWith("ws", alias);
-        }
-      } finally {
-        await rm(directory, { recursive: true, force: true });
+      terminalActivity = "idle";
+      await Effect.runPromise(lifecycle);
+      if (operation === "close") {
+        expect(closeWorkspace).toHaveBeenCalledWith("ws", configuredRepoPath);
+      } else {
+        expect(releaseSessions).toHaveBeenCalledWith(canonicalRepoPath);
+        expect(removeWorkspaceRegistration).toHaveBeenCalledWith("ws", configuredRepoPath);
       }
-    },
-  );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
-  test.each(["close", "remove"] as const)(
-    "%s propagates path resolution errors before changing workspace data",
-    async (operation) => {
+  test.each([
+    ["close", "EACCES"],
+    ["remove", "EACCES"],
+    ["close", "ELOOP"],
+    ["remove", "ELOOP"],
+    ["close", "ENOTDIR"],
+    ["remove", "ENOTDIR"],
+  ] as const)(
+    "%s propagates %s path errors before changing workspace data",
+    async (operation, code) => {
       const failure = new HostOperationError({
-        operation: "settingsConfig.resolveWorkspaceLifecyclePath",
-        message: "Permission denied. Restore path access and retry.",
+        operation: "settingsConfig.canonicalizePath",
+        message: "Cannot resolve the workspace path. Restore path access and retry.",
+        cause: Object.assign(new Error("Path resolution failed"), { code }),
       });
       const closeWorkspace = mock(() => Effect.succeed(catalog()));
       const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
       const removeWorkspaceTaskAssets = mock(() => Effect.void);
       const service = createService({
-        resolveWorkspaceLifecyclePath: () => Effect.fail(failure),
+        canonicalizePath: () => Effect.fail(failure),
         closeWorkspace,
         beginWorkspaceRemoval,
         removeWorkspaceTaskAssets,
@@ -473,12 +474,12 @@ describe("workspace lifecycle service", () => {
   });
 
   test.each([
-    ["close", "existing"],
-    ["remove", "existing"],
-    ["close", "deleted"],
-    ["remove", "deleted"],
+    ["close", "existing alias"],
+    ["remove", "existing alias"],
+    ["close", "deleted repository"],
+    ["remove", "deleted repository"],
   ] as const)(
-    "%s rejects canonical task lifecycle work with symlink target %s",
+    "%s rejects canonical task lifecycle work for the %s path",
     async (operation, targetState) => {
       const directory = await mkdtemp(join(tmpdir(), "odt-workspace-alias-"));
       const alias = join(directory, "alias");
@@ -487,15 +488,15 @@ describe("workspace lifecycle service", () => {
         await mkdir(repository);
         await symlink(repository, alias, "junction");
         const canonicalRepoPath = await realpath(repository);
-        if (targetState === "deleted") await rm(repository, { recursive: true });
+        if (targetState === "deleted repository") await rm(repository, { recursive: true });
+        const configuredRepoPath = targetState === "existing alias" ? alias : canonicalRepoPath;
         const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
         const closeWorkspace = mock(() => Effect.succeed(catalog()));
         const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord()));
         const settingsConfig = createSettingsConfigAdapter();
         const service = createService({
-          getRepoConfig: () => Effect.succeed(repoConfig({ repoPath: alias })),
+          getRepoConfig: () => Effect.succeed(repoConfig({ repoPath: configuredRepoPath })),
           canonicalizePath: settingsConfig.canonicalizePath,
-          resolveWorkspaceLifecyclePath: settingsConfig.resolveWorkspaceLifecyclePath,
           pathExists: settingsConfig.pathExists,
           closeWorkspace,
           beginWorkspaceRemoval,
@@ -510,7 +511,7 @@ describe("workspace lifecycle service", () => {
                 ["task-1"],
                 "direct merge",
               );
-              const input = { workspaceId: "ws", expectedRepoPath: alias };
+              const input = { workspaceId: "ws", expectedRepoPath: configuredRepoPath };
               const result = yield* Effect.either(
                 operation === "close"
                   ? service.closeWorkspace(input).pipe(Effect.asVoid)

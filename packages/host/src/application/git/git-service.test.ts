@@ -572,7 +572,6 @@ const createFakeSettingsConfig = (
   resolveConfiguredPath(rawPath) {
     return rawPath === "~/worktrees" ? "/home/user/worktrees" : rawPath;
   },
-  resolveWorkspaceLifecyclePath: () => Effect.die("Unused workspace lifecycle path resolver"),
   canonicalizePath(path) {
     return Effect.tryPromise({
       try: async () => {

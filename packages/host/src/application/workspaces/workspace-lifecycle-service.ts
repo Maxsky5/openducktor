@@ -7,6 +7,7 @@ import type {
 import { Effect } from "effect";
 import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
+  hasNestedNodeErrorCode,
   HostOperationError,
   type HostOperationErrorAggregate,
   HostValidationError,
@@ -133,6 +134,14 @@ export const createWorkspaceLifecycleService = ({
         );
       }
     });
+
+  const resolveWorkspaceLifecyclePath = (repoPath: string) =>
+    settingsConfig.canonicalizePath(repoPath).pipe(
+      Effect.catchTag("HostOperationError", (error) =>
+        // Workspace setup stores the canonical path. Keep it if the directory is missing.
+        hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(repoPath) : Effect.fail(error),
+      ),
+    );
 
   const persistProgress = (
     workspaceId: string,
@@ -300,9 +309,7 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        const lifecycleRepoPath = yield* settingsConfig.resolveWorkspaceLifecyclePath(
-          repoConfig.repoPath,
-        );
+        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
           lifecycleRepoPath,
           "close",
@@ -357,9 +364,7 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        const lifecycleRepoPath = yield* settingsConfig.resolveWorkspaceLifecyclePath(
-          repoConfig.repoPath,
-        );
+        const lifecycleRepoPath = yield* resolveWorkspaceLifecyclePath(repoConfig.repoPath);
         return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
           lifecycleRepoPath,
           "remove",

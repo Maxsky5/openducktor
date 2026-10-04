@@ -29,7 +29,6 @@ import {
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import { resolveWorkspaceLifecyclePath } from "./workspace-lifecycle-path";
 
 const USER_SETTINGS_FILENAME = "config.json";
 const missingConfigFileErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
@@ -332,7 +331,6 @@ export const createSettingsConfigAdapter = ({
           }),
       });
     },
-    resolveWorkspaceLifecyclePath,
     pathExists(inputPath) {
       return Effect.tryPromise({
         try: () => access(inputPath),

@@ -63,7 +63,6 @@ const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =
     defaultRepoWorktreeBasePath: (repoPath) =>
       `/tmp/worktrees/${repoPath.split("/").at(-1) ?? "repo"}`,
     resolveConfiguredPath: (rawPath) => rawPath,
-    resolveWorkspaceLifecyclePath: () => Effect.die("Unused workspace lifecycle path resolver"),
     canonicalizePath: (rawPath) =>
       Effect.tryPromise({
         try: async () => {

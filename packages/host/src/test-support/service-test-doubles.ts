@@ -117,10 +117,6 @@ export const createSettingsConfigTestDouble = <Overrides extends Partial<Setting
   overrides: Overrides,
 ): SettingsConfigPort => ({
   canonicalizePath: unexpectedEffectCall("settings config", "canonicalizePath"),
-  resolveWorkspaceLifecyclePath: unexpectedEffectCall(
-    "settings config",
-    "resolveWorkspaceLifecyclePath",
-  ),
   defaultRepoWorktreeBasePath: () =>
     unexpectedSyncCall("settings config", "defaultRepoWorktreeBasePath"),
   defaultWorktreeBasePath: () => unexpectedSyncCall("settings config", "defaultWorktreeBasePath"),

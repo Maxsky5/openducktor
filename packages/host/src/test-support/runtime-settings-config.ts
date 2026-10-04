@@ -31,7 +31,6 @@ const createSettingsConfig = (
   defaultRepoWorktreeBasePath: () => "/tmp/repo",
   resolveConfiguredPath: (path) => path,
   canonicalizePath: (path) => Effect.succeed(path),
-  resolveWorkspaceLifecyclePath: (path) => Effect.succeed(path),
   pathExists: () => Effect.succeed(true),
   join: (...paths) => paths.join("/"),
 });
