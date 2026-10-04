@@ -15,6 +15,7 @@ import type { RuntimeUnavailableDetails } from "../../ports/runtime-admission-po
 const UNAVAILABLE_OPERATIONS = {
   admit: "runtime.admit",
   require_ready: "runtime.requireReady",
+  probe_session: "runtime.probeSession",
 } satisfies Record<RuntimeUnavailableError["operation"], string>;
 
 const toHostUnavailableError = (error: RuntimeUnavailableError) =>

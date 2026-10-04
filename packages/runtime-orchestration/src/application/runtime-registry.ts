@@ -56,7 +56,13 @@ export type RuntimeRegistry<E> = {
   stopAll(): Effect.Effect<RuntimeInstanceSummary[], RuntimeShutdownError>;
   /** Stopping a session is a control, so a lifecycle action waits for it. */
   stopSession(target: RuntimeSessionTarget): Effect.Effect<void, E | RuntimeUnavailableError>;
-  probeSession(target: RuntimeSessionTarget): Effect.Effect<RuntimeSessionProbe, E>;
+  /**
+   * Reports whether a native session is live. Only a ready runtime can answer. A runtime that is
+   * not ready but still holds its process may run the session, so the probe fails with the reason.
+   */
+  probeSession(
+    target: RuntimeSessionTarget,
+  ): Effect.Effect<RuntimeSessionProbe, E | RuntimeUnavailableError>;
 };
 
 export type CreateRuntimeRegistryInput<E> = {
@@ -309,11 +315,24 @@ export const createRuntimeRegistry = <E>({
           ),
       ),
     probeSession: (target) =>
-      Effect.suspend(() => {
+      Effect.suspend((): Effect.Effect<RuntimeSessionProbe, E | RuntimeUnavailableError> => {
         const slot = slotFor(target.runtimeKind);
-        const runtime = slot.state === "ready" ? (slot.handle?.runtime ?? null) : null;
-        if (!runtime) return Effect.succeed({ supported: true, hasLiveSession: false });
-        return drivers[target.runtimeKind].probeSession(target, runtime);
+        // A probe reads; it is not a control. A ready runtime answers, also during a reservation.
+        if (slot.state === "ready" && slot.handle) {
+          return drivers[target.runtimeKind].probeSession(target, slot.handle.runtime);
+        }
+        // Without a process, no session of this kind can run.
+        if (slot.handle === null) return Effect.succeed({ supported: true, hasLiveSession: false });
+        const { message, nextAction } = unavailable(slot);
+        return Effect.fail(
+          new RuntimeUnavailableError({
+            operation: "probe_session",
+            runtimeKind: target.runtimeKind,
+            state: slot.state,
+            message: `${message} ${nextAction}`,
+            nextAction,
+          }),
+        );
       }),
   };
   for (const slot of slots.values()) syncAdmission(slot);

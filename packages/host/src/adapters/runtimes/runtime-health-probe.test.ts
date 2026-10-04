@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import {
   RuntimeExecutableIncompatibleError,
   type RuntimeExecutableProbeError,
@@ -217,5 +217,46 @@ describe("createRuntimeHealthProbe", () => {
         },
       ],
     ]);
+  });
+
+  test("reads the version of a running runtime without starting a second runtime", async () => {
+    const versionCalls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
+    const protocolProbes: RuntimeKind[] = [];
+    const probe = createProbe(
+      {
+        ...createSystemCommands(),
+        versionCommand(...input) {
+          versionCalls.push(input);
+          return Effect.succeed("codex-cli 0.160.0");
+        },
+      },
+      createExecutableProbes((kind) => Effect.sync(() => void protocolProbes.push(kind))),
+    );
+
+    await expect(
+      Effect.runPromise(probe.readVersion("codex", executablePaths.codex)),
+    ).resolves.toBe("codex-cli 0.160.0");
+
+    expect(versionCalls).toEqual([[executablePaths.codex, ["--version"], { timeoutMs: 2_000 }]]);
+    expect(protocolProbes).toEqual([]);
+  });
+
+  test("leaves the version unknown when the version command fails", async () => {
+    const probe = createProbe({
+      ...createSystemCommands(),
+      versionCommand(command) {
+        return Effect.fail(
+          new HostPathAccessError({
+            operation: "test.version",
+            path: command,
+            message: "The executable cannot run.",
+          }),
+        );
+      },
+    });
+
+    await expect(
+      Effect.runPromise(probe.readVersion("claude", executablePaths.claude)),
+    ).resolves.toBeNull();
   });
 });

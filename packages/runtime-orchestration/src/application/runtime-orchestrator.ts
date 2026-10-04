@@ -96,7 +96,13 @@ export type RuntimeOrchestrator<E> = {
   /** Stops every runtime. No runtime can start or become ready afterwards. */
   stopAll(): Effect.Effect<RuntimeInstanceSummary[], RuntimeShutdownError>;
   stopSession(target: RuntimeSessionTarget): Effect.Effect<void, E | RuntimeUnavailableError>;
-  probeSession(target: RuntimeSessionTarget): Effect.Effect<RuntimeSessionProbe, E>;
+  /**
+   * Reports whether a native session is live. Only a ready runtime can answer. A runtime that is
+   * not ready but still holds its process may run the session, so the probe fails with the reason.
+   */
+  probeSession(
+    target: RuntimeSessionTarget,
+  ): Effect.Effect<RuntimeSessionProbe, E | RuntimeUnavailableError>;
 };
 
 export type CreateRuntimeOrchestratorInput<E> = {

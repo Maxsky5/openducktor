@@ -11,7 +11,7 @@ export type CreateRuntimeDriversInput = {
   descriptorFor: (kind: RuntimeKind) => RuntimeDescriptor;
   starters: Readonly<Record<RuntimeKind, RuntimeStarterPort>>;
   sessionOperations: Readonly<Record<RuntimeKind, RuntimeSessionOperations>>;
-  runtimeHealth: Pick<RuntimeHealthPort, "getRuntimeHealth">;
+  runtimeHealth: Pick<RuntimeHealthPort, "readVersion">;
   toolDiscovery: Pick<ToolDiscoveryPort, "validateToolPath">;
 };
 
@@ -30,11 +30,8 @@ export const createRuntimeDrivers = ({
       descriptor,
       start: (context) =>
         starters[kind].startRuntime({ ...context, runtimeKind: kind, descriptor }),
-      probeVersion: (executablePath) =>
-        runtimeHealth.getRuntimeHealth(kind, executablePath).pipe(
-          Effect.map((health) => health.version),
-          Effect.orElseSucceed(() => null),
-        ),
+      // The start already ran the runtime, so the version read must not start a second one.
+      probeVersion: (executablePath) => runtimeHealth.readVersion(kind, executablePath),
       validateExecutable: (executablePath) =>
         toolDiscovery.validateToolPath(kind, executablePath).pipe(Effect.asVoid),
       stopSession: (target, runtime) => operations.stopSession(target, runtime),

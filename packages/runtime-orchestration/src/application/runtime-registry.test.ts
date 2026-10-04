@@ -66,7 +66,7 @@ const createHarness = (
       probeVersion: () => probeVersion(kind),
       validateExecutable: () => Effect.void,
       stopSession: () => Effect.void,
-      probeSession: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+      probeSession: () => Effect.succeed({ supported: true, hasLiveSession: true }),
     };
   };
   const drivers: RuntimeDrivers<HostOperationError> = {
@@ -199,7 +199,17 @@ describe("runtime registry lifecycle", () => {
       ),
     );
     const { registry, events } = harness;
+    const target = {
+      runtimeKind: "codex" as const,
+      externalSessionId: "s",
+      workingDirectory: "/w",
+    };
     await Effect.runPromise(apply(registry, "codex", request("start")));
+    // A ready runtime answers through its driver.
+    await expect(Effect.runPromise(registry.probeSession(target))).resolves.toEqual({
+      supported: true,
+      hasLiveSession: true,
+    });
 
     const failed = await Effect.runPromise(
       apply(registry, "codex", request("stop", { trigger: "settings" })),
@@ -208,12 +218,26 @@ describe("runtime registry lifecycle", () => {
     expect(failed.status).toMatchObject({ state: "error", runtimeId: "codex-1", enabled: false });
     expect(failed.status.failure).toMatchObject({ phase: "stop" });
     expect(failed.status.failure?.nextAction).toContain("retry applying the saved settings");
+    // The process may still run its sessions, so the probe cannot report them as stopped.
+    const probeFailure = await Effect.runPromise(Effect.flip(registry.probeSession(target)));
+    expect(probeFailure).toMatchObject({
+      _tag: "RuntimeUnavailableError",
+      operation: "probe_session",
+      runtimeKind: "codex",
+      state: "error",
+    });
+    expect(probeFailure.message).toContain("retry applying the saved settings");
 
     const retried = await Effect.runPromise(
       apply(registry, "codex", request("stop", { trigger: "restart" })),
     );
     expect(retried.status).toMatchObject({ state: "disabled", runtimeId: null, failure: null });
     expect(events).toEqual(["start:codex-1", "stop:codex-1"]);
+    // Without a process, no session can run.
+    await expect(Effect.runPromise(registry.probeSession(target))).resolves.toEqual({
+      supported: true,
+      hasLiveSession: false,
+    });
   });
 
   test("reports a crash, adds a later cleanup failure, and ignores a released generation", async () => {
@@ -326,6 +350,19 @@ describe("runtime registry lifecycle", () => {
       apply(registry, "opencode", request("replace", { trigger: "restart" })),
     );
     await Effect.runPromise(Deferred.await(stopEntered));
+    // The old process still runs while it stops, so a probe gets the state and next action.
+    const target = {
+      runtimeKind: "opencode" as const,
+      externalSessionId: "s",
+      workingDirectory: "/w",
+    };
+    await expect(
+      Effect.runPromise(Effect.flip(registry.probeSession(target))),
+    ).resolves.toMatchObject({
+      operation: "probe_session",
+      state: "restarting",
+      message: "The OpenCode runtime is restarting. Wait for the runtime to become ready.",
+    });
 
     const shutdown = Effect.runFork(registry.stopAll());
     await Effect.runPromise(Effect.yieldNow());

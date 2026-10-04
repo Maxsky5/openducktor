@@ -232,8 +232,9 @@ const createRouter = async (
       onBackgroundFailure,
       processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: join(root, "config") },
       runtimeDistribution: createSourceRuntimeDistribution(join(import.meta.dir, "../../../../..")),
-      // A real version probe runs the fixture again, which rewrites the runtime PID file.
+      // A real version read runs the fixture again, which rewrites the runtime PID file.
       runtimeHealth: {
+        readVersion: () => Effect.succeed(null),
         getRuntimeHealth: () =>
           Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
       },

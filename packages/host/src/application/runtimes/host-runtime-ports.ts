@@ -26,7 +26,7 @@ export const createRuntimeRegistryPort = (
   requireReady: (kind) => mapRuntimeUnavailable(orchestrator.requireReady(kind)),
   stopAllRuntimes: () => mapRuntimeShutdown(orchestrator.stopAll()),
   stopSession: (input) => mapRuntimeUnavailable(orchestrator.stopSession(input)),
-  probeSessionStatus: (input) => orchestrator.probeSession(input),
+  probeSessionStatus: (input) => mapRuntimeUnavailable(orchestrator.probeSession(input)),
 });
 
 /** Reads the saved runtime settings and workspaces from the OpenDucktor settings file. */

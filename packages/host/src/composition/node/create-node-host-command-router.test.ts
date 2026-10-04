@@ -73,6 +73,7 @@ const unusedRuntimeStarter: RuntimeStarterPort = {
 };
 
 const runtimeHealth: RuntimeHealthPort = {
+  readVersion: () => Effect.succeed(null),
   getRuntimeHealth: () =>
     Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
 };

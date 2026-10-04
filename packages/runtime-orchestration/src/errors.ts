@@ -6,7 +6,7 @@ import { Data } from "effect";
  * control that a lifecycle action cancelled, whose message gives the cancel reason.
  */
 export class RuntimeUnavailableError extends Data.TaggedError("RuntimeUnavailableError")<{
-  readonly operation: "admit" | "require_ready";
+  readonly operation: "admit" | "require_ready" | "probe_session";
   readonly runtimeKind: RuntimeKind;
   readonly state: string;
   readonly message: string;
