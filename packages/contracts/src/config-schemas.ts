@@ -1,5 +1,6 @@
 import { claudePolicyFieldsSchema } from "./claude-policy-schemas";
 import { z } from "zod";
+import { openCodePermissionRulesSchema } from "./opencode-permission-schemas";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
@@ -200,24 +201,32 @@ export const claudeRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
   .strict();
 export type ClaudeRuntimeConfig = z.infer<typeof claudeRuntimeConfigSchema>;
 
+export const openCodeRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
+  .extend({
+    defaults: openCodePermissionRulesSchema.default(() => ({ rules: [] })),
+    roleOverrides: z.partialRecord(agentRoleSchema, openCodePermissionRulesSchema).default({}),
+  })
+  .strict();
+export type OpenCodeRuntimeConfig = z.infer<typeof openCodeRuntimeConfigSchema>;
 export type AgentRuntimeConfig =
   | AgentRuntimeEnabledConfig
   | CodexRuntimeConfig
-  | ClaudeRuntimeConfig;
+  | ClaudeRuntimeConfig
+  | OpenCodeRuntimeConfig;
 export type AgentRuntimes = Record<string, AgentRuntimeConfig> & {
-  opencode: AgentRuntimeEnabledConfig;
+  opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
 };
 
 type DefaultAgentRuntimes = {
-  opencode: AgentRuntimeEnabledConfig;
+  opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
-  opencode: { enabled: false, executablePath: "" },
+  opencode: { enabled: false, executablePath: "", defaults: { rules: [] }, roleOverrides: {} },
   codex: {
     enabled: false,
     executablePath: "",
@@ -231,14 +240,19 @@ export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes(
 
 export const agentRuntimesSchema = z
   .object({
-    opencode: agentRuntimeEnabledConfigSchema.optional(),
+    opencode: openCodeRuntimeConfigSchema.optional(),
     codex: codexRuntimeConfigSchema.optional(),
     claude: claudeRuntimeConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
   .transform((value): AgentRuntimes => ({
     ...value,
-    opencode: value.opencode ?? { enabled: false, executablePath: "" },
+    opencode: value.opencode ?? {
+      enabled: false,
+      executablePath: "",
+      defaults: { rules: [] },
+      roleOverrides: {},
+    },
     codex: value.codex ?? {
       enabled: false,
       executablePath: "",

@@ -1,3 +1,4 @@
+import type { Session } from "@opencode-ai/sdk/v2/client";
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
@@ -113,7 +114,9 @@ const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
 };
 
 test("rejects non-OpenCode runtime policy bindings at the adapter boundary", async () => {
-  const adapter = new OpencodeSdkAdapter();
+  const adapter = new OpencodeSdkAdapter({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+  });
 
   await expect(
     adapter.startSession({
@@ -142,7 +145,10 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
   const createClient = mock(() => {
     throw new Error("createClient should not be called");
   });
-  const adapter = new OpencodeSdkAdapter({ createClient });
+  const adapter = new OpencodeSdkAdapter({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    createClient,
+  });
 
   await expect(
     adapter.forkSession({
@@ -177,6 +183,7 @@ test("rejects missing resume scope before runtime side effects", async () => {
     throw new Error("requireRepoRuntime should not be called");
   });
   const adapter = new OpencodeSdkAdapter({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     createClient,
     repoRuntimeResolver: { requireRepoRuntime },
   });
@@ -196,7 +203,10 @@ test("rejects missing resume scope before runtime side effects", async () => {
 
 test("loads unbound session history without applying a session policy", async () => {
   const mockClient = makeMockClient();
-  const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+  const adapter = new OpencodeSdkAdapter({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    createClient: () => mockClient.client,
+  });
 
   await expect(
     adapter.loadSessionHistory(
@@ -243,6 +253,7 @@ const makeMockClient = (
   const mcpConnectCalls: unknown[] = [];
   const toolIdCalls: unknown[] = [];
 
+  const metadataById = new Map<string, NonNullable<Session["metadata"]>>();
   const rulesById = new Map<
     string,
     NonNullable<ClientMethodInput<"session", "create">["permission"]>
@@ -259,12 +270,14 @@ const makeMockClient = (
       updated: Date.parse("2026-02-22T12:00:00.000Z"),
     },
     permission: rulesById.get(id) ?? [],
+    metadata: metadataById.get(id) ?? {},
   });
   const client: OpencodeClient = {
     session: {
       create: async (input?: ClientMethodInput<"session", "create">) => {
         createCalls.push(input);
         rulesById.set("external-session-1", input?.permission ?? []);
+        metadataById.set("external-session-1", input?.metadata ?? {});
         return { data: nativeDetail("external-session-1", input?.directory), error: undefined };
       },
       abort: async (input?: ClientMethodInput<"session", "abort">) => {
@@ -282,7 +295,9 @@ const makeMockClient = (
         updateCalls.push(input);
         if (options.sessionUpdateResult) return options.sessionUpdateResult;
         const id = input?.sessionID ?? "external-session-1";
-        if (input?.permission) rulesById.set(id, input.permission);
+        if (input?.permission)
+          rulesById.set(id, [...(rulesById.get(id) ?? []), ...input.permission]);
+        if (input?.metadata) metadataById.set(id, input.metadata);
         return { data: nativeDetail(id, input?.directory), error: undefined };
       },
       fork: async (input?: ClientMethodInput<"session", "fork">) => {
@@ -479,6 +494,7 @@ describe("opencode-sdk-adapter", () => {
     const mockClient = makeMockClient();
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
@@ -502,6 +518,7 @@ describe("opencode-sdk-adapter", () => {
     const mockClient = makeMockClient();
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
@@ -534,6 +551,7 @@ describe("opencode-sdk-adapter", () => {
       },
     });
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -576,6 +594,7 @@ describe("opencode-sdk-adapter", () => {
       },
     });
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -612,6 +631,7 @@ describe("opencode-sdk-adapter", () => {
   test("startSession registers and stopSession tears down the session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -646,6 +666,7 @@ describe("opencode-sdk-adapter", () => {
   test("replyApproval clears only the matching pending input bucket by request id", async () => {
     const mockClient = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => mockClient.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -753,6 +774,7 @@ describe("opencode-sdk-adapter", () => {
       },
     } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient: () => client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -830,6 +852,7 @@ describe("opencode-sdk-adapter", () => {
       command: { list },
     }));
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });
@@ -869,6 +892,7 @@ describe("opencode-sdk-adapter", () => {
       command: { list },
     }));
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
@@ -893,6 +917,7 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Client creation must not run for a stdio runtime connection.");
     });
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: makeRepoRuntimeResolver("stdio"),
@@ -917,6 +942,7 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("createClient should not be called");
     });
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       repoRuntimeResolver: { requireRepoRuntime },
     });
@@ -948,7 +974,11 @@ describe("opencode-sdk-adapter", () => {
       error: undefined,
     }));
     const createClient: () => OpencodeClient = mock(() => ({ app: { agents } }));
-    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+      createClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
 
     const catalog = await adapter.loadRuntimeCatalog({
       repoPath: defaultRepoPath,
@@ -985,6 +1015,7 @@ describe("opencode-sdk-adapter", () => {
       find: { files },
     }));
     const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });

@@ -63,7 +63,9 @@ export const createSessionDependenciesFixture = (
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({
-  adapter: createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
+  adapter: createOpenCodeAgentEngineTestAdapter(
+    new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+  ),
   canonicalizePath: async (path) => path,
   startWorkflowSession: async () => {
     throw new Error("should not start workflow session");

@@ -31,7 +31,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   test("an old send failure does not change a newer execution episode or its pending input", async () => {
     const entered = Promise.withResolvers<void>();
     const rejected = Promise.withResolvers<never>();
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const adapter = createOpenCodeAgentEngineTestAdapter(
+      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+    );
     adapter.sendUserMessage = () => {
       entered.resolve();
       return rejected.promise;
@@ -66,7 +68,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
   test("delivers confirmed kickoff whitespace through the real sender to the adapter", async () => {
     const text = "\n\n  Custom instruction\n{{task.title}}\n ";
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const adapter = createOpenCodeAgentEngineTestAdapter(
+      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+    );
     const sent: Array<Parameters<typeof adapter.sendUserMessage>[0]["parts"]> = [];
     adapter.sendUserMessage = async (input) => {
       sent.push(input.parts);
@@ -97,7 +101,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const adapter = createOpenCodeAgentEngineTestAdapter(
+      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+    );
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendInput: unknown;
     adapter.sendUserMessage = async (input) => {
@@ -152,7 +158,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("does not store the Codex compaction send result as a user message", async () => {
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const adapter = createOpenCodeAgentEngineTestAdapter(
+      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+    );
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async (input) => ({
       type: "user_message",
@@ -195,7 +203,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("does not store the OpenCode compaction send result as a user message", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async (input) => acceptedUserMessage(input);
     const sessionsRef = createSessionsRef([
@@ -226,7 +236,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("stores accepted user messages from the runtime send result", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
@@ -271,7 +283,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("stores a live accepted user message only once when send returns the same event", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     const originalSubscribeEvents = adapter.subscribeEvents;
     const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
@@ -331,7 +345,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("stores a live accepted user message only once when send returns an equivalent event", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     const originalSubscribeEvents = adapter.subscribeEvents;
     const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
@@ -394,7 +410,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("stores a Codex accepted user message only once when runtime confirmation has a nearby timestamp", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     const originalSubscribeEvents = adapter.subscribeEvents;
     const handlers: Parameters<typeof adapter.subscribeEvents>[1][] = [];
@@ -479,7 +497,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("releases held starting sessions to running when sending starts", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     const committedStatuses: AgentSessionState["status"][] = [];
@@ -521,7 +541,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("releases held starting sessions to idle when pending input prevents sending", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
@@ -562,7 +584,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("marks held starting sessions as failed when send preparation fails", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
@@ -593,7 +617,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("does not load requested history before sending to a runtime session", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
     let sentInput: Parameters<typeof adapter.sendUserMessage>[0] | null = null;
@@ -639,7 +665,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("tells the runtime which history-restored background questions a send handles", async () => {
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const adapter = createOpenCodeAgentEngineTestAdapter(
+      new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) }),
+    );
     const originalSendUserMessage = adapter.sendUserMessage;
     const inputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
     adapter.sendUserMessage = async (input) => {
@@ -715,7 +743,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     async ({ beforeSend }) => {
       const handlers: Array<(event: AgentEvent) => void> = [];
       const adapter: AgentEnginePort & SessionEventAdapter = {
-        ...createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
+        ...createOpenCodeAgentEngineTestAdapter(
+          new OpencodeSdkAdapter({
+            resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+          }),
+        ),
         subscribeEvents: async (_sessionRef, handler) => {
           handlers.push(handler);
           return () => {};
@@ -824,7 +856,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   test.each(blockingInputCases)(
     "rejects a send while waiting for a blocking $label",
     async ({ pendingInput }) => {
-      const adapter = new OpencodeSdkAdapter();
+      const adapter = new OpencodeSdkAdapter({
+        resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+      });
       const originalSendUserMessage = adapter.sendUserMessage;
       let sendCalls = 0;
       adapter.sendUserMessage = async (input) => {
@@ -880,7 +914,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   );
 
   test("sends to an existing QA session after the task status changes", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
@@ -931,7 +967,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("reports a send failure without assigning a runtime error", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
@@ -974,7 +1012,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("preserves active turn transcript and timing for busy queued sends", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     const sendCalls: Array<{
       externalSessionId: string;
@@ -1048,7 +1088,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("keeps the active turn running when a busy queued send fails", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async () => {
       throw new Error("queued send failed");

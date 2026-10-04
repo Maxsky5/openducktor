@@ -17,7 +17,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   });
 
   test("uses live workspace refs for session start stale checks", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const actions = createSessionActions({
       adapter,
@@ -44,7 +46,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   });
 
   test("routes fork canonicalization through injected dependencies", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const canonicalizedPaths: string[] = [];
     const sourceSession = buildSession({
       externalSessionId: "source-session",

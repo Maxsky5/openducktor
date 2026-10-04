@@ -1,3 +1,5 @@
+import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,6 +25,65 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 };
 
 describe("settings config adapter initialization", () => {
+  test("round trips OpenCode rules through Settings and resolves detached role snapshots", async () => {
+    await withTempConfig(async (configPath) => {
+      const adapter = createSettingsConfigAdapter({ configPath });
+      const service = createWorkspaceSettingsService(adapter);
+      const draft = await Effect.runPromise(service.getSettingsSnapshot());
+      const rules = [
+        { permission: "bash", pattern: "*", action: "deny" as const },
+        { permission: "bash", pattern: "git ?  *", action: "allow" as const },
+        { permission: "read", pattern: "~/private/*", action: "ask" as const },
+      ];
+      draft.agentRuntimes.opencode.defaults.rules = rules;
+      draft.agentRuntimes.opencode.roleOverrides = {
+        qa: { rules: [{ permission: "myserver_*", pattern: "*", action: "deny" }] },
+      };
+      await Effect.runPromise(service.saveSettingsSnapshot(draft));
+      const restartedAdapter = createSettingsConfigAdapter({ configPath });
+      const restartedService = createWorkspaceSettingsService(restartedAdapter);
+      const loaded = await Effect.runPromise(restartedService.getSettingsSnapshot());
+      expect(loaded.agentRuntimes.opencode).toEqual(draft.agentRuntimes.opencode);
+      const resolver = createOpenCodeCreationSettings(restartedAdapter);
+      const qa = await Effect.runPromise(
+        resolver.resolve({ kind: "workflow", taskId: "task", role: "qa" }),
+      );
+      expect(qa).toEqual({
+        defaults: rules,
+        role: draft.agentRuntimes.opencode.roleOverrides.qa!.rules,
+      });
+      const repository = await Effect.runPromise(resolver.resolve({ kind: "repository" }));
+      expect(repository).toEqual({ defaults: rules, role: [] });
+      loaded.agentRuntimes.opencode.defaults.rules = [];
+      loaded.agentRuntimes.opencode.executablePath = "/new/opencode";
+      loaded.agentRuntimes.opencode.enabled = false;
+      await Effect.runPromise(restartedService.saveSettingsSnapshot(loaded));
+      expect(qa.defaults).toEqual(rules);
+      const latest = await Effect.runPromise(
+        resolver.resolve({ kind: "workflow", taskId: "task", role: "qa" }),
+      );
+      expect(latest.defaults).toEqual([]);
+      expect(latest.role).toEqual(qa.role);
+    });
+  });
+
+  test("rejects invalid persisted OpenCode rules with the exact field and a recovery action", async () => {
+    await withTempConfig(async (configPath) => {
+      const config = createDefaultGlobalConfig();
+      config.agentRuntimes.opencode.roleOverrides.qa = {
+        rules: [{ permission: "bash", pattern: " ", action: "ask" }],
+      };
+      await writeFile(configPath, JSON.stringify(config));
+      const adapter = createSettingsConfigAdapter({ configPath });
+      await expect(Effect.runPromise(adapter.readConfig())).rejects.toThrow(
+        "agentRuntimes.opencode.roleOverrides.qa.rules.0.pattern",
+      );
+      await expect(
+        Effect.runPromise(createOpenCodeCreationSettings(adapter).resolve({ kind: "repository" })),
+      ).rejects.toThrow("Fix the values in this file");
+    });
+  });
+
   test("uses the explicit config directory instead of the environment", async () => {
     await withTempConfig(async (configPath) => {
       const otherDir = join(configPath, "..", "other");
@@ -50,7 +111,12 @@ describe("settings config adapter initialization", () => {
             ...createDefaultGlobalConfig(),
             agentRuntimes: {
               ...createDefaultGlobalConfig().agentRuntimes,
-              opencode: { enabled: true, executablePath: "/tools/opencode" },
+              opencode: {
+                defaults: { rules: [] },
+                roleOverrides: {},
+                enabled: true,
+                executablePath: "/tools/opencode",
+              },
             },
           });
         },

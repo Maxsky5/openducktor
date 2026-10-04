@@ -405,7 +405,9 @@ describe("session-start notifications", () => {
     const sessionsRef = createSessionsRef([
       buildSession({ status: "starting", workingDirectory: session.workingDirectory }),
     ]);
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     adapter.sendUserMessage = async () => {
       sessionsRef.current = createSessionsRef().current;
       throw new Error("Session disconnected during send");
@@ -434,7 +436,9 @@ describe("session-start notifications", () => {
   });
 
   test("focuses the exact rendered error after a post-start message failure", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async () => {
       throw new Error("message failed");

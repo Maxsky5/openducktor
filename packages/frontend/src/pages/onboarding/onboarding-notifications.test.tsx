@@ -18,7 +18,12 @@ afterEach(cleanup);
 
 const runtimes = {
   ...DEFAULT_AGENT_RUNTIMES,
-  opencode: { enabled: true, executablePath: "/valid/opencode" },
+  opencode: {
+    defaults: { rules: [] },
+    roleOverrides: {},
+    enabled: true,
+    executablePath: "/valid/opencode",
+  },
 };
 
 const enterNotificationsStage = async (): Promise<void> => {

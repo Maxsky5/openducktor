@@ -48,7 +48,8 @@ import {
   withAgentSessionRef,
 } from "@openducktor/core";
 import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
-import { addPermissionRules } from "./workflow-tool-permissions";
+import { buildCreationPermissions } from "./opencode-creation-permissions";
+import { PERMISSION_METADATA_KEY, unownedPermissionRules } from "./opencode-permission-ownership";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
@@ -80,7 +81,9 @@ import {
   restoreSessionPolicy,
 } from "./opencode-session-binding";
 import {
-  restoreSessionPermissions,
+  createSessionPermissionRestorer,
+  type SessionPermissionRestorer,
+  resolvePermissionOwnership,
   readPermissionSession,
   appendSessionPermissions,
   checkSessionPermissions,
@@ -139,6 +142,8 @@ const assertOpenCodeRuntimePolicyBinding = (
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
+  private readonly resolveCreationSettings: OpencodeSdkAdapterOptions["resolveCreationSettings"];
+  private readonly restorePermissions: SessionPermissionRestorer;
   private readonly sessions: Map<string, SessionRecord>;
   private readonly runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   private readonly listeners: SessionEventListeners = new Map();
@@ -148,12 +153,15 @@ export class OpencodeSdkAdapter
   private readonly logEvent: OpencodeEventLogger | undefined;
 
   constructor(
-    options: OpencodeSdkAdapterOptions = {},
+    options: OpencodeSdkAdapterOptions,
     runtimeState?: {
       sessions: Map<string, SessionRecord>;
       runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+      restorePermissions?: SessionPermissionRestorer;
     },
   ) {
+    this.resolveCreationSettings = options.resolveCreationSettings;
+    this.restorePermissions = runtimeState?.restorePermissions ?? createSessionPermissionRestorer();
     this.sessions = runtimeState?.sessions ?? new Map();
     this.runtimeEventTransports = runtimeState?.runtimeEventTransports ?? new Map();
     this.now = options.now ?? nowIso;
@@ -203,15 +211,24 @@ export class OpencodeSdkAdapter
       runtimeDefinition,
       "start OpenCode session",
     );
+    const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
     await ensureTrustedOdtMcpServerConnected({
       client,
       workingDirectory: input.workingDirectory,
     });
+    const creation = await buildCreationPermissions({
+      settings,
+      policy,
+      native: [],
+      client,
+      workingDirectory: input.workingDirectory,
+    });
     const createRequest: Parameters<typeof client.session.create>[0] = {
       directory: input.workingDirectory,
-      permission: policy.permission,
+      permission: creation.permission,
+      metadata: { [PERMISSION_METADATA_KEY]: creation.ownership },
     };
     if (policy.title !== undefined) {
       createRequest.title = policy.title;
@@ -238,7 +255,8 @@ export class OpencodeSdkAdapter
         created,
         input.workingDirectory,
         externalSessionId,
-        policy.permission,
+        creation.permission,
+        creation.ownership,
       );
     } catch (error) {
       return this.deleteUnregisteredSession(
@@ -289,6 +307,7 @@ export class OpencodeSdkAdapter
         policy,
         request: input,
         session: existing,
+        restorePermissions: this.restorePermissions,
       });
       return existing.summary;
     }
@@ -299,17 +318,11 @@ export class OpencodeSdkAdapter
       client,
       workingDirectory: input.workingDirectory,
     });
-    const detailRecord = await readPermissionSession({
-      client,
-      workingDirectory: input.workingDirectory,
-      externalSessionId: input.externalSessionId,
-    });
-    await restoreSessionPermissions({
+    const detailRecord = await this.restorePermissions({
       client,
       externalSessionId: input.externalSessionId,
       policy,
       workingDirectory: input.workingDirectory,
-      detail: detailRecord,
     });
     const title = await setSessionTitle({
       client,
@@ -491,6 +504,7 @@ export class OpencodeSdkAdapter
           ),
           request: input,
           session: existing,
+          restorePermissions: this.restorePermissions,
         });
       } else {
         applySessionContext(existing, input, "ensure session state");
@@ -513,7 +527,6 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    let detailRecord: ParsedOpencodeSession;
     if (knownDetail) {
       if (
         knownDetail.id !== input.externalSessionId ||
@@ -523,21 +536,22 @@ export class OpencodeSdkAdapter
           `Cannot observe OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' from detail '${knownDetail.id}' in '${knownDetail.directory}'.`,
         );
       }
+    }
+    let detailRecord: ParsedOpencodeSession;
+    if (policy) {
+      detailRecord = await this.restorePermissions({
+        client,
+        externalSessionId: input.externalSessionId,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    } else if (knownDetail) {
       detailRecord = knownDetail;
     } else {
       detailRecord = await readPermissionSession({
         client,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
-      });
-    }
-    if (policy) {
-      await restoreSessionPermissions({
-        client,
-        externalSessionId: input.externalSessionId,
-        policy,
-        workingDirectory: input.workingDirectory,
-        detail: detailRecord,
       });
     }
     const title = policy
@@ -638,6 +652,7 @@ export class OpencodeSdkAdapter
       this.getRuntimeDefinition(),
       "fork OpenCode session",
     );
+    const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
     await ensureTrustedOdtMcpServerConnected({
@@ -647,6 +662,15 @@ export class OpencodeSdkAdapter
     const source = await readPermissionSession({
       client,
       externalSessionId: input.parentExternalSessionId,
+      workingDirectory: input.workingDirectory,
+    });
+    const ownership = await resolvePermissionOwnership(client, source);
+    const native = unownedPermissionRules(source.permission ?? [], ownership);
+    const creation = await buildCreationPermissions({
+      settings,
+      policy,
+      native,
+      client,
       workingDirectory: input.workingDirectory,
     });
     const forkRequest: Parameters<typeof client.session.fork>[0] = {
@@ -666,10 +690,15 @@ export class OpencodeSdkAdapter
       );
     try {
       const detail = checkSessionPermissions(forkedData, input.workingDirectory, externalSessionId);
+      if ((detail.permission?.length ?? 0) !== 0)
+        throw new Error(
+          "The native fork unexpectedly contains permissions. Update the selected OpenCode runtime.",
+        );
       await appendSessionPermissions({
         client,
         detail,
-        permission: addPermissionRules(source.permission ?? [], policy.permission),
+        permission: creation.permission,
+        ownership: creation.ownership,
       });
       await setSessionTitle({
         client,

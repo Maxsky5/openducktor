@@ -20,7 +20,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const selection = session.selectedModel;
     const store = createAgentSessionsStore("/tmp/repo");
     store.replaceSession(session);
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     adapter.updateSessionModel = async () => {};
     const actions = createSessionActions({
       adapter,
@@ -34,7 +36,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("updates the host session and local state for an idle session", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
     adapter.updateSessionModel = async (input) => {
@@ -62,7 +66,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("syncs selected model to the runtime for an observed live session", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
     adapter.updateSessionModel = async (input) => {
@@ -105,7 +111,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("keeps the durable model unchanged when host runtime sync fails", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalUpdateSessionModel = adapter.updateSessionModel;
     adapter.updateSessionModel = async () => {
       throw new Error("Unknown session: session-1");
@@ -132,7 +140,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("changes a repository session model without task persistence", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
     adapter.updateSessionModel = async (input) => {
       modelCalls.push(input);
@@ -171,7 +181,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("keeps local state unchanged when the host rejects the stored model update", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     adapter.updateSessionModel = async () => {
       throw new Error("task session persistence failed");
     };
@@ -192,7 +204,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("rejects an unbound model change before calling the runtime", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     let runtimeCalls = 0;
     adapter.updateSessionModel = async () => {
       runtimeCalls += 1;
@@ -215,7 +229,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("rejects a runtime change before calling the host", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     let runtimeCalls = 0;
     adapter.updateSessionModel = async () => {
       runtimeCalls += 1;
@@ -234,7 +250,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("reports a stale model operation when the session disappears after runtime update", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     let runtimeCalls = 0;
     adapter.updateSessionModel = async () => {
       runtimeCalls += 1;
@@ -260,7 +278,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
   });
 
   test("fails instead of silently ignoring model changes for an unloaded session", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
     adapter.updateSessionModel = async (input) => {

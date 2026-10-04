@@ -19,7 +19,12 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     agentRuntimes: {
       ...DEFAULT_AGENT_RUNTIMES,
-      opencode: { enabled: true, executablePath: "/tools/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/tools/opencode",
+      },
     },
   });
 

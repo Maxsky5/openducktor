@@ -284,7 +284,12 @@ describe("createSystemDiagnosticsService", () => {
         ...createDefaultGlobalConfig(),
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
-          opencode: { enabled: true, executablePath: "/bin/opencode" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: true,
+            executablePath: "/bin/opencode",
+          },
           codex: {
             ...DEFAULT_AGENT_RUNTIMES.codex,
             enabled: true,

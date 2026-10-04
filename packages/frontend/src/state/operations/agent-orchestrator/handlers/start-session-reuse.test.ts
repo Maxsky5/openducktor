@@ -249,7 +249,9 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -314,7 +316,9 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -532,7 +536,9 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     let loadSourceSessionCalls = 0;
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -609,7 +615,9 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     let loadSourceSessionCalls = 0;
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
