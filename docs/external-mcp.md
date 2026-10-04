@@ -49,7 +49,7 @@ Environment variables:
 
 ## Host discovery
 
-The host starts the bridge and writes the discovery file during host startup. If this fails, the host logs the cause and continues to start runtimes. Diagnostics shows the cause in the OpenDucktor MCP bridge check. Operations that need the bridge fail with the same cause. The host does not try to start the bridge again. Fix the cause, then restart OpenDucktor.
+The host starts the bridge and writes the discovery file during host startup. If this fails, the host logs the cause and continues to start runtimes. The host publishes each bridge state (`starting`, `ready`, or `failed`) on `openducktor://runtime-changed`, and Diagnostics shows it with the cause of a failure. Operations that need the bridge fail with the same cause. The host does not try to start the bridge again. Fix the cause, then restart OpenDucktor.
 
 Production discovery reads `runtime/mcp-bridge.json`. Development discovery requires both `OPENDUCKTOR_CHANNEL=dev` and `OPENDUCKTOR_DEV_INSTANCE`, then reads `runtime/dev-instances/<instanceId>/mcp-bridge.json`.
 

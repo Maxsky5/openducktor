@@ -68,6 +68,7 @@ import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
+import { createMcpBridgeStatusPublisher } from "./runtime-lifecycle-publisher";
 import { createModelCatalogPreviewComposition as previewModels } from "./model-catalog-preview-composition";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
@@ -160,7 +161,11 @@ export const assembleNodeEffectHostCommandRouter = (
   // services that this function creates after the runtimes, so it gets its value further down.
   let resolvedMcpHostBridge = mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
-  const { hostRuntimeService, registry: runtimeRegistry } = createNodeHostRuntimeComposition({
+  const {
+    hostInstanceId,
+    hostRuntimeService,
+    registry: runtimeRegistry,
+  } = createNodeHostRuntimeComposition({
     clientVersion,
     configuredRuntimeStarter,
     defaultPorts,
@@ -303,6 +308,7 @@ export const assembleNodeEffectHostCommandRouter = (
     bridgeService: odtMcpBridgeService,
     discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
     workspaceSettingsService,
+    onStatusChanged: eventBus ? createMcpBridgeStatusPublisher(eventBus, hostInstanceId) : () => {},
   });
   const taskSessionStopService = createTaskSessionStopService({
     gitPort: git,
@@ -395,10 +401,10 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeHealth,
       toolDiscovery,
     }),
-    ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService),
-    ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService, () =>
-      mcpBridge.checkReady(),
+    ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService, () =>
+      mcpBridge.status(),
     ),
+    ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
     ...createSystemPlatformCommandHandlers(),
     ...createTaskAssetCommandHandlers(taskAssetStagingService),
     ...createTaskCommandHandlers(taskService),

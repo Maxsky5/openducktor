@@ -34,7 +34,6 @@ const renderSections = (workspace: ModelInput["workspace"], overrides: Partial<M
           isCurrent: false,
         }),
         runtimeCheck: createObservedCheckFixture(),
-        hostMcpBridgeCheck: { data: null, error: null },
         workspace,
         checksRepoPath: workspace?.repoPath ?? null,
         taskStoreCheck: createObservedCheckFixture(),
@@ -86,22 +85,23 @@ describe("DiagnosticsPanelSections", () => {
 
   test("labels values kept after a failed refresh as an earlier result", () => {
     const html = renderSections(null, {
-      hostMcpBridgeCheck: {
+      runtimeCheck: createObservedCheckFixture({
         data: {
-          state: "ready",
-          hostUrl: "http://127.0.0.1:1",
-          checkedAt: "2026-02-22T08:00:00.000Z",
-          detail: null,
+          pathOk: true,
+          gitOk: true,
+          gitVersion: "git version 2.50.1",
+          runtimes: [],
+          errors: [],
         },
-        error: "Bridge check failed.",
-      },
+        error: "Git check failed.",
+        failureKind: "error",
+        observedAt: "2026-02-22T08:00:00.000Z",
+      }),
     });
 
     expect(html).toContain("Showing the result from ");
     expect(html).toContain("It may be out of date.");
-    expect(html).toContain(
-      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
-    );
+    expect(html).toContain("Git check failed: Git check failed. Select Refresh to try again.");
   });
 
   test("maps each check health to a pill tone, with a spinner while work runs", () => {

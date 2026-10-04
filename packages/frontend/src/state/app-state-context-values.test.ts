@@ -95,7 +95,6 @@ describe("app-state-context-values", () => {
   test("returns identity for other context builders", () => {
     const checksValue: ChecksStateContextValue = {
       runtimeCheck: createObservedCheckFixture(),
-      hostMcpBridgeCheck: { data: null, error: null },
       checksRepoPath: null,
       taskStoreCheck: createObservedCheckFixture(),
       isRefreshingChecks: false,

@@ -153,7 +153,6 @@ function renderCreation(
         <ChecksStateContext
           value={{
             runtimeCheck: createObservedCheckFixture(),
-            hostMcpBridgeCheck: { data: null, error: null },
             checksRepoPath: null,
             taskStoreCheck: createObservedCheckFixture(),
             isRefreshingChecks: false,

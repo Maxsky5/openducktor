@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type HostMcpBridgeStatus,
   type HostRuntimeSnapshot,
   type HostRuntimeStatus,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -42,7 +43,19 @@ const status = {
   revision: 1,
 } satisfies HostRuntimeStatus;
 
-const snapshot = { hostInstanceId: "host-1", runtimes: [status] } satisfies HostRuntimeSnapshot;
+const mcpBridge = {
+  state: "ready",
+  hostUrl: "http://127.0.0.1:4000",
+  failure: null,
+  updatedAt: "2026-10-03T10:00:00.000Z",
+  revision: 1,
+} satisfies HostMcpBridgeStatus;
+
+const snapshot = {
+  hostInstanceId: "host-1",
+  runtimes: [status],
+  mcpBridge,
+} satisfies HostRuntimeSnapshot;
 
 const impact = {
   kinds: [
@@ -71,7 +84,7 @@ const createHarness = () => {
     snapshot: () =>
       Effect.sync(() => {
         calls.push({ method: "snapshot", input: null });
-        return snapshot;
+        return { hostInstanceId: snapshot.hostInstanceId, runtimes: snapshot.runtimes };
       }),
     requireRuntime: (kind) =>
       Effect.sync(() => {
@@ -90,7 +103,7 @@ const createHarness = () => {
       }),
   });
   const router = createHostCommandRouter({
-    handlers: createRuntimeCommandHandlers(orchestrator, hostRuntimeService),
+    handlers: createRuntimeCommandHandlers(orchestrator, hostRuntimeService, () => mcpBridge),
   });
   return { calls, router };
 };

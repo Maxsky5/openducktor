@@ -245,9 +245,13 @@ describe("host lifecycle shutdown", () => {
             }),
           );
         },
-        checkReady() {
-          return Effect.die("checkReady should not be called");
-        },
+        status: () => ({
+          state: "ready",
+          hostUrl: "http://127.0.0.1:5000",
+          failure: null,
+          updatedAt: "2026-10-03T10:00:00.000Z",
+          revision: 1,
+        }),
         close() {
           return Effect.fail(
             new HostOperationError({

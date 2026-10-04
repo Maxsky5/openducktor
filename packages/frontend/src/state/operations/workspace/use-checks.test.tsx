@@ -48,12 +48,6 @@ let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =
 const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
 const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
 const refreshHostRuntimeStatusMock = mock(async () => {});
-const hostMcpBridgeCheckMock = mock(async () => ({
-  state: "ready" as const,
-  hostUrl: "http://127.0.0.1:1",
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  detail: null,
-}));
 
 type UseChecksHook = (typeof import("./use-checks"))["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
@@ -63,14 +57,7 @@ type HookHarnessArgs = Partial<HookArgs> & {
 };
 type ResolvedHookArgs = HookArgs &
   Required<
-    Pick<
-      HookArgs,
-      | "runtimeCheck"
-      | "taskStoreCheck"
-      | "toastApi"
-      | "refreshHostRuntimeStatus"
-      | "hostMcpBridgeCheck"
-    >
+    Pick<HookArgs, "runtimeCheck" | "taskStoreCheck" | "toastApi" | "refreshHostRuntimeStatus">
   >;
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
@@ -110,8 +97,6 @@ const buildHookArgs = (
       args.refreshHostRuntimeStatus ??
       previous?.refreshHostRuntimeStatus ??
       refreshHostRuntimeStatusMock,
-    hostMcpBridgeCheck:
-      args.hostMcpBridgeCheck ?? previous?.hostMcpBridgeCheck ?? hostMcpBridgeCheckMock,
   };
 };
 
@@ -171,11 +156,7 @@ type HookHarness = ReturnType<typeof createHookHarness>;
 const waitForInitialChecksToSettle = async (harness: HookHarness) => {
   await harness.mount();
   await harness.waitFor((value) => {
-    return (
-      value.runtimeCheck.data !== null &&
-      value.taskStoreCheck.data !== null &&
-      value.hostMcpBridgeCheck.data !== null
-    );
+    return value.runtimeCheck.data !== null && value.taskStoreCheck.data !== null;
   });
 };
 
@@ -185,7 +166,6 @@ beforeEach(async () => {
   runtimeCheckMock.mockClear();
   taskStoreCheckMock.mockClear();
   refreshHostRuntimeStatusMock.mockClear();
-  hostMcpBridgeCheckMock.mockClear();
   runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
   taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
 });
@@ -199,16 +179,14 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((value) => value.hostMcpBridgeCheck.data !== null);
+      await harness.waitFor((value) => value.runtimeCheck.data !== null);
       runtimeCheckMock.mockClear();
-      hostMcpBridgeCheckMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
 
       expect(refreshHostRuntimeStatusMock).toHaveBeenCalledTimes(1);
       expect(runtimeCheckMock.mock.calls).toEqual([[true]]);
-      expect(hostMcpBridgeCheckMock).toHaveBeenCalledTimes(1);
       expect(taskStoreCheckMock).not.toHaveBeenCalled();
       expect(harness.getLatest().checksRepoPath).toBeNull();
       expect(harness.getLatest().isRefreshingChecks).toBe(false);
@@ -225,20 +203,13 @@ describe("use-checks", () => {
 
     try {
       await waitForInitialChecksToSettle(harness);
-      hostMcpBridgeCheckMock.mockImplementationOnce(async () => {
-        throw new Error("bridge down");
-      });
       runtimeCheckHandler = async () => {
         throw new Error("runtime down");
       };
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
-      await harness.waitFor(
-        (value) =>
-          value.hostMcpBridgeCheck.error === "bridge down" &&
-          value.runtimeCheck.failureKind === "error",
-      );
+      await harness.waitFor((value) => value.runtimeCheck.failureKind === "error");
 
       expect(refreshHostRuntimeStatusMock).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().taskStoreCheck.data?.taskStoreOk).toBe(true);
@@ -268,17 +239,13 @@ describe("use-checks", () => {
       taskStoreCheckHandler = async () => {
         throw new Error("task store down");
       };
-      hostMcpBridgeCheckMock.mockImplementationOnce(async () => {
-        throw new Error("bridge down");
-      });
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
       await harness.waitFor(
         (value) =>
           value.runtimeCheck.error === "runtime down" &&
-          value.taskStoreCheck.error === "task store down" &&
-          value.hostMcpBridgeCheck.error === "bridge down",
+          value.taskStoreCheck.error === "task store down",
       );
 
       const latest = harness.getLatest();
@@ -286,7 +253,6 @@ describe("use-checks", () => {
       expect(latest.taskStoreCheck.failureKind).toBe("error");
       expect(latest.runtimeCheck.data).toEqual(makeRuntimeCheck());
       expect(latest.taskStoreCheck.data).toEqual(makeTaskStoreCheck());
-      expect(latest.hostMcpBridgeCheck.data?.state).toBe("ready");
       expect(latest.runtimeCheck.observedAt).toBe(initial.runtimeCheck.observedAt);
       expect(latest.taskStoreCheck.observedAt).toBe(initial.taskStoreCheck.observedAt);
     } finally {

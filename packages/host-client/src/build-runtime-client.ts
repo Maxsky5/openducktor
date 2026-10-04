@@ -1,7 +1,5 @@
 import {
-  type HostMcpBridgeCheck,
   type HostRuntimeSnapshot,
-  hostMcpBridgeCheckSchema,
   hostRuntimeSnapshotSchema,
   type RuntimeLifecycleImpact,
   type RuntimeRestartResult,
@@ -97,10 +95,6 @@ const runtimeRestart = async (
   confirmation: string,
 ): Promise<RuntimeRestartResult> => {
   return invokeFn("runtime_restart", { runtimeKind, confirmation }, runtimeRestartResultSchema);
-};
-
-const hostMcpBridgeCheck = async (invokeFn: InvokeFn): Promise<HostMcpBridgeCheck> => {
-  return invokeFn("host_mcp_bridge_check", {}, hostMcpBridgeCheckSchema);
 };
 
 const buildStart = async (
@@ -329,10 +323,6 @@ export class HostAgentClient {
     confirmation: string,
   ): Promise<RuntimeRestartResult> {
     return runtimeRestart(this.invokeFn, runtimeKind, confirmation);
-  }
-
-  async hostMcpBridgeCheck(): Promise<HostMcpBridgeCheck> {
-    return hostMcpBridgeCheck(this.invokeFn);
   }
 
   async buildStart(

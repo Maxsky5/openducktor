@@ -11,6 +11,13 @@ import {
 const createRuntimeSnapshot = (hostInstanceId: string): HostRuntimeSnapshot => ({
   hostInstanceId,
   runtimes: [],
+  mcpBridge: {
+    state: "ready",
+    hostUrl: "http://127.0.0.1:4000",
+    failure: null,
+    updatedAt: "2026-10-03T10:00:00.000Z",
+    revision: 1,
+  },
 });
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({

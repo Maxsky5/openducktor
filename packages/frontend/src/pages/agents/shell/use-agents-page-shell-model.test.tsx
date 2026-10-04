@@ -540,7 +540,6 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
 
 const checksStateValue = (): ChecksStateContextValue => ({
   runtimeCheck: createObservedCheckFixture(),
-  hostMcpBridgeCheck: { data: null, error: null },
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
   isRefreshingChecks: false,

@@ -4,11 +4,12 @@ import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@/lib/browser-live/constant
 import { errorMessage } from "@/lib/errors";
 import type { RuntimeChangeListener } from "@/lib/shell-bridge";
 import {
-  applyHostRuntimeChangedEvent,
+  applyHostStatusEvent,
   hostRuntimeStatusQueryKeys,
   hostRuntimeStatusQueryOptions,
 } from "@/state/queries/host-runtime-status";
 import { invalidateRuntimeKindQueries } from "@/state/queries/runtime-query-invalidation";
+import type { HostStatusSnapshot } from "@/types/diagnostics";
 import type { HostRuntimeEventListener, HostRuntimeEvents } from "@/types/state-slices";
 
 export type HostRuntimeStatusOwnerPorts = {
@@ -98,7 +99,7 @@ export const createHostRuntimeStatusOwner = ({
 
   // Reports each kind whose runtime generation or readiness changed since the last observation.
   const observeGenerations = (): void => {
-    const snapshot = queryClient.getQueryData<HostRuntimeSnapshot>(
+    const snapshot = queryClient.getQueryData<HostStatusSnapshot>(
       hostRuntimeStatusQueryKeys.snapshot,
     );
     for (const status of snapshot?.runtimes ?? []) {
@@ -153,10 +154,10 @@ export const createHostRuntimeStatusOwner = ({
         changeStream(event.message ?? "Runtime updates are unavailable.", { hasBaseline: false });
         return;
       }
-      // A runtime change updates the cache. Impact changes concern open reviews only.
-      if (event.type === "runtime_changed") {
-        queryClient.setQueryData<HostRuntimeSnapshot>(options.queryKey, (current) =>
-          applyHostRuntimeChangedEvent(current, event),
+      // A runtime or MCP bridge change updates the cache. Impact changes concern open reviews only.
+      if (event.type === "runtime_changed" || event.type === "mcp_bridge_changed") {
+        queryClient.setQueryData<HostStatusSnapshot>(options.queryKey, (current) =>
+          applyHostStatusEvent(current, event),
         );
         observeGenerations();
         if (observedHostInstanceId !== null && observedHostInstanceId !== event.hostInstanceId) {

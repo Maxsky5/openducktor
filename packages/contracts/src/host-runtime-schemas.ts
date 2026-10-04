@@ -59,10 +59,26 @@ export const hostRuntimeStatusSchema = z
   .strict();
 export type HostRuntimeStatus = z.infer<typeof hostRuntimeStatusSchema>;
 
+/**
+ * State of the OpenDucktor MCP host bridge. The host starts it once at startup and does not retry a
+ * failed start. `failure` gives the cause and the next action.
+ */
+export const hostMcpBridgeStatusSchema = z
+  .object({
+    state: z.enum(["starting", "ready", "failed"]),
+    hostUrl: z.string().nullable(),
+    failure: z.string().nullable(),
+    updatedAt: isoTimestampSchema,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type HostMcpBridgeStatus = z.infer<typeof hostMcpBridgeStatusSchema>;
+
 export const hostRuntimeSnapshotSchema = z
   .object({
     hostInstanceId: nonEmptyStringSchema,
     runtimes: z.array(hostRuntimeStatusSchema),
+    mcpBridge: hostMcpBridgeStatusSchema,
   })
   .strict();
 export type HostRuntimeSnapshot = z.infer<typeof hostRuntimeSnapshotSchema>;
@@ -85,9 +101,19 @@ export const hostRuntimeImpactChangedEventSchema = z
   .strict();
 export type HostRuntimeImpactChangedEvent = z.infer<typeof hostRuntimeImpactChangedEventSchema>;
 
+export const hostMcpBridgeChangedEventSchema = z
+  .object({
+    type: z.literal("mcp_bridge_changed"),
+    hostInstanceId: nonEmptyStringSchema,
+    status: hostMcpBridgeStatusSchema,
+  })
+  .strict();
+export type HostMcpBridgeChangedEvent = z.infer<typeof hostMcpBridgeChangedEventSchema>;
+
 export const hostRuntimeEventSchema = z.discriminatedUnion("type", [
   hostRuntimeChangedEventSchema,
   hostRuntimeImpactChangedEventSchema,
+  hostMcpBridgeChangedEventSchema,
 ]);
 export type HostRuntimeEvent = z.infer<typeof hostRuntimeEventSchema>;
 
@@ -181,13 +207,3 @@ export const settingsSnapshotSaveResultSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type SettingsSnapshotSaveResult = z.infer<typeof settingsSnapshotSaveResultSchema>;
-
-export const hostMcpBridgeCheckSchema = z
-  .object({
-    state: z.enum(["ready", "error"]),
-    hostUrl: z.string().nullable(),
-    checkedAt: isoTimestampSchema,
-    detail: z.string().nullable(),
-  })
-  .strict();
-export type HostMcpBridgeCheck = z.infer<typeof hostMcpBridgeCheckSchema>;

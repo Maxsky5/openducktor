@@ -63,7 +63,6 @@ export const HOST_COMMAND_NAMES = [
   "git_remove_worktree",
   "git_reset_worktree_selection",
   "git_switch_branch",
-  "host_mcp_bridge_check",
   "human_approve",
   "human_request_changes",
   "issue_image_get",

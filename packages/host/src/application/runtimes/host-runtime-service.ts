@@ -21,7 +21,8 @@ import {
 export type HostRuntimeService = {
   /** Starts every enabled kind in the background. Never waits for a runtime to become ready. */
   initialize(): Effect.Effect<void>;
-  snapshot(): Effect.Effect<HostRuntimeSnapshot>;
+  /** The runtime part of the host snapshot. The command handler adds the MCP bridge status. */
+  snapshot(): Effect.Effect<Omit<HostRuntimeSnapshot, "mcpBridge">>;
   requireRuntime(kind: RuntimeKind): Effect.Effect<RuntimeInstanceSummary, HostError>;
   restartImpact(kind: RuntimeKind): Effect.Effect<RuntimeLifecycleImpact, HostError>;
   restart(kind: RuntimeKind, confirmation: string): Effect.Effect<RuntimeRestartResult, HostError>;

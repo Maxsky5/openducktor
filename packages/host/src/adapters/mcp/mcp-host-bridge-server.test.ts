@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 
 import path from "node:path";
 
-import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
+import {
+  type HostMcpBridgeStatus,
+  ODT_MCP_TOOL_NAMES,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -103,6 +107,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath,
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -170,6 +175,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -258,6 +264,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.fail(
@@ -302,22 +309,17 @@ describe("createMcpHostBridgeServer", () => {
     }
   });
 
-  test("checks bridge readiness with an authenticated request and never starts the bridge", async () => {
+  test("reports starting, then ready, and publishes each change", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
-    let readyCalls = 0;
-    let readyFails = false;
+    const published: HostMcpBridgeStatus[] = [];
     const bridge = createMcpHostBridgeServer({
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: (status) => published.push(status),
       bridgeService: {
         ready() {
-          readyCalls += 1;
-          return readyFails
-            ? Effect.fail(
-                new HostOperationError({ operation: "test.ready", message: "Bridge not ready." }),
-              )
-            : Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -329,37 +331,18 @@ describe("createMcpHostBridgeServer", () => {
     });
 
     try {
-      await expect(Effect.runPromise(bridge.checkReady())).resolves.toEqual({
-        state: "error",
-        hostUrl: null,
-        checkedAt: expect.any(String),
-        detail: "The OpenDucktor MCP host bridge is not running. Restart OpenDucktor.",
-      });
-      expect(readyCalls).toBe(0);
+      expect(bridge.status()).toMatchObject({ state: "starting", hostUrl: null, revision: 0 });
+      expect(published).toEqual([]);
 
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
-      await expect(Effect.runPromise(bridge.checkReady())).resolves.toEqual({
+
+      expect(bridge.status()).toMatchObject({
         state: "ready",
         hostUrl: connection.hostUrl,
-        checkedAt: expect.any(String),
-        detail: null,
+        failure: null,
+        revision: 1,
       });
-      // The check reached the authenticated ready handler, so the bridge accepted its token.
-      expect(readyCalls).toBe(1);
-
-      readyFails = true;
-      const failed = await Effect.runPromise(bridge.checkReady());
-      expect(failed).toMatchObject({ state: "error", hostUrl: connection.hostUrl });
-      expect(failed.detail).toBe(
-        "The MCP host bridge did not accept an authenticated request: The bridge answered with HTTP 400.",
-      );
-
-      await Effect.runPromise(bridge.close());
-      await expect(Effect.runPromise(bridge.checkReady())).resolves.toMatchObject({
-        state: "error",
-        hostUrl: null,
-      });
-      expect(readyCalls).toBe(2);
+      expect(published).toEqual([bridge.status()]);
     } finally {
       await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });
@@ -374,6 +357,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
@@ -397,11 +381,11 @@ describe("createMcpHostBridgeServer", () => {
       expect(connection.message).toBe(
         `The OpenDucktor MCP host bridge did not start: ${startup.message} Fix the cause, then restart OpenDucktor.`,
       );
-      await expect(Effect.runPromise(bridge.checkReady())).resolves.toEqual({
-        state: "error",
+      expect(bridge.status()).toMatchObject({
+        state: "failed",
         hostUrl: null,
-        checkedAt: expect.any(String),
-        detail: connection.message,
+        failure: connection.message,
+        revision: 1,
       });
     } finally {
       await Effect.runPromise(bridge.close());
@@ -416,6 +400,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath,
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
@@ -473,6 +458,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -560,6 +546,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });

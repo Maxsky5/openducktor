@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
+  type HostMcpBridgeStatus,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import {
+  createHostMcpBridgeStatusFixture,
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
   createObservedCheckFixture,
@@ -41,12 +43,17 @@ const CLI_TOOLS_CHECK = {
   errors: [],
 };
 
-const MCP_BRIDGE_CHECK = {
-  state: "ready",
-  hostUrl: "http://127.0.0.1:1",
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  detail: null,
-} as const;
+const BRIDGE_FAILURE =
+  "The OpenDucktor MCP host bridge did not start: Port in use. Fix the cause, then restart OpenDucktor.";
+
+/** Host status whose snapshot carries the given MCP bridge status. */
+const withMcpBridge = (
+  mcpBridge: HostMcpBridgeStatus,
+  overrides: Parameters<typeof createHostRuntimeStatusContextValue>[0] = {},
+) => {
+  const value = createHostRuntimeStatusContextValue(overrides);
+  return value.snapshot === null ? value : { ...value, snapshot: { ...value.snapshot, mcpBridge } };
+};
 
 const createInput = (
   overrides: Partial<BuildDiagnosticsPanelModelInput> = {},
@@ -60,7 +67,6 @@ const createInput = (
   runtimeDefinitionsError: null,
   runtimeStatus: createHostRuntimeStatusContextValue(),
   runtimeCheck: createObservedCheckFixture({ data: CLI_TOOLS_CHECK }),
-  hostMcpBridgeCheck: { data: MCP_BRIDGE_CHECK, error: null },
   workspace: createWorkspace(),
   checksRepoPath: "/repo-a",
   taskStoreCheck: createObservedCheckFixture({ data: createTaskStoreCheckFixture() }),
@@ -365,25 +371,50 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.hasHostBlockingFailure).toBe(true);
   });
 
-  test("shows a failed MCP bridge refresh over a cached success as a current failure", () => {
+  test("shows the address of a ready MCP bridge", () => {
+    const model = buildDiagnosticsPanelModel(createInput());
+
+    const mcpBridge = hostCheck(model, "mcp-bridge");
+    expect(mcpBridge.status).toEqual({ health: "ok", label: "Ready" });
+    expect(mcpBridge.details).toEqual([
+      { label: "Address", value: "http://127.0.0.1:4000", isPath: true },
+    ]);
+    expect(mcpBridge.errors).toEqual([]);
+  });
+
+  test("shows a starting MCP bridge as work in progress, not as an issue", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
-        hostMcpBridgeCheck: { data: MCP_BRIDGE_CHECK, error: "Bridge check failed." },
+        runtimeStatus: withMcpBridge(
+          createHostMcpBridgeStatusFixture({ state: "starting", hostUrl: null, revision: 0 }),
+        ),
+      }),
+    );
+
+    expect(hostCheck(model, "mcp-bridge").status).toEqual({ health: "busy", label: "Starting" });
+    expect(model.criticalReasons).toEqual([]);
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+  });
+
+  test("shows a failed MCP bridge start as a critical host issue", () => {
+    const model = buildDiagnosticsPanelModel(
+      createInput({
+        runtimeStatus: withMcpBridge(
+          createHostMcpBridgeStatusFixture({
+            state: "failed",
+            hostUrl: null,
+            failure: BRIDGE_FAILURE,
+          }),
+        ),
       }),
     );
 
     const mcpBridge = hostCheck(model, "mcp-bridge");
-    expect(mcpBridge.status).toEqual({ health: "failed", label: "Check failed" });
-    expect(mcpBridge.errors).toEqual([
-      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
-    ]);
-    expect(mcpBridge.notice).toStartWith("Showing the result from ");
-    expect(mcpBridge.notice).toEndWith(". It may be out of date.");
-    expect(mcpBridge.details).toEqual([
-      { label: "Address", value: "http://127.0.0.1:1", isPath: true },
-    ]);
-
-    expect(model.criticalReasons).toEqual(mcpBridge.errors);
+    expect(mcpBridge.status).toEqual({ health: "failed", label: "Error" });
+    expect(mcpBridge.errors).toEqual([BRIDGE_FAILURE]);
+    expect(mcpBridge.details).toEqual([]);
+    expect(model.criticalReasons).toEqual([BRIDGE_FAILURE]);
     expect(model.hasHostBlockingFailure).toBe(true);
     expect(model.hasWorkspaceBlockingFailure).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
@@ -392,8 +423,14 @@ describe("buildDiagnosticsPanelModel", () => {
   test("puts a critical issue ahead of a check in progress", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
-        runtimeStatus: createHostRuntimeStatusContextValue({ isLoading: true, isCurrent: false }),
-        hostMcpBridgeCheck: { data: null, error: "Bridge check failed." },
+        runtimeStatus: withMcpBridge(
+          createHostMcpBridgeStatusFixture({
+            state: "failed",
+            hostUrl: null,
+            failure: BRIDGE_FAILURE,
+          }),
+          { isLoading: true, isCurrent: false },
+        ),
       }),
     );
 

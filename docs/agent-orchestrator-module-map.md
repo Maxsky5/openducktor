@@ -100,7 +100,7 @@ Owns the host runtime status of each kind and the mapping to ready, checking, or
 
 The host starts each enabled kind at host startup. One shared runtime of each kind serves every workspace. The frontend never starts, ensures, or polls a runtime.
 
-The status owner subscribes to `openducktor://runtime-changed` before it reads the `runtime_status` baseline. It merges events into one Query snapshot by host instance and per-kind revision, so a late baseline cannot restore stale state. A reconnect reads one new baseline. A stream or read failure marks the status as not current.
+The status owner subscribes to `openducktor://runtime-changed` before it reads the `runtime_status` baseline. It merges runtime and MCP bridge events into one Query snapshot by host instance and revision, so a late baseline cannot restore stale state. A reconnect reads one new baseline. A stream or read failure marks the status as not current.
 
 `HostRuntimeStatusContext` is the only frontend runtime status context. Session actions and selected-session reads require the exact kind of that session to be `ready` and current. A runtime ID change or loss of ready state invalidates runtime-dependent Query data of that kind in every workspace.
 

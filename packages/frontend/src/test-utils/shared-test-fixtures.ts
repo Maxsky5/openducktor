@@ -7,6 +7,7 @@ import {
   DEFAULT_KANBAN_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
+  type HostMcpBridgeStatus,
   type HostRuntimeStatus,
   type RepoGitConfig,
   repositoryGitProviderContextSchema,
@@ -437,6 +438,17 @@ export const createAgentSessionSummaryFixture = (
   overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionSummary => toAgentSessionSummary(createAgentSessionFixture(defaults, overrides));
 
+export const createHostMcpBridgeStatusFixture = (
+  overrides: Partial<HostMcpBridgeStatus> = {},
+): HostMcpBridgeStatus => ({
+  state: "ready",
+  hostUrl: "http://127.0.0.1:4000",
+  failure: null,
+  updatedAt: "2026-10-03T10:00:00.000Z",
+  revision: 1,
+  ...overrides,
+});
+
 export const createHostRuntimeStatusFixture = (
   overrides: Partial<HostRuntimeStatus> = {},
 ): HostRuntimeStatus =>
@@ -469,6 +481,7 @@ export const createHostRuntimeStatusContextValue = (
     snapshot: {
       hostInstanceId: "host-1",
       runtimes: Object.values(statusByKind).filter((status) => status !== undefined),
+      mcpBridge: createHostMcpBridgeStatusFixture(),
     },
     isCurrent: true,
     isLoading: false,
@@ -515,7 +528,6 @@ export const createChecksStateFixture = (
   overrides: Partial<ChecksStateContextValue> = {},
 ): ChecksStateContextValue => ({
   runtimeCheck: createObservedCheckFixture(),
-  hostMcpBridgeCheck: { data: null, error: null },
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
   isRefreshingChecks: false,

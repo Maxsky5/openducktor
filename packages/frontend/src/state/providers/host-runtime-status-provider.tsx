@@ -1,4 +1,3 @@
-import type { HostRuntimeSnapshot } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type PropsWithChildren,
@@ -16,7 +15,7 @@ import {
   type RuntimeGenerationChangeHandler,
 } from "@/state/host-runtime/host-runtime-status-owner";
 import { hostRuntimeStatusQueryOptions } from "@/state/queries/host-runtime-status";
-import type { HostRuntimeStatusMap } from "@/types/diagnostics";
+import type { HostRuntimeStatusMap, HostStatusSnapshot } from "@/types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { HostRuntimeStatusContext } from "../app-state-contexts";
 
@@ -86,7 +85,7 @@ export function HostRuntimeStatusProvider({
   );
 }
 
-const toStatusByKind = (snapshot: HostRuntimeSnapshot | undefined): HostRuntimeStatusMap => {
+const toStatusByKind = (snapshot: HostStatusSnapshot | undefined): HostRuntimeStatusMap => {
   const statusByKind: HostRuntimeStatusMap = {};
   for (const status of snapshot?.runtimes ?? []) {
     statusByKind[status.kind] = status;

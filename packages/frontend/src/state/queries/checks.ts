@@ -1,4 +1,4 @@
-import type { HostMcpBridgeCheck, RuntimeCheck, TaskStoreCheck } from "@openducktor/contracts";
+import type { RuntimeCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
@@ -8,18 +8,15 @@ import { host } from "../operations/host";
 export type ChecksQueryDependencies = {
   runtimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   taskStoreCheck: (repoPath: string) => Promise<TaskStoreCheck>;
-  hostMcpBridgeCheck: () => Promise<HostMcpBridgeCheck>;
 };
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
-const HOST_MCP_BRIDGE_CHECK_STALE_TIME_MS = 5 * 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
   taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
-  hostMcpBridgeCheck: () => host.hostMcpBridgeCheck(),
 };
 
 export class DiagnosticsQueryTimeoutError extends Error {
@@ -72,7 +69,6 @@ export const checksQueryKeys = {
   all: ["checks"] as const,
   runtime: () => [...checksQueryKeys.all, "runtime"] as const,
   taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
-  hostMcpBridge: () => [...checksQueryKeys.all, "host-mcp-bridge"] as const,
 };
 
 export const runtimeCheckQueryOptions = (
@@ -97,17 +93,6 @@ export const taskStoreCheckQueryOptions = (
     queryFn: (): Promise<TaskStoreCheck> =>
       withDiagnosticsQueryTimeout(taskStoreCheck(repoPath), scheduler),
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
-  });
-
-export const hostMcpBridgeCheckQueryOptions = (
-  hostMcpBridgeCheck: ChecksQueryDependencies["hostMcpBridgeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.hostMcpBridgeCheck,
-  scheduler: ScheduleTask = scheduleTask,
-) =>
-  queryOptions({
-    queryKey: checksQueryKeys.hostMcpBridge(),
-    queryFn: (): Promise<HostMcpBridgeCheck> =>
-      withDiagnosticsQueryTimeout(hostMcpBridgeCheck(), scheduler),
-    staleTime: HOST_MCP_BRIDGE_CHECK_STALE_TIME_MS,
   });
 
 export const loadRuntimeCheckFromQuery = (

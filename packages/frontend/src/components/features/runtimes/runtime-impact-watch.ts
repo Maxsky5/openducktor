@@ -90,6 +90,8 @@ export const watchRuntimeImpact = ({
 
   const unsubscribe = events.subscribeEvents({
     onEvent: (event) => {
+      // The MCP bridge carries no sessions, so it never changes a review.
+      if (event.type === "mcp_bridge_changed") return;
       const changedKinds =
         event.type === "runtime_changed" ? [event.status.kind] : event.runtimeKinds;
       const reviewed = new Set(kinds());

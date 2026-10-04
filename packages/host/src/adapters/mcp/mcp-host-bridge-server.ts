@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   type GetWorkspacesResult,
-  type HostMcpBridgeCheck,
+  type HostMcpBridgeStatus,
   type OdtHostBridgeReady,
   type OdtToolErrorPayload,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
@@ -41,8 +41,8 @@ export type McpHostBridgeServer = {
     input: McpHostBridgeConnectionInput,
   ): Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationErrorAggregate>;
   ensureExternalDiscoveryReady(): Effect.Effect<void, HostOperationErrorAggregate>;
-  /** Proves that the running bridge accepts an authenticated MCP request. Never starts it. */
-  checkReady(): Effect.Effect<HostMcpBridgeCheck>;
+  /** The current bridge state. The host starts the bridge; reading the status never starts it. */
+  status(): HostMcpBridgeStatus;
   close(): Effect.Effect<McpHostBridgeCloseResult, HostOperationErrorAggregate>;
 };
 
@@ -55,6 +55,8 @@ export type CreateMcpHostBridgeServerInput = {
   bridgeService: OdtMcpBridgeService;
   discoveryPath: string;
   workspaceSettingsService: WorkspaceSettingsService;
+  /** Receives each status change, so clients see it without reading again. */
+  onStatusChanged: (status: HostMcpBridgeStatus) => void;
   token?: string;
 };
 
@@ -82,7 +84,6 @@ type BridgeHttpPayload =
   | WorkspaceScopedOdtToolResult;
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const BRIDGE_CHECK_TIMEOUT_MS = 2_000;
 const tcpAddressSchema = z.object({ port: z.number() }).passthrough();
 
 const isWorkspaceScopedToolName = (command: string): command is WorkspaceScopedOdtToolName =>
@@ -271,6 +272,7 @@ export const createMcpHostBridgeServer = ({
   bridgeService,
   discoveryPath,
   workspaceSettingsService,
+  onStatusChanged,
   token = randomUUID(),
 }: CreateMcpHostBridgeServerInput): McpHostBridgeServer => {
   let server: Server | null = null;
@@ -281,6 +283,21 @@ export const createMcpHostBridgeServer = ({
   let startupFailure: string | null = null;
   const startupFailureMessage = (cause: string) =>
     `The OpenDucktor MCP host bridge did not start: ${cause} Fix the cause, then restart OpenDucktor.`;
+  let status: HostMcpBridgeStatus = {
+    state: "starting",
+    hostUrl: null,
+    failure: null,
+    updatedAt: new Date().toISOString(),
+    revision: 0,
+  };
+  const changeStatus = (change: Pick<HostMcpBridgeStatus, "state" | "hostUrl" | "failure">) => {
+    status = {
+      ...change,
+      updatedAt: new Date().toISOString(),
+      revision: status.revision + 1,
+    };
+    onStatusChanged(status);
+  };
 
   const startBridge = (): Effect.Effect<StartedMcpHostBridge, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
@@ -382,6 +399,13 @@ export const createMcpHostBridgeServer = ({
             );
             if (Exit.isFailure(exit)) {
               startupFailure = causeMessage(exit.cause);
+              changeStatus({
+                state: "failed",
+                hostUrl: null,
+                failure: startupFailureMessage(startupFailure),
+              });
+            } else {
+              changeStatus({ state: "ready", hostUrl: exit.value.baseUrl, failure: null });
             }
             yield* Deferred.done(flight.deferred, exit);
           }).pipe(
@@ -419,49 +443,7 @@ export const createMcpHostBridgeServer = ({
     ensureExternalDiscoveryReady() {
       return ensureStarted().pipe(Effect.asVoid);
     },
-    checkReady() {
-      return Effect.gen(function* () {
-        const checkedAt = new Date().toISOString();
-        const hostUrl = baseUrl;
-        if (!hostUrl) {
-          return {
-            state: "error" as const,
-            hostUrl: null,
-            checkedAt,
-            detail:
-              startupFailure === null
-                ? "The OpenDucktor MCP host bridge is not running. Restart OpenDucktor."
-                : startupFailureMessage(startupFailure),
-          };
-        }
-        const result = yield* Effect.either(
-          Effect.tryPromise({
-            try: async (signal) => {
-              const response = await fetch(`${hostUrl}/invoke/odt_mcp_ready`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", [APP_TOKEN_HEADER]: token },
-                body: "{}",
-                signal: AbortSignal.any([signal, AbortSignal.timeout(BRIDGE_CHECK_TIMEOUT_MS)]),
-              });
-              if (!response.ok) {
-                throw new Error(`The bridge answered with HTTP ${response.status}.`);
-              }
-              return response.json();
-            },
-            catch: (cause) => toMcpHostBridgeError(cause, "mcpHostBridge.checkReady"),
-          }),
-        );
-        if (result._tag === "Left") {
-          return {
-            state: "error" as const,
-            hostUrl,
-            checkedAt,
-            detail: `The MCP host bridge did not accept an authenticated request: ${result.left.message}`,
-          };
-        }
-        return { state: "ready" as const, hostUrl, checkedAt, detail: null };
-      });
-    },
+    status: () => status,
     close() {
       return Effect.gen(function* () {
         if (startupFlight) {

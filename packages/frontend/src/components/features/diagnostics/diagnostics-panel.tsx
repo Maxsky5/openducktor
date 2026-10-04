@@ -40,7 +40,6 @@ export function DiagnosticsPanel({
         runtimeDefinitionsError,
         runtimeStatus,
         runtimeCheck: checks.runtimeCheck,
-        hostMcpBridgeCheck: checks.hostMcpBridgeCheck,
         workspace: activeWorkspace,
         checksRepoPath: checks.checksRepoPath,
         taskStoreCheck: checks.taskStoreCheck,

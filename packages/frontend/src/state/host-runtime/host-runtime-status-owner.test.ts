@@ -3,14 +3,19 @@ import type { HostRuntimeSnapshot, HostRuntimeStatus } from "@openducktor/contra
 import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import type { RuntimeChangeListener } from "@/lib/shell-bridge";
+import type { HostStatusSnapshot } from "@/types/diagnostics";
 import { hostRuntimeStatusQueryKeys } from "@/state/queries/host-runtime-status";
-import { createHostRuntimeStatusFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createHostMcpBridgeStatusFixture,
+  createHostRuntimeStatusFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { createHostRuntimeStatusOwner } from "./host-runtime-status-owner";
 
-const snapshot = (hostInstanceId: string, runtimes: HostRuntimeStatus[]): HostRuntimeSnapshot => ({
-  hostInstanceId,
-  runtimes,
-});
+const snapshot = (
+  hostInstanceId: string,
+  runtimes: HostRuntimeStatus[],
+  mcpBridge = createHostMcpBridgeStatusFixture(),
+): HostRuntimeSnapshot => ({ hostInstanceId, runtimes, mcpBridge });
 
 const createHarness = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -43,7 +48,7 @@ const createHarness = () => {
     listener(event);
   };
   const readSnapshot = () =>
-    queryClient.getQueryData<HostRuntimeSnapshot>(hostRuntimeStatusQueryKeys.snapshot);
+    queryClient.getQueryData<HostStatusSnapshot>(hostRuntimeStatusQueryKeys.snapshot);
   const lastBaseline = () => {
     const baseline = baselines.at(-1);
     if (!baseline) throw new Error("No baseline read started.");
@@ -73,13 +78,19 @@ describe("createHostRuntimeStatusOwner", () => {
       hostInstanceId: "host-1",
       status: createHostRuntimeStatusFixture({ kind: "opencode", state: "error", revision: 5 }),
     });
+    const readyBridge = createHostMcpBridgeStatusFixture({ state: "ready", revision: 1 });
+    harness.emit({ type: "mcp_bridge_changed", hostInstanceId: "host-1", status: readyBridge });
     harness
       .lastBaseline()
       .resolve(
-        snapshot("host-1", [
-          createHostRuntimeStatusFixture({ kind: "opencode", state: "ready", revision: 3 }),
-          createHostRuntimeStatusFixture({ kind: "codex", revision: 2 }),
-        ]),
+        snapshot(
+          "host-1",
+          [
+            createHostRuntimeStatusFixture({ kind: "opencode", state: "ready", revision: 3 }),
+            createHostRuntimeStatusFixture({ kind: "codex", revision: 2 }),
+          ],
+          createHostMcpBridgeStatusFixture({ state: "starting", hostUrl: null, revision: 0 }),
+        ),
       );
 
     await waitFor(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
@@ -87,6 +98,7 @@ describe("createHostRuntimeStatusOwner", () => {
       ["opencode", "error"],
       ["codex", "ready"],
     ]);
+    expect(harness.readSnapshot()?.mcpBridge).toEqual(readyBridge);
     harness.owner.stop();
   });
 
@@ -107,11 +119,11 @@ describe("createHostRuntimeStatusOwner", () => {
       status: createHostRuntimeStatusFixture({ kind: "codex", state: "starting", revision: 1 }),
     });
 
-    expect(harness.readSnapshot()).toEqual(
-      snapshot("host-2", [
-        createHostRuntimeStatusFixture({ kind: "codex", state: "starting", revision: 1 }),
-      ]),
-    );
+    expect(harness.readSnapshot()).toEqual({
+      hostInstanceId: "host-2",
+      runtimes: [createHostRuntimeStatusFixture({ kind: "codex", state: "starting", revision: 1 })],
+      mcpBridge: null,
+    });
     expect(harness.owner.getConnection().hasBaseline).toBe(false);
     await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
     harness.owner.stop();

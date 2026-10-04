@@ -8,9 +8,7 @@ import type {
   PullRequest,
   RepoDevServerScript,
   RuntimeApprovalReplyOutcome,
-  HostMcpBridgeCheck,
   HostRuntimeEvent,
-  HostRuntimeSnapshot,
   RuntimeCheck,
   RuntimeKind,
   SettingsRepoConfig,
@@ -52,7 +50,7 @@ import type {
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { AgentSessionTransientFault } from "./agent-session-transient-fault";
-import type { CheckRead, HostRuntimeStatusMap, ObservedCheck } from "./diagnostics";
+import type { HostRuntimeStatusMap, HostStatusSnapshot, ObservedCheck } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
@@ -160,7 +158,6 @@ export type WorkspacePresenceContextValue = {
 
 export type ChecksStateContextValue = {
   runtimeCheck: ObservedCheck<RuntimeCheck>;
-  hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
   /** The selected workspace repository that the task store check below describes. */
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
@@ -190,7 +187,7 @@ export type HostRuntimeEvents = {
 };
 
 export type HostRuntimeStatusContextValue = {
-  snapshot: HostRuntimeSnapshot | null;
+  snapshot: HostStatusSnapshot | null;
   statusByKind: HostRuntimeStatusMap;
   /** True only with live updates and a successful baseline read. */
   isCurrent: boolean;

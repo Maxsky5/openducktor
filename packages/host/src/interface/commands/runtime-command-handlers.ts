@@ -1,10 +1,12 @@
 import {
   agentSessionStopTargetSchema,
+  type HostMcpBridgeStatus,
   runtimeKindInputSchema,
   runtimeRestartInputSchema,
 } from "@openducktor/contracts";
 import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { TaskSessionStopService } from "../../application/tasks/task-session-stop-service";
+import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -31,11 +33,15 @@ const parseAgentSessionStopInput = (args: HostCommandArgs) => {
 export const createRuntimeCommandHandlers = (
   taskSessionStopService: TaskSessionStopService,
   hostRuntimeService: HostRuntimeService,
+  mcpBridgeStatus: () => HostMcpBridgeStatus,
 ) =>
   ({
     agent_session_stop: (args) =>
       taskSessionStopService.agentSessionStop(parseAgentSessionStopInput(args)),
-    runtime_status: () => hostRuntimeService.snapshot(),
+    runtime_status: () =>
+      hostRuntimeService
+        .snapshot()
+        .pipe(Effect.map((snapshot) => ({ ...snapshot, mcpBridge: mcpBridgeStatus() }))),
     runtime_require: (args) =>
       hostRuntimeService.requireRuntime(
         parseCommandInput(runtimeKindInputSchema, args, "runtime_require").runtimeKind,

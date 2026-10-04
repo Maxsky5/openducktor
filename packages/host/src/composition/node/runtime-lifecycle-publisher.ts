@@ -1,4 +1,8 @@
-import type { AgentSessionLiveEnvelope, HostRuntimeStatus } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  HostMcpBridgeStatus,
+  HostRuntimeStatus,
+} from "@openducktor/contracts";
 import { createRuntimeImpactTracker } from "@openducktor/runtime-orchestration";
 import { HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
@@ -40,5 +44,15 @@ export const createRuntimeStatusPublisher =
     eventBus.publish({
       channel: "openducktor://runtime-changed",
       payload: { type: "runtime_changed", hostInstanceId, status },
+    });
+  };
+
+/** Publishes the MCP host bridge status on the host-level runtime channel. */
+export const createMcpBridgeStatusPublisher =
+  (eventBus: HostEventBusPort, hostInstanceId: string) =>
+  (status: HostMcpBridgeStatus): void => {
+    eventBus.publish({
+      channel: "openducktor://runtime-changed",
+      payload: { type: "mcp_bridge_changed", hostInstanceId, status },
     });
   };

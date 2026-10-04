@@ -1975,18 +1975,21 @@ describe("HostClient", () => {
         case "task_worktree_get":
           return { workingDirectory: "/repo/worktrees/task-1" };
         case "runtime_status":
-          return { hostInstanceId: "host-1", runtimes: [status] };
+          return {
+            hostInstanceId: "host-1",
+            runtimes: [status],
+            mcpBridge: {
+              state: "ready",
+              hostUrl: "http://127.0.0.1:1",
+              failure: null,
+              updatedAt: "2026-02-17T12:00:00.000Z",
+              revision: 1,
+            },
+          };
         case "runtime_restart_impact":
           return impact;
         case "runtime_restart":
           return { type: "completed", status };
-        case "host_mcp_bridge_check":
-          return {
-            state: "ready",
-            hostUrl: "http://127.0.0.1:1",
-            checkedAt: "2026-02-17T12:00:00.000Z",
-            detail: null,
-          };
         default:
           throw new Error(`Unexpected command: ${command}`);
       }
@@ -1997,7 +2000,6 @@ describe("HostClient", () => {
     const snapshot = await client.runtimeStatus();
     const reviewed = await client.runtimeRestartImpact("opencode");
     const restarted = await client.runtimeRestart("opencode", reviewed.confirmation);
-    const bridge = await client.hostMcpBridgeCheck();
 
     expect(definitions[0]?.workflowToolAliasesByCanonical).toEqual(
       OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
@@ -2005,7 +2007,7 @@ describe("HostClient", () => {
     expect(qaTarget).toEqual({ workingDirectory: "/repo/worktrees/task-1" });
     expect(snapshot.runtimes[0]?.state).toBe("ready");
     expect(restarted.type).toBe("completed");
-    expect(bridge.state).toBe("ready");
+    expect(snapshot.mcpBridge.state).toBe("ready");
     expect(calls).toEqual([
       { command: "runtime_definitions_list", args: {} },
       { command: "task_worktree_get", args: { repoPath: "/repo", taskId: "task-1" } },
@@ -2015,7 +2017,6 @@ describe("HostClient", () => {
         command: "runtime_restart",
         args: { runtimeKind: "opencode", confirmation: "confirm-1" },
       },
-      { command: "host_mcp_bridge_check", args: {} },
     ]);
   });
 

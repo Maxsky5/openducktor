@@ -1,4 +1,5 @@
 import type {
+  HostMcpBridgeStatus,
   HostRuntimeFailurePhase,
   HostRuntimeStatus,
   RuntimeCheck,
@@ -58,7 +59,8 @@ export const collectHostState = (
     reasons.push(`The ${runtimeLabel(input.runtimeDefinitions, kind)} runtime ${summary}.`);
   }
   // A failed refresh takes priority over a retained earlier result.
-  const { runtimeCheck, hostMcpBridgeCheck } = input;
+  const { runtimeCheck } = input;
+  const mcpBridge = input.runtimeStatus.snapshot?.mcpBridge ?? null;
   if (runtimeCheck.error !== null) {
     reasons.push(refreshFailureMessage(GIT_TITLE, runtimeCheck.error));
   } else {
@@ -67,17 +69,15 @@ export const collectHostState = (
       reasons.push(cliDetail);
     }
   }
-  if (hostMcpBridgeCheck.error !== null) {
-    reasons.push(refreshFailureMessage(MCP_BRIDGE_TITLE, hostMcpBridgeCheck.error));
-  } else if (hostMcpBridgeCheck.data?.state === "error") {
-    reasons.push(hostMcpBridgeCheck.data.detail ?? "The OpenDucktor MCP bridge is unavailable.");
+  if (mcpBridge?.state === "failed") {
+    reasons.push(mcpBridge.failure ?? "The OpenDucktor MCP bridge did not start.");
   }
   const isLoading =
     input.isLoadingRuntimeDefinitions ||
     input.runtimeStatus.isLoading ||
     runtimes.entries.some((entry) => entry.status.health === "busy") ||
     (runtimeCheck.data === null && runtimeCheck.error === null) ||
-    (hostMcpBridgeCheck.data === null && hostMcpBridgeCheck.error === null);
+    mcpBridge?.state === "starting";
   return { reasons, isLoading };
 };
 
@@ -126,32 +126,33 @@ const buildGitCheck = (input: BuildDiagnosticsPanelModelInput): DiagnosticsCheck
   };
 };
 
+const MCP_BRIDGE_STATUSES = {
+  starting: { health: "busy", label: "Starting" },
+  ready: { health: "ok", label: "Ready" },
+  failed: { health: "failed", label: "Error" },
+} satisfies Record<HostMcpBridgeStatus["state"], DiagnosticsStatus>;
+
+/** The host publishes each bridge state change, so this row follows the bridge without a check. */
 const buildMcpBridgeCheck = (input: BuildDiagnosticsPanelModelInput): DiagnosticsCheckModel => {
-  const { data: check, error: readError } = input.hostMcpBridgeCheck;
+  const bridge = input.runtimeStatus.snapshot?.mcpBridge ?? null;
   const base: DiagnosticsCheckBase = {
     key: "mcp-bridge",
     title: MCP_BRIDGE_TITLE,
     value: null,
-    details: check?.hostUrl ? [{ label: "Address", value: check.hostUrl, isPath: true }] : [],
+    details: bridge?.hostUrl ? [{ label: "Address", value: bridge.hostUrl, isPath: true }] : [],
   };
-  if (readError !== null) {
-    return buildRefreshFailedCheck(
-      base,
-      { error: readError, failureKind: "error" },
-      check?.checkedAt ?? null,
-    );
+  if (bridge === null) {
+    const status: DiagnosticsStatus = input.runtimeStatus.isLoading
+      ? LOADING_STATUS
+      : { health: "neutral", label: "Unavailable" };
+    return { ...base, status, notice: null, errors: [] };
   }
-  if (check === null) {
-    return { ...base, status: LOADING_STATUS, notice: null, errors: [] };
-  }
-  return check.state === "ready"
-    ? { ...base, status: { health: "ok", label: "Ready" }, notice: null, errors: [] }
-    : {
-        ...base,
-        status: { health: "failed", label: "Error" },
-        notice: null,
-        errors: [check.detail ?? "The host cannot accept authenticated MCP requests."],
-      };
+  return {
+    ...base,
+    status: MCP_BRIDGE_STATUSES[bridge.state],
+    notice: null,
+    errors: bridge.failure === null ? [] : [bridge.failure],
+  };
 };
 
 const FAILURE_SUMMARIES = {

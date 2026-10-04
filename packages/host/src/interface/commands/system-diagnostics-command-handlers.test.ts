@@ -1,10 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  HostMcpBridgeCheck,
-  RuntimeCheck,
-  SystemCheck,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { RuntimeCheck, SystemCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import {
@@ -44,13 +39,6 @@ const systemCheckResult = {
   ...taskStoreCheckResult,
 } satisfies SystemCheck;
 
-const hostBridgeCheckResult = {
-  state: "ready",
-  hostUrl: "http://127.0.0.1:4000",
-  checkedAt: "2026-10-03T10:00:00.000Z",
-  detail: null,
-} satisfies HostMcpBridgeCheck;
-
 const createDiagnosticsService = () => {
   const runtimeCheck = mock((_forceRefresh?: boolean) => Effect.succeed(runtimeCheckResult));
   const taskStoreCheck = mock((_repoPath: string) => Effect.succeed(taskStoreCheckResult));
@@ -60,23 +48,18 @@ const createDiagnosticsService = () => {
     taskStoreCheck,
     systemCheck,
   } satisfies SystemDiagnosticsService;
-  const hostBridgeCheck = mock(() => Effect.succeed(hostBridgeCheckResult));
   return {
     runtimeCheck,
     service,
     systemCheck,
     taskStoreCheck,
-    hostBridgeCheck,
   };
 };
 describe("createSystemDiagnosticsCommandHandlers", () => {
   test("routes diagnostics commands to the service", async () => {
     const diagnostics = createDiagnosticsService();
     const router = createHostCommandRouter({
-      handlers: createSystemDiagnosticsCommandHandlers(
-        diagnostics.service,
-        diagnostics.hostBridgeCheck,
-      ),
+      handlers: createSystemDiagnosticsCommandHandlers(diagnostics.service),
     });
     await expect(router.invoke("runtime_check", { force: true })).resolves.toEqual(
       runtimeCheckResult,
@@ -91,24 +74,10 @@ describe("createSystemDiagnosticsCommandHandlers", () => {
     expect(diagnostics.taskStoreCheck).toHaveBeenCalledWith("/repo");
     expect(diagnostics.systemCheck).toHaveBeenCalledWith("/repo");
   });
-  test("routes the MCP bridge check to the bridge", async () => {
-    const diagnostics = createDiagnosticsService();
-    const router = createHostCommandRouter({
-      handlers: createSystemDiagnosticsCommandHandlers(
-        diagnostics.service,
-        diagnostics.hostBridgeCheck,
-      ),
-    });
-    await expect(router.invoke("host_mcp_bridge_check")).resolves.toEqual(hostBridgeCheckResult);
-    expect(diagnostics.hostBridgeCheck).toHaveBeenCalledTimes(1);
-  });
   test("requires repoPath for repo-scoped diagnostics", async () => {
     const diagnostics = createDiagnosticsService();
     const router = createHostCommandRouter({
-      handlers: createSystemDiagnosticsCommandHandlers(
-        diagnostics.service,
-        diagnostics.hostBridgeCheck,
-      ),
+      handlers: createSystemDiagnosticsCommandHandlers(diagnostics.service),
     });
     await expect(router.invoke("task_store_check", {})).rejects.toThrow("repoPath is required.");
     await expect(router.invoke("system_check")).rejects.toThrow(

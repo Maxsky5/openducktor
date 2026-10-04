@@ -1,19 +1,13 @@
-import type {
-  HostMcpBridgeCheck,
-  RuntimeCheck,
-  RuntimeDescriptor,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ScheduleTask } from "@/lib/scheduling";
-import type { CheckRead, ObservedCheck } from "@/types/diagnostics";
+import type { ObservedCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type ChecksQueryDependencies,
   checksQueryKeys,
   classifyDiagnosticsQueryError,
-  hostMcpBridgeCheckQueryOptions,
   loadRuntimeCheckFromQuery,
   loadTaskStoreCheckFromQuery,
   runtimeCheckQueryOptions,
@@ -35,23 +29,18 @@ type UseChecksArgs = {
   refreshHostRuntimeStatus: () => Promise<void>;
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
-  hostMcpBridgeCheck?: ChecksQueryDependencies["hostMcpBridgeCheck"];
   scheduleTask?: ScheduleTask;
   toastApi?: DiagnosticsToastApi;
 };
 
 type UseChecksResult = {
   runtimeCheck: ObservedCheck<RuntimeCheck>;
-  hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
   isRefreshingChecks: boolean;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshChecks: () => Promise<void>;
 };
-
-const queryErrorMessage = (error: Error | null): string | null =>
-  error ? classifyDiagnosticsQueryError(error).message : null;
 
 const toObservedCheck = <T>(
   data: T | undefined,
@@ -80,7 +69,6 @@ export function useChecks({
   refreshHostRuntimeStatus,
   runtimeCheck,
   taskStoreCheck,
-  hostMcpBridgeCheck,
   scheduleTask,
   toastApi,
 }: UseChecksArgs): UseChecksResult {
@@ -88,9 +76,6 @@ export function useChecks({
   const queryClient = useQueryClient();
   const [isRefreshingChecks, setIsRefreshingChecks] = useState(false);
   const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck, scheduleTask));
-  const hostMcpBridgeCheckQuery = useQuery(
-    hostMcpBridgeCheckQueryOptions(hostMcpBridgeCheck, scheduleTask),
-  );
   // Workspace reads keep their repository key, so a switch never shows another workspace's data.
   const taskStoreCheckQuery = useQuery({
     ...taskStoreCheckQueryOptions(
@@ -141,24 +126,12 @@ export function useChecks({
       await Promise.allSettled([
         refreshHostRuntimeStatus(),
         refreshRuntimeCheck(true),
-        queryClient.fetchQuery({
-          ...hostMcpBridgeCheckQueryOptions(hostMcpBridgeCheck, scheduleTask),
-          staleTime: 0,
-        }),
         ...(activeRepoPath === null ? [] : [refreshTaskStoreCheckForRepo(activeRepoPath, true)]),
       ]);
     } finally {
       setIsRefreshingChecks(false);
     }
-  }, [
-    activeRepoPath,
-    hostMcpBridgeCheck,
-    queryClient,
-    refreshHostRuntimeStatus,
-    refreshRuntimeCheck,
-    refreshTaskStoreCheckForRepo,
-    scheduleTask,
-  ]);
+  }, [activeRepoPath, refreshHostRuntimeStatus, refreshRuntimeCheck, refreshTaskStoreCheckForRepo]);
 
   const runtimeCheckState = useMemo(
     (): ObservedCheck<RuntimeCheck> =>
@@ -174,13 +147,6 @@ export function useChecks({
       runtimeCheckQuery.error,
       runtimeDefinitions,
     ],
-  );
-  const hostMcpBridgeCheckState = useMemo(
-    (): CheckRead<HostMcpBridgeCheck> => ({
-      data: hostMcpBridgeCheckQuery.data ?? null,
-      error: queryErrorMessage(hostMcpBridgeCheckQuery.error),
-    }),
-    [hostMcpBridgeCheckQuery.data, hostMcpBridgeCheckQuery.error],
   );
   const taskStoreCheckState = useMemo((): ObservedCheck<TaskStoreCheck> => {
     const check = toObservedCheck(
@@ -210,7 +176,6 @@ export function useChecks({
 
   return {
     runtimeCheck: runtimeCheckState,
-    hostMcpBridgeCheck: hostMcpBridgeCheckState,
     checksRepoPath: activeRepoPath,
     taskStoreCheck: taskStoreCheckState,
     isRefreshingChecks,

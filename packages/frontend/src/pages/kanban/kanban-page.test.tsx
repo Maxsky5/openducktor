@@ -438,7 +438,6 @@ const createTasksStateValue = (
 
 const createChecksStateValue = (): ChecksStateContextValue => ({
   runtimeCheck: createObservedCheckFixture(),
-  hostMcpBridgeCheck: { data: null, error: null },
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture({
     data: createTaskStoreCheckFixture(

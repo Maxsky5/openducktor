@@ -1,5 +1,3 @@
-import type { HostMcpBridgeCheck } from "@openducktor/contracts";
-import type { Effect } from "effect";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -30,10 +28,8 @@ const parseRepoPath = (args: HostCommandArgs, command: string): string => {
 
 export const createSystemDiagnosticsCommandHandlers = (
   systemDiagnosticsService: SystemDiagnosticsService,
-  checkMcpBridge: () => Effect.Effect<HostMcpBridgeCheck>,
 ) =>
   ({
-    host_mcp_bridge_check: () => checkMcpBridge(),
     runtime_check: (args) => systemDiagnosticsService.runtimeCheck(parseRuntimeCheckForce(args)),
     task_store_check: (args) =>
       systemDiagnosticsService.taskStoreCheck(parseRepoPath(args, "task_store_check")),

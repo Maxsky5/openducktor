@@ -52,11 +52,11 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 | Agent session list | 30 sec |
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
-| Host runtime status | Infinite, updated by events |
+| Host runtime and MCP bridge status | Infinite, updated by events |
 
 Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
 
-The `openducktor://runtime-changed` event stream owns host runtime status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
+The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
 ### Checks and file data
 
@@ -64,7 +64,6 @@ The `openducktor://runtime-changed` event stream owns host runtime status after 
 |---|---:|
 | Runtime check | 5 min |
 | Task store check | 60 sec |
-| OpenDucktor MCP bridge check | 5 min |
 | Directory listing | 1 sec |
 | Branches | 60 sec |
 | Current branch | 60 sec |

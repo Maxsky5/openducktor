@@ -1,4 +1,5 @@
 import type { HostRuntimeSnapshot } from "@openducktor/contracts";
+import { createHostMcpBridgeStatusFixture } from "./shared-test-fixtures";
 import { QueryClient } from "@tanstack/react-query";
 import type { RuntimeChangeListener } from "@/lib/shell-bridge";
 import { createHostRuntimeStatusOwner } from "@/state/host-runtime/host-runtime-status-owner";
@@ -27,6 +28,7 @@ export const startHostRuntimeEventsHarness = ({
       runtimeStatus: async (): Promise<HostRuntimeSnapshot> => ({
         hostInstanceId: "host-1",
         runtimes: [],
+        mcpBridge: createHostMcpBridgeStatusFixture(),
       }),
     },
     onRuntimeGenerationChange: () => {},

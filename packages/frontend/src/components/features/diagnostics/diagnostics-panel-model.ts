@@ -1,12 +1,11 @@
 import type {
-  HostMcpBridgeCheck,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
   TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { CheckRead, ObservedCheck } from "@/types/diagnostics";
+import type { ObservedCheck } from "@/types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { buildHostModel, collectHostState } from "./diagnostics-host-model";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
@@ -205,10 +204,9 @@ export type BuildDiagnosticsPanelModelInput = {
   runtimeDefinitionsError: string | null;
   runtimeStatus: Pick<
     HostRuntimeStatusContextValue,
-    "statusByKind" | "isCurrent" | "isLoading" | "readError" | "streamError"
+    "snapshot" | "statusByKind" | "isCurrent" | "isLoading" | "readError" | "streamError"
   >;
   runtimeCheck: ObservedCheck<RuntimeCheck>;
-  hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
   workspace: WorkspaceRecord | null;
   /** The repository that the task store check below describes. */
   checksRepoPath: string | null;

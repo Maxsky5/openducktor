@@ -18,7 +18,6 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
   const { refresh: refreshHostRuntimeStatus } = useHostRuntimeStatusContext();
   const {
     runtimeCheck,
-    hostMcpBridgeCheck,
     checksRepoPath,
     taskStoreCheck,
     isRefreshingChecks,
@@ -34,20 +33,12 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
     () =>
       buildChecksStateValue({
         runtimeCheck,
-        hostMcpBridgeCheck,
         checksRepoPath,
         taskStoreCheck,
         isRefreshingChecks,
         refreshChecks,
       }),
-    [
-      checksRepoPath,
-      hostMcpBridgeCheck,
-      isRefreshingChecks,
-      refreshChecks,
-      runtimeCheck,
-      taskStoreCheck,
-    ],
+    [checksRepoPath, isRefreshingChecks, refreshChecks, runtimeCheck, taskStoreCheck],
   );
 
   const checksOperationsValue = useMemo<ChecksOperationsContextValue>(

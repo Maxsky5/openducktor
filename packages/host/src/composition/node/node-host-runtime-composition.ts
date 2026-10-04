@@ -197,5 +197,5 @@ export const createNodeHostRuntimeComposition = ({
     orchestrator,
     settingsService: workspaceSettingsService,
   });
-  return { hostRuntimeService, registry: createRuntimeRegistryPort(orchestrator) };
+  return { hostInstanceId, hostRuntimeService, registry: createRuntimeRegistryPort(orchestrator) };
 };

@@ -1,8 +1,22 @@
-import type { FailureKind, HostRuntimeStatus, RuntimeKind } from "@openducktor/contracts";
+import type {
+  FailureKind,
+  HostMcpBridgeStatus,
+  HostRuntimeSnapshot,
+  HostRuntimeStatus,
+  RuntimeKind,
+} from "@openducktor/contracts";
 
 export type DiagnosticsFailureKind = FailureKind | null;
 
 export type HostRuntimeStatusMap = Partial<Record<RuntimeKind, HostRuntimeStatus>>;
+
+/**
+ * The cached host status. An event can arrive before the baseline read, so the cache can hold the
+ * runtimes of that event without an MCP bridge status. The baseline read then completes it.
+ */
+export type HostStatusSnapshot = Omit<HostRuntimeSnapshot, "mcpBridge"> & {
+  mcpBridge: HostMcpBridgeStatus | null;
+};
 
 /** The latest read of one check. A read failure takes priority over a retained `data`. */
 export type CheckRead<T> = {
