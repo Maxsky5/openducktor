@@ -31,6 +31,7 @@ type Session = WorkspaceProviderSetupSession & {
   progress: WorkspaceProviderSetupProgress;
   signInRevision: number | null;
   startingSignIn: boolean;
+  readiness: { ready: boolean } | null;
 };
 /** Keeps completed sessions until acknowledgement so callers can recover a lost commit reply. */
 export const createWorkspaceProviderSetupService = (input: {
@@ -90,6 +91,7 @@ export const createWorkspaceProviderSetupService = (input: {
     });
   const release = (session: Session) =>
     Effect.gen(function* () {
+      session.readiness = null;
       session.signInRevision = null;
       session.cleanupRequired = true;
       if (session.credentialConfig) yield* input.credentials.release(session.credentialConfig);
@@ -107,6 +109,9 @@ export const createWorkspaceProviderSetupService = (input: {
     });
   const statusFor = (session: Session) =>
     Effect.gen(function* () {
+      // Each reply stays with its own check, so a late reply cannot replace current readiness.
+      const check = { ready: false };
+      session.readiness = check;
       const config = selectionConfig(session);
       const provider = config.git.provider;
       if (!provider)
@@ -118,6 +123,8 @@ export const createWorkspaceProviderSetupService = (input: {
         repository && "deployment" in repository
           ? yield* input.credentials.connection.getState(config, repository)
           : null;
+      check.ready =
+        health.available && health.authenticated && health.repositoryMappingValid === true;
       return { health, connection } satisfies WorkspaceProviderSetupStatus;
     });
   const requireReady = (session: Session) =>
@@ -129,6 +136,7 @@ export const createWorkspaceProviderSetupService = (input: {
       if (session.selection.kind === "configured" && session.selection.config.enabled) {
         if (!session.selection.config.repository)
           return yield* fail("Complete the repository details or skip setup.");
+        if (session.readiness?.ready) return;
         const status = yield* statusFor(session);
         if (
           !status.health?.available ||
@@ -163,6 +171,7 @@ export const createWorkspaceProviderSetupService = (input: {
           writes: 0,
           signInRevision: null,
           startingSignIn: false,
+          readiness: null,
           progress: {
             workspace: null,
             registrationSaved: false,
@@ -183,6 +192,7 @@ export const createWorkspaceProviderSetupService = (input: {
         return yield* write(
           session,
           Effect.gen(function* () {
+            session.readiness = null;
             const nextConfig = selectionConfig({ ...session, selection });
             const abandoned = credentialKey(session.credentialConfig) !== credentialKey(nextConfig);
             if (abandoned || session.cleanupRequired) {
@@ -242,6 +252,7 @@ export const createWorkspaceProviderSetupService = (input: {
         return yield* write(
           session,
           Effect.gen(function* () {
+            session.readiness = null;
             const { config, repository } = yield* azureConfig(session);
             session.signInRevision = session.revision;
             session.startingSignIn = true;
@@ -262,6 +273,7 @@ export const createWorkspaceProviderSetupService = (input: {
         return yield* write(
           session,
           Effect.gen(function* () {
+            session.readiness = null;
             const { config, repository } = yield* azureConfig(session);
             const state = yield* input.credentials.connection.getState(config, repository);
             if (state.status === "pending" && state.deviceCode.attemptId !== attemptId)
@@ -279,6 +291,7 @@ export const createWorkspaceProviderSetupService = (input: {
         return yield* write(
           session,
           Effect.gen(function* () {
+            session.readiness = null;
             const { config, repository } = yield* azureConfig(session);
             const state = yield* input.credentials.connection.getState(config, repository);
             session.signInRevision = null;
@@ -395,6 +408,7 @@ export const createWorkspaceProviderSetupService = (input: {
         azureDevOpsConnectionConfigurationFingerprint(session.setupId, session.repoPath, repository)
       )
         return;
+      session.readiness = null;
       input.publish({
         setupId: session.setupId,
         repoPath: session.repoPath,

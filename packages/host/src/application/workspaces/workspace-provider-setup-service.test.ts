@@ -32,6 +32,30 @@ const azureSelection = {
     },
   },
 } satisfies WorkspaceProviderSetupSelection;
+const githubSelection = {
+  kind: "configured",
+  config: {
+    id: "github",
+    enabled: true,
+    autoDetected: false,
+    repository: { host: "github.com", owner: "owner", name: "repo" },
+  },
+} satisfies WorkspaceProviderSetupSelection;
+const healthy: GitProviderHealth = {
+  providerId: "azure_devops",
+  enabled: true,
+  available: true,
+  authenticated: true,
+  repositoryMappingValid: true,
+  executablePath: null,
+  version: null,
+  account: null,
+};
+const unavailable: GitProviderHealth = {
+  ...healthy,
+  available: false,
+  reason: "Provider unavailable",
+};
 const failure = () =>
   new HostOperationError({ operation: "test.write", message: "Storage unavailable" });
 function harness() {
@@ -54,16 +78,10 @@ function harness() {
     resolveConfiguredPath: (value) => value,
     join: (...parts) => parts.join("/"),
   };
-  let health: GitProviderHealth = {
-    providerId: "azure_devops",
-    enabled: true,
-    available: true,
-    authenticated: true,
-    repositoryMappingValid: true,
-    executablePath: null,
-    version: null,
-    account: null,
-  };
+  let health: GitProviderHealth = { ...healthy };
+  const checkHealth = mock((): Effect.Effect<GitProviderHealth, HostError> =>
+    Effect.sync(() => health),
+  );
   let connection: AzureDevOpsConnectionState = { status: "disconnected" };
   let failRelease = false;
   let failTransfer = false;
@@ -115,8 +133,8 @@ function harness() {
     detectRepositories: () => Effect.succeed({ outcome: "none", candidates: [] }),
     settings: createWorkspaceSettingsService(port),
     credentials,
-    github: { health: () => ({ getStatus: () => Effect.sync(() => health) }) },
-    azure: { health: () => ({ getStatus: () => Effect.sync(() => health) }) },
+    github: { health: () => ({ getStatus: checkHealth }) },
+    azure: { health: () => ({ getStatus: checkHealth }) },
     areas: { list: () => Effect.succeed(["project\\area"]) },
     inspectGithub: () =>
       Effect.succeed({
@@ -136,6 +154,7 @@ function harness() {
     release,
     complete,
     publish,
+    checkHealth,
     config: () => config,
     failWrite: (value: boolean) => {
       failWrite = value;
@@ -161,6 +180,117 @@ const details = (ref: { setupId: string; revision: number }): WorkspaceProviderS
 });
 
 describe("workspace provider setup", () => {
+  test.each(["github", "azure_devops"] as const)(
+    "creates an unchanged %s workspace with accepted readiness after the provider becomes unavailable",
+    async (providerId) => {
+      const h = harness();
+      const selection = providerId === "github" ? githubSelection : azureSelection;
+      let ref = await Effect.runPromise(h.service.begin("/repo"));
+      ref = await Effect.runPromise(h.service.set(ref, selection));
+      if (providerId === "azure_devops") await Effect.runPromise(h.service.pat(ref, "token"));
+      h.setHealth({ ...healthy, providerId });
+      expect((await Effect.runPromise(h.service.status(ref))).health?.available).toBe(true);
+      h.setHealth({ ...unavailable, providerId });
+      const result = await Effect.runPromise(h.service.commit(details(ref)));
+      expect(result.phase).toBe("complete");
+      expect(h.config().workspaces.repo?.git.provider).toEqual(selection.config);
+      expect(h.checkHealth).toHaveBeenCalledTimes(1);
+    },
+  );
+  test.each(["selection", "PAT", "sign-in", "disconnect"] as const)(
+    "checks readiness again after a %s change",
+    async (change) => {
+      const h = harness();
+      let ref = await Effect.runPromise(h.service.begin("/repo"));
+      ref = await Effect.runPromise(h.service.set(ref, azureSelection));
+      await Effect.runPromise(h.service.pat(ref, "first-token"));
+      await Effect.runPromise(h.service.status(ref));
+      switch (change) {
+        case "selection":
+          ref = await Effect.runPromise(
+            h.service.set(ref, {
+              ...azureSelection,
+              config: {
+                ...azureSelection.config,
+                repository: { ...azureSelection.config.repository, name: "other-repo" },
+              },
+            }),
+          );
+          break;
+        case "PAT":
+          await Effect.runPromise(h.service.pat(ref, "replacement-token"));
+          break;
+        case "sign-in":
+          await Effect.runPromise(h.service.signIn(ref));
+          break;
+        case "disconnect":
+          await Effect.runPromise(h.service.disconnect(ref));
+      }
+      h.setHealth(unavailable);
+      const result = await Effect.runPromise(h.service.commit(details(ref)));
+      expect(result.registrationSaved).toBe(false);
+      expect(result.error).toContain("Provider unavailable");
+      expect(h.checkHealth).toHaveBeenCalledTimes(2);
+      expect(h.write).not.toHaveBeenCalled();
+    },
+  );
+  test.each(["unhealthy", "failed"] as const)(
+    "does not reuse an earlier success after a %s readiness check",
+    async (result) => {
+      const h = harness();
+      let ref = await Effect.runPromise(h.service.begin("/repo"));
+      ref = await Effect.runPromise(h.service.set(ref, azureSelection));
+      await Effect.runPromise(h.service.pat(ref, "token"));
+      await Effect.runPromise(h.service.status(ref));
+      h.setHealth(unavailable);
+      if (result === "failed") {
+        h.checkHealth.mockImplementationOnce(() => Effect.fail(failure()));
+        await expect(Effect.runPromise(h.service.status(ref))).rejects.toThrow(
+          "Storage unavailable",
+        );
+      } else {
+        expect((await Effect.runPromise(h.service.status(ref))).health?.available).toBe(false);
+      }
+      const outcome = await Effect.runPromise(h.service.commit(details(ref)));
+      expect(outcome.registrationSaved).toBe(false);
+      expect(outcome.error).toContain("Provider unavailable");
+      expect(h.write).not.toHaveBeenCalled();
+    },
+  );
+  test("does not reuse a late readiness reply after the repository changes", async () => {
+    const h = harness();
+    let ref = await Effect.runPromise(h.service.begin("/repo"));
+    ref = await Effect.runPromise(h.service.set(ref, azureSelection));
+    await Effect.runPromise(h.service.pat(ref, "token"));
+    await Effect.runPromise(h.service.status(ref));
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<GitProviderHealth>();
+    h.checkHealth.mockImplementationOnce(() =>
+      Effect.gen(function* () {
+        entered.resolve();
+        return yield* Effect.promise(() => finish.promise);
+      }),
+    );
+    const checking = Effect.runPromise(Effect.either(h.service.status(ref)));
+    await entered.promise;
+    ref = await Effect.runPromise(
+      h.service.set(ref, {
+        ...azureSelection,
+        config: {
+          ...azureSelection.config,
+          repository: { ...azureSelection.config.repository, name: "other-repo" },
+        },
+      }),
+    );
+    h.setHealth(unavailable);
+    finish.resolve(healthy);
+    expect((await checking)._tag).toBe("Left");
+    const outcome = await Effect.runPromise(h.service.commit(details(ref)));
+    expect(outcome.registrationSaved).toBe(false);
+    expect(outcome.error).toContain("Provider unavailable");
+    expect(h.checkHealth).toHaveBeenCalledTimes(3);
+    expect(h.write).not.toHaveBeenCalled();
+  });
   test("uses corrected details and models after an unsaved attempt", async () => {
     const h = harness();
     const ref = await Effect.runPromise(h.service.begin("/repo"));
@@ -275,6 +405,7 @@ describe("workspace provider setup", () => {
     h.failWrite(true);
     expect((await Effect.runPromise(h.service.commit(details(ref)))).registrationSaved).toBe(false);
     h.failWrite(false);
+    h.setHealth(unavailable);
     h.failTransfer(true);
     const partial = await Effect.runPromise(h.service.commit(details(ref)));
     expect(partial).toMatchObject({
@@ -291,6 +422,7 @@ describe("workspace provider setup", () => {
     expect(h.write).toHaveBeenCalledTimes(2);
     expect(h.transfer).toHaveBeenCalledTimes(2);
     expect(h.complete).toHaveBeenCalledTimes(1);
+    expect(h.checkHealth).toHaveBeenCalledTimes(1);
     const saved = structuredClone(h.config());
     await Effect.runPromise(h.service.discard(ref.setupId));
     await expect(Effect.runPromise(h.service.progress(ref.setupId))).rejects.toThrow("not found");
