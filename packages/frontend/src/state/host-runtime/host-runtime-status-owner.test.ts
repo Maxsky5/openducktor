@@ -275,9 +275,20 @@ describe("createHostRuntimeStatusOwner", () => {
       expect(harness.owner.getConnection().streamError).toBe("Event stream unavailable."),
     );
     harness.lastBaseline().resolve(snapshot("host-1", []));
+    await waitFor(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
 
+    const resubscribed = Promise.withResolvers<() => void>();
+    harness.subscribeRuntimeChanges.mockImplementationOnce(() => {
+      harness.events.push("subscribe");
+      return resubscribed.promise;
+    });
     const refresh = harness.owner.refresh();
+    // Until the new subscription is ready and a new baseline succeeds, the cache is not current.
+    expect(harness.owner.getConnection()).toMatchObject({ streamError: null, hasBaseline: false });
+
+    resubscribed.resolve(() => {});
     await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
+    expect(harness.owner.getConnection().hasBaseline).toBe(false);
     harness.lastBaseline().resolve(snapshot("host-1", []));
     await refresh;
 

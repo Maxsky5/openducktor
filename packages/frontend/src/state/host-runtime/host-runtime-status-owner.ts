@@ -180,7 +180,9 @@ export const createHostRuntimeStatusOwner = ({
     if (isRecovering) {
       // A new epoch prevents an earlier read from clearing the failure for event listeners.
       streamEpoch += 1;
-      updateConnection({ streamError: null });
+      // The cache missed events while the stream failed. It is current again only after the
+      // baseline read that follows this subscription, as after a reconnect.
+      updateConnection({ streamError: null, hasBaseline: false });
     }
     const subscribeEpoch = streamEpoch;
     subscription = ports.subscribeRuntimeChanges(createListener(subscribeSession)).then(
