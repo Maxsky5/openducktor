@@ -15,6 +15,7 @@ import type { HostOperationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 export type WorkspaceNotificationInput =
   | { type: "task"; event: ExternalTaskSyncEvent }
   | { type: "live"; envelope: AgentSessionLiveEnvelope; provenance: "baseline" | "live" }
@@ -39,6 +40,7 @@ type WorkspaceState = {
  */
 export const createWorkspaceNotificationObserver = ({
   record,
+  settingsConfig,
   tasks,
   live,
   workspaceSessions,
@@ -47,6 +49,7 @@ export const createWorkspaceNotificationObserver = ({
   recovered,
 }: {
   record: WorkspaceRecord;
+  settingsConfig: Pick<SettingsConfigPort, "pathExists">;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
   live: Pick<AgentSessionLiveStateService, "list">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
@@ -191,6 +194,11 @@ export const createWorkspaceNotificationObserver = ({
       );
     const initialize = () =>
       Effect.gen(function* () {
+        // Saved workspaces can outlive their directories. Keep them in the catalog, but do not watch them.
+        if (!(yield* settingsConfig.pathExists(state.record.repoPath))) {
+          state.active = false;
+          return;
+        }
         const baseline = yield* tasks.listTasks({ repoPath: state.record.repoPath });
         if (!state.active) return;
         for (const task of baseline) state.tasks.set(task.id, task);
@@ -256,7 +264,13 @@ export const createWorkspaceNotificationObserver = ({
                 Effect.sync(() => failure(record.repoPath, "initialization", cause)),
               ),
               Effect.zipRight(
-                Effect.forever(Queue.take(queue).pipe(Effect.flatMap((input) => consume(input)))),
+                Effect.suspend(() =>
+                  state.active
+                    ? Effect.forever(
+                        Queue.take(queue).pipe(Effect.flatMap((input) => consume(input))),
+                      )
+                    : Effect.void,
+                ),
               ),
               Effect.interruptible,
             ),

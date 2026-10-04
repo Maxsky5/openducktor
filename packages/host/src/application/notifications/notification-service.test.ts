@@ -12,7 +12,7 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 import { Stream, Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { withNotificationConfigCommit } from "../../adapters/config/notification-settings-config";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -709,6 +709,102 @@ test("workspace failure is scoped; removal discards late work and re-entry seeds
     expect(occurrences(h.frames)).toHaveLength(1);
   } finally {
     gate.resolve();
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
+test("a removed workspace stays silent while other workspaces notify and starts after restoration", async () => {
+  const h = harness();
+  let exists = false;
+  h.port.pathExists = (path) => Effect.succeed(path !== "/beta" || exists);
+  h.listTasks.mockImplementation(({ repoPath }) =>
+    repoPath === "/beta" && !exists
+      ? Effect.fail(
+          new HostOperationError({
+            operation: "settingsConfig.canonicalizePath",
+            message: "ENOENT: no such file or directory, realpath '/beta'",
+          }),
+        )
+      : Effect.succeed([]),
+  );
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptTask(transition("missing", "/beta"));
+    h.service.acceptTask(transition("present"));
+    await flush();
+    expect(h.frames.filter((frame) => frame.type === "health" && frame.health.message)).toEqual([]);
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+      "/alpha",
+    ]);
+    expect(h.listTasks.mock.calls.map(([input]) => input.repoPath)).toEqual(["/alpha"]);
+    expect(h.listActive.mock.calls.map(([input]) => input.repoPath)).toEqual(["/alpha"]);
+    expect(h.listLive.mock.calls.map(([input]) => input.repoPath)).toEqual(["/alpha"]);
+
+    exists = true;
+    await Effect.runPromise(h.service.configCommitted(h.config));
+    await flush();
+    h.service.acceptTask(transition("restored", "/beta"));
+    await flush();
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+      "/alpha",
+      "/beta",
+    ]);
+    expect(h.listTasks.mock.calls.map(([input]) => input.repoPath)).toEqual(["/alpha", "/beta"]);
+    expect(h.frames.filter((frame) => frame.type === "health" && frame.health.message)).toEqual([]);
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
+test("workspace path access failures stay visible without stopping other observers", async () => {
+  const h = harness();
+  h.port.pathExists = (path) =>
+    path === "/beta"
+      ? Effect.fail(
+          new HostPathAccessError({
+            path,
+            operation: "settingsConfig.pathExists",
+            message: "Permission denied for /beta",
+          }),
+        )
+      : Effect.succeed(true);
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptTask(transition("present"));
+    await flush();
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.repoPath)).toEqual([
+      "/alpha",
+    ]);
+    expect(
+      h.frames.filter((frame) => frame.type === "health" && frame.health.message),
+    ).toMatchObject([
+      {
+        health: {
+          scope: "/beta",
+          source: "initialization",
+          message: expect.stringContaining("Permission denied"),
+        },
+      },
+    ]);
+    const removed = structuredClone(h.config);
+    delete removed.workspaces.beta;
+    await Effect.runPromise(h.service.configCommitted(removed));
+    await flush();
+    expect(
+      h.frames
+        .filter(
+          (frame) =>
+            frame.type === "health" &&
+            frame.health.scope === "/beta" &&
+            frame.health.source === "initialization",
+        )
+        .at(-1),
+    ).toMatchObject({
+      health: { scope: "/beta", source: "initialization", message: null },
+    });
+  } finally {
     await Effect.runPromise(h.service.dispose());
   }
 });

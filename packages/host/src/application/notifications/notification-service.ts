@@ -124,13 +124,15 @@ export const createNotificationService = ({
       for (const { observer } of removed) yield* observer.dispose();
       for (const record of records) {
         const existing = workspaces.get(record.repoPath);
-        if (existing) {
+        if (existing?.observer.isActive()) {
           existing.record = record;
           existing.observer.updateRecord(record);
           continue;
         }
+        if (existing) yield* existing.observer.dispose();
         const observer = yield* createWorkspaceNotificationObserver({
           record,
+          settingsConfig,
           tasks,
           live,
           workspaceSessions,
