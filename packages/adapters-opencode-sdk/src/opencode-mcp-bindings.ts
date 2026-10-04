@@ -4,11 +4,6 @@ import type { McpStatus, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { unwrapData } from "./data-utils";
 
-export type OpencodeMcpBinding = {
-  readonly workingDirectory: string;
-  readonly repoPath: string;
-};
-
 export type OpencodeMcpReconnectEvent = {
   serverName: string;
   workingDirectory: string;
@@ -29,7 +24,6 @@ export type OpencodeMcpDirectoryBindings = {
   /** Forgets a binding after OpenCode disposed the directory instance that held it. */
   readonly forget: (workingDirectory: string) => void;
   readonly clear: () => void;
-  readonly list: () => ReadonlyArray<OpencodeMcpBinding>;
 };
 
 export const createOpencodeMcpDirectoryBindings = ({
@@ -86,7 +80,7 @@ export const createOpencodeMcpDirectoryBindings = ({
   };
 
   /**
-   * Runs `setup` after earlier setup of the same directory. Success marks the entry bound.
+   * Runs `setup` after earlier setup of the same directory.
    * `removeOnFailure` drops a new entry when its first setup fails.
    */
   const runSetup = (
@@ -105,10 +99,7 @@ export const createOpencodeMcpDirectoryBindings = ({
       if (setupQueues.get(key) === settled) setupQueues.delete(key);
     });
     const pending = queued.then(
-      () => {
-        requireCurrent(key, entry);
-        entry.bound = true;
-      },
+      () => requireCurrent(key, entry),
       (cause: unknown) => {
         if (removeOnFailure && bindings.get(key) === entry) {
           bindings.delete(key);
@@ -142,7 +133,6 @@ export const createOpencodeMcpDirectoryBindings = ({
       const entry: BindingEntry = {
         workingDirectory: input.workingDirectory,
         repoPath: input.repoPath,
-        bound: false,
         pending: null,
       };
       bindings.set(key, entry);
@@ -187,15 +177,12 @@ export const createOpencodeMcpDirectoryBindings = ({
     clear: () => {
       bindings.clear();
     },
-    list: () =>
-      [...bindings.values()]
-        .filter((entry) => entry.bound)
-        .map(({ workingDirectory, repoPath }) => ({ workingDirectory, repoPath })),
   };
 };
 
-type BindingEntry = OpencodeMcpBinding & {
-  bound: boolean;
+type BindingEntry = {
+  readonly workingDirectory: string;
+  readonly repoPath: string;
   pending: Promise<void> | null;
 };
 

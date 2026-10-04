@@ -191,39 +191,3 @@ export const hostMcpBridgeCheckSchema = z
   })
   .strict();
 export type HostMcpBridgeCheck = z.infer<typeof hostMcpBridgeCheckSchema>;
-
-export const workspaceRuntimeMcpObservationSchema = z
-  .object({
-    workingDirectory: nonEmptyStringSchema,
-    state: z.enum(["connected", "failed"]),
-    serverStatus: z.string().nullable(),
-    toolIds: z.array(z.string()),
-    detail: z.string().nullable(),
-  })
-  .strict();
-export type WorkspaceRuntimeMcpObservation = z.infer<typeof workspaceRuntimeMcpObservationSchema>;
-
-export const workspaceRuntimeMcpStatusSchema = z
-  .object({
-    kind: runtimeKindSchema,
-    state: z.enum(["not_checked", "unavailable", "unsupported", "observed"]),
-    runtimeId: z.string().nullable(),
-    observations: z.array(workspaceRuntimeMcpObservationSchema),
-    detail: z.string().nullable(),
-  })
-  .strict();
-export type WorkspaceRuntimeMcpStatus = z.infer<typeof workspaceRuntimeMcpStatusSchema>;
-
-export const workspaceRuntimeMcpCheckInputSchema = z
-  .object({ repoPath: nonEmptyStringSchema })
-  .strict();
-export type WorkspaceRuntimeMcpCheckInput = z.infer<typeof workspaceRuntimeMcpCheckInputSchema>;
-
-export const workspaceRuntimeMcpCheckSchema = z
-  .object({
-    repoPath: nonEmptyStringSchema,
-    checkedAt: isoTimestampSchema,
-    runtimes: z.array(workspaceRuntimeMcpStatusSchema),
-  })
-  .strict();
-export type WorkspaceRuntimeMcpCheck = z.infer<typeof workspaceRuntimeMcpCheckSchema>;

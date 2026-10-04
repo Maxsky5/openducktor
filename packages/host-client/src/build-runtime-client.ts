@@ -7,8 +7,6 @@ import {
   type RuntimeRestartResult,
   runtimeLifecycleImpactSchema,
   runtimeRestartResultSchema,
-  type WorkspaceRuntimeMcpCheck,
-  workspaceRuntimeMcpCheckSchema,
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
@@ -103,13 +101,6 @@ const runtimeRestart = async (
 
 const hostMcpBridgeCheck = async (invokeFn: InvokeFn): Promise<HostMcpBridgeCheck> => {
   return invokeFn("host_mcp_bridge_check", {}, hostMcpBridgeCheckSchema);
-};
-
-const workspaceRuntimeMcpCheck = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-): Promise<WorkspaceRuntimeMcpCheck> => {
-  return invokeFn("workspace_runtime_mcp_check", { repoPath }, workspaceRuntimeMcpCheckSchema);
 };
 
 const buildStart = async (
@@ -342,10 +333,6 @@ export class HostAgentClient {
 
   async hostMcpBridgeCheck(): Promise<HostMcpBridgeCheck> {
     return hostMcpBridgeCheck(this.invokeFn);
-  }
-
-  async workspaceRuntimeMcpCheck(repoPath: string): Promise<WorkspaceRuntimeMcpCheck> {
-    return workspaceRuntimeMcpCheck(this.invokeFn, repoPath);
   }
 
   async buildStart(

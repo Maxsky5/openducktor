@@ -518,7 +518,6 @@ export const createChecksStateFixture = (
   hostMcpBridgeCheck: { data: null, error: null },
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
-  workspaceRuntimeMcpCheck: { data: null, error: null },
   isRefreshingChecks: false,
   refreshChecks: async () => undefined,
   ...overrides,

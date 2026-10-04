@@ -28,7 +28,6 @@ type SelectionHarnessArgs = {
   activeRepo?: string | null;
   setActiveRepo?: (repoPath: string | null) => void;
   clearTaskData: () => void;
-  clearActiveTaskStoreCheck: () => void;
   clearBranchData: () => void;
 };
 
@@ -125,7 +124,6 @@ const createRepoSelectionHarness = (
     activeRepo,
     setActiveRepo,
     clearTaskData: () => {},
-    clearActiveTaskStoreCheck: () => {},
     clearBranchData: () => {},
   });
 
@@ -316,9 +314,6 @@ describe("use-workspace-selection-operations", () => {
     const clearTaskData = mock(() => {
       callOrder.push("clearTaskData");
     });
-    const clearActiveTaskStoreCheck = mock(() => {
-      callOrder.push("clearActiveTaskStoreCheck");
-    });
     const clearBranchData = mock(() => {
       callOrder.push("clearBranchData");
     });
@@ -330,7 +325,6 @@ describe("use-workspace-selection-operations", () => {
       activeRepo: "/repo-old",
       setActiveRepo,
       clearTaskData,
-      clearActiveTaskStoreCheck,
       clearBranchData,
     });
 
@@ -340,9 +334,8 @@ describe("use-workspace-selection-operations", () => {
         await value.selectWorkspace("repo-a");
       });
 
-      expect(callOrder.slice(0, 4)).toEqual([
+      expect(callOrder.slice(0, 3)).toEqual([
         "clearTaskData",
-        "clearActiveTaskStoreCheck",
         "clearBranchData",
         "setActiveRepo:/repo-a",
       ]);
@@ -415,7 +408,6 @@ describe("use-workspace-selection-operations", () => {
 
   test("reorders workspaces without clearing switch-dependent state", async () => {
     const clearTaskData = mock(() => {});
-    const clearActiveTaskStoreCheck = mock(() => {});
     const clearBranchData = mock(() => {});
     const workspaceReorder = mock(async (workspaceOrder: string[]) =>
       workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
@@ -426,7 +418,6 @@ describe("use-workspace-selection-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo: () => {},
       clearTaskData,
-      clearActiveTaskStoreCheck,
       clearBranchData,
     });
 
@@ -452,7 +443,6 @@ describe("use-workspace-selection-operations", () => {
         workspace("/repo-b"),
       ]);
       expect(clearTaskData).not.toHaveBeenCalled();
-      expect(clearActiveTaskStoreCheck).not.toHaveBeenCalled();
       expect(clearBranchData).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -566,7 +556,6 @@ describe("use-workspace-selection-operations", () => {
         latestActiveWorkspace = workspace;
       },
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
       clearBranchData: () => {},
     });
 
@@ -597,7 +586,6 @@ describe("use-workspace-selection-operations", () => {
         latestActiveWorkspace = workspace;
       },
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
       clearBranchData: () => {},
     });
 

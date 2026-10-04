@@ -10,9 +10,10 @@ import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { earlierResultNotice } from "./diagnostics-check-section";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
-import { DiagnosticsStatusBadge } from "./diagnostics-section";
+import { DiagnosticsStatusPill } from "./diagnostics-status";
 
 type ModelInput = Parameters<typeof buildDiagnosticsPanelModel>[0];
 
@@ -38,22 +39,27 @@ const renderSections = (workspace: ModelInput["workspace"], overrides: Partial<M
         workspace,
         checksRepoPath: workspace?.repoPath ?? null,
         taskStoreCheck: createObservedCheckFixture(),
-        workspaceRuntimeMcpCheck: { data: null, error: null },
         ...overrides,
       }),
     }),
   );
 
 describe("DiagnosticsPanelSections", () => {
-  test("renders the host group first and the workspace message without a workspace", () => {
+  test("renders the overview, then the host group, then the workspace message", () => {
     const html = renderSections(null);
 
-    expect(html.indexOf("Agent runtimes")).toBeGreaterThan(-1);
-    expect(html.indexOf("Agent runtimes")).toBeLessThan(html.indexOf("CLI tools"));
-    expect(html.indexOf("CLI tools")).toBeLessThan(html.indexOf("OpenDucktor MCP bridge"));
-    expect(html.indexOf("OpenDucktor MCP bridge")).toBeLessThan(
-      html.indexOf("Select a workspace to view workspace checks."),
-    );
+    const order = [
+      'data-testid="diagnostics-overview"',
+      "Host",
+      "Shared by all workspaces",
+      "Agent runtimes",
+      "Tools and services",
+      "Git",
+      "OpenDucktor MCP bridge",
+      "Select a workspace to view workspace checks.",
+    ].map((text) => html.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((left, right) => left - right));
     expect(html).toContain("OpenCode");
     expect(html).toContain("Codex");
     expect(html).toContain("Claude");
@@ -73,11 +79,11 @@ describe("DiagnosticsPanelSections", () => {
       effectiveWorktreeBasePath: "/worktrees",
     });
 
-    expect(html).toContain("Workspace: Repo A");
+    expect(html).toContain("Repo A");
     expect(html).toContain("/repo-a");
     expect(html).toContain("Repository setup");
     expect(html).toContain("Task store");
-    expect(html).toContain("Runtime OpenDucktor MCP connections");
+    expect(html).not.toContain("OpenDucktor MCP connections");
   });
 
   test("labels values kept after a failed refresh as an earlier result", () => {
@@ -93,19 +99,20 @@ describe("DiagnosticsPanelSections", () => {
       },
     });
 
-    expect(html).toContain("Earlier result from 2026-02-22T08:00:00.000Z. It may not be current.");
+    expect(html).toContain(earlierResultNotice("2026-02-22T08:00:00.000Z"));
     expect(html).toContain(
-      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh Checks to try again.",
+      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
     );
   });
 
-  test("maps each check health to a badge tone only when it renders", () => {
-    const renderBadge = (status: Parameters<typeof DiagnosticsStatusBadge>[0]["status"]) =>
-      renderToStaticMarkup(createElement(DiagnosticsStatusBadge, { status }));
+  test("maps each check health to a pill tone, with a spinner while work runs", () => {
+    const renderPill = (status: Parameters<typeof DiagnosticsStatusPill>[0]["status"]) =>
+      renderToStaticMarkup(createElement(DiagnosticsStatusPill, { status }));
 
-    expect(renderBadge({ health: "failed", label: "Issue" })).toContain("bg-destructive-surface");
-    expect(renderBadge({ health: "busy", label: "Starting" })).toContain("bg-warning-surface");
-    expect(renderBadge({ health: "ok", label: "Ready" })).toContain("bg-success-surface");
-    expect(renderBadge({ health: "loading", label: "Loading" })).toContain("bg-secondary");
+    expect(renderPill({ health: "failed", label: "Error" })).toContain("bg-destructive-surface");
+    expect(renderPill({ health: "warning", label: "Degraded" })).toContain("bg-warning-surface");
+    expect(renderPill({ health: "ok", label: "Ready" })).toContain("bg-success-surface");
+    expect(renderPill({ health: "busy", label: "Starting" })).toContain("animate-spin");
+    expect(renderPill({ health: "neutral", label: "Disabled" })).not.toContain("animate-spin");
   });
 });

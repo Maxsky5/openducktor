@@ -451,7 +451,6 @@ const createChecksStateValue = (): ChecksStateContextValue => ({
       },
     ),
   }),
-  workspaceRuntimeMcpCheck: { data: null, error: null },
   isRefreshingChecks: false,
   refreshChecks: async () => {},
 });

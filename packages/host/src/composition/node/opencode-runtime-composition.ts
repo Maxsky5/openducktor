@@ -8,7 +8,6 @@ import { Effect, Exit } from "effect";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import type { OpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
 import { createOpenCodeRuntimeStarter } from "../../adapters/opencode/opencode-runtime-starter";
-import { probeOpenCodeMcpStatus } from "../../adapters/runtimes/runtime-registry-probes";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { causeToHostBoundaryError, toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -71,7 +70,6 @@ export const createOpenCodeRuntimeComposition = ({
         resolveCreationSettings: (scope) => Effect.runPromise(creationSettings.resolve(scope)),
         resolveMcpServerConfig: resolveOpencodeMcpServerConfig,
       }),
-      probeMcpStatus: probeOpenCodeMcpStatus,
     }),
   });
 };

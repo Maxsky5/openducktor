@@ -98,7 +98,6 @@ describe("app-state-context-values", () => {
       hostMcpBridgeCheck: { data: null, error: null },
       checksRepoPath: null,
       taskStoreCheck: createObservedCheckFixture(),
-      workspaceRuntimeMcpCheck: { data: null, error: null },
       isRefreshingChecks: false,
       refreshChecks: async () => {},
     };

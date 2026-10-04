@@ -33,10 +33,6 @@ import type {
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
 import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-normalization";
-import {
-  type OpenCodeMcpStatusProbe,
-  readOpenCodeMcpConnections,
-} from "./opencode-live-session-mcp";
 import { createOpenCodeAdapterRelease } from "./opencode-live-session-release";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
@@ -70,7 +66,6 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     "releaseRuntime" | "createRuntimeRegistration"
   >;
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
-  readonly probeMcpStatus: OpenCodeMcpStatusProbe;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -89,7 +84,6 @@ const stateEffect = <Value, Details extends object>(
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime,
-  probeMcpStatus,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -305,15 +299,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         listSnapshots: () =>
           stateEffect("opencode-live-session.list-snapshots", state.listSnapshots, {
             runtimeId: runtime.runtimeId,
-          }),
-        readMcpConnections: (repoPath) =>
-          readOpenCodeMcpConnections({
-            probeMcpStatus,
-            runtimeRoute: runtime.runtimeRoute,
-            workingDirectories: prepared
-              .listMcpBindings()
-              .filter((mcpBinding) => mcpBinding.repoPath === repoPath)
-              .map((mcpBinding) => mcpBinding.workingDirectory),
           }),
         readSnapshot: (ref) =>
           stateEffect("opencode-live-session.read-snapshot", () => state.readSnapshot(ref), {

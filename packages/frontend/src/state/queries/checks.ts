@@ -1,10 +1,5 @@
-import type {
-  HostMcpBridgeCheck,
-  RuntimeCheck,
-  TaskStoreCheck,
-  WorkspaceRuntimeMcpCheck,
-} from "@openducktor/contracts";
-import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import type { HostMcpBridgeCheck, RuntimeCheck, TaskStoreCheck } from "@openducktor/contracts";
+import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import type { DiagnosticsFailureKind } from "@/types/diagnostics";
@@ -14,20 +9,17 @@ export type ChecksQueryDependencies = {
   runtimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   taskStoreCheck: (repoPath: string) => Promise<TaskStoreCheck>;
   hostMcpBridgeCheck: () => Promise<HostMcpBridgeCheck>;
-  workspaceRuntimeMcpCheck: (repoPath: string) => Promise<WorkspaceRuntimeMcpCheck>;
 };
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
 const HOST_MCP_BRIDGE_CHECK_STALE_TIME_MS = 5 * 60_000;
-const WORKSPACE_RUNTIME_MCP_CHECK_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
   taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
   hostMcpBridgeCheck: () => host.hostMcpBridgeCheck(),
-  workspaceRuntimeMcpCheck: (repoPath) => host.workspaceRuntimeMcpCheck(repoPath),
 };
 
 export class DiagnosticsQueryTimeoutError extends Error {
@@ -81,11 +73,6 @@ export const checksQueryKeys = {
   runtime: () => [...checksQueryKeys.all, "runtime"] as const,
   taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
   hostMcpBridge: () => [...checksQueryKeys.all, "host-mcp-bridge"] as const,
-  workspaceRuntimeMcp: (repoPath: string) =>
-    [...checksQueryKeys.all, "workspace-runtime-mcp", repoPath] as const,
-  /** A workspace MCP check covers every kind, so a change of any kind's runtime makes it old. */
-  matchesWorkspaceRuntimeMcp: (key: QueryKey): boolean =>
-    key[0] === checksQueryKeys.all[0] && key[1] === "workspace-runtime-mcp",
 };
 
 export const runtimeCheckQueryOptions = (
@@ -121,18 +108,6 @@ export const hostMcpBridgeCheckQueryOptions = (
     queryFn: (): Promise<HostMcpBridgeCheck> =>
       withDiagnosticsQueryTimeout(hostMcpBridgeCheck(), scheduler),
     staleTime: HOST_MCP_BRIDGE_CHECK_STALE_TIME_MS,
-  });
-
-export const workspaceRuntimeMcpCheckQueryOptions = (
-  repoPath: string,
-  workspaceRuntimeMcpCheck: ChecksQueryDependencies["workspaceRuntimeMcpCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.workspaceRuntimeMcpCheck,
-  scheduler: ScheduleTask = scheduleTask,
-) =>
-  queryOptions({
-    queryKey: checksQueryKeys.workspaceRuntimeMcp(repoPath),
-    queryFn: (): Promise<WorkspaceRuntimeMcpCheck> =>
-      withDiagnosticsQueryTimeout(workspaceRuntimeMcpCheck(repoPath), scheduler),
-    staleTime: WORKSPACE_RUNTIME_MCP_CHECK_STALE_TIME_MS,
   });
 
 export const loadRuntimeCheckFromQuery = (

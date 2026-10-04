@@ -1,3 +1,4 @@
+import { Save } from "lucide-react";
 import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
 import { runtimeImpactPathChanges } from "./settings-save/runtime-settings-application";
 import {
@@ -312,6 +313,7 @@ function SettingsDialog({
         title="Apply runtime changes"
         description="Saving these settings stops or replaces agent runtimes."
         confirmLabel="Save and apply"
+        confirmIcon={Save}
         impact={runtimeReview?.impact ?? null}
         isLoadingImpact={runtimeReview?.isLoadingImpact ?? false}
         impactError={runtimeReview?.impactError ?? null}

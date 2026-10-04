@@ -21,14 +21,9 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
     hostMcpBridgeCheck,
     checksRepoPath,
     taskStoreCheck,
-    workspaceRuntimeMcpCheck,
     isRefreshingChecks,
-    refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,
     refreshChecks,
-    hasRuntimeCheck,
-    hasCachedTaskStoreCheck,
-    clearActiveTaskStoreCheck,
   } = useChecks({
     activeWorkspace,
     runtimeDefinitions: availableRuntimeDefinitions,
@@ -42,7 +37,6 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
         hostMcpBridgeCheck,
         checksRepoPath,
         taskStoreCheck,
-        workspaceRuntimeMcpCheck,
         isRefreshingChecks,
         refreshChecks,
       }),
@@ -53,25 +47,12 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
       refreshChecks,
       runtimeCheck,
       taskStoreCheck,
-      workspaceRuntimeMcpCheck,
     ],
   );
 
   const checksOperationsValue = useMemo<ChecksOperationsContextValue>(
-    () => ({
-      refreshRuntimeCheck,
-      refreshTaskStoreCheckForRepo,
-      clearActiveTaskStoreCheck,
-      hasRuntimeCheck,
-      hasCachedTaskStoreCheck,
-    }),
-    [
-      clearActiveTaskStoreCheck,
-      hasCachedTaskStoreCheck,
-      hasRuntimeCheck,
-      refreshTaskStoreCheckForRepo,
-      refreshRuntimeCheck,
-    ],
+    () => ({ refreshTaskStoreCheckForRepo }),
+    [refreshTaskStoreCheckForRepo],
   );
 
   return (

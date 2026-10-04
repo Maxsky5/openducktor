@@ -6,10 +6,7 @@ import {
 } from "./opencode-session-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { createOpenCodeSessionImportPort } from "./opencode-session-import";
-import {
-  createOpencodeMcpDirectoryBindings,
-  type OpencodeMcpBinding,
-} from "./opencode-mcp-bindings";
+import { createOpencodeMcpDirectoryBindings } from "./opencode-mcp-bindings";
 import { agentSessionRefsEqual, agentSessionScopesEqual } from "@openducktor/core";
 import type { RuntimeSessionImportPort } from "@openducktor/core";
 import type {
@@ -113,8 +110,6 @@ export type PreparedOpencodeSessionRuntime = {
   readonly startForwarding: (
     listener: (signal: OpencodeSessionRuntimeSignal) => void | Promise<void>,
   ) => Promise<void>;
-  /** Lists directories with a connected OpenDucktor MCP binding. It does not call the runtime. */
-  readonly listMcpBindings: () => ReadonlyArray<OpencodeMcpBinding>;
   readonly release: () => Promise<void>;
 };
 
@@ -695,7 +690,6 @@ export const createPrepareOpencodeSessionRuntime = (
       queries: controlAdapter,
       connection,
       startForwarding,
-      listMcpBindings: mcpBindings.list,
       release,
     };
   };

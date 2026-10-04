@@ -3,7 +3,6 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { agentSessionContextQueryKeys } from "./agent-session-context";
 import { agentSessionHistoryQueryKeys } from "./agent-session-history";
 import { agentSessionTodosQueryKeys } from "./agent-session-todos";
-import { checksQueryKeys } from "./checks";
 import { runtimeCatalogQueryKeys } from "./runtime-catalog";
 import { workspaceSessionExternalQueryKeys } from "./workspace-session-import";
 
@@ -14,7 +13,6 @@ const RUNTIME_KIND_MATCHERS: ReadonlyArray<(key: QueryKey, runtimeKind: RuntimeK
   agentSessionContextQueryKeys.matchesRuntimeKind,
   runtimeCatalogQueryKeys.matchesCatalogRuntimeKind,
   workspaceSessionExternalQueryKeys.matchesRuntimeKind,
-  checksQueryKeys.matchesWorkspaceRuntimeMcp,
 ];
 
 /**

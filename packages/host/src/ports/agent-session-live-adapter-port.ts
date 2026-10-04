@@ -29,7 +29,6 @@ import type {
   FileDiff,
   RuntimeKind,
   SlashCommandCatalog,
-  WorkspaceRuntimeMcpObservation,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
@@ -125,13 +124,6 @@ type AgentSessionLiveAdapterBase = {
     repoPath: string,
     roots?: AgentSessionAuthorizedRoot[],
   ) => Effect.Effect<void, HostError>;
-  /**
-   * Reads observed OpenDucktor MCP connections of one workspace. Present only when the runtime
-   * exposes MCP status. It never creates a native directory instance or a connection.
-   */
-  readonly readMcpConnections?: (
-    repoPath: string,
-  ) => Effect.Effect<ReadonlyArray<WorkspaceRuntimeMcpObservation>, HostError>;
   /** Lists every live session of this runtime, across all repositories. */
   readonly listSnapshots: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   readonly readSnapshot: (

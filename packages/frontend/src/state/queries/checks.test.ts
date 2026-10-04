@@ -1,11 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  checksQueryKeys,
   classifyDiagnosticsQueryError,
   DiagnosticsQueryTimeoutError,
   hostMcpBridgeCheckQueryOptions,
-  workspaceRuntimeMcpCheckQueryOptions,
 } from "./checks";
 
 describe("classifyDiagnosticsQueryError", () => {
@@ -24,28 +22,7 @@ describe("classifyDiagnosticsQueryError", () => {
   });
 });
 
-describe("host and workspace MCP check queries", () => {
-  test("keys workspace MCP observations by repository", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const check = mock(async (repoPath: string) => ({
-      repoPath,
-      checkedAt: "2026-02-22T08:00:00.000Z",
-      runtimes: [],
-    }));
-
-    try {
-      await queryClient.fetchQuery(workspaceRuntimeMcpCheckQueryOptions("/repo-a", check));
-      await queryClient.fetchQuery(workspaceRuntimeMcpCheckQueryOptions("/repo-b", check));
-
-      expect(check.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
-      expect(
-        queryClient.getQueryData(checksQueryKeys.workspaceRuntimeMcp("/repo-a")),
-      ).toMatchObject({ repoPath: "/repo-a" });
-    } finally {
-      queryClient.clear();
-    }
-  });
-
+describe("host MCP bridge check query", () => {
   test("reads the host MCP bridge without a workspace", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const check = mock(async () => ({

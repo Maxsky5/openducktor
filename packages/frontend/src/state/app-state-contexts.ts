@@ -1,6 +1,5 @@
 import type {
   AgentRuntimes,
-  RuntimeCheck,
   RuntimeDescriptor,
   TaskCard,
   TaskStoreCheck,
@@ -75,11 +74,7 @@ export type RuntimeDefinitionsContextValue = {
 };
 
 export type ChecksOperationsContextValue = {
-  refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  clearActiveTaskStoreCheck: () => void;
-  hasRuntimeCheck: () => boolean;
-  hasCachedTaskStoreCheck: (repoPath: string) => boolean;
 };
 
 export type TaskSnapshotContextValue = {

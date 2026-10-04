@@ -4,7 +4,6 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceRecord,
-  type WorkspaceRuntimeMcpCheck,
 } from "@openducktor/contracts";
 import {
   createHostRuntimeStatusContextValue,
@@ -12,10 +11,12 @@ import {
   createObservedCheckFixture,
   createTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { CheckRead } from "@/types/diagnostics";
+import { earlierResultNotice } from "./diagnostics-check-section";
 import {
   type BuildDiagnosticsPanelModelInput,
   buildDiagnosticsPanelModel,
+  type DiagnosticsCheckModel,
+  type DiagnosticsPanelModel,
 } from "./diagnostics-panel-model";
 import { NO_WORKSPACE_MESSAGE } from "./diagnostics-workspace-model";
 
@@ -31,19 +32,6 @@ const createWorkspace = (overrides: Partial<WorkspaceRecord> = {}): WorkspaceRec
   defaultWorktreeBasePath: "/worktrees",
   effectiveWorktreeBasePath: "/worktrees",
   ...overrides,
-});
-
-const createMcpCheck = (
-  repoPath: string,
-  runtimes: WorkspaceRuntimeMcpCheck["runtimes"] = [],
-  error: string | null = null,
-): CheckRead<WorkspaceRuntimeMcpCheck> => ({
-  data: {
-    repoPath,
-    checkedAt: "2026-02-22T08:00:00.000Z",
-    runtimes,
-  },
-  error,
 });
 
 const CLI_TOOLS_CHECK = {
@@ -77,7 +65,6 @@ const createInput = (
   workspace: createWorkspace(),
   checksRepoPath: "/repo-a",
   taskStoreCheck: createObservedCheckFixture({ data: createTaskStoreCheckFixture() }),
-  workspaceRuntimeMcpCheck: createMcpCheck("/repo-a"),
   ...overrides,
 });
 
@@ -94,6 +81,19 @@ const failedStatus = (kind: "opencode" | "codex" | "claude", enabled = true) =>
       occurredAt: "2026-02-22T08:00:00.000Z",
     },
   });
+
+const hostCheck = (model: DiagnosticsPanelModel, key: string): DiagnosticsCheckModel => {
+  const check = model.host.tools.find((candidate) => candidate.key === key);
+  if (!check) throw new Error(`Missing host check ${key}.`);
+  return check;
+};
+
+const workspaceCheck = (model: DiagnosticsPanelModel, key: string): DiagnosticsCheckModel => {
+  if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
+  const check = model.workspace.checks.find((candidate) => candidate.key === key);
+  if (!check) throw new Error(`Missing workspace check ${key}.`);
+  return check;
+};
 
 describe("buildDiagnosticsPanelModel", () => {
   test("lists every supported runtime kind in a stable order, including disabled kinds", () => {
@@ -144,13 +144,22 @@ describe("buildDiagnosticsPanelModel", () => {
     const [opencode, codex] = model.host.runtimes.entries;
     expect(opencode?.action).toEqual({ type: "restart", label: "Restart" });
     expect(opencode?.failure).toEqual({
-      stage: "Start",
       message: "opencode failed to start.",
       nextAction: "Fix the executable path in Settings.",
     });
     expect(codex?.action).toEqual({ type: "restart", label: "Retry apply" });
     expect(model.hasHostBlockingFailure).toBe(true);
     expect(model.summaryState.label).toBe("Critical issue");
+    // The row shows the full cause. The overview lists a short issue for each runtime.
+    expect(model.overview).toEqual({
+      tone: "critical",
+      title: "2 issues need attention",
+      description: "Fix these issues so agent sessions can run.",
+      issues: [
+        { scope: "host", message: "The OpenCode runtime could not start." },
+        { scope: "host", message: "The Codex runtime could not start." },
+      ],
+    });
   });
 
   test("shows the effective executable only when it differs from the configured one", () => {
@@ -169,12 +178,26 @@ describe("buildDiagnosticsPanelModel", () => {
       }),
     );
 
-    expect(model.host.runtimes.entries[0]?.rows.map((row) => row.label)).toEqual([
-      "Enabled",
-      "Configured executable",
-      "Effective executable",
-      "Version",
-    ]);
+    expect(model.host.runtimes.entries[0]).toMatchObject({
+      executablePath: "opencode",
+      effectiveExecutablePath: "/usr/local/bin/opencode",
+      version: "1.18.34",
+    });
+
+    const samePath = buildDiagnosticsPanelModel(
+      createInput({
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {
+            opencode: createHostRuntimeStatusFixture({
+              kind: "opencode",
+              configuredExecutablePath: "/usr/local/bin/opencode",
+              effectiveExecutablePath: "/usr/local/bin/opencode",
+            }),
+          },
+        }),
+      }),
+    );
+    expect(samePath.host.runtimes.entries[0]?.effectiveExecutablePath).toBeNull();
   });
 
   test("marks runtime state as not current when live updates stopped", () => {
@@ -187,8 +210,9 @@ describe("buildDiagnosticsPanelModel", () => {
       }),
     );
 
-    expect(model.host.runtimes.status).toEqual({ health: "failed", label: "Not current" });
-    expect(model.host.runtimes.notice).toContain("earlier results");
+    expect(model.host.runtimes.notice).toBe(
+      "Live runtime updates stopped: Connection lost. These states can be out of date. Select Refresh to read them again.",
+    );
     expect(model.hasHostBlockingFailure).toBe(true);
   });
 
@@ -198,7 +222,6 @@ describe("buildDiagnosticsPanelModel", () => {
         workspace: null,
         checksRepoPath: null,
         taskStoreCheck: createObservedCheckFixture(),
-        workspaceRuntimeMcpCheck: { data: null, error: null },
       }),
     );
 
@@ -216,7 +239,6 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimeStatus,
         workspace: createWorkspace({ workspaceId: "workspace-b", repoPath: "/repo-b" }),
         checksRepoPath: "/repo-b",
-        workspaceRuntimeMcpCheck: createMcpCheck("/repo-b"),
       }),
     );
 
@@ -230,75 +252,50 @@ describe("buildDiagnosticsPanelModel", () => {
       createInput({
         workspace: createWorkspace({ workspaceName: "Repo B", repoPath: "/repo-b" }),
         checksRepoPath: "/repo-a",
-        workspaceRuntimeMcpCheck: createMcpCheck("/repo-a"),
       }),
     );
 
     if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
     expect(model.workspace.name).toBe("Repo B");
-    expect(model.workspace.taskStore.status.label).toBe("Loading");
-    expect(model.workspace.runtimeMcp.status.label).toBe("Loading");
+    expect(workspaceCheck(model, "task-store").status.label).toBe("Checking");
     expect(model.summaryState.label).toBe("Checking...");
+    expect(model.overview.tone).toBe("checking");
   });
 
-  test("shows MCP connections as not checked, unsupported, or failed per observed directory", () => {
+  test("warns about a missing executable only for an enabled runtime that is not ready", () => {
+    const runtime = { executablePath: null, version: null };
     const model = buildDiagnosticsPanelModel(
       createInput({
-        workspaceRuntimeMcpCheck: createMcpCheck("/repo-a", [
-          {
-            kind: "opencode",
-            state: "observed",
-            runtimeId: "opencode-runtime-1",
-            observations: [
-              {
-                workingDirectory: "/repo-a",
-                state: "connected",
-                serverStatus: "connected",
-                toolIds: ["odt_read_task"],
-                detail: null,
-              },
-              {
-                workingDirectory: "/worktrees/task-1",
-                state: "failed",
-                serverStatus: null,
-                toolIds: [],
-                detail: "Tools are missing.",
-              },
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {
+            opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+            codex: failedStatus("codex"),
+            claude: createHostRuntimeStatusFixture({
+              kind: "claude",
+              enabled: false,
+              state: "disabled",
+              runtimeId: null,
+            }),
+          },
+        }),
+        runtimeCheck: createObservedCheckFixture({
+          data: {
+            ...CLI_TOOLS_CHECK,
+            runtimes: [
+              { ...runtime, kind: "opencode", enabled: true, ok: false, error: "Not found." },
+              { ...runtime, kind: "codex", enabled: true, ok: false, error: "codex: not found" },
+              { ...runtime, kind: "claude", enabled: false, ok: false, error: null },
             ],
-            detail: null,
           },
-          {
-            kind: "codex",
-            state: "not_checked",
-            runtimeId: null,
-            observations: [],
-            detail: null,
-          },
-          {
-            kind: "claude",
-            state: "unsupported",
-            runtimeId: null,
-            observations: [],
-            detail: null,
-          },
-        ]),
+        }),
       }),
     );
 
-    if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
-    const [opencode, codex, claude] = model.workspace.runtimeMcp.entries;
-    expect(opencode?.status.label).toBe("Failed");
-    expect(opencode?.observations.map((observation) => observation.status.label)).toEqual([
-      "Connected",
-      "Failed",
+    expect(model.host.runtimes.entries.map((entry) => entry.executableWarning)).toEqual([
+      null,
+      "codex: not found",
+      null,
     ]);
-    expect(codex?.status.label).toBe("Not checked");
-    expect(claude?.status.label).toBe("Unsupported");
-    expect(model.workspace.runtimeMcp.errors).toEqual([
-      "OpenCode in /worktrees/task-1: Tools are missing.",
-    ]);
-    expect(model.hasWorkspaceBlockingFailure).toBe(true);
-    expect(model.hasHostBlockingFailure).toBe(false);
   });
 
   test("shows failed CLI and task-store refreshes over cached successes as current failures", () => {
@@ -319,32 +316,23 @@ describe("buildDiagnosticsPanelModel", () => {
       }),
     );
 
-    const { cliTools } = model.host;
-    expect(cliTools.status).toEqual({ health: "failed", label: "Check failed" });
-    expect(cliTools.errors).toEqual([
-      "CLI tools check failed: Runtime check failed. Select Refresh Checks to try again.",
+    const git = hostCheck(model, "git");
+    expect(git.status).toEqual({ health: "failed", label: "Check failed" });
+    expect(git.errors).toEqual([
+      "Git check failed: Runtime check failed. Select Refresh to try again.",
     ]);
-    expect(cliTools.notice).toBe(
-      "Earlier result from 2026-02-22T07:00:00.000Z. It may not be current.",
-    );
-    expect(cliTools.rows[0]).toEqual({ label: "Git", value: "git version 2.50.1" });
+    expect(git.notice).toBe(earlierResultNotice("2026-02-22T07:00:00.000Z"));
+    expect(git.value).toBe("2.50.1");
 
-    if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
-    const { taskStore } = model.workspace;
+    const taskStore = workspaceCheck(model, "task-store");
     expect(taskStore.status).toEqual({ health: "failed", label: "Check failed" });
     expect(taskStore.errors).toEqual([
-      "Task store check failed: Task store check failed. Select Refresh Checks to try again.",
+      "Task store check failed: Task store check failed. Select Refresh to try again.",
     ]);
-    expect(taskStore.notice).toBe(
-      "Earlier result from 2026-02-22T07:30:00.000Z. It may not be current.",
-    );
-    expect(taskStore.rows.map((row) => row.label)).toEqual([
-      "Status",
-      "Health category",
-      "SQLite database path",
-    ]);
+    expect(taskStore.notice).toBe(earlierResultNotice("2026-02-22T07:30:00.000Z"));
+    expect(taskStore.details.map((detail) => detail.label)).toEqual(["Database"]);
 
-    expect(model.criticalReasons).toEqual([...cliTools.errors, ...taskStore.errors]);
+    expect(model.criticalReasons).toEqual([...git.errors, ...taskStore.errors]);
     expect(model.hasHostBlockingFailure).toBe(true);
     expect(model.hasWorkspaceBlockingFailure).toBe(true);
     expect(model.summaryState.label).toBe("Critical issue");
@@ -368,126 +356,47 @@ describe("buildDiagnosticsPanelModel", () => {
       }),
     );
 
-    expect(model.host.cliTools.status).toEqual({ health: "failed", label: "Timed out" });
-    expect(model.host.cliTools.rows).toEqual([]);
-    expect(model.host.cliTools.notice).toBeUndefined();
+    const git = hostCheck(model, "git");
+    expect(git.status).toEqual({ health: "failed", label: "Timed out" });
+    expect(git.value).toBeNull();
+    expect(git.notice).toBeNull();
     expect(model.hasHostBlockingFailure).toBe(true);
   });
 
-  test("shows failed MCP bridge and connection refreshes over cached successes as current failures", () => {
+  test("shows a failed MCP bridge refresh over a cached success as a current failure", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
         hostMcpBridgeCheck: { data: MCP_BRIDGE_CHECK, error: "Bridge check failed." },
-        workspaceRuntimeMcpCheck: createMcpCheck(
-          "/repo-a",
-          [
-            {
-              kind: "opencode",
-              state: "observed",
-              runtimeId: "opencode-runtime-1",
-              observations: [
-                {
-                  workingDirectory: "/repo-a",
-                  state: "connected",
-                  serverStatus: "connected",
-                  toolIds: ["odt_read_task"],
-                  detail: null,
-                },
-              ],
-              detail: null,
-            },
-          ],
-          "Connection check failed.",
-        ),
       }),
     );
 
-    const { mcpBridge } = model.host;
+    const mcpBridge = hostCheck(model, "mcp-bridge");
     expect(mcpBridge.status).toEqual({ health: "failed", label: "Check failed" });
     expect(mcpBridge.errors).toEqual([
-      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh Checks to try again.",
+      "OpenDucktor MCP bridge check failed: Bridge check failed. Select Refresh to try again.",
     ]);
-    expect(mcpBridge.notice).toBe(
-      "Earlier result from 2026-02-22T08:00:00.000Z. It may not be current.",
-    );
-    expect(mcpBridge.rows.map((row) => row.label)).toEqual(["Host URL", "Checked at"]);
-
-    if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
-    const { runtimeMcp } = model.workspace;
-    expect(runtimeMcp.status).toEqual({ health: "failed", label: "Check failed" });
-    expect(runtimeMcp.errors).toEqual([
-      "Runtime OpenDucktor MCP connections check failed: Connection check failed. Select Refresh Checks to try again.",
+    expect(mcpBridge.notice).toBe(earlierResultNotice("2026-02-22T08:00:00.000Z"));
+    expect(mcpBridge.details).toEqual([
+      { label: "Address", value: "http://127.0.0.1:1", isPath: true },
     ]);
-    expect(runtimeMcp.notice).toBe(
-      "Earlier result from 2026-02-22T08:00:00.000Z. It may not be current.",
-    );
-    expect(runtimeMcp.entries[0]?.status.label).toBe("Connected");
 
-    expect(model.criticalReasons).toEqual([...mcpBridge.errors, ...runtimeMcp.errors]);
+    expect(model.criticalReasons).toEqual(mcpBridge.errors);
     expect(model.hasHostBlockingFailure).toBe(true);
-    expect(model.hasWorkspaceBlockingFailure).toBe(true);
+    expect(model.hasWorkspaceBlockingFailure).toBe(false);
     expect(model.summaryState.label).toBe("Critical issue");
   });
 
-  test("does not show MCP connections of a replaced runtime as current", () => {
-    const model = buildDiagnosticsPanelModel(
-      createInput({
-        runtimeStatus: createHostRuntimeStatusContextValue({
-          statusByKind: {
-            opencode: createHostRuntimeStatusFixture({ kind: "opencode", runtimeId: "opencode-2" }),
-          },
-        }),
-        workspaceRuntimeMcpCheck: createMcpCheck("/repo-a", [
-          {
-            kind: "opencode",
-            state: "observed",
-            runtimeId: "opencode-1",
-            observations: [
-              {
-                workingDirectory: "/repo-a",
-                state: "connected",
-                serverStatus: "connected",
-                toolIds: ["odt_read_task"],
-                detail: null,
-              },
-            ],
-            detail: null,
-          },
-        ]),
-      }),
-    );
-
-    if (model.workspace.kind !== "selected") throw new Error("Expected a selected workspace.");
-    const { runtimeMcp } = model.workspace;
-    expect(runtimeMcp.entries).toEqual([
-      {
-        kind: "opencode",
-        label: "OpenCode",
-        status: { health: "neutral", label: "Unavailable" },
-        detail:
-          "These connections were observed on an earlier runtime. Refresh checks to observe the current runtime.",
-        observations: [],
-      },
-    ]);
-    expect(runtimeMcp.status).toEqual({ health: "neutral", label: "Not checked" });
-  });
-
-  test("treats unobserved MCP as not blocking and puts setup warnings after loading", () => {
+  test("puts setup warnings after loading", () => {
     const warningModel = buildDiagnosticsPanelModel(
       createInput({
         workspace: createWorkspace({ effectiveWorktreeBasePath: null }),
-        workspaceRuntimeMcpCheck: createMcpCheck("/repo-a", [
-          {
-            kind: "opencode",
-            state: "not_checked",
-            runtimeId: null,
-            observations: [],
-            detail: null,
-          },
-        ]),
       }),
     );
     expect(warningModel.summaryState.label).toBe("Setup needed");
+    expect(warningModel.overview).toMatchObject({
+      tone: "warning",
+      title: "Workspace setup needed",
+    });
 
     const loadingModel = buildDiagnosticsPanelModel(
       createInput({
@@ -496,5 +405,35 @@ describe("buildDiagnosticsPanelModel", () => {
       }),
     );
     expect(loadingModel.summaryState.label).toBe("Checking...");
+  });
+
+  test("summarizes a healthy host with and without a workspace", () => {
+    const withWorkspace = buildDiagnosticsPanelModel(
+      createInput({
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {
+            opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+            codex: createHostRuntimeStatusFixture({ kind: "codex" }),
+          },
+        }),
+      }),
+    );
+    expect(withWorkspace.overview).toEqual({
+      tone: "healthy",
+      title: "Everything is working",
+      description: "2 runtimes are ready. The workspace checks passed.",
+      issues: [],
+    });
+
+    const withoutWorkspace = buildDiagnosticsPanelModel(
+      createInput({
+        workspace: null,
+        checksRepoPath: null,
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: { claude: createHostRuntimeStatusFixture({ kind: "claude" }) },
+        }),
+      }),
+    );
+    expect(withoutWorkspace.overview.description).toBe("1 runtime is ready.");
   });
 });

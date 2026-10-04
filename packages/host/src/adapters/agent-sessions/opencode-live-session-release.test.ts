@@ -10,7 +10,6 @@ import {
   createRuntimeHarness,
   ignoreObservationLoss,
   runtime,
-  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 /** Composes the production live-state service with the production OpenCode adapter. */
@@ -33,7 +32,6 @@ const setup = async (
         createRuntimeRegistration: service.createRuntimeRegistration,
       },
       prepareRuntime: harness.prepareRuntime,
-      probeMcpStatus: unexpectedMcpStatusProbe,
     })(runtime, observer),
   );
   await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));

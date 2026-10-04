@@ -193,5 +193,5 @@ export const createNodeHostRuntimeComposition = ({
     logError: (message) =>
       writeHostLifecycleLog(lifecycleLogger, "error", message).pipe(Effect.ignore),
   });
-  return { descriptorFor, hostRuntimeService, registry };
+  return { hostRuntimeService, registry };
 };

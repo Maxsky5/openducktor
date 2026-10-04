@@ -8,7 +8,6 @@ import {
   ref,
   runtime,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import { HostOperationError } from "../../effect/host-errors";
@@ -63,7 +62,6 @@ describe("message acceptance through the command and live adapter modules", () =
               },
             };
           },
-          probeMcpStatus: unexpectedMcpStatusProbe,
         })(runtime, ignoreObservationLoss),
       );
       await Effect.runPromise(

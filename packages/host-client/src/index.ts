@@ -219,7 +219,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     runtimeRestartImpact: agentClient.runtimeRestartImpact.bind(agentClient),
     runtimeRestart: agentClient.runtimeRestart.bind(agentClient),
     hostMcpBridgeCheck: agentClient.hostMcpBridgeCheck.bind(agentClient),
-    workspaceRuntimeMcpCheck: agentClient.workspaceRuntimeMcpCheck.bind(agentClient),
     buildStart: agentClient.buildStart.bind(agentClient),
     devServerGetState: agentClient.devServerGetState.bind(agentClient),
     devServerStart: agentClient.devServerStart.bind(agentClient),

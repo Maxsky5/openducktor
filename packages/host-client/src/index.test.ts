@@ -1987,8 +1987,6 @@ describe("HostClient", () => {
             checkedAt: "2026-02-17T12:00:00.000Z",
             detail: null,
           };
-        case "workspace_runtime_mcp_check":
-          return { repoPath: "/repo", checkedAt: "2026-02-17T12:00:00.000Z", runtimes: [] };
         default:
           throw new Error(`Unexpected command: ${command}`);
       }
@@ -2000,7 +1998,6 @@ describe("HostClient", () => {
     const reviewed = await client.runtimeRestartImpact("opencode");
     const restarted = await client.runtimeRestart("opencode", reviewed.confirmation);
     const bridge = await client.hostMcpBridgeCheck();
-    const workspaceMcp = await client.workspaceRuntimeMcpCheck("/repo");
 
     expect(definitions[0]?.workflowToolAliasesByCanonical).toEqual(
       OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
@@ -2009,7 +2006,6 @@ describe("HostClient", () => {
     expect(snapshot.runtimes[0]?.state).toBe("ready");
     expect(restarted.type).toBe("completed");
     expect(bridge.state).toBe("ready");
-    expect(workspaceMcp.repoPath).toBe("/repo");
     expect(calls).toEqual([
       { command: "runtime_definitions_list", args: {} },
       { command: "task_worktree_get", args: { repoPath: "/repo", taskId: "task-1" } },
@@ -2020,7 +2016,6 @@ describe("HostClient", () => {
         args: { runtimeKind: "opencode", confirmation: "confirm-1" },
       },
       { command: "host_mcp_bridge_check", args: {} },
-      { command: "workspace_runtime_mcp_check", args: { repoPath: "/repo" } },
     ]);
   });
 

@@ -931,36 +931,31 @@ describe("OpenCode session runtime connection", () => {
     }
   });
 
-  test("forgets an MCP binding when OpenCode disposes its directory instance", async () => {
+  test("adds the MCP server again after OpenCode disposes its directory instance", async () => {
     const harness = createLiveClientHarness();
+    const mcpAdds: string[] = [];
+    const add = harness.client.mcp.add;
+    harness.client.mcp.add = async (...args) => {
+      mcpAdds.push(args[0]?.directory ?? "");
+      return add(...args);
+    };
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     await prepared.startForwarding(() => undefined);
     try {
       await resumeOpenDucktorSession(prepared);
-      expect(prepared.listMcpBindings()).toEqual([
-        { workingDirectory: "/repo", repoPath: "/repo" },
-      ]);
+      await resumeOpenDucktorSession(prepared);
+      expect(mcpAdds).toEqual(["/repo"]);
 
       await harness.emitAndWait({
         type: "server.instance.disposed",
         properties: { directory: "/repo" },
       });
+      await resumeOpenDucktorSession(prepared);
 
-      expect(prepared.listMcpBindings()).toEqual([]);
+      expect(mcpAdds).toEqual(["/repo", "/repo"]);
     } finally {
       await prepared.release();
     }
-  });
-
-  test("clears MCP bindings when the runtime is released", async () => {
-    const harness = createLiveClientHarness();
-    const prepared = await createPrepareRuntime(harness)(runtimeInput);
-    await resumeOpenDucktorSession(prepared);
-    expect(prepared.listMcpBindings()).toHaveLength(1);
-
-    await prepared.release();
-
-    expect(prepared.listMcpBindings()).toEqual([]);
   });
 
   test("keeps a confirmed registration without reading the session list", async () => {
@@ -1627,12 +1622,11 @@ describe("OpenCode MCP binding of imported and continued work", () => {
     const source = await prepared.sessionImport.inspectSession(importRef);
 
     await expect(source.attach()).rejects.toThrow("MCP bridge unavailable");
-    expect(prepared.listMcpBindings()).toEqual([]);
+    expect(mcpAdds).toEqual([]);
 
     available = true;
     await source.attach();
     expect(mcpAdds).toEqual(["/repo"]);
-    expect(prepared.listMcpBindings()).toEqual([{ workingDirectory: "/repo", repoPath: "/repo" }]);
     await prepared.release();
   });
 

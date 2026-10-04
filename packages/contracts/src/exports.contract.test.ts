@@ -736,10 +736,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeSettingsApplicationSchema",
   "settingsSnapshotRuntimePreviewSchema",
   "settingsSnapshotSaveResultSchema",
-  "workspaceRuntimeMcpCheckInputSchema",
-  "workspaceRuntimeMcpCheckSchema",
-  "workspaceRuntimeMcpObservationSchema",
-  "workspaceRuntimeMcpStatusSchema",
 ] as const;
 
 describe("contracts exports contract", () => {

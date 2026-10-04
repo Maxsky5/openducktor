@@ -11,7 +11,8 @@ export type SettingsDeepLink =
   | {
       kind: "global";
       section: Exclude<SettingsSectionId, "repositories">;
-    };
+    }
+  | { kind: "runtime"; runtimeKind: RuntimeKind };
 
 export type SettingsContentFocusRequest =
   | { kind: "repository-dev-servers" }
@@ -22,6 +23,7 @@ type GlobalSettingsDeepLinkResolution = {
   navigation: {
     section: Exclude<SettingsSectionId, "repositories">;
   };
+  contentFocus?: SettingsContentFocusRequest;
 };
 
 type RepositorySettingsDeepLinkResolution = {
@@ -47,6 +49,12 @@ export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDee
       };
     case "custom-agent-roles":
       return { scope: "global", navigation: { section: "custom-agent-roles" } };
+    case "runtime":
+      return {
+        scope: "global",
+        navigation: { section: "runtimes" },
+        contentFocus: { kind: "runtime-executable", runtimeKind: deepLink.runtimeKind },
+      };
     case "repository-configuration":
       return {
         scope: "repository",

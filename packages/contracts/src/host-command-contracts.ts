@@ -154,7 +154,6 @@ export const HOST_COMMAND_NAMES = [
   "workspace_replace_azure_devops_pat",
   "workspace_resolve_local_attachment_path",
   "workspace_resolve_path",
-  "workspace_runtime_mcp_check",
   "workspace_save_repo_settings",
   "workspace_save_settings_snapshot",
   "workspace_select",

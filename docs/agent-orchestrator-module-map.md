@@ -104,7 +104,7 @@ The status owner subscribes to `openducktor://runtime-changed` before it reads t
 
 `HostRuntimeStatusContext` is the only frontend runtime status context. Session actions and selected-session reads require the exact kind of that session to be `ready` and current. A runtime ID change or loss of ready state invalidates runtime-dependent Query data of that kind in every workspace.
 
-Diagnostics show the host group (agent runtimes, CLI tools, OpenDucktor MCP bridge) before the selected workspace group (repository setup, task store, runtime MCP connections). `Restart` reads the restart impact, shows the affected live sessions in every workspace, and needs a confirmation.
+Diagnostics start with an overview of all issues. The host group (agent runtimes, then Git and the OpenDucktor MCP bridge) comes before the selected workspace group (repository setup, then task store). Each runtime row shows its version, executable, state, last failure, and lifecycle action. `Restart` reads the restart impact, shows the affected live sessions in every workspace, and needs a confirmation.
 
 ## Selected history
 

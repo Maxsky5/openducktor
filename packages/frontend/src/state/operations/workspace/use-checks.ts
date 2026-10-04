@@ -3,7 +3,6 @@ import type {
   RuntimeCheck,
   RuntimeDescriptor,
   TaskStoreCheck,
-  WorkspaceRuntimeMcpCheck,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -19,7 +18,6 @@ import {
   loadTaskStoreCheckFromQuery,
   runtimeCheckQueryOptions,
   taskStoreCheckQueryOptions,
-  workspaceRuntimeMcpCheckQueryOptions,
 } from "../../queries/checks";
 import {
   buildDiagnosticsToastIssues,
@@ -38,7 +36,6 @@ type UseChecksArgs = {
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
   hostMcpBridgeCheck?: ChecksQueryDependencies["hostMcpBridgeCheck"];
-  workspaceRuntimeMcpCheck?: ChecksQueryDependencies["workspaceRuntimeMcpCheck"];
   scheduleTask?: ScheduleTask;
   toastApi?: DiagnosticsToastApi;
 };
@@ -48,14 +45,9 @@ type UseChecksResult = {
   hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
-  workspaceRuntimeMcpCheck: CheckRead<WorkspaceRuntimeMcpCheck>;
   isRefreshingChecks: boolean;
-  refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshChecks: () => Promise<void>;
-  hasRuntimeCheck: () => boolean;
-  hasCachedTaskStoreCheck: (repoPath: string) => boolean;
-  clearActiveTaskStoreCheck: () => void;
 };
 
 const queryErrorMessage = (error: Error | null): string | null =>
@@ -89,7 +81,6 @@ export function useChecks({
   runtimeCheck,
   taskStoreCheck,
   hostMcpBridgeCheck,
-  workspaceRuntimeMcpCheck,
   scheduleTask,
   toastApi,
 }: UseChecksArgs): UseChecksResult {
@@ -105,14 +96,6 @@ export function useChecks({
     ...taskStoreCheckQueryOptions(
       activeRepoPath ?? DISABLED_REPO_PATH,
       taskStoreCheck,
-      scheduleTask,
-    ),
-    enabled: activeRepoPath !== null,
-  });
-  const workspaceRuntimeMcpCheckQuery = useQuery({
-    ...workspaceRuntimeMcpCheckQueryOptions(
-      activeRepoPath ?? DISABLED_REPO_PATH,
-      workspaceRuntimeMcpCheck,
       scheduleTask,
     ),
     enabled: activeRepoPath !== null,
@@ -162,19 +145,7 @@ export function useChecks({
           ...hostMcpBridgeCheckQueryOptions(hostMcpBridgeCheck, scheduleTask),
           staleTime: 0,
         }),
-        ...(activeRepoPath === null
-          ? []
-          : [
-              refreshTaskStoreCheckForRepo(activeRepoPath, true),
-              queryClient.fetchQuery({
-                ...workspaceRuntimeMcpCheckQueryOptions(
-                  activeRepoPath,
-                  workspaceRuntimeMcpCheck,
-                  scheduleTask,
-                ),
-                staleTime: 0,
-              }),
-            ]),
+        ...(activeRepoPath === null ? [] : [refreshTaskStoreCheckForRepo(activeRepoPath, true)]),
       ]);
     } finally {
       setIsRefreshingChecks(false);
@@ -187,34 +158,7 @@ export function useChecks({
     refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,
     scheduleTask,
-    workspaceRuntimeMcpCheck,
   ]);
-
-  const hasCachedTaskStoreCheck = useCallback(
-    (repoPath: string): boolean => {
-      return (
-        queryClient.getQueryData(taskStoreCheckQueryOptions(repoPath, taskStoreCheck).queryKey) !==
-        undefined
-      );
-    },
-    [taskStoreCheck, queryClient],
-  );
-
-  const hasRuntimeCheck = useCallback((): boolean => {
-    return (
-      queryClient.getQueryData(runtimeCheckQueryOptions(false, runtimeCheck).queryKey) !== undefined
-    );
-  }, [queryClient, runtimeCheck]);
-
-  const clearActiveTaskStoreCheck = useCallback(() => {
-    if (activeRepoPath === null) {
-      return;
-    }
-    queryClient.removeQueries({
-      queryKey: checksQueryKeys.taskStore(activeRepoPath),
-      exact: true,
-    });
-  }, [activeRepoPath, queryClient]);
 
   const runtimeCheckState = useMemo(
     (): ObservedCheck<RuntimeCheck> =>
@@ -252,16 +196,6 @@ export function useChecks({
     taskStoreCheckQuery.dataUpdatedAt,
     taskStoreCheckQuery.error,
   ]);
-  const workspaceRuntimeMcpCheckState = useMemo(
-    (): CheckRead<WorkspaceRuntimeMcpCheck> =>
-      activeRepoPath === null
-        ? { data: null, error: null }
-        : {
-            data: workspaceRuntimeMcpCheckQuery.data ?? null,
-            error: queryErrorMessage(workspaceRuntimeMcpCheckQuery.error),
-          },
-    [activeRepoPath, workspaceRuntimeMcpCheckQuery.data, workspaceRuntimeMcpCheckQuery.error],
-  );
   const diagnosticsToastIssues = useMemo(
     (): DiagnosticsToastIssue[] =>
       buildDiagnosticsToastIssues({
@@ -279,13 +213,8 @@ export function useChecks({
     hostMcpBridgeCheck: hostMcpBridgeCheckState,
     checksRepoPath: activeRepoPath,
     taskStoreCheck: taskStoreCheckState,
-    workspaceRuntimeMcpCheck: workspaceRuntimeMcpCheckState,
     isRefreshingChecks,
-    refreshRuntimeCheck,
     refreshTaskStoreCheckForRepo,
     refreshChecks,
-    hasRuntimeCheck,
-    hasCachedTaskStoreCheck,
-    clearActiveTaskStoreCheck,
   };
 }

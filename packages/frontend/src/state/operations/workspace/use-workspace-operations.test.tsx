@@ -242,7 +242,6 @@ const normalizeHookArgs = ({
         setActiveRepo?.(workspace?.repoPath ?? null);
       }),
     clearTaskData: rest.clearTaskData ?? (() => {}),
-    clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
   };
   if (rest.hostClient !== undefined) {
     args.hostClient = rest.hostClient;
@@ -370,7 +369,6 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     };
 
     const StartupBranchLoader = ({
@@ -476,7 +474,6 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -508,7 +505,6 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
       hostClient,
     });
 
@@ -555,7 +551,6 @@ describe("use-workspace-operations", () => {
       latest = useWorkspaceOperations({
         ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
         clearTaskData: () => {},
-        clearActiveTaskStoreCheck: () => {},
         hostClient,
       });
       return createElement(SettingsSnapshotProbe);
@@ -599,7 +594,6 @@ describe("use-workspace-operations", () => {
   test("selectWorkspace clears state without starting a runtime", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
     const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
       workspace("/repo-a", true),
@@ -623,7 +617,6 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData,
-      clearActiveTaskStoreCheck,
     });
 
     try {
@@ -644,7 +637,6 @@ describe("use-workspace-operations", () => {
 
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
-      expect(clearActiveTaskStoreCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(workspaceList).toHaveBeenCalledTimes(1);
       expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
@@ -659,7 +651,6 @@ describe("use-workspace-operations", () => {
   test("selectWorkspace keeps the cached settings snapshot for the next read", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
@@ -681,7 +672,6 @@ describe("use-workspace-operations", () => {
       latest = useWorkspaceOperations({
         ...normalizeHookArgs({ activeRepo: "/repo-old", setActiveRepo }),
         clearTaskData,
-        clearActiveTaskStoreCheck,
         hostClient,
       });
       return createElement(SettingsSnapshotProbe);
@@ -763,7 +753,6 @@ describe("use-workspace-operations", () => {
         activeWorkspace,
         setActiveWorkspace,
         clearTaskData: () => {},
-        clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
       const { refreshBranches } = value;
@@ -868,7 +857,6 @@ describe("use-workspace-operations", () => {
   test("preserves current repo branch state when workspace selection fails", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
       throw new Error("workspace switch failed");
     });
@@ -902,7 +890,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-old",
       setActiveRepo,
       clearTaskData,
-      clearActiveTaskStoreCheck,
     });
 
     try {
@@ -934,7 +921,6 @@ describe("use-workspace-operations", () => {
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).not.toHaveBeenCalled();
-      expect(clearActiveTaskStoreCheck).not.toHaveBeenCalled();
       expect(harness.getLatest().activeBranch).toEqual({
         name: "main",
         detached: false,
@@ -1007,7 +993,6 @@ describe("use-workspace-operations", () => {
         activeWorkspace,
         setActiveWorkspace,
         clearTaskData: () => {},
-        clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
       const { refreshBranches } = value;
@@ -1131,7 +1116,6 @@ describe("use-workspace-operations", () => {
     const baseArgs = {
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     };
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1218,7 +1202,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1284,7 +1267,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1326,7 +1308,6 @@ describe("use-workspace-operations", () => {
     const baseArgs = {
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     };
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1389,7 +1370,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1456,7 +1436,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1497,7 +1476,6 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1510,7 +1488,6 @@ describe("use-workspace-operations", () => {
         activeRepo: "/repo-b",
         setActiveRepo,
         clearTaskData: () => {},
-        clearActiveTaskStoreCheck: () => {},
       });
 
       expect(harness.getLatest().branchSyncDegraded).toBe(false);

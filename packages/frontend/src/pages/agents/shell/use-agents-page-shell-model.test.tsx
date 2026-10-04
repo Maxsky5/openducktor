@@ -543,7 +543,6 @@ const checksStateValue = (): ChecksStateContextValue => ({
   hostMcpBridgeCheck: { data: null, error: null },
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
-  workspaceRuntimeMcpCheck: { data: null, error: null },
   isRefreshingChecks: false,
   ...checksState,
 });

@@ -280,17 +280,7 @@ const createHookWrapper = () => {
       ChecksOperationsContext.Provider,
       {
         value: {
-          refreshRuntimeCheck: async () => ({
-            pathOk: true,
-            gitOk: true,
-            gitVersion: null,
-            runtimes: [],
-            errors: [],
-          }),
           refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
-          clearActiveTaskStoreCheck: () => {},
-          hasRuntimeCheck: () => false,
-          hasCachedTaskStoreCheck: () => false,
         },
       },
       createElement(

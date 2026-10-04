@@ -19,7 +19,6 @@ const sessionKeys = [
   ["agent-session-context", "/repo", "opencode", "/repo", "session", null, null, null],
 ];
 const importKey = ["workspace-session-external", "workspace-1", "opencode", "catalog-1", "", null];
-const mcpCheckKey = ["checks", "workspace-runtime-mcp", "/other"];
 
 test("a stopped kind invalidates its reads in every workspace and cancels the old read", async () => {
   const client = new QueryClient();
@@ -27,7 +26,6 @@ test("a stopped kind invalidates its reads in every workspace and cancels the ol
     client.setQueryData(key, ["cached"]);
   }
   client.setQueryData(importKey, ["cached"]);
-  client.setQueryData(mcpCheckKey, ["connected on the old runtime"]);
   client.setQueryData(["checks", "task-store", "/repo"], ["cached"]);
   const oldRead = Promise.withResolvers<string[]>();
   const pending = client
@@ -38,13 +36,7 @@ test("a stopped kind invalidates its reads in every workspace and cancels the ol
   oldRead.resolve(["obsolete"]);
 
   expect(await pending).toEqual(["cached"]);
-  for (const key of [
-    ...sessionKeys,
-    repoCatalogKey,
-    otherWorkspaceCatalogKey,
-    importKey,
-    mcpCheckKey,
-  ]) {
+  for (const key of [...sessionKeys, repoCatalogKey, otherWorkspaceCatalogKey, importKey]) {
     expect(client.getQueryState(key)?.isInvalidated).toBe(true);
   }
   expect(client.getQueryState(["checks", "task-store", "/repo"])?.isInvalidated).toBe(false);

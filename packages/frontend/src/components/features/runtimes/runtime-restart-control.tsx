@@ -83,6 +83,7 @@ export function RuntimeRestartControl({
           title={`${actionLabel} ${runtimeLabel} runtime`}
           description="The host stops the current runtime and starts it again with the saved executable."
           confirmLabel={actionLabel}
+          confirmIcon={RotateCcw}
           impact={review?.impact ?? null}
           isLoadingImpact={review?.isLoadingImpact ?? false}
           impactError={review?.impactError ?? null}

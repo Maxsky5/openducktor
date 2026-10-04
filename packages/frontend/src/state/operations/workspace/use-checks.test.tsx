@@ -57,14 +57,6 @@ const hostMcpBridgeCheckMock = mock(async () => ({
   checkedAt: "2026-02-22T08:00:00.000Z",
   detail: null,
 }));
-let workspaceRuntimeMcpCheckHandler = async (repoPath: string) => ({
-  repoPath,
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  runtimes: [],
-});
-const workspaceRuntimeMcpCheckMock = mock((repoPath: string) =>
-  workspaceRuntimeMcpCheckHandler(repoPath),
-);
 
 type UseChecksHook = (typeof import("./use-checks"))["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
@@ -81,7 +73,6 @@ type ResolvedHookArgs = HookArgs &
       | "toastApi"
       | "refreshHostRuntimeStatus"
       | "hostMcpBridgeCheck"
-      | "workspaceRuntimeMcpCheck"
     >
   >;
 
@@ -124,10 +115,6 @@ const buildHookArgs = (
       refreshHostRuntimeStatusMock,
     hostMcpBridgeCheck:
       args.hostMcpBridgeCheck ?? previous?.hostMcpBridgeCheck ?? hostMcpBridgeCheckMock,
-    workspaceRuntimeMcpCheck:
-      args.workspaceRuntimeMcpCheck ??
-      previous?.workspaceRuntimeMcpCheck ??
-      workspaceRuntimeMcpCheckMock,
   };
 };
 
@@ -190,8 +177,7 @@ const waitForInitialChecksToSettle = async (harness: HookHarness) => {
     return (
       value.runtimeCheck.data !== null &&
       value.taskStoreCheck.data !== null &&
-      value.hostMcpBridgeCheck.data !== null &&
-      value.workspaceRuntimeMcpCheck.data !== null
+      value.hostMcpBridgeCheck.data !== null
     );
   });
 };
@@ -204,12 +190,6 @@ beforeEach(async () => {
   taskStoreCheckMock.mockClear();
   refreshHostRuntimeStatusMock.mockClear();
   hostMcpBridgeCheckMock.mockClear();
-  workspaceRuntimeMcpCheckMock.mockClear();
-  workspaceRuntimeMcpCheckHandler = async (repoPath: string) => ({
-    repoPath,
-    checkedAt: "2026-02-22T08:00:00.000Z",
-    runtimes: [],
-  });
   runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
   taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
 });
@@ -234,7 +214,6 @@ describe("use-checks", () => {
       expect(runtimeCheckMock.mock.calls).toEqual([[true]]);
       expect(hostMcpBridgeCheckMock).toHaveBeenCalledTimes(1);
       expect(taskStoreCheckMock).not.toHaveBeenCalled();
-      expect(workspaceRuntimeMcpCheckMock).not.toHaveBeenCalled();
       expect(harness.getLatest().checksRepoPath).toBeNull();
       expect(harness.getLatest().isRefreshingChecks).toBe(false);
     } finally {
@@ -250,9 +229,9 @@ describe("use-checks", () => {
 
     try {
       await waitForInitialChecksToSettle(harness);
-      workspaceRuntimeMcpCheckHandler = async () => {
-        throw new Error("MCP observation failed");
-      };
+      hostMcpBridgeCheckMock.mockImplementationOnce(async () => {
+        throw new Error("bridge down");
+      });
       runtimeCheckHandler = async () => {
         throw new Error("runtime down");
       };
@@ -261,7 +240,7 @@ describe("use-checks", () => {
       });
       await harness.waitFor(
         (value) =>
-          value.workspaceRuntimeMcpCheck.error === "MCP observation failed" &&
+          value.hostMcpBridgeCheck.error === "bridge down" &&
           value.runtimeCheck.failureKind === "error",
       );
 
@@ -296,9 +275,6 @@ describe("use-checks", () => {
       hostMcpBridgeCheckMock.mockImplementationOnce(async () => {
         throw new Error("bridge down");
       });
-      workspaceRuntimeMcpCheckHandler = async () => {
-        throw new Error("MCP observation failed");
-      };
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
@@ -306,8 +282,7 @@ describe("use-checks", () => {
         (value) =>
           value.runtimeCheck.error === "runtime down" &&
           value.taskStoreCheck.error === "task store down" &&
-          value.hostMcpBridgeCheck.error === "bridge down" &&
-          value.workspaceRuntimeMcpCheck.error === "MCP observation failed",
+          value.hostMcpBridgeCheck.error === "bridge down",
       );
 
       const latest = harness.getLatest();
@@ -316,7 +291,6 @@ describe("use-checks", () => {
       expect(latest.runtimeCheck.data).toEqual(makeRuntimeCheck());
       expect(latest.taskStoreCheck.data).toEqual(makeTaskStoreCheck());
       expect(latest.hostMcpBridgeCheck.data?.state).toBe("ready");
-      expect(latest.workspaceRuntimeMcpCheck.data?.repoPath).toBe("/repo-a");
       expect(latest.runtimeCheck.observedAt).toBe(initial.runtimeCheck.observedAt);
       expect(latest.taskStoreCheck.observedAt).toBe(initial.taskStoreCheck.observedAt);
     } finally {
@@ -324,41 +298,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("keys workspace MCP observations by the selected repository", async () => {
-    const pendingRepoB = createDeferred<{
-      repoPath: string;
-      checkedAt: string;
-      runtimes: never[];
-    }>();
-    workspaceRuntimeMcpCheckHandler = async (repoPath) =>
-      repoPath === "/repo-b"
-        ? pendingRepoB.promise
-        : { repoPath, checkedAt: "2026-02-22T08:00:00.000Z", runtimes: [] };
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((value) => value.workspaceRuntimeMcpCheck.data?.repoPath === "/repo-a");
-      await harness.updateArgs({ activeRepo: "/repo-b" });
-
-      expect(harness.getLatest().checksRepoPath).toBe("/repo-b");
-      expect(harness.getLatest().workspaceRuntimeMcpCheck.data).toBeNull();
-
-      pendingRepoB.resolve({
-        repoPath: "/repo-b",
-        checkedAt: "2026-02-22T08:00:00.000Z",
-        runtimes: [],
-      });
-      await harness.waitFor((value) => value.workspaceRuntimeMcpCheck.data?.repoPath === "/repo-b");
-    } finally {
-      await harness.unmount();
-    }
-  }, 5000);
-
-  test("refreshRuntimeCheck caches and supports force retries", async () => {
+  test("refreshChecks forces one new runtime check", async () => {
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
       makeRuntimeCheck(),
     );
@@ -374,19 +314,16 @@ describe("use-checks", () => {
       await harness.mount();
       runtimeCheck.mockClear();
       await harness.run(async (value) => {
-        await value.refreshRuntimeCheck();
-        await value.refreshRuntimeCheck();
-        await value.refreshRuntimeCheck(true);
+        await value.refreshChecks();
       });
 
       expect(runtimeCheck).toHaveBeenCalledTimes(1);
       expect(runtimeCheck.mock.calls[0]).toEqual([true]);
-      expect(harness.getLatest().hasRuntimeCheck()).toBe(true);
     } finally {
       await harness.unmount();
     }
   }, 5000);
-  test("tracks per-repo task-store cache when active repo changes", async () => {
+  test("keeps the task-store result of each repository across workspace switches", async () => {
     const taskStoreCheck = mock(async (repoPath: string): Promise<TaskStoreCheck> =>
       makeTaskStoreCheck({
         taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
@@ -411,12 +348,10 @@ describe("use-checks", () => {
       await harness.run(async (value) => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
       });
-      await harness.waitFor((value) => value.hasCachedTaskStoreCheck("/repo-b"));
 
       expect(harness.getLatest().taskStoreCheck.data?.taskStorePath).toBe(
         "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
       );
-      expect(harness.getLatest().hasCachedTaskStoreCheck("/repo-b")).toBe(true);
       expect(taskStoreCheck).toHaveBeenCalledTimes(1);
 
       await harness.updateArgs({
@@ -436,6 +371,13 @@ describe("use-checks", () => {
         await value.refreshTaskStoreCheckForRepo("/repo-b");
       });
 
+      expect(taskStoreCheck).not.toHaveBeenCalled();
+
+      // Back to the first workspace: its result shows at once, with no new check.
+      await harness.updateArgs({ activeRepo: "/repo-a" });
+      expect(harness.getLatest().taskStoreCheck.data?.taskStorePath).toBe(
+        "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
+      );
       expect(taskStoreCheck).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();

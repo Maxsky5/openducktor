@@ -12,7 +12,6 @@ import {
   ref,
   runtime,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
@@ -23,7 +22,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -65,7 +63,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -97,7 +94,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -139,7 +135,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -182,7 +177,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -217,7 +211,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -339,7 +332,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -473,7 +465,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -557,7 +548,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -641,7 +631,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -700,7 +689,6 @@ describe("OpenCode live session controls", () => {
         createOpenCodeLiveSessionAdapterPreparer({
           liveSessionLifecycle: createLifecycle(publishedChanges),
           prepareRuntime: harness.prepareRuntime,
-          probeMcpStatus: unexpectedMcpStatusProbe,
         })(runtime, ignoreObservationLoss),
       );
       await Effect.runPromise(prepared.startForwarding());
@@ -800,7 +788,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -870,7 +857,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -915,7 +901,6 @@ describe("OpenCode live session controls", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(prepared.startForwarding());

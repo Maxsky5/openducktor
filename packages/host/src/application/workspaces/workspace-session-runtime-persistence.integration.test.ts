@@ -11,7 +11,6 @@ import {
   acceptedMessageText,
   createRuntimeHarness,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createSqliteTaskStoreHarness,
@@ -116,7 +115,6 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: live,
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(
         {
           kind: "opencode",

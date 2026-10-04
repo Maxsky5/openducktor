@@ -5,48 +5,96 @@ import type {
   RuntimeKind,
   TaskStoreCheck,
   WorkspaceRecord,
-  WorkspaceRuntimeMcpCheck,
 } from "@openducktor/contracts";
 import type { CheckRead, ObservedCheck } from "@/types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
-import {
-  buildCliToolsSection,
-  buildMcpBridgeSection,
-  buildRuntimesModel,
-  collectHostState,
-} from "./diagnostics-host-model";
+import { buildHostModel, collectHostState } from "./diagnostics-host-model";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 import { collectWorkspaceState } from "./diagnostics-workspace-model";
 
 export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
-  const runtimes = buildRuntimesModel(input);
-  const host = collectHostState(input, runtimes);
+  const host = buildHostModel(input);
+  const hostState = collectHostState(input, host);
   const workspace = collectWorkspaceState(input);
-  const criticalReasons = [...host.reasons, ...workspace.reasons];
-  const isSummaryChecking = host.isLoading || workspace.isLoading;
+  const issues: DiagnosticsIssueModel[] = [
+    ...hostState.reasons.map((message) => ({ scope: "host" as const, message })),
+    ...workspace.reasons.map((message) => ({ scope: "workspace" as const, message })),
+  ];
+  const isChecking = hostState.isLoading || workspace.isLoading;
 
   return {
-    host: {
-      runtimes,
-      cliTools: buildCliToolsSection(input),
-      mcpBridge: buildMcpBridgeSection(input),
-    },
+    overview: buildOverview({ host, workspace, issues, isChecking }),
+    host,
     workspace: workspace.model,
-    isSummaryChecking,
+    isSummaryChecking: isChecking,
     summaryState: buildDiagnosticsSummary({
-      isChecking: isSummaryChecking,
-      hasCriticalIssues: criticalReasons.length > 0,
+      isChecking,
+      hasCriticalIssues: issues.length > 0,
       hasSetupIssues: workspace.hasWarning,
     }),
-    criticalReasons,
-    hasHostBlockingFailure: host.reasons.length > 0,
+    criticalReasons: issues.map((issue) => issue.message),
+    hasHostBlockingFailure: hostState.reasons.length > 0,
     hasWorkspaceBlockingFailure: workspace.reasons.length > 0,
   };
 };
 
-/** Health of one check, computed from check data. Rendering maps it to a badge. */
+const buildOverview = ({
+  host,
+  workspace,
+  issues,
+  isChecking,
+}: {
+  host: DiagnosticsHostModel;
+  workspace: { model: DiagnosticsWorkspaceModel; hasWarning: boolean };
+  issues: DiagnosticsIssueModel[];
+  isChecking: boolean;
+}): DiagnosticsOverviewModel => {
+  if (issues.length > 0) {
+    return {
+      tone: "critical",
+      title:
+        issues.length === 1 ? "1 issue needs attention" : `${issues.length} issues need attention`,
+      description: "Fix these issues so agent sessions can run.",
+      issues,
+    };
+  }
+  if (isChecking) {
+    return {
+      tone: "checking",
+      title: "Running checks",
+      description: "Each result shows when its check finishes.",
+      issues: [],
+    };
+  }
+  if (workspace.hasWarning) {
+    return {
+      tone: "warning",
+      title: "Workspace setup needed",
+      description: "Configure the worktree path in repository settings.",
+      issues: [],
+    };
+  }
+  const readyCount = host.runtimes.entries.filter((entry) => entry.status.health === "ok").length;
+  let runtimeSummary = "No runtime is enabled.";
+  if (readyCount === 1) {
+    runtimeSummary = "1 runtime is ready.";
+  } else if (readyCount > 1) {
+    runtimeSummary = `${readyCount} runtimes are ready.`;
+  }
+  return {
+    tone: "healthy",
+    title: "Everything is working",
+    description:
+      workspace.model.kind === "selected"
+        ? `${runtimeSummary} The workspace checks passed.`
+        : runtimeSummary,
+    issues: [],
+  };
+};
+
+/** Health of one check, computed from check data. Rendering maps it to an icon and a badge. */
 export type DiagnosticsHealth = "ok" | "loading" | "busy" | "warning" | "failed" | "neutral";
 
 export type DiagnosticsStatus = {
@@ -54,70 +102,68 @@ export type DiagnosticsStatus = {
   label: string;
 };
 
-export type DiagnosticKeyValueRowModel = {
+/** A secondary fact of a check, for example a path. */
+export type DiagnosticsDetailModel = {
   label: string;
   value: string;
-  mono?: boolean;
-  breakAll?: boolean;
-  valueClassName?: string;
+  /** Shows the value in a monospace font, truncated with its full text on hover. */
+  isPath: boolean;
 };
 
-export type DiagnosticsSectionModel = {
-  key: string;
+export type DiagnosticsCheckKey = "git" | "mcp-bridge" | "repository-setup" | "task-store";
+
+/** One check in a group list. */
+export type DiagnosticsCheckModel = {
+  key: DiagnosticsCheckKey;
   title: string;
   status: DiagnosticsStatus;
-  /** Marks the rows as an earlier result after a failed refresh. */
-  notice?: string;
-  rows: DiagnosticKeyValueRowModel[];
+  /** The main result, for example a version. Null when the status says enough. */
+  value: string | null;
+  details: DiagnosticsDetailModel[];
+  /** Marks the result as an earlier result after a failed refresh. */
+  notice: string | null;
   errors: string[];
-  emptyMessage?: string;
 };
+
+/** The facts of a check before its status is known. */
+export type DiagnosticsCheckBase = Omit<DiagnosticsCheckModel, "status" | "notice" | "errors">;
 
 export type DiagnosticsRuntimeAction =
   | { type: "restart"; label: "Restart" | "Retry apply" }
   | { type: "open_settings" };
 
+export type DiagnosticsRuntimeFailureModel = {
+  message: string;
+  nextAction: string;
+};
+
 export type DiagnosticsRuntimeEntryModel = {
   kind: RuntimeKind;
   label: string;
   status: DiagnosticsStatus;
-  rows: DiagnosticKeyValueRowModel[];
+  version: string | null;
+  /** The configured executable. Null when the runtime uses the default executable. */
+  executablePath: string | null;
+  /** The executable in use, when it differs from the configured one. */
+  effectiveExecutablePath: string | null;
+  /** The executable check could not find the executable of an enabled runtime. */
+  executableWarning: string | null;
   progress: string | null;
-  failure: { stage: string; message: string; nextAction: string } | null;
+  failure: DiagnosticsRuntimeFailureModel | null;
   action: DiagnosticsRuntimeAction | null;
   isLifecycleBusy: boolean;
 };
 
 export type DiagnosticsRuntimesModel = {
-  status: DiagnosticsStatus;
-  /** Explains why the shown state is loading, earlier, or unavailable. */
+  /** Explains why the shown states are loading, earlier, or unavailable. */
   notice: string | null;
   entries: DiagnosticsRuntimeEntryModel[];
 };
 
-export type DiagnosticsMcpObservationModel = {
-  key: string;
-  workingDirectory: string;
-  status: DiagnosticsStatus;
-  rows: DiagnosticKeyValueRowModel[];
-  error: string | null;
-};
-
-export type DiagnosticsRuntimeMcpEntryModel = {
-  kind: RuntimeKind;
-  label: string;
-  status: DiagnosticsStatus;
-  detail: string | null;
-  observations: DiagnosticsMcpObservationModel[];
-};
-
-export type DiagnosticsRuntimeMcpModel = {
-  status: DiagnosticsStatus;
-  /** Marks the entries as an earlier result after a failed refresh. */
-  notice?: string;
-  errors: string[];
-  emptyMessage?: string;
-  entries: DiagnosticsRuntimeMcpEntryModel[];
+export type DiagnosticsHostModel = {
+  runtimes: DiagnosticsRuntimesModel;
+  /** Git and the OpenDucktor MCP bridge. */
+  tools: DiagnosticsCheckModel[];
 };
 
 export type DiagnosticsWorkspaceModel =
@@ -126,17 +172,25 @@ export type DiagnosticsWorkspaceModel =
       kind: "selected";
       name: string;
       path: string;
-      repositorySetup: DiagnosticsSectionModel;
-      taskStore: DiagnosticsSectionModel;
-      runtimeMcp: DiagnosticsRuntimeMcpModel;
+      /** Repository setup and task store. */
+      checks: DiagnosticsCheckModel[];
     };
 
+export type DiagnosticsIssueModel = {
+  scope: "host" | "workspace";
+  message: string;
+};
+
+export type DiagnosticsOverviewModel = {
+  tone: "healthy" | "checking" | "warning" | "critical";
+  title: string;
+  description: string;
+  issues: DiagnosticsIssueModel[];
+};
+
 export type DiagnosticsPanelModel = {
-  host: {
-    runtimes: DiagnosticsRuntimesModel;
-    cliTools: DiagnosticsSectionModel;
-    mcpBridge: DiagnosticsSectionModel;
-  };
+  overview: DiagnosticsOverviewModel;
+  host: DiagnosticsHostModel;
   workspace: DiagnosticsWorkspaceModel;
   isSummaryChecking: boolean;
   summaryState: DiagnosticsSummary;
@@ -156,8 +210,7 @@ export type BuildDiagnosticsPanelModelInput = {
   runtimeCheck: ObservedCheck<RuntimeCheck>;
   hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
   workspace: WorkspaceRecord | null;
-  /** The repository that the workspace checks below describe. */
+  /** The repository that the task store check below describes. */
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
-  workspaceRuntimeMcpCheck: CheckRead<WorkspaceRuntimeMcpCheck>;
 };

@@ -16,7 +16,6 @@ import {
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
-import { createRuntimeMcpDiagnosticsService } from "../../application/diagnostics/runtime-mcp-diagnostics-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
@@ -26,7 +25,6 @@ import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
-import { resolveRepoPath } from "../../application/runtimes/runtime-orchestrator-model";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
@@ -159,11 +157,7 @@ export const assembleNodeEffectHostCommandRouter = (
   // services that this function creates after the runtimes, so it gets its value further down.
   let resolvedMcpHostBridge = mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
-  const {
-    descriptorFor,
-    hostRuntimeService,
-    registry: runtimeRegistry,
-  } = createNodeHostRuntimeComposition({
+  const { hostRuntimeService, registry: runtimeRegistry } = createNodeHostRuntimeComposition({
     clientVersion,
     configuredRuntimeStarter,
     defaultPorts,
@@ -314,13 +308,6 @@ export const assembleNodeEffectHostCommandRouter = (
     taskReader: taskStore,
   });
   const mcpBridge = resolvedMcpHostBridge;
-  const runtimeMcpDiagnosticsService = createRuntimeMcpDiagnosticsService({
-    checkBridge: () => mcpBridge.checkReady(),
-    registry: runtimeRegistry,
-    adapterRegistry: liveSessionAdapterRegistry,
-    descriptorFor,
-    resolveRepoPath: (repoPath) => resolveRepoPath(git, repoPath),
-  });
   const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
     createNodeWorkspaceSessionServices({
       devServerService,
@@ -406,9 +393,8 @@ export const assembleNodeEffectHostCommandRouter = (
       toolDiscovery,
     }),
     ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorService, hostRuntimeService),
-    ...createSystemDiagnosticsCommandHandlers(
-      systemDiagnosticsService,
-      runtimeMcpDiagnosticsService,
+    ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService, () =>
+      mcpBridge.checkReady(),
     ),
     ...createSystemPlatformCommandHandlers(),
     ...createTaskAssetCommandHandlers(taskAssetStagingService),

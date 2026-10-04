@@ -65,7 +65,6 @@ The `openducktor://runtime-changed` event stream owns host runtime status after 
 | Runtime check | 5 min |
 | Task store check | 60 sec |
 | OpenDucktor MCP bridge check | 5 min |
-| Workspace runtime MCP connections | 60 sec |
 | Directory listing | 1 sec |
 | Branches | 60 sec |
 | Current branch | 60 sec |

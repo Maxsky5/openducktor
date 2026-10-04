@@ -8,7 +8,6 @@ import {
   runtime,
   ref,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
@@ -57,7 +56,6 @@ describe("live runtime registration lifecycle", () => {
               },
             };
           },
-          probeMcpStatus: unexpectedMcpStatusProbe,
         })(runtime, ignoreObservationLoss),
       );
       await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));

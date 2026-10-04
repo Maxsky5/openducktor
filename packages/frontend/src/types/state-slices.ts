@@ -31,7 +31,6 @@ import type {
   WorkspaceRemovalInput,
   WorkspaceProviderSetupCommit,
   WorkspaceProviderSetupProgress,
-  WorkspaceRuntimeMcpCheck,
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -162,10 +161,9 @@ export type WorkspacePresenceContextValue = {
 export type ChecksStateContextValue = {
   runtimeCheck: ObservedCheck<RuntimeCheck>;
   hostMcpBridgeCheck: CheckRead<HostMcpBridgeCheck>;
-  /** The selected workspace repository that the workspace checks below describe. */
+  /** The selected workspace repository that the task store check below describes. */
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
-  workspaceRuntimeMcpCheck: CheckRead<WorkspaceRuntimeMcpCheck>;
   isRefreshingChecks: boolean;
   /** Reruns host checks and, when a workspace is selected, workspace checks. Never starts a runtime. */
   refreshChecks: () => Promise<void>;

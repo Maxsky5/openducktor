@@ -1,15 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { OpencodeRuntimeSnapshotSource } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
-import type { OpenCodeMcpStatusProbe } from "./opencode-live-session-mcp";
 import {
   createLifecycle,
   createRuntimeHarness,
   runtime,
-  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 const repoA = "/repo-a";
@@ -39,7 +36,6 @@ const prepareAdapter = (
   harness: ReturnType<typeof createRuntimeHarness>,
   options: {
     changes?: AgentSessionLiveAdapterChange[];
-    probeMcpStatus?: OpenCodeMcpStatusProbe;
     lostObservations?: string[];
   } = {},
 ) =>
@@ -47,7 +43,6 @@ const prepareAdapter = (
     createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle: createLifecycle(options.changes ?? []),
       prepareRuntime: harness.prepareRuntime,
-      probeMcpStatus: options.probeMcpStatus ?? unexpectedMcpStatusProbe,
     })(runtime, {
       onObservationLost: (message) => options.lostObservations?.push(message),
       onCleanupFailed: () => undefined,
@@ -160,85 +155,5 @@ describe("OpenCode live sessions on one shared runtime", () => {
 
     expect(changes).toEqual([]);
     expect(lostObservations).toEqual(["connection lost"]);
-  });
-});
-
-describe("OpenCode MCP connection observation", () => {
-  test("reads only the bound directories of the requested workspace", async () => {
-    const probed: string[] = [];
-    const harness = createRuntimeHarness({
-      mcpBindings: [
-        { workingDirectory: "/repo-a", repoPath: repoA },
-        { workingDirectory: "/repo-a/worktree", repoPath: repoA },
-        { workingDirectory: "/repo-b/stale", repoPath: repoA },
-        { workingDirectory: "/repo-b", repoPath: repoB },
-      ],
-    });
-    const prepared = await prepareAdapter(harness, {
-      probeMcpStatus: ({ runtimeRoute, workingDirectory, serverName }) => {
-        probed.push(workingDirectory);
-        expect(runtimeRoute).toEqual(runtime.runtimeRoute);
-        expect(serverName).toBe("openducktor");
-        if (workingDirectory === "/repo-a") {
-          return Effect.succeed({
-            connected: true,
-            serverStatus: "connected",
-            toolIds: ["odt_read_task"],
-            detail: null,
-          });
-        }
-        if (workingDirectory === "/repo-a/worktree") {
-          return Effect.succeed({
-            connected: false,
-            serverStatus: "failed",
-            toolIds: [],
-            detail: "Connection closed",
-          });
-        }
-        return Effect.fail(
-          new HostOperationError({ operation: "probe", message: "OpenCode did not answer." }),
-        );
-      },
-    });
-    const readMcpConnections = prepared.adapter.readMcpConnections;
-    if (!readMcpConnections) throw new Error("Expected OpenCode to observe MCP connections.");
-
-    const observations = await Effect.runPromise(readMcpConnections(repoA));
-
-    expect(probed.toSorted()).toEqual(["/repo-a", "/repo-a/worktree", "/repo-b/stale"]);
-    expect(observations).toEqual([
-      {
-        workingDirectory: "/repo-a",
-        state: "connected",
-        serverStatus: "connected",
-        toolIds: ["odt_read_task"],
-        detail: null,
-      },
-      {
-        workingDirectory: "/repo-a/worktree",
-        state: "failed",
-        serverStatus: "failed",
-        toolIds: [],
-        detail: "Connection closed",
-      },
-      {
-        workingDirectory: "/repo-b/stale",
-        state: "failed",
-        serverStatus: null,
-        toolIds: [],
-        detail: "OpenCode did not answer.",
-      },
-    ]);
-  });
-
-  test("returns no observation and calls no runtime for a workspace without a binding", async () => {
-    const harness = createRuntimeHarness({
-      mcpBindings: [{ workingDirectory: "/repo-b", repoPath: repoB }],
-    });
-    const prepared = await prepareAdapter(harness);
-    const readMcpConnections = prepared.adapter.readMcpConnections;
-    if (!readMcpConnections) throw new Error("Expected OpenCode to observe MCP connections.");
-
-    await expect(Effect.runPromise(readMcpConnections(repoA))).resolves.toEqual([]);
   });
 });

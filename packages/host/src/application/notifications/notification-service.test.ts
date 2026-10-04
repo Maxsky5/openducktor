@@ -21,7 +21,6 @@ import {
   createRuntimeHarness,
   runtime,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createAgentSessionLiveStateService,
@@ -262,7 +261,6 @@ test.each(["before", "after"])(
             },
           };
         },
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     try {

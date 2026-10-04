@@ -67,6 +67,8 @@ A shared process must not give every workspace the same workspace ID. The host b
 
 Every binding keeps `ODT_FORBID_WORKSPACE_ID_INPUT=true`.
 
+A failed binding fails the operation that needs it, and the error gives the cause. Diagnostics do not list runtime MCP bindings.
+
 ## Ownership
 
 | Owner | Owns | Does not own |

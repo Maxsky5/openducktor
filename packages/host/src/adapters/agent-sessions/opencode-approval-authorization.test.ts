@@ -8,7 +8,6 @@ import {
   ref,
   runtime,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 const roles: AgentRole[] = ["spec", "planner", "build", "qa"];
@@ -28,7 +27,6 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
         createOpenCodeLiveSessionAdapterPreparer({
           liveSessionLifecycle: createLifecycle([]),
           prepareRuntime: harness.prepareRuntime,
-          probeMcpStatus: unexpectedMcpStatusProbe,
         })(runtime, ignoreObservationLoss),
       );
       const adapter = prepared.adapter;
@@ -116,7 +114,6 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(

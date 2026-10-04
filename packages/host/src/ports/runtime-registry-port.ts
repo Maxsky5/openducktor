@@ -1,5 +1,4 @@
 import type {
-  FailureKind,
   HostRuntimeLifecycleTrigger,
   HostRuntimeStatus,
   RuntimeDescriptor,
@@ -56,15 +55,6 @@ export type RuntimeSessionTarget = {
   runtimeKind: RuntimeKind;
   externalSessionId: string;
   workingDirectory: string;
-};
-
-export type RuntimeMcpStatusProbeResult = {
-  supported: boolean;
-  connected: boolean;
-  serverStatus: string | null;
-  toolIds: string[];
-  detail: string | null;
-  failureKind: FailureKind | null;
 };
 
 /** Starts or restarts an enabled kind with the path. Stops a disabled kind. */

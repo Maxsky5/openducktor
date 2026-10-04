@@ -4,7 +4,13 @@ import type {
   RuntimeLifecycleImpact,
   RuntimeLifecycleSessionImpact,
 } from "@openducktor/contracts";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CircleCheck,
+  CornerDownRight,
+  LoaderCircle,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +40,7 @@ type RuntimeImpactDialogProps = {
   description?: string;
   /** For example `Restart` or `Save and apply`. */
   confirmLabel: string;
+  confirmIcon?: LucideIcon;
   /** The reviewed impact. Null while the first read is in progress or after it failed. */
   impact: RuntimeLifecycleImpact | null;
   isLoadingImpact: boolean;
@@ -62,6 +69,7 @@ export function RuntimeImpactDialog({
   title,
   description,
   confirmLabel,
+  confirmIcon,
   impact,
   isLoadingImpact,
   impactError,
@@ -80,15 +88,15 @@ export function RuntimeImpactDialog({
         if (!nextOpen && !isPending) onCancel();
       }}
     >
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent className="max-w-xl overflow-hidden p-0">
+        <DialogHeader className="border-b border-border px-6 py-5 pr-14">
+          <DialogTitle className="text-lg">{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <DialogBody className="mt-4 min-h-0 space-y-4 overflow-y-auto">
+        <DialogBody className="min-h-0 space-y-4 overflow-y-auto px-6 py-5">
           {pathChanges.length > 0 ? <PathChanges pathChanges={pathChanges} /> : null}
           {notice ? (
-            <p className="rounded-md border border-warning-border bg-warning-surface p-2 text-sm text-warning-muted">
+            <p className="rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground">
               {notice}
             </p>
           ) : null}
@@ -104,12 +112,24 @@ export function RuntimeImpactDialog({
           {impactError === null && impact !== null ? <ImpactSessions impact={impact} /> : null}
           {error !== null ? <ErrorText message={error} /> : null}
         </DialogBody>
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={isPending} onClick={onCancel}>
+        <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+            onClick={onCancel}
+          >
             Cancel
           </Button>
-          <Button type="button" variant="destructive" disabled={!canConfirm} onClick={onConfirm}>
-            {isPending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-full sm:w-auto"
+            disabled={!canConfirm}
+            onClick={onConfirm}
+          >
+            <ConfirmButtonIcon isPending={isPending} icon={confirmIcon} />
             {confirmLabel}
           </Button>
         </DialogFooter>
@@ -128,51 +148,86 @@ const ACTIVITY_BADGES = {
   idle: { label: "Idle", variant: "secondary" },
 } satisfies Record<AgentSessionActivity, ActivityBadge>;
 
+function ConfirmButtonIcon({
+  isPending,
+  icon: Icon,
+}: {
+  isPending: boolean;
+  icon: LucideIcon | undefined;
+}): ReactElement | null {
+  if (isPending) return <LoaderCircle className="size-4 animate-spin" />;
+  return Icon ? <Icon className="size-4" /> : null;
+}
+
 function SessionRow({ session }: { session: RuntimeLifecycleSessionImpact }): ReactElement {
   const activity = ACTIVITY_BADGES[session.activity];
   const isChild = session.parentExternalSessionId !== undefined;
   return (
     <li
-      className={cn("space-y-1 rounded-md border border-border bg-card p-2", isChild && "ml-4")}
+      className={cn("flex items-start gap-3 px-3 py-2.5", isChild && "pl-8")}
       data-testid="runtime-impact-session"
     >
-      <div className="flex items-start justify-between gap-2">
+      {isChild ? (
+        <CornerDownRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      ) : null}
+      <div className="min-w-0 flex-1 space-y-0.5">
         <p className="min-w-0 break-words text-sm font-medium text-foreground">
-          {isChild ? <span className="text-muted-foreground">Child session: </span> : null}
+          {isChild ? <span className="sr-only">Child session: </span> : null}
           {session.title}
         </p>
-        <Badge variant={activity.variant}>{activity.label}</Badge>
-      </div>
-      <p className="break-all font-mono text-[11px] text-muted-foreground">
-        {session.ref.workingDirectory}
-      </p>
-      {session.pendingInputCount > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Pending input requests: {session.pendingInputCount}
+        <p
+          className="truncate font-mono text-[11px] text-muted-foreground"
+          title={session.ref.workingDirectory}
+        >
+          {session.ref.workingDirectory}
         </p>
-      ) : null}
+        {session.pendingInputCount > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Pending input requests: {session.pendingInputCount}
+          </p>
+        ) : null}
+      </div>
+      <Badge variant={activity.variant} className="shrink-0">
+        {activity.label}
+      </Badge>
     </li>
   );
 }
 
 function ImpactSessions({ impact }: { impact: RuntimeLifecycleImpact }): ReactElement {
   if (!hasLiveSessions(impact)) {
-    return <p className="text-sm text-muted-foreground">{NO_IMPACT_MESSAGE}</p>;
+    return (
+      <p className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+        <CircleCheck className="size-4 shrink-0 text-success-accent" aria-hidden />
+        {NO_IMPACT_MESSAGE}
+      </p>
+    );
   }
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-foreground">{IMPACT_EXPLANATION}</p>
+    <div className="space-y-4">
+      <p className="flex gap-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span>{IMPACT_EXPLANATION}</span>
+      </p>
       {impact.workspaces
         .filter((workspace) => workspace.sessions.length > 0)
         .map((workspace) => (
-          <section key={workspace.repoPath} className="space-y-2">
-            <div>
-              <p className="text-sm font-semibold text-foreground">
+          <section
+            key={workspace.repoPath}
+            className="overflow-hidden rounded-lg border border-border bg-card"
+          >
+            <div className="border-b border-border bg-muted/40 px-3 py-2">
+              <p className="text-sm font-medium text-foreground">
                 {workspace.workspaceName ?? workspace.repoPath}
               </p>
-              <p className="break-all text-xs text-muted-foreground">{workspace.repoPath}</p>
+              <p
+                className="truncate font-mono text-[11px] text-muted-foreground"
+                title={workspace.repoPath}
+              >
+                {workspace.repoPath}
+              </p>
             </div>
-            <ul className="space-y-1.5">
+            <ul className="divide-y divide-border">
               {workspace.sessions.map((session) => (
                 <SessionRow
                   key={`${session.ref.runtimeKind}:${session.ref.externalSessionId}`}
@@ -188,17 +243,24 @@ function ImpactSessions({ impact }: { impact: RuntimeLifecycleImpact }): ReactEl
 
 function PathChanges({ pathChanges }: { pathChanges: RuntimeImpactPathChange[] }): ReactElement {
   return (
-    <ul className="space-y-1.5">
+    <ul className="space-y-2">
       {pathChanges.map((change) => (
-        <li key={change.kind} className="rounded-md border border-border bg-muted p-2 text-xs">
-          <p className="font-medium text-foreground">{change.label}</p>
-          <p className="break-all text-muted-foreground">
-            Old executable:{" "}
-            <span className="font-mono">{change.oldExecutablePath || "Default"}</span>
+        <li
+          key={change.kind}
+          className="space-y-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs"
+        >
+          <p className="text-sm font-medium text-foreground">{change.label}</p>
+          <p className="flex min-w-0 items-baseline gap-2 text-muted-foreground">
+            <span className="w-8 shrink-0">From</span>
+            <span className="min-w-0 break-all font-mono">
+              {change.oldExecutablePath || "Default"}
+            </span>
           </p>
-          <p className="break-all text-muted-foreground">
-            New executable:{" "}
-            <span className="font-mono">{change.newExecutablePath || "Default"}</span>
+          <p className="flex min-w-0 items-baseline gap-2 text-foreground">
+            <span className="w-8 shrink-0 text-muted-foreground">To</span>
+            <span className="min-w-0 break-all font-mono">
+              {change.newExecutablePath || "Default"}
+            </span>
           </p>
         </li>
       ))}
@@ -208,9 +270,12 @@ function PathChanges({ pathChanges }: { pathChanges: RuntimeImpactPathChange[] }
 
 function ErrorText({ message }: { message: string }): ReactElement {
   return (
-    <p role="alert" className="flex items-start gap-1.5 text-sm text-destructive-muted">
+    <p
+      role="alert"
+      className="flex items-start gap-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2.5 text-sm text-destructive-surface-foreground"
+    >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-      <span>{message}</span>
+      <span className="min-w-0 break-words">{message}</span>
     </p>
   );
 }

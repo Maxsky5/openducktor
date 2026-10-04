@@ -34,6 +34,14 @@ describe("getOpenState", () => {
     });
   });
 
+  test("opens the tab of the requested runtime", () => {
+    expect(getOpenState({ kind: "runtime", runtimeKind: "claude" }, INITIAL_NAVIGATION)).toEqual({
+      workspaceSelectionPolicy: undefined,
+      navigation: { ...INITIAL_NAVIGATION, section: "runtimes" },
+      focusRequest: { kind: "runtime-executable", runtimeKind: "claude" },
+    });
+  });
+
   test("opens at the initial section", () => {
     expect(getOpenState(undefined, INITIAL_NAVIGATION)).toEqual({
       navigation: INITIAL_NAVIGATION,

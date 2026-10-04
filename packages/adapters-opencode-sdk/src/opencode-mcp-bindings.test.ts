@@ -104,7 +104,6 @@ describe("OpenCode MCP directory bindings", () => {
       },
     ]);
     expect(fake.statusCalls).toEqual(["/repo-a/"]);
-    expect(bindings.list()).toEqual([{ workingDirectory: "/repo-a", repoPath: "/repo-a" }]);
   });
 
   test("shares concurrent setup of one directory", async () => {
@@ -121,7 +120,6 @@ describe("OpenCode MCP directory bindings", () => {
       workingDirectory: "/wt",
       repoPath: "/a",
     });
-    expect(bindings.list()).toEqual([]);
     release();
     await Promise.all([first, second]);
 
@@ -140,7 +138,6 @@ describe("OpenCode MCP directory bindings", () => {
       'Cannot use OpenCode directory "/shared" for repository "/b": its OpenDucktor MCP server is bound to repository "/a".',
     );
     expect(fake.addCalls).toHaveLength(1);
-    expect(bindings.list()).toEqual([{ workingDirectory: "/shared", repoPath: "/a" }]);
   });
 
   test("binds each directory to its own workspace", async () => {
@@ -173,10 +170,12 @@ describe("OpenCode MCP directory bindings", () => {
     ).rejects.toThrow(
       'ODT workflow tools unavailable for "/a": OpenCode did not connect MCP server "openducktor" for repository "/a". Status is "failed" (spawn ENOENT).',
     );
-    expect(bindings.list()).toEqual([]);
 
     await bindings.ensure({ client: fake.client, workingDirectory: "/a", repoPath: "/b" });
-    expect(bindings.list()).toEqual([{ workingDirectory: "/a", repoPath: "/b" }]);
+    expect(fake.addCalls.map((call) => call.config)).toEqual([
+      expect.objectContaining({ environment: configFor("/a").environment }),
+      expect.objectContaining({ environment: configFor("/b").environment }),
+    ]);
   });
 
   test("adds the server again after the directory instance is disposed", async () => {
@@ -185,7 +184,6 @@ describe("OpenCode MCP directory bindings", () => {
     await bindings.ensure({ client: fake.client, workingDirectory: "/a", repoPath: "/a" });
 
     bindings.forget("/a/");
-    expect(bindings.list()).toEqual([]);
     await bindings.ensure({ client: fake.client, workingDirectory: "/a", repoPath: "/a" });
 
     expect(fake.addCalls).toHaveLength(2);
@@ -232,7 +230,9 @@ describe("OpenCode MCP directory bindings", () => {
     ).rejects.toThrow(
       'Status is "failed" (still closed). Status before reconnect was "missing". Check the OpenDucktor MCP bridge in Diagnostics and retry.',
     );
-    expect(bindings.list()).toEqual([{ workingDirectory: "/a", repoPath: "/a" }]);
+    await expect(
+      bindings.ensure({ client: fake.client, workingDirectory: "/a", repoPath: "/b" }),
+    ).rejects.toThrow('its OpenDucktor MCP server is bound to repository "/a"');
   });
 
   test("clear forgets every binding", async () => {
@@ -242,8 +242,10 @@ describe("OpenCode MCP directory bindings", () => {
     await bindings.ensure({ client: fake.client, workingDirectory: "/b", repoPath: "/b" });
 
     bindings.clear();
+    await bindings.ensure({ client: fake.client, workingDirectory: "/a", repoPath: "/b" });
 
-    expect(bindings.list()).toEqual([]);
+    expect(fake.addCalls.map((call) => call.directory)).toEqual(["/a", "/b", "/a"]);
+    expect(fake.statusCalls).toEqual([]);
   });
   test("a status read that outlives its binding never authorizes the operation", async () => {
     let releaseStatus = (): void => {};
@@ -281,7 +283,9 @@ describe("OpenCode MCP directory bindings", () => {
     releaseStatus();
 
     await expect(staleRead).rejects.toThrow('bound to repository "/repo-b"');
-    expect(bindings.list()).toEqual([{ workingDirectory: "/shared", repoPath: "/repo-b" }]);
+    await expect(
+      bindings.ensure({ client: fake.client, workingDirectory: "/shared", repoPath: "/repo-a" }),
+    ).rejects.toThrow('bound to repository "/repo-b"');
   });
 
   test("a setup released by disposal fails, and a later binding is added after it", async () => {
@@ -315,6 +319,8 @@ describe("OpenCode MCP directory bindings", () => {
       expect.objectContaining({ environment: { ODT_WORKSPACE_ID: "workspace:/repo-a" } }),
       expect.objectContaining({ environment: { ODT_WORKSPACE_ID: "workspace:/repo-b" } }),
     ]);
-    expect(bindings.list()).toEqual([{ workingDirectory: "/shared", repoPath: "/repo-b" }]);
+    await expect(
+      bindings.ensure({ client: fake.client, workingDirectory: "/shared", repoPath: "/repo-a" }),
+    ).rejects.toThrow('bound to repository "/repo-b"');
   });
 });

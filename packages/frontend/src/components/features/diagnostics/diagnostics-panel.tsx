@@ -1,13 +1,7 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
 import {
@@ -50,7 +44,6 @@ export function DiagnosticsPanel({
         workspace: activeWorkspace,
         checksRepoPath: checks.checksRepoPath,
         taskStoreCheck: checks.taskStoreCheck,
-        workspaceRuntimeMcpCheck: checks.workspaceRuntimeMcpCheck,
       }),
     [
       activeWorkspace,
@@ -133,16 +126,13 @@ export function DiagnosticsPanel({
     <>
       {trigger}
       <Sheet open={isOpen} onOpenChange={setOpen}>
-        <SheetContent side="right" className="overflow-y-auto">
-          <SheetHeader className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1">
-                <SheetTitle className="flex items-center gap-2">
-                  <ShieldCheck className="size-4 text-selected-accent" />
-                  Diagnostics
-                </SheetTitle>
-                <SheetDescription>Host and workspace checks.</SheetDescription>
-              </div>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-xl" aria-describedby={undefined}>
+          <SheetHeader className="border-b border-border px-6 pb-4 pt-5">
+            <div className="flex items-center justify-between gap-3 pr-8">
+              <SheetTitle className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-selected-accent" />
+                Diagnostics
+              </SheetTitle>
               <Button
                 type="button"
                 size="sm"
@@ -151,14 +141,15 @@ export function DiagnosticsPanel({
                 onClick={() => void checks.refreshChecks()}
               >
                 <RefreshCcw
-                  className={cn("size-3.5", checks.isRefreshingChecks ? "animate-spin" : "")}
+                  className={cn("size-3.5", checks.isRefreshingChecks && "animate-spin")}
                 />
-                Refresh Checks
+                {checks.isRefreshingChecks ? "Refreshing" : "Refresh"}
               </Button>
             </div>
           </SheetHeader>
-
-          <DiagnosticsPanelSections model={model} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <DiagnosticsPanelSections model={model} />
+          </div>
         </SheetContent>
       </Sheet>
     </>

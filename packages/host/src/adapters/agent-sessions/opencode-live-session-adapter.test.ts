@@ -22,7 +22,6 @@ import {
   ref,
   runtime,
   ignoreObservationLoss,
-  unexpectedMcpStatusProbe,
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
@@ -52,7 +51,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
 
@@ -79,7 +77,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(
@@ -104,7 +101,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -268,7 +264,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -386,7 +381,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(
@@ -443,7 +437,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -464,7 +457,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
 
@@ -504,7 +496,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
@@ -575,7 +566,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         input.runtimeId === runtime.runtimeId
           ? firstHarness.prepareRuntime(input)
           : secondHarness.prepareRuntime(input),
-      probeMcpStatus: unexpectedMcpStatusProbe,
     });
 
     const first = await Effect.runPromise(prepareAdapter(runtime, ignoreObservationLoss));
@@ -670,7 +660,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: service,
         prepareRuntime: harness.prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
@@ -808,7 +797,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           },
         },
         prepareRuntime,
-        probeMcpStatus: unexpectedMcpStatusProbe,
       })(runtime, ignoreObservationLoss),
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
