@@ -54,6 +54,8 @@ function fixture(
     readStatus?: () => Promise<WorkspaceProviderSetupStatus>;
     progress?: () => Promise<void>;
     areas?: string[];
+    selection?: () => Promise<void>;
+    pat?: () => Promise<void>;
   } = {},
 ) {
   const ref = { setupId: crypto.randomUUID(), revision: 0, repoPath: "/repo" };
@@ -66,6 +68,10 @@ function fixture(
   const discard = mock(async () => {
     await options.discard?.();
     if (failCleanup) throw new Error("Cleanup unavailable");
+  });
+  const pat = mock(async () => {
+    await options.pat?.();
+    return { status: "connected", account: "user" };
   });
   const code = {
     attemptId: crypto.randomUUID(),
@@ -85,6 +91,7 @@ function fixture(
       case "workspace_provider_setup_set": {
         const value = workspaceProviderSetupSetSchema.parse(args);
         if (value.revision !== ref.revision) throw new Error("Workspace setup changed");
+        await options.selection?.();
         selections.push(value.selection);
         selection = value.selection;
         ref.revision += 1;
@@ -140,6 +147,8 @@ function fixture(
         return schema.parse(options.areas ?? []);
       case "workspace_provider_setup_cancel_sign_in":
         return schema.parse(undefined);
+      case "workspace_provider_setup_pat":
+        return schema.parse(await pat());
       default:
         throw new Error(`Unexpected setup command ${command}`);
     }
@@ -167,6 +176,7 @@ function fixture(
     listeners,
     unsubscribe,
     discard,
+    pat,
     loseNextReply: () => {
       loseReply = true;
     },
@@ -189,6 +199,66 @@ async function chooseAzure(f: ReturnType<typeof fixture>) {
   await f.h.waitFor((state) => state.pending === null);
 }
 describe("workspace provider draft ownership", () => {
+  test.each([
+    ["selection", "resolve"],
+    ["selection", "reject"],
+    ["PAT", "resolve"],
+    ["PAT", "reject"],
+    ["selection before PAT", "resolve"],
+  ] as const)(
+    "waits for the active %s write to %s before discarding an unmounted setup",
+    async (write, outcome) => {
+      const pending = Promise.withResolvers<void>();
+      let started = false;
+      const hold = () => {
+        started = true;
+        return pending.promise;
+      };
+      const f = fixture(undefined, write === "PAT" ? { pat: hold } : { selection: hold });
+      let action: Promise<unknown> | undefined;
+      await f.h.mount();
+      try {
+        await chooseAzure(f);
+        await f.h.run((state) => {
+          action = write === "selection" ? state.ensureSelection() : state.savePat();
+        });
+        await f.h.waitFor(() => started);
+        await f.h.unmount();
+        expect(f.discard).not.toHaveBeenCalled();
+        await act(async () => {
+          if (outcome === "resolve") pending.resolve();
+          else pending.reject(new Error("Setup write failed"));
+          await action?.catch(() => undefined);
+        });
+        await waitFor(() => expect(f.discard).toHaveBeenCalledTimes(1), { timeout: 200 });
+        if (write === "selection before PAT") expect(f.pat).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve();
+        await action?.catch(() => undefined);
+        await f.h.unmount();
+      }
+    },
+  );
+  test("discards immediately when unmounted during sign-in startup", async () => {
+    const startup = Promise.withResolvers<void>();
+    const f = fixture(undefined, { signInStartup: startup.promise });
+    let signIn: Promise<unknown> | undefined;
+    await f.h.mount();
+    try {
+      await chooseAzure(f);
+      await f.h.run((state) => {
+        signIn = state.startSignIn();
+      });
+      await f.h.waitFor((state) => state.isStartingSignIn);
+      await f.h.unmount();
+      expect(f.discard).toHaveBeenCalledTimes(1);
+      expect(f.unsubscribe).toHaveBeenCalledTimes(1);
+    } finally {
+      startup.resolve();
+      await signIn;
+      await f.h.unmount();
+    }
+  });
   test("keeps provider fields editable until an action sends the latest draft", async () => {
     const f = fixture(undefined, { readStatus: async () => ready });
     const view = render(

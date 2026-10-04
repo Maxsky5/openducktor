@@ -2,6 +2,8 @@ import type {
   AzureDevOpsConnectionState,
   WorkspaceProviderSetupSession,
   WorkspaceProviderSetupDetection,
+  WorkspaceProviderSetupCommit,
+  WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import { azureDevOpsConnectionConfigurationFingerprint } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +60,19 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
   } | null>(null);
   const accepted = useRef<string | null>(null);
   const mounted = useRef(true);
+  const activeWrite = useRef<Promise<unknown> | null>(null);
+  const write = async <T>(request: () => Promise<T>): Promise<T> => {
+    if (!mounted.current) throw new Error("Workspace setup was cancelled.");
+    const pending = request();
+    activeWrite.current = pending;
+    try {
+      const result = await pending;
+      if (!mounted.current) throw new Error("Workspace setup was cancelled.");
+      return result;
+    } finally {
+      if (activeWrite.current === pending) activeWrite.current = null;
+    }
+  };
   const clearStatus = () => {
     const current = sessionRef.current;
     if (current)
@@ -120,11 +135,13 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     const key = JSON.stringify(selection);
     if (accepted.current === key) return current;
     try {
-      const next = await client.workspaceProviderSetupSet({
-        setupId: current.setupId,
-        revision: current.revision,
-        selection,
-      });
+      const next = await write(() =>
+        client.workspaceProviderSetupSet({
+          setupId: current.setupId,
+          revision: current.revision,
+          selection,
+        }),
+      );
       applySession(next);
       accepted.current = key;
       return next;
@@ -239,7 +256,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       version.current += 1;
       const current = sessionRef.current;
       if (current) {
-        await client.workspaceProviderSetupDiscard({ setupId: current.setupId });
+        await write(() => client.workspaceProviderSetupDiscard({ setupId: current.setupId }));
         queryClient.removeQueries({
           queryKey: workspaceProviderSetupKeys.session(current.setupId),
         });
@@ -304,6 +321,13 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
         throw new Error(result.health?.reason ?? "The provider is not ready.");
       return true;
     });
+  const commit = async (
+    details: Omit<WorkspaceProviderSetupCommit, "setupId" | "revision">,
+    save: (input: WorkspaceProviderSetupCommit) => Promise<WorkspaceProviderSetupProgress>,
+  ) => {
+    const current = await ensureSelection();
+    return write(() => save({ ...details, setupId: current.setupId, revision: current.revision }));
+  };
   const skip = () =>
     run("Skip Git provider setup", async () => {
       edited.current = true;
@@ -362,7 +386,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       unsubscribe.current = stop;
       owner.signInStartup = true;
       setOperation({ ...owner });
-      const code = await client.workspaceProviderSetupSignIn(current);
+      const code = await write(() => client.workspaceProviderSetupSignIn(current));
       if (attempt.current !== owned || sessionRef.current?.setupId !== current.setupId) return;
       owned.id = code.attemptId;
       setConnection(owned.early.get(code.attemptId) ?? { status: "pending", deviceCode: code });
@@ -375,11 +399,13 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
         attempt.current?.id ??
         (connection.status === "pending" ? connection.deviceCode.attemptId : null);
       if (current && id)
-        await client.workspaceProviderSetupCancelSignIn({
-          setupId: current.setupId,
-          revision: current.revision,
-          attemptId: id,
-        });
+        await write(() =>
+          client.workspaceProviderSetupCancelSignIn({
+            setupId: current.setupId,
+            revision: current.revision,
+            attemptId: id,
+          }),
+        );
       clearStatus();
       stopListening();
       setConnection({ status: "disconnected" });
@@ -387,11 +413,13 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
   const savePat = () =>
     run("Validate PAT", async () => {
       const current = await ensureSelection();
-      const result = await client.workspaceProviderSetupPat({
-        setupId: current.setupId,
-        revision: current.revision,
-        pat,
-      });
+      const result = await write(() =>
+        client.workspaceProviderSetupPat({
+          setupId: current.setupId,
+          revision: current.revision,
+          pat,
+        }),
+      );
       setPat("");
       stopListening();
       setConnection(result);
@@ -400,7 +428,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
   const disconnect = () =>
     run("Disconnect setup connection", async () => {
       const current = await sendSelection();
-      await client.workspaceProviderSetupDisconnect(current);
+      await write(() => client.workspaceProviderSetupDisconnect(current));
       stopListening();
       setConnection({ status: "disconnected" });
       clearStatus();
@@ -435,7 +463,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     const current = sessionRef.current;
     if (current) {
       try {
-        await client.workspaceProviderSetupDiscard({ setupId: current.setupId });
+        await write(() => client.workspaceProviderSetupDiscard({ setupId: current.setupId }));
       } catch (cause) {
         throw new Error(
           `Workspace is saved. Setup acknowledgement failed: ${errorMessage(cause)}. Retry to finish opening it.`,
@@ -453,14 +481,23 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
       mounted.current = false;
       stopListening();
       const current = sessionRef.current;
-      if (current)
-        void client
-          .workspaceProviderSetupDiscard({ setupId: current.setupId })
-          .catch((cause) =>
-            console.error("Workspace provider setup cleanup failed", errorMessage(cause)),
-          );
+      const pending =
+        actionLock.current?.signInStartup && !cancellationLock.current ? null : activeWrite.current;
+      if (current) {
+        // Sign-in startup permits cancellation. Other writes must finish before discard.
+        const cleanup = async () => {
+          if (pending) await Promise.allSettled([pending]);
+          await client.workspaceProviderSetupDiscard({ setupId: current.setupId });
+          queryClient.removeQueries({
+            queryKey: workspaceProviderSetupKeys.session(current.setupId),
+          });
+        };
+        void cleanup().catch((cause) =>
+          console.error("Workspace provider setup cleanup failed", errorMessage(cause)),
+        );
+      }
     };
-  }, [client]);
+  }, [client, queryClient]);
   return {
     session,
     draft,
@@ -493,6 +530,7 @@ export function useWorkspaceProviderSetup(bridge = hostBridge) {
     disconnect,
     loadAreas,
     ensureSelection,
+    commit,
     recover,
     complete,
     errors: parseWorkspaceProviderDraft(draft).errors,

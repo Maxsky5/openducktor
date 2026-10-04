@@ -124,7 +124,6 @@ export function useWorkspaceCreation({
       const completed = await runChange(async () => {
         // A lost acknowledgement can remove the host setup before its reply arrives.
         if (state.committed) return;
-        const setup = await provider.ensureSelection();
         const workspaceInput: WorkspaceSelectionOperationsInput = {
           workspaceId: state.workspaceId.trim(),
           workspaceName: state.workspaceName.trim(),
@@ -133,12 +132,13 @@ export function useWorkspaceCreation({
         if (state.abbreviation.trim()) workspaceInput.abbreviation = state.abbreviation.trim();
         if (state.tileColor) workspaceInput.tileColor = state.tileColor;
         const { repoPath: _repoPath, ...details } = workspaceInput;
-        const outcome = await commitWorkspaceProviderSetup({
-          ...details,
-          setupId: setup.setupId,
-          revision: setup.revision,
-          ...state.modelDraft,
-        });
+        const outcome = await provider.commit(
+          {
+            ...details,
+            ...state.modelDraft,
+          },
+          commitWorkspaceProviderSetup,
+        );
         if (outcome.workspace)
           dispatch({ type: "created", workspaceId: outcome.workspace.workspaceId });
         if (outcome.error || outcome.phase !== "complete")

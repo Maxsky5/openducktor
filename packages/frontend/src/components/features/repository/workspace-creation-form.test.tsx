@@ -175,6 +175,62 @@ const advanceToModels = async () => {
 };
 
 describe("workspace creation", () => {
+  test.each(["partial result", "rejection", "complete result"] as const)(
+    "discards an unmounted setup after the commit returns a %s",
+    async (failure) => {
+      const pending = Promise.withResolvers<void>();
+      let ownedId: string | undefined;
+      const commit = mock(async (input) => {
+        ownedId = input.setupId;
+        const result = outcome(input);
+        await pending.promise;
+        if (failure === "rejection") throw new Error("Commit failed");
+        if (failure === "complete result") return result;
+        return { ...result, phase: "credentials" as const, error: "Credential transfer failed" };
+      });
+      const success = mock(() => {});
+      const h = createHookHarness(
+        () =>
+          useWorkspaceCreation({
+            workspaces: [],
+            commitWorkspaceProviderSetup: commit,
+            onSuccess: success,
+          }),
+        {},
+        { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      );
+      const discard = hostClient.workspaceProviderSetupDiscard;
+      const cleanup = mock(discard);
+      hostClient.workspaceProviderSetupDiscard = (ref) =>
+        ref.setupId === ownedId ? cleanup(ref) : discard(ref);
+      let submission: Promise<void> | undefined;
+      await h.mount();
+      try {
+        await h.run(async (state) => {
+          await state.confirmRepo(`/unmounted-commit-${failure.replaceAll(" ", "-")}`);
+        });
+        await h.run(async (state) => {
+          await state.skipProvider();
+        });
+        await h.run((state) => state.next());
+        await h.run((state) => {
+          submission = state.submit();
+        });
+        await h.waitFor(() => commit.mock.calls.length === 1);
+        await h.unmount();
+        expect(cleanup).not.toHaveBeenCalled();
+        pending.resolve();
+        await submission;
+        await waitFor(() => expect(cleanup).toHaveBeenCalledTimes(1), { timeout: 200 });
+        expect(success).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve();
+        await submission;
+        await h.unmount();
+        hostClient.workspaceProviderSetupDiscard = discard;
+      }
+    },
+  );
   test("checks a detected provider before Continue and checks again after edits", async () => {
     const detect = hostClient.workspaceProviderSetupDetect;
     const status = hostClient.workspaceProviderSetupStatus;
