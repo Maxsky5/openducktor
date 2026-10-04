@@ -15,6 +15,7 @@ import {
 import { Effect } from "effect";
 import { spawn } from "node-pty";
 import { createSerialLane } from "../../effect/serial-gate";
+import { prepareTerminalShell } from "./terminal-shell-integration";
 
 type NodePtyProcess = Pick<
   ReturnType<typeof spawn>,
@@ -53,214 +54,226 @@ export const createNodePtyPort = ({
   processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateNodePtyPortInput = {}): TerminalPtyPort => ({
-  start: (plan, handlers) =>
-    Effect.try({
-      try: () => {
-        let closed = false;
-        const exitWaiters = new Set<() => void>();
-        let exitPublished = false;
-        type NativeExit = { exitCode: number; signal: string | null };
-        let nativeExit: NativeExit | null = null;
-        let receivedOutput = false;
-        let cleanupPromise: Promise<void> | null = null;
-        let terminating = false;
-        let terminated = false;
-        let outputPaused = false;
-        const terminationPermit = createSerialLane();
-        const pty = nodePty.spawn(plan.shell, [...plan.args], {
-          cols: plan.grid.columns,
-          cwd: plan.cwd,
-          encoding: null,
-          env: plan.env,
-          name: "xterm-256color",
-          rows: plan.grid.rows,
-        });
-        const dataSubscription = pty.onData((value) => {
-          // Windows node-pty decodes its ConPTY socket as UTF-8 even with encoding: null.
-          const data = Buffer.isBuffer(value) ? value : Buffer.from(value, "utf8");
-          receivedOutput ||= data.byteLength > 0;
-          handlers.onOutput(new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice());
-        });
-        const exitSubscription = pty.onExit(({ exitCode, signal }) => {
-          if (closed) return;
-          closed = true;
-          nativeExit = { exitCode, signal: signal === undefined ? null : String(signal) };
-          if (!receivedOutput && (exitCode !== 0 || Boolean(signal)) && !cleanupPromise) {
-            handlers.onFailure(
-              new TerminalPtyError({
-                code: "spawn_failed",
-                operation: "start",
-                message: `Terminal shell ${plan.shell} exited with code ${exitCode}${signal ? ` (signal ${signal})` : ""} before producing output in ${plan.cwd}. Check that the shell starts in this directory outside OpenDucktor.`,
-              }),
-            );
-          }
-          for (const waiter of exitWaiters) waiter();
-          Effect.runFork(
-            finalizeExit().pipe(
-              Effect.tapError((failure) => Effect.sync(() => handlers.onFailure(failure))),
-            ),
-          );
-        });
-        const processTreeClosed = (): boolean =>
-          closed && !processTreeIsAlive(pty.pid, process.platform);
-        const waitForExit = (timeoutMs: number): Effect.Effect<boolean> =>
-          waitForObservedState({
-            isComplete: processTreeClosed,
-            subscribe: (listener) => {
-              exitWaiters.add(listener);
-              return () => exitWaiters.delete(listener);
-            },
-            timeoutMs,
-          });
-        const terminateProcessTreeEffect = () =>
-          processTreeTerminator({
-            pid: pty.pid,
-            label: "interactive terminal",
-            isClosed: processTreeClosed,
-            waitForExit,
-            stopTimeoutMs: 500,
-          }).pipe(
-            Effect.mapError(
-              (cause) =>
-                new TerminalPtyError({
-                  code: "operation_failed",
-                  operation: "terminate",
-                  message: "node-pty process-tree termination failed.",
-                  cause,
-                }),
-            ),
-          );
-        const ensureProcessTreeTerminated = (): Effect.Effect<void, TerminalPtyError> =>
-          Effect.tryPromise({
-            try: () => {
-              cleanupPromise ??= Promise.resolve()
-                .then(() => Effect.runPromise(terminateProcessTreeEffect()))
-                .catch((cause) => {
-                  cleanupPromise = null;
-                  throw cause;
-                });
-              return cleanupPromise;
-            },
-            catch: (cause) =>
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "terminate",
-                message: "node-pty process-tree termination failed.",
-                cause,
-              }),
-          });
-        const publishExit = (): void => {
-          if (exitPublished || !nativeExit) return;
-          exitPublished = true;
-          dataSubscription.dispose();
-          exitSubscription.dispose();
-          handlers.onExit(nativeExit);
-        };
-        const finalizeExit = (): Effect.Effect<void, TerminalPtyError> =>
-          // node-pty releases ConPTY before reporting a connection failure with no process ID.
-          closed && pty.pid === 0
-            ? Effect.sync(publishExit)
-            : ensureProcessTreeTerminated().pipe(Effect.tap(() => Effect.sync(publishExit)));
-        const requireOpen = (name: TerminalPtyError["operation"], run: () => void) =>
-          Effect.suspend(() => {
-            if ((name === "write" || name === "resize") && (terminating || terminated)) {
-              return Effect.fail(
-                new TerminalPtyError({
-                  code: "operation_failed",
-                  operation: name,
-                  message: "Terminal is closing. Wait for close to finish or retry if it fails.",
-                }),
-              );
-            }
-            return operation(name, () => {
-              if (closed) throw new Error("The terminal is already closed.");
-              run();
+  start: (input, handlers) =>
+    Effect.uninterruptible(
+      Effect.gen(function* () {
+        const { plan, dispose } = yield* prepareTerminalShell(input);
+        return yield* Effect.try({
+          try: () => {
+            let closed = false;
+            const exitWaiters = new Set<() => void>();
+            let exitPublished = false;
+            type NativeExit = { exitCode: number; signal: string | null };
+            let nativeExit: NativeExit | null = null;
+            let receivedOutput = false;
+            let cleanupPromise: Promise<void> | null = null;
+            let terminating = false;
+            let terminated = false;
+            let outputPaused = false;
+            const terminationPermit = createSerialLane();
+            const pty = nodePty.spawn(plan.shell, [...plan.args], {
+              cols: plan.grid.columns,
+              cwd: plan.cwd,
+              encoding: null,
+              env: plan.env,
+              name: "xterm-256color",
+              rows: plan.grid.rows,
             });
-          });
-        const handle: TerminalPtyHandle = {
-          supportsOutputPause: true,
-          hasChildProcesses: () =>
-            processTreeInspector(pty.pid).pipe(
-              Effect.mapError(
-                (cause) =>
+            const dataSubscription = pty.onData((value) => {
+              // Windows node-pty decodes its ConPTY socket as UTF-8 even with encoding: null.
+              const data = Buffer.isBuffer(value) ? value : Buffer.from(value, "utf8");
+              receivedOutput ||= data.byteLength > 0;
+              handlers.onOutput(
+                new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice(),
+              );
+            });
+            const exitSubscription = pty.onExit(({ exitCode, signal }) => {
+              if (closed) return;
+              closed = true;
+              nativeExit = { exitCode, signal: signal === undefined ? null : String(signal) };
+              if (!receivedOutput && (exitCode !== 0 || Boolean(signal)) && !cleanupPromise) {
+                handlers.onFailure(
                   new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: "inspect",
-                    message: "node-pty child-process inspection failed.",
-                    cause,
-                  }),
-              ),
-            ),
-          write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
-          resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
-          pauseOutput: () =>
-            Effect.suspend(() =>
-              terminating
-                ? Effect.sync(() => {
-                    outputPaused = true;
-                  })
-                : requireOpen("pause", () => {
-                    pty.pause();
-                    outputPaused = true;
-                  }),
-            ),
-          resumeOutput: () =>
-            Effect.suspend(() =>
-              terminating
-                ? Effect.sync(() => {
-                    outputPaused = false;
-                  })
-                : requireOpen("resume", () => {
-                    pty.resume();
-                    outputPaused = false;
-                  }),
-            ),
-          terminate: () =>
-            terminationPermit.run(
-              Effect.gen(function* () {
-                if (exitPublished || terminated) return;
-                terminating = true;
-                const result = yield* Effect.result(
-                  Effect.gen(function* () {
-                    // node-pty delays onExit until its output stream closes.
-                    if (!closed) yield* operation("terminate", () => pty.resume());
-                    yield* finalizeExit();
+                    code: "spawn_failed",
+                    operation: "start",
+                    message: `Terminal shell ${plan.shell} exited with code ${exitCode}${signal ? ` (signal ${signal})` : ""} before producing output in ${plan.cwd}. Check that the shell starts in this directory outside OpenDucktor.`,
                   }),
                 );
-                if (result._tag === "Success") {
-                  terminating = false;
-                  terminated = true;
-                  return;
-                }
-
-                const restore = yield* Effect.result(
-                  operation("terminate", () => {
-                    if (!closed && outputPaused) pty.pause();
-                  }),
-                );
-                terminating = false;
-                if (restore._tag === "Failure") {
-                  return yield* Effect.fail(
+              }
+              for (const waiter of exitWaiters) waiter();
+              Effect.runFork(
+                finalizeExit().pipe(
+                  Effect.tapError((failure) => Effect.sync(() => handlers.onFailure(failure))),
+                ),
+              );
+            });
+            const processTreeClosed = (): boolean =>
+              closed && !processTreeIsAlive(pty.pid, process.platform);
+            const waitForExit = (timeoutMs: number): Effect.Effect<boolean> =>
+              waitForObservedState({
+                isComplete: processTreeClosed,
+                subscribe: (listener) => {
+                  exitWaiters.add(listener);
+                  return () => exitWaiters.delete(listener);
+                },
+                timeoutMs,
+              });
+            const terminateProcessTreeEffect = () =>
+              processTreeTerminator({
+                pid: pty.pid,
+                label: "interactive terminal",
+                isClosed: processTreeClosed,
+                waitForExit,
+                stopTimeoutMs: 500,
+              }).pipe(
+                Effect.mapError(
+                  (cause) =>
                     new TerminalPtyError({
                       code: "operation_failed",
                       operation: "terminate",
-                      message: "node-pty could not restore output pause after termination failed.",
-                      cause: new AggregateError([result.failure, restore.failure]),
+                      message: "node-pty process-tree termination failed.",
+                      cause,
+                    }),
+                ),
+              );
+            const ensureProcessTreeTerminated = (): Effect.Effect<void, TerminalPtyError> =>
+              Effect.tryPromise({
+                try: () => {
+                  cleanupPromise ??= Promise.resolve()
+                    .then(() => Effect.runPromise(terminateProcessTreeEffect()))
+                    .catch((cause) => {
+                      cleanupPromise = null;
+                      throw cause;
+                    });
+                  return cleanupPromise;
+                },
+                catch: (cause) =>
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "terminate",
+                    message: "node-pty process-tree termination failed.",
+                    cause,
+                  }),
+              });
+            const publishExit = (): void => {
+              if (exitPublished || !nativeExit) return;
+              exitPublished = true;
+              dataSubscription.dispose();
+              exitSubscription.dispose();
+              handlers.onExit(nativeExit);
+            };
+            const finalizeExit = (): Effect.Effect<void, TerminalPtyError> =>
+              // node-pty releases ConPTY before reporting a connection failure with no process ID.
+              closed && pty.pid === 0
+                ? dispose.pipe(Effect.andThen(Effect.sync(publishExit)))
+                : ensureProcessTreeTerminated().pipe(
+                    Effect.tap(() => dispose),
+                    Effect.tap(() => Effect.sync(publishExit)),
+                  );
+            const requireOpen = (name: TerminalPtyError["operation"], run: () => void) =>
+              Effect.suspend(() => {
+                if ((name === "write" || name === "resize") && (terminating || terminated)) {
+                  return Effect.fail(
+                    new TerminalPtyError({
+                      code: "operation_failed",
+                      operation: name,
+                      message:
+                        "Terminal is closing. Wait for close to finish or retry if it fails.",
                     }),
                   );
                 }
-                return yield* Effect.fail(result.failure);
-              }),
-            ),
-        };
-        return handle;
-      },
-      catch: (cause) =>
-        new TerminalPtyError({
-          code: "spawn_failed",
-          operation: "start",
-          message: `Could not start terminal shell ${plan.shell} in ${plan.cwd}: ${cause instanceof Error ? cause.message : String(cause)}. Check that the shell executable and working directory are accessible.`,
-          cause,
-        }),
-    }),
+                return operation(name, () => {
+                  if (closed) throw new Error("The terminal is already closed.");
+                  run();
+                });
+              });
+            const handle: TerminalPtyHandle = {
+              supportsOutputPause: true,
+              hasChildProcesses: () =>
+                processTreeInspector(pty.pid).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new TerminalPtyError({
+                        code: "operation_failed",
+                        operation: "inspect",
+                        message: "node-pty child-process inspection failed.",
+                        cause,
+                      }),
+                  ),
+                ),
+              write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
+              resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
+              pauseOutput: () =>
+                Effect.suspend(() =>
+                  terminating
+                    ? Effect.sync(() => {
+                        outputPaused = true;
+                      })
+                    : requireOpen("pause", () => {
+                        pty.pause();
+                        outputPaused = true;
+                      }),
+                ),
+              resumeOutput: () =>
+                Effect.suspend(() =>
+                  terminating
+                    ? Effect.sync(() => {
+                        outputPaused = false;
+                      })
+                    : requireOpen("resume", () => {
+                        pty.resume();
+                        outputPaused = false;
+                      }),
+                ),
+              terminate: () =>
+                terminationPermit.run(
+                  Effect.gen(function* () {
+                    if (exitPublished || terminated) return;
+                    terminating = true;
+                    const result = yield* Effect.result(
+                      Effect.gen(function* () {
+                        // node-pty delays onExit until its output stream closes.
+                        if (!closed) yield* operation("terminate", () => pty.resume());
+                        yield* finalizeExit();
+                      }),
+                    );
+                    if (result._tag === "Success") {
+                      terminating = false;
+                      terminated = true;
+                      return;
+                    }
+
+                    const restore = yield* Effect.result(
+                      operation("terminate", () => {
+                        if (!closed && outputPaused) pty.pause();
+                      }),
+                    );
+                    terminating = false;
+                    if (restore._tag === "Failure") {
+                      return yield* Effect.fail(
+                        new TerminalPtyError({
+                          code: "operation_failed",
+                          operation: "terminate",
+                          message:
+                            "node-pty could not restore output pause after termination failed.",
+                          cause: new AggregateError([result.failure, restore.failure]),
+                        }),
+                      );
+                    }
+                    return yield* Effect.fail(result.failure);
+                  }),
+                ),
+            };
+            return handle;
+          },
+          catch: (cause) =>
+            new TerminalPtyError({
+              code: "spawn_failed",
+              operation: "start",
+              message: `Could not start terminal shell ${plan.shell} in ${plan.cwd}: ${cause instanceof Error ? cause.message : String(cause)}. Check that the shell executable and working directory are accessible.`,
+              cause,
+            }),
+        }).pipe(Effect.tapError(() => dispose));
+      }),
+    ),
 });

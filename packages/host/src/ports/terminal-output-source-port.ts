@@ -21,6 +21,7 @@ export type TerminalOutputSourcePort = {
     context: TerminalContext;
     workingDir: string;
     label: string;
+    command: string;
     onForgotten(): void;
   }): Effect.Effect<TerminalOutputSource, TerminalPtyError>;
 };

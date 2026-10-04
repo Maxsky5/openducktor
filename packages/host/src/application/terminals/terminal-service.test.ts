@@ -4,15 +4,17 @@ import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import {
   repoConfigSchema,
+  type TerminalActivityMessage,
   type TerminalServerMessage,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import {
   TerminalPtyError,
   type TerminalPtyHandlers,
+  type TerminalPtyLaunchPlan,
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
@@ -47,12 +49,14 @@ const filesystem: FilesystemPort = {
 const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   const operations: string[] = [];
   const startDirectories: string[] = [];
+  const launches: TerminalPtyLaunchPlan[] = [];
   let handlers: TerminalPtyHandlers | null = null;
   let terminateFails = false;
   let terminateFailuresRemaining = 0;
   const port: TerminalPtyPort = {
     start: (plan, nextHandlers) => {
       startDirectories.push(plan.cwd);
+      launches.push(plan);
       handlers = nextHandlers;
       return Effect.succeed({
         supportsOutputPause,
@@ -87,6 +91,7 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
     port,
     operations,
     startDirectories,
+    launches,
     emit: (data: Uint8Array) => handlers?.onOutput(data),
     exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
     fail: (failure: TerminalPtyError) => handlers?.onFailure(failure),
@@ -243,6 +248,248 @@ const workspaceTerminalDependencies = (records: Map<string, WorkspaceSession>) =
 });
 
 describe("TerminalService", () => {
+  test("keeps a terminal available for cleanup when creation is interrupted during shell setup", async () => {
+    const pty = makePty();
+    const started = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const start = pty.port.start;
+    pty.port.start = (plan, handlers) =>
+      Effect.uninterruptible(
+        Deferred.succeed(started, undefined).pipe(
+          Effect.zipRight(Deferred.await(release)),
+          Effect.zipRight(start(plan, handlers)),
+        ),
+      );
+    const { service } = await makeService(pty);
+    const fiber = Effect.runFork(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    try {
+      await Effect.runPromise(Deferred.await(started));
+      await Effect.runPromise(Fiber.interruptFork(fiber));
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.await(fiber));
+      await Effect.runPromise(service.dispose());
+      expect(pty.operations).toContain("terminate");
+      expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+    } finally {
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.interrupt(fiber));
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
+  test("closes the PTY when a terminal is closed during shell setup", async () => {
+    const pty = makePty();
+    const started = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const start = pty.port.start;
+    pty.port.start = (plan, handlers) =>
+      Deferred.succeed(started, undefined).pipe(
+        Effect.zipRight(Deferred.await(release)),
+        Effect.zipRight(start(plan, handlers)),
+      );
+    const { service } = await makeService(pty);
+    const creating = Effect.runFork(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    try {
+      await Effect.runPromise(Deferred.await(started));
+      const closing = Effect.runFork(
+        service.close({ terminalId: "terminal-1", confirmTerminate: true }),
+      );
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.join(creating));
+      await Effect.runPromise(Fiber.join(closing));
+      expect(pty.operations).toContain("terminate");
+      expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+    } finally {
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.interrupt(creating));
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
+  test("counts a command only between shell execution and completion, without process inspection", async () => {
+    const { service, pty } = await makeService();
+    const terminal = await Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    const messages: TerminalActivityMessage[] = [];
+    const stop = await Effect.runPromise(
+      service.observeActivity((message) => messages.push(message)),
+    );
+    try {
+      expect(messages.map((message) => message.type)).toEqual([
+        "activity_snapshot_start",
+        "activity_snapshot_end",
+      ]);
+      const nonce = pty.launches[0]?.commandNonce;
+      expect(nonce).toBeString();
+      pty.emit(
+        new TextEncoder().encode(
+          "\u001b]633;E;false command;another-shell\u0007\u001b]633;C\u0007",
+        ),
+      );
+      await Bun.sleep(10);
+      expect(messages).toHaveLength(2);
+      pty.emit(new TextEncoder().encode(`\u001b]633;E;sleep 30;${nonce}\u0007\u001b]633;C\u0007`));
+      await Bun.sleep(10);
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_updated",
+        activity: {
+          kind: "terminal",
+          command: "sleep 30",
+          summary: { terminalId: terminal.ref.terminalId },
+        },
+      });
+      const snapshot: TerminalActivityMessage[] = [];
+      const stopSnapshot = await Effect.runPromise(
+        service.observeActivity((message) => snapshot.push(message)),
+      );
+      stopSnapshot();
+      expect(snapshot).toMatchObject([
+        { type: "activity_snapshot_start" },
+        { type: "activity_updated", activity: { command: "sleep 30" } },
+        { type: "activity_snapshot_end" },
+      ]);
+      pty.emit(new TextEncoder().encode("\u001b]633;D;0\u0007"));
+      await Bun.sleep(10);
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_removed",
+        terminalId: terminal.ref.terminalId,
+      });
+      expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals[0]?.lifecycle).toBe(
+        "running",
+      );
+      expect(pty.operations).toEqual([]);
+    } finally {
+      stop();
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
+  test("observes live metadata and settled titles without attaching output or inspecting processes", async () => {
+    const { service, pty, settleTitles } = await makeService();
+    const terminal = await Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+    );
+    const messages: TerminalActivityMessage[] = [];
+    const stop = await Effect.runPromise(
+      service.observeActivity((message) => messages.push(message)),
+    );
+    try {
+      expect(messages).toMatchObject([
+        { type: "activity_snapshot_start" },
+        { type: "activity_snapshot_end" },
+      ]);
+      pty.emit(
+        new TextEncoder().encode(
+          `\u001b]633;E;bun test;${pty.launches[0]?.commandNonce}\u0007\u001b]633;C\u0007`,
+        ),
+      );
+      await Bun.sleep(10);
+      pty.emit(new TextEncoder().encode("ordinary command output\r\n"));
+      settleTitles();
+      expect(messages).toHaveLength(3);
+      expect(pty.operations).toEqual([]);
+
+      pty.emit(new TextEncoder().encode("\u001b]0;bun test\u0007"));
+      settleTitles();
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_updated",
+        activity: { summary: { label: "bun test" } },
+      });
+      pty.exit();
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_removed",
+        terminalId: terminal.ref.terminalId,
+      });
+      expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toMatchObject([
+        { lifecycle: "exited" },
+      ]);
+      const next: TerminalActivityMessage[] = [];
+      const stopNext = await Effect.runPromise(
+        service.observeActivity((message) => next.push(message)),
+      );
+      stopNext();
+      expect(next.map((message) => message.type)).toEqual([
+        "activity_snapshot_start",
+        "activity_snapshot_end",
+      ]);
+
+      stop();
+      const count = messages.length;
+      await Effect.runPromise(
+        service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: true }),
+      );
+      expect(messages).toHaveLength(count);
+    } finally {
+      stop();
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
+  test("keeps failed stops visible and isolates broken observers from process cleanup", async () => {
+    const { service, pty } = await makeService();
+    const terminal = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.emit(
+      new TextEncoder().encode(
+        `\u001b]633;E;sleep 30;${pty.launches[0]?.commandNonce}\u0007\u001b]633;C\u0007`,
+      ),
+    );
+    await Bun.sleep(10);
+    const messages: TerminalActivityMessage[] = [];
+    let rejectDelivery = false;
+    let rejected = 0;
+    const stopBroken = await Effect.runPromise(
+      service.observeActivity(() => {
+        if (rejectDelivery) {
+          rejected += 1;
+          throw new Error("Connection closed");
+        }
+      }),
+    );
+    const stop = await Effect.runPromise(
+      service.observeActivity((message) => messages.push(message)),
+    );
+    try {
+      pty.failNextTerminate();
+      rejectDelivery = true;
+      const failure = await Effect.runPromise(
+        Effect.either(
+          service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: true }),
+        ),
+      );
+      expect(failure._tag).toBe("Left");
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_updated",
+        activity: { summary: { lifecycle: "close_failed" } },
+      });
+      expect(rejected).toBe(1);
+      await Effect.runPromise(
+        service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: true }),
+      );
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_removed",
+        terminalId: terminal.ref.terminalId,
+      });
+      const count = messages.length;
+      pty.fail(
+        new TerminalPtyError({
+          code: "operation_failed",
+          operation: "terminate",
+          message: "Late process callback",
+        }),
+      );
+      expect(messages).toHaveLength(count);
+    } finally {
+      stopBroken();
+      stop();
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
   test("starts root and worktree chat terminals in their saved directories and keeps owners separate", async () => {
     const records = new Map<string, WorkspaceSession>([
       [
@@ -1436,6 +1683,7 @@ describe("TerminalService", () => {
                 context: { repoPath: "/canonical/repo", taskId },
                 workingDir: "/canonical/repo",
                 label: "Dev server",
+                command: "bun run dev",
                 onForgotten: () => {},
               }),
             );

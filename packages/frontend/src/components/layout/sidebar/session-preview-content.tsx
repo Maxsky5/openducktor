@@ -32,6 +32,7 @@ import { sessionEntryTimeText } from "./session-navigation-entry-model";
 import { SessionEntryRuntimeIcon } from "./session-navigation-parts";
 import { SessionPreviewPendingRequests } from "./session-preview-pending-input";
 import { useSessionMenu } from "./session-menu-provider";
+import { SessionPreviewCommands } from "./session-command-activity";
 
 const { loadRuntimeCatalog } = createHostRuntimeCatalogOperations();
 
@@ -76,7 +77,10 @@ export function SessionPreviewContent({
             />
           </section>
         ) : null}
-        <SessionPreviewModelDetails entry={entry} model={details.model} />
+        <div className="flex items-center justify-between gap-3">
+          <SessionPreviewModelDetails entry={entry} model={details.model} />
+          <SessionPreviewCommands entry={entry} />
+        </div>
         {statusIssue ? (
           <p
             role="alert"
@@ -228,7 +232,7 @@ function SessionPreviewModelDetails({
   else infoParts = agentModelInfoParts(model, surface.catalog);
   const label = infoParts.join(" · ");
   return (
-    <div aria-label="Session configuration" className="min-w-0 space-y-1.5">
+    <div aria-label="Session configuration" className="min-w-0 flex-1 space-y-1.5">
       <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
         <SessionEntryRuntimeIcon entry={entry} />
         <span className="min-w-0 truncate" title={label}>

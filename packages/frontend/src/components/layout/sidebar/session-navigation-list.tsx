@@ -34,6 +34,8 @@ import {
   sessionEntryIconClassName,
   sessionEntrySurfaceClassName,
 } from "./session-navigation-styles";
+import { useSessionCommands } from "@/features/session-navigation/use-session-commands";
+import { SessionCommandIcon } from "./session-command-activity";
 
 type SessionNavigationListProps = {
   model: SessionNavigationModel;
@@ -142,12 +144,19 @@ function SessionRow({
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();
+  const commands = useSessionCommands(entry);
+  const commandCount = commands.status === "ready" ? commands.commands.length : 0;
   return (
     <SessionEntryPreview entry={entry} isVisible={isVisible} now={now} onOpen={onOpen}>
       <button
         type="button"
         aria-current={isSelected ? "true" : undefined}
-        aria-label={sessionEntryAccessibleName(entry)}
+        aria-label={
+          sessionEntryAccessibleName(entry) +
+          (commandCount > 0
+            ? `, ${commandCount} active ${commandCount === 1 ? "command" : "commands"}`
+            : "")
+        }
         aria-describedby={readStatusId}
         onClick={() => {
           if (!isVisible) onOpen(entry);
@@ -188,6 +197,7 @@ function SessionRow({
           >
             {entry.title}
           </span>
+          <SessionCommandIcon count={commandCount} />
           <SessionEntryRuntimeIcon entry={entry} />
         </span>
         {isSelected ? <SessionSelectionIndicator className="absolute -right-1 -top-1" /> : null}

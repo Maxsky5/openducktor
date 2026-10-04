@@ -659,6 +659,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "hostInvokeFailureSchema",
   "hostErrorResponseSchema",
   "terminalClientMessageSchema",
+  "terminalActivitySchema",
   "terminalCloseRequestSchema",
   "terminalCloseResponseSchema",
   "terminalContextSchema",

@@ -75,6 +75,15 @@ export const terminalSummarySchema = z
   .strict();
 export type TerminalSummary = z.infer<typeof terminalSummarySchema>;
 
+export const terminalActivitySchema = z
+  .object({
+    summary: terminalSummarySchema,
+    kind: z.enum(["terminal", "dev_server"]),
+    command: z.string().min(1),
+  })
+  .strict();
+export type TerminalActivity = z.infer<typeof terminalActivitySchema>;
+
 export const terminalFailureCodeSchema = z.enum([
   "invalid_working_directory",
   "working_directory_not_found",

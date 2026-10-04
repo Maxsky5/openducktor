@@ -12,6 +12,7 @@ import {
   type TerminalSession,
 } from "./terminal-session";
 import type { TerminalOutputEvents } from "./terminal-session-output";
+import type { createTerminalActivity } from "./terminal-activity";
 
 export type TerminalOperation = ConstructorParameters<typeof TerminalServiceError>[0]["operation"];
 
@@ -56,9 +57,11 @@ export const terminalOperationFailure = (
 export const createTerminalSessionLifecycle = ({
   now,
   sessions,
+  activity,
 }: {
   now: () => Date;
   sessions: Map<string, TerminalSession>;
+  activity: ReturnType<typeof createTerminalActivity>;
 }) => {
   const getSession = (terminalId: string, operation: TerminalOperation): TerminalSession => {
     const session = sessions.get(terminalId);
@@ -74,6 +77,7 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const emitLifecycle = (session: TerminalSession): void => {
+    activity.changed(session);
     const exit = session.summary.exit;
     const event: Parameters<TerminalSession["output"]["publish"]>[0] = {
       version: TERMINAL_PROTOCOL_VERSION,
@@ -118,6 +122,7 @@ export const createTerminalSessionLifecycle = ({
         }),
       );
       sessions.delete(session.summary.terminalId);
+      activity.remove(session.summary.terminalId);
     }
   };
 
@@ -248,7 +253,8 @@ export const createTerminalSessionLifecycle = ({
       );
       forgetTerminalSession(session);
       sessions.delete(terminalId);
-    });
+      activity.remove(terminalId);
+    }).pipe(session.operations.withPermits(1));
 
   const closeSessions = (
     targets: readonly TerminalSession[],

@@ -7,6 +7,7 @@ import {
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
   type TerminalSummary,
+  type TerminalActivityMessage,
   terminalCloseRequestSchema,
   terminalCreateRequestSchema,
   terminalListFilterSchema,
@@ -42,6 +43,7 @@ export type TerminalService = TerminalOutputSourcePort & {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
+  observeActivity(listener: (message: TerminalActivityMessage) => void): Effect.Effect<() => void>;
   inspectWorkspaceActivity(
     canonicalRepoPath: string,
   ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
@@ -124,7 +126,7 @@ export const createTerminalService = ({
 
     const service: TerminalService = {
       hostInstanceId,
-      openOutputSource: ({ context, workingDir, label, onForgotten }) =>
+      openOutputSource: ({ context, workingDir, label, command, onForgotten }) =>
         Effect.gen(function* () {
           const reservation = yield* admission.beginCreation(context);
           return yield* Effect.gen(function* () {
@@ -139,6 +141,7 @@ export const createTerminalService = ({
                 lifecycle: "starting",
                 exit: null,
               },
+              command,
               () => {
                 reservation.release();
                 onForgotten();
@@ -228,6 +231,7 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
+      observeActivity: (listener) => Effect.sync(() => engine.observeActivity(listener)),
       inspectWorkspaceActivity: engine.inspectWorkspaceActivity,
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {

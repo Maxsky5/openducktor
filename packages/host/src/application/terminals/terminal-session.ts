@@ -22,11 +22,13 @@ type TerminalSessionState = {
 export type InteractiveTerminalSession = TerminalSessionState & {
   readonly kind: "interactive";
   readonly shell: string;
+  command: string | null;
   resources: TerminalSessionResources<TerminalPtyHandle>;
 };
 
 export type OutputTerminalSession = TerminalSessionState & {
   readonly kind: "output";
+  readonly command: string;
   resources: TerminalSessionResources<TerminalProducerHandle>;
 };
 
@@ -72,10 +74,11 @@ export function createTerminalSession(
   input: TerminalSessionInput & { kind: "interactive"; shell: string },
 ): InteractiveTerminalSession;
 export function createTerminalSession(
-  input: TerminalSessionInput & { kind: "output" },
+  input: TerminalSessionInput & { kind: "output"; command: string },
 ): OutputTerminalSession;
 export function createTerminalSession(
-  input: TerminalSessionInput & ({ kind: "interactive"; shell: string } | { kind: "output" }),
+  input: TerminalSessionInput &
+    ({ kind: "interactive"; shell: string } | { kind: "output"; command: string }),
 ): TerminalSession {
   const screen = new TerminalScreenState(input.grid, input.kind === "output");
   const state: TerminalSessionState = {
@@ -92,11 +95,13 @@ export function createTerminalSession(
         ...state,
         kind: input.kind,
         shell: input.shell,
+        command: null,
         resources: new TerminalSessionResources<TerminalPtyHandle>(input.titleTracker),
       }
     : {
         ...state,
         kind: input.kind,
+        command: input.command,
         resources: new TerminalSessionResources<TerminalProducerHandle>(input.titleTracker),
       };
 }

@@ -8,6 +8,7 @@ import type {
   TerminalFrameListener,
   TerminalTransportController,
 } from "./terminal-transport-controller";
+import { EMPTY_TERMINAL_ACTIVITY } from "./terminal-activity-store";
 
 if (globalThis.document === undefined) {
   GlobalRegistrator.register();
@@ -32,6 +33,8 @@ const createController = () => {
     dispose: async () => undefined,
     releaseEmulator: () => undefined,
     resize: async () => undefined,
+    readActivity: () => EMPTY_TERMINAL_ACTIVITY,
+    subscribeActivity: () => () => undefined,
     subscribe: (terminalId: string, listener: TerminalFrameListener) => {
       listeners.set(terminalId, listener);
       return () => {

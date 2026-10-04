@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   terminalFailureSchema,
+  terminalActivitySchema,
   terminalIdSchema,
   terminalLifecycleSchema,
 } from "./terminal-schemas";
@@ -17,6 +18,8 @@ const sequenceSchema = z.number().int().nonnegative();
 const protocolBaseSchema = z.object({ version: z.literal(TERMINAL_PROTOCOL_VERSION) });
 
 export const terminalClientMessageSchema = z.discriminatedUnion("type", [
+  protocolBaseSchema.extend({ type: z.literal("observe_activity") }).strict(),
+  protocolBaseSchema.extend({ type: z.literal("unobserve_activity") }).strict(),
   protocolBaseSchema
     .extend({
       type: z.literal("attach"),
@@ -45,6 +48,14 @@ export const terminalClientMessageSchema = z.discriminatedUnion("type", [
 export type TerminalClientMessage = z.infer<typeof terminalClientMessageSchema>;
 
 export const terminalServerMessageSchema = z.discriminatedUnion("type", [
+  protocolBaseSchema.extend({ type: z.literal("activity_snapshot_start") }).strict(),
+  protocolBaseSchema.extend({ type: z.literal("activity_snapshot_end") }).strict(),
+  protocolBaseSchema
+    .extend({ type: z.literal("activity_updated"), activity: terminalActivitySchema })
+    .strict(),
+  protocolBaseSchema
+    .extend({ type: z.literal("activity_removed"), terminalId: terminalIdSchema })
+    .strict(),
   protocolBaseSchema
     .extend({
       type: z.literal("snapshot"),
@@ -115,6 +126,16 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
+export type TerminalActivityMessage = Extract<
+  TerminalServerMessage,
+  {
+    type:
+      | "activity_snapshot_start"
+      | "activity_snapshot_end"
+      | "activity_updated"
+      | "activity_removed";
+  }
+>;
 export type TerminalProtocolMessage = TerminalClientMessage | TerminalServerMessage;
 
 const terminalProtocolMessageSchema = z.union([
@@ -124,7 +145,14 @@ const terminalProtocolMessageSchema = z.union([
 
 export const isTerminalClientMessage = (
   message: TerminalProtocolMessage,
-): message is TerminalClientMessage => terminalClientMessageSchema.safeParse(message).success;
+): message is TerminalClientMessage =>
+  message.type === "observe_activity" ||
+  message.type === "unobserve_activity" ||
+  message.type === "attach" ||
+  message.type === "input" ||
+  message.type === "resize" ||
+  message.type === "ack" ||
+  message.type === "detach";
 
 const terminalProtocolHeaderSchema = z
   .object({

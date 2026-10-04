@@ -19,12 +19,16 @@ export const createTerminalClientSession = ({
   send,
 }: {
   clientId: string;
-  terminalService: Pick<TerminalService, "acknowledge" | "attach" | "detach" | "resize" | "write">;
+  terminalService: Pick<
+    TerminalService,
+    "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity"
+  >;
   send(message: TerminalServerMessage, payload: Uint8Array): void;
 }): TerminalClientSession => {
   const attachedTerminalIds = new Set<string>();
   const operations = createSerialLane();
   let closed = false;
+  let stopActivity: (() => void) | null = null;
   const attachmentId = (terminalId: string): string => `${clientId}:${terminalId}`;
   const sendFailure = (
     error: TerminalServiceError,
@@ -32,38 +36,54 @@ export const createTerminalClientSession = ({
   ): Effect.Effect<void> =>
     Effect.sync(() => {
       const failure = terminalServiceErrorToFailure(error);
-      send(
-        {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "protocol_error",
-          terminalId: message.terminalId,
-          failure: {
-            ...failure,
-            code:
-              message.type === "attach" && failure.code === "terminal_not_found"
-                ? "terminal_forgotten"
-                : failure.code,
-            terminalId: message.terminalId,
-          },
+      const response: Extract<TerminalServerMessage, { type: "protocol_error" }> = {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "protocol_error",
+        failure: {
+          ...failure,
+          code:
+            message.type === "attach" && failure.code === "terminal_not_found"
+              ? "terminal_forgotten"
+              : failure.code,
         },
-        new Uint8Array(),
-      );
+      };
+      if ("terminalId" in message) {
+        response.terminalId = message.terminalId;
+        response.failure.terminalId = message.terminalId;
+      }
+      send(response, new Uint8Array());
     });
   const handleMessage = (
     message: TerminalClientMessage,
     payload: Uint8Array,
   ): Effect.Effect<void> => {
     if (closed) {
+      const failure: ConstructorParameters<typeof TerminalServiceError>[0] = {
+        code: "protocol_error",
+        operation:
+          "terminalId" in message ? (message.type === "input" ? "write" : message.type) : "list",
+        message: "Terminal client connection is closed. Reconnect before sending terminal frames.",
+      };
       return sendFailure(
-        new TerminalServiceError({
-          code: "protocol_error",
-          operation: message.type === "input" ? "write" : message.type,
-          message:
-            "Terminal client connection is closed. Reconnect before sending terminal frames.",
-          terminalId: message.terminalId,
-        }),
+        new TerminalServiceError(
+          "terminalId" in message ? { ...failure, terminalId: message.terminalId } : failure,
+        ),
         message,
       );
+    }
+    if (message.type === "observe_activity") {
+      return Effect.gen(function* () {
+        stopActivity?.();
+        stopActivity = yield* terminalService.observeActivity((event) =>
+          send(event, new Uint8Array()),
+        );
+      });
+    }
+    if (message.type === "unobserve_activity") {
+      return Effect.sync(() => {
+        stopActivity?.();
+        stopActivity = null;
+      });
     }
     const id = attachmentId(message.terminalId);
     const operation = (() => {
@@ -99,6 +119,8 @@ export const createTerminalClientSession = ({
     operations.run(
       Effect.gen(function* () {
         closed = true;
+        stopActivity?.();
+        stopActivity = null;
         const terminalIds = [...attachedTerminalIds];
         let firstFailure: TerminalServiceError | undefined;
         for (const terminalId of terminalIds) {

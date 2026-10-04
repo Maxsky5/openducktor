@@ -4,6 +4,7 @@ import {
   TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
+  isTerminalClientMessage,
 } from "@openducktor/contracts";
 import type {
   TerminalBridge,
@@ -14,6 +15,7 @@ import {
   createTerminalTransportChannelRegistry,
   type TerminalFrameListener,
 } from "./terminal-transport-channel-registry";
+import { createTerminalActivityStore } from "./terminal-activity-store";
 
 export type { TerminalFrameListener } from "./terminal-transport-channel-registry";
 
@@ -46,6 +48,8 @@ export const createTerminalTransportController = (
   onProtocolFailure: (failure: TerminalFailure) => void = () => undefined,
 ) => {
   const terminalChannels = createTerminalTransportChannelRegistry();
+  const activity = createTerminalActivityStore();
+  const activityListeners = new Set<() => void>();
   let connectionState: TerminalConnectionState = { status: "disconnected" };
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
@@ -111,14 +115,17 @@ export const createTerminalTransportController = (
     );
   const handleFrame = (frame: Uint8Array): void => {
     const decoded = decodeTerminalProtocolFrame(frame);
-    if (
-      decoded.message.type === "attach" ||
-      decoded.message.type === "input" ||
-      decoded.message.type === "resize" ||
-      decoded.message.type === "ack" ||
-      decoded.message.type === "detach"
-    ) {
+    if (isTerminalClientMessage(decoded.message)) {
       throw new Error("Terminal transport received a client-directed frame.");
+    }
+    if (
+      decoded.message.type === "activity_snapshot_start" ||
+      decoded.message.type === "activity_snapshot_end" ||
+      decoded.message.type === "activity_updated" ||
+      decoded.message.type === "activity_removed"
+    ) {
+      activity.apply(decoded.message);
+      return;
     }
     if (decoded.message.type === "protocol_error" && !decoded.message.terminalId) {
       transitionToDisconnected({ failure: decoded.message.failure });
@@ -150,6 +157,7 @@ export const createTerminalTransportController = (
     const failedConnection = activeConnection();
     connectionGeneration += 1;
     connectionState = { status: "disconnected" };
+    activity.disconnected(failure?.message ?? (cause instanceof Error ? cause.message : undefined));
     onStateChange("disconnected");
     if (failure) onProtocolFailure(failure);
     if (cause !== undefined) reportConnectionFailure(cause);
@@ -177,7 +185,9 @@ export const createTerminalTransportController = (
     if (replaceExisting && previousConnection) await closeConnection(previousConnection);
     const pending = Promise.resolve().then(() =>
       bridge.connect(
-        handleFrame,
+        (frame) => {
+          if (!isDisposed() && generation === connectionGeneration) handleFrame(frame);
+        },
         (state) => {
           if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
           if (state === "disconnected") {
@@ -200,6 +210,7 @@ export const createTerminalTransportController = (
       if (!isDisposed() && generation === connectionGeneration) {
         reportConnectionFailure(cause);
         connectionState = { status: "disconnected" };
+        activity.disconnected(cause instanceof Error ? cause.message : String(cause));
         onStateChange("disconnected");
         scheduleReconnect();
       }
@@ -211,6 +222,8 @@ export const createTerminalTransportController = (
     }
     connectionState = { status: "connected", generation, connection: connected };
     const attachments = terminalChannels.activeTerminalIds().map(attach);
+    if (activityListeners.size > 0)
+      attachments.push(send({ version: TERMINAL_PROTOCOL_VERSION, type: "observe_activity" }));
     try {
       await Promise.all(attachments);
       reconnectAttempt = 0;
@@ -238,6 +251,26 @@ export const createTerminalTransportController = (
 
   return {
     connect,
+    readActivity: activity.read,
+    subscribeActivity(listener: () => void): () => void {
+      const first = activityListeners.size === 0;
+      activityListeners.add(listener);
+      const stop = activity.subscribe(listener);
+      if (first && connectionState.status === "connected") {
+        activity.loading();
+        void send({ version: TERMINAL_PROTOCOL_VERSION, type: "observe_activity" }).catch(
+          reportTransportFailure,
+        );
+      }
+      return () => {
+        stop();
+        activityListeners.delete(listener);
+        if (activityListeners.size === 0 && connectionState.status === "connected")
+          void send({ version: TERMINAL_PROTOCOL_VERSION, type: "unobserve_activity" }).catch(
+            reportTransportFailure,
+          );
+      };
+    },
     subscribe(terminalId: string, listener: TerminalFrameListener): () => void {
       const shouldAttach = terminalChannels.addListener(terminalId, listener);
       if (shouldAttach && connectionState.status === "connected")
@@ -319,6 +352,8 @@ export const createTerminalTransportController = (
       const connectionToClose = activeConnection();
       connectionState = { status: "disposed" };
       terminalChannels.clear();
+      activity.clear();
+      activityListeners.clear();
       onStateChange("disconnected");
       await closeConnection(connectionToClose);
     },

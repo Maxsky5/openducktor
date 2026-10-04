@@ -4,6 +4,36 @@ import { Effect } from "effect";
 import { createNodePtyPort } from "./pty-process-adapter";
 
 describe("createNodePtyPort", () => {
+  test("removes command hook files when native spawn fails", async () => {
+    let root: string | undefined;
+    const port = createNodePtyPort({
+      nodePty: {
+        spawn: (_shell, _args, options) => {
+          root = options.env?.ZDOTDIR;
+          throw new Error("Native spawn failed");
+        },
+      },
+    });
+    const result = await Effect.runPromise(
+      Effect.either(
+        port.start(
+          {
+            shell: "/bin/zsh",
+            args: ["-l"],
+            cwd: "/repo",
+            env: {},
+            grid: { columns: 80, rows: 24 },
+            commandNonce: "source",
+          },
+          { onOutput: () => {}, onFailure: () => {}, onExit: () => {} },
+        ),
+      ),
+    );
+    expect(result._tag).toBe("Left");
+    expect(root).toBeString();
+    expect(await Bun.file(`${root}/.zshrc`).exists()).toBe(false);
+  });
+
   test("includes the native spawn error, shell, and directory in startup failures", async () => {
     const port = createNodePtyPort({
       nodePty: {

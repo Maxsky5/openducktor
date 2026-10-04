@@ -33,6 +33,7 @@
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
   --status-running: oklch(0.685 0.169 237.323); /* ~sky-500 */
+  --status-running-foreground: var(--info-muted);
   --selected-surface: oklch(0.588 0.158 241.966 / 0.16); /* ~sky-600/16 */
   --selected-accent: oklch(0.588 0.158 241.966); /* ~sky-600 */
   --selected-control: oklch(0.55 0.158 241.966); /* vivid selected blue */
@@ -183,6 +184,7 @@
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
   --status-running: oklch(0.746 0.16 232.661); /* ~sky-400 */
+  --status-running-foreground: var(--status-running);
   --selected-surface: oklch(0.631 0.158 241.966 / 0.22); /* ~sky-500/22 */
   --selected-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
   --selected-control: oklch(0.54 0.17 245); /* deep vivid blue */
@@ -309,6 +311,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-status-running: var(--status-running);
+  --color-status-running-foreground: var(--status-running-foreground);
   --color-status-read: var(--status-read);
   --color-status-unread: var(--status-unread);
   --color-status-input-read: var(--status-input-read);

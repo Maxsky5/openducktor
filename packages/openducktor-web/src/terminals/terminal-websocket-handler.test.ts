@@ -34,6 +34,7 @@ const createTerminalServiceFixture = (
   detach: () => unexpectedTerminalOperation("detach"),
   resize: () => unexpectedTerminalOperation("resize"),
   write: () => unexpectedTerminalOperation("write"),
+  observeActivity: () => unexpectedTerminalOperation("observeActivity"),
   ...overrides,
 });
 
@@ -73,6 +74,47 @@ const makeSocket = (
 };
 
 describe("terminalWebSocketHandler", () => {
+  test("observes metadata without terminal attachments and releases observers on disconnect", async () => {
+    let stopped = 0;
+    const service = createTerminalServiceFixture({
+      observeActivity: (listener) =>
+        Effect.sync(() => {
+          listener({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" });
+          listener({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" });
+          return () => {
+            stopped += 1;
+          };
+        }),
+    });
+    const harness = makeSocket(service);
+    const send = (type: "observe_activity" | "unobserve_activity") =>
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: { version: TERMINAL_PROTOCOL_VERSION, type },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    send("observe_activity");
+    await Bun.sleep(0);
+    expect(harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message.type)).toEqual([
+      "activity_snapshot_start",
+      "activity_snapshot_end",
+    ]);
+    expect(harness.data.messagePermits.size).toBe(0);
+    expect(harness.closed).toEqual([]);
+    send("unobserve_activity");
+    await Bun.sleep(0);
+    expect(stopped).toBe(1);
+    send("observe_activity");
+    await Bun.sleep(0);
+    terminalWebSocketHandler.close(harness.socket);
+    await Bun.sleep(0);
+    expect(stopped).toBe(2);
+  });
+
   test("paces concurrent attaches after an asynchronous first restore", async () => {
     const payload = new Uint8Array(6 * 1024 * 1024);
     let releaseFirst!: () => void;
@@ -183,7 +225,10 @@ describe("terminalWebSocketHandler", () => {
       expect(harness.closed).toEqual([]);
     }
     expect(
-      harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message.terminalId),
+      harness.sent.map((frame) => {
+        const { message } = decodeTerminalProtocolFrame(frame);
+        return "terminalId" in message ? message.terminalId : undefined;
+      }),
     ).toEqual(["terminal-1", "terminal-2", "terminal-3"]);
   });
 
@@ -458,7 +503,10 @@ describe("terminalWebSocketHandler", () => {
       "detach:terminal-2:browser:connection-1:terminal-2",
     ]);
     expect(
-      harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message.terminalId),
+      harness.sent.map((frame) => {
+        const { message } = decodeTerminalProtocolFrame(frame);
+        return "terminalId" in message ? message.terminalId : undefined;
+      }),
     ).toEqual(["terminal-1", "terminal-2"]);
   });
 

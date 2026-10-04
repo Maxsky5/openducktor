@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { posix } from "node:path";
-import { repoConfigSchema, type TerminalServerMessage } from "@openducktor/contracts";
+import {
+  repoConfigSchema,
+  type TerminalActivityMessage,
+  type TerminalServerMessage,
+} from "@openducktor/contracts";
 import { Terminal } from "@xterm/headless";
 import { Effect, Fiber } from "effect";
 import { createDevServerService } from "../dev-servers/dev-server-service";
@@ -79,6 +83,62 @@ const makeHandle = () => {
 };
 
 describe("shared terminal output sources", () => {
+  test("publishes the started dev server command and owner until exit or release", async () => {
+    const service = await makeService();
+    const native = makeHandle();
+    const messages: TerminalActivityMessage[] = [];
+    const stop = await Effect.runPromise(
+      service.observeActivity((message) => messages.push(message)),
+    );
+    try {
+      const source = await Effect.runPromise(
+        service.openOutputSource({
+          context,
+          workingDir: "/repo/worktree",
+          label: "Web app",
+          command: "bun run dev --port 3000",
+          onForgotten: () => {},
+        }),
+      );
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_updated",
+        activity: {
+          kind: "dev_server",
+          command: "bun run dev --port 3000",
+          summary: { context, lifecycle: "starting" },
+        },
+      });
+      await Effect.runPromise(source.activate(native.handle));
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_updated",
+        activity: { summary: { lifecycle: "running" } },
+      });
+      expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+      const count = messages.length;
+      source.write(encoder.encode("server ready\r\n"));
+      expect(messages).toHaveLength(count);
+      expect(native.operations).toEqual([]);
+      source.exit({ exitCode: 0, signal: null });
+      expect(messages.at(-1)).toMatchObject({
+        type: "activity_removed",
+        terminalId: source.terminalId,
+      });
+      source.release();
+      const next: TerminalActivityMessage[] = [];
+      const stopNext = await Effect.runPromise(
+        service.observeActivity((message) => next.push(message)),
+      );
+      stopNext();
+      expect(next.map((message) => message.type)).toEqual([
+        "activity_snapshot_start",
+        "activity_snapshot_end",
+      ]);
+    } finally {
+      stop();
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
   test("restores the screen after replay eviction without exposing alternate-screen logs", async () => {
     const service = await makeService();
     const native = makeHandle();
@@ -87,6 +147,7 @@ describe("shared terminal output sources", () => {
         context,
         workingDir: "/repo",
         label: "Nx",
+        command: "bun run dev",
         onForgotten: () => {},
       }),
     );
@@ -153,6 +214,7 @@ describe("shared terminal output sources", () => {
         context,
         workingDir: "/repo",
         label: "Output",
+        command: "bun run dev",
         onForgotten: () => {},
       }),
     );
@@ -202,6 +264,7 @@ describe("shared terminal output sources", () => {
             context,
             workingDir: "/repo",
             label: "Output",
+            command: "bun run dev",
             onForgotten: () => {
               forgotten += 1;
             },
@@ -214,6 +277,7 @@ describe("shared terminal output sources", () => {
           context,
           workingDir: "/repo",
           label: "Too many",
+          command: "bun run dev",
           onForgotten: () => {},
         }),
       ),
