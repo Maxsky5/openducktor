@@ -1,18 +1,21 @@
 import type {
-  HostRuntimeLifecycleTrigger,
   HostRuntimeStatus,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
+import type { RuntimeSessionProbe, RuntimeSessionTarget } from "@openducktor/runtime-orchestration";
 import type { Effect } from "effect";
 import type {
   HostDependencyErrorAggregate,
+  HostError,
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
   HostResourceErrorAggregate,
   HostValidationErrorAggregate,
 } from "../effect/host-errors";
+
+export type { RuntimeSessionTarget } from "@openducktor/runtime-orchestration";
 
 export type RuntimeRegistryError =
   | HostDependencyErrorAggregate
@@ -27,9 +30,9 @@ export type RuntimeStartInput = {
   /** The saved executable path from the committed settings that this start applies. */
   configuredExecutablePath: string;
   /**
-   * Hands the host the cleanup of resources acquired so far. The host owns it until startup
-   * returns a handle, runs it when startup fails or is interrupted, and retries it later when it
-   * fails. Call it as soon as the first resource exists.
+   * Hands the orchestrator the cleanup of resources acquired so far. It owns the cleanup until
+   * startup returns a handle, runs it when startup fails or is interrupted, and retries it later
+   * when it fails. Call it as soon as the first resource exists.
    */
   ownCleanup: (cleanup: Effect.Effect<void, HostOperationErrorAggregate>) => void;
   /** Reports a managed resource exit or fatal transport failure after startup. */
@@ -46,67 +49,20 @@ export type RuntimeHandle = {
   stop(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
+/** Starts the managed resource of one runtime kind on this host platform. */
 export type RuntimeStarterPort = {
   startRuntime(input: RuntimeStartInput): Effect.Effect<RuntimeHandle, RuntimeRegistryError>;
 };
 
-/** Identifies one native session without its repository. One shared runtime serves all repositories. */
-export type RuntimeSessionTarget = {
-  runtimeKind: RuntimeKind;
-  externalSessionId: string;
-  workingDirectory: string;
-};
-
-/** Starts or restarts an enabled kind with the path. Stops a disabled kind. */
-export type RuntimeLifecycleRequest = {
-  trigger: HostRuntimeLifecycleTrigger;
-  enabled: boolean;
-  configuredExecutablePath: string;
-};
-
-export type RuntimeLifecycleOutcome = {
-  type: "completed" | "failed";
-  status: HostRuntimeStatus;
-};
-
-/** Exclusive lifecycle ownership of one or more kinds. Admission stays closed until release. */
-export type RuntimeLifecycleReservation = {
-  readonly kinds: ReadonlyArray<RuntimeKind>;
-  apply(
-    kind: RuntimeKind,
-    request: RuntimeLifecycleRequest,
-  ): Effect.Effect<RuntimeLifecycleOutcome, HostValidationErrorAggregate>;
-  /** Reopens admission for ready kinds and ends the reservation. */
-  release(): Effect.Effect<void>;
-};
-
+/** The shared runtimes as host services see them. */
 export type RuntimeRegistryPort = {
   status(kind: RuntimeKind): Effect.Effect<HostRuntimeStatus>;
   statuses(): Effect.Effect<HostRuntimeStatus[]>;
-  /** Records saved settings without a lifecycle effect. */
-  configure(
-    kind: RuntimeKind,
-    settings: { enabled: boolean; configuredExecutablePath: string },
-  ): Effect.Effect<void>;
-  recordConfigurationFailure(kind: RuntimeKind, message: string): Effect.Effect<void>;
-  /** Reserves lifecycle ownership, closes admission, and waits for admitted controls to finish. */
-  reserve(
-    kinds: ReadonlyArray<RuntimeKind>,
-  ): Effect.Effect<RuntimeLifecycleReservation, HostResourceErrorAggregate>;
   /** Returns the ready runtime of the kind, or why it is unavailable. It does not admit work. */
   requireReady(
     kind: RuntimeKind,
   ): Effect.Effect<RuntimeInstanceSummary, HostResourceErrorAggregate>;
-  stopAllRuntimes(): Effect.Effect<
-    RuntimeInstanceSummary[],
-    HostOperationErrorAggregate | HostResourceErrorAggregate
-  >;
-  stopSession(input: RuntimeSessionTarget): Effect.Effect<void, RuntimeRegistryError>;
-  probeSessionStatus(input: RuntimeSessionTarget): Effect.Effect<
-    {
-      supported: boolean;
-      hasLiveSession: boolean;
-    },
-    RuntimeRegistryError
-  >;
+  stopAllRuntimes(): Effect.Effect<RuntimeInstanceSummary[], HostOperationErrorAggregate>;
+  stopSession(input: RuntimeSessionTarget): Effect.Effect<void, HostError>;
+  probeSessionStatus(input: RuntimeSessionTarget): Effect.Effect<RuntimeSessionProbe, HostError>;
 };

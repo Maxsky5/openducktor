@@ -17,7 +17,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import { resolveRepoPath } from "./runtime-orchestrator-model";
+import { resolveRepoPath } from "./runtime-request-resolution";
 import { toCatalogResponse } from "./agent-runtime-catalog-response";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";

@@ -5,17 +5,17 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
+import { createTaskSessionStopService as createEffectTaskSessionStopService } from "./task-session-stop-service";
 
-export const createRuntimeOrchestratorService = (
-  input: Parameters<typeof createEffectRuntimeOrchestratorService>[0],
-) => createEffectRuntimeOrchestratorService(input);
+export const createTaskSessionStopService = (
+  input: Parameters<typeof createEffectTaskSessionStopService>[0],
+) => createEffectTaskSessionStopService(input);
 
 export const createGitPort = (
   canonicalizePath: (path: string) => string = (path) =>
     path === "/repo" ? "/canonical/repo" : path,
   isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
-): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"] =>
+): Parameters<typeof createEffectTaskSessionStopService>[0]["gitPort"] =>
   ({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
@@ -43,7 +43,7 @@ export const createGitPort = (
           }),
       });
     },
-  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"];
+  }) satisfies Parameters<typeof createEffectTaskSessionStopService>[0]["gitPort"];
 
 export const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
@@ -61,7 +61,7 @@ export const createTaskStore = (
     selectedModel: null;
   }> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
-): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"] =>
+): Parameters<typeof createEffectTaskSessionStopService>[0]["taskReader"] =>
   ({
     getTaskMetadata() {
       return Effect.tryPromise({
@@ -89,10 +89,10 @@ export const createTaskStore = (
           }),
       });
     },
-  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"];
+  }) satisfies Parameters<typeof createEffectTaskSessionStopService>[0]["taskReader"];
 
 type RuntimeSessionStopper = Parameters<
-  typeof createEffectRuntimeOrchestratorService
+  typeof createEffectTaskSessionStopService
 >[0]["runtimeRegistry"];
 
 export const createSessionStopper = (

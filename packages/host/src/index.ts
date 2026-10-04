@@ -25,7 +25,6 @@ export {
   type SourceRuntimeDistribution,
   type ToolScriptMcpLauncher,
 } from "./adapters/runtimes/runtime-distribution";
-export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { findInvalidSettingsFileError } from "./adapters/settings/settings-config-adapter";
 export {
   type AgentSessionLiveStateService,

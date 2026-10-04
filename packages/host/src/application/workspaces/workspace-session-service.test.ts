@@ -1,3 +1,4 @@
+import { createRuntimeOrchestrator, planSettingsChange } from "@openducktor/runtime-orchestration";
 import {
   readWorkspaceSessionArchivePreview,
   removeWorkspaceSessionWorktree,
@@ -7,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
-  RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionControlStartInput,
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
@@ -15,8 +15,12 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
-import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
+import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
+import {
+  createTestRuntimeDrivers,
+  testRuntimeHandle,
+  testRuntimeSettings,
+} from "../../test-support/runtime-orchestrator-test-support";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -494,27 +498,18 @@ describe("host-owned Workspace Session lifecycle", () => {
 
   test("first-send startup requires the shared runtime to be ready in the real registry", async () => {
     const h = setup();
-    const registry = createRuntimeRegistry({
-      admission: createRuntimeAdmissionGate(),
-      starter: {
-        startRuntime: (request) =>
-          Effect.succeed({
-            runtime: {
-              kind: request.runtimeKind,
-              runtimeId: "shared-opencode",
-              runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
-              startedAt: "2026-09-07T00:00:00Z",
-              descriptor: request.descriptor,
-            },
-            configuredExecutablePath: "opencode",
-            effectiveExecutablePath: "/bin/opencode",
-            stop: () => Effect.void,
-          }),
+    const orchestrator = createRuntimeOrchestrator({
+      drivers: createTestRuntimeDrivers((kind) =>
+        Effect.succeed(testRuntimeHandle(kind, "shared-opencode")),
+      ),
+      settings: {
+        readRuntimeSettings: () => Effect.succeed(testRuntimeSettings()),
+        listWorkspaces: () => Effect.succeed([]),
       },
-      descriptorFor: (kind) => RUNTIME_DESCRIPTORS_BY_KIND[kind],
-      onStatusChanged: () => {},
-      probeVersion: () => Effect.succeed(null),
+      liveSessions: { listAffectedSessions: () => Effect.succeed([]) },
+      observer: { statusChanged: () => {}, backgroundFailure: () => {} },
     });
+    const registry = createRuntimeRegistryPort(orchestrator);
     const service = createWorkspaceSessionService({
       ...h.dependencies,
       runtime: { requireReady: registry.requireReady },
@@ -529,16 +524,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts).toEqual([]);
       expect((await Effect.runPromise(service.get(ref))).externalSessionId).toBeNull();
 
+      // Enable OpenCode through a saved settings change.
       await Effect.runPromise(
-        Effect.acquireUseRelease(
-          registry.reserve(["opencode"]),
-          (reservation) =>
-            reservation.apply("opencode", {
-              trigger: "host_startup",
-              enabled: true,
-              configuredExecutablePath: "opencode",
-            }),
-          (reservation) => reservation.release(),
+        orchestrator.withSettingsChange(["opencode"], (session) =>
+          session.apply(
+            planSettingsChange(
+              testRuntimeSettings(),
+              testRuntimeSettings({ opencode: "opencode" }),
+            ),
+          ),
         ),
       );
       const created = await Effect.runPromise(service.start(ref));

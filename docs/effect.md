@@ -228,7 +228,7 @@ For single-flight startup, reserve the in-flight slot synchronously before the f
 
 `Deferred.make` and `Effect.fork` can yield. If code sets shared state after either call, two callers can both start the resource.
 
-References: `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts` and `packages/host/src/adapters/runtimes/runtime-registry.ts`.
+References: `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts` and `packages/runtime-orchestration/src/application/runtime-registry.ts`.
 
 ## Time and streams
 
@@ -304,4 +304,4 @@ The migration is complete when one full path uses Effect from its public adapter
 - Pure code stays synchronous.
 - Tests control time, streams, fibers, and scopes.
 
-Current examples are in `packages/host/src/ports/*`, `packages/host/src/effect/host-errors.ts`, `packages/host/src/adapters/attachments/local-attachment-adapter.ts`, `packages/host/src/composition/node/node-host-default-ports.ts`, `packages/host/src/interface/router/*`, `packages/host/src/composition/host-lifecycle.ts`, `packages/host/src/adapters/runtimes/runtime-registry.ts`, and `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`.
+Current examples are in `packages/host/src/ports/*`, `packages/host/src/effect/host-errors.ts`, `packages/host/src/adapters/attachments/local-attachment-adapter.ts`, `packages/host/src/composition/node/node-host-default-ports.ts`, `packages/host/src/interface/router/*`, `packages/host/src/composition/host-lifecycle.ts`, `packages/runtime-orchestration/src/application/runtime-registry.ts`, and `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`.

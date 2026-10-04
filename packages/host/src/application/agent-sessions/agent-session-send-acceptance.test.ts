@@ -9,7 +9,7 @@ import {
   runtime,
   ignoreObservationLoss,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
+import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { HostOperationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
@@ -27,7 +27,7 @@ describe("message acceptance through the command and live adapter modules", () =
       let sends = 0;
       let records = 0;
       const failure = new HostOperationError({ operation: "test", message: `${stage} failed` });
-      const runtimeAdmission = createRuntimeAdmissionGate();
+      const runtimeAdmission = createTestRuntimeAdmissionGate();
       runtimeAdmission.open(runtime.kind);
       const live = createAgentSessionLiveStateService({
         adapterRegistry: createLiveSessionAdapterRegistry(),

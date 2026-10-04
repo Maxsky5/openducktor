@@ -1,4 +1,5 @@
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
+import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
 import { createNodeAgentRuntimeQueryCommandHandlers } from "./node-agent-runtime-query-command-handlers";
 import { createNodeNotificationServices } from "./node-notification-services";
 import { createNotificationCommandHandlers } from "../../interface/commands/notification-command-handlers";
@@ -8,7 +9,6 @@ import { createNodeGitProviderCommandHandlers } from "./node-git-provider-comman
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
 import {
   createMcpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
@@ -24,7 +24,8 @@ import { createWorkspaceLifecycleService } from "../../application/workspaces/wo
 import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
+import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
@@ -42,7 +43,7 @@ import { createLocalAttachmentCommandHandlers } from "../../interface/commands/l
 import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
-import { createRuntimeOrchestratorCommandHandlers } from "../../interface/commands/runtime-orchestrator-command-handlers";
+import { createRuntimeCommandHandlers } from "../../interface/commands/runtime-command-handlers";
 import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
 import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
 import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
@@ -124,7 +125,9 @@ export const assembleNodeEffectHostCommandRouter = (
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
-  const runtimeAdmission = createRuntimeAdmissionGate();
+  // Services admit runtime work before the orchestrator exists, so the gate comes first.
+  const runtimeAdmissionGate = createRuntimeAdmissionGate();
+  const runtimeAdmission = createRuntimeAdmissionPort(runtimeAdmissionGate);
   const { liveSessionAdapterRegistry, liveState: agentSessionLiveStateService } =
     createNodeAgentSessionLiveState({
       runtimeAdmission,
@@ -166,7 +169,7 @@ export const assembleNodeEffectHostCommandRouter = (
     liveState: agentSessionLiveStateService,
     onBackgroundFailure,
     resolveBridge: () => resolvedMcpHostBridge,
-    runtimeAdmission,
+    runtimeAdmissionGate,
     runtimeDefinitionsService,
     settingsConfig,
     taskSessionLifecycleCoordinator,
@@ -301,7 +304,7 @@ export const assembleNodeEffectHostCommandRouter = (
     discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
     workspaceSettingsService,
   });
-  const runtimeOrchestratorService = createRuntimeOrchestratorService({
+  const taskSessionStopService = createTaskSessionStopService({
     gitPort: git,
     runtimeDefinitionsService,
     runtimeRegistry,
@@ -392,7 +395,7 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeHealth,
       toolDiscovery,
     }),
-    ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorService, hostRuntimeService),
+    ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService),
     ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService, () =>
       mcpBridge.checkReady(),
     ),

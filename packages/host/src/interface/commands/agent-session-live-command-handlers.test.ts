@@ -12,7 +12,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
+import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
@@ -142,7 +142,7 @@ const createHarness = async (
     stopSession: () => Effect.dieMessage("unexpected stop"),
     releaseSession: () => Effect.dieMessage("unexpected release"),
   };
-  const runtimeAdmission = createRuntimeAdmissionGate();
+  const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open("opencode");
   const service = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),

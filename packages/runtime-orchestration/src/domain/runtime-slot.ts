@@ -6,8 +6,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type { Deferred, Effect, Fiber } from "effect";
-import type { HostOperationErrorAggregate } from "../../effect/host-errors";
-import type { RuntimeHandle, RuntimeRegistryError } from "../../ports/runtime-registry-port";
+import type { RuntimeHandle } from "../ports/runtime-driver";
 
 /**
  * Identifies one start attempt so late callbacks from an old resource cannot change a new one.
@@ -32,11 +31,11 @@ export type SlotStatus = {
 export type SlotResources = {
   /** The started resource. Its summary gives the published runtime ID and start time. */
   handle: RuntimeHandle | null;
-  /** Cleanup of a partly started resource that the host still owns. */
-  orphanCleanup: Effect.Effect<void, HostOperationErrorAggregate> | null;
+  /** Cleanup of a partly started resource that the orchestrator still owns. */
+  orphanCleanup: Effect.Effect<void, unknown> | null;
   generation: Generation | null;
   /** The start in progress. Shutdown interrupts it. */
-  startFiber: Fiber.RuntimeFiber<RuntimeHandle, RuntimeRegistryError> | null;
+  startFiber: Fiber.RuntimeFiber<RuntimeHandle, unknown> | null;
   /** Resolves when the running lifecycle action ends. Shutdown waits for it. */
   applying: Deferred.Deferred<void> | null;
   /** True while a lifecycle reservation owns the slot. Admission stays closed meanwhile. */

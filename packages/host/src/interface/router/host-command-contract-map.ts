@@ -17,7 +17,7 @@ import type { createOpenInToolsCommandHandlers } from "../commands/open-in-tools
 import type { createPullRequestReviewCommandHandlers } from "../commands/pull-request-review-command-handlers";
 import type { createRuntimeDefinitionsCommandHandlers } from "../commands/runtime-definitions-command-handlers";
 import type { createRuntimeExecutableCommandHandlers } from "../commands/runtime-executable-command-handlers";
-import type { createRuntimeOrchestratorCommandHandlers } from "../commands/runtime-orchestrator-command-handlers";
+import type { createRuntimeCommandHandlers } from "../commands/runtime-command-handlers";
 import type { createSystemDiagnosticsCommandHandlers } from "../commands/system-diagnostics-command-handlers";
 import type { createSystemPlatformCommandHandlers } from "../commands/system-platform-command-handlers";
 import type { createTaskAssetCommandHandlers } from "../commands/task-asset-command-handlers";
@@ -49,7 +49,7 @@ type AllHostCommandHandlers = ReturnType<typeof createNotificationCommandHandler
   ReturnType<typeof createPullRequestReviewCommandHandlers> &
   ReturnType<typeof createRuntimeDefinitionsCommandHandlers> &
   ReturnType<typeof createRuntimeExecutableCommandHandlers> &
-  ReturnType<typeof createRuntimeOrchestratorCommandHandlers> &
+  ReturnType<typeof createRuntimeCommandHandlers> &
   ReturnType<typeof createSystemDiagnosticsCommandHandlers> &
   ReturnType<typeof createSystemPlatformCommandHandlers> &
   ReturnType<typeof createTaskAssetCommandHandlers> &

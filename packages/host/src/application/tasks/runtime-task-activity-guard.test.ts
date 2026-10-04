@@ -41,9 +41,6 @@ const registry = ({
 } = {}): RuntimeRegistryPort => ({
   status: () => Effect.dieMessage("unexpected runtime status"),
   statuses: () => Effect.dieMessage("unexpected runtime statuses"),
-  configure: () => Effect.dieMessage("unexpected runtime configure"),
-  recordConfigurationFailure: () => Effect.dieMessage("unexpected runtime configuration failure"),
-  reserve: () => Effect.dieMessage("unexpected runtime reservation"),
   requireReady: () => Effect.dieMessage("unexpected runtime readiness check"),
   stopAllRuntimes: () => Effect.dieMessage("unexpected runtime shutdown"),
   stopSession(input) {

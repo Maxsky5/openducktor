@@ -25,9 +25,6 @@ const createRuntimeRegistry = (
 ): RuntimeRegistryPort => ({
   status: () => Effect.die("unused"),
   statuses: () => Effect.die("unused"),
-  configure: () => Effect.die("unused"),
-  recordConfigurationFailure: () => Effect.die("unused"),
-  reserve: () => Effect.die("unused"),
   requireReady: () => Effect.die("unused"),
   stopAllRuntimes,
   stopSession: () => Effect.die("unused"),

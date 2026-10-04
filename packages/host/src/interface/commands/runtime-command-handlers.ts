@@ -4,7 +4,7 @@ import {
   runtimeRestartInputSchema,
 } from "@openducktor/contracts";
 import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
-import type { RuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import type { TaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -28,13 +28,13 @@ const parseAgentSessionStopInput = (args: HostCommandArgs) => {
   });
 };
 
-export const createRuntimeOrchestratorCommandHandlers = (
-  runtimeOrchestratorService: RuntimeOrchestratorService,
+export const createRuntimeCommandHandlers = (
+  taskSessionStopService: TaskSessionStopService,
   hostRuntimeService: HostRuntimeService,
 ) =>
   ({
     agent_session_stop: (args) =>
-      runtimeOrchestratorService.agentSessionStop(parseAgentSessionStopInput(args)),
+      taskSessionStopService.agentSessionStop(parseAgentSessionStopInput(args)),
     runtime_status: () => hostRuntimeService.snapshot(),
     runtime_require: (args) =>
       hostRuntimeService.requireRuntime(

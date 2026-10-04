@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { HostResourceError } from "../../effect/host-errors";
-import { createRuntimeAdmissionGate } from "./runtime-admission";
+import { RuntimeUnavailableError } from "../errors";
+import { createRuntimeAdmissionGate } from "./runtime-admission-gate";
 
 const unavailable = {
   state: "stopping",
@@ -14,7 +14,7 @@ describe("runtime admission gate", () => {
     const gate = createRuntimeAdmissionGate();
 
     const closed = await Effect.runPromise(Effect.flip(gate.admit("codex", Effect.succeed(1))));
-    expect(closed).toBeInstanceOf(HostResourceError);
+    expect(closed).toBeInstanceOf(RuntimeUnavailableError);
 
     gate.open("codex");
     await expect(Effect.runPromise(gate.admit("codex", Effect.succeed(1)))).resolves.toBe(1);

@@ -17,8 +17,6 @@ import type { ClaudeSession } from "../claude/claude-agent-sdk-types";
 import {
   type CreateRuntimeSessionOperationsInput,
   createRuntimeSessionOperations,
-  probeRuntimeSessionStatus,
-  stopRuntimeSession,
 } from "./runtime-session-operations";
 
 type FetchRequest = (
@@ -101,25 +99,23 @@ const stopSession = (
   externalSessionId = "session-1",
 ) =>
   Effect.runPromise(
-    stopRuntimeSession({
-      input: sessionTarget(runtime.kind, externalSessionId),
+    createRuntimeSessionOperations(operationsInput)[runtime.kind].stopSession(
+      sessionTarget(runtime.kind, externalSessionId),
       runtime,
-      sessionOperations: createRuntimeSessionOperations(operationsInput),
-    }),
+    ),
   );
 
 const probeSession = (
-  runtime: RuntimeInstanceSummary | null,
+  runtime: RuntimeInstanceSummary,
   runtimeKind: RuntimeKind,
   operationsInput: CreateRuntimeSessionOperationsInput = {},
   externalSessionId = "session-1",
 ) =>
   Effect.runPromise(
-    probeRuntimeSessionStatus({
-      input: sessionTarget(runtimeKind, externalSessionId),
+    createRuntimeSessionOperations(operationsInput)[runtimeKind].probeSessionStatus(
+      sessionTarget(runtimeKind, externalSessionId),
       runtime,
-      sessionOperations: createRuntimeSessionOperations(operationsInput),
-    }),
+    ),
   );
 
 const claudeRuntime: RuntimeInstanceSummary = {
@@ -186,20 +182,14 @@ describe("Claude runtime session operations", () => {
     };
 
     await expect(
-      Effect.runPromise(
-        probeRuntimeSessionStatus({ input: target, runtime: claudeRuntime, sessionOperations }),
-      ),
+      Effect.runPromise(sessionOperations.claude.probeSessionStatus(target, claudeRuntime)),
     ).resolves.toEqual({ supported: true, hasLiveSession: true });
-    await Effect.runPromise(
-      stopRuntimeSession({ input: target, runtime: claudeRuntime, sessionOperations }),
-    );
+    await Effect.runPromise(sessionOperations.claude.stopSession(target, claudeRuntime));
 
     expect(sessionStore.get("session-b")).toBeUndefined();
     expect(sessionStore.get("session-a")?.activity).toBe("running");
     await expect(
-      Effect.runPromise(
-        probeRuntimeSessionStatus({ input: target, runtime: claudeRuntime, sessionOperations }),
-      ),
+      Effect.runPromise(sessionOperations.claude.probeSessionStatus(target, claudeRuntime)),
     ).resolves.toEqual({ supported: true, hasLiveSession: false });
   });
 
@@ -210,15 +200,14 @@ describe("Claude runtime session operations", () => {
 
     await expect(
       Effect.runPromise(
-        stopRuntimeSession({
-          input: {
+        sessionOperations.claude.stopSession(
+          {
             runtimeKind: "claude",
             externalSessionId: "missing",
             workingDirectory: "/repo/worktree",
           },
-          runtime: claudeRuntime,
-          sessionOperations,
-        }),
+          claudeRuntime,
+        ),
       ),
     ).rejects.toThrow("Unknown Claude session 'missing'.");
   });
@@ -310,21 +299,6 @@ describe("OpenCode runtime session operations", () => {
 });
 
 describe("Codex runtime session operations", () => {
-  test("treats session status probes without a runtime as inactive", async () => {
-    const calls: unknown[] = [];
-    await expect(
-      probeSession(null, "codex", {
-        codexAppServer: {
-          request(input) {
-            calls.push(input);
-            return codexResult("turn/interrupt", {});
-          },
-        },
-      }),
-    ).resolves.toEqual({ supported: true, hasLiveSession: false });
-    expect(calls).toEqual([]);
-  });
-
   test("probes Codex session status through the host-managed app-server transport", async () => {
     const calls: unknown[] = [];
     const codexAppServer: CreateRuntimeSessionOperationsInput["codexAppServer"] = {

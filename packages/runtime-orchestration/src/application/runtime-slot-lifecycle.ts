@@ -1,18 +1,26 @@
 import {
   type HostRuntimeFailure,
   type HostRuntimeLifecycleTrigger,
-  type RuntimeDescriptor,
+  type HostRuntimeStatus,
   type RuntimeKind,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Effect, Exit, Fiber } from "effect";
-import { causeMessage } from "../../effect/host-errors";
-import type {
-  RuntimeLifecycleOutcome,
-  RuntimeLifecycleRequest,
-  RuntimeStarterPort,
-} from "../../ports/runtime-registry-port";
-import { type Generation, type Slot, type SlotStatus, toStatus } from "./runtime-registry-slot";
+import { causeMessage } from "../domain/failure-message";
+import { type Generation, type Slot, type SlotStatus, toStatus } from "../domain/runtime-slot";
+import type { RuntimeDrivers } from "../ports/runtime-driver";
+
+/** Starts or restarts an enabled kind with the path. Stops a disabled kind. */
+export type RuntimeLifecycleRequest = {
+  trigger: HostRuntimeLifecycleTrigger;
+  enabled: boolean;
+  configuredExecutablePath: string;
+};
+
+export type RuntimeLifecycleOutcome = {
+  type: "completed" | "failed";
+  status: HostRuntimeStatus;
+};
 
 const withCleanupFailure = (message: string, cleanupFailure: string | null): string =>
   cleanupFailure === null ? message : `${message}\nCleanup failed: ${cleanupFailure}`;
@@ -24,18 +32,14 @@ const startNextAction = (label: string) =>
  * Starts, stops, and replaces the resource of one runtime slot, and records its crashes. The
  * registry owns the slots, admission, reservations, and shutdown.
  */
-export const createRuntimeSlotLifecycle = ({
-  starter,
-  descriptorFor,
-  probeVersion,
+export const createRuntimeSlotLifecycle = <E>({
+  drivers,
   label,
   update,
   newFailure,
   isShuttingDown,
 }: {
-  starter: RuntimeStarterPort;
-  descriptorFor: (kind: RuntimeKind) => RuntimeDescriptor;
-  probeVersion: (kind: RuntimeKind, executablePath: string) => Effect.Effect<string | null>;
+  drivers: RuntimeDrivers<E>;
   label: (kind: RuntimeKind) => string;
   update: (slot: Slot, changes: Partial<SlotStatus>) => void;
   newFailure: (
@@ -161,9 +165,7 @@ export const createRuntimeSlotLifecycle = ({
       // can act, so shutdown always finds and stops it.
       const start = Effect.uninterruptibleMask((restore) =>
         restore(
-          starter.startRuntime({
-            runtimeKind: slot.kind,
-            descriptor: descriptorFor(slot.kind),
+          drivers[slot.kind].start({
             configuredExecutablePath: request.configuredExecutablePath,
             ownCleanup: (cleanup) => {
               if (slot.generation === generation) slot.orphanCleanup = cleanup;
@@ -229,7 +231,7 @@ export const createRuntimeSlotLifecycle = ({
         });
         return false;
       }
-      const version = yield* probeVersion(slot.kind, handle.effectiveExecutablePath);
+      const version = yield* drivers[slot.kind].probeVersion(handle.effectiveExecutablePath);
       // Once shutdown began, the runtime cannot become ready. Shutdown stops the handle.
       if (slot.handle !== handle || isShuttingDown()) return false;
       update(slot, {

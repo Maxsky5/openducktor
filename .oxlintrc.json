@@ -15,7 +15,10 @@
     "tools/oxlint/anti-slop/**"
   ],
   "jsPlugins": [
-    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/src/index.ts" },
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/src/index.ts"
+    },
     {
       "name": "anti-slop-effect",
       "specifier": "./tools/oxlint/anti-slop/src/effect/index.ts"
@@ -47,6 +50,48 @@
         "react/exhaustive-deps": "warn",
         "react/no-danger": "warn",
         "react/rules-of-hooks": "warn"
+      }
+    },
+    {
+      "files": ["packages/runtime-orchestration/src/**/*.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 500,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["node:*"],
+                "message": "Runtime orchestration stays platform independent. Put Node code in a host driver or port adapter."
+              },
+              {
+                "group": [
+                  "@openducktor/host",
+                  "@openducktor/host/*",
+                  "@openducktor/frontend",
+                  "@openducktor/frontend/*",
+                  "@openducktor/node-support",
+                  "**/adapters/**",
+                  "**/infrastructure/**"
+                ],
+                "message": "Runtime orchestration must not import host, frontend, or adapter code. Add a port instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/runtime-orchestration/src/**/*.test.ts"],
+      "rules": {
+        "max-lines": "off"
       }
     }
   ],

@@ -27,6 +27,7 @@ import {
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveSnapshotSchema,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
@@ -161,7 +162,7 @@ export const createAgentSessionLiveStateService = ({
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   // Controls enter the shared runtime only while its current generation is ready.
   const withStartAdmission =
-    <Input extends { repoPath: string; runtimeKind: string }, Success>(
+    <Input extends { repoPath: string; runtimeKind: RuntimeKind }, Success>(
       operation: (input: Input) => Effect.Effect<Success, HostError>,
     ) =>
     (input: Input): Effect.Effect<Success, HostError> => {

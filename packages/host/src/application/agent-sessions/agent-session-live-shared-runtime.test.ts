@@ -9,7 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
+import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
@@ -142,7 +142,7 @@ describe("shared live runtime across repositories", () => {
   });
 
   test("rejects a control with an actionable message while the kind is not ready", async () => {
-    const admission = createRuntimeAdmissionGate();
+    const admission = createTestRuntimeAdmissionGate();
     const { service } = createHarness({ runtimeAdmission: admission });
     const starts: AgentSessionControlStartInput[] = [];
     await Effect.runPromise(

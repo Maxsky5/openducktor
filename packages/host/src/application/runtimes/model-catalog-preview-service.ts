@@ -5,7 +5,7 @@ import { errorMessage, type HostError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-query-error";
 import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
-import { resolveRepoPath, resolveRuntimeDescriptor } from "./runtime-orchestrator-model";
+import { resolveRepoPath, resolveRuntimeDescriptor } from "./runtime-request-resolution";
 
 export type ModelCatalogPreviewReader = (
   input: AgentRuntimePreviewModelsInput,

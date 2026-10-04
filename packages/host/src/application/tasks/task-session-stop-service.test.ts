@@ -4,10 +4,10 @@ import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import {
   createGitPort,
   createRuntimeDefinitionsService,
-  createRuntimeOrchestratorService,
+  createTaskSessionStopService,
   createSessionStopper,
   createTaskStore,
-} from "./runtime-orchestrator-service.test-support";
+} from "./task-session-stop-service.test-support";
 
 const recordingStopper = (calls: RuntimeSessionTarget[]) =>
   createSessionStopper((input) =>
@@ -16,10 +16,10 @@ const recordingStopper = (calls: RuntimeSessionTarget[]) =>
     }),
   );
 
-describe("createRuntimeOrchestratorService agentSessionStop", () => {
+describe("createTaskSessionStopService agentSessionStop", () => {
   test("stops persisted agent sessions through the shared runtime of their kind", async () => {
     const calls: RuntimeSessionTarget[] = [];
-    const service = createRuntimeOrchestratorService({
+    const service = createTaskSessionStopService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: recordingStopper(calls),
@@ -47,7 +47,7 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
 
   test("stops persisted Codex sessions through the shared runtime of their kind", async () => {
     const calls: RuntimeSessionTarget[] = [];
-    const service = createRuntimeOrchestratorService({
+    const service = createTaskSessionStopService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: recordingStopper(calls),
@@ -75,7 +75,7 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
 
   test("stops the exact persisted session when external ids collide", async () => {
     const calls: RuntimeSessionTarget[] = [];
-    const service = createRuntimeOrchestratorService({
+    const service = createTaskSessionStopService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: recordingStopper(calls),
@@ -121,7 +121,7 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
 
   test("rejects agent session stop when persisted session identity mismatches the request", async () => {
     const calls: RuntimeSessionTarget[] = [];
-    const service = createRuntimeOrchestratorService({
+    const service = createTaskSessionStopService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: recordingStopper(calls),
@@ -142,7 +142,7 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
   });
 
   test("propagates runtime registry stop failures", async () => {
-    const service = createRuntimeOrchestratorService({
+    const service = createTaskSessionStopService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createSessionStopper(() =>

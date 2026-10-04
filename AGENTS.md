@@ -40,6 +40,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 - `packages/contracts`: Shared runtime schemas and IPC contracts.
 - `packages/core`: Core domain services and ports.
 - `packages/host`: Effect-native TypeScript host, command routing, use cases, and infrastructure adapters.
+- `packages/runtime-orchestration`: Platform-independent lifecycle of the shared agent runtimes. The host plugs in one driver for each runtime kind.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
 - `packages/host-client`: Frontend IPC adapter.
 - `packages/openducktor-mcp`: MCP server for `odt_*` workflow tools.

@@ -9,7 +9,7 @@ import {
   ref,
   ignoreObservationLoss,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
+import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
 
 describe("live runtime registration lifecycle", () => {
@@ -24,7 +24,7 @@ describe("live runtime registration lifecycle", () => {
       const detached = Promise.withResolvers<void>();
       const registry = createLiveSessionAdapterRegistry();
       const events: AgentSessionLiveEnvelope[] = [];
-      const runtimeAdmission = createRuntimeAdmissionGate();
+      const runtimeAdmission = createTestRuntimeAdmissionGate();
       runtimeAdmission.open(runtime.kind);
       const service = createAgentSessionLiveStateService({
         runtimeAdmission,

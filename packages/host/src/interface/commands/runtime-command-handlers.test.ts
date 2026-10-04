@@ -7,14 +7,14 @@ import {
   type RuntimeLifecycleImpact,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { RuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import type { TaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { createHostRuntimeServiceTestDouble } from "../../test-support/host-runtime-service-test-double";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../router/host-command-router";
-import { createRuntimeOrchestratorCommandHandlers } from "./runtime-orchestrator-command-handlers";
+import { createRuntimeCommandHandlers } from "./runtime-command-handlers";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
@@ -60,7 +60,7 @@ const impact = {
 
 const createHarness = () => {
   const calls: Array<{ method: string; input: unknown }> = [];
-  const orchestrator: RuntimeOrchestratorService = {
+  const orchestrator: TaskSessionStopService = {
     agentSessionStop: (input) =>
       Effect.sync(() => {
         calls.push({ method: "agentSessionStop", input });
@@ -90,12 +90,12 @@ const createHarness = () => {
       }),
   });
   const router = createHostCommandRouter({
-    handlers: createRuntimeOrchestratorCommandHandlers(orchestrator, hostRuntimeService),
+    handlers: createRuntimeCommandHandlers(orchestrator, hostRuntimeService),
   });
   return { calls, router };
 };
 
-describe("createRuntimeOrchestratorCommandHandlers", () => {
+describe("createRuntimeCommandHandlers", () => {
   test("routes session stop and host runtime lifecycle commands", async () => {
     const { calls, router } = createHarness();
     const stopRequest = {

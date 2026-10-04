@@ -223,6 +223,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/runtime-orchestration": "workspace:*",
         "@xterm/addon-serialize": "0.14.0",
         "@xterm/headless": "6.0.0",
         "diff": "9.0.0",
@@ -305,6 +306,19 @@
     "packages/path-support": {
       "name": "@openducktor/path-support",
       "version": "0.9.0",
+      "devDependencies": {
+        "bun-types": "^1.4.2",
+      },
+    },
+    "packages/runtime-orchestration": {
+      "name": "@openducktor/runtime-orchestration",
+      "version": "0.9.0",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
+        "@openducktor/path-support": "workspace:*",
+        "effect": "^3.22.2",
+      },
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
@@ -788,6 +802,8 @@
     "@openducktor/mcp": ["@openducktor/mcp@workspace:packages/openducktor-mcp"],
 
     "@openducktor/path-support": ["@openducktor/path-support@workspace:packages/path-support"],
+
+    "@openducktor/runtime-orchestration": ["@openducktor/runtime-orchestration@workspace:packages/runtime-orchestration"],
 
     "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
 

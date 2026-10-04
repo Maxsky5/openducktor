@@ -94,7 +94,7 @@ The host detects shared notifications for all open workspaces. Shells deliver th
 
 ## Runtime readiness
 
-Files: `state/queries/host-runtime-status.ts`, `state/host-runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, and `packages/host/src/application/runtimes/host-runtime-service.ts`.
+Files: `state/queries/host-runtime-status.ts`, `state/host-runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, `packages/host/src/application/runtimes/host-runtime-service.ts`, and `packages/runtime-orchestration/src`.
 
 Owns the host runtime status of each kind and the mapping to ready, checking, or blocked.
 

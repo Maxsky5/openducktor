@@ -2,7 +2,6 @@ import {
   type RuntimeInstanceSummary,
   type RuntimeKind,
   type RuntimeRoute,
-  runtimeKindSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostResourceError, HostValidationError } from "../../effect/host-errors";
@@ -32,7 +31,7 @@ export type RuntimeSessionOperations = {
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, RuntimeRegistryError>;
 };
 
-export type RuntimeSessionOperationsByKind = Partial<Record<RuntimeKind, RuntimeSessionOperations>>;
+export type RuntimeSessionOperationsByKind = Record<RuntimeKind, RuntimeSessionOperations>;
 
 export type CreateRuntimeSessionOperationsInput = {
   codexAppServer?: Pick<CodexAppServerPort, "request">;
@@ -152,58 +151,6 @@ export const createRuntimeSessionOperations = ({
     claude: createClaudeSessionOperations(claudeAgentSdk),
   }) satisfies RuntimeSessionOperationsByKind;
 
-type StopRuntimeSessionInput = {
-  input: RuntimeSessionTarget;
-  runtime: RuntimeInstanceSummary;
-  sessionOperations: RuntimeSessionOperationsByKind;
-};
-
-type ProbeRuntimeSessionStatusInput = {
-  input: RuntimeSessionTarget;
-  runtime: RuntimeInstanceSummary | null;
-  sessionOperations: RuntimeSessionOperationsByKind;
-};
-
-const requireSessionOperations = (
-  runtimeKind: string,
-  sessionOperations: RuntimeSessionOperationsByKind,
-  operation: string,
-) => {
-  const parsedRuntimeKind = runtimeKindSchema.safeParse(runtimeKind);
-  if (!parsedRuntimeKind.success) {
-    return Effect.fail(
-      new HostValidationError({
-        message: `Runtime kind ${runtimeKind} does not support ${operation} in the TypeScript host.`,
-        field: "runtimeKind",
-        details: { runtimeKind },
-      }),
-    );
-  }
-
-  const operations = sessionOperations[parsedRuntimeKind.data];
-  if (operations) {
-    return Effect.succeed(operations);
-  }
-  return Effect.fail(
-    new HostValidationError({
-      message: `Runtime kind ${parsedRuntimeKind.data} does not support ${operation} in the TypeScript host.`,
-      field: "runtimeKind",
-      details: { runtimeKind: parsedRuntimeKind.data },
-    }),
-  );
-};
-
-const optionalSessionOperationsFor = (
-  runtimeKind: string,
-  sessionOperations: RuntimeSessionOperationsByKind,
-) => {
-  const parsedRuntimeKind = runtimeKindSchema.safeParse(runtimeKind);
-  if (!parsedRuntimeKind.success) {
-    return null;
-  }
-  return sessionOperations[parsedRuntimeKind.data] ?? null;
-};
-
 const requireClaudeAgentSdk = (
   claudeAgentSdk: ClaudeRuntimeSessionOperationsPort,
   operation: string,
@@ -252,45 +199,9 @@ const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
     );
   });
 
-const toSessionRouteTarget = (
-  input: RuntimeSessionTarget | RuntimeSessionTarget,
-  runtime: RuntimeInstanceSummary,
-) => ({
+const toSessionRouteTarget = (input: RuntimeSessionTarget, runtime: RuntimeInstanceSummary) => ({
   runtimeKind: input.runtimeKind,
   runtimeRoute: runtime.runtimeRoute,
   externalSessionId: input.externalSessionId,
   workingDirectory: input.workingDirectory,
 });
-
-export const stopRuntimeSession = ({
-  input,
-  runtime,
-  sessionOperations,
-}: StopRuntimeSessionInput): Effect.Effect<void, RuntimeRegistryError> =>
-  Effect.gen(function* () {
-    const operations = yield* requireSessionOperations(
-      input.runtimeKind,
-      sessionOperations,
-      "session stop",
-    );
-    return yield* operations.stopSession(input, runtime);
-  });
-
-export const probeRuntimeSessionStatus = ({
-  input,
-  runtime,
-  sessionOperations,
-}: ProbeRuntimeSessionStatusInput): Effect.Effect<
-  { supported: boolean; hasLiveSession: boolean },
-  RuntimeRegistryError
-> =>
-  Effect.gen(function* () {
-    if (!runtime) {
-      return { supported: true, hasLiveSession: false };
-    }
-    const operations = optionalSessionOperationsFor(input.runtimeKind, sessionOperations);
-    if (!operations) {
-      return { supported: false, hasLiveSession: false };
-    }
-    return yield* operations.probeSessionStatus(input, runtime);
-  });

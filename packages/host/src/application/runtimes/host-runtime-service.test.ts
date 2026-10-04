@@ -3,15 +3,25 @@ import {
   type AgentSessionLiveSnapshot,
   type GlobalConfig,
   globalConfigSchema,
-  RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
+import {
+  createRuntimeAdmissionGate,
+  createRuntimeOrchestrator,
+} from "@openducktor/runtime-orchestration";
 import { Deferred, Effect, Exit, Fiber, FiberId } from "effect";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
-import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
+import {
+  createTestRuntimeDrivers,
+  testRuntimeHandle,
+} from "../../test-support/runtime-orchestrator-test-support";
+import {
+  createLiveSessionInventory,
+  createRuntimeAdmissionPort,
+  createRuntimeRegistryPort,
+  createRuntimeSettingsSource,
+} from "./host-runtime-ports";
 import { createHostRuntimeService } from "./host-runtime-service";
 
 const repoPath = "/repos/alpha";
@@ -60,38 +70,48 @@ const createHarness = (initialConfig: GlobalConfig) => {
   const sessions = new Map<RuntimeKind, AgentSessionLiveSnapshot[]>();
   const failingStarts = new Set<RuntimeKind>();
   const missingExecutables = new Set<string>();
-  const starter: RuntimeStarterPort = {
-    startRuntime: (input) =>
+  const drivers = createTestRuntimeDrivers(
+    (kind) =>
       Effect.suspend(() => {
-        if (failingStarts.has(input.runtimeKind)) {
+        if (failingStarts.has(kind)) {
           return Effect.fail(
             new HostOperationError({ operation: "test.start", message: "missing executable" }),
           );
         }
-        const runtimeId = `${input.runtimeKind}-${++starts}`;
+        const runtimeId = `${kind}-${++starts}`;
         events.push(`start:${runtimeId}`);
-        return Effect.succeed({
-          runtime: {
-            kind: input.runtimeKind,
-            runtimeId,
-            runtimeRoute: { type: "host_service" as const, identity: runtimeId },
-            startedAt: "2026-10-03T10:00:00.000Z",
-            descriptor: input.descriptor,
-          },
-          configuredExecutablePath: input.runtimeKind,
-          effectiveExecutablePath: `/bin/${input.runtimeKind}`,
-          stop: () => Effect.sync(() => void events.push(`stop:${runtimeId}`)),
-        });
+        return Effect.succeed(testRuntimeHandle(kind, runtimeId, events));
       }),
+    {
+      validateExecutable: (executablePath) =>
+        missingExecutables.has(executablePath)
+          ? Effect.fail(
+              new HostValidationError({
+                field: "executablePath",
+                message: `${executablePath} does not exist.`,
+              }),
+            )
+          : Effect.void,
+    },
+  );
+  const settingsConfig = {
+    readConfig: () =>
+      Effect.suspend(() => (readFailure ? Effect.fail(readFailure) : Effect.succeed(config))),
   };
-  const admission = createRuntimeAdmissionGate();
-  const registry = createRuntimeRegistry({
-    admission,
-    starter,
-    descriptorFor: (kind) => RUNTIME_DESCRIPTORS_BY_KIND[kind],
-    onStatusChanged: () => {},
+  const gate = createRuntimeAdmissionGate();
+  const orchestrator = createRuntimeOrchestrator({
+    drivers,
+    settings: createRuntimeSettingsSource(settingsConfig),
+    liveSessions: createLiveSessionInventory({
+      listRuntimeSessions: (kind) =>
+        Effect.sync(() => [...sessions].find(([candidate]) => candidate === kind)?.[1] ?? []),
+    }),
+    observer: { statusChanged: () => {}, backgroundFailure: () => {} },
+    admission: gate,
     controlGrace: "20 millis",
   });
+  const registry = createRuntimeRegistryPort(orchestrator);
+  const admission = createRuntimeAdmissionPort(gate);
   const workspaces: WorkspaceRecord[] = [];
   const prepare = (next: { agentRuntimes: GlobalConfig["agentRuntimes"] }) => {
     const current = config ?? initialConfig;
@@ -102,11 +122,7 @@ const createHarness = (initialConfig: GlobalConfig) => {
   };
   const service = createHostRuntimeService({
     hostInstanceId: "host-1",
-    registry,
-    settingsConfig: {
-      readConfig: () =>
-        Effect.suspend(() => (readFailure ? Effect.fail(readFailure) : Effect.succeed(config))),
-    },
+    orchestrator,
     settingsService: {
       prepareSettingsSnapshot: (next) => Effect.sync(() => prepare(next)),
       saveSettingsSnapshotWith: (next, commit) =>
@@ -128,29 +144,10 @@ const createHarness = (initialConfig: GlobalConfig) => {
           );
         }),
     },
-    liveSessions: {
-      listRuntimeSessions: (kind) =>
-        Effect.sync(() => [...sessions].find(([candidate]) => candidate === kind)?.[1] ?? []),
-    },
-    toolDiscovery: {
-      validateToolPath: (toolId, executablePath) =>
-        missingExecutables.has(executablePath)
-          ? Effect.fail(
-              new HostValidationError({
-                field: "executablePath",
-                message: `${executablePath} does not exist.`,
-              }),
-            )
-          : Effect.succeed({
-              displayLabel: toolId,
-              path: executablePath,
-              sourceCategory: "provided_path" as const,
-            }),
-    },
-    logError: () => Effect.void,
   });
   return {
     service,
+    orchestrator,
     registry,
     admission,
     events,
@@ -422,8 +419,10 @@ describe("host runtime service", () => {
     while (!harness.writeStarted()) await Effect.runPromise(Effect.yieldNow());
     await Effect.runPromise(Fiber.interrupt(saving));
 
-    const reservation = await Effect.runPromise(harness.registry.reserve(["opencode"]));
-    await Effect.runPromise(reservation.release());
+    // A new lifecycle action can reserve the kind, so the save released it.
+    await Effect.runPromise(
+      harness.orchestrator.withSettingsChange(["opencode"], () => Effect.void),
+    );
     expect(harness.events).toEqual(["start:opencode-1"]);
   });
 

@@ -10,7 +10,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createRuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
+import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
@@ -110,7 +110,7 @@ const setup = async () => {
   const adapter = createAdapter("runtime-1");
   await Effect.runPromise(registry.register(adapter));
   const lifecycle = createTaskSessionLifecycleCoordinator();
-  const admission = createRuntimeAdmissionGate();
+  const admission = createTestRuntimeAdmissionGate();
   admission.open("opencode");
   const service = createWorkspaceSessionImportService({
     store: {

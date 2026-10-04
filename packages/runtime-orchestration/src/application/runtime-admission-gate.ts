@@ -1,19 +1,16 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { Deferred, Effect, Exit, Fiber, FiberId } from "effect";
-import { HostResourceError } from "../../effect/host-errors";
-import type {
-  RuntimeAdmissionPort,
-  RuntimeUnavailableDetails,
-} from "../../ports/runtime-admission-port";
+import { RuntimeUnavailableError } from "../errors";
 
 type Control = Fiber.RuntimeFiber<unknown, unknown>;
 
 /** Why a closed kind admits nothing, and what the caller can do next. */
-type Unavailable = Omit<RuntimeUnavailableDetails, "runtimeKind"> & { message: string };
+export type RuntimeUnavailability = { state: string; message: string; nextAction: string };
 
 type AdmissionEntry = {
-  runtimeKind: string;
+  runtimeKind: RuntimeKind;
   open: boolean;
-  unavailable: Unavailable;
+  unavailable: RuntimeUnavailability;
   /** Each admitted control runs in its own fiber, so the gate can cancel it alone. */
   controls: Set<Control>;
   /** Controls that the gate cancelled, with the reason their callers receive. */
@@ -22,24 +19,32 @@ type AdmissionEntry = {
   drained: Deferred.Deferred<void> | null;
 };
 
-export type RuntimeAdmissionGate = RuntimeAdmissionPort & {
-  open(runtimeKind: string): void;
-  close(runtimeKind: string, unavailable: Unavailable): void;
+/**
+ * Admits runtime-dependent controls only while the kind is open. A lifecycle action closes the
+ * kind, drains the admitted controls, and can cancel the ones that outlast its grace period.
+ */
+export type RuntimeAdmissionGate = {
+  admit<A, E, R>(
+    runtimeKind: RuntimeKind,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | RuntimeUnavailableError, R>;
+  open(runtimeKind: RuntimeKind): void;
+  close(runtimeKind: RuntimeKind, unavailable: RuntimeUnavailability): void;
   /** Waits until every control admitted before the last close has finished. */
-  drain(runtimeKind: string): Effect.Effect<void>;
+  drain(runtimeKind: RuntimeKind): Effect.Effect<void>;
   /** Interrupts every admitted control and waits for it. Each caller fails with `reason`. */
-  cancel(runtimeKind: string, reason: string): Effect.Effect<void>;
+  cancel(runtimeKind: RuntimeKind, reason: string): Effect.Effect<void>;
 };
 
-const notStarted = (runtimeKind: string): Unavailable => ({
+const notStarted = (runtimeKind: RuntimeKind): RuntimeUnavailability => ({
   state: "starting",
   message: `The ${runtimeKind} runtime is not ready yet.`,
   nextAction: "Wait for the runtime to start, or check Diagnostics.",
 });
 
 export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
-  const entries = new Map<string, AdmissionEntry>();
-  const entryFor = (runtimeKind: string): AdmissionEntry => {
+  const entries = new Map<RuntimeKind, AdmissionEntry>();
+  const entryFor = (runtimeKind: RuntimeKind): AdmissionEntry => {
     const existing = entries.get(runtimeKind);
     if (existing) return existing;
     const created: AdmissionEntry = {
@@ -64,34 +69,34 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
   /** Without `reason`, the message explains the closed gate and the next action. */
   const unavailableError = (entry: AdmissionEntry, reason?: string) => {
     const { message, state, nextAction } = entry.unavailable;
-    return new HostResourceError<RuntimeUnavailableDetails>({
-      resource: "agent_runtime",
-      operation: "runtime.admit",
+    return new RuntimeUnavailableError({
+      operation: "admit",
+      runtimeKind: entry.runtimeKind,
+      state,
       message: reason ?? `${message} ${nextAction}`,
-      details: { runtimeKind: entry.runtimeKind, state, nextAction },
+      nextAction,
     });
   };
 
   return {
-    admit: <A, E, R>(runtimeKind: string, effect: Effect.Effect<A, E, R>) =>
-      Effect.uninterruptibleMask(
-        (restore): Effect.Effect<A, E | HostResourceError<RuntimeUnavailableDetails>, R> =>
-          Effect.gen(function* () {
-            const entry = entryFor(runtimeKind);
-            if (!entry.open) return yield* unavailableError(entry);
-            const control = yield* Effect.fork(restore(effect));
-            entry.controls.add(control);
-            const exit = yield* restore(Fiber.await(control)).pipe(
-              // An interrupted caller interrupts its control.
-              Effect.onInterrupt(() => Fiber.interrupt(control)),
-              Effect.ensuring(leave(entry, control)),
-            );
-            const reason = entry.cancelled.get(control);
-            if (Exit.isInterrupted(exit) && reason !== undefined) {
-              return yield* unavailableError(entry, reason);
-            }
-            return yield* exit;
-          }),
+    admit: <A, E, R>(runtimeKind: RuntimeKind, effect: Effect.Effect<A, E, R>) =>
+      Effect.uninterruptibleMask((restore): Effect.Effect<A, E | RuntimeUnavailableError, R> =>
+        Effect.gen(function* () {
+          const entry = entryFor(runtimeKind);
+          if (!entry.open) return yield* unavailableError(entry);
+          const control = yield* Effect.fork(restore(effect));
+          entry.controls.add(control);
+          const exit = yield* restore(Fiber.await(control)).pipe(
+            // An interrupted caller interrupts its control.
+            Effect.onInterrupt(() => Fiber.interrupt(control)),
+            Effect.ensuring(leave(entry, control)),
+          );
+          const reason = entry.cancelled.get(control);
+          if (Exit.isInterrupted(exit) && reason !== undefined) {
+            return yield* unavailableError(entry, reason);
+          }
+          return yield* exit;
+        }),
       ),
     open(runtimeKind) {
       entryFor(runtimeKind).open = true;

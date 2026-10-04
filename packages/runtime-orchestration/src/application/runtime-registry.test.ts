@@ -4,16 +4,21 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { Cause, Deferred, type Duration, Effect, Exit, Fiber } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import type {
-  RuntimeHandle,
-  RuntimeLifecycleRequest,
-  RuntimeStartInput,
-  RuntimeStarterPort,
-} from "../../ports/runtime-registry-port";
-import { createRuntimeAdmissionGate } from "./runtime-admission";
+import { Cause, Data, Deferred, type Duration, Effect, Exit, Fiber } from "effect";
+import type { RuntimeDrivers, RuntimeHandle, RuntimeStartContext } from "../ports/runtime-driver";
+import { createRuntimeAdmissionGate } from "./runtime-admission-gate";
 import { createRuntimeRegistry } from "./runtime-registry";
+import type { RuntimeLifecycleRequest } from "./runtime-slot-lifecycle";
+
+class HostOperationError extends Data.TaggedError("HostOperationError")<{
+  readonly operation: string;
+  readonly message: string;
+}> {}
+
+type RuntimeStartInput = RuntimeStartContext & {
+  runtimeKind: RuntimeKind;
+  descriptor: (typeof RUNTIME_DESCRIPTORS_BY_KIND)[RuntimeKind];
+};
 
 type StarterCall = { input: RuntimeStartInput; runtimeId: string };
 
@@ -47,19 +52,33 @@ const createHarness = (
         stop: () => Effect.sync(() => void events.push(`stop:${runtimeId}`)),
       };
     });
-  const starter: RuntimeStarterPort = {
-    startRuntime: (input) => {
-      const call = calls.length + 1;
-      calls.push({ input, runtimeId: `${input.runtimeKind}-${call}` });
-      return (startRuntime ?? defaultStart)(input, call);
-    },
+  const startWithCall = (input: RuntimeStartInput) => {
+    const call = calls.length + 1;
+    calls.push({ input, runtimeId: `${input.runtimeKind}-${call}` });
+    return (startRuntime ?? defaultStart)(input, call);
+  };
+  const driverFor = (kind: RuntimeKind) => {
+    const descriptor = RUNTIME_DESCRIPTORS_BY_KIND[kind];
+    return {
+      descriptor,
+      start: (context: RuntimeStartContext) =>
+        startWithCall({ ...context, runtimeKind: kind, descriptor }),
+      probeVersion: () => probeVersion(kind),
+      validateExecutable: () => Effect.void,
+      stopSession: () => Effect.void,
+      probeSession: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+    };
+  };
+  const drivers: RuntimeDrivers<HostOperationError> = {
+    opencode: driverFor("opencode"),
+    codex: driverFor("codex"),
+    claude: driverFor("claude"),
   };
   const registry = createRuntimeRegistry({
     admission,
-    starter,
-    descriptorFor: (kind) => RUNTIME_DESCRIPTORS_BY_KIND[kind],
-    onStatusChanged: (status) => statuses.push(status),
-    probeVersion,
+    drivers,
+    onStatusChanged: (change) => statuses.push(change.status),
+    now: () => new Date(),
     controlGrace,
   });
   return { registry, admission, statuses, events, calls, defaultStart };
@@ -263,7 +282,7 @@ describe("runtime registry lifecycle", () => {
     const pending = Effect.runFork(apply(registry, "codex", request("start")));
     await Effect.runPromise(Deferred.await(started));
 
-    const stopped = await Effect.runPromise(registry.stopAllRuntimes());
+    const stopped = await Effect.runPromise(registry.stopAll());
 
     expect(stopped.map((runtime) => runtime.runtimeId)).toEqual(["opencode-1"]);
     expect(events).toEqual(["start:opencode-1", "stop:opencode-1"]);
@@ -305,7 +324,7 @@ describe("runtime registry lifecycle", () => {
     );
     await Effect.runPromise(Deferred.await(stopEntered));
 
-    const shutdown = Effect.runFork(registry.stopAllRuntimes());
+    const shutdown = Effect.runFork(registry.stopAll());
     await Effect.runPromise(Effect.yieldNow());
     expect(shutdown.unsafePoll()).toBeNull();
     await Effect.runPromise(Deferred.succeed(stopRelease, undefined));
@@ -370,7 +389,7 @@ describe("runtime registry lifecycle", () => {
     });
     await Effect.runPromise(apply(harness.registry, "codex", request("start")));
 
-    await Effect.runPromise(harness.registry.stopAllRuntimes());
+    await Effect.runPromise(harness.registry.stopAll());
 
     expect(cleanupAttempts).toBe(2);
     await expect(Effect.runPromise(harness.registry.status("codex"))).resolves.toMatchObject({
@@ -389,7 +408,7 @@ describe("runtime registry lifecycle", () => {
     }
     expect(events).toEqual(["start:opencode-1"]);
 
-    const shutdown = Effect.runPromise(registry.stopAllRuntimes());
+    const shutdown = Effect.runPromise(registry.stopAll());
     await Effect.runPromise(Effect.yieldNow());
     await Effect.runPromise(Deferred.succeed(versionRead, "opencode 1.0.0"));
 
@@ -434,7 +453,7 @@ describe("runtime registry lifecycle", () => {
     );
     await Effect.runPromise(Effect.yieldNow());
 
-    const shutdown = Effect.runPromise(registry.stopAllRuntimes());
+    const shutdown = Effect.runPromise(registry.stopAll());
     await Effect.runPromise(Effect.yieldNow());
     expect(events).toEqual(["start:claude-1"]);
     await expect(Effect.runPromise(admission.admit("claude", Effect.void))).rejects.toThrow();
@@ -451,7 +470,7 @@ describe("runtime registry lifecycle", () => {
     const control = Effect.runFork(admission.admit("claude", Effect.never));
     await Effect.runPromise(Effect.yieldNow());
 
-    await Effect.runPromise(registry.stopAllRuntimes());
+    await Effect.runPromise(registry.stopAll());
 
     expect(events).toEqual(["start:claude-1", "stop:claude-1"]);
     const result = await Effect.runPromise(Fiber.await(control));

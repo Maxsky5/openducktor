@@ -26,6 +26,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "@openducktor/runtime-orchestration": "workspace:*",
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
     "diff": "9.0.0",

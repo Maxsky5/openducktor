@@ -16,7 +16,6 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 |---|---|---|
 | `RuntimeDescriptor` | Static identity, policy, and capabilities for one runtime kind | App |
 | `RuntimeInstanceSummary` | One running shared runtime of a kind | Runtime process |
-| `HostRuntimeStatus` | Lifecycle state of the shared runtime of a kind | Host |
 | `RuntimeRoute` | Address of a running runtime | Runtime process |
 | Runtime connection | Native client input built from a resolved route | One operation |
 | `AgentSessionRecord` | Durable data used to reopen a session | Durable |
@@ -34,40 +33,33 @@ The live-session adapter owns the normalized snapshot, transcript, current conte
 
 Every session operation uses the stored runtime kind, workspace repository, and working directory. If the shared runtime of that kind is not ready, fail the operation with its state and next action. Do not use another runtime kind or the repository default runtime as a fallback.
 
-## Host runtime lifecycle
+## Shared runtime
 
-One OpenDucktor host runs at most one managed runtime of each enabled kind. All workspaces and task worktrees of that host share it. OpenCode runs one `opencode serve` process. Codex runs one `codex app-server` process. Claude runs one logical host service, and each live Claude session keeps its own CLI process.
+One host runs at most one runtime of each enabled kind. All workspaces and task worktrees share it. The host starts it at host startup, and restarts, replaces, or stops it. An adapter or the frontend never starts or stops a runtime.
 
-| Rule | Detail |
+A new runtime kind plugs in through one `RuntimeDriver` from `@openducktor/runtime-orchestration` ([ADR 0010](adr/0010-own-runtime-orchestration-in-a-platform-independent-package.md)). Add the driver in `packages/host/src/adapters/runtimes/runtime-drivers.ts`. The orchestrator does not change.
+
+| Driver part | Rule |
 |---|---|
-| Startup | Host initialization reads the saved `agentRuntimes` settings and starts each enabled kind in the background. It does not wait for a frontend, a workspace, or a session. A failed start records an error with the kind, cause, and next action. It does not retry or start another executable. The host log records each state change of a runtime: start, ready with executable and version, restart, stop, and failure. |
-| Launch | OpenCode and Codex start in the user home directory. Process configuration contains no workspace ID. Each operation sends the directory of its session. |
-| Ownership | `packages/host/src/adapters/runtimes/runtime-registry.ts` owns one slot for each kind. The slot holds the resource, its generation, the lifecycle state, and the last failure. |
-| Admission | `runtime-admission.ts` admits session controls only while the slot is ready. A lifecycle action closes admission and waits up to 10 seconds for admitted controls before it stops the resource. It then cancels the remaining controls, and each caller gets an error with the next action. |
-| Startup cleanup | A starter gives the cleanup of each resource that it acquires to the host with `ownCleanup`. A failed start does not clean up in the starter. The registry runs the owned cleanup once, reports a failure once, and retries a failed cleanup before the next stop, restart, or shutdown. |
-| Status | The host publishes `HostRuntimeStatus` on the `openducktor://runtime-changed` channel. The channel has no repository scope. `runtime_status` returns the current snapshot. |
-| Restart | `runtime_restart_impact` lists the live sessions of the kind in every workspace and issues a confirmation. A live session is one with work in progress or pending input, or one that a session control of this runtime generation served, with its child sessions. An idle session that the runtime only restored from saved history is history, so the review does not list it. `runtime_restart` rechecks that impact, stops the old resource, then starts a replacement with the saved executable. New work after the review returns `impact_changed`. |
-| Review updates | When a live session starts, ends, or changes a field that a review shows (title, activity, execution episode, parent, or pending input), the host publishes `runtime_impact_changed` with its runtime kinds on `openducktor://runtime-changed`. Transcript and context updates publish nothing. An open restart or settings review reads its impact again after this event, after a `runtime_changed` event of a reviewed kind, and after the event stream reconnects. A review cannot confirm while a read runs, after a failed read, or while live updates are unavailable. In the browser runner, a subscriber that joins during a connection failure gets the current warning before its subscription is ready. |
-| Settings | A saved enable starts the kind. A saved disable stops it. A saved path change of an enabled kind replaces it. A save that stops live sessions needs a confirmation from `workspace_preview_settings_snapshot_runtime`. Before the write, the host validates each executable that the save starts. An invalid executable fails the save, and the host does not write settings or stop a runtime. The host writes settings before it applies runtime changes, and reports each kind separately. |
-| Restore | A new runtime generation restores the saved session roots of each repository that a renderer views. A repository that cannot be restored gets a `fault` event with the cause. The runtime still becomes ready for the other repositories. |
-| Loss | A stop, crash, restart, or disable releases every session of that runtime in all workspaces. A crash makes the runtime unavailable before its cleanup runs. A starter reports a failed cleanup with `onRuntimeCleanupFailed`, and the registry adds its cause to the crash error of that generation. Pending input fails. Saved session records and native history stay available. |
-| Shutdown | Shutdown closes admission, interrupts pending starts, and waits for admitted controls with the same 10-second limit. Shutdown then stops every resource. A released Claude service rejects a control that reaches it late. |
+| `start` | Start one process or service for all workspaces. Start it in the user home directory, and put no workspace ID or repository in its configuration. Call `ownCleanup` as soon as the first resource exists, and do not clean up a failed start yourself. Fail with the cause and next action. Do not retry or start another executable. |
+| `onRuntimeExit` | Report a process exit or a fatal transport failure after the start. |
+| `onRuntimeCleanupFailed` | Report a cleanup failure after a reported exit. |
+| `stop` on the handle | Stop the resource and release every live session of it, in all workspaces. Settle each transcript and reject pending input. Saved session records and native history stay available. |
+| `probeVersion` | Read the executable version. A missing version does not fail a start. |
+| `validateExecutable` | Check an executable before a settings change stops or starts a runtime. |
+| `stopSession`, `probeSession` | Act on the exact session. |
 
-The frontend never starts a runtime. Session reads and controls require the exact kind to be ready.
+Each session operation sends the directory of its session to the shared runtime. Do not depend on the directory of one workspace.
 
 ### Workspace binding of OpenDucktor tools
 
-A shared process must not give every workspace the same workspace ID. The host binds the managed OpenDucktor MCP server to the workspace of each session.
+A shared process must not give every workspace the same workspace ID. Bind the managed OpenDucktor MCP server to the workspace of each session, and keep `ODT_FORBID_WORKSPACE_ID_INPUT=true`. A failed binding fails the operation that needs it, with its cause.
 
 | Runtime | Binding |
 |---|---|
-| OpenCode | Before a session uses workflow tools, the adapter calls `mcp.add` for the exact session directory with the explicit bridge environment of that workspace. An import attachment and an approval or question reply also need this binding first. A failed attachment binding leaves the root out, and the saved association reports it as `openError`. A directory keeps one binding. A conflicting workspace fails the operation. `server.instance.disposed` and runtime release clear the binding. |
-| Codex | Each `thread/start`, `thread/resume`, and `thread/fork` request sends `mcp_servers.openducktor.*` overrides with the explicit bridge environment of the session workspace. |
+| OpenCode | Before a session uses workflow tools, `mcp.add` for the session directory with the bridge environment of its workspace. A directory keeps one binding, and a conflicting workspace fails the operation. |
+| Codex | Each `thread/start`, `thread/resume`, and `thread/fork` request sends `mcp_servers.openducktor.*` overrides with the bridge environment of the session workspace. |
 | Claude | Each session resolves the bridge from its own repository. |
-
-Every binding keeps `ODT_FORBID_WORKSPACE_ID_INPUT=true`.
-
-A failed binding fails the operation that needs it, and the error gives the cause. Diagnostics do not list runtime MCP bindings.
 
 ## Ownership
 
@@ -76,7 +68,7 @@ A failed binding fails the operation that needs it, and the error gives the caus
 | Shared contracts | Descriptors, routes, session identity, prompt parts, events, snapshots, and history items | SDK types and native parsing |
 | Native adapter | Client setup, native config, requests, events, history, catalogs, input, errors, and cleanup | Shared orchestration and renderer state |
 | Live-session adapter | Ordered controls and events, live snapshots, context, pending input, and child sessions | A second native protocol |
-| Host | Startup, shared runtime slots, admission, route registration, service wiring, commands, and lifecycle guards | Guessed routes |
+| Host | Runtime lifecycle, route registration, service wiring, commands, and lifecycle guards | Guessed routes |
 | Frontend | Capability-based UI, normalized transcript, queries, and operation errors | Native payloads |
 
 Put shared data in `packages/contracts` only when it is an OpenDucktor concept. Keep SDK options and protocol details in the native adapter.
@@ -305,11 +297,9 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 
 Implement `RuntimeSessionImportPort` to scan existing root conversations in bounded batches. Keep native cursors inside the adapter. Scanning must not read a transcript, send a prompt, or add a session to live state.
 
-`inspectSession` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host runs the inspection, the save, and the attachment as one admitted control, so a lifecycle action waits for the import or cancels it. The host saves the workspace association before it calls `attach` on that source. The adapter must not retain a live resource before the save. A failed attach must leave the saved association available for retry.
+`inspectSession` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host saves the workspace association before it calls `attach` on that source. The adapter must not retain a live resource before the save. A failed attach must leave the saved association available for retry.
 
-Only an explicit import can claim a native root. The host checks repository or registered-worktree scope and existing task or workspace ownership. A shared runtime can list conversations of many repositories, so the host filters every scan result. The adapter must not create, fork, or move the source conversation. It must report native access failures instead of substituting another session.
-
-An import names its `catalogRequestId`. The host imports only a candidate from a live catalog of the same workspace, kind, and runtime generation. A runtime replacement or loss invalidates the catalog, and the user must reload the list.
+Only an explicit import can claim a native root. The host checks repository or registered-worktree scope and existing task or workspace ownership. The adapter must not create, fork, or move the source conversation. It must report native access failures instead of substituting another session.
 
 ## Code map
 
@@ -318,6 +308,6 @@ An import names its `catalogRequestId`. The host imports only a candidate from a
 | Schemas | `packages/contracts/src/agent-runtime-schemas.ts`, `packages/contracts/src/agent-engine-schemas.ts` |
 | Live-session port | `packages/host/src/ports/agent-session-live-adapter-port.ts` |
 | Live-session adapters | `packages/host/src/adapters/agent-sessions` |
-| Runtime registry | `packages/host/src/adapters/runtimes/runtime-registry.ts` |
-| Runtime lifecycle service | `packages/host/src/application/runtimes/host-runtime-service.ts` |
+| Runtime orchestration | `packages/runtime-orchestration/src` |
+| Runtime drivers | `packages/host/src/adapters/runtimes/runtime-drivers.ts` |
 | Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude` |

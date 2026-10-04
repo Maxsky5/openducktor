@@ -1,20 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
+import { type RuntimeKind, resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
-  type HostRuntimeStatus,
-  type RuntimeKind,
-  resolveCodexEffectivePolicy,
-} from "@openducktor/contracts";
+  createRuntimeOrchestrator,
+  describeRuntimeStatusChange,
+  type RuntimeAdmissionGate,
+  type RuntimeObserver,
+} from "@openducktor/runtime-orchestration";
 import { Effect } from "effect";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createCodexRuntimeStarter } from "../../adapters/codex/codex-runtime-starter";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
-import type { RuntimeAdmissionGate } from "../../adapters/runtimes/runtime-admission";
-import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
+import { createRuntimeDrivers } from "../../adapters/runtimes/runtime-drivers";
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createClaudeLaunchPolicy } from "../../application/runtimes/claude-launch-policy";
+import {
+  createLiveSessionInventory,
+  createRuntimeRegistryPort,
+  createRuntimeSettingsSource,
+} from "../../application/runtimes/host-runtime-ports";
 import { createHostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
@@ -32,7 +38,6 @@ import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeStatusPublisher } from "./runtime-lifecycle-publisher";
-import { describeRuntimeStatusChange } from "./runtime-status-log";
 import { guardRuntimeStart } from "./user-path-start-guard";
 
 /** Composes the shared runtime of each kind, its registry, and its lifecycle service. */
@@ -45,7 +50,7 @@ export const createNodeHostRuntimeComposition = ({
   liveState,
   onBackgroundFailure,
   resolveBridge,
-  runtimeAdmission,
+  runtimeAdmissionGate,
   runtimeDefinitionsService,
   settingsConfig,
   taskSessionLifecycleCoordinator,
@@ -60,7 +65,7 @@ export const createNodeHostRuntimeComposition = ({
   liveState: AgentSessionLiveStateService;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   resolveBridge: () => McpHostBridgeServer | undefined;
-  runtimeAdmission: RuntimeAdmissionGate;
+  runtimeAdmissionGate: RuntimeAdmissionGate;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   settingsConfig: SettingsConfigPort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
@@ -145,53 +150,52 @@ export const createNodeHostRuntimeComposition = ({
   const publishRuntimeStatus = eventBus
     ? createRuntimeStatusPublisher(eventBus, hostInstanceId)
     : () => {};
-  const lastRuntimeStates = new Map<RuntimeKind, HostRuntimeStatus["state"]>();
-  // Every runtime state change reaches the host log, even when no frontend is connected.
-  const onRuntimeStatusChanged = (status: HostRuntimeStatus) => {
-    publishRuntimeStatus(status);
-    const log = describeRuntimeStatusChange(
-      lastRuntimeStates.get(status.kind),
-      status,
-      descriptorFor(status.kind).label,
-    );
-    lastRuntimeStates.set(status.kind, status.state);
-    if (!log) return;
+  const writeLog = (level: "info" | "error", message: string) =>
     Effect.runFork(
-      writeHostLifecycleLog(lifecycleLogger, log.level, log.message).pipe(
+      writeHostLifecycleLog(lifecycleLogger, level, message).pipe(
         Effect.catchAll(onBackgroundFailure),
       ),
     );
+  // Every runtime state change reaches the host log, even when no frontend is connected.
+  const observer: RuntimeObserver = {
+    statusChanged: ({ status, previousState }) => {
+      publishRuntimeStatus(status);
+      const log = describeRuntimeStatusChange(
+        previousState,
+        status,
+        descriptorFor(status.kind).label,
+      );
+      if (log) writeLog(log.level, log.message);
+    },
+    backgroundFailure: (message) => writeLog("error", message),
   };
-  const registry = createRuntimeRegistry({
-    admission: runtimeAdmission,
-    starter: guardRuntimeStart(
-      configuredRuntimeStarter ?? {
-        startRuntime: (runtimeInput) =>
-          runtimeStarters[runtimeInput.runtimeKind].startRuntime(runtimeInput),
-      },
-      processEnvironment,
-    ),
-    descriptorFor,
-    onStatusChanged: onRuntimeStatusChanged,
-    probeVersion: (kind, executablePath) =>
-      runtimeHealth.getRuntimeHealth(kind, executablePath).pipe(
-        Effect.map((health) => health.version),
-        Effect.orElseSucceed(() => null),
-      ),
-    sessionOperations: createRuntimeSessionOperations({
-      codexAppServer,
-      claudeAgentSdk: claudeRuntime.sessionOperations,
+  const startGuard = guardRuntimeStart(
+    configuredRuntimeStarter ?? {
+      startRuntime: (runtimeInput) =>
+        runtimeStarters[runtimeInput.runtimeKind].startRuntime(runtimeInput),
+    },
+    processEnvironment,
+  );
+  const orchestrator = createRuntimeOrchestrator({
+    drivers: createRuntimeDrivers({
+      descriptorFor,
+      starters: { opencode: startGuard, codex: startGuard, claude: startGuard },
+      sessionOperations: createRuntimeSessionOperations({
+        codexAppServer,
+        claudeAgentSdk: claudeRuntime.sessionOperations,
+      }),
+      runtimeHealth,
+      toolDiscovery,
     }),
+    settings: createRuntimeSettingsSource(settingsConfig),
+    liveSessions: createLiveSessionInventory(liveState),
+    observer,
+    admission: runtimeAdmissionGate,
   });
   const hostRuntimeService = createHostRuntimeService({
     hostInstanceId,
-    registry,
-    settingsConfig,
+    orchestrator,
     settingsService: workspaceSettingsService,
-    liveSessions: liveState,
-    toolDiscovery,
-    logError: (message) =>
-      writeHostLifecycleLog(lifecycleLogger, "error", message).pipe(Effect.ignore),
   });
-  return { hostRuntimeService, registry };
+  return { hostRuntimeService, registry: createRuntimeRegistryPort(orchestrator) };
 };
