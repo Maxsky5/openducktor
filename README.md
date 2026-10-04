@@ -67,8 +67,6 @@ npx @openducktor/web
 
 See the [installation guide](docs/installation.md) for requirements, more install options, and update steps.
 
-See [workspace provider setup](docs/workspace-provider-setup.md) to connect GitHub or Azure DevOps when you add a workspace.
-
 ## User Prerequisites
 
 OpenDucktor runs on macOS, Windows, and Linux.
