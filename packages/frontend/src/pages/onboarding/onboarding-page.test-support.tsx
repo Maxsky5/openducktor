@@ -1,10 +1,3 @@
-import { beforeAll, afterAll } from "bun:test";
-import { installLocalOnlyProviderSetup } from "@/test-utils/workspace-provider-setup-fixture";
-let releaseProviderFixture: (() => void) | undefined;
-beforeAll(() => {
-  releaseProviderFixture = installLocalOnlyProviderSetup();
-});
-afterAll(() => releaseProviderFixture?.());
 import { expect, mock } from "bun:test";
 import {
   type AgentRuntimes,

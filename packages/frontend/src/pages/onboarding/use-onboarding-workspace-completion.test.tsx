@@ -1,10 +1,3 @@
-import { beforeAll, afterAll } from "bun:test";
-import { installLocalOnlyProviderSetup } from "@/test-utils/workspace-provider-setup-fixture";
-let releaseProviderFixture: (() => void) | undefined;
-beforeAll(() => {
-  releaseProviderFixture = installLocalOnlyProviderSetup();
-});
-afterAll(() => releaseProviderFixture?.());
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
