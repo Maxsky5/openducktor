@@ -358,7 +358,12 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitions({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: false, executablePath: "" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: false,
+            executablePath: "",
+          },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
           claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },
@@ -369,7 +374,12 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitionsForStartMode({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: true, executablePath: "/bin/opencode" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: true,
+            executablePath: "/bin/opencode",
+          },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
           claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },
@@ -381,7 +391,12 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitions({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: false, executablePath: "" },
+          opencode: {
+            defaults: { rules: [] },
+            roleOverrides: {},
+            enabled: false,
+            executablePath: "",
+          },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
           claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
         },

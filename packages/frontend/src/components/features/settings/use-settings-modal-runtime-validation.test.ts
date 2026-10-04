@@ -13,7 +13,12 @@ const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     autopilot: createDefaultAutopilotSettings(),
     agentRuntimes: {
-      opencode: { enabled: true, executablePath: "/bin/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/bin/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     },

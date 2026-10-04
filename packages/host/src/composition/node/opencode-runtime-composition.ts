@@ -1,3 +1,4 @@
+import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import {
   createPrepareOpencodeSessionRuntime,
   type ReadOpencodeDirectory,
@@ -35,6 +36,7 @@ export const createOpenCodeRuntimeComposition = ({
   taskSessionLifecycleCoordinator,
   toolDiscovery,
 }: CreateOpenCodeRuntimeCompositionInput): RuntimeWorkspaceStarterPort => {
+  const creationSettings = createOpenCodeCreationSettings(settingsConfig);
   const readDirectory: ReadOpencodeDirectory = (directory, read) =>
     Effect.runPromise(
       taskSessionLifecycleCoordinator.runWorktreeRead(
@@ -62,6 +64,7 @@ export const createOpenCodeRuntimeComposition = ({
       liveSessionLifecycle,
       prepareRuntime: createPrepareOpencodeSessionRuntime({
         readDirectory,
+        resolveCreationSettings: (scope) => Effect.runPromise(creationSettings.resolve(scope)),
       }),
     }),
     resolveMcpBridgeConnection,

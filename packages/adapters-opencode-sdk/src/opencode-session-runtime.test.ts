@@ -1,3 +1,4 @@
+import type { Session } from "@opencode-ai/sdk/v2/client";
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
@@ -72,6 +73,7 @@ const createLiveClientHarness = (
   const promptCalls: unknown[] = [];
   const permissionReplyCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
+  const metadata = new Map<string, NonNullable<Session["metadata"]>>();
   const rules = new Map<string, OpencodePermissionRule[]>();
   let permissionReplyError: Error | null = null;
   let pendingApproval = input.pendingQuestion !== true;
@@ -108,6 +110,7 @@ const createLiveClientHarness = (
             createOpencodeSessionFixture({
               id: sessionId,
               permission: rules.get(sessionId),
+              metadata: metadata.get(sessionId),
               parentID: input.parentSessionIdsBySessionId?.[sessionId],
               directory: "/repo",
               title: "Live session",
@@ -135,6 +138,7 @@ const createLiveClientHarness = (
           data: createOpencodeSessionFixture({
             id: sessionID,
             permission: rules.get(sessionID),
+            metadata: metadata.get(sessionID),
             parentID:
               input.parentSessionIdsBySessionId?.[sessionID] ??
               Object.entries(input.childSessionIdsByParent ?? {}).find(([, children]) =>
@@ -159,6 +163,7 @@ const createLiveClientHarness = (
             createOpencodeSessionFixture({
               id: childSessionId,
               permission: rules.get(childSessionId),
+              metadata: metadata.get(childSessionId),
               parentID: sessionID,
               directory: "/repo",
               title: "OpenCode subagent",
@@ -214,11 +219,13 @@ const createLiveClientHarness = (
         return { data: {}, error: undefined };
       },
       update: async (request) => {
+        if (request.metadata) metadata.set(request.sessionID, request.metadata);
         const permission = [...(rules.get(request.sessionID) ?? []), ...(request.permission ?? [])];
         rules.set(request.sessionID, permission);
         return {
           data: createOpencodeSessionFixture({
             id: request.sessionID,
+            metadata: metadata.get(request.sessionID),
             directory: request.directory ?? "/repo",
             permission,
           }),
@@ -392,6 +399,7 @@ const runtimeInput = {
 
 const createPrepareRuntime = (harness: LiveClientHarness) =>
   createPrepareOpencodeSessionRuntime({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     createClient: () => harness.client,
     readDirectory: (_directory, read) => read(),
     now: () => "2026-07-16T10:02:00.000Z",
@@ -1191,6 +1199,7 @@ test("restores workflow roots and descendant denies before publishing reload sou
     { permission: "bash", pattern: "git *", action: "ask" as const },
     { permission: "task", pattern: "*", action: "deny" as const },
   ];
+  const metadata = new Map<string, NonNullable<Session["metadata"]>>();
   const rules = new Map<string, OpencodePermissionRule[]>([
     ["session-1", native],
     ["child-session", [...native]],
@@ -1198,10 +1207,18 @@ test("restores workflow roots and descendant denies before publishing reload sou
   const get = harness.client.session.get;
   harness.client.session.get = async (...args) => {
     const response = await get(...args);
-    return { ...response, data: { ...response.data!, permission: rules.get(args[0].sessionID) } };
+    return {
+      ...response,
+      data: {
+        ...response.data!,
+        permission: rules.get(args[0].sessionID),
+        metadata: metadata.get(args[0].sessionID),
+      },
+    };
   };
   const updates: Parameters<typeof harness.client.session.update>[0][] = [];
   harness.client.session.update = async (request) => {
+    if (request.metadata) metadata.set(request.sessionID, request.metadata);
     updates.push(request);
     const permission = [...(rules.get(request.sessionID) ?? []), ...(request.permission ?? [])];
     rules.set(request.sessionID, permission);
@@ -1209,6 +1226,7 @@ test("restores workflow roots and descendant denies before publishing reload sou
       data: createOpencodeSessionFixture({
         id: request.sessionID,
         directory: "/repo",
+        metadata: metadata.get(request.sessionID),
         permission,
       }),
       error: undefined,

@@ -95,3 +95,4 @@ export * from "./workspace-lifecycle-schemas";
 export * from "./notification-stream-schemas";
 export * from "./browser-event-stream-schemas";
 export * from "./claude-policy-schemas";
+export * from "./opencode-permission-schemas";

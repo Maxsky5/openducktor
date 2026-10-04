@@ -1,3 +1,4 @@
+import { createOpenCodeCreationSettings } from "./opencode-creation-settings";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -58,7 +59,12 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   agentRuntimes: {
-    opencode: { enabled: true, executablePath: "/bin/opencode" },
+    opencode: {
+      defaults: { rules: [] },
+      roleOverrides: {},
+      enabled: true,
+      executablePath: "/bin/opencode",
+    },
     codex: {
       enabled: false,
       executablePath: "/bin/codex",
@@ -211,11 +217,41 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs).toEqual([]);
   });
 
+  test("a failed OpenCode settings write keeps the saved creation rules", async () => {
+    const config = globalConfig();
+    config.agentRuntimes.opencode.defaults.rules = [
+      { permission: "bash", pattern: "*", action: "ask" },
+    ];
+    const port = createFakeSettingsConfig({
+      config,
+      beforeWrite: async () => {
+        throw new Error("Disk full");
+      },
+    });
+    const service = createWorkspaceSettingsService(port);
+    const draft = await Effect.runPromise(service.getSettingsSnapshot());
+    draft.agentRuntimes.opencode.defaults.rules = [
+      { permission: "bash", pattern: "*", action: "allow" },
+    ];
+    await expect(Effect.runPromise(service.saveSettingsSnapshot(draft))).rejects.toThrow(
+      "Disk full",
+    );
+    expect(port.writtenConfigs).toEqual([]);
+    expect(
+      await Effect.runPromise(createOpenCodeCreationSettings(port).resolve({ kind: "repository" })),
+    ).toEqual({ defaults: config.agentRuntimes.opencode.defaults.rules, role: [] });
+    expect(draft.agentRuntimes.opencode.defaults.rules[0]?.action).toBe("allow");
+  });
   test("returns default settings snapshot when config is missing", async () => {
     const service = createWorkspaceSettingsService(createFakeSettingsConfig());
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     expect(snapshot.theme).toBe("system");
-    expect(snapshot.agentRuntimes?.opencode).toEqual({ enabled: false, executablePath: "" });
+    expect(snapshot.agentRuntimes?.opencode).toEqual({
+      enabled: false,
+      executablePath: "",
+      defaults: { rules: [] },
+      roleOverrides: {},
+    });
     expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
     expect(snapshot.agentRuntimes?.codex?.executablePath).toBe("");
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);

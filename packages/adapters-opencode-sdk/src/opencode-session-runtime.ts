@@ -1,5 +1,8 @@
 import { assertSessionScope } from "./opencode-session-binding";
-import { restoreSessionPermissions, beginPermissionSetup } from "./opencode-session-permissions";
+import {
+  createSessionPermissionRestorer,
+  beginPermissionSetup,
+} from "./opencode-session-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { createOpenCodeSessionImportPort } from "./opencode-session-import";
 import { agentSessionRefsEqual, agentSessionScopesEqual } from "@openducktor/core";
@@ -122,6 +125,7 @@ export const createPrepareOpencodeSessionRuntime = (
 
   return async (input) => {
     const eventSessions = new Map<string, SessionRecord>();
+    const restorePermissions = createSessionPermissionRestorer();
     const controlAdapter = new OpencodeSdkAdapter(
       {
         ...adapterOptions,
@@ -134,7 +138,7 @@ export const createPrepareOpencodeSessionRuntime = (
           }),
         },
       },
-      { sessions: eventSessions, runtimeEventTransports },
+      { sessions: eventSessions, runtimeEventTransports, restorePermissions },
     );
     const pendingSignals: OpencodeSessionRuntimeSignal[] = [];
     const pendingSessionSignals: OpencodeSessionRuntimeSignal[] = [];
@@ -345,12 +349,11 @@ export const createPrepareOpencodeSessionRuntime = (
                 // Children keep their own allows; only parent denials carry over.
                 policy.permission = policy.permission.filter((rule) => rule.action === "deny");
               }
-              await restoreSessionPermissions({
+              await restorePermissions({
                 client,
                 externalSessionId: detail.id,
                 workingDirectory: detail.directory,
                 policy,
-                detail,
               });
               if (existing) delete existing.permissionSetupError;
             },

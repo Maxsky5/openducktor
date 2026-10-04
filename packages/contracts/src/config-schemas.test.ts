@@ -523,6 +523,8 @@ describe("config-schemas", () => {
     expect(parsed.agentRuntimes.opencode).toEqual({
       enabled: false,
       executablePath: "/bin/opencode",
+      defaults: { rules: [] },
+      roleOverrides: {},
     });
     expect(parsed.agentRuntimes.custom).toEqual({
       enabled: true,

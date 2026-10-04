@@ -470,7 +470,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("does not continue registration cleanup when the runtime stop fails", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     adapter.stopSession = async () => {
       throw new Error("runtime unavailable");
     };
@@ -504,7 +506,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("does not continue stale-session cleanup when the runtime stop fails", async () => {
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     adapter.stopSession = async () => {
       throw new Error("runtime unavailable");
     };
@@ -540,7 +544,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     let startCalls = 0;
     adapter.startSession = async (input) => {
@@ -687,7 +693,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("lets the host resolve the canonical worktree for qa start", async () => {
     const ensuredWorkingDirectories: Array<string | null | undefined> = [];
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => ({
       externalSessionId: "external-qa",
@@ -813,7 +821,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("does not start a runtime when prompt override loading fails", async () => {
     let runtimeCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => {
       throw new Error("startSession should not be reached");
@@ -860,7 +870,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       let runtimeCalls = 0;
       let startCalls = 0;
 
-      const adapter = new OpencodeSdkAdapter();
+      const adapter = new OpencodeSdkAdapter({
+        resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+      });
       const originalStartSession = adapter.startSession;
       adapter.startSession = async () => {
         startCalls += 1;

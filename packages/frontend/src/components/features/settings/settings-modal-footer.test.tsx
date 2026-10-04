@@ -17,6 +17,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         isLoadingRuntimeConfiguration: false,
       },
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
@@ -40,6 +41,7 @@ describe("SettingsModalFooter", () => {
       const renderer = renderFooter({
         location: { section: "runtimes", repositorySection: "configuration" },
         validationSummary: {
+          openCodePermissionErrorCount: 0,
           promptPlaceholderErrorCount: 1,
           customAgentRoleFieldErrorCount: 2,
           reusablePromptFieldErrorCount: 3,
@@ -80,6 +82,7 @@ describe("SettingsModalFooter", () => {
   test("disables save and shows custom role field errors", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 2,
         reusablePromptFieldErrorCount: 0,
@@ -113,6 +116,7 @@ describe("SettingsModalFooter", () => {
   test("keeps save enabled when only dev server fields are invalid", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
@@ -134,6 +138,7 @@ describe("SettingsModalFooter", () => {
   test("shows the dev server validation count in the footer", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
@@ -153,6 +158,7 @@ describe("SettingsModalFooter", () => {
   test("disables save when reusable prompt fields are invalid", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 1,
@@ -175,6 +181,7 @@ describe("SettingsModalFooter", () => {
   test("disables save and shows runtime executable error count", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
@@ -197,6 +204,7 @@ describe("SettingsModalFooter", () => {
   test("disables save when dangerous Codex settings are unacknowledged", () => {
     const renderer = renderFooter({
       validationSummary: {
+        openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,

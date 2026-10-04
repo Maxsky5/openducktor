@@ -199,9 +199,10 @@ describe("OpenCode session permission continuity", () => {
         (error: Error) => error,
       );
       await updateEntered.promise;
+      let overlappingRestore: Promise<unknown> | undefined;
       if (phase === "overlapping") {
         mock.client.session.update = update;
-        await adapter.resumeSession(ref);
+        overlappingRestore = adapter.resumeSession(ref);
       }
       if (phase === "failed") {
         releaseUpdate.resolve();
@@ -216,6 +217,7 @@ describe("OpenCode session permission continuity", () => {
       } finally {
         releaseUpdate.resolve();
         await restore;
+        await overlappingRestore;
       }
       mock.client.session.update = update;
       await adapter.resumeSession(ref);
@@ -284,37 +286,48 @@ describe("OpenCode session permission continuity", () => {
     "omitted permission",
     "malformed permission",
     "unconfirmed permission",
-  ])("blocks the next turn when permission setup returns %s", async (kind) => {
-    const mock = makeMockClient({ sessionPermissions: nativeRules() });
-    const update = mock.client.session.update;
-    mock.client.session.update = async (...args) => {
-      const result = await update(...args);
-      // SAFETY: The fixture deliberately returns corrupt SDK data to test ingress rejection.
-      return {
-        ...result,
-        data: {
-          ...result.data!,
-          id: kind === "wrong identity" ? "another-session" : result.data!.id,
-          permission:
-            kind === "omitted permission"
-              ? undefined
-              : kind === "malformed permission"
-                ? [{ permission: "bash", pattern: "*", action: "invalid" }]
-                : [],
-        },
-      } as typeof result;
-    };
-    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
-    await expect(
-      adapter.sendUserMessage({
+  ])(
+    "blocks the next turn when setup returns %s until a later attachment confirms ownership",
+    async (kind) => {
+      const mock = makeMockClient({ sessionPermissions: nativeRules() });
+      const update = mock.client.session.update;
+      mock.client.session.update = async (...args) => {
+        const result = await update(...args);
+        // SAFETY: The fixture deliberately returns corrupt SDK data to test ingress rejection.
+        return {
+          ...result,
+          data: {
+            ...result.data!,
+            id: kind === "wrong identity" ? "another-session" : result.data!.id,
+            permission:
+              kind === "omitted permission"
+                ? undefined
+                : kind === "malformed permission"
+                  ? [{ permission: "bash", pattern: "*", action: "invalid" }]
+                  : [],
+          },
+        } as typeof result;
+      };
+      const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+      await expect(
+        adapter.sendUserMessage({
+          ...sessionRuntimeRef(),
+          parts: [{ kind: "text", text: "continue" }],
+        }),
+      ).rejects.toThrow("Reconnect the selected OpenCode runtime");
+      expect(mock.session.promptAsyncCalls).toEqual([]);
+      // The malformed primary response cannot be replaced by a second read.
+      expect(mock.session.getCalls).toHaveLength(1);
+      mock.client.session.update = update;
+      await adapter.resumeSession(sessionRuntimeRef());
+      await adapter.sendUserMessage({
         ...sessionRuntimeRef(),
-        parts: [{ kind: "text", text: "continue" }],
-      }),
-    ).rejects.toThrow("Reconnect the selected OpenCode runtime");
-    expect(mock.session.promptAsyncCalls).toEqual([]);
-    // The malformed primary response cannot be replaced by a second read.
-    expect(mock.session.getCalls).toHaveLength(1);
-  });
+        parts: [{ kind: "text", text: "Continue after confirmed attachment" }],
+      });
+      expect(mock.session.promptAsyncCalls).toHaveLength(1);
+      await adapter.releaseSession(sessionRuntimeRef());
+    },
+  );
 
   test("fails a fork before creation when its source permissions are malformed", async () => {
     const mock = makeMockClient();

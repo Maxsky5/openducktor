@@ -1,3 +1,4 @@
+import type { OpenCodeCreationSettings } from "@openducktor/contracts";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
@@ -130,6 +131,7 @@ export type ReadOpencodeDirectory = <Value>(
 ) => Promise<Value | null>;
 
 export type OpencodeSdkAdapterOptions = {
+  resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
   now?: () => string;
   createClient?: ClientFactory;
   repoRuntimeResolver?: RepoRuntimeResolverPort;

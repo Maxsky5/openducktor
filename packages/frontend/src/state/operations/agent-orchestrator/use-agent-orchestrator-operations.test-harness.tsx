@@ -245,7 +245,13 @@ export const createHookHarness = (args: {
     runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
       opencode: createRepoRuntimeHealthFixture(),
     },
-    agentEngine: args.agentEngine ?? createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
+    agentEngine:
+      args.agentEngine ??
+      createOpenCodeAgentEngineTestAdapter(
+        new OpencodeSdkAdapter({
+          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+        }),
+      ),
     dependencies,
   };
   const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();

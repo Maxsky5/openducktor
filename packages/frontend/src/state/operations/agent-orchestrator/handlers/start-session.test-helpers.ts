@@ -244,7 +244,9 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
   const {
     activeRepo = "/tmp/repo",
     workspaceId = "workspace-1",
-    adapter = new OpencodeSdkAdapter(),
+    adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    }),
     sessionsRef = { current: emptyAgentSessionCollection() },
     taskRef = { current: [] },
     repoEpochRef = { current: 1 },

@@ -25,7 +25,12 @@ describe("global config", () => {
     const config = createDefaultGlobalConfig();
 
     expect(config.version).toBe(4);
-    expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
+    expect(config.agentRuntimes.opencode).toEqual({
+      enabled: false,
+      executablePath: "",
+      defaults: { rules: [] },
+      roleOverrides: {},
+    });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });

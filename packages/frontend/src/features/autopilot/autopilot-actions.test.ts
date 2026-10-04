@@ -596,7 +596,9 @@ describe("autopilot feature helpers", () => {
       createSettingsSnapshotFixture(),
     );
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = new OpencodeSdkAdapter({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    });
     const releaseStarts = createDeferred<void>();
     const firstKickoffStarted = createDeferred<void>();
     const releaseFirstKickoff = createDeferred<void>();

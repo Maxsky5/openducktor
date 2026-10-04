@@ -90,7 +90,9 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     sessionsRef: overrideSessionsRef,
     ...actionOverrides
   } = overrides;
-  const adapterCandidate = adapterOverride ?? new OpencodeSdkAdapter();
+  const adapterCandidate =
+    adapterOverride ??
+    new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) });
   const adapter =
     adapterCandidate instanceof OpencodeSdkAdapter
       ? createOpenCodeAgentEngineTestAdapter(adapterCandidate)

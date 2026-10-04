@@ -1,4 +1,8 @@
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import {
+  createOpencodeClient,
+  type OpencodeClient,
+  type Session,
+} from "@opencode-ai/sdk/v2/client";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
@@ -129,8 +133,9 @@ const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind)
 });
 
 export class OpencodeSdkAdapter extends BaseOpencodeSdkAdapter {
-  constructor(options: ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0] = {}) {
+  constructor(options: Partial<ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0]> = {}) {
     super({
+      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       repoRuntimeResolver: {
         requireRepoRuntime: async ({ repoPath, runtimeKind }) =>
           createDefaultRuntimeSummary(repoPath, runtimeKind),
@@ -253,6 +258,7 @@ export type MakeMockClientInput = {
   sessionId?: string;
   sessionIds?: string[];
   forkSessionId?: string;
+  forkSessionIds?: string[];
   sessionStatus?: "busy" | "idle" | "retry";
   pendingApproval?: boolean;
   pendingQuestion?: boolean;
@@ -274,6 +280,7 @@ export const makeMockClient = ({
   sessionId = "session-opencode-1",
   sessionIds,
   forkSessionId = "session-opencode-fork",
+  forkSessionIds,
   sessionStatus = "idle",
   pendingApproval = false,
   pendingQuestion = false,
@@ -330,9 +337,11 @@ export const makeMockClient = ({
   const stream: MockEventStream = {
     events: [...streamEvents],
   };
+  const queuedForkIds = [...(forkSessionIds ?? [forkSessionId])];
   const queuedSessionIds = [...(sessionIds ?? [sessionId])];
   const baseClient = createOpencodeClient({ baseUrl: defaultRuntimeConnection.endpoint });
 
+  const nativeMetadata = new Map<string, NonNullable<Session["metadata"]>>();
   const nativeRules = new Map<string, OpencodePermissionRule[]>([[sessionId, sessionPermissions]]);
   const detail = (id: string, directory = defaultRuntimeConnection.workingDirectory) => ({
     id,
@@ -346,15 +355,18 @@ export const makeMockClient = ({
       updated: Date.parse("2026-02-17T12:00:00Z"),
     },
     permission: nativeRules.get(id) ?? [],
+    metadata: nativeMetadata.get(id) ?? {},
   });
   const client: OpencodeClient = {
     ...baseClient,
+    path: baseClient.path,
     session: {
       ...baseClient.session,
       create: async (input: ClientMethodInput<"session", "create">) => {
         session.createCalls.push(input);
         const id = queuedSessionIds.shift() ?? sessionId;
         nativeRules.set(id, input?.permission ?? []);
+        nativeMetadata.set(id, input?.metadata ?? {});
         return { data: detail(id, input?.directory), error: undefined };
       },
       promptAsync: async (input: ClientMethodInput<"session", "promptAsync">) => {
@@ -405,6 +417,7 @@ export const makeMockClient = ({
         session.updateCalls.push(input);
         if (session.updateResult.error || session.updateResult.data !== undefined)
           return session.updateResult;
+        if (input.metadata) nativeMetadata.set(input.sessionID, input.metadata);
         if (input.permission)
           nativeRules.set(input.sessionID, [
             ...(nativeRules.get(input.sessionID) ?? []),
@@ -416,8 +429,10 @@ export const makeMockClient = ({
       },
       fork: async (input: ClientMethodInput<"session", "fork">) => {
         session.forkCalls.push(input);
-        nativeRules.set(forkSessionId, []);
-        return { data: detail(forkSessionId, input.directory), error: undefined };
+        const id = queuedForkIds.shift() ?? forkSessionId;
+        nativeRules.set(id, []);
+        nativeMetadata.set(id, structuredClone(nativeMetadata.get(input.sessionID) ?? {}));
+        return { data: detail(id, input.directory), error: undefined };
       },
       delete: async (input: ClientMethodInput<"session", "delete">) => {
         session.deleteCalls.push(input);
@@ -696,6 +711,7 @@ export const createLoadSessionTodosHarness = (mockInput: MakeMockClientInput) =>
   const createClientCalls: unknown[] = [];
   const mock = makeMockClient(mockInput);
   const adapter = new OpencodeSdkAdapter({
+    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     createClient: (input) => {
       createClientCalls.push(input);
       return mock.client;

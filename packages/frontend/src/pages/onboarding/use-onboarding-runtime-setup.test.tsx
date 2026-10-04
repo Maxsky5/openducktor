@@ -24,7 +24,12 @@ afterEach(cleanup);
 describe("useOnboardingRuntimeSetup", () => {
   test("keeps runtime cards neutral while exact paths are being checked", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: {
         ...DEFAULT_AGENT_RUNTIMES.codex,
         enabled: true,
@@ -70,7 +75,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("uses runtime brand marks and opens Browse in the configured executable directory", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/Users/dev/.local/bin/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/Users/dev/.local/bin/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -217,7 +227,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("keeps runtime controls available after a runtime validation request fails", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -264,7 +279,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("waits for an active runtime validation before checking the latest edited path", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/initial/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/initial/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -344,7 +364,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("does not block onboarding when validation fails for a disabled runtime", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/broken/claude", defaults: {}, roleOverrides: {} },
     };
@@ -374,7 +399,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("checks an edited enabled runtime while a disabled runtime validation is pending", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/slow/claude", defaults: {}, roleOverrides: {} },
     };
@@ -425,7 +455,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("keeps Continue available after an optional runtime rediscovery fails", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -466,7 +501,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("runs explicit runtime discovery through the shared Query cache", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -506,13 +546,23 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("locks runtime edits and navigation while explicit discovery is pending", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
-      opencode: { enabled: true, executablePath: "/discovered/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/discovered/opencode",
+      },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
     const originalCheck = host.runtimeExecutablesCheck;
@@ -564,13 +614,23 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("publishes exact-path results returned by explicit runtime discovery", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
-      opencode: { enabled: true, executablePath: "/discovered/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/discovered/opencode",
+      },
     };
     const requests: Array<"discover" | { opencodePath: string }> = [];
     const originalCheck = host.runtimeExecutablesCheck;
@@ -582,7 +642,12 @@ describe("useOnboardingRuntimeSetup", () => {
       requests.push({ opencodePath: input.paths.opencode });
       const checkedRuntimes = {
         ...runtimes,
-        opencode: { enabled: true, executablePath: input.paths.opencode },
+        opencode: {
+          defaults: { rules: [] },
+          roleOverrides: {},
+          enabled: true,
+          executablePath: input.paths.opencode,
+        },
       };
       return createCheck(checkedRuntimes, true);
     });
@@ -612,7 +677,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("shows fresh discovery status when a runtime changes at the same path", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/tools/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/tools/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -646,7 +716,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
     const initialRuntimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -684,7 +759,12 @@ describe("useOnboardingRuntimeSetup", () => {
           createCheck(
             {
               ...initialRuntimes,
-              opencode: { enabled: true, executablePath: "/invalid/opencode" },
+              opencode: {
+                defaults: { rules: [] },
+                roleOverrides: {},
+                enabled: true,
+                executablePath: "/invalid/opencode",
+              },
             },
             false,
           ),
@@ -711,7 +791,12 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("checks only the runtime whose executable path changed", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
       claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
     };
@@ -776,7 +861,7 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("auto-enables a valid custom path unless the user changed the switch", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: false, executablePath: "" },
+      opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -826,7 +911,7 @@ describe("useOnboardingRuntimeSetup", () => {
 
   test("preserves the user-entered path when validation resolves another executable path", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: false, executablePath: "" },
+      opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -875,7 +960,7 @@ describe("useOnboardingRuntimeSetup", () => {
   // This test renders and visits three onboarding stages before it checks Back navigation.
   test("keeps the runtime step on save failure and supports retry, Workspace, and Back", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: false, executablePath: "" },
+      opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
@@ -927,7 +1012,12 @@ describe("useOnboardingRuntimeSetup", () => {
   // This test renders the full coding-agent form and waits for an async save.
   test("keeps the coding-agent form visually stable while save is pending", async () => {
     const runtimes: AgentRuntimes = {
-      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/valid/opencode",
+      },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
       claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
     };

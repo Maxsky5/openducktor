@@ -6,7 +6,12 @@ describe("replaceRuntimeExecutablePaths", () => {
   test("replaces discovered paths while preserving runtime settings", () => {
     const runtimes = {
       ...DEFAULT_AGENT_RUNTIMES,
-      opencode: { enabled: false, executablePath: "/old/opencode" },
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: false,
+        executablePath: "/old/opencode",
+      },
       codex: {
         ...DEFAULT_AGENT_RUNTIMES.codex,
         enabled: true,

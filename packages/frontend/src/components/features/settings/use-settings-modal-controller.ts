@@ -1,4 +1,5 @@
 import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
+import { validateOpenCodePermissions } from "./opencode-permission-validation";
 import type {
   AgentPromptTemplateId,
   AgentRuntimes,
@@ -96,6 +97,7 @@ export type SettingsModalController = {
   isLoadingSelectedRepoBranches: boolean;
   selectedRepoBranchesError: string | null;
   promptValidationState: PromptValidationState;
+  openCodePermissionErrorCount: number;
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   selectedRepoPromptValidationErrorCount: number;
@@ -434,6 +436,9 @@ export const useSettingsModalController = ({
     ],
   );
 
+  const openCodePermissionErrors = validateOpenCodePermissions(
+    snapshotDraft?.agentRuntimes.opencode,
+  );
   const {
     isSaving,
     saveError,
@@ -447,6 +452,7 @@ export const useSettingsModalController = ({
     snapshotDraft,
     dirtySections,
     validation: {
+      openCodePermissions: openCodePermissionErrors,
       azureDevOps: {
         hasErrors: azureDevOpsValidationErrorCount > 0,
         errorCount: azureDevOpsValidationErrorCount,
@@ -613,6 +619,7 @@ export const useSettingsModalController = ({
     isLoadingSelectedRepoBranches,
     selectedRepoBranchesError,
     promptValidationState,
+    openCodePermissionErrorCount: openCodePermissionErrors.length,
     hasPromptValidationErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
