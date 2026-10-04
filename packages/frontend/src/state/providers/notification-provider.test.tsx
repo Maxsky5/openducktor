@@ -22,6 +22,41 @@ import { useNotificationContext } from "../notifications/notification-context";
 import { NotificationProvider } from "./notification-provider";
 
 describe("notification permission recovery", () => {
+  test.each([
+    ["denied", "failed"],
+    ["denied", "throw"],
+    ["failed", "failed"],
+    ["failed", "throw"],
+  ] as const)(
+    "Test OS clears a denial and keeps real failures: prior %s, test delivery %s",
+    async (status, delivery) => {
+      const h = createHarness(status);
+      try {
+        await h.mount();
+        const failure = h.hook.getLatest().deliveryFailure;
+        h.showOsNotification.mockImplementation(async () => {
+          if (delivery === "throw") throw new Error("Test delivery failed.");
+          return { status: "failed", message: "Test delivery failed." };
+        });
+        const settings = createDefaultNotificationSettings();
+        settings.volumePercent = 0;
+        await h.hook.run(async (context) => {
+          if (delivery === "throw") {
+            await expect(context.testOs(settings)).rejects.toThrow("Test delivery failed.");
+          } else {
+            expect(await context.testOs(settings)).toEqual({
+              status: "failed",
+              message: "Test delivery failed.",
+            });
+          }
+        });
+        expect(h.hook.getLatest().deliveryFailure).toBe(status === "denied" ? null : failure);
+      } finally {
+        await h.close();
+      }
+    },
+  );
+
   test.each(["denied", "failed"] as const)(
     "granting permission clears only a denial when OS delivery was %s",
     async (status) => {

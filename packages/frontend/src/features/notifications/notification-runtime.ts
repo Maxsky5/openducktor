@@ -35,6 +35,7 @@ export const createNotificationRuntime = ({
   onFailure,
   onObservationHealth = () => {},
   onCoordinationRecovered,
+  onPermissionGranted = () => {},
   onOsShown = () => {},
   onSettingsRecovered = () => {},
   onSoundPlayed = () => {},
@@ -52,6 +53,7 @@ export const createNotificationRuntime = ({
   onFailure(failure: NotificationDispatchFailure): void;
   onObservationHealth?: (health: NotificationHealth) => void;
   onCoordinationRecovered(): void;
+  onPermissionGranted?: () => void;
   onOsShown?: () => void;
   onSettingsRecovered?: () => void;
   onSoundPlayed?: () => void;
@@ -63,6 +65,11 @@ export const createNotificationRuntime = ({
   const localErrorPublications = new Set<string>();
   const coordinatedOccurrences = new Set<string>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
+  const requestPermission = async () => {
+    const capability = await bridge.requestPermission();
+    if (capability.permission === "granted") onPermissionGranted();
+    return capability;
+  };
   const playSound = async (cue: NotificationCue, volumePercent: number): Promise<void> => {
     await sound.play(cue, volumePercent);
     onSoundPlayed();
@@ -279,7 +286,7 @@ export const createNotificationRuntime = ({
       };
     },
     getCapability: () => bridge.getCapability(),
-    requestPermission: () => bridge.requestPermission(),
+    requestPermission,
     openSystemSettings: () => bridge.openSystemSettings(),
     previewCue(cue: NotificationCue, volumePercent: number): Promise<void> {
       return playSound(cue, volumePercent);
@@ -294,7 +301,7 @@ export const createNotificationRuntime = ({
     },
     async testOs(rawSettings: NotificationSettings): Promise<NotificationDeliveryResult> {
       const settings = notificationSettingsSchema.parse(rawSettings);
-      const capability = await bridge.requestPermission();
+      const capability = await requestPermission();
       if (!capability.supported) {
         return {
           status: "unsupported",

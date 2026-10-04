@@ -102,6 +102,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         }
       },
       onCoordinationRecovered: () => updateFailureState({ type: "coordination-recovered" }),
+      onPermissionGranted: () => updateFailureState({ type: "os-permission-granted" }),
       onOsShown: () => updateFailureState({ type: "os-shown" }),
       onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
       onSoundPlayed: () => updateFailureState({ type: "sound-played" }),
@@ -147,13 +148,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     () => ({
       deliveryFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
-      async requestPermission() {
-        const capability = await runtime.requestPermission();
-        if (capability.permission === "granted") {
-          updateFailureState({ type: "os-permission-granted" });
-        }
-        return capability;
-      },
+      requestPermission: runtime.requestPermission,
       openSystemSettings: runtime.openSystemSettings,
       previewCue: runtime.previewCue,
       testInApp: runtime.testInApp,
