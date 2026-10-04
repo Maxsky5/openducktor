@@ -2,8 +2,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { type AddressInfo } from "node:net";
 import { Readable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { createGzip } from "node:zlib";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { nodeReadableStream } from "./node-readable-stream";
+
+const MIN_GZIP_BYTES = 1024;
 
 export type NodeServerSocket<Data> = {
   data: Data;
@@ -95,7 +99,7 @@ export const startNodeFetchServer = async <Data>({
       const request = toRequest(incoming, hostname, abort.signal);
       const response = await fetch(request, makeRequestServer(outgoing, null));
       if (!response) throw new Error("HTTP request did not produce a response.");
-      await writeResponse(outgoing, response);
+      await writeResponse(request, outgoing, response);
     })().catch((cause: unknown) => {
       if (abort.signal.aborted || outgoing.destroyed) return;
       onError(cause);
@@ -204,14 +208,78 @@ const toRequest = (incoming: IncomingMessage, hostname: string, signal: AbortSig
   return request;
 };
 
-const writeResponse = async (outgoing: ServerResponse, response: Response): Promise<void> => {
-  const headers = Object.fromEntries(response.headers.entries());
-  outgoing.writeHead(response.status, headers);
-  if (!response.body) {
+const writeResponse = async (
+  request: Request,
+  outgoing: ServerResponse,
+  response: Response,
+): Promise<void> => {
+  const headers = new Headers(Object.fromEntries(response.headers.entries()));
+  const eligible = canCompress(response);
+  const length = headers.get("content-length");
+  let gzip =
+    eligible && acceptsGzip(request) && (length === null || Number(length) >= MIN_GZIP_BYTES);
+  if (gzip && request.method === "HEAD" && length === null) {
+    // Omit metadata that needs a GET body read to choose.
+    gzip = false;
+    headers.delete("etag");
+  }
+  // SAFETY: Node uses the standard stream API; Bun adds unused helper types.
+  let body =
+    request.method !== "HEAD" && response.body
+      ? Readable.fromWeb(response.body as typeof response.body & NodeReadableStream<Uint8Array>, {
+          signal: request.signal,
+        })
+      : null;
+  if (gzip && body && length === null) {
+    const prefix = await readPrefix(body);
+    gzip = prefix.size >= MIN_GZIP_BYTES;
+    body = prefix.body;
+    if (!gzip) headers.set("content-length", String(prefix.size));
+  }
+  if (eligible) {
+    const vary = headers.get("vary");
+    const fields = vary?.split(",").map((field) => field.trim().toLowerCase()) ?? [];
+    if (!fields.includes("*") && !fields.includes("accept-encoding")) {
+      headers.set("vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");
+    }
+  }
+  if (gzip) {
+    headers.set("content-encoding", "gzip");
+    headers.delete("content-length");
+    // Gzip changes the bytes, so the original ETag must be weak.
+    const etag = headers.get("etag");
+    if (etag && !etag.startsWith("W/")) headers.set("etag", `W/${etag}`);
+  }
+  outgoing.writeHead(response.status, Object.fromEntries(headers.entries()));
+  if (!body) {
+    await response.body?.cancel();
     outgoing.end();
     return;
   }
-  await pipeline(Readable.from(response.body), outgoing);
+  if (gzip) await pipeline(body, createGzip(), outgoing);
+  else await pipeline(body, outgoing);
+};
+
+// Stop once gzip is worth considering instead of buffering the whole response.
+const readPrefix = async (body: Readable): Promise<{ size: number; body: Readable }> => {
+  const iterator = body[Symbol.asyncIterator]();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < MIN_GZIP_BYTES) {
+    const next = await iterator.next();
+    if (next.done) break;
+    chunks.push(next.value);
+    size += next.value.byteLength;
+  }
+  async function* replay(): AsyncGenerator<Uint8Array> {
+    try {
+      yield* chunks;
+      yield* iterator;
+    } finally {
+      body.destroy();
+    }
+  }
+  return { size, body: Readable.from(replay(), { objectMode: false }) };
 };
 
 const writeUpgradeResponse = async (socket: Duplex, response: Response): Promise<void> => {
@@ -234,4 +302,37 @@ const toMessage = (data: RawData, binary: boolean): string | Buffer => {
       ? Buffer.from(data)
       : data;
   return binary ? bytes : bytes.toString("utf8");
+};
+
+const acceptsGzip = (request: Request): boolean => {
+  const weights = new Map<string, number>();
+  for (const entry of (request.headers.get("accept-encoding") ?? "").split(",")) {
+    const [encoding, ...parameters] = entry.trim().toLowerCase().split(";");
+    if (!encoding) continue;
+    const parameter = parameters.find((value) => /^\s*q\s*=/.test(value));
+    let weight = 1;
+    if (parameter !== undefined) {
+      const match = parameter.match(/^\s*q\s*=\s*(0(?:\.\d{0,3})?|1(?:\.0{0,3})?)\s*$/);
+      weight = match ? Number(match[1]) : 0;
+    }
+    weights.set(encoding.trim(), weight);
+  }
+  const gzipWeight = weights.get("gzip") ?? weights.get("*") ?? 0;
+  return gzipWeight > 0 && gzipWeight >= (weights.get("identity") ?? 0);
+};
+
+const canCompress = (response: Response): boolean => {
+  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  return (
+    contentType !== undefined &&
+    contentType !== "text/event-stream" &&
+    (contentType.startsWith("text/") ||
+      /^(?:application\/(?:json|javascript|[^/]+\+json)|image\/svg\+xml)$/.test(contentType)) &&
+    !response.headers.has("content-encoding") &&
+    !response.headers.has("content-range") &&
+    response.status !== 206 &&
+    response.status !== 204 &&
+    response.status !== 205 &&
+    !/(?:^|,)\s*no-transform\s*(?:,|$)/i.test(response.headers.get("cache-control") ?? "")
+  );
 };

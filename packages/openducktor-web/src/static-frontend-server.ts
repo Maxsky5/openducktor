@@ -178,8 +178,9 @@ const staticAssetResponse = async (
     size = bytes.byteLength;
   }
   headers.set("etag", etag);
-  if (isNotModified(request, etag)) return new Response(null, { status: 304, headers });
+  // Keep the GET size on 304 so its encoding matches the cached response.
   headers.set("content-length", String(size));
+  if (isNotModified(request, etag)) return new Response(null, { status: 304, headers });
   if (request.method === "HEAD") return new Response(null, { headers });
   const body =
     bytes === null ? nodeReadableStream(createReadStream(responsePath)) : new Uint8Array(bytes);

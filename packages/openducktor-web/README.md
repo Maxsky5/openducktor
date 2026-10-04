@@ -20,6 +20,12 @@ Workspace mode runs the Node host in-process and serves the frontend with Vite. 
 
 Workspace mode lets the OS assign frontend and backend ports, prints both resolved URLs, and publishes external MCP discovery to `runtime/dev-instances/<instanceId>/mcp-bridge.json`. Published installs keep fixed default ports and use `runtime/mcp-bridge.json`. For automatic development discovery, external MCP clients must set `OPENDUCKTOR_CHANNEL=dev` and the printed `OPENDUCKTOR_DEV_INSTANCE` value. Clients can instead use `ODT_HOST_URL` or `--host-url`.
 
+## Downloads and caching
+
+Published installs compress larger text responses when the client supports gzip. Browsers can reuse unchanged application files and load the current files after an upgrade.
+
+Runtime configuration and connection credentials stay fresh. Live events stream without compression. Clients without gzip support receive the original content.
+
 ## Options
 
 ```sh
