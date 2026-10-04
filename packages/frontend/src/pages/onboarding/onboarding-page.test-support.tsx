@@ -126,6 +126,9 @@ export const createOnboardingTestHarness = () => {
       activeWorkspace: null,
       branches: [],
       activeBranch: null,
+      commitWorkspaceProviderSetup: async () => {
+        throw new Error("Not used");
+      },
       addWorkspace: mock(
         async (input) =>
           ({

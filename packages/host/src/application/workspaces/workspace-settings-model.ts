@@ -36,7 +36,7 @@ import {
 } from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
-type RepoConfigDraft = Pick<
+export type RepoConfigDraft = Pick<
   RepoConfig,
   "defaultModel" | "repoPath" | "workspaceId" | "workspaceName"
 > &
@@ -128,8 +128,12 @@ export type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;
-  abbreviation?: string;
-  tileColor?: string;
+  abbreviation?: string | undefined;
+  tileColor?: string | undefined;
+  git?: RepoConfig["git"];
+  defaultModel?: RepoConfig["defaultModel"];
+  agentDefaults?: RepoConfig["agentDefaults"];
+  onRegistered?: (workspace: WorkspaceRecord) => void;
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
@@ -279,11 +283,11 @@ export const saveAndReturnWorkspaceRecord = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
   workspaceId: string,
+  onRegistered?: (workspace: WorkspaceRecord) => void,
 ) =>
   Effect.gen(function* () {
     const parsed = yield* parseConfig(globalConfigSchema, config);
-    yield* settingsConfig.writeConfig(parsed);
-    return yield* Effect.try({
+    const record = yield* Effect.try({
       try: () => workspaceRecordForId(settingsConfig, config, workspaceId),
       catch: (cause) =>
         new HostValidationError({
@@ -291,6 +295,9 @@ export const saveAndReturnWorkspaceRecord = (
           cause,
         }),
     });
+    yield* settingsConfig.writeConfig(parsed);
+    onRegistered?.(record);
+    return record;
   });
 export const requireConfiguredWorkspace = (
   config: LoadedGlobalConfig,

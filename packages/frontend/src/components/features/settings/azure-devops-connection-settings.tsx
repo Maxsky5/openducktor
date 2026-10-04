@@ -322,7 +322,7 @@ function PatConnectionActions({
   const saveDisabled = inputDisabled || !connectionInput || !pat.trim() || !httpConsentSaved;
   let helpText = "The token needs Code read and write, Build read, and repository policy access.";
   if (!httpConsentSaved) {
-    helpText = "Confirm the HTTP connection in Repository, then save settings before using a PAT.";
+    helpText = "Confirm the HTTP connection in Repository before using a PAT.";
   } else if (replacing) {
     helpText = "Your current token stays active if validation fails.";
   }

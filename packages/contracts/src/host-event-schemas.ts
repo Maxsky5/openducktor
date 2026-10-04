@@ -12,11 +12,23 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://agent-session-live-event",
   "openducktor://workspace-session-updated",
   "openducktor://azure-devops-connection-updated",
+  "openducktor://workspace-provider-setup-updated",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
 
 export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
+  z.strictObject({
+    channel: z.literal("openducktor://workspace-provider-setup-updated"),
+    payload: z.strictObject({
+      setupId: z.string().uuid(),
+      repoPath: z.string().min(1),
+      revision: z.number().int().nonnegative(),
+      configurationFingerprint: z.string().min(1),
+      attemptId: z.string().uuid(),
+      state: azureDevOpsConnectionStateSchema,
+    }),
+  }),
   z.strictObject({
     channel: z.literal("openducktor://azure-devops-connection-updated"),
     payload: z.strictObject({

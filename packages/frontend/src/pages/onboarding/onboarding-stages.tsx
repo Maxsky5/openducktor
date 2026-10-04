@@ -406,8 +406,7 @@ export function WorkspaceStage({
       ...workspaceState.closedWorkspaces,
       ...workspaceState.incompleteRemovals.map((removal) => removal.workspace),
     ],
-    addWorkspace: workspaceState.addWorkspace,
-    saveWorkspaceModelDefaults: workspaceState.saveWorkspaceModelDefaults,
+    commitWorkspaceProviderSetup: workspaceState.commitWorkspaceProviderSetup,
     resolveRepoPath: workspaceState.resolveWorkspacePath,
     onReopenClosedWorkspace: (workspace) =>
       workspaceState.reopenWorkspace({
@@ -481,7 +480,11 @@ export function WorkspaceStage({
             type="button"
             variant="outline"
             disabled={workspaceCreation.busy}
-            onClick={onBack}
+            onClick={() => {
+              void workspaceCreation.abandon().then((done) => {
+                if (done) onBack();
+              });
+            }}
           >
             <ArrowLeft data-icon="inline-start" /> Back to notifications
           </Button>

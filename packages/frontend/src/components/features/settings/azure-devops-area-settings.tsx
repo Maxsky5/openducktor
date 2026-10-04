@@ -1,16 +1,31 @@
 import { RefreshCcw } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import type { AzureDevOpsGitProviderFormController } from "./use-azure-devops-git-provider-form";
 
+type AzureAreaController = Pick<
+  AzureDevOpsGitProviderFormController,
+  | "providerEnabled"
+  | "connectionInput"
+  | "canManageConnection"
+  | "hasConnectedAccount"
+  | "areaPaths"
+  | "selectedAreaPath"
+  | "isLoadingAreaPaths"
+  | "setAreaPath"
+  | "canLoadAreaPaths"
+  | "reloadAreaPaths"
+  | "areaPathsError"
+>;
+
 type AzureDevOpsAreaSettingsProps = {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: AzureAreaController;
   disabled: boolean;
 };
 
-const areaPrerequisite = (controller: AzureDevOpsGitProviderFormController): string | null => {
+const areaPrerequisite = (controller: AzureAreaController): string | null => {
   if (!controller.providerEnabled) return "Enable Azure DevOps to choose an area.";
   if (!controller.connectionInput) return "Link a repository to choose an area.";
   if (!controller.canManageConnection)
@@ -20,10 +35,47 @@ const areaPrerequisite = (controller: AzureDevOpsGitProviderFormController): str
   return null;
 };
 
-export function AzureDevOpsAreaSettings({
+export function AzureDevOpsAreaSettings(props: AzureDevOpsAreaSettingsProps): ReactElement {
+  return (
+    <AzureDevOpsAreaSection
+      {...props}
+      description="Choose the area to import from. Imports include its child areas."
+    />
+  );
+}
+
+export function AzureDevOpsSetupArea({
   controller,
   disabled,
 }: AzureDevOpsAreaSettingsProps): ReactElement {
+  return (
+    <AzureDevOpsAreaSection
+      controller={controller}
+      disabled={disabled}
+      description="Optional for setup. Choose an area to import work items later."
+    >
+      {controller.selectedAreaPath ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="justify-self-start"
+          disabled={disabled}
+          onClick={() => controller.setAreaPath("")}
+        >
+          Clear area
+        </Button>
+      ) : null}
+    </AzureDevOpsAreaSection>
+  );
+}
+
+function AzureDevOpsAreaSection({
+  controller,
+  disabled,
+  description,
+  children,
+}: AzureDevOpsAreaSettingsProps & { description: string; children?: ReactNode }): ReactElement {
   const prerequisite = areaPrerequisite(controller);
   const availableSelectedArea = controller.areaPaths.find(
     (path) => path.toLowerCase() === controller.selectedAreaPath.toLowerCase(),
@@ -38,9 +90,7 @@ export function AzureDevOpsAreaSettings({
         <h3 id="azure-area-heading" className="text-sm font-semibold text-foreground">
           3. Work item area
         </h3>
-        <p className="text-xs text-muted-foreground">
-          Choose the area to import from. Imports include its child areas.
-        </p>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       {prerequisite ? (
         <p className="text-xs text-muted-foreground">{prerequisite}</p>
@@ -50,7 +100,9 @@ export function AzureDevOpsAreaSettings({
             controller={controller}
             disabled={disabled}
             selectedArea={availableSelectedArea ?? controller.selectedAreaPath}
-          />
+          >
+            {children}
+          </AreaPathPicker>
           <AreaPathFeedback
             controller={controller}
             selectedAreaUnavailable={
@@ -69,10 +121,12 @@ function AreaPathPicker({
   controller,
   disabled,
   selectedArea,
+  children,
 }: {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: AzureAreaController;
   disabled: boolean;
   selectedArea: string;
+  children?: ReactNode;
 }): ReactElement {
   return (
     <div className="grid min-w-0 gap-2">
@@ -100,9 +154,18 @@ function AreaPathPicker({
           disabled={disabled || controller.isLoadingAreaPaths || !controller.canLoadAreaPaths}
           onClick={controller.reloadAreaPaths}
         >
-          <RefreshCcw className={controller.isLoadingAreaPaths ? "animate-spin" : undefined} />
+          <span
+            className={
+              controller.isLoadingAreaPaths
+                ? "inline-flex size-4 animate-spin"
+                : "inline-flex size-4"
+            }
+          >
+            <RefreshCcw className="size-4" />
+          </span>
         </Button>
       </div>
+      {children}
     </div>
   );
 }
@@ -111,7 +174,7 @@ function AreaPathFeedback({
   controller,
   selectedAreaUnavailable,
 }: {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: AzureAreaController;
   selectedAreaUnavailable: boolean;
 }): ReactElement {
   return (

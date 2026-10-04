@@ -11,11 +11,30 @@ import type { AzureRepositoryDraftField } from "./azure-devops-git-provider-form
 import { AzureDevOpsRemoteMappings } from "./azure-devops-remote-mappings";
 import type { AzureDevOpsGitProviderFormController } from "./use-azure-devops-git-provider-form";
 
+type AzureRepositoryController = Pick<
+  AzureDevOpsGitProviderFormController,
+  | "detectRepository"
+  | "draft"
+  | "isDetecting"
+  | "repositoryActionError"
+  | "updateDraft"
+  | "connectionInput"
+  | "consentGranted"
+  | "httpCollectionUrl"
+  | "mappingErrors"
+  | "remoteMappingDrafts"
+  | "repositoryErrors"
+  | "setHttpConsent"
+  | "updateRemoteMappings"
+>;
+
 type AzureDevOpsRepositorySettingsProps = {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: AzureRepositoryController;
   disabled: boolean;
   repoPath: string;
   workspaceName: string;
+  defaultManualOpen?: boolean;
+  showErrors?: boolean;
 };
 
 const fieldLabels = {
@@ -47,9 +66,11 @@ export function AzureDevOpsRepositorySettings({
   disabled,
   repoPath,
   workspaceName,
+  defaultManualOpen = false,
+  showErrors = false,
 }: AzureDevOpsRepositorySettingsProps): ReactElement {
   const { detectRepository, draft, isDetecting, repositoryActionError, updateDraft } = controller;
-  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(defaultManualOpen);
   const [touchedFields, setTouchedFields] = useState<Set<AzureRepositoryDraftField>>(
     () => new Set(),
   );
@@ -150,17 +171,48 @@ export function AzureDevOpsRepositorySettings({
         <ManualRepositoryForm
           controller={controller}
           disabled={disabled}
-          touchedFields={touchedFields}
+          touchedFields={
+            showErrors
+              ? new Set<AzureRepositoryDraftField>([
+                  "deployment",
+                  "serviceUrl",
+                  "organization",
+                  "project",
+                  "name",
+                ])
+              : touchedFields
+          }
           markFieldTouched={markFieldTouched}
           updateField={updateField}
         />
+      ) : null}
+      {controller.httpCollectionUrl ? (
+        <Label className="flex min-w-0 items-start gap-3 rounded-md border border-warning-border bg-warning-surface p-3 text-sm">
+          <Checkbox
+            checked={controller.consentGranted}
+            disabled={disabled}
+            onCheckedChange={(checked) => controller.setHttpConsent(checked === true)}
+          />
+          <span className="min-w-0 break-words">
+            Allow credentials over unencrypted HTTP to this exact collection:{" "}
+            {controller.httpCollectionUrl}
+          </span>
+        </Label>
       ) : null}
     </section>
   );
 }
 
 type ManualRepositoryFormProps = {
-  controller: AzureDevOpsGitProviderFormController;
+  controller: Pick<
+    AzureDevOpsGitProviderFormController,
+    | "draft"
+    | "mappingErrors"
+    | "remoteMappingDrafts"
+    | "repositoryErrors"
+    | "updateDraft"
+    | "updateRemoteMappings"
+  >;
   disabled: boolean;
   touchedFields: Set<AzureRepositoryDraftField>;
   markFieldTouched: (field: AzureRepositoryDraftField) => void;
@@ -175,13 +227,10 @@ function ManualRepositoryForm({
   updateField,
 }: ManualRepositoryFormProps): ReactElement {
   const {
-    consentGranted,
     draft,
-    httpCollectionUrl,
     mappingErrors,
     remoteMappingDrafts,
     repositoryErrors,
-    setHttpConsent,
     updateDraft,
     updateRemoteMappings,
   } = controller;
@@ -296,19 +345,6 @@ function ManualRepositoryForm({
         errors={mappingErrors}
         onChange={updateRemoteMappings}
       />
-
-      {httpCollectionUrl ? (
-        <Label className="flex min-w-0 items-start gap-3 rounded-md border border-warning-border bg-warning-surface p-3 text-sm">
-          <Checkbox
-            checked={consentGranted}
-            disabled={disabled}
-            onCheckedChange={(checked) => setHttpConsent(checked === true)}
-          />
-          <span className="min-w-0 break-words">
-            Allow credentials over unencrypted HTTP to this exact collection: {httpCollectionUrl}
-          </span>
-        </Label>
-      ) : null}
     </div>
   );
 }

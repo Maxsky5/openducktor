@@ -21,6 +21,9 @@ type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHost
 const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
   ({
     workspaceList: async () => [],
+    workspaceProviderSetupCommit: async () => {
+      throw new Error("Not used");
+    },
     workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
     workspaceCatalogGet: async () => ({

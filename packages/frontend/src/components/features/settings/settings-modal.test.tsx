@@ -179,6 +179,9 @@ function renderSettings(shared: boolean) {
     isLoadingBranches: false,
     isSwitchingBranch: false,
     branchSyncDegraded: false,
+    commitWorkspaceProviderSetup: async () => {
+      throw new Error("Not used");
+    },
     addWorkspace: async () => {
       throw new Error("Not used in this test");
     },

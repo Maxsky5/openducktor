@@ -6,6 +6,8 @@ import type {
   WorkspacePathResolution,
   WorkspaceRecord,
   WorkspaceRemovalInput,
+  WorkspaceProviderSetupCommit,
+  WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import type { host } from "../shared/host";
@@ -23,6 +25,7 @@ export type WorkspaceBranchProbeHostClient = Pick<
 export type WorkspaceSelectionOperationsHostClient = Pick<
   typeof host,
   | "workspaceAdd"
+  | "workspaceProviderSetupCommit"
   | "workspaceCatalogGet"
   | "workspaceClose"
   | "workspaceList"
@@ -51,6 +54,9 @@ export type UseWorkspaceOperationsResult = {
   branchSyncDegraded: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
+  commitWorkspaceProviderSetup: (
+    input: WorkspaceProviderSetupCommit,
+  ) => Promise<WorkspaceProviderSetupProgress>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;

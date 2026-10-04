@@ -79,6 +79,9 @@ describe("WorkspaceRail", () => {
       activeWorkspace: null,
       branches: [],
       activeBranch: null,
+      commitWorkspaceProviderSetup: async () => {
+        throw new Error("Not used");
+      },
       addWorkspace: async () => {
         throw new Error("Not used");
       },

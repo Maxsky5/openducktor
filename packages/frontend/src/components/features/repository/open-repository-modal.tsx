@@ -1,4 +1,4 @@
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, FolderGit2 } from "lucide-react";
 import { type ReactElement, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +37,17 @@ type OpenRepositoryModalProps = {
     options?: { waitForSuccess?: boolean },
   ) => void;
 };
+
+export function OpenRepositoryModal(props: OpenRepositoryModalProps): ReactElement | null {
+  const mounted = useDialogPresence(props.open);
+  const [sessionKey, setSessionKey] = useState(0);
+  const wasOpen = useRef(props.open);
+  useLayoutEffect(() => {
+    if (props.open && !wasOpen.current) setSessionKey((key) => key + 1);
+    wasOpen.current = props.open;
+  }, [props.open]);
+  return mounted ? <OpenRepositoryModalSession key={sessionKey} {...props} /> : null;
+}
 
 function useGuardedWorkspaceChange(
   requestTransition: OpenRepositoryModalProps["requestTransition"],
@@ -102,6 +113,7 @@ function OpenRepositoryModalFooter({
   canClose,
   canBackToWorkspaces,
   interactionLocked,
+  cancellationLocked,
   showCreationFlow,
   creation,
   models,
@@ -111,6 +123,7 @@ function OpenRepositoryModalFooter({
   canClose: boolean;
   canBackToWorkspaces: boolean;
   interactionLocked: boolean;
+  cancellationLocked: boolean;
   showCreationFlow: boolean;
   creation: WorkspaceCreationController;
   models: WorkspaceCreationModelSurface;
@@ -125,7 +138,7 @@ function OpenRepositoryModalFooter({
     >
       <div className="flex flex-wrap gap-2">
         {canClose ? (
-          <Button type="button" variant="outline" disabled={interactionLocked} onClick={onClose}>
+          <Button type="button" variant="outline" disabled={cancellationLocked} onClick={onClose}>
             Close
           </Button>
         ) : null}
@@ -163,8 +176,7 @@ function OpenRepositoryModalSession({
     workspaces,
     closedWorkspaces,
     incompleteRemovals,
-    addWorkspace,
-    saveWorkspaceModelDefaults,
+    commitWorkspaceProviderSetup,
     saveAgentModelFavorites,
     reopenWorkspace,
     resolveWorkspacePath,
@@ -182,8 +194,7 @@ function OpenRepositoryModalSession({
   ];
   const creation = useWorkspaceCreation({
     workspaces: configuredWorkspaces,
-    addWorkspace,
-    saveWorkspaceModelDefaults,
+    commitWorkspaceProviderSetup,
     resolveRepoPath: resolveWorkspacePath,
     onReopenClosedWorkspace: (workspace) =>
       reopenWorkspace({
@@ -205,46 +216,57 @@ function OpenRepositoryModalSession({
     active: open && showCreationFlow && creation.stage === "models",
     saveAgentModelFavorites,
   });
-  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
+  const workspaceChangeLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
+  const interactionLocked = workspaceChangeLocked || creation.busy;
+  const cancellationLocked = workspaceChangeLocked || !creation.canAbandon;
+  const canDismiss = canClose && !cancellationLocked;
+  const close = async () => {
+    if (await creation.abandon()) onOpenChange(false);
+  };
   const { selectionError, reopenClosedWorkspace } = useClosedWorkspaceReopen({
     runWorkspaceChange,
     reopenWorkspace,
     onOpenChange,
     disabled: interactionLocked,
   });
+  let description = "Choose a local Git repository to start a workspace.";
+  if (showCreationFlow)
+    description = {
+      repository: "Choose a local Git folder for this workspace.",
+      provider: "Connect pull requests and work items, or skip this step.",
+      information: "Choose a name and appearance for this workspace.",
+      models: "Set default models for your agents. You can change these later.",
+    }[creation.stage];
+  else if (hasClosedWorkspaces)
+    description = "Start a new workspace or reopen one you closed earlier.";
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen || (canClose && !interactionLocked)) onOpenChange(nextOpen);
+        if (nextOpen) onOpenChange(true);
+        else if (canDismiss) void close();
       }}
     >
       <DialogContent
         className={cn(
-          "grid max-h-[92vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
-          showCreationFlow || hasClosedWorkspaces ? "max-w-6xl" : "max-w-2xl",
+          "grid max-h-[88vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0",
+          showCreationFlow ? "max-w-6xl" : "max-w-4xl",
         )}
-        {...(canClose && !interactionLocked ? {} : { closeButton: null })}
+        {...(canDismiss ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
-          if (!canClose || interactionLocked) event.preventDefault();
+          if (!canDismiss) event.preventDefault();
         }}
         onPointerDownOutside={(event) => {
-          if (!canClose || interactionLocked) event.preventDefault();
+          if (!canDismiss) event.preventDefault();
         }}
       >
         <DialogHeader className="border-b border-border px-6 py-5">
-          <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Sparkles className="size-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <FolderGit2 className="size-5 text-muted-foreground" />
             Open a repository
           </DialogTitle>
-          <DialogDescription>
-            {showCreationFlow
-              ? "Choose a Git folder, review workspace details, and set model defaults."
-              : hasClosedWorkspaces
-                ? "Start a new workspace or reopen one you closed earlier."
-                : "Choose a local Git repository to start a workspace."}
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="min-h-0 overflow-y-auto px-6 py-5">
@@ -270,11 +292,16 @@ function OpenRepositoryModalSession({
           canClose={canClose}
           canBackToWorkspaces={hasClosedWorkspaces}
           interactionLocked={interactionLocked}
+          cancellationLocked={cancellationLocked}
           showCreationFlow={showCreationFlow}
           creation={creation}
           models={models}
-          onClose={() => onOpenChange(false)}
-          onBackToWorkspaces={() => setShowCreationFlow(false)}
+          onClose={() => void close()}
+          onBackToWorkspaces={() => {
+            void creation.abandon().then((done) => {
+              if (done) setShowCreationFlow(false);
+            });
+          }}
         />
       </DialogContent>
       <FolderPickerDialog
@@ -288,15 +315,4 @@ function OpenRepositoryModalSession({
       />
     </Dialog>
   );
-}
-
-export function OpenRepositoryModal(props: OpenRepositoryModalProps): ReactElement | null {
-  const mounted = useDialogPresence(props.open);
-  const [sessionKey, setSessionKey] = useState(0);
-  const wasOpen = useRef(props.open);
-  useLayoutEffect(() => {
-    if (props.open && !wasOpen.current) setSessionKey((key) => key + 1);
-    wasOpen.current = props.open;
-  }, [props.open]);
-  return mounted ? <OpenRepositoryModalSession key={sessionKey} {...props} /> : null;
 }

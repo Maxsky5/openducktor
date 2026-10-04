@@ -8,6 +8,7 @@ import {
   type HostErrorResponse,
   type HostEventChannel,
   type HostEventEnvelope,
+  type HostEventPayload,
   parseHostEventEnvelope,
   type TaskEventCursor,
 } from "@openducktor/contracts";
@@ -539,6 +540,23 @@ export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
         listener(event.payload);
       }
     }),
+  );
+  return subscription.unsubscribe;
+};
+export const subscribeLocalHostWorkspaceProviderSetupUpdates = async (
+  listener: (payload: HostEventPayload<"openducktor://workspace-provider-setup-updated">) => void,
+): Promise<() => void> => {
+  const subscription = await runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(
+      "openducktor://workspace-provider-setup-updated",
+      (event) => {
+        if (
+          !isBrowserSseControlEvent(event) &&
+          event.channel === "openducktor://workspace-provider-setup-updated"
+        )
+          listener(event.payload);
+      },
+    ),
   );
   return subscription.unsubscribe;
 };

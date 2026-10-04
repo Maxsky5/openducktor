@@ -96,6 +96,28 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     customAgentRoleDelete: workspaceClient.customAgentRoleDelete.bind(workspaceClient),
     workspaceList: workspaceClient.workspaceList.bind(workspaceClient),
     workspaceAdd: workspaceClient.workspaceAdd.bind(workspaceClient),
+    workspaceProviderSetupBegin: workspaceClient.workspaceProviderSetupBegin.bind(workspaceClient),
+    workspaceProviderSetupSet: workspaceClient.workspaceProviderSetupSet.bind(workspaceClient),
+    workspaceProviderSetupDetect:
+      workspaceClient.workspaceProviderSetupDetect.bind(workspaceClient),
+    workspaceProviderSetupStatus:
+      workspaceClient.workspaceProviderSetupStatus.bind(workspaceClient),
+    workspaceProviderSetupGithub:
+      workspaceClient.workspaceProviderSetupGithub.bind(workspaceClient),
+    workspaceProviderSetupAreas: workspaceClient.workspaceProviderSetupAreas.bind(workspaceClient),
+    workspaceProviderSetupSignIn:
+      workspaceClient.workspaceProviderSetupSignIn.bind(workspaceClient),
+    workspaceProviderSetupCancelSignIn:
+      workspaceClient.workspaceProviderSetupCancelSignIn.bind(workspaceClient),
+    workspaceProviderSetupPat: workspaceClient.workspaceProviderSetupPat.bind(workspaceClient),
+    workspaceProviderSetupDisconnect:
+      workspaceClient.workspaceProviderSetupDisconnect.bind(workspaceClient),
+    workspaceProviderSetupCommit:
+      workspaceClient.workspaceProviderSetupCommit.bind(workspaceClient),
+    workspaceProviderSetupProgress:
+      workspaceClient.workspaceProviderSetupProgress.bind(workspaceClient),
+    workspaceProviderSetupDiscard:
+      workspaceClient.workspaceProviderSetupDiscard.bind(workspaceClient),
     workspaceSelect: workspaceClient.workspaceSelect.bind(workspaceClient),
     workspaceCatalogGet: workspaceClient.workspaceCatalogGet.bind(workspaceClient),
     workspaceClose: workspaceClient.workspaceClose.bind(workspaceClient),

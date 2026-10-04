@@ -1,3 +1,13 @@
+import { beforeAll, afterAll } from "bun:test";
+import {
+  installLocalOnlyProviderSetup,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
+let releaseProviderFixture: (() => void) | undefined;
+beforeAll(() => {
+  releaseProviderFixture = installLocalOnlyProviderSetup();
+});
+afterAll(() => releaseProviderFixture?.());
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -183,6 +193,9 @@ const createWorkspaceState = (
   activeWorkspace,
   branches: [],
   activeBranch: null,
+  commitWorkspaceProviderSetup: async () => {
+    throw new Error("Not used");
+  },
   addWorkspace: async () => {
     throw new Error("Not used");
   },
@@ -338,6 +351,14 @@ function AppShellTestEnvironment({
                     : [],
                   activeWorkspace: currentWorkspace,
                   addWorkspace,
+                  commitWorkspaceProviderSetup: async (input) => ({
+                    workspace: await addWorkspace(localOnlyWorkspaceDetails(input)),
+                    registrationSaved: true,
+                    settingsSaved: true,
+                    credentialsSaved: true,
+                    phase: "complete",
+                    error: null,
+                  }),
                 })}
               >
                 <WorkspaceBranchStateContext.Provider
@@ -648,7 +669,12 @@ describe("AppShell", () => {
     expect(workspaceFooter.contains(submitActions)).toBe(true);
     expect(within(workspaceFooter).getByRole("button", { name: "Back" })).toBeTruthy();
     expect(workspaceAdd).not.toHaveBeenCalled();
-    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Continue to models" }));
+    fireEvent.click(
+      await within(workspaceFooter).findByRole("button", { name: "Skip Git provider setup" }),
+    );
+    fireEvent.click(
+      await within(workspaceFooter).findByRole("button", { name: "Continue to models" }),
+    );
     const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
       name: "Open repository",
     });
@@ -718,6 +744,7 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Skip Git provider setup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
@@ -725,7 +752,7 @@ describe("AppShell", () => {
     if (!(backButton instanceof HTMLButtonElement)) {
       throw new TypeError("Expected the back action to be a button.");
     }
-    expect(backButton.disabled).toBe(true);
+    await waitFor(() => expect(backButton.disabled).toBe(true));
 
     workspaceAddResult.reject(new Error("Repository open failed"));
 

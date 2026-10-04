@@ -34,6 +34,7 @@ import {
   toSettingsSnapshot,
   touchRecentWorkspace,
   validateAndNormalizeRepoConfig,
+  type RepoConfigDraft,
   type WorkspaceSettingsService,
 } from "./workspace-settings-model";
 
@@ -59,13 +60,17 @@ const createUnserializedWorkspaceSettingsService = (
   },
   addWorkspace(input) {
     return Effect.gen(function* () {
-      const repoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
+      const draft: RepoConfigDraft = {
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: input.repoPath,
         abbreviation: input.abbreviation,
         tileColor: input.tileColor,
-      });
+      };
+      if (input.git !== undefined) draft.git = input.git;
+      if (input.defaultModel !== undefined) draft.defaultModel = input.defaultModel;
+      if (input.agentDefaults !== undefined) draft.agentDefaults = input.agentDefaults;
+      const repoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, draft);
       const config = yield* loadGlobalConfig(settingsConfig);
 
       if (config.workspaces[repoConfig.workspaceId]) {
@@ -90,7 +95,12 @@ const createUnserializedWorkspaceSettingsService = (
       config.activeWorkspace = repoConfig.workspaceId;
       touchRecentWorkspace(config, repoConfig.workspaceId);
 
-      return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, repoConfig.workspaceId);
+      return yield* saveAndReturnWorkspaceRecord(
+        settingsConfig,
+        config,
+        repoConfig.workspaceId,
+        input.onRegistered,
+      );
     });
   },
   selectWorkspace(workspaceId) {

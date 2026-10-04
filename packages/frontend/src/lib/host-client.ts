@@ -61,6 +61,8 @@ const hostClientProxy = new Proxy(
 export const createHostBridge = (): HostBridge => getShellBridge();
 
 export const hostBridge: HostBridge = {
+  subscribeWorkspaceProviderSetupUpdates: (listener) =>
+    getShellBridge().subscribeWorkspaceProviderSetupUpdates(listener),
   client: hostClientProxy,
   subscribeWorkspaceSessionUpdates: (listener) =>
     getShellBridge().subscribeWorkspaceSessionUpdates(listener),

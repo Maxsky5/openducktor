@@ -5,6 +5,8 @@ import type {
   WorkspacePathResolution,
   WorkspaceRecord,
   WorkspaceRemovalInput,
+  WorkspaceProviderSetupCommit,
+  WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import {
   isCancelledError,
@@ -15,6 +17,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
@@ -52,6 +55,9 @@ type UseWorkspaceSelectionOperationsResult = {
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
+  commitWorkspaceProviderSetup: (
+    input: WorkspaceProviderSetupCommit,
+  ) => Promise<WorkspaceProviderSetupProgress>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
@@ -372,6 +378,33 @@ export function useWorkspaceSelectionOperations({
     [applyWorkspaceRecord, hostClient, queryClient],
   );
 
+  const commitWorkspaceProviderSetup = useCallback(
+    async (input: WorkspaceProviderSetupCommit) => {
+      const outcome = await hostClient.workspaceProviderSetupCommit(input);
+      if (outcome.workspace) {
+        applyWorkspaceRecord(outcome.workspace);
+        try {
+          await Promise.all([
+            invalidateWorkspaceSettingsSnapshot(queryClient),
+            queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.catalog() }),
+            queryClient.invalidateQueries({
+              queryKey: workspaceQueryKeys.repoConfig(outcome.workspace.workspaceId),
+            }),
+            queryClient.invalidateQueries({
+              queryKey: repositoryGitProviderContextQueryKeys.repo(outcome.workspace.repoPath),
+            }),
+          ]);
+        } catch (cause) {
+          toast.error("Workspace saved, but settings did not refresh", {
+            description: errorMessage(cause),
+          });
+        }
+      }
+      return outcome;
+    },
+    [applyWorkspaceRecord, hostClient, queryClient],
+  );
+
   const selectWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
@@ -494,6 +527,7 @@ export function useWorkspaceSelectionOperations({
     isSwitchingWorkspace,
     refreshWorkspaces,
     addWorkspace,
+    commitWorkspaceProviderSetup,
     selectWorkspace,
     closeWorkspace,
     removeWorkspace,

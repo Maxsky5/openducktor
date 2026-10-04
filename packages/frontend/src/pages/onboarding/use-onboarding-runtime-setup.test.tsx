@@ -999,7 +999,7 @@ describe("useOnboardingRuntimeSetup", () => {
       await continueFromNotificationsToWorkspace();
       expect(screen.queryByText("Repository boundary")).toBeNull();
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
-      expect(screen.getByRole("heading", { name: "Configure notifications" })).toBeTruthy();
+      await screen.findByRole("heading", { name: "Configure notifications" });
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
       expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);

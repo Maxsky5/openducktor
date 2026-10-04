@@ -452,6 +452,7 @@ describe("local host SSE subscriptions", () => {
       subscribeLocalHostDevServerEvents,
       subscribeLocalHostRunEvents,
       subscribeLocalHostWorkspaceSessionUpdates,
+      subscribeLocalHostWorkspaceProviderSetupUpdates,
     } = await loadLocalHostTransport();
     const fetchMock = mock(
       async (url: string | URL | Request) =>
@@ -464,11 +465,13 @@ describe("local host SSE subscriptions", () => {
     const devServerListener = mock(() => {});
     const liveSessionListener = mock(() => {});
     const workspaceSessionListener = mock(() => {});
+    const setupListener = mock(() => {});
 
     const unsubscribeRun = await subscribeLocalHostRunEvents(runListener);
     const devServerSubscription = subscribeLocalHostDevServerEvents(devServerListener);
     const workspaceSessionSubscription =
       subscribeLocalHostWorkspaceSessionUpdates(workspaceSessionListener);
+    const setupSubscription = subscribeLocalHostWorkspaceProviderSetupUpdates(setupListener);
     const liveSessionObservation = observeLocalHostAgentSessions(
       { repoPath: "/repo" },
       liveSessionListener,
@@ -481,6 +484,7 @@ describe("local host SSE subscriptions", () => {
     FakeEventSource.instances[0]?.emit("open", "");
     const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const unsubscribeWorkspaceSession = await workspaceSessionSubscription;
+    const unsubscribeSetup = await setupSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
 
     const emitHostEvent = (channel: string, payload: JSONType): void => {
@@ -510,6 +514,16 @@ describe("local host SSE subscriptions", () => {
     };
     emitHostEvent("openducktor://workspace-session-updated", workspaceSessionUpdate);
     expect(workspaceSessionListener).toHaveBeenCalledWith(workspaceSessionUpdate);
+    const setupUpdate = {
+      setupId: crypto.randomUUID(),
+      repoPath: "/new-repo",
+      revision: 2,
+      configurationFingerprint: "current",
+      attemptId: crypto.randomUUID(),
+      state: { status: "connected", account: "user" },
+    };
+    emitHostEvent("openducktor://workspace-provider-setup-updated", setupUpdate);
+    expect(setupListener).toHaveBeenCalledWith(setupUpdate);
     emitHostEvent("openducktor://dev-server-event", {
       type: "snapshot",
       state: {
@@ -553,6 +567,7 @@ describe("local host SSE subscriptions", () => {
     unsubscribeRun();
     unsubscribeDevServer();
     unsubscribeWorkspaceSession();
+    unsubscribeSetup();
     expect(FakeEventSource.instances[0]?.closed).toBe(false);
 
     stopObservingLiveSessions();
