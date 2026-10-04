@@ -14,14 +14,14 @@ export const OPENCODE_PERMISSION_TARGETS = [
     supportsPattern: true,
     label: "Read files",
     patternLabel: "File path pattern",
-    help: "Use native file paths, including ~/ and $HOME/.",
+    help: "Relative paths use OpenCode's worktree. Home and absolute paths are converted for this session.",
   },
   {
     permission: "edit",
     supportsPattern: true,
     label: "Edit files",
     patternLabel: "File path pattern",
-    help: "Includes file creation, editing, and patches.",
+    help: "Includes file creation, editing, and patches. Relative paths use OpenCode's worktree. Home and absolute paths are converted for this session.",
   },
   {
     permission: "glob",

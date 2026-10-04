@@ -87,6 +87,7 @@ export const inheritedPermissionOwnership = (
 export const ownsRule = (ownership: PermissionOwnership, index: number): boolean =>
   ownership.spans.some((span) => index >= span.start && index < span.start + span.rules.length);
 
+/** Trust the native runtime as the metadata writer. These checks prove rule positions and contents, not authorship. */
 export const checkPermissionOwnership = (
   value: OpenCodeProtocolValue | PermissionOwnership | undefined,
   permission: OpencodePermissionRule[],

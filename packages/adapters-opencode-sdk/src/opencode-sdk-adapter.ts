@@ -659,6 +659,7 @@ export class OpencodeSdkAdapter
       client,
       workingDirectory: input.workingDirectory,
     });
+    // The fork uses this source snapshot. Later native permission changes do not alter the captured rules.
     const source = await readPermissionSession({
       client,
       externalSessionId: input.parentExternalSessionId,

@@ -116,9 +116,10 @@ function PermissionInfoPanel({ disabled }: PermissionInfoPanelProps): ReactEleme
             final priority.
           </p>
           <p>
-            Use native * to match any text and ? to match one character. Path rules support ~, ~/
-            and $HOME/. OpenCode matches commands and patterns. Rules do not install or enable
-            tools.
+            Use native * to match any text and ? to match one character. Read and edit paths use
+            OpenCode's worktree. Home forms such as ~, ~/ and $HOME/, and absolute paths, are
+            converted for each new or forked session. External-directory paths stay absolute. Rules
+            do not install or enable tools.
           </p>
         </div>
       ) : null}

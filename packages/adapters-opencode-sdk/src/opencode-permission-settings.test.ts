@@ -177,39 +177,86 @@ test("captures a detached creation snapshot and never reloads it on resume or la
   await reopened.releaseSession(sessionRuntimeRef());
 });
 
-test("expands home paths with the selected runtime and preserves saved pattern text", async () => {
-  const client = makeMockClient();
-  const home = mock(async () => ({
-    data: {
-      home: "/runtime/home",
-      state: "/state",
-      config: "/config",
-      worktree: "/repo",
-      directory: "/repo",
-    },
-    error: undefined,
-  }));
-  client.client.path.get = home;
-  const settings: OpenCodeCreationSettings = {
-    defaults: [
-      { permission: "read", pattern: "~/private/*", action: "deny" },
-      { permission: "external_directory", pattern: "$HOME/shared/*", action: "allow" },
+test.each([
+  ["fresh", "posix", true],
+  ["fork", "posix", true],
+  ["fresh", "windows", true],
+  ["fork", "windows", true],
+  ["fresh", "posix", false],
+] as const)(
+  "%s sessions match file rules relative to the %s runtime worktree, home aliases: %s",
+  async (mode, platform, useHome) => {
+    const home = platform === "windows" ? "C:\\Users\\runtime" : "/runtime/home";
+    const worktree = `${home}/project`;
+    const directory = `${worktree}/nested`;
+    const native = [
+      { permission: "read", pattern: "*", action: "allow" as const },
+      { permission: "edit", pattern: "*", action: "allow" as const },
+    ];
+    const client = makeMockClient({ sessionId: "native", sessionPermissions: native });
+    const paths = mock(async () => ({
+      data: { home, state: "/state", config: "/config", worktree, directory },
+      error: undefined,
+    }));
+    client.client.path.get = paths;
+    const settings: OpenCodeCreationSettings = {
+      defaults: [
+        {
+          permission: "read",
+          pattern: useHome ? "~/project/secrets/*" : `${worktree}/secrets/*`,
+          action: "deny",
+        },
+        {
+          permission: "external_directory",
+          pattern: useHome ? "$HOME/shared/*" : `${home}/shared/*`,
+          action: "allow",
+        },
+        { permission: "bash", pattern: "echo $HOME", action: "ask" },
+        { permission: "read", pattern: "relative/*", action: "ask" },
+        { permission: "read", pattern: `${home}/private/*`, action: "deny" },
+      ],
+      role: [{ permission: "edit", pattern: `${worktree}/generated/*.ts`, action: "ask" }],
+    };
+    const saved = structuredClone(settings);
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => client.client,
+      resolveCreationSettings: async () => settings,
+    });
+    const input = {
+      ...defaultRepoRuntimeInput,
+      workingDirectory: directory,
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+    };
+    const created =
+      mode === "fresh"
+        ? await adapter.startSession({ ...input, systemPrompt: "system prompt" })
+        : await adapter.forkSession({ ...input, parentExternalSessionId: "native" });
+    const detail = (
+      await client.client.session.get({ sessionID: created.externalSessionId, directory })
+    ).data!;
+    const offset = mode === "fork" ? native.length : 0;
+    expect(detail.permission?.slice(offset, offset + 6)).toEqual([
+      { permission: "read", pattern: "secrets/*", action: "deny" },
+      { permission: "external_directory", pattern: `${home}/shared/*`, action: "allow" },
       { permission: "bash", pattern: "echo $HOME", action: "ask" },
-    ],
-    role: [],
-  };
-  const adapter = new OpencodeSdkAdapter({
-    createClient: () => client.client,
-    resolveCreationSettings: async () => settings,
-  });
-  await startDefaultSession(adapter);
-  expect(
-    client.session.createCalls[0]?.permission?.slice(0, 3).map((rule) => rule.pattern),
-  ).toEqual(["/runtime/home/private/*", "/runtime/home/shared/*", "echo $HOME"]);
-  expect(settings.defaults[0]?.pattern).toBe("~/private/*");
-  expect(home).toHaveBeenCalledTimes(1);
-  await adapter.releaseSession(sessionRuntimeRef());
-});
+      { permission: "read", pattern: "relative/*", action: "ask" },
+      { permission: "read", pattern: "../private/*", action: "deny" },
+      { permission: "edit", pattern: "generated/*.ts", action: "ask" },
+    ]);
+    if (mode === "fork") {
+      expect(detail.permission?.slice(0, offset)).toEqual(native);
+      expect(
+        (await client.client.session.get({ sessionID: "native", directory })).data?.permission,
+      ).toEqual(native);
+    }
+    expect(settings).toEqual(saved);
+    expect(paths).toHaveBeenCalledTimes(1);
+    expect(paths.mock.calls[0]).toEqual([{ directory }]);
+    await adapter.releaseSession(
+      sessionRuntimeRef(created.externalSessionId, { workingDirectory: directory, role: "build" }),
+    );
+  },
+);
 
 test.each(["missing", "mismatch", "malformed"] as const)(
   "blocks creation and cleans up when ownership confirmation is %s",
@@ -345,19 +392,44 @@ test("forks a native child using confirmed ancestor positions and leaves native 
   await parentAdapter.releaseSession(sessionRuntimeRef("session-opencode-fork"));
 });
 
-test("failed path reads stop creation before the native session exists", async () => {
-  const client = makeMockClient();
-  client.client.path.get = async () => {
-    throw new Error("Runtime path API unavailable");
-  };
-  const adapter = new OpencodeSdkAdapter({
-    createClient: () => client.client,
-    resolveCreationSettings: async () => ({
-      defaults: [{ permission: "read", pattern: "~/private/*", action: "deny" }],
-      role: [],
-    }),
-  });
-  await expect(startDefaultSession(adapter)).rejects.toThrow("Runtime path API unavailable");
-  expect(client.session.createCalls).toEqual([]);
-  expect(client.session.promptAsyncCalls).toEqual([]);
-});
+test.each(["unavailable", "missing home", "missing worktree", "wildcard above worktree"] as const)(
+  "%s paths stop creation before the native session exists",
+  async (mode) => {
+    const client = makeMockClient();
+    client.client.path.get = async () => {
+      if (mode === "unavailable") throw new Error("Runtime path API unavailable");
+      return {
+        data: {
+          home: mode === "missing home" ? "" : "/runtime/home",
+          worktree: mode === "missing worktree" ? "" : "/runtime/home/project",
+          directory: "/repo",
+          state: "/state",
+          config: "/config",
+        },
+        error: undefined,
+      };
+    };
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => client.client,
+      resolveCreationSettings: async () => ({
+        defaults: [
+          {
+            permission: "read",
+            pattern: mode === "wildcard above worktree" ? "~/pro*/private/*" : "~/private/*",
+            action: "deny",
+          },
+        ],
+        role: [],
+      }),
+    });
+    const reason = {
+      unavailable: "Runtime path API unavailable",
+      "missing home": "home directory",
+      "missing worktree": "absolute worktree path",
+      "wildcard above worktree": "Use a worktree-relative pattern",
+    }[mode];
+    await expect(startDefaultSession(adapter)).rejects.toThrow(reason);
+    expect(client.session.createCalls).toEqual([]);
+    expect(client.session.promptAsyncCalls).toEqual([]);
+  },
+);
