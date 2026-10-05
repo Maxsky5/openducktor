@@ -123,8 +123,8 @@ export const buildSessionPolicyNoticeMessage = (
     id,
     meta: {
       kind: "session_notice",
-      tone: "info",
+      tone: "warning",
       reason: "runtime_policy",
-      title: "Claude permission mode",
+      title: "Claude permission mode mismatch",
     },
   });

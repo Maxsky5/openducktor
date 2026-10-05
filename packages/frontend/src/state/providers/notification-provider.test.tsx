@@ -216,6 +216,7 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   branches: [],
   activeBranch: null,
   addWorkspace: unused,
+  commitWorkspaceProviderSetup: unused,
   saveWorkspaceModelDefaults: unused,
   selectWorkspace: unused,
   closeWorkspace: unused,
