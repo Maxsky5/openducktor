@@ -93,7 +93,6 @@ type UseAgentChatComposerModelArgs = {
   composerEditorRef: RefObject<HTMLDivElement | null>;
   resizeComposerEditor: () => void;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
-  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export function useAgentChatComposerModel({
@@ -104,7 +103,6 @@ export function useAgentChatComposerModel({
   composerEditorRef,
   resizeComposerEditor,
   scrollToBottomOnSendRef,
-  syncBottomAfterComposerLayoutRef,
 }: UseAgentChatComposerModelArgs): AgentChatComposerModel | undefined {
   const composerState = useMemo(
     () =>
@@ -183,7 +181,6 @@ export function useAgentChatComposerModel({
       composerEditorRef,
       onComposerEditorInput: resizeComposerEditor,
       scrollToBottomOnSendRef,
-      syncBottomAfterComposerLayoutRef,
     };
     if (composer.pendingSendItems) {
       model.pendingSendItems = composer.pendingSendItems;
@@ -202,6 +199,5 @@ export function useAgentChatComposerModel({
     composerFormRef,
     resizeComposerEditor,
     scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
   ]);
 }

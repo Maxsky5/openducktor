@@ -44,7 +44,6 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       onToggleTodoPanel: () => {},
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef,
-      syncBottomAfterComposerLayoutRef: { current: null },
     },
     composer: {
       displayedSessionKey: null,
@@ -115,7 +114,6 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       composerEditorRef: { current: null },
       onComposerEditorInput: () => {},
       scrollToBottomOnSendRef,
-      syncBottomAfterComposerLayoutRef: { current: null },
     },
   };
 };

@@ -9,6 +9,7 @@ import {
 } from "./agent-chat-row-windows";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { buildAgentChatTurnAnchors } from "./agent-chat-transcript-model";
+import { revealElement } from "@/lib/reveal-element";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 interface LatestResultRefContract {
@@ -20,8 +21,6 @@ type HarnessProps = {
   turnAnchors?: ReturnType<typeof buildAgentChatTurnAnchors>;
   displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
-  isSessionWorking?: boolean;
-  syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
 };
 
 type HookResult = ReturnType<typeof useAgentChatWindow>;
@@ -180,13 +179,9 @@ const createHarness = () => {
     const hookInput: Parameters<typeof useAgentChatWindow>[0] = {
       ...props,
       turnAnchors: props.turnAnchors ?? buildAgentChatTurnAnchors(props.rows),
-      isSessionWorking: props.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
     };
-    if (props.syncBottomAfterComposerLayoutRef) {
-      hookInput.syncBottomAfterComposerLayoutRef = props.syncBottomAfterComposerLayoutRef;
-    }
     const result = useAgentChatWindow(hookInput);
     latestResultRef.current = result;
     return null;
@@ -269,13 +264,9 @@ const mountHarness = async (
     const hookInput: Parameters<typeof useAgentChatWindow>[0] = {
       ...nextProps,
       turnAnchors: nextProps.turnAnchors ?? buildAgentChatTurnAnchors(nextProps.rows),
-      isSessionWorking: nextProps.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
     };
-    if (nextProps.syncBottomAfterComposerLayoutRef) {
-      hookInput.syncBottomAfterComposerLayoutRef = nextProps.syncBottomAfterComposerLayoutRef;
-    }
     const result = useAgentChatWindow(hookInput);
     latestResultRef.current = result;
     return result;
@@ -290,6 +281,23 @@ const mountHarness = async (
     update: (nextProps: HarnessProps) => harness.update(nextProps),
     unmount: () => harness.unmount(),
   };
+};
+
+const mountPinnedTranscript = async () => {
+  const extraContentHeightPx = { current: 0 };
+  const harness = await mountHarness(
+    {
+      rows: createTurnRows(8),
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    },
+    { attachDom: true, extraContentHeightPx },
+  );
+  const container = harness.messagesContainerRef.current;
+  if (!container) {
+    throw new Error("Expected messages container");
+  }
+  return { harness, container, extraContentHeightPx };
 };
 
 const renderMountedRowElements = (
@@ -345,6 +353,24 @@ const dispatchScroll = async (container: HTMLDivElement): Promise<void> => {
 const dispatchPointerDown = async (container: HTMLDivElement): Promise<void> => {
   container.dispatchEvent(new PointerEvent("pointerdown"));
   await flush();
+};
+
+const dispatchPointerUp = async (): Promise<void> => {
+  document.dispatchEvent(new PointerEvent("pointerup"));
+  await flush();
+};
+
+const dispatchKeyDown = async (target: EventTarget, key: string): Promise<void> => {
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  await flush();
+};
+
+const growContent = async (extraContentHeightPx: { current: number }): Promise<void> => {
+  extraContentHeightPx.current += 200;
+  await act(async () => {
+    triggerResizeObservers();
+    await flush();
+  });
 };
 
 describe("useAgentChatWindow", () => {
@@ -422,7 +448,6 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().scrollToTop).toBe(initialResult.scrollToTop);
     expect(harness.getLatestResult().scrollToBottom).toBe(initialResult.scrollToBottom);
-    expect(harness.getLatestResult().scrollToBottomOnSend).toBe(initialResult.scrollToBottomOnSend);
 
     await harness.unmount();
   });
@@ -603,7 +628,6 @@ describe("useAgentChatWindow", () => {
 
     await act(async () => {
       harness.getLatestResult().scrollToTop();
-      expect(container.style.overflowAnchor).toBe("none");
       await flush();
       await dispatchScroll(container);
       triggerResizeObservers();
@@ -989,7 +1013,7 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = 160;
     await act(async () => {
-      await dispatchWheelDown(container);
+      await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
     await animationFrameDriver.flushFrames();
@@ -1223,7 +1247,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("scrollToBottomOnSend from an older row window selects latest and pins bottom", async () => {
+  test("scrollToBottom from the bottom of an older row window selects latest and pins bottom", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + AGENT_CHAT_ROW_WINDOW_SIZE + 25);
     const harness = await mountHarness(
       {
@@ -1250,7 +1274,7 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      harness.getLatestResult().scrollToBottomOnSend();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
     await animationFrameDriver.flushFrames();
@@ -1261,39 +1285,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("pins bottom once when a followed running session becomes idle", async () => {
-    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
-    const harness = await mountHarness(
-      {
-        rows,
-        displayedSessionKey: "single-turn-session",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
-      },
-      { attachDom: true },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = 0;
-
-    await harness.update({
-      rows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(getMaxScrollTop(container));
-    expect(harness.getLatestResult().isNearBottom).toBe(true);
-
-    await harness.unmount();
-  });
-
-  test("pins bottom when a followed running session appends final rows while becoming idle", async () => {
+  test("keeps a pinned transcript at the bottom when appended rows advance the row window", async () => {
     const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
     const nextRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2 + 15);
     const harness = await mountHarness(
@@ -1301,7 +1293,6 @@ describe("useAgentChatWindow", () => {
         rows: initialRows,
         displayedSessionKey: "single-turn-session",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true },
     );
@@ -1311,17 +1302,10 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    await act(async () => {
-      await dispatchPointerDown(container);
-      container.scrollTop = getMaxScrollTop(container);
-      await dispatchScroll(container);
-    });
-
     await harness.update({
       rows: nextRows,
       displayedSessionKey: "single-turn-session",
       shouldResetForTranscriptLoad: false,
-      isSessionWorking: false,
     });
 
     expect(harness.getLatestResult().windowStart).toBe(
@@ -1333,46 +1317,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("keeps following when an idle session wakes before appending parent rows", async () => {
-    const initialRows = createSingleTurnRows(20);
-    const nextRows = createSingleTurnRows(24);
-    const harness = await mountHarness(
-      {
-        rows: initialRows,
-        displayedSessionKey: "single-turn-session",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: false,
-      },
-      { attachDom: true },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    expect(container.scrollTop).toBe(getMaxScrollTop(container));
-
-    await harness.update({
-      rows: initialRows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: true,
-    });
-    await harness.update({
-      rows: nextRows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: true,
-    });
-
-    expect(container.scrollTop).toBe(getMaxScrollTop(container));
-    expect(harness.getLatestResult().isNearBottom).toBe(true);
-
-    await harness.unmount();
-  });
-
-  test("repins bottom after idle layout settles instead of accepting a browser top jump", async () => {
+  test("restores the bottom when the browser moves a pinned transcript after a click", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
     const extraContentHeightPx = { current: 0 };
     const harness = await mountHarness(
@@ -1380,7 +1325,6 @@ describe("useAgentChatWindow", () => {
         rows,
         displayedSessionKey: "single-turn-session",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true, extraContentHeightPx },
     );
@@ -1392,15 +1336,7 @@ describe("useAgentChatWindow", () => {
 
     await act(async () => {
       await dispatchPointerDown(container);
-      container.scrollTop = getMaxScrollTop(container);
-      await dispatchScroll(container);
-    });
-
-    await harness.update({
-      rows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: false,
+      await dispatchPointerUp();
     });
 
     await act(async () => {
@@ -1408,88 +1344,9 @@ describe("useAgentChatWindow", () => {
       container.scrollTop = 0;
       await dispatchScroll(container);
     });
-    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
-
-    await harness.unmount();
-  });
-
-  test("does not repin bottom after idle if the user intentionally scrolls", async () => {
-    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
-    const extraContentHeightPx = { current: 0 };
-    const harness = await mountHarness(
-      {
-        rows,
-        displayedSessionKey: "single-turn-session",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = getMaxScrollTop(container);
-
-    await harness.update({
-      rows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: false,
-    });
-
-    await act(async () => {
-      extraContentHeightPx.current = ROW_HEIGHT_PX * 8;
-      container.scrollTop = 0;
-      await dispatchWheelUp(container);
-      await dispatchScroll(container);
-    });
-    await animationFrameDriver.flushFrames();
-
-    expect(container.scrollTop).toBeLessThan(getMaxScrollTop(container));
-
-    await harness.unmount();
-  });
-
-  test("does not pin bottom when a manually scrolled running session becomes idle", async () => {
-    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
-    const harness = await mountHarness(
-      {
-        rows,
-        displayedSessionKey: "single-turn-session",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
-      },
-      { attachDom: true },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = 120;
-    await act(async () => {
-      await dispatchWheelUp(container);
-      await dispatchScroll(container);
-    });
-    await animationFrameDriver.flushFrames();
-    const manualScrollTop = container.scrollTop;
-
-    await harness.update({
-      rows,
-      displayedSessionKey: "single-turn-session",
-      shouldResetForTranscriptLoad: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(manualScrollTop);
-    expect(container.scrollTop).toBeLessThan(getMaxScrollTop(container));
 
     await harness.unmount();
   });
@@ -1502,7 +1359,6 @@ describe("useAgentChatWindow", () => {
         rows: initialRows,
         displayedSessionKey: "single-turn-session",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true },
     );
@@ -1511,7 +1367,6 @@ describe("useAgentChatWindow", () => {
       rows: nextRows,
       displayedSessionKey: "single-turn-session",
       shouldResetForTranscriptLoad: false,
-      isSessionWorking: true,
     });
 
     expect(harness.getLatestResult().windowStart).toBe(
@@ -2144,7 +1999,6 @@ describe("useAgentChatWindow", () => {
         rows,
         displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true, extraContentHeightPx },
     );
@@ -2182,7 +2036,6 @@ describe("useAgentChatWindow", () => {
         rows,
         displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true, extraContentHeightPx },
     );
@@ -2215,7 +2068,6 @@ describe("useAgentChatWindow", () => {
         rows: initialRows,
         displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true },
     );
@@ -2233,7 +2085,7 @@ describe("useAgentChatWindow", () => {
     await animationFrameDriver.flushFrames();
 
     await act(async () => {
-      harness.getLatestResult().scrollToBottomOnSend();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
 
@@ -2241,7 +2093,6 @@ describe("useAgentChatWindow", () => {
       rows: nextRows,
       displayedSessionKey: "session-1",
       shouldResetForTranscriptLoad: false,
-      isSessionWorking: true,
     });
     await act(async () => {
       triggerResizeObservers();
@@ -2256,14 +2107,13 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("scrollToBottomOnSend clears user scroll state and jumps to bottom", async () => {
+  test("scrollToBottom pins the transcript again after the user scrolls up", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(
       {
         rows,
         displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true },
     );
@@ -2280,7 +2130,7 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      harness.getLatestResult().scrollToBottomOnSend();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
     await animationFrameDriver.flushFrames();
@@ -2292,14 +2142,13 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("scrollToBottomOnSend keeps full history expanded when already at the bottom", async () => {
+  test("scrollToBottom keeps full history expanded when it is also the latest row window", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(
       {
         rows,
         displayedSessionKey: "session-1",
         shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
       },
       { attachDom: true },
     );
@@ -2324,7 +2173,7 @@ describe("useAgentChatWindow", () => {
     expect(harness.getLatestResult().windowStart).toBe(0);
 
     await act(async () => {
-      harness.getLatestResult().scrollToBottomOnSend();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
     await animationFrameDriver.flushFrames();
@@ -2335,44 +2184,14 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("syncBottomAfterComposerLayoutRef keeps the transcript pinned while following", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const syncBottomAfterComposerLayoutRef: NonNullable<
-      HarnessProps["syncBottomAfterComposerLayoutRef"]
-    > = { current: null };
-    const harness = await mountHarness(
-      {
-        rows,
-        displayedSessionKey: "session-1",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
-        syncBottomAfterComposerLayoutRef,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
+  test("keeps a pinned transcript at the bottom when the chat area shrinks", async () => {
+    const { harness, container } = await mountPinnedTranscript();
 
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-    const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
-    if (!syncBottomAfterComposerLayout) {
-      throw new Error("Expected sync callback");
-    }
-
-    container.scrollTop = getMaxScrollTop(container);
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 150 });
     await act(async () => {
-      await dispatchScroll(container);
-    });
-    await animationFrameDriver.flushFrames();
-
-    extraContentHeightPx.current = 200;
-    await act(async () => {
-      syncBottomAfterComposerLayout();
+      triggerResizeObservers(container);
       await flush();
     });
-    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
@@ -2380,48 +2199,317 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("syncBottomAfterComposerLayoutRef does not override manual scroll position", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const syncBottomAfterComposerLayoutRef: NonNullable<
-      HarnessProps["syncBottomAfterComposerLayoutRef"]
-    > = { current: null };
-    const harness = await mountHarness(
-      {
-        rows,
-        displayedSessionKey: "session-1",
-        shouldResetForTranscriptLoad: false,
-        isSessionWorking: true,
-        syncBottomAfterComposerLayoutRef,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
+  test("keeps the reading position when the chat area shrinks after the user scrolls up", async () => {
+    const { harness, container } = await mountPinnedTranscript();
 
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-    const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
-    if (!syncBottomAfterComposerLayout) {
-      throw new Error("Expected sync callback");
-    }
-
-    container.scrollTop = 120;
     await act(async () => {
       await dispatchWheelUp(container);
+      container.scrollTop = 120;
       await dispatchScroll(container);
     });
-    await animationFrameDriver.flushFrames();
-
-    extraContentHeightPx.current = 200;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 150 });
     await act(async () => {
-      syncBottomAfterComposerLayout();
+      triggerResizeObservers(container);
       await flush();
     });
-    await animationFrameDriver.flushFrames();
 
     expect(container.scrollTop).toBe(120);
     expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps following content growth during a click that does not scroll up", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      await dispatchPointerDown(container);
+    });
+    extraContentHeightPx.current += 200;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("keeps following content growth when the content gets smaller during a pointer press", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    extraContentHeightPx.current = 200;
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    await act(async () => {
+      await dispatchPointerDown(container);
+      // The browser clamps the scroll position to the new bottom edge.
+      extraContentHeightPx.current = 0;
+      container.scrollTop = getMaxScrollTop(container);
+      await dispatchScroll(container);
+      await dispatchPointerUp();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("stops following content growth after an upward pointer drag", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = 120;
+      await dispatchScroll(container);
+      await dispatchPointerUp();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(120);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("stops following content growth after an upward touch drag", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      container.dispatchEvent(new Event("touchstart"));
+      // A touch pan cancels its pointer before the scroll starts.
+      document.dispatchEvent(new PointerEvent("pointercancel", { pointerType: "touch" }));
+      container.scrollTop = 120;
+      await dispatchScroll(container);
+      document.dispatchEvent(new Event("touchend"));
+      await flush();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(120);
+
+    await harness.unmount();
+  });
+
+  test("stops following content growth after a scroll-up key in the transcript", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    document.body.appendChild(container);
+
+    try {
+      await act(async () => {
+        await dispatchKeyDown(container, "PageUp");
+        container.scrollTop = 120;
+        await dispatchScroll(container);
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(120);
+    } finally {
+      container.remove();
+      await harness.unmount();
+    }
+  });
+
+  test("keeps following content growth after a scroll-up key that a component handles", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const list = document.createElement("div");
+    list.addEventListener("keydown", (event) => event.preventDefault());
+    container.appendChild(list);
+    document.body.appendChild(container);
+
+    try {
+      await act(async () => {
+        await dispatchKeyDown(list, "ArrowUp");
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    } finally {
+      container.remove();
+      await harness.unmount();
+    }
+  });
+
+  test("keeps following content growth after a scroll-up key in an editable field", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const textarea = document.createElement("textarea");
+    container.appendChild(textarea);
+    document.body.appendChild(container);
+
+    try {
+      await act(async () => {
+        await dispatchKeyDown(textarea, "ArrowUp");
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    } finally {
+      container.remove();
+      await harness.unmount();
+    }
+  });
+
+  test("a scroll-up key on the page body unpins only after a click in the transcript", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    document.body.appendChild(container);
+
+    try {
+      await act(async () => {
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await dispatchPointerUp();
+        await dispatchKeyDown(document.body, "PageUp");
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await act(async () => {
+        container.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await dispatchPointerUp();
+        await dispatchKeyDown(document.body, "PageUp");
+        container.scrollTop = 120;
+        await dispatchScroll(container);
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(120);
+    } finally {
+      container.remove();
+      await harness.unmount();
+    }
+  });
+
+  test("keeps following content growth after a sideways wheel or a wheel inside an inner scroll area", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const innerScrollArea = document.createElement("div");
+    Object.defineProperty(innerScrollArea, "scrollTop", { configurable: true, value: 80 });
+    container.appendChild(innerScrollArea);
+
+    await act(async () => {
+      innerScrollArea.dispatchEvent(new WheelEvent("wheel", { deltaY: -24, bubbles: true }));
+      container.dispatchEvent(new WheelEvent("wheel", { deltaX: -40, deltaY: -4 }));
+      await flush();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("stops following content growth after keyboard focus scrolls up to an element", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const button = document.createElement("button");
+    container.appendChild(button);
+
+    await act(async () => {
+      button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await act(async () => {
+      // The browser scrolls the focused element into view before the focusin event.
+      container.scrollTop = 120;
+      button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await dispatchScroll(container);
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(120);
+
+    await harness.unmount();
+  });
+
+  test("keeps following content growth after a pointer press that focuses an element", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const button = document.createElement("button");
+    container.appendChild(button);
+
+    await act(async () => {
+      await dispatchPointerDown(container);
+      container.scrollTop = 120;
+      button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await dispatchPointerUp();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("stops following content growth after a request to reveal an element", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const errorCard = document.createElement("article");
+    errorCard.scrollIntoView = () => {};
+    container.appendChild(errorCard);
+
+    await act(async () => {
+      revealElement(errorCard);
+      container.scrollTop = 120;
+      await dispatchScroll(container);
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(120);
+
+    await harness.unmount();
+  });
+
+  test("pins again when an unpinned transcript stops overflowing", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      await dispatchWheelUp(container);
+      container.scrollTop = 120;
+      await dispatchScroll(container);
+    });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 5_000 });
+    await act(async () => {
+      triggerResizeObservers(container);
+      await flush();
+    });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 300 });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("pins again only when the user scrolls down to the bottom", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      await dispatchWheelUp(container);
+      container.scrollTop = getMaxScrollTop(container) - 20;
+      await dispatchScroll(container);
+    });
+    const smallUpwardScrollTop = container.scrollTop;
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(smallUpwardScrollTop);
+
+    await act(async () => {
+      await dispatchWheelDown(container);
+      container.scrollTop = getMaxScrollTop(container) - 10;
+      await dispatchScroll(container);
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
 
     await harness.unmount();
   });

@@ -402,7 +402,7 @@ describe("createOpenCodeRuntimeStarter", () => {
       expect(handle.configuredExecutablePath).toBe(opencodeBinary);
       expect(handle.effectiveExecutablePath).toBe(opencodeBinary);
       expect(portProbeCalls).toEqual([43123, 43123, 43123]);
-      await waitFor(() => existsSync(environmentCapturePath));
+      await waitFor(() => existsSync(environmentCapturePath), PROCESS_START_TIMEOUT_MS);
       const { cwd, ...environment } = JSON.parse(await readFile(environmentCapturePath, "utf8"));
       expect(environment).toEqual({
         password: null,

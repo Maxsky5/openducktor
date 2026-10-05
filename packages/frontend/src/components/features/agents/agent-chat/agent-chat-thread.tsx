@@ -1,7 +1,7 @@
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { memo, type ReactElement, type RefObject, useEffect, useMemo, useRef } from "react";
+import { memo, type ReactElement, type RefObject, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -58,7 +58,6 @@ export function AgentChatThread({
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
   } = model;
   const { session, target: transcriptTarget } = transcript;
   const sessionKey = JSON.stringify([
@@ -91,10 +90,8 @@ export function AgentChatThread({
     scrollToTop,
   } = useAgentChatRenderedTranscript({
     transcript,
-    isSessionWorking,
     messagesContainerRef,
     scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
   });
 
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
@@ -109,51 +106,6 @@ export function AgentChatThread({
     runtimeStatusMessage,
     hasInterruptedTurnResume: interruptedTurnResume !== undefined,
   });
-
-  const bottomStackRef = useRef<HTMLDivElement | null>(null);
-  const bottomStackHeightRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!hasBottomStack) {
-      bottomStackHeightRef.current = null;
-      return;
-    }
-
-    const bottomStack = bottomStackRef.current;
-    if (!bottomStack || globalThis.ResizeObserver === undefined) {
-      return;
-    }
-
-    const syncAfterBottomStackResize = (height: number) => {
-      if (!Number.isFinite(height)) {
-        return;
-      }
-
-      if (
-        bottomStackHeightRef.current !== null &&
-        Math.abs(bottomStackHeightRef.current - height) < 0.5
-      ) {
-        return;
-      }
-
-      bottomStackHeightRef.current = height;
-      syncBottomAfterComposerLayoutRef.current?.();
-    };
-
-    const observer = new ResizeObserver((entries) => {
-      const matchingEntry = entries.find((entry) => entry.target === bottomStack) ?? entries[0];
-      const nextHeight =
-        matchingEntry?.contentRect.height ?? bottomStack.getBoundingClientRect().height;
-      syncAfterBottomStackResize(nextHeight);
-    });
-
-    observer.observe(bottomStack);
-    syncAfterBottomStackResize(bottomStack.getBoundingClientRect().height);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [hasBottomStack, syncBottomAfterComposerLayoutRef]);
 
   return (
     <AgentChatImageSessionContext.Provider value={imageSessionRef}>
@@ -176,7 +128,7 @@ export function AgentChatThread({
         />
 
         {hasBottomStack && session ? (
-          <div ref={bottomStackRef} className="min-h-0 overflow-y-auto">
+          <div className="min-h-0 overflow-y-auto">
             <AgentChatBottomStack
               sessionKey={sessionKey}
               collapseResetKey={collapseResetKey}
@@ -340,9 +292,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
-
       <div ref={messagesContentRef}>
+        {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
         {!transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>

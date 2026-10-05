@@ -13,8 +13,9 @@ type UseAgentChatRowWindowInput = {
   turnAnchors: AgentChatTurnAnchor[];
   displayedSessionKey: string | null;
   shouldResetForTranscriptLoad: boolean;
-  shouldFollowLatestWindow: boolean;
+  isFollowingLatestWindow: () => boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  messagesContentRef: RefObject<HTMLDivElement | null>;
 };
 
 type UseAgentChatRowWindowResult = {
@@ -34,16 +35,6 @@ type RowRange = {
 type SessionRowRange = {
   sessionKey: string | null;
   range: RowRange;
-};
-
-type PrependScrollSnapshot = {
-  scrollHeight: number;
-  overflowAnchor: string;
-};
-
-type TrimTopScrollSnapshot = {
-  scrollHeight: number;
-  overflowAnchor: string;
 };
 
 type ExpandBeforeOptions = {
@@ -117,8 +108,9 @@ export function useAgentChatRowWindow({
   turnAnchors,
   displayedSessionKey,
   shouldResetForTranscriptLoad,
-  shouldFollowLatestWindow,
+  isFollowingLatestWindow,
   messagesContainerRef,
+  messagesContentRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
   const [sessionRange, setSessionRange] = useState<SessionRowRange>(() => ({
     sessionKey: displayedSessionKey,
@@ -130,8 +122,9 @@ export function useAgentChatRowWindow({
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousRowsLengthRef = useRef(rows.length);
   const previousFirstVisibleRowKeyRef = useRef(rows[range.startRow]?.key ?? null);
-  const prependScrollSnapshotRef = useRef<PrependScrollSnapshot | null>(null);
-  const trimTopScrollSnapshotRef = useRef<TrimTopScrollSnapshot | null>(null);
+  // The scroll height before rows mount or unmount at the top, to keep the visible rows in place.
+  const scrollHeightBeforePrependRef = useRef<number | null>(null);
+  const scrollHeightBeforeTrimTopRef = useRef<number | null>(null);
   const shouldTrimBottomAfterPrependRef = useRef(false);
   const shouldTrimTopAfterAppendRef = useRef(false);
   const lastScrollTopRef = useRef(0);
@@ -176,20 +169,31 @@ export function useAgentChatRowWindow({
     setRange(latestRange(rows.length));
   }, [rows.length, setRange, shouldResetForTranscriptLoad]);
 
+  // This hook moves the scroll position itself when rows mount or unmount at the top.
+  // It turns scroll anchoring off on the content, because the pin state owns it on the container.
+  const suspendScrollAnchoring = useCallback(() => {
+    const content = messagesContentRef.current;
+    if (content) {
+      content.style.overflowAnchor = "none";
+    }
+  }, [messagesContentRef]);
+
+  const resumeScrollAnchoring = useCallback(() => {
+    const content = messagesContentRef.current;
+    if (content) {
+      content.style.overflowAnchor = "";
+    }
+  }, [messagesContentRef]);
+
   const expandBefore = useCallback(
     (options?: ExpandBeforeOptions) => {
       const currentRange = rangeRef.current;
       if (currentRange.startRow === 0) return false;
 
       const container = messagesContainerRef.current;
-      prependScrollSnapshotRef.current = container
-        ? {
-            scrollHeight: container.scrollHeight,
-            overflowAnchor: container.style.overflowAnchor,
-          }
-        : null;
       if (container) {
-        container.style.overflowAnchor = "none";
+        scrollHeightBeforePrependRef.current = container.scrollHeight;
+        suspendScrollAnchoring();
       }
 
       shouldTrimBottomAfterPrependRef.current = options?.trimBottomAfterPrepend !== false;
@@ -199,7 +203,7 @@ export function useAgentChatRowWindow({
       });
       return true;
     },
-    [messagesContainerRef, setRange],
+    [messagesContainerRef, setRange, suspendScrollAnchoring],
   );
 
   const expandAfter = useCallback(
@@ -221,29 +225,29 @@ export function useAgentChatRowWindow({
   );
 
   useLayoutEffect(() => {
-    const trimTopScrollSnapshot = trimTopScrollSnapshotRef.current;
-    if (!trimTopScrollSnapshot) return;
+    const scrollHeightBeforeTrimTop = scrollHeightBeforeTrimTopRef.current;
+    if (scrollHeightBeforeTrimTop === null) return;
 
-    trimTopScrollSnapshotRef.current = null;
+    scrollHeightBeforeTrimTopRef.current = null;
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    container.scrollTop += Math.min(0, container.scrollHeight - trimTopScrollSnapshot.scrollHeight);
+    container.scrollTop += Math.min(0, container.scrollHeight - scrollHeightBeforeTrimTop);
     lastScrollTopRef.current = container.scrollTop;
-    container.style.overflowAnchor = trimTopScrollSnapshot.overflowAnchor;
+    resumeScrollAnchoring();
   });
 
   useLayoutEffect(() => {
-    const prependScrollSnapshot = prependScrollSnapshotRef.current;
-    if (!prependScrollSnapshot) return;
+    const scrollHeightBeforePrepend = scrollHeightBeforePrependRef.current;
+    if (scrollHeightBeforePrepend === null) return;
 
-    prependScrollSnapshotRef.current = null;
+    scrollHeightBeforePrependRef.current = null;
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    container.scrollTop += Math.max(0, container.scrollHeight - prependScrollSnapshot.scrollHeight);
+    container.scrollTop += Math.max(0, container.scrollHeight - scrollHeightBeforePrepend);
     lastScrollTopRef.current = container.scrollTop;
-    container.style.overflowAnchor = prependScrollSnapshot.overflowAnchor;
+    resumeScrollAnchoring();
 
     const shouldTrimBottom = shouldTrimBottomAfterPrependRef.current;
     shouldTrimBottomAfterPrependRef.current = false;
@@ -278,11 +282,8 @@ export function useAgentChatRowWindow({
     const rowsToTrim = trimRowCount(currentRange);
     if (rowsToTrim <= 0) return;
 
-    trimTopScrollSnapshotRef.current = {
-      scrollHeight: container.scrollHeight,
-      overflowAnchor: container.style.overflowAnchor,
-    };
-    container.style.overflowAnchor = "none";
+    scrollHeightBeforeTrimTopRef.current = container.scrollHeight;
+    suspendScrollAnchoring();
     setRange({
       startRow: currentRange.startRow + rowsToTrim,
       endRowExclusive: currentRange.endRowExclusive,
@@ -334,7 +335,7 @@ export function useAgentChatRowWindow({
     }
 
     if (rows.length !== previousRowsLength) {
-      if (shouldFollowLatestWindow && previousRange.endRowExclusive === previousRowsLength) {
+      if (isFollowingLatestWindow() && previousRange.endRowExclusive === previousRowsLength) {
         setRange(latestRange(rows.length));
         return;
       }
@@ -361,7 +362,7 @@ export function useAgentChatRowWindow({
     }
 
     previousFirstVisibleRowKeyRef.current = rows[rangeRef.current.startRow]?.key ?? null;
-  }, [didSessionChange, rows, rows.length, setRange, shouldFollowLatestWindow]);
+  }, [didSessionChange, isFollowingLatestWindow, rows, rows.length, setRange]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;

@@ -1,4 +1,3 @@
-import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 export const COMPOSER_EDITOR_MIN_HEIGHT_PX = 44;
@@ -6,11 +5,6 @@ export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
 
 type ComposerEditorLayout = {
   heightPx: number;
-  overflowY: "auto" | "hidden";
-};
-
-type ComposerEditorResizeResult = {
-  didHeightChange: boolean;
   overflowY: "auto" | "hidden";
 };
 
@@ -58,7 +52,7 @@ export const resizeComposerEditorElement = (
   editor: ComposerResizableElement,
   serializedDraftText?: string,
   previousHeightPx?: number,
-): ComposerEditorResizeResult => {
+): void => {
   const resolvedSerializedDraftText = serializedDraftText ?? editor.textContent ?? "";
   const currentHeight = readComposerEditorHeight(editor, previousHeightPx);
   if (resolvedSerializedDraftText.length === 0) {
@@ -70,10 +64,7 @@ export const resizeComposerEditorElement = (
     if (editor.style.overflowY !== "hidden") {
       editor.style.overflowY = "hidden";
     }
-    return {
-      didHeightChange,
-      overflowY: "hidden",
-    };
+    return;
   }
 
   const previousInlineHeight = editor.style.height;
@@ -87,18 +78,13 @@ export const resizeComposerEditorElement = (
   if (editor.style.overflowY !== layout.overflowY) {
     editor.style.overflowY = layout.overflowY;
   }
-
-  return {
-    didHeightChange,
-    overflowY: layout.overflowY,
-  };
 };
 
 export const resizeComposerTextareaElement = (
   editor: ComposerResizableElement & { value?: string },
   serializedDraftText?: string,
   previousHeightPx?: number,
-): ComposerEditorResizeResult =>
+): void =>
   resizeComposerEditorElement(
     editor,
     serializedDraftText ?? editor.value ?? editor.textContent ?? "",
@@ -108,7 +94,6 @@ export const resizeComposerTextareaElement = (
 type UseAgentChatLayoutInput = {
   input?: string;
   displayedSessionKey: string | null;
-  syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
 };
 
 type UseAgentChatLayoutResult = {
@@ -123,7 +108,6 @@ type UseAgentChatLayoutResult = {
 export const useAgentChatLayout = ({
   input: _input,
   displayedSessionKey,
-  syncBottomAfterComposerLayoutRef,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
@@ -141,20 +125,13 @@ export const useAgentChatLayout = ({
       return;
     }
 
-    const { didHeightChange } = resizeComposerEditorElement(
-      editor,
-      undefined,
-      composerEditorHeightRef.current,
-    );
+    resizeComposerEditorElement(editor, undefined, composerEditorHeightRef.current);
     composerEditorHeightRef.current =
       readInlineHeightPx(editor.style.height) ??
       ((editor.textContent ?? "").length === 0
         ? COMPOSER_EDITOR_MIN_HEIGHT_PX
         : composerEditorHeightRef.current);
-    if (didHeightChange) {
-      syncBottomAfterComposerLayoutRef?.current?.();
-    }
-  }, [syncBottomAfterComposerLayoutRef]);
+  }, []);
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
@@ -179,20 +156,13 @@ export const useAgentChatLayout = ({
       return;
     }
 
-    const { didHeightChange } = resizeComposerTextareaElement(
-      textarea,
-      undefined,
-      composerTextareaHeightRef.current,
-    );
+    resizeComposerTextareaElement(textarea, undefined, composerTextareaHeightRef.current);
     composerTextareaHeightRef.current =
       readInlineHeightPx(textarea.style.height) ??
       (textarea.value.length === 0
         ? COMPOSER_EDITOR_MIN_HEIGHT_PX
         : composerTextareaHeightRef.current);
-    if (didHeightChange) {
-      syncBottomAfterComposerLayoutRef?.current?.();
-    }
-  }, [syncBottomAfterComposerLayoutRef]);
+  }, []);
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;

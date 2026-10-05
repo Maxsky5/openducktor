@@ -109,7 +109,6 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null },
-    syncBottomAfterComposerLayoutRef: { current: null },
     ...overrides,
   };
 };

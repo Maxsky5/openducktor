@@ -660,6 +660,10 @@ describe("electron dev script", () => {
       const replacementExited = new Promise<number>((resolve) => {
         resolveReplacementExit = resolve;
       });
+      let resolveReplacementLaunch: () => void = () => {};
+      const replacementLaunched = new Promise<void>((resolve) => {
+        resolveReplacementLaunch = resolve;
+      });
 
       const lifecycle = runElectronEffect(
         runElectronDevLifecycleEffect({
@@ -680,6 +684,7 @@ describe("electron dev script", () => {
               };
             }
             void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            resolveReplacementLaunch();
             return {
               exited: replacementExited,
               kill() {
@@ -697,9 +702,7 @@ describe("electron dev script", () => {
       }
       changeListener(path.join(ELECTRON_RESTART_WATCH_ROOTS[0], "main.ts"));
 
-      for (let attempt = 0; attempt < 50 && remoteDebuggingValues.length < 2; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      await replacementLaunched;
       const shutdownHandler = fakeProcessHandlers.registered.find(
         ({ event }) => event === "SIGTERM",
       );
@@ -728,6 +731,11 @@ describe("electron dev script", () => {
       resolveProcessExit = resolve;
     });
     const remoteDebuggingValues: boolean[] = [];
+
+    let resolveFirstLaunch: () => void = () => {};
+    const firstLaunched = new Promise<void>((resolve) => {
+      resolveFirstLaunch = resolve;
+    });
 
     try {
       const activePortPath = path.join(directory, "DevToolsActivePort");
@@ -761,6 +769,7 @@ describe("electron dev script", () => {
           startElectronProcess: (_rendererDevUrl, _executablePath, remoteDebugging) => {
             remoteDebuggingValues.push(remoteDebugging);
             void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            resolveFirstLaunch();
             return {
               exited: processExited,
               kill() {
@@ -778,9 +787,7 @@ describe("electron dev script", () => {
       }
       changeListener(path.join(ELECTRON_RESTART_WATCH_ROOTS[0], "main.ts"));
 
-      for (let attempt = 0; attempt < 100 && remoteDebuggingValues.length < 1; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      await firstLaunched;
       expect(remoteDebuggingValues.length).toBe(1);
 
       resolveInitialPreparation();
@@ -810,13 +817,21 @@ describe("electron dev script", () => {
     const replacementExited = new Promise<number>((resolve) => {
       resolveReplacementExit = resolve;
     });
+    let resolveFirstEndpointLogged: () => void = () => {};
+    const firstEndpointLogged = new Promise<void>((resolve) => {
+      resolveFirstEndpointLogged = resolve;
+    });
     console.log = (...arguments_: unknown[]) => {
       const line = arguments_.map(String).join(" ");
       loggedLines.push(line);
-      if (
-        line === endpointLine &&
-        loggedLines.filter((entry) => entry === endpointLine).length === 2
-      ) {
+      if (line !== endpointLine) {
+        return;
+      }
+      const endpointLineCount = loggedLines.filter((entry) => entry === endpointLine).length;
+      if (endpointLineCount === 1) {
+        resolveFirstEndpointLogged();
+      }
+      if (endpointLineCount === 2) {
         resolveReplacementExit(0);
       }
     };
@@ -871,13 +886,7 @@ describe("electron dev script", () => {
         }),
       );
 
-      for (
-        let attempt = 0;
-        attempt < 50 && loggedLines.filter((line) => line === endpointLine).length < 1;
-        attempt += 1
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      await firstEndpointLogged;
       expect(loggedLines.filter((line) => line === endpointLine).length).toBe(1);
 
       const changeListener = changeListeners[0];
