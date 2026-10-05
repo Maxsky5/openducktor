@@ -78,7 +78,12 @@ export function TaskExecutionPanel({ model }: { model: TaskExecutionPanelModel }
     ) : null,
   } satisfies Record<TaskExecutionPanelTabId, ReactElement | null>;
   const tabs: SharedToolsTab<TaskExecutionPanelTabId>[] = model.tabs.map((tab) => {
-    const base = { ...tab, icon: tabIcons[tab.id], content: content[tab.id] };
+    const base = {
+      ...tab,
+      icon: tabIcons[tab.id],
+      content: content[tab.id],
+      keepMounted: tab.id === "file_explorer",
+    };
     if (tab.id !== "ci_checks") return base;
     return {
       ...base,

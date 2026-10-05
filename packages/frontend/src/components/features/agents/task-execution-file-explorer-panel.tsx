@@ -296,6 +296,8 @@ export function TaskExecutionFileExplorerPanel({
 
   useEffect(() => {
     if (!preparedInput) {
+      // A full refresh can drop cached data. Keep folder state until the next tree arrives.
+      if (requestedRootPath !== null) return;
       appliedPathsRef.current = null;
       fileTree.resetPaths({ preparedInput: EMPTY_TREE_INPUT });
       fileTree.setGitStatus([]);
@@ -309,16 +311,26 @@ export function TaskExecutionFileExplorerPanel({
       applied.paths.every((path, index) => path === fileTreeInputPaths[index])
     )
       return;
-    appliedPathsRef.current = { rootPath, paths: fileTreeInputPaths };
-    const query = fileTree.getSearchValue();
-    fileTree.resetPaths({ preparedInput });
-    if (query) {
-      // resetPaths keeps old search matches, so rerun the search against the new paths.
+    if (applied?.rootPath === rootPath) {
+      const oldPaths = new Set(applied.paths);
+      const newPaths = new Set(fileTreeInputPaths);
+      fileTree.batch([
+        ...applied.paths
+          .filter((path) => !newPaths.has(path))
+          // Remove children first so each directory is empty when it is removed.
+          .sort((left, right) => right.length - left.length)
+          .map((path) => ({ type: "remove" as const, path })),
+        ...fileTreeInputPaths
+          .filter((path) => !oldPaths.has(path))
+          .map((path) => ({ type: "add" as const, path })),
+      ]);
+    } else {
       fileTree.setSearch(null);
-      fileTree.setSearch(query);
+      fileTree.resetPaths({ preparedInput });
     }
+    appliedPathsRef.current = { rootPath, paths: fileTreeInputPaths };
     fileTree.setIcons("complete");
-  }, [fileTree, preparedInput, fileTreeInputPaths, rootPath]);
+  }, [fileTree, preparedInput, fileTreeInputPaths, rootPath, requestedRootPath]);
 
   useEffect(() => {
     fileTree.setGitStatus(gitStatusEntries);

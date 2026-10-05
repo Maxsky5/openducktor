@@ -181,6 +181,7 @@ function WorkspaceSessionTools({
             label: "File explorer",
             icon: FolderTree,
             content: <TaskExecutionFileExplorerPanel model={fileModel} />,
+            keepMounted: true,
           },
         ],
         activeTabId,

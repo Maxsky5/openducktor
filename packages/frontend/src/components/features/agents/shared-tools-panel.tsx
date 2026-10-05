@@ -16,6 +16,7 @@ export type SharedToolsTab<Id extends string> = {
   label: string;
   icon: LucideIcon;
   content: ReactNode;
+  keepMounted?: boolean;
   ariaLabel?: string;
   indicator?: ReactNode;
 };
@@ -160,7 +161,13 @@ function SharedToolsPanelTabs<Id extends string>({ model }: { model: SharedTools
           </div>
         </div>
         {model.tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="min-h-0 overflow-hidden">
+          <TabsContent
+            key={tab.id}
+            value={tab.id}
+            {...(tab.keepMounted ? { forceMount: true as const } : {})}
+            hidden={tab.id !== model.activeTabId}
+            className="min-h-0 overflow-hidden data-[state=inactive]:hidden"
+          >
             {tab.content}
           </TabsContent>
         ))}

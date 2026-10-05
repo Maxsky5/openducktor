@@ -1050,7 +1050,7 @@ test("a missing target fetch failure tells the user what failed", async () => {
     );
     await waitFor(() => expect(comparison).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(statusTargets.length).toBeGreaterThan(localReads));
-    await waitFor(() => expect(queryClient.getQueryState(treeKey)).toBeUndefined());
+    await waitFor(() => expect(queryClient.getQueryData(treeKey)).toBeUndefined());
   } finally {
     view.unmount();
     queryClient.clear();
