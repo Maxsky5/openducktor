@@ -42,8 +42,8 @@ export const scheduleWorkspaceRefresh = (
     else if (refreshGit.priority > jobs[index]!.priority) jobs[index] = refreshGit;
   }
   if (scheduler.promise) return scheduler.promise;
-  const promise = Promise.resolve()
-    .then(async () => {
+  const promise = Promise.resolve().then(async () => {
+    try {
       let failure: unknown;
       while (scheduler.pending) {
         const batch = scheduler.pending;
@@ -68,14 +68,14 @@ export const scheduleWorkspaceRefresh = (
         scheduler.mode = "incremental";
       }
       if (failure !== undefined) throw failure;
-    })
-    .finally(() => {
+    } finally {
       scheduler.promise = null;
       scheduler.readContext = undefined;
       scheduler.mode = "incremental";
-      // Drop the finished scheduler. Query keeps the file data.
+      // Clear the scheduler before yielding so the next signal cannot join a finished batch.
       schedulers.get(client)?.delete(root);
-    });
+    }
+  });
   scheduler.promise = promise;
   return promise;
 };

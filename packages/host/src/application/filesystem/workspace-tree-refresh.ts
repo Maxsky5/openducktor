@@ -110,20 +110,22 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
               return yield* new HostValidationError({
                 message: "Workspace file service has stopped. Restart the host to refresh files.",
               });
-            let view = views.get(key);
+            const view = views.get(key);
             if (input.mode === "incremental" && (!view || view.cursor.viewId !== input.base.viewId))
               return reset("missing_view");
             const context = yield* git.getFileTreeContext(root, input.targetBranch);
             if (input.mode === "incremental" && view && !sameContext(context, view.context))
               return reset("context_changed");
             const repositoryRoot = yield* git.getRepositoryRoot(root);
+            const needsSnapshot = !view || needsFull || !sameContext(context, view.context);
+            // Inventory reads can take time. Read Git badges after that inventory.
+            const files = needsSnapshot ? yield* loadWorkspaceFileEntries(git, root) : [];
             // Earlier Git captures can miss unstaged edits without changing this context.
             const statuses = yield* git.getStatus(root);
             const comparison = input.targetBranch
               ? yield* git.listChangedFiles(root, input.targetBranch)
               : [];
-            if (!view || needsFull || !sameContext(context, view.context)) {
-              const files = yield* loadWorkspaceFileEntries(git, root);
+            if (needsSnapshot) {
               const tree = yield* buildWorkspaceTree(
                 filesystem,
                 repositoryRoot,
@@ -138,7 +140,7 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
               const visible = new WorkspaceTreeIndex<WorkspaceFileTreeEntry>();
               for (const entry of files) inventory.set(entry);
               for (const entry of tree.entries) visible.set(entry);
-              view = {
+              const fresh: View = {
                 context,
                 cursor: { viewId: crypto.randomUUID(), revision: 0 },
                 inventory,
@@ -150,9 +152,9 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
                 retainedFrom: 0,
               };
               views.delete(key);
-              views.set(key, view);
+              views.set(key, fresh);
               while (views.size > 8) views.delete(views.keys().next().value!);
-              return view;
+              return fresh;
             }
 
             const resetResult = yield* updateTree(

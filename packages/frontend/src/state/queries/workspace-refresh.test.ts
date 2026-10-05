@@ -220,6 +220,32 @@ describe("workspace file refresh Query ownership", () => {
     queryClient.clear();
   });
 
+  test("runs a refresh requested as the last file read completes", async () => {
+    const queryClient = client();
+    const started = deferred<void>(),
+      release = deferred<void>();
+    let reads = 0;
+    const signal = () =>
+      scheduleWorkspaceRefresh(queryClient, "/repo", "incremental", () => {
+        reads += 1;
+        started.resolve();
+        return release.promise;
+      });
+    const first = signal();
+    try {
+      await started.promise;
+      // Run the next signal from a completion callback, after the drain loop resumes.
+      const second = release.promise.then(() => {}).then(signal);
+      release.resolve();
+      await Promise.all([first, second]);
+      expect(reads).toBe(2);
+    } finally {
+      release.resolve();
+      await first;
+      queryClient.clear();
+    }
+  });
+
   test("waits for a scheduled fetch before reading the new target", async () => {
     const queryClient = client();
     const started = deferred<void>(),

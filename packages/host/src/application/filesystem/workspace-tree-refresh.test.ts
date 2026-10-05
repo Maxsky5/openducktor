@@ -40,6 +40,45 @@ const withRepository = async (
 };
 
 describe("workspace tree refresh", () => {
+  test("full refresh includes Git badges for edits made during the inventory read", async () => {
+    await withRepository(async (root) => {
+      const liveRunner = createDefaultGitRunner(process.env, { command: "git" });
+      let edited = false;
+      const git = createGitCliAdapter({
+        runner: (dir, args, options) =>
+          Effect.gen(function* () {
+            if (args[0] === "ls-files" && args.at(-1) === "." && !edited) {
+              edited = true;
+              yield* Effect.promise(async () => {
+                await writeFile(path.join(root, "src/entry.txt"), "edited\n");
+                await writeFile(path.join(root, "new.txt"), "new\n");
+              });
+            }
+            return yield* liveRunner(dir, args, options);
+          }),
+      });
+      const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
+      try {
+        const before = await Effect.runPromise(git.getFileTreeContext(root, "comparison"));
+        const result = await Effect.runPromise(
+          service.refreshTree({
+            rootPath: root,
+            targetBranch: "comparison",
+            mode: "full",
+            refreshId: "full",
+          }),
+        );
+        expect(await Effect.runPromise(git.getFileTreeContext(root, "comparison"))).toEqual(before);
+        if (result.kind !== "snapshot") throw new Error("expected snapshot");
+        const entries = new Map(result.entries.map((entry) => [entry.path, entry]));
+        expect(entries.get("new.txt")?.gitStatus).toBe("untracked");
+        expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
+      } finally {
+        await Effect.runPromise(service.dispose());
+      }
+    });
+  });
+
   // Each case starts real Git processes for the stale reads and the tree refresh.
   test.each(["full", "incremental"] as const)(
     "%s refresh reads edits made after an earlier Git capture",
