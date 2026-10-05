@@ -145,6 +145,8 @@ describe("buildAgentSystemPrompt", () => {
       "the relevant conditions, and the expected result",
       "Keep observable outcomes and limits beside the requirement they qualify",
       "Do not add a separate acceptance-criteria section or completion checklist",
+      "Show a multi-step user flow in a Mermaid flowchart",
+      "Keep diagrams and tables at product level, without internal modules or code",
     ]);
     expect(prompt).not.toContain("## Acceptance criteria");
     expect(prompt).not.toContain("requirements and acceptance criteria cover the agreed scope");
@@ -179,6 +181,11 @@ describe("buildAgentSystemPrompt", () => {
         "requirements, decisions, and findings in separate list items",
         "conditions and exceptions beside the rule they qualify",
         "use tables when entries share the same fields",
+        "fenced code blocks with a language tag",
+        "Add a Mermaid diagram in a fenced code block tagged mermaid",
+        "keep every requirement and decision in the text as well",
+        "The viewer renders Mermaid in strict mode",
+        "do not add HTML, click handlers, or theme and style directives",
       ]);
     },
   );
@@ -213,6 +220,13 @@ describe("buildAgentSystemPrompt", () => {
       "Use the spec's requirement names when a spec exists",
       "## Risks and constraints",
       "state ownership, and failure behavior",
+      "Show the target design in a Mermaid diagram",
+      "Skip the diagram only when the change stays inside one module and changes no flow or state",
+      "Start with a table of the changed modules or files",
+      "Show each new or changed contract in a fenced code block",
+      "leave function bodies to Builder",
+      "Add a sequenceDiagram when the change alters an interaction across modules",
+      "in a table with one row per requirement",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
@@ -284,6 +298,11 @@ describe("buildAgentSystemPrompt", () => {
       "Do not reject valid work for a different implementation order or method",
       "material excess complexity",
       "severity, location, impact, and a concrete correction",
+      "## Verdict",
+      "## Findings",
+      "Start with a table of each finding's severity, location as `path:line`, and one-line summary",
+      "## Verification",
+      "Show the checks you ran and their results in a table",
       "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
       "read-only mode",
     ]);
@@ -308,20 +327,20 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 6,
+        builtinVersion: 7,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 6, 7, "build"],
+    ["system.shared.workflow_guards", 7, 8, "build"],
     ["system.shared.tool_protocol", 8, 9, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 5, 6, "spec"],
-    ["system.role.planner.base", 6, 7, "planner"],
+    ["system.role.spec.base", 6, 7, "spec"],
+    ["system.role.planner.base", 7, 8, "planner"],
     ["system.role.build.base", 4, 5, "build"],
-    ["system.role.qa.base", 4, 5, "qa"],
+    ["system.role.qa.base", 5, 6, "qa"],
     ["kickoff.spec_initial", 4, 5, "spec"],
     ["kickoff.planner_initial", 4, 5, "planner"],
     ["kickoff.build_implementation_start", 4, 5, "build"],

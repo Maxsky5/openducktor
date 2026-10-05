@@ -283,6 +283,8 @@ Keep names that the runtime accepts. A bad catalog entry fails that catalog requ
 
 The built-in prompt templates live in [agent-system-prompts.ts](../packages/core/src/services/agent-system-prompts.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
 
+The shared artifact format tells agents to use tables, fenced code blocks, and Mermaid diagrams. Its Mermaid limits match the renderer settings in [markdown-mermaid-render.ts](../packages/frontend/src/components/ui/markdown-mermaid-render.ts). Change both files together.
+
 For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt.
 
 Existing custom overrides remain active. Users must review, update, or disable old overrides themselves. The app does not display a version-mismatch warning. A new built-in version does not replace custom text.
