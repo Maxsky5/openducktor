@@ -201,7 +201,6 @@ export const buildBaseModel = () => ({
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
-  syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {

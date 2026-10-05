@@ -116,7 +116,6 @@ describe("useAgentChatComposerModel", () => {
     const composerFormRef = createRef<HTMLFormElement>();
     const composerEditorRef = createRef<HTMLDivElement>();
     const scrollToBottomOnSendRef = createRef<() => void>();
-    const syncBottomAfterComposerLayoutRef = { current: null };
     const rendered = renderHook(() =>
       useAgentChatComposerModel({
         composer: buildComposerConfig(async (draft) => {
@@ -129,7 +128,6 @@ describe("useAgentChatComposerModel", () => {
         composerEditorRef,
         resizeComposerEditor: () => {},
         scrollToBottomOnSendRef,
-        syncBottomAfterComposerLayoutRef,
       }),
     );
 

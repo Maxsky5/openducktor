@@ -107,7 +107,6 @@ const buildModel = () => ({
   composerEditorRef: createRef<HTMLDivElement>(),
   onComposerEditorInput: SHARED_CALLBACKS.onComposerEditorInput,
   scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
-  syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
 });
 
 const createMemoryStorage = (spies?: { getItem?: (key: string) => void }): TestStorage => {
@@ -685,38 +684,6 @@ describe("AgentChatComposer attachments", () => {
 
     await waitFor(() => {
       expect(screen.queryByTitle("brief.pdf")).toBeNull();
-    });
-  });
-
-  test("requests a bottom resync when attachment layout changes", async () => {
-    const syncBottomAfterComposerLayout = { current: mock(() => {}) };
-    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
-    const { container } = render(
-      <AgentChatComposer
-        model={{
-          ...buildModel(),
-          syncBottomAfterComposerLayoutRef: syncBottomAfterComposerLayout,
-        }}
-      />,
-    );
-
-    const attachmentInput = container.querySelector('input[type="file"]');
-    if (!(attachmentInput instanceof HTMLInputElement)) {
-      throw new Error("Expected hidden attachment input");
-    }
-
-    fireEvent.change(attachmentInput, {
-      target: { files: [file] },
-    });
-
-    await waitFor(() => {
-      expect(syncBottomAfterComposerLayout.current).toHaveBeenCalledTimes(1);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove brief.pdf" }));
-
-    await waitFor(() => {
-      expect(syncBottomAfterComposerLayout.current).toHaveBeenCalledTimes(2);
     });
   });
 

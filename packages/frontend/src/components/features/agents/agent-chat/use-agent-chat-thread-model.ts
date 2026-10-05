@@ -52,7 +52,6 @@ type UseAgentChatThreadModelArgs = {
   subagentPendingQuestionCountBySessionKey: Record<string, number> | undefined;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
-  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export function useAgentChatThreadModel({
@@ -76,7 +75,6 @@ export function useAgentChatThreadModel({
   subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
   scrollToBottomOnSendRef,
-  syncBottomAfterComposerLayoutRef,
 }: UseAgentChatThreadModelArgs): AgentChatThreadModel {
   const { displayedSessionKey } = transcript;
   const [todoPanelCollapsedBySessionKey, setTodoPanelCollapsedBySessionKey] = useState<
@@ -131,7 +129,6 @@ export function useAgentChatThreadModel({
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
       scrollToBottomOnSendRef,
-      syncBottomAfterComposerLayoutRef,
     }),
     [
       activeTodoPanelCollapsed,
@@ -157,7 +154,6 @@ export function useAgentChatThreadModel({
       sessionAuxiliaryError,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
-      syncBottomAfterComposerLayoutRef,
       transcript,
     ],
   );

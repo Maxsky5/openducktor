@@ -109,7 +109,6 @@ const buildModel = () => ({
   composerEditorRef: createRef<HTMLDivElement>(),
   onComposerEditorInput: () => {},
   scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
-  syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
 });
 
 const buildCodexModelSelectionWithoutProfile = () => {

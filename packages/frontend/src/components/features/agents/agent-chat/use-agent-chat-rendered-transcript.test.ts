@@ -102,9 +102,6 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     });
     const displayedSessionKey = agentSessionIdentityKey(session);
     const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
-    const syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null> = {
-      current: null,
-    };
     const harness = createHookHarness(
       () =>
         useAgentChatRenderedTranscript({
@@ -117,10 +114,8 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
-          isSessionWorking: true,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
-          syncBottomAfterComposerLayoutRef,
         }),
       {},
       { wrapper: settingsWrapper },
@@ -155,9 +150,6 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     });
     const displayedSessionKey = agentSessionIdentityKey(session);
     const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
-    const syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null> = {
-      current: null,
-    };
     const harness = createHookHarness(
       () =>
         useAgentChatRenderedTranscript({
@@ -170,10 +162,8 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
-          isSessionWorking: true,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
-          syncBottomAfterComposerLayoutRef,
         }),
       {},
       { wrapper: settingsWrapper },
@@ -211,9 +201,6 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     const displayedSessionKey = agentSessionIdentityKey(session);
     const messagesContainerRef = createRef<HTMLDivElement>();
     const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
-    const syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null> = {
-      current: null,
-    };
     const harness = createHookHarness(
       (_props: { tick: number }) =>
         useAgentChatRenderedTranscript({
@@ -226,10 +213,8 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
-          isSessionWorking: true,
           messagesContainerRef,
           scrollToBottomOnSendRef,
-          syncBottomAfterComposerLayoutRef,
         }),
       { tick: 0 },
       { wrapper: settingsWrapper },

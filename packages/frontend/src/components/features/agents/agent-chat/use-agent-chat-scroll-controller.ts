@@ -1,378 +1,304 @@
-import type { MutableRefObject, RefObject } from "react";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { REVEAL_ELEMENT_EVENT } from "@/lib/reveal-element";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
-  displayedSessionKey: string | null;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
-  isSessionWorking: boolean;
-  canFollowPhysicalBottomRef: MutableRefObject<boolean>;
+  pinnedRef: RefObject<boolean>;
+  // Only the latest row window contains the transcript end, so only it can stay pinned.
+  canPin: boolean;
 };
 
 type UseAgentChatScrollControllerResult = {
   isNearBottom: boolean;
   isNearTop: boolean;
-  userScrolledRef: MutableRefObject<boolean>;
-  userScrollIntentVersionRef: MutableRefObject<number>;
-  stopFollowingTranscript: () => void;
-  forceScrollToBottom: () => void;
-  refreshScrollState: () => void;
+  pin: () => void;
+  unpin: () => void;
+  syncScrollPosition: () => void;
 };
 
-const AUTO_SCROLL_MARK_TTL_MS = 1500;
+type EdgeState = { nearBottom: boolean; nearTop: boolean };
 
+const SCROLL_UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
+
+const isScrollUpKey = (event: KeyboardEvent): boolean =>
+  SCROLL_UP_KEYS.has(event.key) || (event.key === " " && event.shiftKey);
+
+const isEditableTarget = (target: EventTarget | null): boolean =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || target.matches("input, textarea, select"));
+
+const canScroll = (container: HTMLElement): boolean =>
+  container.scrollHeight - container.clientHeight > 1;
+
+const distanceFromBottom = (container: HTMLElement): number =>
+  container.scrollHeight - container.clientHeight - container.scrollTop;
+
+const isAtBottom = (container: HTMLElement): boolean =>
+  !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
+
+// An inner scroll container, such as a diff viewer, takes an upward scroll until it reaches its top.
+const hasInnerScrollAbove = (target: EventTarget | null, container: HTMLElement): boolean => {
+  for (
+    let element = target instanceof Element ? target : null;
+    element && element !== container;
+    element = element.parentElement
+  ) {
+    if (element.scrollTop > 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Keeps a pinned transcript at its bottom edge.
+ *
+ * - Only user input unpins: an upward wheel, a scroll-up key, an upward pointer or touch drag,
+ *   or keyboard focus that scrolls up to an element. A request to reveal an element also unpins.
+ * - The user pins again by scrolling down to the bottom edge, or the caller pins explicitly.
+ *   A transcript that stops overflowing pins again, because no scroll can reach its bottom edge.
+ * - While pinned, every size change of the viewport or the content scrolls back to the bottom.
+ *   Any other scroll that leaves the bottom, such as a browser scroll restoration, is reverted.
+ */
 export function useAgentChatScrollController({
-  displayedSessionKey,
   messagesContainerRef,
   messagesContentRef,
-  isSessionWorking,
-  canFollowPhysicalBottomRef,
+  pinnedRef,
+  canPin,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
-  const [userScrolled, dispatchUserScrolled] = useReducer(
-    (_current: boolean, next: boolean) => next,
-    false,
+  const canPinRef = useRef(canPin);
+  const isPointerPressedRef = useRef(false);
+  const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
+  const lastScrollTopRef = useRef(0);
+  const edgesRef = useRef<EdgeState>({ nearBottom: true, nearTop: true });
+  const [edges, dispatchEdges] = useReducer(
+    (_current: EdgeState, next: EdgeState) => next,
+    edgesRef.current,
   );
 
-  const nearBottomRef = useRef(true);
-  const nearTopRef = useRef(true);
-  const [buttonState, dispatchButtonState] = useReducer(
-    (
-      _current: { nearBottom: boolean; nearTop: boolean },
-      next: { nearBottom: boolean; nearTop: boolean },
-    ) => next,
-    { nearBottom: true, nearTop: true },
-  );
-
-  const userScrolledRef = useRef(false);
-  const userScrollIntentVersionRef = useRef(0);
-  const autoScrollRef = useRef<{ time: number; top: number } | null>(null);
-  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayedSessionKeyRef = useRef<string | null>(displayedSessionKey);
-
-  const updateNearEdges = useCallback((nearBottom: boolean, nearTop: boolean) => {
-    const changed = nearBottomRef.current !== nearBottom || nearTopRef.current !== nearTop;
-    nearBottomRef.current = nearBottom;
-    nearTopRef.current = nearTop;
-    if (changed) {
-      dispatchButtonState({ nearBottom, nearTop });
-    }
-  }, []);
-
-  const applyUserScrolledState = useCallback((nextValue: boolean) => {
-    userScrolledRef.current = nextValue;
-    dispatchUserScrolled(nextValue);
-  }, []);
-
-  const canScroll = useCallback((element: HTMLDivElement) => {
-    return element.scrollHeight - element.clientHeight > 1;
-  }, []);
-
-  const distanceFromBottom = useCallback((element: HTMLDivElement) => {
-    return element.scrollHeight - element.clientHeight - element.scrollTop;
-  }, []);
-
-  const refreshScrollState = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const nearBottom =
-      !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
-    const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
-
-    if (nearBottom && canFollowPhysicalBottomRef.current && userScrolledRef.current) {
-      applyUserScrolledState(false);
-      container.style.overflowAnchor = "none";
-    }
-
-    updateNearEdges(nearBottom, nearTop);
-  }, [
-    canScroll,
-    canFollowPhysicalBottomRef,
-    distanceFromBottom,
-    messagesContainerRef,
-    applyUserScrolledState,
-    updateNearEdges,
-  ]);
-
-  const markAutoScroll = useCallback((element: HTMLDivElement) => {
-    autoScrollRef.current = {
-      time: Date.now(),
-      top: Math.max(0, element.scrollHeight - element.clientHeight),
-    };
-
-    if (autoScrollTimerRef.current !== null) {
-      clearTimeout(autoScrollTimerRef.current);
-    }
-
-    autoScrollTimerRef.current = setTimeout(() => {
-      autoScrollRef.current = null;
-      autoScrollTimerRef.current = null;
-    }, AUTO_SCROLL_MARK_TTL_MS);
-  }, []);
-
-  const clearAutoScrollTimer = useCallback(() => {
-    if (autoScrollTimerRef.current !== null) {
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = null;
-    }
-  }, []);
-
-  const isAutoScrollEvent = useCallback((element: HTMLDivElement) => {
-    const autoScroll = autoScrollRef.current;
-    if (!autoScroll) {
-      return false;
-    }
-
-    if (Date.now() - autoScroll.time > AUTO_SCROLL_MARK_TTL_MS) {
-      autoScrollRef.current = null;
-      return false;
-    }
-
-    return Math.abs(element.scrollTop - autoScroll.top) < 2;
-  }, []);
-
+  // The caller runs its scroll effects after this one, so they use the committed row window.
   useLayoutEffect(() => {
-    if (displayedSessionKeyRef.current === displayedSessionKey) {
-      return;
-    }
+    canPinRef.current = canPin;
+  }, [canPin]);
 
-    displayedSessionKeyRef.current = displayedSessionKey;
-    userScrollIntentVersionRef.current = 0;
-    autoScrollRef.current = null;
-    if (autoScrollTimerRef.current !== null) {
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = null;
-    }
-
-    applyUserScrolledState(false);
-    updateNearEdges(true, true);
-
-    const container = messagesContainerRef.current;
-    if (container) {
-      container.style.overflowAnchor = "none";
-    }
-  }, [displayedSessionKey, messagesContainerRef, applyUserScrolledState, updateNearEdges]);
-
-  const scrollToBottomNow = useCallback(
-    (force: boolean) => {
-      const container = messagesContainerRef.current;
-      if (!container) {
-        return;
-      }
-
-      if (!force && userScrolledRef.current) {
-        return;
-      }
-
-      if (force && userScrolledRef.current) {
-        applyUserScrolledState(false);
-      }
-
-      const distance = distanceFromBottom(container);
-      if (distance < 2) {
-        markAutoScroll(container);
-        updateNearEdges(true, container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX);
-        return;
-      }
-
-      markAutoScroll(container);
-      container.scrollTop = container.scrollHeight;
-      updateNearEdges(true, false);
-    },
-    [
-      distanceFromBottom,
-      markAutoScroll,
-      messagesContainerRef,
-      applyUserScrolledState,
-      updateNearEdges,
-    ],
-  );
-
-  const stopFollowing = useCallback(() => {
+  const refreshEdges = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
     }
 
-    if (!canScroll(container) || userScrolledRef.current) {
+    const nearBottom = isAtBottom(container);
+    const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+    if (edgesRef.current.nearBottom === nearBottom && edgesRef.current.nearTop === nearTop) {
       return;
     }
 
-    userScrollIntentVersionRef.current += 1;
-    applyUserScrolledState(true);
-  }, [canScroll, messagesContainerRef, applyUserScrolledState]);
+    edgesRef.current = { nearBottom, nearTop };
+    dispatchEdges(edgesRef.current);
+  }, [messagesContainerRef]);
 
-  const stopFollowingTranscript = useCallback(() => {
-    userScrollIntentVersionRef.current += 1;
-    applyUserScrolledState(true);
+  const setPinned = useCallback(
+    (pinned: boolean) => {
+      pinnedRef.current = pinned;
+      const container = messagesContainerRef.current;
+      if (container) {
+        // Scroll anchoring keeps the reading position, which only an unpinned transcript needs.
+        container.style.overflowAnchor = pinned ? "none" : "auto";
+      }
+    },
+    [messagesContainerRef, pinnedRef],
+  );
 
+  const syncScrollPosition = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.style.overflowAnchor = "auto";
+    if (!container) {
+      return;
     }
-  }, [messagesContainerRef, applyUserScrolledState]);
+
+    if (canPinRef.current) {
+      if (!pinnedRef.current && !canScroll(container)) {
+        setPinned(true);
+      }
+      if (pinnedRef.current && distanceFromBottom(container) > 1) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+    lastScrollTopRef.current = container.scrollTop;
+    refreshEdges();
+  }, [messagesContainerRef, pinnedRef, refreshEdges, setPinned]);
+
+  const pin = useCallback(() => {
+    setPinned(true);
+    syncScrollPosition();
+  }, [setPinned, syncScrollPosition]);
+
+  const unpin = useCallback(() => {
+    setPinned(false);
+  }, [setPinned]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container) {
+    const content = messagesContentRef.current;
+    if (!container || !content) {
       return;
     }
 
-    const updateOverflowAnchor = () => {
-      container.style.overflowAnchor = userScrolledRef.current ? "auto" : "none";
+    const ownerDocument = container.ownerDocument;
+
+    // A clamp after the content gets smaller also moves the position up, but it stays at the bottom.
+    const hasMovedUpFromBottom = () =>
+      container.scrollTop < lastScrollTopRef.current && distanceFromBottom(container) > 1;
+
+    const unpinForUserScroll = (scrollTarget: EventTarget | null) => {
+      if (
+        pinnedRef.current &&
+        canScroll(container) &&
+        !hasInnerScrollAbove(scrollTarget, container)
+      ) {
+        setPinned(false);
+      }
     };
 
     const handleWheel = (event: WheelEvent) => {
-      userScrollIntentVersionRef.current += 1;
-
-      if (event.deltaY >= 0) {
-        return;
+      if (event.deltaY < 0 && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
+        unpinForUserScroll(event.target);
       }
-
-      const target = event.target instanceof Element ? event.target : undefined;
-      const nestedScrollable = target?.closest("[data-scrollable]");
-      if (nestedScrollable && nestedScrollable !== container) {
-        return;
-      }
-
-      stopFollowing();
     };
 
-    const handlePointerDown = () => {
-      userScrollIntentVersionRef.current += 1;
+    // The document gets the key after the app handlers, so a key that a component handled is skipped.
+    // With no focused element, the browser scrolls the scroll container that the user clicked last.
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isScrollUpKey(event) || isEditableTarget(event.target)) {
+        return;
+      }
+      if (event.target instanceof Node && container.contains(event.target)) {
+        unpinForUserScroll(event.target);
+      } else if (event.target === ownerDocument.body && lastPointerDownTargetRef.current !== null) {
+        unpinForUserScroll(lastPointerDownTargetRef.current);
+      }
+    };
+
+    // Keyboard focus scrolls the focused element into view before the focusin event,
+    // and the scroll event for that move comes later.
+    const handleFocusIn = () => {
+      if (!isPointerPressedRef.current && hasMovedUpFromBottom()) {
+        unpinForUserScroll(null);
+      }
+    };
+
+    const handleRevealElement = () => {
+      setPinned(false);
+    };
+
+    // Touch input uses touch events, because a touch pan cancels its pointer before it scrolls.
+    const handlePointerDown = (event: PointerEvent) => {
+      lastPointerDownTargetRef.current = event.target;
+      if (event.pointerType !== "touch") {
+        isPointerPressedRef.current = true;
+      }
+    };
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !container.contains(event.target)) {
+        lastPointerDownTargetRef.current = null;
+      }
+    };
+
+    const handleDocumentPointerEnd = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") {
+        isPointerPressedRef.current = false;
+      }
     };
 
     const handleTouchStart = () => {
-      userScrollIntentVersionRef.current += 1;
+      isPointerPressedRef.current = true;
+    };
+
+    const handleDocumentTouchEnd = () => {
+      isPointerPressedRef.current = false;
     };
 
     const handleScroll = () => {
-      const nearBottom =
-        !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
-      const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      const hasDraggedUp = isPointerPressedRef.current && hasMovedUpFromBottom();
+      const isMovingUp = container.scrollTop < lastScrollTopRef.current;
+      lastScrollTopRef.current = container.scrollTop;
 
-      updateNearEdges(nearBottom, nearTop);
-
-      if (!canScroll(container)) {
-        if (userScrolledRef.current) {
-          applyUserScrolledState(false);
-          updateOverflowAnchor();
+      if (pinnedRef.current) {
+        if (hasDraggedUp) {
+          setPinned(false);
+          refreshEdges();
+          return;
         }
+        syncScrollPosition();
         return;
       }
 
-      if (nearBottom) {
-        if (userScrolledRef.current) {
-          if (canFollowPhysicalBottomRef.current) {
-            applyUserScrolledState(false);
-            updateOverflowAnchor();
-          }
-        }
+      if (!isMovingUp && isAtBottom(container) && canPinRef.current) {
+        pin();
         return;
       }
-
-      if (!userScrolledRef.current && isAutoScrollEvent(container)) {
-        scrollToBottomNow(false);
-        return;
-      }
-
-      if (!userScrolledRef.current && userScrollIntentVersionRef.current === 0) {
-        scrollToBottomNow(false);
-        return;
-      }
-
-      if (!userScrolledRef.current) {
-        applyUserScrolledState(true);
-        updateOverflowAnchor();
-      }
+      refreshEdges();
     };
 
-    updateOverflowAnchor();
-    handleScroll();
+    setPinned(pinnedRef.current);
+    syncScrollPosition();
 
     container.addEventListener("wheel", handleWheel, { passive: true });
+    container.addEventListener("focusin", handleFocusIn);
+    container.addEventListener(REVEAL_ELEMENT_EVENT, handleRevealElement);
     container.addEventListener("pointerdown", handlePointerDown, { passive: true });
     container.addEventListener("touchstart", handleTouchStart, { passive: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
+    ownerDocument.addEventListener("keydown", handleDocumentKeyDown);
+    ownerDocument.addEventListener("pointerdown", handleDocumentPointerDown, {
+      capture: true,
+      passive: true,
+    });
+    ownerDocument.addEventListener("pointerup", handleDocumentPointerEnd, { passive: true });
+    ownerDocument.addEventListener("pointercancel", handleDocumentPointerEnd, { passive: true });
+    ownerDocument.addEventListener("touchend", handleDocumentTouchEnd, { passive: true });
+    ownerDocument.addEventListener("touchcancel", handleDocumentTouchEnd, { passive: true });
+
+    // The viewport shrinks without a scroll event when a panel such as the terminal opens.
+    const resizeObserver = new ResizeObserver(syncScrollPosition);
+    resizeObserver.observe(container);
+    resizeObserver.observe(content);
 
     return () => {
+      resizeObserver.disconnect();
       container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("focusin", handleFocusIn);
+      container.removeEventListener(REVEAL_ELEMENT_EVENT, handleRevealElement);
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("touchstart", handleTouchStart);
       container.removeEventListener("scroll", handleScroll);
+      ownerDocument.removeEventListener("keydown", handleDocumentKeyDown);
+      ownerDocument.removeEventListener("pointerdown", handleDocumentPointerDown, {
+        capture: true,
+      });
+      ownerDocument.removeEventListener("pointerup", handleDocumentPointerEnd);
+      ownerDocument.removeEventListener("pointercancel", handleDocumentPointerEnd);
+      ownerDocument.removeEventListener("touchend", handleDocumentTouchEnd);
+      ownerDocument.removeEventListener("touchcancel", handleDocumentTouchEnd);
     };
   }, [
-    canScroll,
-    canFollowPhysicalBottomRef,
-    distanceFromBottom,
-    isAutoScrollEvent,
     messagesContainerRef,
-    scrollToBottomNow,
-    applyUserScrolledState,
-    stopFollowing,
-    updateNearEdges,
+    messagesContentRef,
+    pin,
+    pinnedRef,
+    refreshEdges,
+    setPinned,
+    syncScrollPosition,
   ]);
 
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    container.style.overflowAnchor = userScrolled ? "auto" : "none";
-  }, [messagesContainerRef, userScrolled]);
-
-  useEffect(() => {
-    if (!isSessionWorking) {
-      return;
-    }
-
-    if (!userScrolledRef.current) {
-      scrollToBottomNow(true);
-    }
-  }, [isSessionWorking, scrollToBottomNow]);
-
-  useEffect(() => {
-    const content = messagesContentRef.current;
-    if (!content || globalThis.ResizeObserver === undefined) {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      refreshScrollState();
-      if (!canFollowPhysicalBottomRef.current) {
-        return;
-      }
-
-      if (userScrolledRef.current) {
-        return;
-      }
-
-      scrollToBottomNow(false);
-    });
-    observer.observe(content);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [messagesContentRef, refreshScrollState, scrollToBottomNow, canFollowPhysicalBottomRef]);
-
-  useEffect(() => clearAutoScrollTimer, [clearAutoScrollTimer]);
-
-  const forceScrollToBottom = useCallback(() => {
-    scrollToBottomNow(true);
-  }, [scrollToBottomNow]);
-
   return {
-    isNearBottom: buttonState.nearBottom,
-    isNearTop: buttonState.nearTop,
-    userScrolledRef,
-    userScrollIntentVersionRef,
-    stopFollowingTranscript,
-    forceScrollToBottom,
-    refreshScrollState,
+    isNearBottom: edges.nearBottom,
+    isNearTop: edges.nearTop,
+    pin,
+    unpin,
+    syncScrollPosition,
   };
 }

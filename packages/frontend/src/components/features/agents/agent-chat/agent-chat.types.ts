@@ -145,7 +145,6 @@ export type AgentChatThreadModel = {
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
-  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatPendingSendItems = {
@@ -224,7 +223,6 @@ export type AgentChatComposerModel = {
   composerEditorRef: RefObject<HTMLDivElement | null>;
   onComposerEditorInput: () => void;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
-  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatSurfaceModel = {

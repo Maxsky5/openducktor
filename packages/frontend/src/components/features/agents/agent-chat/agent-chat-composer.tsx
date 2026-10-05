@@ -688,7 +688,6 @@ export function AgentChatComposer({
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
-    syncBottomAfterComposerLayoutRef,
   } = model;
 
   const {
@@ -777,17 +776,6 @@ export function AgentChatComposer({
   const hasBlockingAttachments = Object.keys(attachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
-  const attachmentLayoutKey = useMemo(() => {
-    const attachments = draft.attachments ?? [];
-    if (attachments.length === 0) {
-      return null;
-    }
-
-    return attachments
-      .map((attachment) => `${attachment.id}:${attachmentErrors[attachment.id] ?? "ok"}`)
-      .join("|");
-  }, [attachmentErrors, draft.attachments]);
-  const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
 
   const sendDisabled =
     isSubmitting ||
@@ -802,20 +790,6 @@ export function AgentChatComposer({
     latestOnSendRef.current = onSend;
     latestSendDisabledRef.current = sendDisabled;
   }, [draft, draftScope.key, onSend, sendDisabled]);
-
-  useLayoutEffect(() => {
-    if (previousAttachmentLayoutKeyRef.current === attachmentLayoutKey) {
-      return;
-    }
-
-    const previousAttachmentLayoutKey = previousAttachmentLayoutKeyRef.current;
-    previousAttachmentLayoutKeyRef.current = attachmentLayoutKey;
-    if (previousAttachmentLayoutKey === undefined) {
-      return;
-    }
-
-    syncBottomAfterComposerLayoutRef.current?.();
-  }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);

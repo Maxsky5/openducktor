@@ -67,11 +67,9 @@ export function useAgentChatSurfaceModel({
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const isSessionWorking = isAgentSessionActivityWorking(transcript.session?.activityState);
-  const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
       displayedSessionKey: transcript.displayedSessionKey,
-      syncBottomAfterComposerLayoutRef,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
   const resolvedSessionAgentColors = sessionAgentColors ?? EMPTY_SESSION_AGENT_COLORS;
@@ -97,7 +95,6 @@ export function useAgentChatSurfaceModel({
     composerEditorRef,
     resizeComposerEditor,
     scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
   });
   const threadModel = useAgentChatThreadModel({
     modelCatalog: modelCatalog ?? null,
@@ -120,7 +117,6 @@ export function useAgentChatSurfaceModel({
     subagentPendingQuestionCountBySessionKey,
     messagesContainerRef,
     scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
   });
 
   return useMemo(() => {

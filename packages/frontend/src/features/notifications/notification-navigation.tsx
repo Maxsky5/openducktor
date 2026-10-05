@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { revealElement } from "@/lib/reveal-element";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
@@ -124,7 +125,7 @@ export function NotificationAttentionFocus(): ReactElement | null {
     const focus = (): boolean => {
       const target = findNotificationAttentionTarget(kind, id);
       if (!target) return false;
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      revealElement(target);
       target.focus({ preventScroll: true });
       clearAttention();
       return true;

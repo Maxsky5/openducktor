@@ -43,16 +43,6 @@ const createTextareaElement = ({
   return textarea;
 };
 
-const createMessagesContainer = (): HTMLDivElement => {
-  const container = document.createElement("div");
-  Object.defineProperties(container, {
-    clientHeight: { configurable: true, value: 300, writable: true },
-    scrollHeight: { configurable: true, value: 1_000, writable: true },
-    scrollTop: { configurable: true, value: 700, writable: true },
-  });
-  return container;
-};
-
 describe("use-agent-chat-layout helpers", () => {
   test("clamps textarea layout to minimum height", () => {
     expect(computeComposerEditorLayout(10)).toEqual({
@@ -124,12 +114,8 @@ describe("use-agent-chat-layout helpers", () => {
       },
     };
 
-    const result = resizeComposerTextareaElement(textarea);
+    resizeComposerTextareaElement(textarea);
 
-    expect(result).toEqual({
-      didHeightChange: false,
-      overflowY: "hidden",
-    });
     expect(assignedHeights).toEqual(["auto", "120px"]);
     expect(assignedOverflowValues).toEqual([]);
   });
@@ -164,12 +150,8 @@ describe("use-agent-chat-layout helpers", () => {
       textContent: "line one\nline two",
     };
 
-    const result = resizeComposerEditorElement(editor, undefined, COMPOSER_EDITOR_MIN_HEIGHT_PX);
+    resizeComposerEditorElement(editor, undefined, COMPOSER_EDITOR_MIN_HEIGHT_PX);
 
-    expect(result).toEqual({
-      didHeightChange: true,
-      overflowY: "hidden",
-    });
     expect(styleState.height).toBe("120px");
   });
 
@@ -206,12 +188,8 @@ describe("use-agent-chat-layout helpers", () => {
       },
     };
 
-    const result = resizeComposerTextareaElement(textarea);
+    resizeComposerTextareaElement(textarea);
 
-    expect(result).toEqual({
-      didHeightChange: true,
-      overflowY: "hidden",
-    });
     expect(styleState.height).toBe(`${COMPOSER_EDITOR_MIN_HEIGHT_PX}px`);
   });
 
@@ -247,12 +225,8 @@ describe("use-agent-chat-layout helpers", () => {
       value: "line one\nline two",
     };
 
-    const result = resizeComposerTextareaElement(textarea);
+    resizeComposerTextareaElement(textarea);
 
-    expect(result).toEqual({
-      didHeightChange: false,
-      overflowY: "hidden",
-    });
     expect(assignedHeights).toEqual(["auto", "120px"]);
     expect(styleState.height).toBe("120px");
   });
@@ -292,12 +266,8 @@ describe("use-agent-chat-layout helpers", () => {
       },
     };
 
-    const result = resizeComposerTextareaElement(textarea);
+    resizeComposerTextareaElement(textarea);
 
-    expect(result).toEqual({
-      didHeightChange: false,
-      overflowY: "hidden",
-    });
     expect(assignedHeights).toEqual(["auto", ""]);
     expect(styleState.height).toBe("");
   });
@@ -384,58 +354,6 @@ describe("use-agent-chat-layout helpers", () => {
 
       await animationFrameDriver.flushFrame();
       expect(textarea.style.height).toBe("44px");
-
-      await harness.unmount();
-    });
-  });
-
-  test("requests a bottom resync only when composer height changes while the transcript is near bottom", async () => {
-    await withAnimationFrameTestDriver(async (animationFrameDriver) => {
-      let syncBottomAfterComposerLayoutCallCount = 0;
-      const syncBottomAfterComposerLayoutRef = {
-        current: () => {
-          syncBottomAfterComposerLayoutCallCount += 1;
-        },
-      } satisfies { current: (() => void) | null };
-      const harness = createSharedHookHarness(
-        ({ displayedSessionKey }: { displayedSessionKey: string | null }) => {
-          return useAgentChatLayout({
-            displayedSessionKey,
-            syncBottomAfterComposerLayoutRef,
-          });
-        },
-        { displayedSessionKey: "session-1" },
-      );
-
-      await harness.mount();
-
-      const state = harness.getLatest();
-      state.messagesContainerRef.current = createMessagesContainer();
-
-      const textarea = createTextareaElement({
-        height: 44,
-        scrollHeight: 120,
-        value: "line one\nline two",
-      });
-      state.composerTextareaRef.current = textarea;
-
-      state.resizeComposerTextarea();
-      await animationFrameDriver.flushFrame();
-
-      expect(textarea.style.height).toBe("120px");
-      expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
-
-      state.messagesContainerRef.current = createMessagesContainer();
-      Object.assign(textarea, {
-        scrollHeight: 120,
-        value: "line one\nline tw",
-      });
-
-      state.resizeComposerTextarea();
-      await animationFrameDriver.flushFrame();
-
-      expect(textarea.style.height).toBe("120px");
-      expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
       await harness.unmount();
     });
