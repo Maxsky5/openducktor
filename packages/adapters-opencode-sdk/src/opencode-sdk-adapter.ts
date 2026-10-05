@@ -63,7 +63,11 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
-import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
+import {
+  sendUserMessage,
+  usesPromptAsyncTransport,
+  type UserSendOptions,
+} from "./message-execution";
 import {
   continueOpencodeInterruptedTurn,
   probeOpencodeInterruptedTurn,
@@ -788,7 +792,12 @@ export class OpencodeSdkAdapter
     return /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
   }
 
-  async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
+  /** signal cancels preparation. onSent lets reads resume at the native call. */
+  async sendUserMessage(
+    input: SendAgentUserMessageInput,
+    options?: UserSendOptions,
+  ): Promise<AcceptedAgentUserMessage> {
+    options?.signal?.throwIfAborted();
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
     resolveOpencodeSessionPolicy(
       input.sessionScope,
@@ -810,16 +819,18 @@ export class OpencodeSdkAdapter
     const session = this.policyBoundSessionState(input, "send");
     return session instanceof Promise
       ? session.then((boundSession) =>
-          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation),
+          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation, options),
         )
-      : this.sendUserMessageFromBoundSession(input, session, systemInvocation);
+      : this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
   }
 
   private async sendUserMessageFromBoundSession(
     input: SendAgentUserMessageInput,
     session: SessionRecord,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
+    options?: UserSendOptions,
   ): Promise<AcceptedAgentUserMessage> {
+    options?.signal?.throwIfAborted();
     const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
     const waitsForRuntimeAdmission =
       systemInvocation.kind === "not_system" && !expectsPromptTurnStart;
@@ -845,6 +856,12 @@ export class OpencodeSdkAdapter
       }
       if (admission) {
         sendInput.admission = admission.promise;
+      }
+      if (options?.onSent) {
+        sendInput.onSent = options.onSent;
+      }
+      if (options?.signal) {
+        sendInput.signal = options.signal;
       }
       const admittedUserMessage = await sendUserMessage(sendInput);
       const timestamp = this.now();
@@ -877,6 +894,7 @@ export class OpencodeSdkAdapter
       if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
         this.emit(input.externalSessionId, idleEvent);
       }
+      options?.signal?.throwIfAborted();
       throw error;
     } finally {
       admission?.dispose();

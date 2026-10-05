@@ -1,3 +1,8 @@
+import type { SendAgentUserMessageInput } from "@openducktor/core";
+import {
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  type AgentSessionAuthorizedRoot,
+} from "@openducktor/contracts";
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
@@ -99,6 +104,19 @@ const createLiveClientHarness = (
     ...baseClient,
     session: {
       ...baseClient.session,
+      create: async (request) => {
+        rules.set(externalSessionId, request?.permission ?? []);
+        if (request?.metadata) metadata.set(externalSessionId, request.metadata);
+        return {
+          data: createOpencodeSessionFixture({
+            id: externalSessionId,
+            directory: request?.directory ?? "/repo",
+            permission: rules.get(externalSessionId),
+            metadata: metadata.get(externalSessionId),
+          }),
+          error: undefined,
+        };
+      },
       list: async () => {
         callOrder.push("list");
         input.onList?.();
@@ -424,6 +442,608 @@ const resumeOpenDucktorSession = async (
 };
 
 describe("OpenCode session runtime connection", () => {
+  test.each([
+    ["stop", "prompt"],
+    ["stop", "command"],
+    ["stop", "compact"],
+    ["release", "prompt"],
+    ["release", "command"],
+    ["release", "compact"],
+  ] as const)("%s cancels a queued %s before native dispatch", async (action, kind) => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const calls: string[] = [];
+    recordNativeSends(harness, calls);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let reading: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+    let nextRead: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+    let sending: Promise<unknown> | undefined;
+    let readCalls = 0;
+    const get = harness.client.session.get;
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      harness.client.session.get = async (...args) => {
+        readCalls++;
+        started.resolve();
+        await finish.promise;
+        return get(...args);
+      };
+      reading = prepared.connection.readSessionSources("/repo", [root]);
+      await started.promise;
+      sending = prepared.connection.sendUserMessage(userSend(root, kind)).then(
+        (message) => ({ message }),
+        (error: Error) => ({ error: error.message }),
+      );
+      if (action === "stop") await prepared.connection.stopSession(root);
+      else await prepared.connection.releaseSession(root);
+      expect(
+        await Promise.race([
+          sending,
+          new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+        ]),
+      ).toMatchObject({ error: expect.stringContaining("canceled") });
+      nextRead = prepared.connection.readSessionSources("/repo", [root]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(readCalls).toBe(1);
+      finish.resolve();
+      await Promise.all([reading, nextRead]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toEqual([]);
+      harness.client.session.get = get;
+      await prepared.connection.resumeSession({ ...root, runtimePolicy: { kind: "opencode" } });
+      await prepared.connection.sendUserMessage(userSend(root, "prompt"));
+      expect(calls).toEqual(["prompt"]);
+    } finally {
+      finish.resolve();
+      await Promise.allSettled([reading, nextRead, sending]);
+      await prepared.release();
+    }
+  });
+
+  test.each([
+    ["stop", "prompt"],
+    ["stop", "command"],
+    ["release", "prompt"],
+    ["release", "command"],
+  ] as const)("%s cancels a %s during MCP setup", async (action, kind) => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const calls: string[] = [];
+    recordNativeSends(harness, calls);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let sending: Promise<unknown> | undefined;
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      const status = harness.client.mcp.status;
+      harness.client.mcp.status = async (...args) => {
+        started.resolve();
+        await finish.promise;
+        return status(...args);
+      };
+      sending = prepared.connection.sendUserMessage(userSend(root, kind)).then(
+        (message) => ({ message }),
+        (error: Error) => ({ error: error.message }),
+      );
+      await started.promise;
+      if (action === "stop") await prepared.connection.stopSession(root);
+      else await prepared.connection.releaseSession(root);
+      expect(
+        await Promise.race([
+          sending,
+          new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+        ]),
+      ).toMatchObject({ error: expect.stringContaining("canceled") });
+      finish.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toEqual([]);
+    } finally {
+      finish.resolve();
+      await prepared.release();
+      await sending;
+    }
+  });
+
+  test.each(["read", "mcp"] as const)(
+    "runtime release cancels a send while %s stays blocked",
+    async (waiting) => {
+      const harness = createLiveClientHarness();
+      harness.setPendingApproval(false);
+      const calls: string[] = [];
+      recordNativeSends(harness, calls);
+      const prepared = await createPrepareRuntime(harness)(runtimeInput);
+      const root = workflowRoot();
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      let reading: Promise<unknown> | undefined;
+      let sending: Promise<unknown> | undefined;
+      try {
+        await prepared.connection.startSession({
+          ...root,
+          runtimePolicy: { kind: "opencode" },
+          systemPrompt: "Build it",
+        });
+        if (waiting === "read") {
+          const get = harness.client.session.get;
+          harness.client.session.get = async (...args) => {
+            started.resolve();
+            await finish.promise;
+            return get(...args);
+          };
+          reading = prepared.connection.readSessionSources("/repo", [root]).then(
+            (value) => ({ value }),
+            (error: Error) => ({ error }),
+          );
+          await started.promise;
+        } else {
+          const status = harness.client.mcp.status;
+          harness.client.mcp.status = async (...args) => {
+            started.resolve();
+            await finish.promise;
+            return status(...args);
+          };
+        }
+        sending = prepared.connection.sendUserMessage(userSend(root, "prompt")).then(
+          (message) => ({ message }),
+          (error: Error) => ({ error: error.message }),
+        );
+        await started.promise;
+        await prepared.release();
+        expect(
+          await Promise.race([
+            sending,
+            new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+          ]),
+        ).toMatchObject({ error: expect.stringContaining("canceled") });
+        finish.resolve();
+        await Promise.allSettled([reading, sending]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(calls).toEqual([]);
+      } finally {
+        finish.resolve();
+        await Promise.allSettled([reading, sending]);
+        await prepared.release();
+      }
+    },
+  );
+
+  test.each(["read", "mcp"] as const)(
+    "a paused %s in one repository does not block another",
+    async (waiting) => {
+      const harness = createLiveClientHarness({ externalSessionIds: ["session-1", "session-2"] });
+      harness.setPendingApproval(false);
+      harness.client.session.abort = async () => ({ data: true, error: undefined });
+      const get = harness.client.session.get;
+      harness.client.session.get = async (request) => {
+        const result = await get(request);
+        return { ...result, data: { ...result.data, directory: request.directory! } };
+      };
+      const prepared = await createPrepareRuntime(harness)({
+        ...runtimeInput,
+        directories: ["/repo-a", "/repo-b"],
+      });
+      const rootA: AgentSessionAuthorizedRoot = {
+        ...workflowRoot(),
+        repoPath: "/repo-a",
+        workingDirectory: "/repo-a",
+        sessionScope: { kind: "repository" },
+      };
+      const rootB: AgentSessionAuthorizedRoot = {
+        ...rootA,
+        repoPath: "/repo-b",
+        workingDirectory: "/repo-b",
+        externalSessionId: "session-2",
+      };
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const sentB = Promise.withResolvers<void>();
+      let workA: Promise<unknown> | undefined;
+      let sendingB: Promise<unknown> | undefined;
+      const prompt = harness.client.session.promptAsync;
+      harness.client.session.promptAsync = (...args) => {
+        if (args[0].directory === rootB.workingDirectory) sentB.resolve();
+        return prompt(...args);
+      };
+      try {
+        for (const root of [rootA, rootB])
+          await prepared.connection.resumeSession({ ...root, runtimePolicy: { kind: "opencode" } });
+        if (waiting === "read") {
+          const read = harness.client.session.get;
+          harness.client.session.get = async (request) => {
+            if (request.sessionID === rootA.externalSessionId) {
+              started.resolve();
+              await finish.promise;
+            }
+            return read(request);
+          };
+          workA = prepared.connection.readSessionSources(rootA.repoPath, [rootA]);
+        } else {
+          const status = harness.client.mcp.status;
+          harness.client.mcp.status = async (...args) => {
+            if (args[0]?.directory === rootA.workingDirectory) {
+              started.resolve();
+              await finish.promise;
+            }
+            return status(...args);
+          };
+          workA = prepared.connection.sendUserMessage(userSend(rootA, "prompt"));
+        }
+        await started.promise;
+        sendingB = prepared.connection.sendUserMessage(userSend(rootB, "prompt"));
+        expect(
+          await Promise.race([
+            sentB.promise.then(() => "sent"),
+            new Promise((resolve) => setTimeout(() => resolve("blocked"), 50)),
+          ]),
+        ).toBe("sent");
+        await sendingB;
+        await prepared.connection.stopSession(rootB);
+        finish.resolve();
+        await workA;
+        expect(harness.promptCalls).toHaveLength(waiting === "mcp" ? 2 : 1);
+      } finally {
+        finish.resolve();
+        await prepared.release();
+        await Promise.allSettled([workA, sendingB]);
+      }
+    },
+  );
+
+  test("Stop completes while an already dispatched prompt waits for its reply", async () => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    harness.client.session.abort = async () => ({ data: true, error: undefined });
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const prompt = harness.client.session.promptAsync;
+    harness.client.session.promptAsync = async (...args) => {
+      const reply = prompt(...args);
+      started.resolve();
+      await finish.promise;
+      return reply;
+    };
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    let sending: Promise<unknown> | undefined;
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      sending = prepared.connection.sendUserMessage(userSend(root, "prompt")).then(
+        (message) => ({ message }),
+        (error: Error) => ({ error }),
+      );
+      await started.promise;
+      const stopping = prepared.connection.stopSession(root);
+      expect(
+        await Promise.race([
+          stopping.then(() => "stopped"),
+          new Promise((resolve) => setTimeout(() => resolve("blocked"), 50)),
+        ]),
+      ).toBe("stopped");
+      expect(await Promise.race([sending, Promise.resolve("pending")])).toBe("pending");
+      expect(harness.promptCalls).toHaveLength(1);
+    } finally {
+      finish.resolve();
+      await sending;
+      await prepared.release();
+    }
+  });
+
+  test("sends the first message once after queued workflow attachments finish", async () => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    const readStarted = Promise.withResolvers<void>();
+    const finishRead = Promise.withResolvers<void>();
+    const get = harness.client.session.get;
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      harness.client.session.get = async (...args) => {
+        readStarted.resolve();
+        await finishRead.promise;
+        return get(...args);
+      };
+      const reading = prepared.connection.readSessionSources("/repo", [root]);
+      await readStarted.promise;
+      const nextRead = prepared.connection.readSessionSources("/repo", [root]);
+      const sending = prepared.connection
+        .sendUserMessage({
+          ...root,
+          runtimePolicy: { kind: "opencode" },
+          parts: [{ kind: "text", text: "First message" }],
+        })
+        .then(
+          (message) => ({ message }),
+          (error: Error) => ({ error }),
+        );
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(await Promise.race([sending, Promise.resolve("pending")])).toBe("pending");
+        expect(harness.promptCalls).toEqual([]);
+      } finally {
+        finishRead.resolve();
+        await Promise.all([reading, nextRead]);
+      }
+      expect(await sending).toMatchObject({
+        message: { type: "user_message", externalSessionId: "session-1", message: "First message" },
+      });
+      expect(harness.promptCalls).toHaveLength(1);
+    } finally {
+      finishRead.resolve();
+      await prepared.release();
+    }
+  });
+
+  test("keeps a later workflow attachment behind MCP binding validation and native dispatch", async () => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    const statusStarted = Promise.withResolvers<void>();
+    const finishStatus = Promise.withResolvers<void>();
+    const readStarted = Promise.withResolvers<void>();
+    const finishRead = Promise.withResolvers<void>();
+    const promptStarted = Promise.withResolvers<void>();
+    const finishPrompt = Promise.withResolvers<void>();
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      const status = harness.client.mcp.status;
+      harness.client.mcp.status = async (...args) => {
+        statusStarted.resolve();
+        await finishStatus.promise;
+        return status(...args);
+      };
+      const get = harness.client.session.get;
+      harness.client.session.get = async (...args) => {
+        readStarted.resolve();
+        await finishRead.promise;
+        return get(...args);
+      };
+      const prompt = harness.client.session.promptAsync;
+      harness.client.session.promptAsync = async (...args) => {
+        promptStarted.resolve();
+        const result = prompt(...args);
+        await finishPrompt.promise;
+        return result;
+      };
+      const sending = prepared.connection
+        .sendUserMessage({
+          ...root,
+          runtimePolicy: { kind: "opencode" },
+          parts: [{ kind: "text", text: "First message" }],
+        })
+        .then(
+          (message) => ({ message }),
+          (error: Error) => ({ error }),
+        );
+      let reading: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+      try {
+        await statusStarted.promise;
+        reading = prepared.connection.readSessionSources("/repo", [root]);
+        // Let the attachment try to enter while the send still validates its MCP binding.
+        await Promise.race([readStarted.promise, new Promise((resolve) => setTimeout(resolve, 0))]);
+        finishStatus.resolve();
+        expect(await Promise.race([promptStarted.promise.then(() => "sent"), sending])).toBe(
+          "sent",
+        );
+        await readStarted.promise;
+        expect(harness.promptCalls).toHaveLength(1);
+        finishRead.resolve();
+        expect((await reading).failures).toEqual([]);
+        expect(await Promise.race([sending, Promise.resolve("pending")])).toBe("pending");
+        finishPrompt.resolve();
+        expect(await sending).toMatchObject({ message: { message: "First message" } });
+      } finally {
+        finishStatus.resolve();
+        finishRead.resolve();
+        finishPrompt.resolve();
+        await sending;
+        await reading;
+      }
+    } finally {
+      await prepared.release();
+    }
+  });
+
+  test("returns MCP preparation failures and releases queued attachments for recovery", async () => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      const status = harness.client.mcp.status;
+      harness.client.mcp.status = async () => {
+        throw new Error("MCP readiness failed");
+      };
+      const message = {
+        ...root,
+        runtimePolicy: { kind: "opencode" as const },
+        parts: [{ kind: "text" as const, text: "First message" }],
+      };
+      const sending = prepared.connection.sendUserMessage(message);
+      const reading = prepared.connection.readSessionSources("/repo", [root]);
+      await expect(sending).rejects.toThrow("MCP readiness failed");
+      expect(
+        await Promise.race([
+          reading.then((read) => read.failures),
+          new Promise((resolve) => setTimeout(() => resolve("blocked"), 50)),
+        ]),
+      ).toEqual([]);
+      expect(harness.promptCalls).toEqual([]);
+      harness.client.mcp.status = status;
+      await prepared.connection.sendUserMessage(message);
+      expect(harness.promptCalls).toHaveLength(1);
+    } finally {
+      await prepared.release();
+    }
+  });
+
+  test("keeps source reads and live events available while the native prompt response is pending", async () => {
+    const harness = createLiveClientHarness();
+    const promptStarted = Promise.withResolvers<void>();
+    const finishPrompt = Promise.withResolvers<void>();
+    const prompt = harness.client.session.promptAsync;
+    harness.client.session.promptAsync = async (...args) => {
+      promptStarted.resolve();
+      await finishPrompt.promise;
+      return prompt(...args);
+    };
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await resumeOpenDucktorSession(prepared);
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+    const sending = prepared.connection.sendUserMessage({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+    let reading: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+    try {
+      await promptStarted.promise;
+      reading = prepared.connection.readSessionSources("/repo");
+      expect(
+        await Promise.race([
+          reading.then(() => "read"),
+          new Promise((resolve) => setTimeout(() => resolve("blocked"), 50)),
+        ]),
+      ).toBe("read");
+      await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "session-1"));
+      expect(signals).toContainEqual({
+        type: "session_event",
+        externalSessionId: "session-1",
+        event: expect.objectContaining({
+          type: "session_status",
+          status: { type: "busy", message: null },
+        }),
+      });
+    } finally {
+      finishPrompt.resolve();
+      await sending;
+      await reading;
+      await prepared.release();
+    }
+  });
+
+  test("keeps source reads and live events available while slash-command admission is pending", async () => {
+    const harness = createLiveClientHarness();
+    const commandStarted =
+      Promise.withResolvers<Parameters<OpencodeClient["session"]["command"]>[0]>();
+    let commandCalls = 0;
+    harness.client.session.command = async (request) => {
+      commandCalls += 1;
+      commandStarted.resolve(request);
+      // The response succeeds before the stream admits the command message.
+      return {
+        data: {
+          info: createOpencodeMessageInfoFixture({
+            id: "assistant-command-response",
+            sessionID: "session-1",
+            role: "assistant",
+          }),
+          parts: [],
+        },
+        error: undefined,
+      };
+    };
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    let sending: ReturnType<typeof prepared.connection.sendUserMessage> | undefined;
+    let reading: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+    try {
+      await resumeOpenDucktorSession(prepared);
+      await prepared.startForwarding((signal) => {
+        signals.push(signal);
+      });
+      sending = prepared.connection.sendUserMessage({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+        parts: [
+          {
+            kind: "slash_command",
+            command: { id: "review", trigger: "review", title: "Review", hints: [] },
+          },
+        ],
+      });
+      const outcome = sending.then(
+        (message) => ({ message }),
+        (error: Error) => ({ error }),
+      );
+      const request = await commandStarted.promise;
+      if (!request.messageID) throw new Error("The native command did not receive a message ID.");
+      reading = prepared.connection.readSessionSources("/repo");
+      expect(
+        await Promise.race([
+          reading.then((read) => read.failures),
+          new Promise((resolve) => setTimeout(() => resolve("blocked"), 50)),
+        ]),
+      ).toEqual([]);
+      await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "session-1"));
+      expect(signals).toContainEqual({
+        type: "session_event",
+        externalSessionId: "session-1",
+        event: expect.objectContaining({
+          type: "session_status",
+          status: { type: "busy", message: null },
+        }),
+      });
+      expect(await Promise.race([outcome, Promise.resolve("pending")])).toBe("pending");
+      await harness.emitAndWait({
+        type: "message.updated",
+        properties: {
+          info: { id: request.messageID, sessionID: "session-1", role: "user" },
+        },
+      });
+      expect(await outcome).toMatchObject({
+        message: { messageId: request.messageID, message: "/review" },
+      });
+      expect(commandCalls).toBe(1);
+      expect(harness.promptCalls).toEqual([]);
+    } finally {
+      await prepared.release();
+      await Promise.allSettled([sending, reading]);
+    }
+  });
+
   test("reads scoped restored roots and children without binding or changing live state", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session"],
@@ -1516,16 +2136,17 @@ test("reports failed reload permission setup and excludes the workflow tree", as
     harness.client.session.update = failingUpdate;
     const restoring = prepared.connection.readSessionSources("/repo", [root]);
     await readEntered.promise;
+    const sends = Promise.allSettled(
+      ["session-1", "child-session"].map((externalSessionId) =>
+        prepared.connection.sendUserMessage({
+          ...root,
+          externalSessionId,
+          runtimePolicy: { kind: "opencode" },
+          parts: [{ kind: "text", text: "attachment pending" }],
+        }),
+      ),
+    );
     try {
-      for (const externalSessionId of ["session-1", "child-session"])
-        await expect(
-          prepared.connection.sendUserMessage({
-            ...root,
-            externalSessionId,
-            runtimePolicy: { kind: "opencode" },
-            parts: [{ kind: "text", text: "attachment pending" }],
-          }),
-        ).rejects.toThrow("permissions");
       expect(harness.promptCalls).toEqual([]);
       harness.emit(
         permissionAskedEvent({
@@ -1539,6 +2160,11 @@ test("reports failed reload permission setup and excludes the workflow tree", as
     } finally {
       releaseRead.resolve();
       await restoring;
+    }
+    for (const result of await sends) {
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected")
+        expect(result.reason.message).toContain("permission API unavailable");
     }
     harness.client.session.get = get;
     expect((await restoring).sources).toEqual([]);
@@ -1652,3 +2278,69 @@ describe("OpenCode MCP binding of imported and continued work", () => {
     await prepared.release();
   });
 });
+
+function workflowRoot(): AgentSessionAuthorizedRoot {
+  return {
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+    externalSessionId: "session-1",
+    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  };
+}
+
+function userSend(
+  root: AgentSessionAuthorizedRoot,
+  kind: "prompt" | "command" | "compact",
+): SendAgentUserMessageInput {
+  let parts: SendAgentUserMessageInput["parts"];
+  switch (kind) {
+    case "prompt":
+      parts = [{ kind: "text", text: "Continue" }];
+      break;
+    case "command":
+      parts = [
+        {
+          kind: "slash_command",
+          command: { id: "review", trigger: "review", title: "Review", hints: [] },
+        },
+      ];
+      break;
+    case "compact":
+      parts = [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }];
+      break;
+  }
+  return {
+    ...root,
+    runtimePolicy: { kind: "opencode" },
+    model: { providerId: "openai", modelId: "gpt-5" },
+    parts,
+  };
+}
+
+function recordNativeSends(harness: LiveClientHarness, calls: string[]): void {
+  harness.client.session.abort = async () => ({ data: true, error: undefined });
+  const prompt = harness.client.session.promptAsync;
+  harness.client.session.promptAsync = (...args) => {
+    calls.push("prompt");
+    return prompt(...args);
+  };
+  harness.client.session.command = async () => {
+    calls.push("command");
+    return {
+      data: {
+        info: createOpencodeMessageInfoFixture({
+          id: "assistant-1",
+          sessionID: "session-1",
+          role: "assistant",
+        }),
+        parts: [],
+      },
+      error: undefined,
+    };
+  };
+  harness.client.session.summarize = async () => {
+    calls.push("compact");
+    return { data: true, error: undefined };
+  };
+}
