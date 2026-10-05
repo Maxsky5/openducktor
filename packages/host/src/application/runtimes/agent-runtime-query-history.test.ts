@@ -97,6 +97,7 @@ const historyHarness = async (
     gitPort: {
       canonicalizePath: settingsConfig.canonicalizePath,
       isGitRepository: () => Effect.succeed(true),
+      isRegisteredWorktree: () => Effect.succeed(false),
     },
     settingsConfig,
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({

@@ -5,10 +5,12 @@ import {
   type HostOperationErrorAggregate,
   HostValidationError,
 } from "../../effect/host-errors";
+import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
 
 export type RuntimeWorkingDirectoryDependencies = {
+  gitPort: Pick<GitPort, "isRegisteredWorktree">;
   settingsConfig: Pick<
     SettingsConfigPort,
     | "canonicalizePath"
@@ -56,6 +58,13 @@ export const requireRuntimeWorkingDirectory = (
     if (
       canonicalLegacyWorktreeBasePath !== null &&
       pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)
+    ) {
+      return;
+    }
+
+    // Session import accepts registered worktrees outside the managed worktree roots.
+    if (
+      yield* dependencies.gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorkingDirectory)
     ) {
       return;
     }

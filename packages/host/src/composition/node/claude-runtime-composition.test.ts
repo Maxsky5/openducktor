@@ -52,6 +52,9 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
 });
 
 const workingDirectoryDependencies = {
+  gitPort: {
+    isRegisteredWorktree: () => Effect.succeed(false),
+  },
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),
     defaultRepoWorktreeBasePath: () => "/legacy-worktrees/repo",

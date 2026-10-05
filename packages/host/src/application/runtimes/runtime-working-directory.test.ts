@@ -11,6 +11,7 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import {
+  createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
@@ -32,6 +33,7 @@ test("checks real legacy directories when the workspace base is absent and rejec
     const escapedDirectory = join(workingDirectory, "escape");
     await symlink(outsideDirectory, escapedDirectory, "junction");
     const dependencies = {
+      gitPort: { isRegisteredWorktree: () => Effect.succeed(false) },
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "missing-workspace-base"),
@@ -96,6 +98,67 @@ test("checks real legacy directories when the workspace base is absent and rejec
   }
 });
 
+test("accepts registered worktrees outside the managed worktree roots", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-runtime-directory-"));
+  try {
+    const root = await realpath(temporaryDirectory);
+    const repoPath = join(root, "repo");
+    const externalWorktree = join(root, "external", "feature");
+    const unregisteredDirectory = join(root, "external", "other");
+    const externalWorktreeAlias = join(root, "feature-alias");
+    await Promise.all([
+      mkdir(repoPath),
+      mkdir(externalWorktree, { recursive: true }),
+      mkdir(unregisteredDirectory, { recursive: true }),
+    ]);
+    await symlink(externalWorktree, externalWorktreeAlias, "junction");
+    const registeredChecks: Array<{ repoPath: string; worktreePath: string }> = [];
+    const dependencies = {
+      gitPort: {
+        isRegisteredWorktree: (checkedRepoPath: string, worktreePath: string) => {
+          registeredChecks.push({ repoPath: checkedRepoPath, worktreePath });
+          return Effect.succeed(checkedRepoPath === repoPath && worktreePath === externalWorktree);
+        },
+      },
+      settingsConfig: {
+        ...createSettingsConfigAdapter(),
+        defaultWorktreeBasePath: () => join(root, "managed"),
+        defaultRepoWorktreeBasePath: () => join(root, "legacy"),
+      },
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "workspace",
+              workspaceName: "Workspace",
+              repoPath,
+            }),
+          ),
+      }),
+    };
+
+    await Effect.runPromise(
+      requireRuntimeWorkingDirectory(dependencies, {
+        repoPath,
+        workingDirectory: externalWorktreeAlias,
+      }),
+    );
+    expect(registeredChecks).toEqual([{ repoPath, worktreePath: externalWorktree }]);
+
+    const unregisteredError = await Effect.runPromise(
+      Effect.flip(
+        requireRuntimeWorkingDirectory(dependencies, {
+          repoPath,
+          workingDirectory: unregisteredDirectory,
+        }),
+      ),
+    );
+    expect(unregisteredError).toBeInstanceOf(HostValidationError);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
 for (const base of ["/workspace", "/legacy"]) {
   for (const code of ["EACCES", "EIO", "ENOTDIR"]) {
     test(`preserves ${code} from allowed base ${base}`, async () => {
@@ -109,6 +172,7 @@ for (const base of ["/workspace", "/legacy"]) {
         Effect.flip(
           requireRuntimeWorkingDirectory(
             {
+              gitPort: createGitPortTestDouble({}),
               settingsConfig: createSettingsConfigTestDouble({
                 canonicalizePath: (path) => {
                   paths.push(path);
