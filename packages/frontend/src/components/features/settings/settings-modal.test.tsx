@@ -45,6 +45,7 @@ for (const shared of [true, false]) {
     }
   }, 2000);
 
+  // Two full dialog opens and a save with its runtime preview exceed the CI unit-test budget.
   test(`${shared ? "shared" : "local"} settings keeps navigation after saving edits`, async () => {
     const settings = renderSettings(shared);
     try {
@@ -72,7 +73,7 @@ for (const shared of [true, false]) {
     } finally {
       settings.unmount();
     }
-  });
+  }, 2000);
 }
 
 test("shared settings remembers the section opened by a deep link", async () => {

@@ -329,8 +329,9 @@ describe("createOpenCodeRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-starter-"));
     try {
       const repo = join(root, "repo");
-      const launchDirectory = join(root, "home");
-      await mkdir(launchDirectory);
+      // Windows locks the working directory of a process until it is fully gone, so the runtime
+      // must not run inside the folder that this test deletes.
+      const launchDirectory = tmpdir();
       const configCapturePath = join(root, "opencode-config.json");
       const environmentCapturePath = join(root, "opencode-environment.json");
       await mkdir(repo);
