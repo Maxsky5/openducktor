@@ -1,7 +1,19 @@
 import { execFileSync } from "node:child_process";
 
+// Git hooks and `git rebase --exec` set variables such as GIT_DIR. They would send fixture
+// commands, and the Git adapter under test, to the outer repository.
+const repositoryLocalVariables = execFileSync("git", ["rev-parse", "--local-env-vars"], {
+  encoding: "utf8",
+})
+  .split("\n")
+  .filter((name) => name.length > 0);
+
+export const gitFixtureEnv: NodeJS.ProcessEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !repositoryLocalVariables.includes(name)),
+);
+
 const runGit = (cwd: string, args: string[]): void => {
-  execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync("git", args, { cwd, env: gitFixtureEnv, stdio: ["ignore", "pipe", "pipe"] });
 };
 
 export const initGitRepository = (path: string): void => {

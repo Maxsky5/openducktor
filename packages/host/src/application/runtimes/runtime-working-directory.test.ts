@@ -16,7 +16,11 @@ import {
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
-import { addGitWorktree, initGitRepository } from "../../test-support/git-repository-fixture";
+import {
+  addGitWorktree,
+  gitFixtureEnv,
+  initGitRepository,
+} from "../../test-support/git-repository-fixture";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 
@@ -116,7 +120,10 @@ test("accepts registered worktrees outside the managed worktree roots", async ()
     addGitWorktree(repoPath, externalWorktree, "feature");
     await symlink(externalWorktree, externalWorktreeAlias, "junction");
     const dependencies = {
-      gitPort: createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
+      gitPort: createGitCliAdapter({
+        processEnv: gitFixtureEnv,
+        resolveCommand: () => Effect.succeed("git"),
+      }),
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "managed"),

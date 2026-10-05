@@ -4,11 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
-import { addGitWorktree, initGitRepository } from "../../test-support/git-repository-fixture";
+import {
+  addGitWorktree,
+  gitFixtureEnv,
+  initGitRepository,
+} from "../../test-support/git-repository-fixture";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { classifyWorkspaceCheckout } from "./workspace-checkout";
 
-const git = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+const git = createGitCliAdapter({
+  processEnv: gitFixtureEnv,
+  resolveCommand: () => Effect.succeed("git"),
+});
 
 // Real Git repositories and worktrees spawn many processes on Windows.
 test("classifies the repository root and registered worktrees anywhere on disk", async () => {
