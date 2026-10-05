@@ -117,10 +117,10 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
             if (input.mode === "incremental" && view && !sameContext(context, view.context))
               return reset("context_changed");
             const repositoryRoot = yield* git.getRepositoryRoot(root);
-            const readContext = { refreshId: input.refreshId };
-            const statuses = yield* git.getStatus(root, readContext);
+            // Earlier Git captures can miss unstaged edits without changing this context.
+            const statuses = yield* git.getStatus(root);
             const comparison = input.targetBranch
-              ? yield* git.listChangedFiles(root, input.targetBranch, readContext)
+              ? yield* git.listChangedFiles(root, input.targetBranch)
               : [];
             if (!view || needsFull || !sameContext(context, view.context)) {
               const files = yield* loadWorkspaceFileEntries(git, root);
