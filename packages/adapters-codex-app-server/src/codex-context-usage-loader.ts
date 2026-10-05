@@ -13,7 +13,11 @@ import {
 } from "./codex-session-lifecycle";
 import { codexTransportPolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
-import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
+import {
+  type CodexSessionScopePolicy,
+  resolveCodexSessionScopePolicy,
+} from "./codex-session-scope-policy";
+import type { CodexThreadConfig } from "./codex-managed-mcp";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexLiveSessionLocator, CodexSessionContextUsage } from "./types";
 
@@ -32,6 +36,10 @@ type CodexContextUsageLoaderDeps = {
   localSessions: CodexLocalSessionState;
   subagents: CodexSubagentLinkState;
   prepareRuntime(runtimeId: string): Promise<void>;
+  threadConfig(
+    repoPath: string,
+    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
+  ): Promise<CodexThreadConfig>;
   clearThreadInventory(runtimeId: string): void;
 };
 
@@ -68,12 +76,12 @@ export class CodexContextUsageLoader {
           input.externalSessionId,
           async () => {
             const resumeInput: CodexAppServerThreadResumeParams = {
+              config: await this.wait(guard, this.deps.threadConfig(input.repoPath, sessionPolicy)),
               threadId: input.externalSessionId,
               excludeTurns: false,
             };
             if (input.sessionScope?.kind !== "repository") {
               Object.assign(resumeInput, codexTransportPolicy(policy));
-              resumeInput.config = sessionPolicy.threadConfig;
               resumeInput.cwd = input.workingDirectory;
             }
             const response = await this.wait(guard, runtime.client.threadResume(resumeInput));
@@ -141,12 +149,15 @@ export class CodexContextUsageLoader {
           input.externalSessionId,
           async () => {
             const resumeInput: CodexAppServerThreadResumeParams = {
+              config: await this.wait(
+                guard,
+                this.deps.threadConfig(session.repoPath, sessionPolicy),
+              ),
               threadId: input.externalSessionId,
               excludeTurns: false,
             };
             if (sessionScope.kind !== "repository") {
               Object.assign(resumeInput, codexTransportPolicy(sessionPolicy.runtimePolicy));
-              resumeInput.config = sessionPolicy.threadConfig;
               resumeInput.cwd = session.workingDirectory;
             }
             const response = await this.wait(

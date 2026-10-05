@@ -11,8 +11,8 @@ import {
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
 } from "@/lib/agent-runtime";
-import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
-import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
@@ -68,9 +68,9 @@ export function useSessionStartModalRuntimeState({
         : null,
     [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
-  const selectedRuntimeReadiness = useRepoRuntimeReadiness({
+  const selectedRuntimeReadiness = useRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
-    runtimeTarget: repoRuntimeReadinessTargetForRuntime(selectedRuntimeKind),
+    runtimeTarget: runtimeReadinessTargetForRuntime(selectedRuntimeKind),
   });
   const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
     setRequestedRuntimeKindState(runtimeKind);

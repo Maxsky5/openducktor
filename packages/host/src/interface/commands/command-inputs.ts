@@ -83,3 +83,18 @@ export const optionalBoolean = (
 
   return result.data ?? undefined;
 };
+
+/** Parses one command input with its contract schema. A failure names the command. */
+export const parseCommandInput = <Schema extends z.ZodType>(
+  schema: Schema,
+  args: HostCommandArgs,
+  command: string,
+): z.output<Schema> => {
+  const parsed = schema.safeParse(args);
+  if (parsed.success) return parsed.data;
+  throw new HostValidationError({
+    field: command,
+    message: `${command} input is invalid: ${parsed.error.message}`,
+    cause: parsed.error,
+  });
+};

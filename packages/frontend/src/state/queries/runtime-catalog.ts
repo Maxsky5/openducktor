@@ -1,4 +1,4 @@
-import type { RepoRuntimeRef } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentRuntimeCatalog,
@@ -28,6 +28,9 @@ export const runtimeCatalogQueryKeys = {
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
     ] as const,
+  /** True for a catalog key of this runtime kind in any workspace or directory. */
+  matchesCatalogRuntimeKind: (key: QueryKey, runtimeKind: RuntimeKind): boolean =>
+    key[0] === runtimeCatalogKey[0] && key[1] === "catalog" && key[3] === runtimeKind,
   repoCatalogScope: (repoPath: string) =>
     [...runtimeCatalogQueryKeys.all, "catalog", normalizeWorkingDirectory(repoPath)] as const,
   // Prefix key for invalidation. Omit workingDirectory to cover all directories.

@@ -15,10 +15,17 @@
     "tools/oxlint/anti-slop/**"
   ],
   "jsPlugins": [
-    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/src/index.ts" },
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/src/index.ts"
+    },
     {
       "name": "anti-slop-effect",
       "specifier": "./tools/oxlint/anti-slop/src/effect/index.ts"
+    },
+    {
+      "name": "architecture",
+      "specifier": "./tools/oxlint/anti-slop/src/architecture/index.ts"
     }
   ],
   "rules": {
@@ -47,6 +54,134 @@
         "react/exhaustive-deps": "warn",
         "react/no-danger": "warn",
         "react/rules-of-hooks": "warn"
+      }
+    },
+    {
+      "files": ["packages/host/src/**/*.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 500,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ],
+        "architecture/restricted-file-paths": [
+          "error",
+          {
+            "pattern": "/packages/host/src/(?:application|adapters)/[^/]+\\.ts$",
+            "message": "Host application and adapter files must live in named submodules."
+          },
+          {
+            "pattern": "/packages/host/src/.*task-service-[^/]+\\.ts$",
+            "message": "Host task files must use domain or action names, not task-service-* migration names."
+          },
+          {
+            "pattern": "/packages/host/src/commands/",
+            "message": "Host commands belong under src/interface/commands, not src/commands."
+          },
+          {
+            "pattern": "/packages/host/src/adapters/(?:.*/)?(?:node|in-memory)-[^/]+\\.ts$",
+            "message": "Host adapter file names must describe the external boundary, not start with node-* or in-memory-*."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/host/src/**/use-cases/**/*.ts", "packages/host/src/**/*use-case*.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 200,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/host/src/application/**/*.ts",
+        "packages/host/src/domain/**/*.ts",
+        "packages/host/src/interface/**/*.ts",
+        "packages/host/src/ports/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["node:*"],
+                "message": "Host inner-layer files must not import Node APIs. Use a port."
+              },
+              {
+                "group": ["**/adapters/**", "**/infrastructure/**"],
+                "message": "Host inner-layer files must not import adapters or infrastructure. Use a port."
+              },
+              {
+                "group": ["@openducktor/node-support"],
+                "message": "Host inner-layer files must not import Node-only support packages. Use a port."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/host/src/**/*.test.ts",
+        "packages/host/src/**/*.spec.ts",
+        "packages/host/src/**/test-support/**"
+      ],
+      "rules": {
+        "max-lines": "off",
+        "no-restricted-imports": "off",
+        "architecture/restricted-file-paths": "off"
+      }
+    },
+    {
+      "files": ["packages/runtime-orchestration/src/**/*.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 500,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["node:*"],
+                "message": "Runtime orchestration stays platform independent. Put Node code in a host driver or port adapter."
+              },
+              {
+                "group": [
+                  "@openducktor/host",
+                  "@openducktor/host/*",
+                  "@openducktor/frontend",
+                  "@openducktor/frontend/*",
+                  "@openducktor/node-support",
+                  "**/adapters/**",
+                  "**/infrastructure/**"
+                ],
+                "message": "Runtime orchestration must not import host, frontend, or adapter code. Add a port instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/runtime-orchestration/src/**/*.test.ts"],
+      "rules": {
+        "max-lines": "off"
       }
     }
   ],

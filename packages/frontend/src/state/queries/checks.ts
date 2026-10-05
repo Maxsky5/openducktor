@@ -1,18 +1,8 @@
-import type {
-  RuntimeCheck,
-  RuntimeDescriptor,
-  RuntimeKind,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { RuntimeCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
-import { isRepoRuntimeHealthPendingReadiness } from "@/lib/repo-runtime-health";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { DiagnosticsFailureKind } from "@/types/diagnostics";
 import { host } from "../operations/host";
 
 export type ChecksQueryDependencies = {
@@ -22,17 +12,12 @@ export type ChecksQueryDependencies = {
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
-const READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
-export const PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS = 2_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
   taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
 };
-
-const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
-  runtimeKinds.toSorted();
 
 export class DiagnosticsQueryTimeoutError extends Error {
   readonly failureKind = "timeout" as const;
@@ -47,7 +32,7 @@ export class DiagnosticsQueryTimeoutError extends Error {
 
 type ClassifiedDiagnosticsQueryError = {
   message: string;
-  failureKind: Exclude<RepoRuntimeFailureKind, null>;
+  failureKind: Exclude<DiagnosticsFailureKind, null>;
 };
 
 export const classifyDiagnosticsQueryError = (cause: unknown): ClassifiedDiagnosticsQueryError => {
@@ -84,36 +69,6 @@ export const checksQueryKeys = {
   all: ["checks"] as const,
   runtime: () => [...checksQueryKeys.all, "runtime"] as const,
   taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
-  runtimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) =>
-    [
-      ...checksQueryKeys.all,
-      "runtime-health",
-      repoPath,
-      ...sortRuntimeKindsForQueryKey(runtimeKinds),
-    ] as const,
-};
-
-export const repoRuntimeHealthStaleTime = (
-  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
-): number => {
-  const runtimeHealthEntries = Object.values(runtimeHealthByRuntime ?? {});
-  if (runtimeHealthEntries.length === 0) {
-    return 0;
-  }
-
-  return runtimeHealthEntries.every((runtimeHealth) => runtimeHealth?.status === "ready")
-    ? READY_REPO_RUNTIME_HEALTH_STALE_TIME_MS
-    : 0;
-};
-
-export const repoRuntimeHealthRefetchInterval = (
-  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
-): number | false => {
-  const runtimeHealthEntries = Object.values(runtimeHealthByRuntime ?? {});
-  const hasPendingRuntimeHealth = runtimeHealthEntries.some((runtimeHealth) =>
-    isRepoRuntimeHealthPendingReadiness(runtimeHealth),
-  );
-  return hasPendingRuntimeHealth ? PENDING_REPO_RUNTIME_HEALTH_REFETCH_INTERVAL_MS : false;
 };
 
 export const runtimeCheckQueryOptions = (
@@ -138,39 +93,6 @@ export const taskStoreCheckQueryOptions = (
     queryFn: (): Promise<TaskStoreCheck> =>
       withDiagnosticsQueryTimeout(taskStoreCheck(repoPath), scheduler),
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
-  });
-
-export const repoRuntimeHealthQueryOptions = (
-  repoPath: string,
-  runtimeDefinitions: RuntimeDescriptor[],
-  checkRepoRuntimeHealth: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ) => Promise<RepoRuntimeHealthCheck>,
-) =>
-  queryOptions({
-    queryKey: checksQueryKeys.runtimeHealth(
-      repoPath,
-      runtimeDefinitions.map((definition) => definition.kind),
-    ),
-    queryFn: async (): Promise<RepoRuntimeHealthMap> => {
-      const checks = await Promise.all(
-        runtimeDefinitions.map(
-          async (definition) =>
-            [definition.kind, await checkRepoRuntimeHealth(repoPath, definition.kind)] as const,
-        ),
-      );
-
-      const healthByRuntime: RepoRuntimeHealthMap = {};
-      for (const [runtimeKind, health] of checks) {
-        healthByRuntime[runtimeKind] = health;
-      }
-      return healthByRuntime;
-    },
-    staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),
-    refetchInterval: (query) => repoRuntimeHealthRefetchInterval(query.state.data),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 
 export const loadRuntimeCheckFromQuery = (

@@ -178,11 +178,12 @@ export const createOpenCodeLiveSessionState = ({
   };
 
   const applyControlSummary = (
+    repoPath: string,
     summary: AgentSessionSummary,
     options: { readonly keepActivity?: boolean } = {},
   ): AgentSessionLiveAdapterChange[] => {
     const ref: AgentSessionLiveRef = {
-      repoPath: runtime.repoPath,
+      repoPath,
       runtimeKind: "opencode",
       workingDirectory: summary.workingDirectory,
       externalSessionId: summary.externalSessionId,
@@ -190,6 +191,7 @@ export const createOpenCodeLiveSessionState = ({
     return commitSnapshot(
       toOpenCodeLiveSession({
         runtime,
+        repoPath,
         summary,
         previous: sessionsByRef.get(refKey(ref)),
         contextUsage: contextUsageBySessionId.get(summary.externalSessionId),
@@ -445,11 +447,12 @@ export const createOpenCodeLiveSessionState = ({
     applyLoadedContext,
     applyControlSummary,
     applySessionSources: (
+      repoPath: string,
       read: OpencodeRuntimeSnapshotRead,
       readVersions: ReadonlyMap<string, number>,
     ): AgentSessionLiveAdapterChange[] => {
       return applyOpenCodeSessionSources({
-        runtime,
+        repoPath,
         sources: read.sources,
         failures: read.failures,
         snapshots: [...sessionsByRef.values()].map(({ snapshot }) => snapshot),

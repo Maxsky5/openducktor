@@ -76,10 +76,6 @@ export const createWorktreeRuntimeFixture = (
 ): RuntimeInstanceSummary => ({
   kind: "opencode",
   runtimeId: "runtime-1",
-  repoPath: "/tmp/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/tmp/repo/worktree",
   runtimeRoute: {
     type: "local_http",
     endpoint: "http://127.0.0.1:4444",

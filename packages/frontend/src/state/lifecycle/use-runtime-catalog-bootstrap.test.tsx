@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeCatalogBootstrap } from "./use-runtime-catalog-bootstrap";
@@ -46,9 +46,12 @@ test("prefetches one catalog for each enabled and ready runtime", async () => {
   const harness = createHarness(client, {
     activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
-      claude: createRepoRuntimeHealthFixture({ status: "not_started" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+        claude: createHostRuntimeStatusFixture({ kind: "claude", state: "starting" }),
+      },
     },
     loadRepoRuntimeCatalog,
   });
@@ -80,8 +83,11 @@ test("reuses a fresh catalog without another host read", async () => {
   const harness = createHarness(client, {
     activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+      },
     },
     loadRepoRuntimeCatalog,
   });
@@ -107,8 +113,11 @@ test("reloads an invalidated catalog when the runtime is ready", async () => {
   const harness = createHarness(client, {
     activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+      },
     },
     loadRepoRuntimeCatalog,
   });
@@ -132,8 +141,11 @@ test("loads a catalog when a runtime becomes ready after startup", async () => {
   const args = {
     activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "not_started" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
+      },
     },
     loadRepoRuntimeCatalog,
   };
@@ -146,8 +158,11 @@ test("loads a catalog when a runtime becomes ready after startup", async () => {
 
     await harness.update({
       ...args,
-      runtimeHealthByRuntime: {
-        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      runtimeStatus: {
+        isCurrent: true,
+        statusByKind: {
+          opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+        },
       },
     });
     await waitFor(() => expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1));
@@ -165,8 +180,11 @@ test("loads the new repository catalogs after a workspace switch", async () => {
   const args = {
     activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+      },
     },
     loadRepoRuntimeCatalog,
   };
@@ -210,8 +228,11 @@ test("does not read catalogs without an active workspace", async () => {
   const harness = createHarness(client, {
     activeWorkspace: null,
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    runtimeStatus: {
+      isCurrent: true,
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+      },
     },
     loadRepoRuntimeCatalog,
   });
@@ -220,6 +241,31 @@ test("does not read catalogs without an active workspace", async () => {
     await harness.mount();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
+  } finally {
+    await harness.unmount();
+    client.clear();
+  }
+});
+
+test("does not read catalogs while host runtime status is not current", async () => {
+  const client = new QueryClient();
+  const loadRepoRuntimeCatalog = mock(
+    async (_runtimeRef: RuntimeWorkingDirectoryRef) => runtimeCatalog,
+  );
+  const harness = createHarness(client, {
+    activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    runtimeStatus: {
+      isCurrent: false,
+      statusByKind: { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) },
+    },
+    loadRepoRuntimeCatalog,
+  });
+
+  try {
+    await harness.mount();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
   } finally {
     await harness.unmount();

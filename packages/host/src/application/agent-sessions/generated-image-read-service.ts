@@ -34,9 +34,12 @@ export const createGeneratedImageReadService = (
   registry: AgentSessionLiveAdapterRegistryPort,
   files: GeneratedImageFilePort,
   definitions: RuntimeDefinitionsService,
+  /** One shared runtime serves every workspace, so the host checks the session scope. */
+  requireSessionScope: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>,
 ): GeneratedImageReadService => {
   const resolve = (ref: AgentSessionLiveRef) =>
     Effect.gen(function* () {
+      yield* requireSessionScope(ref);
       const descriptor = definitions
         .listRuntimeDefinitions()
         .find((runtime) => runtime.kind === ref.runtimeKind);
@@ -93,6 +96,7 @@ export const createGeneratedImageReadService = (
               details: { itemId: input.itemId },
             }),
           );
+        yield* requireSessionScope(input.ref);
         const adapter = yield* registry.resolveForScope(input.ref);
         const source = yield* adapter.resolveGeneratedImageSource(input);
         if ((yield* registry.resolveForScope(input.ref)) !== adapter)

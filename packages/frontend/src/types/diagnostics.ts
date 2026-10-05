@@ -1,54 +1,36 @@
 import type {
   FailureKind,
-  RepoRuntimeHealthObservation,
-  RepoRuntimeHealthState,
-  RepoRuntimeMcpStatus,
-  RepoRuntimeStartupStatus,
-  RuntimeDescriptor,
+  HostMcpBridgeStatus,
+  HostRuntimeSnapshot,
+  HostRuntimeStatus,
   RuntimeKind,
-  RepoRuntimeHealthCheck as SharedRepoRuntimeHealthCheck,
-  RepoRuntimeHealthMcp as SharedRepoRuntimeHealthMcp,
-  RepoRuntimeHealthRuntime as SharedRepoRuntimeHealthRuntime,
 } from "@openducktor/contracts";
 
-export type RepoRuntimeFailureKind = FailureKind | null;
+export type DiagnosticsFailureKind = FailureKind | null;
 
-export type {
-  RepoRuntimeHealthObservation,
-  RepoRuntimeHealthState,
-  RepoRuntimeMcpStatus,
-  RepoRuntimeStartupStatus,
+export type HostRuntimeStatusMap = Partial<Record<RuntimeKind, HostRuntimeStatus>>;
+
+/**
+ * The cached host status. An event can arrive before the baseline read, so the cache can hold the
+ * runtimes of that event without an MCP bridge status. The baseline read then completes it.
+ */
+export type HostStatusSnapshot = Omit<HostRuntimeSnapshot, "mcpBridge"> & {
+  mcpBridge: HostMcpBridgeStatus | null;
 };
 
-export type RepoRuntimeDiagnosticInstance = {
-  kind: RuntimeKind;
-  repoPath: string;
-  taskId: string | null;
-  role: "workspace";
-  workingDirectory: string;
-  startedAt: string;
-  descriptor: RuntimeDescriptor;
+/** The latest read of one check. A read failure takes priority over a retained `data`. */
+export type CheckRead<T> = {
+  /** The latest observed result. Null when no result was observed. */
+  data: T | null;
+  /** The latest read failure. A retained `data` is then an earlier result. */
+  error: string | null;
 };
 
-export type RepoRuntimeHealthRuntime = Omit<
-  SharedRepoRuntimeHealthRuntime,
-  "instance" | "observation"
-> & {
-  observation: RepoRuntimeHealthObservation | null;
-  instance: RepoRuntimeDiagnosticInstance | null;
+/** A check read that also records the failure kind and the observation time. */
+export type ObservedCheck<T> = CheckRead<T> & {
+  /** The latest observed result, or a failure placeholder when no result was observed. */
+  data: T | null;
+  failureKind: DiagnosticsFailureKind;
+  /** ISO time of the observed `data`. Null for a failure placeholder. */
+  observedAt: string | null;
 };
-
-export type RepoRuntimeHealthMcp = Omit<SharedRepoRuntimeHealthMcp, "status"> & {
-  status: RepoRuntimeMcpStatus;
-};
-
-export type RepoRuntimeHealthCheck = Omit<
-  SharedRepoRuntimeHealthCheck,
-  "status" | "runtime" | "mcp"
-> & {
-  status: RepoRuntimeHealthState;
-  runtime: RepoRuntimeHealthRuntime;
-  mcp: RepoRuntimeHealthMcp | null;
-};
-
-export type RepoRuntimeHealthMap = Record<string, RepoRuntimeHealthCheck | null>;

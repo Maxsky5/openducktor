@@ -26,7 +26,7 @@ import {
   runtimeTitleWithManualTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
+import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
@@ -61,7 +61,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     "stopWorkspaceSession" | "forgetWorkspaceSession"
   >;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
-  runtime: Pick<RuntimeOrchestratorService, "runtimeEnsure">;
+  runtime: Pick<RuntimeRegistryPort, "requireReady">;
   live: Pick<
     AgentSessionLiveStateService,
     "startSession" | "releaseSession" | "read" | "stopSession" | "updateSessionTitle"
@@ -169,10 +169,7 @@ export const createWorkspaceSessionService = (
             ref.repoPath,
             session.executionTarget,
           );
-          yield* runtime.runtimeEnsure({
-            repoPath: ref.repoPath,
-            runtimeKind: session.runtimeKind,
-          });
+          yield* runtime.requireReady(session.runtimeKind);
           return yield* Effect.uninterruptible(
             Effect.gen(function* () {
               const startTitle = runtimeTitle(session);

@@ -20,6 +20,7 @@ import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-s
 import {
   createRuntimeHarness,
   runtime,
+  ignoreObservationLoss,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createAgentSessionLiveStateService,
@@ -101,7 +102,7 @@ const harness = (
     baseline?: AgentSessionLiveSnapshot[];
     initialRead?: Promise<void>;
     failWorkspace?: string;
-    live?: Pick<AgentSessionLiveStateService, "list">;
+    live?: Pick<AgentSessionLiveStateService, "list" | "refresh">;
   } = {},
 ) => {
   let saved = config();
@@ -137,7 +138,7 @@ const harness = (
   const service = createNotificationService({
     settingsConfig: port,
     tasks: { listTasks, agentSessionsListForTasks: listAssociations },
-    live: options.live ?? { list: listLive },
+    live: options.live ?? { list: listLive, refresh: () => Effect.void },
     workspaceSessions: { listActive },
     boundIdentity: (id) => id,
   });
@@ -197,11 +198,16 @@ test.each(["before", "after"])(
   async (order) => {
     const savedRef = { ...ref("/beta"), runtimeKind: "opencode" as const };
     const savedRoot = { ...savedRef, sessionScope: { kind: "repository" as const } };
-    const readRoots = mock(() =>
-      Effect.succeed([savedRoot, { ...savedRoot, runtimeKind: "codex" as const }]),
+    const readRoots = mock((repoPath: string) =>
+      Effect.succeed(
+        repoPath === savedRoot.repoPath
+          ? [savedRoot, { ...savedRoot, runtimeKind: "codex" as const }]
+          : [],
+      ),
     );
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       readSessionRootRefs: readRoots,
       faultLog: () => Effect.void,
       publish: () => {},
@@ -216,6 +222,7 @@ test.each(["before", "after"])(
     const native = createRuntimeHarness({
       sessionSources: [
         {
+          repoPath: savedRef.repoPath,
           externalSessionId: savedRef.externalSessionId,
           workingDirectory: savedRef.workingDirectory,
           sessionAssociation: { kind: "repository" },
@@ -227,7 +234,7 @@ test.each(["before", "after"])(
         },
       ],
     });
-    const rootBatches: AgentSessionLiveRef[][] = [];
+    const rootBatches: Array<{ repoPath: string; roots: AgentSessionLiveRef[] }> = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: live,
@@ -237,9 +244,9 @@ test.each(["before", "after"])(
             ...prepared,
             connection: {
               ...prepared.connection,
-              readSessionSources: async (roots) => {
-                rootBatches.push(roots ?? []);
-                const read = await prepared.connection.readSessionSources(roots);
+              readSessionSources: async (repoPath, roots) => {
+                rootBatches.push({ repoPath, roots: roots ?? [] });
+                const read = await prepared.connection.readSessionSources(repoPath, roots);
                 return {
                   ...read,
                   sources: read.sources.filter((source) =>
@@ -254,7 +261,7 @@ test.each(["before", "after"])(
             },
           };
         },
-      })({ ...runtime, repoPath: "/beta", workingDirectory: "/beta" }),
+      })(runtime, ignoreObservationLoss),
     );
     try {
       if (order === "after") {
@@ -266,11 +273,19 @@ test.each(["before", "after"])(
       if (order === "before") await Effect.runPromise(h.service.initialize());
       await flush();
       expect(readRoots).toHaveBeenCalledWith("/beta");
-      expect(rootBatches).toEqual([[savedRoot]]);
+      // The shared runtime restores the saved roots of every open workspace exactly once.
+      expect(
+        rootBatches.toSorted((left, right) => left.repoPath.localeCompare(right.repoPath)),
+      ).toEqual([
+        { repoPath: "/alpha", roots: [] },
+        { repoPath: "/beta", roots: [savedRoot] },
+      ]);
       expect(await Effect.runPromise(live.list({ repoPath: "/beta" }))).toMatchObject([
         { ref: savedRef, title: "Saved session" },
       ]);
       expect(occurrences(h.frames)).toEqual([]);
+      const rootReads = readRoots.mock.calls.length;
+      const sourceReads = native.sessionSourceReadCalls;
 
       await native.emit({
         type: "session_event",
@@ -313,8 +328,10 @@ test.each(["before", "after"])(
         "agent.question_asked",
         "agent.session_error",
       ]);
-      expect(readRoots).toHaveBeenCalledTimes(1);
-      expect(native.sessionSourceReadCalls).toBe(1);
+      // Live events reach notifications without another saved-root or native source read.
+      expect(readRoots).toHaveBeenCalledTimes(rootReads);
+      expect(native.sessionSourceReadCalls).toBe(sourceReads);
+      expect(sourceReads).toBe(2);
       expect(native.controlCalls).toEqual([]);
     } finally {
       await Effect.runPromise(h.service.dispose());

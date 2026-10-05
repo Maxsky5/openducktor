@@ -1,7 +1,10 @@
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { hasNestedNodeErrorCode, HostValidationError } from "../../effect/host-errors";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-import type { RuntimeWorkingDirectoryDependencies } from "./runtime-working-directory";
+import {
+  requireRuntimeWorkingDirectory,
+  type RuntimeWorkingDirectoryDependencies,
+} from "./runtime-working-directory";
 
 export type RuntimeHistoryWorkingDirectoryDependencies = RuntimeWorkingDirectoryDependencies & {
   worktreeFiles: Pick<WorktreeFilePort, "resolvePathWithinRoot">;
@@ -34,3 +37,19 @@ export const requireManagedHistoryDirectory = (
       details: input,
     });
   });
+
+/**
+ * Requires a recorded session directory to belong to the workspace of `repoPath`. A removed
+ * worktree still qualifies when it sits under the managed worktree roots.
+ */
+export const requireRecordedSessionDirectory = (
+  dependencies: RuntimeHistoryWorkingDirectoryDependencies,
+  input: { repoPath: string; workingDirectory: string },
+) =>
+  requireRuntimeWorkingDirectory(dependencies, input).pipe(
+    Effect.catchTag("HostOperationError", (cause) =>
+      hasNestedNodeErrorCode(cause, "ENOENT")
+        ? requireManagedHistoryDirectory(dependencies, input)
+        : Effect.fail(cause),
+    ),
+  );

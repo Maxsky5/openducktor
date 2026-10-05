@@ -575,7 +575,7 @@ type StartElectronProcess = (
   remoteDebugging: boolean,
 ) => ManagedElectronProcess;
 
-type ElectronDevProcessEvent = "SIGINT" | "SIGTERM" | "exit";
+type ElectronDevProcessEvent = "SIGINT" | "SIGTERM" | "SIGHUP" | "exit";
 
 export type ElectronDevProcessHandlers = {
   off(event: ElectronDevProcessEvent, listener: () => void): void;
@@ -923,6 +923,12 @@ export const runElectronDevLifecycleEffect = ({
         registerProcessHandler("SIGTERM", () => {
           console.log("[electron:dev] Received SIGTERM, shutting down...");
           void runShutdown(143);
+        });
+        // A closed terminal sends SIGHUP. Electron runs in its own process group, so only this
+        // script can stop it and let the host stop the runtimes.
+        registerProcessHandler("SIGHUP", () => {
+          console.log("[electron:dev] Received SIGHUP, shutting down...");
+          void runShutdown(129);
         });
         registerProcessHandler("exit", () => {
           if (electron) {

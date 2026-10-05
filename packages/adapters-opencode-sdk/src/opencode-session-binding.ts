@@ -8,7 +8,6 @@ import type { OpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
 import { opencodeSessionRef } from "./session-ref";
 import type { SessionRecord } from "./types";
-import { ensureTrustedOdtMcpServerConnected } from "./opencode-mcp-readiness";
 import {
   type SessionPermissionRestorer,
   beginPermissionSetup,
@@ -37,15 +36,13 @@ export const restoreSessionPolicy = async (input: {
   request: PolicyBoundSessionRef;
   session: SessionRecord;
   restorePermissions: SessionPermissionRestorer;
+  ensureMcpBinding: () => Promise<void>;
 }): Promise<void> => {
   assertSessionScope(input.session, input.request, input.action);
   const finishSetup =
     input.policy.scope.kind === "workflow" ? beginPermissionSetup(input.session) : undefined;
   try {
-    await ensureTrustedOdtMcpServerConnected({
-      client: input.session.client,
-      workingDirectory: input.request.workingDirectory,
-    });
+    await input.ensureMcpBinding();
     if (input.policy.scope.kind === "workflow")
       await input.restorePermissions({
         client: input.session.client,

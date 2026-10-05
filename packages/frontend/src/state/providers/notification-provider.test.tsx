@@ -232,5 +232,6 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   detectGithubRepository: unused,
   saveGlobalGitConfig: unused,
   saveSettingsSnapshot: unused,
+  previewSettingsSnapshotRuntime: unused,
   saveAgentModelFavorites: unused,
 });

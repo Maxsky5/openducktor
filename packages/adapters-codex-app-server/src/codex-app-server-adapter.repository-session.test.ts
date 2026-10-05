@@ -13,6 +13,8 @@ import {
   flushCodexAdapterWork,
   makeRuntimeSummary,
   RecordingTransport,
+  expectedThreadConfig,
+  testManagedMcpServer,
 } from "./codex-app-server-adapter.test-harness";
 import { CodexAppServerAdapter } from "./index";
 
@@ -110,10 +112,7 @@ const expectedThreadPolicy = {
   sandbox: "workspace-write",
 };
 
-const repositoryThreadConfig = {
-  "mcp_servers.openducktor.enabled": true,
-  "mcp_servers.openducktor.enabled_tools": [...ODT_MCP_TOOL_NAMES],
-};
+const repositoryThreadConfig = expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES);
 
 describe("CodexAppServerAdapter repository sessions", () => {
   test("rejects repository todo reads from retained workflow sessions", async () => {
@@ -445,6 +444,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(resumed.title).toBe("Fairnest");
     expect(resumed.firstTurnCompleted).toBe(true);
     expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      config: repositoryThreadConfig,
       threadId: "thread-resume",
       excludeTurns: true,
     });
@@ -680,6 +680,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     );
 
     expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      config: repositoryThreadConfig,
       threadId: "thread-history",
       excludeTurns: true,
     });
@@ -917,6 +918,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).resolves.toBeDefined();
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       {
+        config: repositoryThreadConfig,
         threadId: "thread-history",
         excludeTurns: true,
         developerInstructions: "Use the repo rules.",
@@ -925,15 +927,15 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("fails repository history restoration on a missing bound Codex route", async () => {
-    const requireRepoRuntime = mock(async () => ({
-      ...makeRuntimeSummary("runtime-wrong-route"),
-      runtimeRoute: { type: "local_http" as const, endpoint: "http://127.0.0.1:43123" },
-    }));
     const transportFactory = mock(() => {
       throw new Error("transportFactory should not be called");
     });
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: { requireRepoRuntime },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: {
+        ...makeRuntimeSummary("runtime-wrong-route"),
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
+      },
       transportFactory,
     });
 
@@ -945,7 +947,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
         }),
       ),
     ).rejects.toThrow("missing required route contract 'stdio'");
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transportFactory).toHaveBeenCalledTimes(0);
   });
 

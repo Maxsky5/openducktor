@@ -38,7 +38,6 @@ let toastErrorSpy: ReturnType<typeof spyOn<typeof toast, "error">> | null = null
 afterEach(() => {
   toastErrorSpy?.mockRestore();
   toastErrorSpy = null;
-  mock.clearAllMocks();
 });
 
 describe("human-review-feedback-flow", () => {

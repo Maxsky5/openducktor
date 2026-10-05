@@ -19,7 +19,7 @@ const input = {
   turnId: "turn",
 };
 const payload = { mime: "image/png" as const, byteLength: 3, base64: "AAAA" };
-const binding = { runtimeId: "runtime", runtimeKind: "codex" as const, repoPath: "/repo" };
+const binding = { runtimeId: "runtime", runtimeKind: "codex" as const };
 const codexImageDefinition = {
   ...RUNTIME_DESCRIPTORS_BY_KIND.codex,
   capabilities: {
@@ -33,6 +33,15 @@ const codexImageDefinition = {
 const definitions = {
   listRuntimeDefinitions: () => [codexImageDefinition],
 };
+const requireRepoScope = (ref: { repoPath: string }) =>
+  ref.repoPath === input.ref.repoPath
+    ? Effect.void
+    : Effect.fail(
+        new HostValidationError({
+          field: "workingDirectory",
+          message: "The session is outside the selected workspace.",
+        }),
+      );
 
 test("reads through the scoped adapter without live snapshot or resume and rejects forged command fields", async () => {
   const registry = createLiveSessionAdapterRegistry();
@@ -63,6 +72,7 @@ test("reads through the scoped adapter without live snapshot or resume and rejec
         }),
     },
     definitions,
+    requireRepoScope,
   );
   const command = createGeneratedImageCommandHandlers(service).agent_session_read_generated_image;
   expect(await Effect.runPromise(command(input))).toEqual({ ...input, ...payload });
@@ -113,6 +123,7 @@ for (const stage of ["source", "file"] as const) {
           }),
       },
       definitions,
+      requireRepoScope,
     );
     const fiber = Effect.runFork(service.read(input).pipe(Effect.either));
     await Effect.runPromise(Deferred.await(entered));
@@ -135,6 +146,7 @@ test("unsupported capability prevents source and file reads", async () => {
     {
       listRuntimeDefinitions: () => [],
     },
+    requireRepoScope,
   );
   await expect(Effect.runPromise(service.read(input))).rejects.toThrow("does not support");
 });
@@ -164,6 +176,7 @@ test("a rejected output revision prevents file reads", async () => {
         }),
     },
     definitions,
+    requireRepoScope,
   );
   const result = await Effect.runPromise(Effect.either(service.read(input)));
   expect(result._tag).toBe("Left");
@@ -179,6 +192,7 @@ test("batch and metadata commands reject file paths, oversized batches, and inva
       read: () => Effect.dieMessage("Unexpected file read"),
     },
     definitions,
+    requireRepoScope,
   );
   const commands = createGeneratedImageCommandHandlers(service);
   for (const request of [

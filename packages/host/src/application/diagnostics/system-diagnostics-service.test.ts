@@ -86,6 +86,7 @@ const createRuntimeDefinitions = (
 const createRuntimeHealthPort = (
   healthByKind: Partial<Record<RuntimeHealth["kind"], RuntimeHealth>> = {},
 ): RuntimeHealthPort => ({
+  readVersion: () => Effect.succeed(null),
   getRuntimeHealth: (kind) =>
     ({
       getRuntimeHealth: () =>
@@ -191,6 +192,7 @@ describe("createSystemDiagnosticsService", () => {
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(),
       runtimeHealth: {
+        readVersion: () => Effect.succeed(null),
         getRuntimeHealth: (kind) => {
           runtimeHealthCalls.push(kind);
           return Effect.succeed(runtimeHealth(kind));
@@ -261,6 +263,7 @@ describe("createSystemDiagnosticsService", () => {
       releaseProbes = resolve;
     });
     const runtimeHealthPort: RuntimeHealthPort = {
+      readVersion: () => Effect.succeed(null),
       getRuntimeHealth: (kind) =>
         Effect.tryPromise({
           try: async () => {

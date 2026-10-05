@@ -4,6 +4,7 @@ import type {
   LoadAgentSessionTodosInput,
   SessionRef,
 } from "@openducktor/core";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -29,6 +30,9 @@ export const agentSessionTodosQueryKeys = {
       session.sessionScope?.kind === "workflow" ? session.sessionScope.taskId : null,
       session.sessionScope?.kind === "workflow" ? session.sessionScope.role : null,
     ] as const,
+  /** True for a todos key of this runtime kind in any workspace or directory. */
+  matchesRuntimeKind: (key: QueryKey, runtimeKind: RuntimeKind): boolean =>
+    key[0] === agentSessionTodosQueryKeys.all[0] && key[2] === runtimeKind,
 };
 
 export const sessionTodosQueryOptions = (

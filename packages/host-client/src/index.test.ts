@@ -1159,20 +1159,24 @@ describe("HostClient", () => {
   test("workspaceSaveSettingsSnapshot uses atomic snapshot IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_save_settings_snapshot") {
-        return [
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            abbreviation: null,
-            tileColor: null,
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: "/tmp/worktrees",
-            defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-            effectiveWorktreeBasePath: "/tmp/worktrees",
-          },
-        ];
+        return {
+          type: "saved",
+          runtimeApplications: [],
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              abbreviation: null,
+              tileColor: null,
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: "/tmp/worktrees",
+              defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+              effectiveWorktreeBasePath: "/tmp/worktrees",
+            },
+          ],
+        };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -1210,7 +1214,8 @@ describe("HostClient", () => {
       globalPromptOverrides: {},
     });
 
-    expect(result).toHaveLength(1);
+    if (result.type !== "saved") throw new Error("Expected a saved result.");
+    expect(result.workspaces).toHaveLength(1);
     expect(calls).toEqual([
       {
         command: "workspace_save_settings_snapshot",
@@ -1948,183 +1953,82 @@ describe("HostClient", () => {
   });
 
   test("runtime commands use expected IPC routes", async () => {
+    const status = {
+      kind: "opencode",
+      enabled: true,
+      configuredExecutablePath: "",
+      effectiveExecutablePath: "/bin/opencode",
+      version: "1.18.34",
+      state: "ready",
+      trigger: "host_startup",
+      runtimeId: "runtime-main",
+      startedAt: "2026-02-17T12:00:00.000Z",
+      updatedAt: "2026-02-17T12:00:00.000Z",
+      failure: null,
+      revision: 1,
+    };
+    const impact = { kinds: [], workspaces: [], confirmation: "confirm-1" };
     const { client, calls } = createClient((command) => {
-      if (command === "runtime_definitions_list") {
-        return [
-          {
-            kind: "opencode",
-            label: "OpenCode",
-            description: "OpenCode local runtime with OpenDucktor MCP integration.",
-            readOnlyRoleBlockedTools: [
-              "edit",
-              "write",
-              "apply_patch",
-              "ast_grep_replace",
-              "lsp_rename",
-            ],
-            workflowToolAliasesByCanonical:
-              OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-            capabilities: structuredClone(OPENCODE_RUNTIME_DESCRIPTOR.capabilities),
-          },
-        ];
-      }
-      if (command === "task_worktree_get") {
-        return {
-          workingDirectory: "/repo/worktrees/task-1",
-        };
-      }
-      if (command === "runtime_list") {
-        return [
-          {
-            kind: "opencode",
-            runtimeId: "runtime-1",
-            repoPath: "/repo",
-            taskId: null,
-            role: "workspace",
-            workingDirectory: "/repo",
-            runtimeRoute: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4173",
+      switch (command) {
+        case "runtime_definitions_list":
+          return [structuredClone(OPENCODE_RUNTIME_DESCRIPTOR)];
+        case "task_worktree_get":
+          return { workingDirectory: "/repo/worktrees/task-1" };
+        case "runtime_status":
+          return {
+            hostInstanceId: "host-1",
+            runtimes: [status],
+            mcpBridge: {
+              state: "ready",
+              hostUrl: "http://127.0.0.1:1",
+              failure: null,
+              updatedAt: "2026-02-17T12:00:00.000Z",
+              revision: 1,
             },
-            startedAt: "2026-02-17T12:00:00Z",
-            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-          },
-        ];
+          };
+        case "runtime_restart_impact":
+          return impact;
+        case "runtime_restart":
+          return { type: "completed", status };
+        default:
+          throw new Error(`Unexpected command: ${command}`);
       }
-      if (command === "runtime_ensure") {
-        return {
-          kind: "opencode",
-          runtimeId: "runtime-main",
-          repoPath: "/repo",
-          taskId: null,
-          role: "workspace",
-          workingDirectory: "/repo",
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4180",
-          },
-          startedAt: "2026-02-17T12:00:00Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        };
-      }
-      if (command === "runtime_require") {
-        return {
-          kind: "opencode",
-          runtimeId: "runtime-main",
-          repoPath: "/repo",
-          taskId: null,
-          role: "workspace",
-          workingDirectory: "/repo",
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4180",
-          },
-          startedAt: "2026-02-17T12:00:00Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        };
-      }
-      if (command === "repo_runtime_health" || command === "repo_runtime_health_status") {
-        return {
-          status: "ready",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-            observation: "observed_existing_runtime",
-            instance: {
-              kind: "opencode",
-              runtimeId: "runtime-main",
-              repoPath: "/repo",
-              taskId: null,
-              role: "workspace",
-              workingDirectory: "/repo",
-              runtimeRoute: {
-                type: "local_http",
-                endpoint: "http://127.0.0.1:4444",
-              },
-              startedAt: "2026-02-17T12:00:00Z",
-              descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-            },
-            startedAt: "2026-02-17T12:00:00Z",
-            updatedAt: "2026-02-17T12:00:05Z",
-            elapsedMs: 5000,
-            attempts: 4,
-            detail: null,
-            failureKind: null,
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "connected",
-            serverName: "openducktor",
-            serverStatus: "connected",
-            toolIds: ["odt_read_task"],
-            detail: null,
-            failureKind: null,
-          },
-          checkedAt: "2026-02-17T12:00:05Z",
-        };
-      }
-      if (command === "runtime_stop") {
-        return { ok: true };
-      }
-      throw new Error(`Unexpected command: ${command}`);
     });
 
     const definitions = await client.runtimeDefinitionsList();
     const qaTarget = await client.taskWorktreeGet("/repo", "task-1");
-    const runtimes = await client.runtimeList("/repo", "opencode");
-    const ensured = await client.runtimeEnsure("/repo", "opencode");
-    const required = await client.runtimeRequire("/repo", "opencode");
-    const repoRuntimeHealth = await client.repoRuntimeHealth("/repo", "opencode");
-    const repoRuntimeHealthStatus = await client.repoRuntimeHealthStatus("/repo", "opencode");
-    const stopped = await client.runtimeStop("runtime-1");
+    const snapshot = await client.runtimeStatus();
+    const reviewed = await client.runtimeRestartImpact("opencode");
+    const restarted = await client.runtimeRestart("opencode", reviewed.confirmation);
 
-    expect(definitions[0]?.kind).toBe("opencode");
     expect(definitions[0]?.workflowToolAliasesByCanonical).toEqual(
       OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
     );
-    expect(qaTarget).toEqual({
-      workingDirectory: "/repo/worktrees/task-1",
-    });
-    expect(runtimes).toHaveLength(1);
-    expect(runtimes[0]?.descriptor.workflowToolAliasesByCanonical).toEqual(
-      OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-    );
-    expect(ensured.runtimeId).toBe("runtime-main");
-    expect(ensured.descriptor.workflowToolAliasesByCanonical).toEqual(
-      OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-    );
-    expect(required.runtimeId).toBe("runtime-main");
-    expect(repoRuntimeHealth.mcp?.status).toBe("connected");
-    expect(repoRuntimeHealthStatus.runtime.stage).toBe("runtime_ready");
-    expect(repoRuntimeHealthStatus.mcp?.status).toBe("connected");
-    expect(stopped.ok).toBe(true);
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "runtime_definitions_list",
-      "task_worktree_get",
-      "runtime_list",
-      "runtime_ensure",
-      "runtime_require",
-      "repo_runtime_health",
-      "repo_runtime_health_status",
-      "runtime_stop",
+    expect(qaTarget).toEqual({ workingDirectory: "/repo/worktrees/task-1" });
+    expect(snapshot.runtimes[0]?.state).toBe("ready");
+    expect(restarted.type).toBe("completed");
+    expect(snapshot.mcpBridge.state).toBe("ready");
+    expect(calls).toEqual([
+      { command: "runtime_definitions_list", args: {} },
+      { command: "task_worktree_get", args: { repoPath: "/repo", taskId: "task-1" } },
+      { command: "runtime_status", args: {} },
+      { command: "runtime_restart_impact", args: { runtimeKind: "opencode" } },
+      {
+        command: "runtime_restart",
+        args: { runtimeKind: "opencode", confirmation: "confirm-1" },
+      },
     ]);
-    expect(calls[2]?.args).toEqual({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
+  });
+
+  test("runtime restart rejects a malformed host result", async () => {
+    const { client } = createClient((command) => {
+      if (command === "runtime_restart") {
+        return { type: "restarted" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
     });
-    expect(calls[3]?.args).toEqual({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-    });
-    expect(calls[4]?.args).toEqual({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-    });
-    expect(calls[5]?.args).toEqual({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-    });
+
+    await expect(client.runtimeRestart("opencode", "confirm-1")).rejects.toThrow();
   });
 
   test("build continuation target returns null when host reports no target", async () => {
@@ -2157,11 +2061,9 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("runtime and session ack commands reject malformed host payloads", async () => {
+  test("session ack commands reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       switch (command) {
-        case "runtime_stop":
-          return { ok: "yes" };
         case "agent_session_stop":
           return { ok: "nope" };
         default:
@@ -2169,9 +2071,6 @@ describe("HostClient", () => {
       }
     });
 
-    await expect(client.runtimeStop("runtime-1")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command runtime_stop",
-    );
     await expect(
       client.agentSessionStop({
         repoPath: "/repo",
@@ -2214,82 +2113,6 @@ describe("HostClient", () => {
         },
       },
     ]);
-  });
-
-  test("runtimeEnsure preserves structured timeout metadata from host failures", async () => {
-    const { client } = createClient((command) => {
-      if (command === "runtime_ensure") {
-        throw {
-          message: "OpenCode startup probe failed reason=timeout after 15000ms",
-          failureKind: "timeout",
-        };
-      }
-
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    try {
-      await client.runtimeEnsure("/repo", "opencode");
-      throw new Error("Expected runtimeEnsure to reject");
-    } catch (error) {
-      expect(error instanceof Error).toBe(true);
-      if (!(error instanceof Error)) {
-        throw new Error("Expected runtimeEnsure to reject with an Error");
-      }
-      expect(error.message).toBe("OpenCode startup probe failed reason=timeout after 15000ms");
-      expect(error).toMatchObject({ failureKind: "timeout" });
-    }
-  });
-
-  test("runtimeEnsure prefers structured cause metadata over generic wrapper errors", async () => {
-    const { client } = createClient((command) => {
-      if (command === "runtime_ensure") {
-        const error = new Error("invoke failed");
-        Reflect.set(error, "cause", {
-          message: "OpenCode runtime is still starting",
-          failureKind: "timeout",
-        });
-        throw error;
-      }
-
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    try {
-      await client.runtimeEnsure("/repo", "opencode");
-      throw new Error("Expected runtimeEnsure to reject");
-    } catch (error) {
-      expect(error instanceof Error).toBe(true);
-      if (!(error instanceof Error)) {
-        throw new Error("Expected runtimeEnsure to reject with an Error");
-      }
-      expect(error.message).toBe("OpenCode runtime is still starting");
-      expect(error).toMatchObject({ failureKind: "timeout" });
-    }
-  });
-
-  test("runtimeEnsure preserves failure metadata attached directly to Error instances", async () => {
-    const { client } = createClient((command) => {
-      if (command === "runtime_ensure") {
-        const error = new Error("OpenCode runtime startup failed");
-        Reflect.set(error, "failureKind", "error");
-        throw error;
-      }
-
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    try {
-      await client.runtimeEnsure("/repo", "opencode");
-      throw new Error("Expected runtimeEnsure to reject");
-    } catch (error) {
-      expect(error instanceof Error).toBe(true);
-      if (!(error instanceof Error)) {
-        throw new Error("Expected runtimeEnsure to reject with an Error");
-      }
-      expect(error.message).toBe("OpenCode runtime startup failed");
-      expect(error).toMatchObject({ failureKind: "error" });
-    }
   });
 
   test("agent session history commands use expected IPC routes", async () => {

@@ -42,44 +42,50 @@ export const createRuntimeHealthProbe = (
   systemCommands: SystemCommandPort,
   toolDiscovery: ToolDiscoveryPort,
   executableProbes: RuntimeExecutableProbesByKind,
-): RuntimeHealthPort => ({
-  getRuntimeHealth(kind, executablePath) {
-    return Effect.gen(function* () {
-      const validatedPath = yield* Effect.either(
-        validateExactToolPath(toolDiscovery, kind, executablePath),
-      );
-      if (validatedPath._tag === "Left") {
-        return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.left));
-      }
-      const binary = validatedPath.right.path;
-      const [probeResult, versionResult] = yield* Effect.all(
-        [
-          Effect.either(executableProbes[kind].probeExecutable(binary)),
-          Effect.either(
-            systemCommands.versionCommand(binary, ["--version"], VERSION_OPTIONS_BY_KIND[kind]),
-          ),
-        ] as const,
-        { concurrency: 2 },
-      );
-      if (probeResult._tag === "Left") {
-        if (probeResult.left instanceof RuntimeExecutableIncompatibleError) {
-          return runtimeHealthFailure(
-            kind,
-            binary,
-            `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
-          );
+): RuntimeHealthPort => {
+  // A failed version read only leaves the version unknown. The protocol probe or the runtime
+  // start reports whether the executable works.
+  const readVersion = (kind: RuntimeKind, executablePath: string) =>
+    systemCommands
+      .versionCommand(executablePath, ["--version"], VERSION_OPTIONS_BY_KIND[kind])
+      .pipe(Effect.orElseSucceed(() => null));
+  return {
+    readVersion,
+    getRuntimeHealth(kind, executablePath) {
+      return Effect.gen(function* () {
+        const validatedPath = yield* Effect.either(
+          validateExactToolPath(toolDiscovery, kind, executablePath),
+        );
+        if (validatedPath._tag === "Left") {
+          return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.left));
         }
-        return yield* Effect.fail(probeResult.left);
-      }
-      const version = versionResult._tag === "Right" ? versionResult.right : null;
-      return {
-        kind,
-        enabled: true,
-        ok: true,
-        executablePath: binary,
-        version,
-        error: null,
-      } satisfies RuntimeHealth;
-    });
-  },
-});
+        const binary = validatedPath.right.path;
+        const [probeResult, version] = yield* Effect.all(
+          [
+            Effect.either(executableProbes[kind].probeExecutable(binary)),
+            readVersion(kind, binary),
+          ] as const,
+          { concurrency: 2 },
+        );
+        if (probeResult._tag === "Left") {
+          if (probeResult.left instanceof RuntimeExecutableIncompatibleError) {
+            return runtimeHealthFailure(
+              kind,
+              binary,
+              `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
+            );
+          }
+          return yield* Effect.fail(probeResult.left);
+        }
+        return {
+          kind,
+          enabled: true,
+          ok: true,
+          executablePath: binary,
+          version,
+          error: null,
+        } satisfies RuntimeHealth;
+      });
+    },
+  };
+};

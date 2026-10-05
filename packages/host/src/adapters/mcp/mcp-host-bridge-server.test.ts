@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 
 import { request } from "node:http";
 
@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 
 import path from "node:path";
 
-import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
+import {
+  type HostMcpBridgeStatus,
+  ODT_MCP_TOOL_NAMES,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -103,6 +107,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath,
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -170,6 +175,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -258,6 +264,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.fail(
@@ -302,6 +309,90 @@ describe("createMcpHostBridgeServer", () => {
     }
   });
 
+  test("reports starting, then ready, and publishes each change", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const published: HostMcpBridgeStatus[] = [];
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: (status) => published.push(status),
+      bridgeService: {
+        ready() {
+          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+        },
+        getWorkspaces() {
+          return Effect.succeed({ workspaces: [] });
+        },
+        invoke() {
+          return Effect.dieMessage("unexpected scoped tool invocation");
+        },
+      } satisfies OdtMcpBridgeService,
+    });
+
+    try {
+      expect(bridge.status()).toMatchObject({ state: "starting", hostUrl: null, revision: 0 });
+      expect(published).toEqual([]);
+
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+
+      expect(bridge.status()).toMatchObject({
+        state: "ready",
+        hostUrl: connection.hostUrl,
+        failure: null,
+        revision: 1,
+      });
+      expect(published).toEqual([bridge.status()]);
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("keeps a failed startup visible and does not retry it", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    // A file where the discovery directory must be makes the discovery write fail.
+    await writeFile(path.join(tempDir, "runtime"), "");
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
+      bridgeService: {
+        ready() {
+          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+        },
+        getWorkspaces() {
+          return Effect.succeed({ workspaces: [] });
+        },
+        invoke() {
+          return Effect.dieMessage("unexpected scoped tool invocation");
+        },
+      },
+    });
+
+    try {
+      const startup = await Effect.runPromise(Effect.flip(bridge.ensureExternalDiscoveryReady()));
+      await rm(path.join(tempDir, "runtime"));
+
+      const connection = await Effect.runPromise(
+        Effect.flip(bridge.ensureConnection({ repoPath: "/repo" })),
+      );
+      expect(connection.message).toBe(
+        `The OpenDucktor MCP host bridge did not start: ${startup.message} Fix the cause, then restart OpenDucktor.`,
+      );
+      expect(bridge.status()).toMatchObject({
+        state: "failed",
+        hostUrl: null,
+        failure: connection.message,
+        revision: 1,
+      });
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   test("deduplicates concurrent startup requests", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const discoveryPath = path.join(tempDir, "runtime", "mcp-bridge.json");
@@ -309,6 +400,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath,
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
@@ -366,6 +458,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.tryPromise({
@@ -453,6 +546,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
       bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });

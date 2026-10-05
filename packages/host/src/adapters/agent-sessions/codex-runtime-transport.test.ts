@@ -1,10 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
-import {
-  CODEX_RUNTIME_DESCRIPTOR,
-  DEFAULT_CODEX_RUNTIME_POLICY,
-  type CodexAppServerThread,
-} from "@openducktor/contracts";
+import { DEFAULT_CODEX_RUNTIME_POLICY, type CodexAppServerThread } from "@openducktor/contracts";
 import { AgentRuntimeQueryError, workflowAgentSessionScope } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -277,19 +273,12 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     respond: () => Effect.succeed(undefined),
   });
   const adapter = new CodexAppServerAdapter({
-    repoRuntimeResolver: {
-      requireRepoRuntime: async () => ({
-        kind: "codex",
-        runtimeId,
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
-        runtimeRoute: { type: "stdio", identity: runtimeId },
-        startedAt: "2026-05-07T00:00:00.000Z",
-        descriptor: CODEX_RUNTIME_DESCRIPTOR,
-      }),
+    runtime: {
+      kind: "codex",
+      runtimeId,
+      runtimeRoute: { type: "stdio", identity: runtimeId },
     },
+    resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     transportFactory: () => createCodexRuntimeTransport(registry, runtimeId),
     subscribeEvents: () => () => {},
     respondServerRequest: async () => {},

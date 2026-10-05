@@ -166,14 +166,10 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         listCustomAgentRoles: () => Effect.succeed([]),
       },
       runtime: {
-        runtimeEnsure: () =>
+        requireReady: () =>
           Effect.succeed({
             kind: "opencode",
             runtimeId: "test-runtime",
-            repoPath,
-            taskId: null,
-            role: "workspace",
-            workingDirectory: repoPath,
             runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
             startedAt: "2026-09-07T00:00:00Z",
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -549,7 +545,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await Effect.runPromise(
         registry.register(
           createAgentSessionRuntimeAdapterTestDouble(
-            { runtimeId: "test-runtime", repoPath, runtimeKind: "opencode" },
+            { runtimeId: "test-runtime", runtimeKind: "opencode" },
             {
               sessionImport: {
                 scanSessions: () => {
@@ -578,13 +574,30 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       );
       const importer = createWorkspaceSessionImportService({
         ...h.dependencies,
+        settings: {
+          ...h.dependencies.settings,
+          getWorkspaceCatalog: () =>
+            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+        },
         registry,
         publishUpdated: () => Effect.void,
+        runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       });
       try {
+        const catalogRequestId = crypto.randomUUID();
+        await Effect.runPromise(
+          importer.list({
+            workspaceId: "fairnest",
+            catalogRequestId,
+            runtimeKind: "opencode",
+            search: "",
+            pageSize: 50,
+          }),
+        );
         const { session } = await Effect.runPromise(
           importer.importSession({
             workspaceId: "fairnest",
+            catalogRequestId,
             runtimeKind: "opencode",
             externalSessionId: metadata.externalSessionId,
             workingDirectory: alias,

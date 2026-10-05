@@ -3,277 +3,115 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type TaskStoreCheck,
-  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  buildDisabledRuntimeHealth,
-  deriveRepoRuntimeHealthState,
-} from "@/lib/repo-runtime-health";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { buildDiagnosticsPanelModel as buildDiagnosticsPanelModelBase } from "./diagnostics-panel-model";
+  createHostRuntimeStatusContextValue,
+  createObservedCheckFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
+import { DiagnosticsStatusPill } from "./diagnostics-status";
 
-const buildDiagnosticsPanelModel = (input: Parameters<typeof buildDiagnosticsPanelModelBase>[0]) =>
-  buildDiagnosticsPanelModelBase({
-    ...input,
-    runtimeHealthByRuntime: {
-      claude: buildDisabledRuntimeHealth(CLAUDE_RUNTIME_DESCRIPTOR),
-      ...input.runtimeHealthByRuntime,
-    },
-  });
+type ModelInput = Parameters<typeof buildDiagnosticsPanelModel>[0];
 
-type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
-  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
-  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
-};
-
-const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
-  const checkedAt = overrides.checkedAt ?? "2026-02-20T12:01:00.000Z";
-  const runtime: RepoRuntimeHealthCheck["runtime"] = {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: checkedAt,
-    elapsedMs: null,
-    attempts: null,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-    ...overrides.runtime,
-  };
-  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
-    supported: true,
-    status: "connected",
-    serverName: "openducktor",
-    serverStatus: "connected",
-    toolIds: [],
-    detail: null,
-    failureKind: null,
-    ...overrides.mcp,
-  };
-
-  return {
-    status: overrides.status ?? deriveRepoRuntimeHealthState({ runtime, mcp }),
-    checkedAt,
-    runtime,
-    mcp,
-  };
-};
-
-const makeTaskStoreCheck = (overrides: Partial<TaskStoreCheck> = {}): TaskStoreCheck => ({
-  taskStoreOk: true,
-  taskStorePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
-  taskStoreError: null,
-  repoStoreHealth: {
-    category: "healthy",
-    status: "ready",
-    isReady: true,
-    detail: "SQLite task store is ready.",
-    databasePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
-  },
-  ...overrides,
-});
-
-const makeWorkspace = (
-  repoPath: string,
-  overrides: Partial<WorkspaceRecord> = {},
-): WorkspaceRecord => ({
-  workspaceId: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  abbreviation: null,
-  tileColor: null,
-  repoPath,
-  isActive: true,
-  hasConfig: true,
-  configuredWorktreeBasePath: "/Users/dev/worktrees",
-  defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
-  effectiveWorktreeBasePath: "/Users/dev/worktrees",
-  ...overrides,
-});
+const renderSections = (workspace: ModelInput["workspace"], overrides: Partial<ModelInput> = {}) =>
+  renderToStaticMarkup(
+    createElement(DiagnosticsPanelSections, {
+      model: buildDiagnosticsPanelModel({
+        runtimeDefinitions: [
+          OPENCODE_RUNTIME_DESCRIPTOR,
+          CODEX_RUNTIME_DESCRIPTOR,
+          CLAUDE_RUNTIME_DESCRIPTOR,
+        ],
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        // No status yet: entries render without lifecycle actions.
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {},
+          isLoading: true,
+          isCurrent: false,
+        }),
+        runtimeCheck: createObservedCheckFixture(),
+        workspace,
+        checksRepoPath: workspace?.repoPath ?? null,
+        taskStoreCheck: createObservedCheckFixture(),
+        ...overrides,
+      }),
+    }),
+  );
 
 describe("DiagnosticsPanelSections", () => {
-  test("renders repository-first empty messages when no repository is selected", () => {
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: null,
-      activeWorkspace: null,
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: null,
-      taskStoreCheck: null,
-      runtimeCheckFailureKind: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {},
-      isLoadingChecks: false,
-    });
+  test("renders the overview, then the host group, then the workspace message", () => {
+    const html = renderSections(null);
 
-    const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
-
-    expect(html).toContain("Select a repository to load diagnostics.");
-    expect(html).toContain("Select a repository first.");
+    const order = [
+      'data-testid="diagnostics-overview"',
+      "Host",
+      "Shared by all workspaces",
+      "Agent runtimes",
+      "Tools and services",
+      "Git",
+      "OpenDucktor MCP bridge",
+      "Select a workspace to view workspace checks.",
+    ].map((text) => html.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((left, right) => left - right));
+    expect(html).toContain("OpenCode");
+    expect(html).toContain("Codex");
+    expect(html).toContain("Claude");
   });
 
-  test("renders key-value labels consistently across sections", () => {
-    const opencodeValue = "1.2.9 (/Users/dev/.opencode/bin/opencode)";
-    const codexValue =
-      "codex-cli 0.42.0 (/Applications/OpenDucktor.app/Contents/Resources/bin/codex)";
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: "/Users/dev/fairnest",
-      activeWorkspace: makeWorkspace("/Users/dev/fairnest"),
-      runtimeDefinitions: [
-        OPENCODE_RUNTIME_DESCRIPTOR,
-        CODEX_RUNTIME_DESCRIPTOR,
-        CLAUDE_RUNTIME_DESCRIPTOR,
-      ],
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: {
-        pathOk: true,
-        gitOk: true,
-        gitVersion: "git version 2.50.1",
-        runtimes: [
-          { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: opencodeValue },
-          {
-            kind: "codex",
-            enabled: false,
-            ok: true,
-            executablePath: "/bin/codex",
-            version: codexValue,
-          },
-          { kind: "claude", enabled: false, ok: false, executablePath: null, version: null },
-        ],
-        errors: [],
-      },
-      taskStoreCheck: makeTaskStoreCheck(),
-      runtimeCheckFailureKind: null,
-      taskStoreCheckFailureKind: null,
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-            observation: null,
-            instance: {
-              kind: "opencode",
-              repoPath: "/Users/dev/fairnest",
-              taskId: null,
-              role: "workspace",
-              workingDirectory: "/Users/dev/fairnest",
-              startedAt: "2026-02-20T12:00:00.000Z",
-              descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-            },
-          },
-          mcp: {
-            supported: true,
-            status: "connected",
-            serverName: "openducktor",
-            serverStatus: "connected",
-            toolIds: ["openducktor_odt_read_task"],
-            detail: null,
-            failureKind: null,
-          },
-        }),
-        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
-      },
-      isLoadingChecks: false,
+  test("labels the workspace group with the workspace name and path", () => {
+    const html = renderSections({
+      workspaceId: "workspace-a",
+      workspaceName: "Repo A",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/repo-a",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: null,
+      effectiveWorktreeBasePath: "/worktrees",
     });
 
-    const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
-
-    expect(html).toContain("Repository:");
-    expect(html).toContain("Repository path:");
-    expect(html).toContain("Worktree directory:");
-    expect(html).toContain("Git:");
-    expect(html).toContain("OpenCode:");
-    expect(html).toContain("Codex:");
-    expect(html).toContain("Claude:");
-    expect(html).toContain(opencodeValue);
-    expect(html).toContain(`${codexValue} (runtime disabled)`);
-    expect(html).toContain("OpenCode Runtime");
-    expect(html).toContain("Working directory:");
-    expect(html).toContain("Server name:");
-    expect(html).toContain("Status:");
-    expect(html).toContain("Tools detected:");
-    expect(html).toContain("SQLite database path:");
+    expect(html).toContain("Repo A");
+    expect(html).toContain("/repo-a");
+    expect(html).toContain("Repository setup");
+    expect(html).toContain("Task store");
   });
 
-  test("renders error rows when section errors are present", () => {
-    const model = buildDiagnosticsPanelModel({
-      workspaceRepoPath: "/Users/dev/fairnest",
-      activeWorkspace: makeWorkspace("/Users/dev/fairnest", {
-        hasConfig: false,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: null,
-        effectiveWorktreeBasePath: null,
-      }),
-      runtimeDefinitions: [
-        OPENCODE_RUNTIME_DESCRIPTOR,
-        CODEX_RUNTIME_DESCRIPTOR,
-        CLAUDE_RUNTIME_DESCRIPTOR,
-      ],
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      runtimeCheck: {
-        pathOk: true,
-        gitOk: true,
-        gitVersion: "git version 2.50.1",
-        runtimes: [
-          { kind: "opencode", ok: false, executablePath: null, version: null },
-          { kind: "codex", enabled: false, ok: false, executablePath: null, version: null },
-          { kind: "claude", enabled: false, ok: false, executablePath: null, version: null },
-        ],
-        errors: ["gh not found in PATH"],
-      },
-      taskStoreCheck: makeTaskStoreCheck({
-        taskStoreOk: false,
-        taskStorePath: null,
-        taskStoreError: "task store failed",
-        repoStoreHealth: {
-          category: "database_unavailable",
-          status: "degraded",
-          isReady: false,
-          detail: "task store failed",
-          databasePath: null,
+  test("labels values kept after a failed refresh as an earlier result", () => {
+    const html = renderSections(null, {
+      runtimeCheck: createObservedCheckFixture({
+        data: {
+          pathOk: true,
+          gitOk: true,
+          gitVersion: "git version 2.50.1",
+          runtimes: [],
+          errors: [],
         },
+        error: "Git check failed.",
+        failureKind: "error",
+        observedAt: "2026-02-22T08:00:00.000Z",
       }),
-      runtimeCheckFailureKind: "error",
-      taskStoreCheckFailureKind: "error",
-      runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({
-          status: "error",
-          runtime: {
-            status: "error",
-            stage: "startup_failed",
-            observation: null,
-            instance: null,
-            detail: "runtime failed",
-            failureKind: "error",
-          },
-          mcp: {
-            supported: true,
-            status: "error",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "server unavailable",
-            failureKind: "error",
-          },
-        }),
-        codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
-      },
-      isLoadingChecks: false,
     });
 
-    const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
+    expect(html).toContain("Showing the result from ");
+    expect(html).toContain("It may be out of date.");
+    expect(html).toContain("Git check failed: Git check failed. Select Refresh to try again.");
+  });
 
-    expect(html).not.toContain("gh not found in PATH");
-    expect(html).toContain("runtime failed");
-    expect(html).not.toContain("server unavailable");
-    expect(html).toContain("task store failed");
+  test("maps each check health to a pill tone, with a spinner while work runs", () => {
+    const renderPill = (status: Parameters<typeof DiagnosticsStatusPill>[0]["status"]) =>
+      renderToStaticMarkup(createElement(DiagnosticsStatusPill, { status }));
+
+    expect(renderPill({ health: "failed", label: "Error" })).toContain("bg-destructive-surface");
+    expect(renderPill({ health: "warning", label: "Degraded" })).toContain("bg-warning-surface");
+    expect(renderPill({ health: "ok", label: "Ready" })).toContain("bg-success-surface");
+    expect(renderPill({ health: "busy", label: "Starting" })).toContain("animate-spin");
+    expect(renderPill({ health: "neutral", label: "Disabled" })).not.toContain("animate-spin");
   });
 });

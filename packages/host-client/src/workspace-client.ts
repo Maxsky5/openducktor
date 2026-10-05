@@ -8,6 +8,10 @@ import {
   workspaceProviderSetupGithubSchema,
   workspaceProviderSetupProgressSchema,
   workspaceProviderSetupProgressReadSchema,
+  type SettingsSnapshotRuntimePreview,
+  type SettingsSnapshotSaveResult,
+  settingsSnapshotRuntimePreviewSchema,
+  settingsSnapshotSaveResultSchema,
   type AgentModelFavorite,
   type AzureDevOpsConnectionState,
   azureDevOpsConnectionStateSchema,
@@ -192,14 +196,26 @@ const workspaceGetSettingsSnapshot = async (invokeFn: InvokeFn): Promise<Setting
   return invokeFn("workspace_get_settings_snapshot", undefined, settingsSnapshotSchema);
 };
 
+const workspacePreviewSettingsSnapshotRuntime = async (
+  invokeFn: InvokeFn,
+  snapshot: SettingsSnapshotSaveInput,
+): Promise<SettingsSnapshotRuntimePreview> => {
+  return invokeFn(
+    "workspace_preview_settings_snapshot_runtime",
+    { snapshot },
+    settingsSnapshotRuntimePreviewSchema,
+  );
+};
+
 const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
   snapshot: SettingsSnapshotSaveInput,
-): Promise<WorkspaceRecord[]> => {
+  runtimeConfirmation?: string,
+): Promise<SettingsSnapshotSaveResult> => {
   return invokeFn(
     "workspace_save_settings_snapshot",
-    { snapshot },
-    arrayResultSchema(workspaceRecordSchema, "workspace_save_settings_snapshot"),
+    runtimeConfirmation === undefined ? { snapshot } : { snapshot, runtimeConfirmation },
+    settingsSnapshotSaveResultSchema,
   );
 };
 
@@ -489,10 +505,17 @@ export class HostWorkspaceClient {
     return workspaceGetSettingsSnapshot(this.invokeFn);
   }
 
+  async workspacePreviewSettingsSnapshotRuntime(
+    snapshot: SettingsSnapshotSaveInput,
+  ): Promise<SettingsSnapshotRuntimePreview> {
+    return workspacePreviewSettingsSnapshotRuntime(this.invokeFn, snapshot);
+  }
+
   async workspaceSaveSettingsSnapshot(
     snapshot: SettingsSnapshotSaveInput,
-  ): Promise<WorkspaceRecord[]> {
-    return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
+    runtimeConfirmation?: string,
+  ): Promise<SettingsSnapshotSaveResult> {
+    return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot, runtimeConfirmation);
   }
 
   async workspaceUpdateAgentModelFavorites(

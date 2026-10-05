@@ -7,12 +7,14 @@ import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adap
 export const createClaudeSessionImportAdapter = (
   service: Pick<ClaudeAgentSdkService, "inspectSessionForImport">,
   runtimeId: string,
+  /** Retains the attached summary under the repository of the import request. */
   publish: (
-    effect: Effect.Effect<AgentSessionSummary, HostError>,
+    repoPath: string,
+    attach: () => Effect.Effect<AgentSessionSummary, HostError>,
   ) => Effect.Effect<unknown, HostError>,
 ) =>
   createRuntimeSessionImportAdapter({
-    scanSessions: async function* (signal) {
+    scanSessions: async function* ({ signal }) {
       yield await listClaudeSessionMetadata(signal);
     },
     inspectSession: async (input) => {
@@ -20,7 +22,8 @@ export const createClaudeSessionImportAdapter = (
       return {
         metadata: handle.metadata,
         selectedModel: handle.selectedModel,
-        attach: () => Effect.runPromise(publish(handle.attach)).then(() => undefined),
+        attach: () =>
+          Effect.runPromise(publish(input.repoPath, () => handle.attach)).then(() => undefined),
       };
     },
   });

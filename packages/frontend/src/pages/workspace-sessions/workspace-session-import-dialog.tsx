@@ -168,13 +168,19 @@ function RuntimeSessionResults({
     enabled: search === debouncedSearch,
   });
   const mutation = useMutation({
-    mutationFn: (session: WorkspaceSessionExternal) =>
-      host.workspaceSessionImport({
+    mutationFn: async (session: WorkspaceSessionExternal) => {
+      if (catalogRequestId === null) {
+        throw new Error("The session list is not loaded. Reload the list, then import again.");
+      }
+      // The host rejects a catalog that a runtime restart made stale.
+      return host.workspaceSessionImport({
         workspaceId,
+        catalogRequestId,
         runtimeKind,
         externalSessionId: session.externalSessionId,
         workingDirectory: session.workingDirectory,
-      }),
+      });
+    },
     onSuccess: (saved) => {
       updateWorkspaceSessionQueries(queryClient, workspaceId, saved.session);
       if (mounted.current && !saved.openError) {

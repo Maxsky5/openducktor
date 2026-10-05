@@ -15,7 +15,12 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { globalConfigSchema } from "@openducktor/contracts";
+import {
+  globalConfigSchema,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeInstanceSummary,
+  runtimeKindSchema,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -109,25 +114,16 @@ const unexpectedRuntimeRegistryCall = (operation: string) =>
 const createRuntimeRegistryPort = <Overrides extends Partial<RuntimeRegistryPort>>(
   port: Overrides,
 ): RuntimeRegistryPort => ({
-  ensureWorkspaceRuntime: () =>
-    unexpectedRuntimeRegistryCall("runtimeRegistry.ensureWorkspaceRuntime"),
-  findRuntimeById: () => Effect.succeed(null),
-  findWorkspaceRuntime: () => Effect.succeed(null),
-  listRuntimes: () => Effect.succeed([]),
-  listRuntimesByRepo: () => Effect.succeed([]),
-  stopRuntime: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopRuntime"),
+  status: () => Effect.dieMessage("Unexpected runtime registry call: status"),
+  statuses: () => Effect.succeed([]),
+  configure: () => Effect.dieMessage("Unexpected runtime registry call: configure"),
+  recordConfigurationFailure: () =>
+    Effect.dieMessage("Unexpected runtime registry call: recordConfigurationFailure"),
+  reserve: () => Effect.dieMessage("Unexpected runtime registry call: reserve"),
+  requireReady: () => unexpectedRuntimeRegistryCall("runtimeRegistry.requireReady"),
   stopAllRuntimes: () => Effect.succeed([]),
   stopSession: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopSession"),
   probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
-  probeMcpStatus: () =>
-    Effect.succeed({
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: null,
-      failureKind: null,
-    }),
   ...port,
 });
 const createGitPort = (port: Partial<GitPort>): GitPort =>
@@ -381,28 +377,17 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   });
 const createBuildStartRuntimeRegistry = (calls: unknown[]): RuntimeRegistryPort =>
   createRuntimeRegistryPort({
-    ensureWorkspaceRuntime(input) {
+    requireReady(runtimeKind) {
       return Effect.sync(() => {
-        calls.push({ type: "ensureRuntime", input });
+        calls.push({ type: "requireRuntime", runtimeKind });
+        const kind = runtimeKindSchema.parse(runtimeKind);
         return {
-          kind: input.descriptor.kind,
+          kind,
           runtimeId: "runtime-1",
-          repoPath: input.repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: input.workingDirectory,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
           startedAt: "2026-05-10T10:00:00.000Z",
-          descriptor: input.descriptor,
-        };
-      });
-    },
-    listRuntimes() {
-      return Effect.succeed([]);
-    },
-    stopRuntime() {
-      return Effect.sync(() => {
-        return false;
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND[kind],
+        } satisfies RuntimeInstanceSummary;
       });
     },
     stopSession() {

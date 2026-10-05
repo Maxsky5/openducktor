@@ -197,6 +197,12 @@ const todoUpdatedEventSchema = eventSchema(
   }),
 );
 
+/** OpenCode disposed one directory instance and its in-memory MCP clients. */
+const serverInstanceDisposedEventSchema = eventSchema(
+  "server.instance.disposed",
+  z.object({ directory: z.string() }),
+);
+
 const ignoredEventTypes = Object.keys(OPENCODE_EVENT_POLICY_BY_TYPE).filter(
   (type) => !isConsumedOpencodeEventType(type),
 );
@@ -232,6 +238,7 @@ export const opencodeDirectEventSchema = z.discriminatedUnion("type", [
   opencodeQuestionRepliedEventSchema,
   opencodeQuestionRejectedEventSchema,
   sessionCompactedEventSchema,
+  serverInstanceDisposedEventSchema,
 ]);
 
 const opencodeIngressEventSchema = z.discriminatedUnion("type", [

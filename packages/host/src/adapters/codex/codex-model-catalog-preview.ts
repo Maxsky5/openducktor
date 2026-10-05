@@ -15,7 +15,7 @@ import {
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
-import type { CodexChildProcess } from "./codex-workspace-runtime-cleanup";
+import type { CodexChildProcess } from "./codex-runtime-cleanup";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 3_000;

@@ -11,11 +11,6 @@ import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 
-export type EnsureExistingSessionRuntime = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-) => Promise<void>;
-
 export type TaskDocuments = {
   specMarkdown: string;
   planMarkdown: string;
@@ -113,12 +108,4 @@ export const requireConfiguredRuntimeKind = (
     throw new Error(contextMessage);
   }
   return runtimeKind;
-};
-
-export const createEnsureExistingSessionRuntime = (
-  hostClient: Pick<typeof host, "runtimeEnsure"> = host,
-): EnsureExistingSessionRuntime => {
-  return async (repoPath, runtimeKind): Promise<void> => {
-    await hostClient.runtimeEnsure(repoPath, runtimeKind);
-  };
 };

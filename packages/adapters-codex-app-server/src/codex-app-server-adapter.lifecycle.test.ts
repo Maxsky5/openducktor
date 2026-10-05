@@ -13,6 +13,8 @@ import {
   flushCodexAdapterWork,
   makeRuntimeSummary,
   RecordingTransport,
+  expectedThreadConfig,
+  testManagedMcpServer,
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
@@ -24,10 +26,8 @@ const expectedThreadPolicy = {
   approvalsReviewer: "auto_review",
   sandbox: "workspace-write",
 };
-const workflowThreadConfig = (role: AgentRole) => ({
-  "mcp_servers.openducktor.enabled": true,
-  "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY[role]],
-});
+const workflowThreadConfig = (role: AgentRole, repoPath = "/repo") =>
+  expectedThreadConfig(repoPath, AGENT_ROLE_TOOL_POLICY[role]);
 const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
@@ -88,9 +88,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("supports read-only construction without renderer-owned live event plumbing", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
 
@@ -115,7 +114,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("starts a session through the live runtime id", async () => {
-    const { adapter, transports, requireRepoRuntime } = createHarness();
+    const { adapter, transports } = createHarness();
 
     const summary = await adapter.startSession({
       repoPath: "/repo",
@@ -131,7 +130,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(summary.runtimeKind).toBe("codex");
     expect(summary.workingDirectory).toBe("/repo");
     expect(summary.title).toBe("BUILD task-1");
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
@@ -184,7 +182,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("lists models through the required live runtime id", async () => {
-    const { adapter, transports, requireRepoRuntime } = createHarness();
+    const { adapter, transports } = createHarness();
 
     const catalog = await adapter.loadRuntimeCatalog({
       repoPath: "/repo",
@@ -196,7 +194,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(
       catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
     ).toBe("codex");
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
@@ -207,9 +204,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("keeps the model surface when the skills surface fails", async () => {
     const transport = new FailingSkillsTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
 
@@ -229,9 +225,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("fails the combined catalog when the runtime transport is unreachable", async () => {
     const transport = new UnreachableRuntimeTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
 
@@ -246,7 +241,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
   test("resumes and forks sessions through the live runtime id", async () => {
     const logSessionPolicy = mock(() => {});
-    const { adapter, transports, requireRepoRuntime } = createHarness({ logSessionPolicy });
+    const { adapter, transports } = createHarness({ logSessionPolicy });
 
     await adapter.resumeSession({
       repoPath: "/repo",
@@ -269,8 +264,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
       parentExternalSessionId: "thread-7",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
     expect(forkSummary.title).toBe("QA task-1");
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
@@ -656,7 +649,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
   });
 
   test("hydrates a saved session through the live runtime id", async () => {
-    const { adapter, requireRepoRuntime, transports } = createHarness();
+    const { adapter, transports } = createHarness();
 
     await expect(
       adapter.loadSessionHistory({
@@ -684,8 +677,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         externalSessionId: "thread-saved",
       }),
     ).rejects.toThrow("has not streamed a turn/diff/updated notification");
-
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.some(({ method }) => method === "turn/diff")).toBe(
       false,
@@ -902,35 +893,11 @@ describe("CodexAppServerAdapter lifecycle", () => {
     ).rejects.toThrow("does not support reasoning effort 'xhigh'");
   });
 
-  test("fails clearly when a live runtime is missing", async () => {
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => {
-          throw new Error("No live repo runtime found for repo '/repo' and runtime 'codex'.");
-        },
-      },
-      transportFactory: () => new RecordingTransport("runtime-live", false),
-      respondServerRequest: async () => {},
-    });
-
-    await expect(
-      adapter.loadRuntimeCatalog({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow("No live repo runtime found for repo '/repo' and runtime 'codex'.");
-  });
-
   test("starts a session in the requested build worktree through the repo runtime", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => ({
-          ...makeRuntimeSummary("runtime-live"),
-          workingDirectory: "/repo",
-        }),
-      },
+      resolveManagedMcpServer: testManagedMcpServer,
+      runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
       onRuntimeEventQueueFailure: () => {
         return undefined;

@@ -1,6 +1,8 @@
+import { createServer as createHttpServer, type Server } from "node:http";
 import path from "node:path";
 import { Effect } from "effect";
-import { createServer, type ViteDevServer } from "vite";
+import { createServer } from "vite";
+import { z } from "zod";
 import {
   ElectronOperationError,
   type ElectronOperationErrorAggregate,
@@ -18,14 +20,12 @@ export type ElectronDevRendererWatcher = {
   ): ElectronDevRendererWatcher;
 };
 
-export type ElectronDevRendererServer = {
+type ElectronDevRendererServerHandle = {
+  /** Closes Vite. */
   close(): Promise<void>;
-  httpServer?: ViteDevServer["httpServer"];
-  resolvedUrls?: { local: string[] } | null;
-  watcher: ElectronDevRendererWatcher;
+  /** The HTTP server that serves the Vite middlewares. The dev script owns it, not Vite. */
+  httpServer: Pick<Server, "closeAllConnections" | "close">;
 };
-
-type ElectronDevRendererServerHandle = Pick<ElectronDevRendererServer, "close" | "httpServer">;
 
 export type ElectronRendererDevServer = {
   close(): Effect.Effect<void, ElectronOperationError>;
@@ -33,29 +33,19 @@ export type ElectronRendererDevServer = {
   readonly watcher: ElectronDevRendererWatcher;
 };
 
-const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle): void => {
-  const { httpServer } = server;
-  if (!httpServer) return;
-  if ("closeIdleConnections" in httpServer) httpServer.closeIdleConnections();
-  if ("closeAllConnections" in httpServer) httpServer.closeAllConnections();
-};
-
 export const closeRendererServerEffect = (
-  server: ElectronDevRendererServerHandle | null,
-): Effect.Effect<void, ElectronOperationError> => {
-  if (!server) {
-    return Effect.void;
-  }
-
-  return Effect.tryPromise({
+  server: ElectronDevRendererServerHandle,
+): Effect.Effect<void, ElectronOperationError> =>
+  Effect.tryPromise({
     try: async () => {
-      let closePromise: Promise<void>;
-      try {
-        closePromise = server.close();
-      } finally {
-        forceCloseRendererConnections(server);
-      }
-      await closePromise;
+      // Stop listening first, then end open connections, so the close does not wait for a
+      // keep-alive socket. Bun also stops listening in closeAllConnections, so this order works in
+      // Node and Bun.
+      const httpServerClosed = new Promise<void>((resolve, reject) => {
+        server.httpServer.close((error) => (error ? reject(error) : resolve()));
+      });
+      server.httpServer.closeAllConnections();
+      await Promise.all([server.close(), httpServerClosed]);
     },
     catch: (cause) =>
       new ElectronOperationError({
@@ -64,19 +54,20 @@ export const closeRendererServerEffect = (
         cause,
       }),
   });
-};
 
-export const resolveRendererDevUrl = (server: ElectronDevRendererServer): string => {
-  const localUrl = server.resolvedUrls?.local.find((url) => url.includes(RENDERER_DEV_HOST));
-  if (localUrl) {
-    return localUrl.replace(/\/$/u, "");
-  }
-
-  throw new ElectronOperationError({
-    operation: "electron.dev.resolve-renderer-url",
-    message: `Vite renderer dev server did not report a local URL for ${RENDERER_DEV_HOST}.`,
+const listenRendererServer = (httpServer: Server, port: number): Promise<string> =>
+  new Promise((resolve, reject) => {
+    httpServer.once("error", reject);
+    httpServer.listen(port, RENDERER_DEV_HOST, () => {
+      httpServer.off("error", reject);
+      const address = z.object({ port: z.number() }).safeParse(httpServer.address());
+      if (!address.success) {
+        reject(new Error(`The renderer dev server has no TCP port on ${RENDERER_DEV_HOST}.`));
+        return;
+      }
+      resolve(`http://${RENDERER_DEV_HOST}:${address.data.port}`);
+    });
   });
-};
 
 export const createElectronRendererDevServerEffect = ({
   packageRoot,
@@ -87,20 +78,26 @@ export const createElectronRendererDevServerEffect = ({
 }): Effect.Effect<ElectronRendererDevServer, ElectronOperationErrorAggregate> =>
   Effect.tryPromise({
     try: async () => {
+      // The dev script owns the HTTP server and runs Vite in middleware mode. A Vite server with
+      // its own HTTP server installs SIGTERM and stdin handlers that exit the process before
+      // Electron stops the host runtimes.
+      const httpServer = createHttpServer();
       const server = await createServer({
         root: packageRoot,
         configFile: path.join(packageRoot, "vite.config.ts"),
-        server: {
-          host: RENDERER_DEV_HOST,
-          port,
-          strictPort: true,
-        },
+        server: { middlewareMode: true, ws: { server: httpServer } },
       });
-      await server.listen(port);
-      server.printUrls();
-      const url = resolveRendererDevUrl(server);
+      httpServer.on("request", server.middlewares);
+      let url: string;
+      try {
+        url = await listenRendererServer(httpServer, port);
+      } catch (cause) {
+        await server.close();
+        throw cause;
+      }
+      const handle = { close: () => server.close(), httpServer };
       return {
-        close: () => closeRendererServerEffect(server),
+        close: () => closeRendererServerEffect(handle),
         url,
         watcher: server.watcher,
       };

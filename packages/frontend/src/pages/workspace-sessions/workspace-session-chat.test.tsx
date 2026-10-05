@@ -20,14 +20,14 @@ import {
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentSessionFixture,
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -133,7 +133,6 @@ const createWorkspaceChatHarness = ({
     }),
     loadRepoRuntimeFileSearch: async () => [],
   };
-  const health = { opencode: createRepoRuntimeHealthFixture() };
   let completeObservation = (): void => {};
 
   function Harness({ children }: { children?: ReactNode }): ReactElement {
@@ -158,13 +157,7 @@ const createWorkspaceChatHarness = ({
       <QueryProvider useIsolatedClient>
         <QueryStatus />
         <RuntimeDefinitionsContext value={definitions}>
-          <RepoRuntimeHealthContext
-            value={{
-              runtimeHealthByRuntime: health,
-              isLoadingRepoRuntimeHealth: false,
-              refreshRepoRuntimeHealth: async () => health,
-            }}
-          >
+          <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
             <AgentOperationsContext value={operations}>
               <AgentSessionHistoryLoadContext
                 value={{
@@ -194,7 +187,7 @@ const createWorkspaceChatHarness = ({
                 </AgentSessionReadModelStateContext>
               </AgentSessionHistoryLoadContext>
             </AgentOperationsContext>
-          </RepoRuntimeHealthContext>
+          </HostRuntimeStatusContext>
         </RuntimeDefinitionsContext>
       </QueryProvider>
     );

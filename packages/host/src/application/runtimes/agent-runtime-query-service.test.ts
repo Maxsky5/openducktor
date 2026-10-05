@@ -14,7 +14,7 @@ import {
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
@@ -32,10 +32,6 @@ const harness = async (
   let runtime: RuntimeInstanceSummary | null = {
     runtimeId: "runtime-1",
     kind: runtimeKind,
-    repoPath,
-    taskId: null,
-    role: "workspace",
-    workingDirectory: repoPath,
     runtimeRoute:
       runtimeKind === "opencode"
         ? { type: "local_http", endpoint: "http://127.0.0.1:7777" }
@@ -48,7 +44,7 @@ const harness = async (
   let snapshots: AgentSessionLiveSnapshot[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
-    { repoPath, runtimeKind, runtimeId: runtime.runtimeId },
+    { runtimeKind, runtimeId: "runtime-1" },
     {
       queries: {
         ...unexpectedRuntimeQueries,
@@ -90,7 +86,20 @@ const harness = async (
   await Effect.runPromise(adapterRegistry.register(adapter));
   const service = createAgentRuntimeQueryService({
     adapterRegistry,
-    runtimeRegistry: { findWorkspaceRuntime: () => Effect.sync(() => runtime) },
+    runtimeRegistry: {
+      requireReady: (kind) =>
+        Effect.suspend(() =>
+          runtime
+            ? Effect.succeed(runtime)
+            : Effect.fail(
+                new HostResourceError({
+                  resource: "agent_runtime",
+                  operation: "runtime.requireReady",
+                  message: `The ${kind} runtime is not ready yet. Wait for the runtime to start, or check Diagnostics.`,
+                }),
+              ),
+        ),
+    },
     gitPort: {
       canonicalizePath: (path) => Effect.succeed(path === "/alias" ? repoPath : path),
       isGitRepository: (path) => Effect.succeed(path === repoPath),
@@ -283,7 +292,7 @@ for (const runtime of [
   }
 }
 
-test("rejects missing and mismatched runtime bindings without starting another runtime", async () => {
+test("rejects a runtime that is not ready or a mismatched binding without starting another runtime", async () => {
   const h = await harness();
   for (const runtime of [null, { ...h.runtime, runtimeId: "replacement" }]) {
     h.setRuntime(runtime);
@@ -297,6 +306,11 @@ test("rejects missing and mismatched runtime bindings without starting another r
       ),
     );
     expect(error.failure.code).toBe("runtime_unavailable");
+    if (runtime === null) {
+      expect(error.failure.detail).toBe(
+        "The opencode runtime is not ready yet. Wait for the runtime to start, or check Diagnostics.",
+      );
+    }
   }
   expect(h.calls).toHaveLength(0);
 });

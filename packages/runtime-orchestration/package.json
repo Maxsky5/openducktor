@@ -1,0 +1,22 @@
+{
+  "name": "@openducktor/runtime-orchestration",
+  "version": "0.9.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 5000",
+    "lint": "oxlint -c ../../.oxlintrc.json src"
+  },
+  "dependencies": {
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/core": "workspace:*",
+    "@openducktor/path-support": "workspace:*",
+    "effect": "^3.22.2"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2"
+  }
+}

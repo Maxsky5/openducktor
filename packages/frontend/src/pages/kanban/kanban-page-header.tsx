@@ -14,7 +14,7 @@ type KanbanPageHeaderProps = {
 export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
   const { taskStoreCheck } = useChecksState();
-  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck);
+  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck.data);
   const provider = model.importProviderContext;
   const canImport =
     !isCreateTaskDisabled &&

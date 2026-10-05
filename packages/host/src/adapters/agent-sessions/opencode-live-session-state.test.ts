@@ -5,13 +5,11 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 
+const REPO = "/repo";
+
 const runtime: OpenCodeRuntimeInstance = {
   kind: "opencode",
   runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
   startedAt: "2026-07-16T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
@@ -36,10 +34,10 @@ const createState = () => {
 };
 
 type LiveState = ReturnType<typeof createState>;
-type SessionSources = Parameters<LiveState["applySessionSources"]>[0]["sources"];
+type SessionSources = Parameters<LiveState["applySessionSources"]>[1]["sources"];
 
 const applySources = (state: LiveState, sources: SessionSources) =>
-  state.applySessionSources({ sources, failures: [] }, state.versions());
+  state.applySessionSources(REPO, { sources, failures: [] }, state.versions());
 
 describe("OpenCode host live-session state", () => {
   test("starts empty and adds a session from an OpenDucktor control result", () => {
@@ -47,7 +45,7 @@ describe("OpenCode host live-session state", () => {
 
     expect(state.listSnapshots()).toEqual([]);
 
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
 
     expect(state.listSnapshots()).toEqual([
       expect.objectContaining({
@@ -60,25 +58,25 @@ describe("OpenCode host live-session state", () => {
   test("indexes external ids through replacement, ambiguity, removal, and release", () => {
     const state = createState();
     expect(state.refForExternalSession("session-1")).toBeNull();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const first = state.refForExternalSession("session-1");
     if (!first) throw new Error("Expected a live session reference.");
-    state.applyControlSummary({ ...summary(), title: "Updated title" });
+    state.applyControlSummary(REPO, { ...summary(), title: "Updated title" });
     expect(state.refForExternalSession("session-1")).toEqual(first);
-    state.applyControlSummary({ ...summary(), workingDirectory: "/other" });
+    state.applyControlSummary(REPO, { ...summary(), workingDirectory: "/other" });
     expect(() => state.refForExternalSession("session-1")).toThrow("ambiguous session id");
     state.removeSession(first);
     const remaining = state.refForExternalSession("session-1");
     expect(remaining?.workingDirectory).toBe("/other");
     state.release();
     expect(state.refForExternalSession("session-1")).toBeNull();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     expect(state.refForExternalSession("session-1")).toEqual(first);
   });
 
   test("retains and resolves pending input from runtime events", () => {
     const state = createState();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
       throw new Error("Expected a live OpenDucktor session.");
@@ -113,7 +111,7 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps pending input authoritative when a later control summary arrives", () => {
     const state = createState();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
       throw new Error("Expected a live OpenDucktor session.");
@@ -127,7 +125,7 @@ describe("OpenCode host live-session state", () => {
       title: "Edit a file",
     });
 
-    state.applyControlSummary({ ...summary(), status: "idle" });
+    state.applyControlSummary(REPO, { ...summary(), status: "idle" });
 
     expect(state.listSnapshots()[0]).toMatchObject({
       activity: "waiting_for_permission",
@@ -137,7 +135,7 @@ describe("OpenCode host live-session state", () => {
 
   test("admits descendants only through registered parent lineage", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -184,7 +182,7 @@ describe("OpenCode host live-session state", () => {
 
   test("rejects a descendant event whose parent was not registered", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -206,7 +204,7 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps context demand-driven and removes a controlled session tree", () => {
     const state = createState();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
       throw new Error("Expected a live OpenDucktor session.");
@@ -224,8 +222,8 @@ describe("OpenCode host live-session state", () => {
     const state = createState();
     expect(state.setContext("session-1", { totalTokens: 42 })).toEqual([]);
     expect(state.listSnapshots()).toEqual([]);
-    state.applyControlSummary(summary());
-    state.applyControlSummary(summary("session-2"));
+    state.applyControlSummary(REPO, summary());
+    state.applyControlSummary(REPO, summary("session-2"));
     const ref = state.refForExternalSession("session-1");
     if (!ref) throw new Error("Expected a live session reference.");
     expect(state.contextUsage(ref)).toEqual({ totalTokens: 42 });
@@ -248,15 +246,15 @@ describe("OpenCode host live-session state", () => {
 
   test("rejects ambiguous context updates without changing state and resumes after removal", () => {
     const state = createState();
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const first = state.refForExternalSession("session-1");
     if (!first) throw new Error("Expected a live session reference.");
     state.setContext("session-1", { totalTokens: 42 });
-    state.applyControlSummary({ ...summary(), workingDirectory: "/other" });
+    state.applyControlSummary(REPO, { ...summary(), workingDirectory: "/other" });
     const before = state.listSnapshots();
 
     expect(() => state.setContext("session-1", { totalTokens: 84 })).toThrow(HostValidationError);
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     expect(state.listSnapshots()).toEqual(before);
 
     state.removeSession(first);
@@ -273,7 +271,7 @@ describe("OpenCode host live-session state", () => {
 
   test("removes a vanished descendant when the runtime list omits it", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -290,6 +288,7 @@ describe("OpenCode host live-session state", () => {
 
     applySources(state, [
       {
+        repoPath: REPO,
         externalSessionId: "parent",
         workingDirectory: parentRef.workingDirectory,
         sessionAssociation: { kind: "unbound" },
@@ -308,7 +307,7 @@ describe("OpenCode host live-session state", () => {
 
   test("removes a session when the runtime list omits it", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -322,7 +321,7 @@ describe("OpenCode host live-session state", () => {
 
   test("blocks child approval when a refresh drops its parent after a new request", () => {
     const state = createState();
-    state.applyControlSummary({
+    state.applyControlSummary(REPO, {
       ...summary("parent"),
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     });
@@ -341,7 +340,7 @@ describe("OpenCode host live-session state", () => {
       mutation: "mutating",
     });
 
-    expect(state.applySessionSources({ sources: [], failures: [] }, readVersions)).toEqual([
+    expect(state.applySessionSources(REPO, { sources: [], failures: [] }, readVersions)).toEqual([
       { type: "session_removed", ref: parentRef, provenance: "baseline" },
     ]);
     const child = state.listSnapshots()[0]!;
@@ -362,7 +361,7 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps a session when its runtime directory read fails", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -370,10 +369,12 @@ describe("OpenCode host live-session state", () => {
 
     expect(
       state.applySessionSources(
+        REPO,
         {
           sources: [],
           failures: [
             {
+              repoPath: REPO,
               externalSessionId: parentRef.externalSessionId,
               workingDirectory: parentRef.workingDirectory,
               message: "status failed",
@@ -385,7 +386,7 @@ describe("OpenCode host live-session state", () => {
     ).toEqual([
       {
         type: "fault",
-        repoPath: runtime.repoPath,
+        repoPath: REPO,
         ref: parentRef,
         provenance: "baseline",
         operation: "opencode-live-session.refresh-session",
@@ -397,7 +398,7 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps parent lineage from the runtime list", () => {
     const state = createState();
-    state.applyControlSummary(summary("child"));
+    state.applyControlSummary(REPO, summary("child"));
     const childRef = state.listSnapshots()[0]?.ref;
     if (!childRef) {
       throw new Error("Expected a live OpenDucktor session.");
@@ -405,6 +406,7 @@ describe("OpenCode host live-session state", () => {
 
     applySources(state, [
       {
+        repoPath: REPO,
         externalSessionId: "child",
         parentExternalSessionId: "parent",
         workingDirectory: childRef.workingDirectory,
@@ -424,7 +426,7 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps a source when the runtime still lists it", () => {
     const state = createState();
-    state.applyControlSummary(summary("parent"));
+    state.applyControlSummary(REPO, summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
       throw new Error("Expected a live OpenDucktor parent.");
@@ -433,6 +435,7 @@ describe("OpenCode host live-session state", () => {
     expect(
       applySources(state, [
         {
+          repoPath: REPO,
           externalSessionId: "parent",
           workingDirectory: parentRef.workingDirectory,
           sessionAssociation: { kind: "unbound" },
@@ -453,7 +456,7 @@ describe("OpenCode host live-session state", () => {
       runtime,
       nextOccurrenceId: () => "",
     });
-    state.applyControlSummary(summary());
+    state.applyControlSummary(REPO, summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
       throw new Error("Expected a live OpenDucktor session.");

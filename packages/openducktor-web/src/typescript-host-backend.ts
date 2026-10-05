@@ -1143,9 +1143,7 @@ export const startTypescriptHostBackendEffect = ({
               yield* cleanupStartedServerEffect();
               return yield* new WebOperationError({
                 operation: "web.host.initialize",
-                message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${errorMessage(
-                  error,
-                )}`,
+                message: `Failed to initialize OpenDucktor host services: ${errorMessage(error)}`,
                 cause: error,
               });
             }),

@@ -19,8 +19,8 @@ import {
   getAgentSessionWaitingInputPlaceholder,
   isAgentSessionBlockedOnInput,
 } from "@/lib/agent-session-waiting-input";
-import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
-import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
@@ -74,9 +74,9 @@ export function WorkspaceSessionChat({
   const readModel = useAgentSessionReadModelState();
   const runtime = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
-  const runtimeReadiness = useRepoRuntimeReadiness({
+  const runtimeReadiness = useRuntimeReadiness({
     hasWorkspace: true,
-    runtimeTarget: repoRuntimeReadinessTargetForRuntime(record.runtimeKind),
+    runtimeTarget: runtimeReadinessTargetForRuntime(record.runtimeKind),
   });
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
@@ -100,7 +100,7 @@ export function WorkspaceSessionChat({
     identity,
     session,
     readModelLoadState: readModel.sessionReadModelLoadState,
-    repoReadinessState: runtimeReadiness.state,
+    runtimeReadinessState: runtimeReadiness.state,
     fault,
   });
   const runtimeData = useSessionRuntimeData({
@@ -110,7 +110,7 @@ export function WorkspaceSessionChat({
         ? { identity, selectedModel, sessionAssociation: { kind: "repository" } }
         : null,
     runtimeDefinitions: runtime.allRuntimeDefinitions,
-    repoReadinessState: runtimeReadiness.state,
+    runtimeReadinessState: runtimeReadiness.state,
     loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
     readSessionTodos: operations.readSessionTodos,
   });
@@ -132,11 +132,11 @@ export function WorkspaceSessionChat({
   const isLoadingModelCatalog = catalogQuery.isFetching;
   useSelectedSessionHistoryLoad({
     session: isStarting ? null : session,
-    repoReadinessState: runtimeReadiness.state,
+    runtimeReadinessState: runtimeReadiness.state,
   });
   const contextError = useSelectedSessionContextLoad({
     session: isStarting ? null : session,
-    repoReadinessState: runtimeReadiness.state,
+    runtimeReadinessState: runtimeReadiness.state,
   });
   const retryModelCatalog = useCallback(
     () =>
@@ -187,7 +187,7 @@ export function WorkspaceSessionChat({
       repoPath: workspace.repoPath,
       record,
       identity,
-      repoReadinessState: runtimeReadiness.state,
+      runtimeReadinessState: runtimeReadiness.state,
       reusablePrompts,
     });
   const contextUsage = useSelectedSessionContextUsage({

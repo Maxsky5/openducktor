@@ -17,7 +17,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import { resolveRepoPath } from "./runtime-orchestrator-model";
+import { resolveRepoPath } from "./runtime-request-resolution";
 import { toCatalogResponse } from "./agent-runtime-catalog-response";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
@@ -29,7 +29,7 @@ import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-q
 
 export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
-  runtimeRegistry: Pick<RuntimeRegistryPort, "findWorkspaceRuntime">;
+  runtimeRegistry: Pick<RuntimeRegistryPort, "requireReady">;
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   taskReader: Pick<TaskReader, "getTaskMetadata">;
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
@@ -154,16 +154,10 @@ export const createAgentRuntimeQueryService = (
   > {
     return Effect.gen(function* () {
       const runtime = yield* dependencies.runtimeRegistry
-        .findWorkspaceRuntime(input)
+        .requireReady(input.runtimeKind)
         .pipe(
           Effect.mapError((cause) =>
-            runtimeQueryError(
-              operation,
-              input,
-              "runtime_unavailable",
-              "Cannot resolve the selected runtime. Start it from the runtime controls.",
-              cause,
-            ),
+            runtimeQueryError(operation, input, "runtime_unavailable", cause.message, cause),
           ),
         );
       const adapter = yield* dependencies.adapterRegistry
@@ -174,17 +168,12 @@ export const createAgentRuntimeQueryService = (
               operation,
               input,
               "runtime_unavailable",
-              "The selected runtime has no active query adapter. Start it from the runtime controls.",
+              "The selected runtime has no active query adapter. Restart it from Diagnostics.",
               cause,
             ),
           ),
         );
-      if (
-        !runtime ||
-        runtime.runtimeId !== adapter.binding.runtimeId ||
-        runtime.kind !== input.runtimeKind ||
-        runtime.repoPath !== input.repoPath
-      ) {
+      if (runtime.runtimeId !== adapter.binding.runtimeId || runtime.kind !== input.runtimeKind) {
         return yield* runtimeQueryError(
           operation,
           input,

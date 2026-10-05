@@ -1,24 +1,13 @@
-import type {
-  RuntimeDescriptor,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
+import type { TaskStoreCheck } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { taskQueryKeys } from "@/state/queries/tasks";
-import { invalidateRuntimeSessionQueries } from "@/state/queries/runtime-query-invalidation";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { TaskStreamController } from "@/state/tasks/task-stream-controller";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import {
-  type LifecycleTimerPort,
-  startRepositoryLoad,
-  startRepositoryRuntimes,
-} from "./app-lifecycle-coordinator";
+import { type LifecycleTimerPort, startRepositoryLoad } from "./app-lifecycle-coordinator";
 import { lifecycleNotifications } from "./lifecycle-notifications";
 
 export type TaskStreamControllerFactory = (input: {
@@ -31,12 +20,9 @@ export type TaskStreamControllerFactory = (input: {
 
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
   refreshBranches: (force?: boolean) => Promise<void>;
-  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   loadWorkspaceTasks: (repoPath: string) => Promise<void>;
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
   clearBranchData: () => void;
   taskStreamControllerFactory: TaskStreamControllerFactory;
 };
@@ -50,12 +36,9 @@ const loadTasksWithoutStream = Promise.resolve(true);
 
 export function useAppLifecycle({
   activeWorkspace,
-  runtimeDefinitions,
   refreshBranches,
-  refreshRepoRuntimeHealth,
   refreshTaskStoreCheckForRepo,
   loadWorkspaceTasks,
-  startRepoRuntime,
   clearBranchData,
   taskStreamControllerFactory,
 }: UseAppLifecycleArgs): void {
@@ -71,40 +54,6 @@ export function useAppLifecycle({
     activeWorkspaceRef.current = activeWorkspace;
     loadWorkspaceTasksRef.current = loadWorkspaceTasks;
   }, [activeWorkspace, loadWorkspaceTasks]);
-
-  const runtimeKinds = useMemo(
-    () => runtimeDefinitions.map((definition) => definition.kind),
-    [runtimeDefinitions],
-  );
-
-  useEffect(() => {
-    const repoPath = activeWorkspace?.repoPath ?? null;
-    if (!repoPath || runtimeKinds.length === 0) {
-      return;
-    }
-
-    return startRepositoryRuntimes({
-      repoPath,
-      runtimeKinds,
-      isCurrent: () => activeWorkspaceRef.current?.repoPath === repoPath,
-      startRepoRuntime,
-      onRuntimeReady: (runtime) =>
-        invalidateRuntimeSessionQueries(
-          queryClient,
-          { repoPath: runtime.repoPath, runtimeKind: runtime.kind },
-          "ready",
-        ),
-      refreshRepoRuntimeHealth,
-      notifications: lifecycleNotifications,
-      timers: lifecycleTimers,
-    });
-  }, [
-    activeWorkspace?.repoPath,
-    queryClient,
-    refreshRepoRuntimeHealth,
-    runtimeKinds,
-    startRepoRuntime,
-  ]);
 
   useEffect(() => {
     failedStreamSnapshotReposRef.current = new Set();

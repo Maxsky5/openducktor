@@ -89,11 +89,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
   );
-  const diagnosticsAutoOpenedByRepoRef = useRef<Set<string> | null>(null);
-  if (diagnosticsAutoOpenedByRepoRef.current === null) {
-    diagnosticsAutoOpenedByRepoRef.current = new Set();
-  }
-  const diagnosticsAutoOpenedByRepo = diagnosticsAutoOpenedByRepoRef.current;
   const hasActiveWorkspace = activeWorkspace !== null;
   const agentActivity = useShellAgentActivity(
     activeWorkspace?.repoPath ?? null,
@@ -177,7 +172,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
                   <BranchSwitcher />
 
-                  <DiagnosticsPanel autoOpenedByRepo={diagnosticsAutoOpenedByRepo} />
+                  <DiagnosticsPanel />
 
                   <SidebarNavigation
                     hasActiveWorkspace={hasActiveWorkspace}
@@ -215,7 +210,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
                 </div>
                 <div className="flex w-full justify-center border-t border-sidebar-border pt-2">
                   <DiagnosticsPanel
-                    autoOpenedByRepo={diagnosticsAutoOpenedByRepo}
                     triggerClassName="text-sidebar-muted-foreground hover:text-sidebar-foreground"
                     triggerVariant="icon"
                   />
@@ -323,7 +317,12 @@ export const AppShell = memo(function AppShell(): ReactElement {
     if (hasWorkspaces && !onboardingStartedWithoutWorkspaceRef.current) {
       return <Navigate to="/kanban" replace />;
     }
-    return <OnboardingPage onComplete={completeOnboarding} />;
+    return (
+      <OnboardingPage
+        onComplete={completeOnboarding}
+        headerActions={<DiagnosticsPanel triggerVariant="icon" />}
+      />
+    );
   }
 
   if (!hasWorkspaces) {

@@ -706,14 +706,7 @@ describe("createTaskService build and review", () => {
           args: ["test"],
           options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
         },
-        {
-          type: "ensureRuntime",
-          input: expect.objectContaining({
-            runtimeKind: "opencode",
-            repoPath: "/repo",
-            workingDirectory: "/repo",
-          }),
-        },
+        { type: "requireRuntime", runtimeKind: "opencode" },
         {
           type: "transition",
           input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },

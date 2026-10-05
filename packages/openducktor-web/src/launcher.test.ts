@@ -882,7 +882,7 @@ describe("launcher internals", () => {
     expect(closeAllConnectionsCalls).toBe(0);
   });
 
-  test("stops Bun HTTP connections before Vite shutdown", async () => {
+  test("stops the HTTP server that the launcher owns, ends its connections, then closes Vite", async () => {
     const calls: string[] = [];
 
     await closeViteFrontendServer({
@@ -890,13 +890,17 @@ describe("launcher internals", () => {
         closeAllConnections: () => {
           calls.push("close-connections");
         },
+        close: (callback) => {
+          calls.push("close-http-server");
+          callback();
+        },
       },
       close: async () => {
         calls.push("close-vite");
       },
     });
 
-    expect(calls).toEqual(["close-connections", "close-vite"]);
+    expect(calls).toEqual(["close-http-server", "close-connections", "close-vite"]);
   });
 
   test("keeps the process alive while shutdown work is pending", async () => {

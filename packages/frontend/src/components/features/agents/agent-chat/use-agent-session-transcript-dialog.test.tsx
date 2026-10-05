@@ -18,7 +18,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import {
-  createRepoRuntimeHealthContextValue,
+  createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
 } from "@/pages/agents/agent-studio-test-utils";
 import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-transcript";
@@ -27,7 +27,7 @@ import {
   ActiveWorkspaceContext,
   AgentOperationsContext,
   AgentSessionsContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import {
@@ -39,7 +39,7 @@ import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-
 import {
   createAgentSessionFixture,
   createChatSettingsFixture,
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -146,10 +146,10 @@ describe("AgentSessionTranscriptDialogHost", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       });
-      const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
-        runtimeHealthByRuntime: {
-          codex: createRepoRuntimeHealthFixture(),
-          opencode: createRepoRuntimeHealthFixture(),
+      const hostRuntimeStatusContext = createHostRuntimeStatusContextValue({
+        statusByKind: {
+          codex: createHostRuntimeStatusFixture({ kind: "codex" }),
+          opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
         },
       });
       const operations: AgentOperationsContextValue = {
@@ -182,13 +182,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
       const wrapper = ({ children }: PropsWithChildren): ReactElement => (
         <QueryClientProvider client={queryClient}>
           <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
-            <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+            <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
               <AgentSessionsContext.Provider value={sessionStore}>
                 <AgentOperationsContext.Provider value={operations}>
                   {children}
                 </AgentOperationsContext.Provider>
               </AgentSessionsContext.Provider>
-            </RepoRuntimeHealthContext.Provider>
+            </HostRuntimeStatusContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </QueryClientProvider>
       );
@@ -277,9 +277,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
-    const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
-      runtimeHealthByRuntime: {
-        opencode: createRepoRuntimeHealthFixture(),
+    const hostRuntimeStatusContext = createHostRuntimeStatusContextValue({
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
     });
     let historyAttempts = 0;
@@ -329,13 +329,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryClientProvider client={queryClient}>
         <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
-          <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+          <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
               <AgentOperationsContext.Provider value={operations}>
                 {children}
               </AgentOperationsContext.Provider>
             </AgentSessionsContext.Provider>
-          </RepoRuntimeHealthContext.Provider>
+          </HostRuntimeStatusContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
     );
@@ -383,9 +383,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         return createRuntimeCatalogFixture({ skills: { skills: [] } });
       },
     });
-    const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
-      runtimeHealthByRuntime: {
-        claude: createRepoRuntimeHealthFixture(),
+    const hostRuntimeStatusContext = createHostRuntimeStatusContextValue({
+      statusByKind: {
+        claude: createHostRuntimeStatusFixture({ kind: "claude" }),
       },
     });
     const operations: AgentOperationsContextValue = {
@@ -418,13 +418,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryClientProvider client={queryClient}>
         <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
-          <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+          <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
               <AgentOperationsContext.Provider value={operations}>
                 {children}
               </AgentOperationsContext.Provider>
             </AgentSessionsContext.Provider>
-          </RepoRuntimeHealthContext.Provider>
+          </HostRuntimeStatusContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
     );

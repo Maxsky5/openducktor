@@ -10,6 +10,7 @@ import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-s
 import {
   acceptedMessageText,
   createRuntimeHarness,
+  ignoreObservationLoss,
 } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createSqliteTaskStoreHarness,
@@ -103,6 +104,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     });
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       persistence,
       faultLog: () => Effect.void,
       publish: () => {},
@@ -113,17 +115,16 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: live,
         prepareRuntime: harness.prepareRuntime,
-      })({
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: database.repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: ref.workingDirectory,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
-        startedAt: "2026-07-16T10:00:00.000Z",
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-      }),
+      })(
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
+          startedAt: "2026-07-16T10:00:00.000Z",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        },
+        ignoreObservationLoss,
+      ),
     );
     await Effect.runPromise(live.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(

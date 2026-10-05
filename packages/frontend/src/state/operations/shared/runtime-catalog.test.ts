@@ -8,52 +8,7 @@ import type {
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
 } from "@openducktor/core";
-import { host } from "./host";
 import { createHostRuntimeCatalogOperations } from "./runtime-catalog";
-
-type HostRepoRuntimeHealthCheck = Awaited<ReturnType<typeof host.repoRuntimeHealth>>;
-
-const runtimeFixture: NonNullable<HostRepoRuntimeHealthCheck["runtime"]["instance"]> = {
-  kind: "opencode",
-  runtimeId: "runtime-1",
-  repoPath: "/tmp/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/tmp/repo/worktree",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4444",
-  },
-  startedAt: "2026-02-22T08:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-};
-
-const healthyRepoRuntimeHealthFixture: HostRepoRuntimeHealthCheck = {
-  status: "ready",
-  checkedAt: "2026-02-22T08:00:10.000Z",
-  runtime: {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: "observed_existing_runtime",
-    instance: runtimeFixture,
-    startedAt: runtimeFixture.startedAt,
-    updatedAt: "2026-02-22T08:00:10.000Z",
-    elapsedMs: 5000,
-    attempts: 4,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-  },
-  mcp: {
-    supported: true,
-    status: "connected",
-    serverName: "openducktor",
-    serverStatus: "connected",
-    toolIds: ["odt_read_task"],
-    detail: null,
-    failureKind: null,
-  },
-};
 
 const catalogFixture: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -131,7 +86,6 @@ const createHostClient = (
 ): RuntimeCatalogHostClient => ({
   agentRuntimeLoadCatalog: async () => runtimeCatalogFixture,
   agentRuntimeSearchFiles: async () => fileSearchResultsFixture,
-  repoRuntimeHealthStatus: (...args) => host.repoRuntimeHealthStatus(...args),
   ...overrides,
 });
 
@@ -204,21 +158,5 @@ describe("runtime-catalog", () => {
       workingDirectory: "/tmp/repo/worktree",
       query: "src",
     });
-  });
-
-  test("delegates repo runtime health to the status-only host command", async () => {
-    const repoRuntimeHealthStatus = mock(async () => healthyRepoRuntimeHealthFixture);
-    const originalRepoRuntimeHealthStatus = host.repoRuntimeHealthStatus;
-    host.repoRuntimeHealthStatus = repoRuntimeHealthStatus;
-
-    try {
-      const operations = createOperations(createHostClient());
-      const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-      expect(repoRuntimeHealthStatus).toHaveBeenCalledWith("/tmp/repo", "opencode");
-      expect(result).toEqual(healthyRepoRuntimeHealthFixture);
-    } finally {
-      host.repoRuntimeHealthStatus = originalRepoRuntimeHealthStatus;
-    }
   });
 });

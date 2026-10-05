@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import { createHostRuntimeStatusFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
   acceptedUserMessageForInput,
@@ -733,8 +733,8 @@ describe("use-agent-orchestrator-operations session state", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runtimeHealthByRuntime: {
-        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+      runtimeStatusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,
@@ -810,8 +810,8 @@ describe("use-agent-orchestrator-operations session state", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runtimeHealthByRuntime: {
-        codex: createRepoRuntimeHealthFixture({ status: "ready" }),
+      runtimeStatusByKind: {
+        codex: createHostRuntimeStatusFixture({ kind: "codex" }),
       },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,

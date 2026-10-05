@@ -16,7 +16,7 @@ import {
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import { Effect, Exit } from "effect";
+import { Effect, Either, Exit } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -56,6 +56,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
   codexAppServer,
   onBackgroundFailure,
   resolveRuntimePolicy,
+  resolveMcpServerConfig,
   prepareImageGenerations,
   createController = defaultCreateController,
 }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer => {
@@ -75,8 +76,13 @@ export const createCodexLiveSessionAdapterPreparer = ({
           createController({
             questionHistory,
             prepareImageGenerations,
-            repoRuntimeResolver: {
-              requireRepoRuntime: async () => runtime,
+            runtime,
+            resolveManagedMcpServer: async (repoPath) => {
+              const result = await Effect.runPromise(
+                Effect.either(resolveMcpServerConfig(repoPath)),
+              );
+              if (Either.isLeft(result)) throw result.left;
+              return result.right;
             },
             transportFactory: (runtimeId) => createCodexRuntimeTransport(codexAppServer, runtimeId),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
@@ -181,14 +187,21 @@ export const createCodexLiveSessionAdapterPreparer = ({
             externalSessionId,
           });
 
+      const queries = createRuntimeQueryAdapter(controller);
       const adapter: AgentSessionRuntimeAdapterPort = {
         sessionImport: createCodexSessionImportAdapter(
           controller,
-          runtime.repoPath,
+          runtime.runtimeId,
           resolveRuntimePolicy,
           refreshProjection,
         ),
-        queries: createRuntimeQueryAdapter(controller),
+        queries: {
+          ...queries,
+          loadRuntimeCatalog: (input) => {
+            projection.recordCatalogRepository(input.repoPath);
+            return queries.loadRuntimeCatalog(input);
+          },
+        },
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: projection.binding,

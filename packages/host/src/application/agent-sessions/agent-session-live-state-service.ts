@@ -27,15 +27,11 @@ import {
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveSnapshotSchema,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import {
-  type HostError,
-  HostInvariantError,
-  HostResourceError,
-  HostValidationError,
-} from "../../effect/host-errors";
+import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
   AgentSessionLiveAdapterChange,
@@ -56,11 +52,17 @@ import {
   createAgentSessionLiveEnvelopePublisher,
   toAgentSessionLiveEnvelope,
 } from "./agent-session-live-envelope";
+import { createRuntimeSessionEngagement } from "./agent-session-runtime-engagement";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
+import {
+  continuationSessionRef,
+  toContinuationResolutionError,
+} from "./agent-session-continuation-errors";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
+import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 
 export type {
   AgentSessionLiveEnvelopePublisher,
@@ -71,6 +73,13 @@ export type AgentSessionLiveStateService = {
   readonly refresh: (input: AgentSessionLiveRefreshInput) => Effect.Effect<void, HostError>;
   readonly list: (
     input: AgentSessionLiveListInput,
+  ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
+  /**
+   * Lists the sessions that a lifecycle action of one runtime kind stops or detaches, across all
+   * repositories. Idle sessions that the runtime only restored from saved history stay out.
+   */
+  readonly listRuntimeSessions: (
+    runtimeKind: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   readonly read: (
     input: AgentSessionLiveReadInput,
@@ -129,6 +138,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
   ) => Effect.Effect<AgentSessionAuthorizedRoot[], HostError>;
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
+  readonly runtimeAdmission: RuntimeAdmissionPort;
   readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
@@ -141,6 +151,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
+  runtimeAdmission,
   readSessionRootRefs,
   withProcessStartAdmission,
   faultLog,
@@ -149,19 +160,24 @@ export const createAgentSessionLiveStateService = ({
   coordinator = createLiveStateCoordinator(),
   persistence,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
+  // Controls enter the shared runtime only while its current generation is ready.
   const withStartAdmission =
-    <Input extends { repoPath: string }, Success>(
+    <Input extends { repoPath: string; runtimeKind: RuntimeKind }, Success>(
       operation: (input: Input) => Effect.Effect<Success, HostError>,
     ) =>
-    (input: Input): Effect.Effect<Success, HostError> =>
-      withProcessStartAdmission
-        ? withProcessStartAdmission(input.repoPath, operation(input))
-        : operation(input);
+    (input: Input): Effect.Effect<Success, HostError> => {
+      const admitted = runtimeAdmission.admit(input.runtimeKind, operation(input));
+      return withProcessStartAdmission
+        ? withProcessStartAdmission(input.repoPath, admitted)
+        : admitted;
+    };
+  const observedRepoPaths = new Set<string>();
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   // Transient admission guard that spans the probe and the native continuation for one session.
   const continuationsInFlight = new Set<string>();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
+  const engagement = createRuntimeSessionEngagement();
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
     publish,
     faultLog,
@@ -191,13 +207,22 @@ export const createAgentSessionLiveStateService = ({
       }
     });
 
+  const readAdapterSnapshots = (
+    adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
+    include: (snapshot: AgentSessionLiveSnapshot) => boolean,
+  ) =>
+    Effect.gen(function* () {
+      const snapshots = yield* Effect.forEach(adapters, (adapter) => adapter.listSnapshots());
+      return yield* Effect.forEach(snapshots.flat().filter(include), (snapshot) =>
+        parseAdapterOutput(agentSessionLiveSnapshotSchema, snapshot, "agent-session-live.list"),
+      );
+    });
+
   const listSnapshots = (repoPath: string) =>
     Effect.gen(function* () {
-      const snapshots = yield* Effect.forEach(adapterRegistry.listForRepo(repoPath), (adapter) =>
-        adapter.listSnapshots(repoPath),
-      );
-      const flattened = yield* Effect.forEach(snapshots.flat(), (snapshot) =>
-        parseAdapterOutput(agentSessionLiveSnapshotSchema, snapshot, "agent-session-live.list"),
+      const flattened = yield* readAdapterSnapshots(
+        adapterRegistry.list(),
+        (snapshot) => snapshot.ref.repoPath === repoPath,
       );
       const seen = new Set<string>();
       for (const snapshot of flattened) {
@@ -238,45 +263,27 @@ export const createAgentSessionLiveStateService = ({
     publishChanges,
     publishEnvelope,
     listSnapshots,
+    // A new shared runtime restores the exact roots of every repository a renderer observes.
+    // A failed repository gets its own fault, so it cannot stop the runtime for the others.
     refreshSnapshots: (adapter) =>
       adapter.refreshSnapshots
-        ? refreshGate.run(refreshAdapters(adapter.binding.repoPath, [adapter]))
+        ? refreshGate.run(
+            Effect.forEach([...observedRepoPaths], (repoPath) =>
+              refreshAdapters(repoPath, [adapter]).pipe(
+                Effect.catchAll((cause) =>
+                  publishEnvelope({
+                    type: "fault",
+                    repoPath,
+                    operation: "agent-session-live.restore-runtime-sessions",
+                    message: `Cannot restore the ${adapter.binding.runtimeKind} sessions of this repository: ${cause.message}`,
+                  }),
+                ),
+              ),
+            ),
+          )
         : Effect.void,
+    observedRepoPaths: () => [...observedRepoPaths],
   });
-
-  const continuationSessionRef = (
-    input: AgentSessionControlContinueInterruptedTurnInput,
-  ): AgentSessionLiveRef => ({
-    repoPath: input.repoPath,
-    runtimeKind: input.runtimeKind,
-    workingDirectory: input.workingDirectory,
-    externalSessionId: input.externalSessionId,
-  });
-
-  const toContinuationResolutionError = (
-    cause: HostError,
-    input: AgentSessionControlContinueInterruptedTurnInput,
-  ): HostError => {
-    if (cause instanceof HostResourceError && cause.resource === "agent_session_control_adapter") {
-      return new AgentSessionResumeError({
-        reason: "unsupported",
-        sessionRef: continuationSessionRef(input),
-        operation: "agent-session.continue-interrupted-turn",
-        message: cause.message,
-        cause,
-      });
-    }
-    if (cause instanceof HostResourceError && cause.resource === "agent_session_live_adapter") {
-      return new AgentSessionResumeError({
-        reason: "runtime_unavailable",
-        sessionRef: continuationSessionRef(input),
-        operation: "agent-session.continue-interrupted-turn",
-        message: cause.message,
-        cause,
-      });
-    }
-    return cause;
-  };
 
   const runControl = <A>(
     scope: AgentSessionLiveAdapterScope,
@@ -284,7 +291,9 @@ export const createAgentSessionLiveStateService = ({
     isCommitted: (result: A) => boolean = () => false,
   ) =>
     Effect.gen(function* () {
-      const adapter = yield* adapterRegistry.resolveControlForScope(scope);
+      const adapter = engagement.trackControls(
+        yield* adapterRegistry.resolveControlForScope(scope),
+      );
       const result = yield* control(adapter);
       // A committed native change stays valid when the runtime detaches right after it.
       if (isCommitted(result)) return result;
@@ -292,11 +301,16 @@ export const createAgentSessionLiveStateService = ({
       return result;
     });
 
+  // A lifecycle action drains admitted controls. It stops and releases the sessions itself.
+  const runAdmittedControl: typeof runControl = (scope, control, isCommitted) =>
+    runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
+
   const service: AgentSessionLiveStateService = {
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
-          yield* refreshAdapters(input.repoPath, adapterRegistry.listForRepo(input.repoPath));
+          observedRepoPaths.add(input.repoPath);
+          yield* refreshAdapters(input.repoPath, adapterRegistry.list());
           yield* coordinator.run(
             Effect.gen(function* () {
               const snapshots = yield* listSnapshots(input.repoPath);
@@ -310,6 +324,20 @@ export const createAgentSessionLiveStateService = ({
         }),
       ),
     list: (input) => coordinator.run(listSnapshots(input.repoPath)),
+    listRuntimeSessions: (runtimeKind) =>
+      coordinator.run(
+        Effect.forEach(
+          adapterRegistry.list().filter((adapter) => adapter.binding.runtimeKind === runtimeKind),
+          (adapter) =>
+            readAdapterSnapshots([adapter], () => true).pipe(
+              Effect.map((snapshots) => engagement.affected(adapter.binding, snapshots)),
+            ),
+        ).pipe(
+          Effect.map((snapshots) =>
+            snapshots.flat().map((snapshot) => executionEpisodes.snapshotWithEpisode(snapshot)),
+          ),
+        ),
+      ),
     read: (input) =>
       coordinator.run(
         Effect.gen(function* () {
@@ -368,12 +396,12 @@ export const createAgentSessionLiveStateService = ({
     replyApproval: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
-        .pipe(Effect.flatMap((adapter) => adapter.replyApproval(input))),
+        .pipe(Effect.flatMap((adapter) => engagement.trackReplies(adapter).replyApproval(input))),
     ),
     replyQuestion: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
-        .pipe(Effect.flatMap((adapter) => adapter.replyQuestion(input))),
+        .pipe(Effect.flatMap((adapter) => engagement.trackReplies(adapter).replyQuestion(input))),
     ),
     startSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.startSession(input)),
@@ -383,9 +411,10 @@ export const createAgentSessionLiveStateService = ({
     ),
     continueInterruptedTurn: withStartAdmission((input) =>
       Effect.gen(function* () {
-        const adapter = yield* adapterRegistry
-          .resolveControlForScope(input)
-          .pipe(Effect.mapError((cause) => toContinuationResolutionError(cause, input)));
+        const adapter = yield* adapterRegistry.resolveControlForScope(input).pipe(
+          Effect.map(engagement.trackControls),
+          Effect.mapError((cause) => toContinuationResolutionError(cause, input)),
+        );
         const continuationKey = [
           adapter.binding.runtimeId,
           input.externalSessionId,
@@ -427,7 +456,9 @@ export const createAgentSessionLiveStateService = ({
     ),
     sendUserMessage: withStartAdmission((input) =>
       Effect.gen(function* () {
-        const adapter = yield* adapterRegistry.resolveControlForScope(input);
+        const adapter = engagement.trackControls(
+          yield* adapterRegistry.resolveControlForScope(input),
+        );
         const acceptedMessage = yield* adapter.sendUserMessage(input);
         yield* lifecycle.requireAttached(adapter.binding).pipe(
           Effect.mapError(
@@ -451,9 +482,9 @@ export const createAgentSessionLiveStateService = ({
       }),
     ),
     updateSessionModel: (input) =>
-      runControl(input, (adapter) => adapter.updateSessionModel(input)),
+      runAdmittedControl(input, (adapter) => adapter.updateSessionModel(input)),
     updateSessionTitle: (input) =>
-      runControl(
+      runAdmittedControl(
         input,
         (adapter) => adapter.updateSessionTitle(input),
         (outcome) => outcome.status === "renamed",

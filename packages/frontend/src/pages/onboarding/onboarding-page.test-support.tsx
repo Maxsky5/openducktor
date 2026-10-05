@@ -21,6 +21,7 @@ import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { OnboardingPage } from "./onboarding-page";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 export const runtimeDefinitions = [
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -92,7 +93,7 @@ export const createOnboardingTestHarness = () => {
 
   const renderOnboarding = ({
     runtimes,
-    saveSettingsSnapshot = mock(async () => {}),
+    saveSettingsSnapshot = mock(async () => savedSettingsResult()),
     prefillSettings = true,
     prefillDefinitions = true,
   }: {
@@ -156,6 +157,7 @@ export const createOnboardingTestHarness = () => {
       loadSettingsSnapshot: mock(async () => createSettingsSnapshotFixture()),
       detectGithubRepository: mock(async () => null),
       saveGlobalGitConfig: mock(async () => {}),
+      previewSettingsSnapshotRuntime: async () => ({ impact: null }),
       saveSettingsSnapshot,
       saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()),
     } satisfies WorkspaceStateContextValue;

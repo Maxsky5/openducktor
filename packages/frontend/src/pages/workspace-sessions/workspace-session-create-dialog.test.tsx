@@ -16,11 +16,14 @@ import { gitQueryKeys } from "@/state/queries/git";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import {
   ChecksStateContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
+  createHostRuntimeStatusContextValue,
+  createObservedCheckFixture,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -89,7 +92,13 @@ function renderCreation(
     loadSettingsSnapshot: async () => snapshot,
     detectGithubRepository: async () => null,
     saveGlobalGitConfig: async () => {},
-    saveSettingsSnapshot: async () => {},
+    previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+    saveSettingsSnapshot: async () => ({
+      type: "saved" as const,
+      workspaces: [],
+      runtimeApplications: [],
+      refreshError: null,
+    }),
     saveAgentModelFavorites: async () => snapshot,
   };
   const definitions: ComponentProps<typeof RuntimeDefinitionsContext>["value"] = {
@@ -143,20 +152,21 @@ function renderCreation(
       <WorkspaceStateContext value={workspaceState}>
         <ChecksStateContext
           value={{
-            runtimeCheck: null,
-            taskStoreCheck: null,
-            runtimeCheckFailureKind: null,
-            taskStoreCheckFailureKind: null,
-            isLoadingChecks: false,
+            runtimeCheck: createObservedCheckFixture(),
+            checksRepoPath: null,
+            taskStoreCheck: createObservedCheckFixture(),
+            isRefreshingChecks: false,
             refreshChecks: async () => {},
           }}
         >
           <RuntimeDefinitionsContext value={definitions}>
-            <WorkspaceSessionCreateDialog
-              workspace={{ workspaceId: "A", workspaceName: "A", repoPath: "/repo" }}
-              onClose={onClose}
-              onCreated={onCreated}
-            />
+            <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+              <WorkspaceSessionCreateDialog
+                workspace={{ workspaceId: "A", workspaceName: "A", repoPath: "/repo" }}
+                onClose={onClose}
+                onCreated={onCreated}
+              />
+            </HostRuntimeStatusContext>
           </RuntimeDefinitionsContext>
         </ChecksStateContext>
       </WorkspaceStateContext>

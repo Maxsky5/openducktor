@@ -3,7 +3,6 @@ import { type PropsWithChildren, type ReactElement, useEffect, useMemo, useRef }
 import { buildWorkspaceStateValue } from "../app-state-context-values";
 import {
   useActiveWorkspaceContext,
-  useChecksOperationsContext,
   useTaskControlContext,
   WorkspaceBranchStateContext,
   WorkspaceOperationsContext,
@@ -17,7 +16,6 @@ import { useWorkspaceOperations } from "../operations/workspace/use-workspace-op
 export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspaceContext();
   const { clearTaskData } = useTaskControlContext();
-  const { clearActiveTaskStoreCheck } = useChecksOperationsContext();
 
   const {
     workspaces,
@@ -50,7 +48,6 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     activeWorkspace,
     setActiveWorkspace,
     clearTaskData,
-    clearActiveTaskStoreCheck,
   });
 
   const lastResolvedActiveWorkspaceRef = useRef<WorkspaceRecord | null>(null);
@@ -104,6 +101,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,
+    previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
     saveAgentModelFavorites,
   } = useRepoSettingsOperations({
@@ -141,6 +139,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         loadSettingsSnapshot,
         detectGithubRepository,
         saveGlobalGitConfig,
+        previewSettingsSnapshotRuntime,
         saveSettingsSnapshot,
         saveAgentModelFavorites,
       }),
@@ -168,6 +167,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       refreshBranches,
       saveRepoSettings,
       saveWorkspaceModelDefaults,
+      previewSettingsSnapshotRuntime,
       saveSettingsSnapshot,
       saveAgentModelFavorites,
       selectWorkspace,

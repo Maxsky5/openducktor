@@ -1,5 +1,10 @@
 import type { AgentRuntimes, NotificationSettings, SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  reportSettingsSaveFollowUps,
+  requireSavedSettings,
+} from "@/components/features/settings/settings-save/runtime-settings-application";
+import { toast } from "sonner";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -51,12 +56,17 @@ export const useOnboardingNotificationSetup = ({
     setIsSaving(true);
     setSaveError(null);
     try {
-      await saveSettingsSnapshot(
-        prepareSettingsSnapshotForSave({
-          ...settingsSnapshot,
-          agentRuntimes,
-          notifications,
-        }),
+      const saved = requireSavedSettings(
+        await saveSettingsSnapshot(
+          prepareSettingsSnapshotForSave({
+            ...settingsSnapshot,
+            agentRuntimes,
+            notifications,
+          }),
+        ),
+      );
+      reportSettingsSaveFollowUps(saved, (title, description) =>
+        toast.warning(title, { description }),
       );
       onContinue();
     } catch (cause) {

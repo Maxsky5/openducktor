@@ -619,7 +619,8 @@ describe("createProcessEnvironment", () => {
       const resolution = await Effect.runPromise(
         createProcessEnvironment({
           baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
-          loginShellTimeoutMs: 500,
+          // The fixture shell must start its child job before the timeout, also under load.
+          loginShellTimeoutMs: 2_000,
           platform: "linux",
           readUserShell: () => shellPath,
         }),

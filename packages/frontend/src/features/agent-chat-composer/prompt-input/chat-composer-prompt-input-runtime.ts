@@ -1,6 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
@@ -27,7 +27,7 @@ export type ChatComposerPromptInputRuntimeSource =
 
 type ResolveChatComposerPromptInputRuntimeArgs = {
   workspaceRepoPath: string | null;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
   source: ChatComposerPromptInputRuntimeSource;
 };
 
@@ -35,7 +35,7 @@ const runtimeWaitingMessage = "File search is unavailable until the runtime is r
 
 export const resolveChatComposerPromptInputRuntime = ({
   workspaceRepoPath,
-  repoReadinessState,
+  runtimeReadinessState,
   source,
 }: ResolveChatComposerPromptInputRuntimeArgs): ChatComposerPromptInputRuntime => {
   if (source.kind === "session") {
@@ -47,7 +47,7 @@ export const resolveChatComposerPromptInputRuntime = ({
         error: "Repository path is required to read selected session runtime data.",
       };
     }
-    if (repoReadinessState !== "ready") {
+    if (runtimeReadinessState !== "ready") {
       return {
         state: "waiting",
         runtimeKind,
@@ -82,7 +82,7 @@ export const resolveChatComposerPromptInputRuntime = ({
       error: "Select a runtime before using prompt input.",
     };
   }
-  if (repoReadinessState !== "ready") {
+  if (runtimeReadinessState !== "ready") {
     return {
       state: "waiting",
       runtimeKind: source.runtimeKind,

@@ -1,17 +1,21 @@
 import type {
-  FailureKind,
+  HostRuntimeStatus,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
-  RuntimeRoute,
+  RuntimeKind,
 } from "@openducktor/contracts";
+import type { RuntimeSessionProbe, RuntimeSessionTarget } from "@openducktor/runtime-orchestration";
 import type { Effect } from "effect";
 import type {
   HostDependencyErrorAggregate,
+  HostError,
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
   HostResourceErrorAggregate,
   HostValidationErrorAggregate,
 } from "../effect/host-errors";
+
+export type { RuntimeSessionTarget } from "@openducktor/runtime-orchestration";
 
 export type RuntimeRegistryError =
   | HostDependencyErrorAggregate
@@ -20,79 +24,45 @@ export type RuntimeRegistryError =
   | HostResourceErrorAggregate
   | HostValidationErrorAggregate;
 
-export type RuntimeEnsureWorkspaceInput = {
-  runtimeKind: string;
-  repoPath: string;
-  workingDirectory: string;
+export type RuntimeStartInput = {
+  runtimeKind: RuntimeKind;
   descriptor: RuntimeDescriptor;
+  /** The saved executable path from the committed settings that this start applies. */
+  configuredExecutablePath: string;
+  /**
+   * Hands the orchestrator the cleanup of resources acquired so far. It owns the cleanup until
+   * startup returns a handle, runs it when startup fails or is interrupted, and retries it later
+   * when it fails. Call it as soon as the first resource exists.
+   */
+  ownCleanup: (cleanup: Effect.Effect<void, HostOperationErrorAggregate>) => void;
+  /** Reports a managed resource exit or fatal transport failure after startup. */
+  onRuntimeExit: (message: string) => void;
+  /** Reports that cleanup after a reported exit failed. The runtime error then shows the cause. */
+  onRuntimeCleanupFailed: (cause: string) => void;
 };
-export type RuntimeWorkspaceHandle = {
+
+export type RuntimeHandle = {
   runtime: RuntimeInstanceSummary;
   configuredExecutablePath: string;
-  isAlive(): boolean;
+  effectiveExecutablePath: string;
+  /** Stops the managed resource and releases its live sessions. */
   stop(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
-export type RuntimeWorkspaceStarterPort = {
-  startWorkspaceRuntime(
-    input: RuntimeEnsureWorkspaceInput,
-  ): Effect.Effect<RuntimeWorkspaceHandle, RuntimeRegistryError>;
+
+/** Starts the managed resource of one runtime kind on this host platform. */
+export type RuntimeStarterPort = {
+  startRuntime(input: RuntimeStartInput): Effect.Effect<RuntimeHandle, RuntimeRegistryError>;
 };
-export type RuntimeSessionStopInput = {
-  runtimeKind: string;
-  repoPath: string;
-  externalSessionId: string;
-  workingDirectory: string;
-};
-export type RuntimeSessionStatusProbeInput = {
-  runtimeKind: string;
-  repoPath: string;
-  externalSessionId: string;
-  workingDirectory: string;
-};
-export type RuntimeMcpStatusProbeInput = {
-  runtimeKind: string;
-  runtimeRoute: RuntimeRoute;
-  workingDirectory: string;
-  serverName: string;
-};
-export type RuntimeMcpStatusProbeResult = {
-  supported: boolean;
-  connected: boolean;
-  serverStatus: string | null;
-  toolIds: string[];
-  detail: string | null;
-  failureKind: FailureKind | null;
-};
+
+/** The shared runtimes as host services see them. */
 export type RuntimeRegistryPort = {
-  ensureWorkspaceRuntime(
-    input: RuntimeEnsureWorkspaceInput,
-  ): Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>;
-  findRuntimeById(runtimeId: string): Effect.Effect<RuntimeInstanceSummary | null, never>;
-  findWorkspaceRuntime(input: {
-    repoPath: string;
-    runtimeKind: string;
-  }): Effect.Effect<RuntimeInstanceSummary | null, RuntimeRegistryError>;
-  listRuntimes(): Effect.Effect<RuntimeInstanceSummary[], never>;
-  listRuntimesByRepo(input: {
-    repoPath: string;
-    runtimeKind?: string;
-  }): Effect.Effect<RuntimeInstanceSummary[], never>;
-  stopRuntime(
-    runtimeId: string,
-  ): Effect.Effect<boolean, HostOperationErrorAggregate | HostResourceErrorAggregate>;
-  stopAllRuntimes(): Effect.Effect<
-    RuntimeInstanceSummary[],
-    HostOperationErrorAggregate | HostResourceErrorAggregate
-  >;
-  stopSession(input: RuntimeSessionStopInput): Effect.Effect<void, RuntimeRegistryError>;
-  probeSessionStatus(input: RuntimeSessionStatusProbeInput): Effect.Effect<
-    {
-      supported: boolean;
-      hasLiveSession: boolean;
-    },
-    RuntimeRegistryError
-  >;
-  probeMcpStatus(
-    input: RuntimeMcpStatusProbeInput,
-  ): Effect.Effect<RuntimeMcpStatusProbeResult, RuntimeRegistryError>;
+  status(kind: RuntimeKind): Effect.Effect<HostRuntimeStatus>;
+  statuses(): Effect.Effect<HostRuntimeStatus[]>;
+  /** Returns the ready runtime of the kind, or why it is unavailable. It does not admit work. */
+  requireReady(
+    kind: RuntimeKind,
+  ): Effect.Effect<RuntimeInstanceSummary, HostResourceErrorAggregate>;
+  stopAllRuntimes(): Effect.Effect<RuntimeInstanceSummary[], HostOperationErrorAggregate>;
+  stopSession(input: RuntimeSessionTarget): Effect.Effect<void, HostError>;
+  probeSessionStatus(input: RuntimeSessionTarget): Effect.Effect<RuntimeSessionProbe, HostError>;
 };

@@ -157,6 +157,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceDisconnectAzureDevOps.bind(workspaceClient),
     workspaceGetGitProviderContext:
       workspaceClient.workspaceGetGitProviderContext.bind(workspaceClient),
+    workspacePreviewSettingsSnapshotRuntime:
+      workspaceClient.workspacePreviewSettingsSnapshotRuntime.bind(workspaceClient),
     workspaceSaveSettingsSnapshot:
       workspaceClient.workspaceSaveSettingsSnapshot.bind(workspaceClient),
     workspaceStageLocalAttachment:
@@ -212,13 +214,10 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     runtimeExecutablesCheck: agentClient.runtimeExecutablesCheck.bind(agentClient),
     taskStoreCheck: agentClient.taskStoreCheck.bind(agentClient),
     runtimeDefinitionsList: agentClient.runtimeDefinitionsList.bind(agentClient),
-    runtimeList: agentClient.runtimeList.bind(agentClient),
     taskWorktreeGet: agentClient.taskWorktreeGet.bind(agentClient),
-    runtimeStop: agentClient.runtimeStop.bind(agentClient),
-    runtimeEnsure: agentClient.runtimeEnsure.bind(agentClient),
-    runtimeRequire: agentClient.runtimeRequire.bind(agentClient),
-    repoRuntimeHealth: agentClient.repoRuntimeHealth.bind(agentClient),
-    repoRuntimeHealthStatus: agentClient.repoRuntimeHealthStatus.bind(agentClient),
+    runtimeStatus: agentClient.runtimeStatus.bind(agentClient),
+    runtimeRestartImpact: agentClient.runtimeRestartImpact.bind(agentClient),
+    runtimeRestart: agentClient.runtimeRestart.bind(agentClient),
     buildStart: agentClient.buildStart.bind(agentClient),
     devServerGetState: agentClient.devServerGetState.bind(agentClient),
     devServerStart: agentClient.devServerStart.bind(agentClient),

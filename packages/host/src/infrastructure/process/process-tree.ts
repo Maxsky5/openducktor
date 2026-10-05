@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import type { EventEmitter } from "node:events";
 import { Effect } from "effect";
-import { z } from "zod";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -117,27 +116,41 @@ export const processTreeIsAlive = (
 
 const runProcessCommand: ProcessCommandRunner = (command, args) =>
   Effect.async<ProcessCommandResult>((resume, signal) => {
-    const child = execFile(
-      command,
-      args,
-      { encoding: "buffer", windowsHide: true },
-      (error, stdout, stderr) => {
-        let status = 0;
-        if (error) {
-          const parsedCode = z.number().safeParse(error.code);
-          status = parsedCode.success ? parsedCode.data : 1;
-        }
-        const result: ProcessCommandResult = {
-          status,
-          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
-          stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
-        };
-        if (error) {
-          result.error = error;
-        }
-        resume(Effect.succeed(result));
-      },
-    );
+    // Shutdown inspects process trees after a terminal signal. In its own process group, a
+    // repeated Ctrl+C cannot kill the inspection and make the runtime stop fail. `execFile`
+    // ignores `detached`, so this runner uses `spawn`.
+    const child = spawn(command, args, {
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    let settled = false;
+    const finish = (status: number, error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      const result: ProcessCommandResult = {
+        status,
+        stdout: Buffer.concat(stdout),
+        stderr: Buffer.concat(stderr),
+      };
+      if (error) {
+        result.error = error;
+      }
+      resume(Effect.succeed(result));
+    };
+    child.once("error", (error) => finish(1, error));
+    child.once("close", (code, exitSignal) => {
+      if (code === 0) {
+        finish(0);
+        return;
+      }
+      const reason = exitSignal ? `signal ${exitSignal}` : `exit code ${code}`;
+      finish(code ?? 1, new Error(`Command failed with ${reason}: ${command} ${args.join(" ")}`));
+    });
     const abort = (): void => {
       child.kill();
     };

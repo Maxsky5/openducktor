@@ -17,6 +17,7 @@ import type {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useIsMutating } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
+import type { RuntimeImpactReviewState } from "@/components/features/runtimes/runtime-impact-review";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
@@ -69,6 +70,9 @@ export type SettingsModalController = {
   isCheckingRuntimeExecutables: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
+  runtimeReview: RuntimeImpactReviewState | null;
+  confirmRuntimeReview: () => void;
+  cancelRuntimeReview: () => void;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
   runtimeExecutablesError: string | null;
@@ -199,6 +203,7 @@ export const useSettingsModalController = ({
     detectGithubRepository,
     saveGlobalGitConfig,
     saveAgentModelFavorites,
+    previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
   } = workspaceState;
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
@@ -210,7 +215,7 @@ export const useSettingsModalController = ({
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,
   );
-  const { runtimeCheck } = checksState;
+  const runtimeCheck = checksState.runtimeCheck.data;
   const {
     allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
@@ -440,6 +445,9 @@ export const useSettingsModalController = ({
     snapshotDraft?.agentRuntimes.opencode,
   );
   const {
+    runtimeReview,
+    confirmRuntimeReview,
+    cancelRuntimeReview,
     isSaving,
     saveError,
     showRepoScriptValidationErrors,
@@ -494,6 +502,7 @@ export const useSettingsModalController = ({
     },
     onRuntimeAvailabilityError,
     saveGlobalGitConfig,
+    previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
     loadSettingsSnapshot,
     isAgentModelFavoritesMutationPending,
@@ -669,6 +678,9 @@ export const useSettingsModalController = ({
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,
     clearSelectedRepoDefaultModel,
+    runtimeReview,
+    confirmRuntimeReview,
+    cancelRuntimeReview,
     submit,
   };
 };

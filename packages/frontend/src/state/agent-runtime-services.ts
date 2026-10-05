@@ -4,8 +4,6 @@ import type {
   AgentRepositorySessionStartInput,
   AgentSessionLiveRef,
   AgentSessionResumeFailureReason,
-  RuntimeInstanceSummary,
-  RuntimeKind,
 } from "@openducktor/contracts";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
@@ -29,7 +27,6 @@ import {
 type AgentRuntimeServices = {
   agentEngine: AgentEnginePort;
   runtimeCatalogOperations: RuntimeCatalogOperations;
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
 };
 
 export const createAgentRuntimeServices = (hostClient: HostClient = host): AgentRuntimeServices => {
@@ -45,7 +42,6 @@ export const createAgentRuntimeServices = (hostClient: HostClient = host): Agent
   return {
     agentEngine: createAgentEngine(hostClient),
     runtimeCatalogOperations: createHostRuntimeCatalogOperations(hostClient),
-    startRepoRuntime: (repoPath, runtimeKind) => hostClient.runtimeEnsure(repoPath, runtimeKind),
   };
 };
 

@@ -1,6 +1,7 @@
 import type {
   AgentSessionContextUsage,
   AgentSessionLiveLoadContextInput,
+  RuntimeKind,
 } from "@openducktor/contracts";
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -26,6 +27,9 @@ export const agentSessionContextQueryKeys = {
       sessionScope?.kind === "workflow" ? sessionScope.taskId : null,
       sessionScope?.kind === "workflow" ? sessionScope.role : null,
     ] as const,
+  /** True for a context usage key of this runtime kind in any workspace or directory. */
+  matchesRuntimeKind: (key: QueryKey, runtimeKind: RuntimeKind): boolean =>
+    key[0] === agentSessionContextQueryKeys.all[0] && key[2] === runtimeKind,
 };
 
 type LoadAgentSessionContext = (

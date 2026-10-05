@@ -66,6 +66,8 @@ export function subscribeElectronHostEvent(
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (hostEvent.channel === "openducktor://workspace-provider-setup-updated") {
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
+        } else if (hostEvent.channel === "openducktor://runtime-changed") {
+          if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (active[0] === hostEvent.channel) {
           active[1](hostEvent.payload);
         }

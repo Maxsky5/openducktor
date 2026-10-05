@@ -1,4 +1,10 @@
 import {
+  type HostRuntimeSnapshot,
+  hostRuntimeSnapshotSchema,
+  type RuntimeLifecycleImpact,
+  type RuntimeRestartResult,
+  runtimeLifecycleImpactSchema,
+  runtimeRestartResultSchema,
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
@@ -6,24 +12,17 @@ import {
   type DevServerGroupState,
   type DevServerOwner,
   devServerGroupStateSchema,
-  type FailureKind,
   type PullRequest,
   pullRequestSchema,
-  type RepoRuntimeHealthCheck,
   type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeExecutableCheck,
   type RuntimeExecutableCheckInput,
-  type RuntimeInstanceSummary,
   type RuntimeKind,
-  runtimeEnsureFailureSourceSchema,
-  type RuntimeEnsureFailureSource,
-  repoRuntimeHealthCheckSchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
   runtimeExecutableCheckInputSchema,
   runtimeExecutableCheckSchema,
-  runtimeInstanceSummarySchema,
   type SystemCheck,
   systemCheckSchema,
   type TaskApprovalContextLoadResult,
@@ -43,111 +42,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 
-type RuntimeEnsureFailureKind = FailureKind;
-
-type RuntimeEnsureErrorInit = {
-  failureKind: RuntimeEnsureFailureKind;
-};
-
-type NormalizedRuntimeEnsureFailure = RuntimeEnsureErrorInit & {
-  message: string;
-  cause?: unknown;
-};
-
-class RuntimeEnsureError extends Error {
-  readonly failureKind: RuntimeEnsureFailureKind;
-
-  constructor(message: string, failure: RuntimeEnsureErrorInit, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "RuntimeEnsureError";
-    this.failureKind = failure.failureKind;
-  }
-}
-
-type RuntimeEnsureFailureEnvelope = {
-  message?: string;
-  error?: string;
-  failureKind: RuntimeEnsureFailureKind;
-};
-
-const readRuntimeEnsureFailureEnvelope = (
-  value: RuntimeEnsureFailureSource,
-): RuntimeEnsureFailureEnvelope | null => {
-  if (!value.failureKind) {
-    return null;
-  }
-
-  const failure: RuntimeEnsureFailureEnvelope = {
-    failureKind: value.failureKind,
-  };
-  if (value.message !== undefined) {
-    failure.message = value.message;
-  }
-  if (value.error !== undefined) {
-    failure.error = value.error;
-  }
-  return failure;
-};
-
-const buildRuntimeEnsureFailureSources = (cause: unknown): RuntimeEnsureFailureSource[] => {
-  const source = runtimeEnsureFailureSourceSchema.safeParse(cause);
-  if (!source.success) {
-    return [];
-  }
-
-  const nestedSource = runtimeEnsureFailureSourceSchema.safeParse(source.data.cause);
-  return nestedSource.success ? [source.data, nestedSource.data] : [source.data];
-};
-
-const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFailure | null => {
-  if (cause instanceof RuntimeEnsureError) {
-    const failure: NormalizedRuntimeEnsureFailure = {
-      message: cause.message,
-      failureKind: cause.failureKind,
-    };
-    if (cause.cause !== undefined) {
-      failure.cause = cause.cause;
-    }
-    return failure;
-  }
-
-  const sources = buildRuntimeEnsureFailureSources(cause);
-  const failureEnvelope = sources
-    .map((source) => readRuntimeEnsureFailureEnvelope(source))
-    .find((source): source is RuntimeEnsureFailureEnvelope => source !== null);
-  if (!failureEnvelope?.failureKind) {
-    return null;
-  }
-
-  const message =
-    failureEnvelope.message ??
-    failureEnvelope.error ??
-    (cause instanceof Error && cause.message.trim().length > 0 ? cause.message : undefined) ??
-    "Failed to ensure runtime.";
-
-  const failure: NormalizedRuntimeEnsureFailure = {
-    message,
-    failureKind: failureEnvelope.failureKind,
-  };
-  if (cause !== undefined) {
-    failure.cause = cause;
-  }
-  return failure;
-};
-
-const toRuntimeEnsureError = (cause: unknown): RuntimeEnsureError | null => {
-  const failure = extractRuntimeEnsureFailure(cause);
-  if (!failure) {
-    return null;
-  }
-
-  return new RuntimeEnsureError(
-    failure.message,
-    { failureKind: failure.failureKind },
-    failure.cause !== undefined ? { cause: failure.cause } : undefined,
-  );
-};
-
 const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
   return invokeFn("system_check", { repoPath }, systemCheckSchema);
 };
@@ -158,18 +52,6 @@ const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeC
 
 const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
   return invokeFn("task_store_check", { repoPath }, taskStoreCheckSchema);
-};
-
-const runtimeList = async (
-  invokeFn: InvokeFn,
-  repoPath: string | undefined,
-  runtimeKind: RuntimeKind,
-): Promise<RuntimeInstanceSummary[]> => {
-  return invokeFn(
-    "runtime_list",
-    { repoPath, runtimeKind },
-    arrayResultSchema(runtimeInstanceSummarySchema, "runtime_list"),
-  );
 };
 
 const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
@@ -196,52 +78,23 @@ const taskWorktreeGet = async (
   return invokeFn("task_worktree_get", { repoPath, taskId }, taskWorktreeSummarySchema.nullable());
 };
 
-const runtimeStop = async (invokeFn: InvokeFn, runtimeId: string): Promise<{ ok: boolean }> => {
-  return invokeFn("runtime_stop", { runtimeId }, okResultSchema("runtime_stop"));
+const runtimeStatus = async (invokeFn: InvokeFn): Promise<HostRuntimeSnapshot> => {
+  return invokeFn("runtime_status", {}, hostRuntimeSnapshotSchema);
 };
 
-const runtimeEnsure = async (
+const runtimeRestartImpact = async (
   invokeFn: InvokeFn,
-  repoPath: string,
   runtimeKind: RuntimeKind,
-): Promise<RuntimeInstanceSummary> => {
-  try {
-    return await invokeFn(
-      "runtime_ensure",
-      { repoPath, runtimeKind },
-      runtimeInstanceSummarySchema,
-    );
-  } catch (error) {
-    throw toRuntimeEnsureError(error) ?? error;
-  }
+): Promise<RuntimeLifecycleImpact> => {
+  return invokeFn("runtime_restart_impact", { runtimeKind }, runtimeLifecycleImpactSchema);
 };
 
-const runtimeRequire = async (
+const runtimeRestart = async (
   invokeFn: InvokeFn,
-  repoPath: string,
   runtimeKind: RuntimeKind,
-): Promise<RuntimeInstanceSummary> => {
-  return invokeFn("runtime_require", { repoPath, runtimeKind }, runtimeInstanceSummarySchema);
-};
-
-const repoRuntimeHealth = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeHealthCheck> => {
-  return invokeFn("repo_runtime_health", { repoPath, runtimeKind }, repoRuntimeHealthCheckSchema);
-};
-
-const repoRuntimeHealthStatus = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeHealthCheck> => {
-  return invokeFn(
-    "repo_runtime_health_status",
-    { repoPath, runtimeKind },
-    repoRuntimeHealthCheckSchema,
-  );
+  confirmation: string,
+): Promise<RuntimeRestartResult> => {
+  return invokeFn("runtime_restart", { runtimeKind, confirmation }, runtimeRestartResultSchema);
 };
 
 const buildStart = async (
@@ -443,13 +296,6 @@ export class HostAgentClient {
     return taskStoreCheck(this.invokeFn, repoPath);
   }
 
-  async runtimeList(
-    repoPath: string | undefined,
-    runtimeKind: RuntimeKind,
-  ): Promise<RuntimeInstanceSummary[]> {
-    return runtimeList(this.invokeFn, repoPath, runtimeKind);
-  }
-
   async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {
     return runtimeDefinitionsList(this.invokeFn);
   }
@@ -464,33 +310,19 @@ export class HostAgentClient {
     return taskWorktreeGet(this.invokeFn, repoPath, taskId);
   }
 
-  async runtimeStop(runtimeId: string): Promise<{ ok: boolean }> {
-    return runtimeStop(this.invokeFn, runtimeId);
+  async runtimeStatus(): Promise<HostRuntimeSnapshot> {
+    return runtimeStatus(this.invokeFn);
   }
 
-  async runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RuntimeInstanceSummary> {
-    return runtimeEnsure(this.invokeFn, repoPath, runtimeKind);
+  async runtimeRestartImpact(runtimeKind: RuntimeKind): Promise<RuntimeLifecycleImpact> {
+    return runtimeRestartImpact(this.invokeFn, runtimeKind);
   }
 
-  async runtimeRequire(
-    repoPath: string,
+  async runtimeRestart(
     runtimeKind: RuntimeKind,
-  ): Promise<RuntimeInstanceSummary> {
-    return runtimeRequire(this.invokeFn, repoPath, runtimeKind);
-  }
-
-  async repoRuntimeHealth(
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<RepoRuntimeHealthCheck> {
-    return repoRuntimeHealth(this.invokeFn, repoPath, runtimeKind);
-  }
-
-  async repoRuntimeHealthStatus(
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<RepoRuntimeHealthCheck> {
-    return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
+    confirmation: string,
+  ): Promise<RuntimeRestartResult> {
+    return runtimeRestart(this.invokeFn, runtimeKind, confirmation);
   }
 
   async buildStart(

@@ -129,7 +129,7 @@ describe("web CLI argument parsing", () => {
     "/events",
     "/local-attachment-preview",
     "/invoke",
-    "/invoke/runtime_ensure",
+    "/invoke/runtime_status",
     "/task-events/subscriptions",
     "/task-assets/workspace/task",
     "/terminal",

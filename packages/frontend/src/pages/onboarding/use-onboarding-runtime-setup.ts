@@ -5,7 +5,12 @@ import {
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import {
+  reportSettingsSaveFollowUps,
+  requireSavedSettings,
+} from "@/components/features/settings/settings-save/runtime-settings-application";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
+import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { replaceRuntimeExecutablePaths } from "@/state/operations/runtime-executables/runtime-executable-draft";
@@ -177,8 +182,13 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     setIsSaving(true);
     setStageError(null);
     try {
-      await saveSettingsSnapshot(
-        prepareSettingsSnapshotForSave({ ...settingsQuery.data, agentRuntimes: runtimeDraft }),
+      const saved = requireSavedSettings(
+        await saveSettingsSnapshot(
+          prepareSettingsSnapshotForSave({ ...settingsQuery.data, agentRuntimes: runtimeDraft }),
+        ),
+      );
+      reportSettingsSaveFollowUps(saved, (title, description) =>
+        toast.warning(title, { description }),
       );
       setConfirmNoRuntime(false);
       onContinue();

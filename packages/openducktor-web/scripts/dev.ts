@@ -231,6 +231,10 @@ export const runWebDevEffect = (
           const handleSigterm = (): void => {
             void shutdown(143);
           };
+          // A closed terminal sends SIGHUP. Stop the web CLI so it can stop its runtimes.
+          const handleSighup = (): void => {
+            void shutdown(129);
+          };
           const handleExit = (): void => {
             if (!webCliExited) {
               try {
@@ -245,6 +249,7 @@ export const runWebDevEffect = (
             Effect.sync(() => {
               process.on("SIGINT", handleSigint);
               process.on("SIGTERM", handleSigterm);
+              process.on("SIGHUP", handleSighup);
               process.on("exit", handleExit);
             }),
             () =>
@@ -264,6 +269,7 @@ export const runWebDevEffect = (
               Effect.sync(() => {
                 process.off("SIGINT", handleSigint);
                 process.off("SIGTERM", handleSigterm);
+                process.off("SIGHUP", handleSighup);
                 process.off("exit", handleExit);
               }),
           );

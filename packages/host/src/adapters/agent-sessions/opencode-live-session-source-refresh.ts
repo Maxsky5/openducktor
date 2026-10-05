@@ -9,7 +9,6 @@ import type {
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { refKey } from "./opencode-live-session-normalization";
 import type {
   OpenCodePendingRequestRouter,
@@ -23,7 +22,8 @@ import {
 } from "./opencode-live-session-state-policy";
 
 type ApplyOpenCodeSessionSourcesInput = {
-  runtime: OpenCodeRuntimeInstance;
+  /** The refreshed repository. Snapshots of other repositories stay unchanged. */
+  repoPath: string;
   sources: ReadonlyArray<OpencodeRuntimeSnapshotSource>;
   failures: ReadonlyArray<OpencodeRuntimeSnapshotFailure>;
   snapshots: ReadonlyArray<AgentSessionLiveSnapshot>;
@@ -45,7 +45,7 @@ type StagedSession = {
 };
 
 export const applyOpenCodeSessionSources = ({
-  runtime,
+  repoPath,
   sources,
   failures,
   snapshots,
@@ -59,7 +59,7 @@ export const applyOpenCodeSessionSources = ({
   const seenKeys = new Set<string>();
   for (const source of sources) {
     const ref: AgentSessionLiveRef = {
-      repoPath: runtime.repoPath,
+      repoPath: source.repoPath,
       runtimeKind: "opencode",
       workingDirectory: source.workingDirectory,
       externalSessionId: source.externalSessionId,
@@ -108,7 +108,7 @@ export const applyOpenCodeSessionSources = ({
 
   const changes: AgentSessionLiveAdapterChange[] = failures.map((failure) => {
     const ref: AgentSessionLiveRef = {
-      repoPath: runtime.repoPath,
+      repoPath: failure.repoPath,
       runtimeKind: "opencode",
       workingDirectory: failure.workingDirectory,
       externalSessionId: failure.externalSessionId,
@@ -116,14 +116,18 @@ export const applyOpenCodeSessionSources = ({
     seenKeys.add(refKey(ref));
     return {
       type: "fault",
-      repoPath: runtime.repoPath,
+      repoPath: failure.repoPath,
       ref,
       operation: "opencode-live-session.refresh-session",
       message: `Failed to refresh OpenCode session '${failure.externalSessionId}' in '${failure.workingDirectory}': ${failure.message}`,
     };
   });
   for (const snapshot of snapshots) {
-    if (!seenKeys.has(refKey(snapshot.ref)) && isFresh(snapshot.ref)) {
+    if (
+      snapshot.ref.repoPath === repoPath &&
+      !seenKeys.has(refKey(snapshot.ref)) &&
+      isFresh(snapshot.ref)
+    ) {
       changes.push(...removeSession(snapshot.ref));
     }
   }

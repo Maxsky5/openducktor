@@ -4,7 +4,10 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
-import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
+import {
+  createLiveSessionPublisher,
+  createRuntimeImpactSignal,
+} from "./runtime-lifecycle-publisher";
 
 type Input = Omit<
   Parameters<typeof createAgentSessionLiveStateService>[0],
@@ -21,6 +24,8 @@ export const createNodeAgentSessionLiveState = ({
   ...dependencies
 }: Input) => {
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
+  const publishLive = createLiveSessionPublisher(eventBus);
+  const signalImpact = eventBus ? createRuntimeImpactSignal(eventBus) : () => {};
   return {
     liveSessionAdapterRegistry,
     liveState: createAgentSessionLiveStateService({
@@ -28,7 +33,10 @@ export const createNodeAgentSessionLiveState = ({
       adapterRegistry: liveSessionAdapterRegistry,
       readSessionRootRefs: createLiveSessionRootRefsReader(dependencies),
       faultLog: createLiveSessionFaultLogger(lifecycleLogger),
-      publish: createLiveSessionPublisher(eventBus),
+      publish: (envelope) => {
+        publishLive(envelope);
+        signalImpact(envelope);
+      },
     }),
   };
 };

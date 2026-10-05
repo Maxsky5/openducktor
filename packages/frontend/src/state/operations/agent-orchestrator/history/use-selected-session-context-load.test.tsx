@@ -71,7 +71,7 @@ describe("useSelectedSessionContextLoad", () => {
     const second = session("thread-2");
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
-      { session: first, repoReadinessState: "ready" as const },
+      { session: first, runtimeReadinessState: "ready" as const },
       { wrapper },
     );
 
@@ -128,7 +128,7 @@ describe("useSelectedSessionContextLoad", () => {
       useSelectedSessionContextLoad,
       {
         session: { ...session("child-thread"), sessionAssociation: { kind: "unbound" } },
-        repoReadinessState: "ready" as const,
+        runtimeReadinessState: "ready" as const,
       },
       { wrapper },
     );
@@ -184,7 +184,7 @@ describe("useSelectedSessionContextLoad", () => {
     const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
-      { session: repositorySession, repoReadinessState: "ready" as const },
+      { session: repositorySession, runtimeReadinessState: "ready" as const },
       { wrapper },
     );
 
@@ -244,7 +244,7 @@ describe("useSelectedSessionContextLoad", () => {
               ? { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5.4", variant: "high" }
               : null,
           },
-          repoReadinessState: "ready" as const,
+          runtimeReadinessState: "ready" as const,
         },
         { wrapper },
       );
@@ -292,7 +292,7 @@ describe("useSelectedSessionContextLoad", () => {
     const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
-      { session: session("thread-1"), repoReadinessState: "ready" as const },
+      { session: session("thread-1"), runtimeReadinessState: "ready" as const },
       { wrapper },
     );
 

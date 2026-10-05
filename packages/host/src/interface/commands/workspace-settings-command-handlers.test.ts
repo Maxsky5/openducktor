@@ -1,6 +1,8 @@
+import { createHostRuntimeServiceTestDouble } from "../../test-support/host-runtime-service-test-double";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { DEFAULT_AGENT_RUNTIMES, DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
 import {
@@ -289,20 +291,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      saveSettingsSnapshot() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("saveSettingsSnapshot");
-            return [];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       updateAgentModelFavorites() {
         return Effect.tryPromise({
           try: async () => {
@@ -398,8 +386,17 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         });
       },
     });
+    const savedRuntimeInputs: Parameters<HostRuntimeService["saveSettings"]>[0][] = [];
+    const hostRuntimeService = createHostRuntimeServiceTestDouble({
+      saveSettings: (input) =>
+        Effect.sync(() => {
+          calls.push("saveSettings");
+          savedRuntimeInputs.push(input);
+          return { type: "saved" as const, workspaces: [], runtimeApplications: [] };
+        }),
+    });
     const router = createHostCommandRouter({
-      handlers: createWorkspaceSettingsCommandHandlers(service),
+      handlers: createWorkspaceSettingsCommandHandlers(service, hostRuntimeService),
     });
     await expect(router.invoke("workspace_list")).resolves.toEqual([]);
     await expect(
@@ -501,8 +498,15 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           workspaces: {},
           globalPromptOverrides: {},
         },
+        runtimeConfirmation: "confirmation-1",
       }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ type: "saved", workspaces: [], runtimeApplications: [] });
+    expect(savedRuntimeInputs).toHaveLength(1);
+    expect(savedRuntimeInputs[0]?.runtimeConfirmation).toBe("confirmation-1");
+    expect(savedRuntimeInputs[0]?.snapshot.agentRuntimes).toMatchObject({
+      opencode: { enabled: true, executablePath: "/bin/opencode" },
+      codex: { enabled: false, executablePath: "/bin/codex" },
+    });
     await expect(
       router.invoke("workspace_update_agent_model_favorites", {
         favorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
@@ -532,7 +536,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "saveRepoSettings",
       "updateRepoHooks",
       "getSettingsSnapshot",
-      "saveSettingsSnapshot",
+      "saveSettings",
       "updateAgentModelFavorites",
       "updateKanbanTaskCardView",
       "setTheme",
@@ -658,19 +662,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      saveSettingsSnapshot() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call saveSettingsSnapshot");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       setTheme() {
         return Effect.tryPromise({
           try: async () => {
@@ -699,7 +690,10 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       },
     });
     const router = createHostCommandRouter({
-      handlers: createWorkspaceSettingsCommandHandlers(service),
+      handlers: createWorkspaceSettingsCommandHandlers(
+        service,
+        createHostRuntimeServiceTestDouble(),
+      ),
     });
     await expect(router.invoke("workspace_get_settings_snapshot", { extra: true })).rejects.toThrow(
       "workspace_get_settings_snapshot does not accept arguments.",
@@ -766,5 +760,67 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         tileColor: false,
       }),
     ).rejects.toThrow("tileColor");
+  });
+
+  test("previews runtime impact and validates the save confirmation", async () => {
+    const snapshot = {
+      system: {},
+      git: { defaultMergeMethod: "merge_commit" },
+      general: { openAgentStudioTabOnBackgroundSessionStart: true },
+      appearance: { horizontalScrollbarVisibility: "system" },
+      chat: { showThinkingMessages: false },
+      reusablePrompts: [],
+      kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
+      autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+      notifications: DEFAULT_NOTIFICATION_SETTINGS,
+      agentRuntimes: {
+        opencode: { enabled: false, executablePath: "/bin/opencode" },
+        codex: { enabled: false, executablePath: "/bin/codex" },
+      },
+      agentModelFavorites: [],
+      workspaces: {},
+      globalPromptOverrides: {},
+    };
+    const impact = {
+      kinds: [
+        {
+          kind: "opencode" as const,
+          runtimeId: "runtime-1",
+          effect: "stop" as const,
+          oldExecutablePath: "/bin/opencode",
+          newExecutablePath: null,
+        },
+      ],
+      workspaces: [],
+      confirmation: "confirmation-1",
+    };
+    const previewed: Parameters<HostRuntimeService["previewSettings"]>[0][] = [];
+    const router = createHostCommandRouter({
+      handlers: createWorkspaceSettingsCommandHandlers(
+        createWorkspaceSettingsServiceTestDouble({}),
+        createHostRuntimeServiceTestDouble({
+          previewSettings: (input) =>
+            Effect.sync(() => {
+              previewed.push(input);
+              return { impact };
+            }),
+        }),
+      ),
+    });
+    await expect(
+      router.invoke("workspace_preview_settings_snapshot_runtime", { snapshot }),
+    ).resolves.toEqual({ impact });
+    expect(previewed).toHaveLength(1);
+    expect(previewed[0]?.agentRuntimes.opencode).toMatchObject({
+      enabled: false,
+      executablePath: "/bin/opencode",
+    });
+    await expect(router.invoke("workspace_preview_settings_snapshot_runtime")).rejects.toThrow(
+      "workspace_preview_settings_snapshot_runtime expects argument 'snapshot'.",
+    );
+    await expect(
+      router.invoke("workspace_save_settings_snapshot", { snapshot, runtimeConfirmation: 42 }),
+    ).rejects.toThrow("workspace_save_settings_snapshot runtimeConfirmation must be a string.");
+    expect(previewed).toHaveLength(1);
   });
 });

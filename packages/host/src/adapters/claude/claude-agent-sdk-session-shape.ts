@@ -11,7 +11,9 @@ import {
   resolveAgentSessionAssociationTransition,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
+import { trimTrailingPathSeparators } from "@openducktor/path-support";
 import { HostValidationError } from "../../effect/host-errors";
+import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
 import { claudeSessionRef, claudeSessionScope } from "./claude-agent-sdk-utils";
@@ -168,6 +170,39 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
     snapshot.parentExternalSessionId = session.parentExternalSessionId;
   }
   return toAgentSessionRuntimeSnapshot({ ref, snapshot });
+};
+
+const normalizeTargetPath = (value: string): string => trimTrailingPathSeparators(value.trim());
+
+export const claudeSessionMatchesTarget = (
+  session: ClaudeSession,
+  target: RuntimeSessionTarget,
+): boolean =>
+  target.runtimeKind === "claude" &&
+  session.externalSessionId === target.externalSessionId &&
+  normalizeTargetPath(session.input.workingDirectory) ===
+    normalizeTargetPath(target.workingDirectory);
+
+export const assertClaudeSessionTarget = (
+  session: ClaudeSession,
+  target: RuntimeSessionTarget,
+  action: string,
+): void => {
+  if (claudeSessionMatchesTarget(session, target)) {
+    return;
+  }
+  throw new HostValidationError({
+    field: "externalSessionId",
+    message: `Cannot ${action} ${target.runtimeKind} session '${target.externalSessionId}' in working directory '${target.workingDirectory}' because the registered Claude session uses working directory '${session.input.workingDirectory}'.`,
+    details: {
+      requested: {
+        runtimeKind: target.runtimeKind,
+        externalSessionId: target.externalSessionId,
+        workingDirectory: target.workingDirectory,
+      },
+      actualWorkingDirectory: session.input.workingDirectory,
+    },
+  });
 };
 
 export const assertClaudeSessionRef = (

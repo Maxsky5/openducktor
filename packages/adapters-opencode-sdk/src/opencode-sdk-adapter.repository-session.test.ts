@@ -198,7 +198,10 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         .every((call) => call.permission === undefined),
     ).toBe(true);
     expect(mock.session.promptAsyncCalls[0]).not.toHaveProperty("tools");
-    expect(mock.mcp.statusCalls).toHaveLength(4);
+    expect(mock.mcp.addCalls).toEqual([
+      expect.objectContaining({ directory: "/repo", name: "openducktor" }),
+    ]);
+    expect(mock.mcp.statusCalls).toHaveLength(3);
     expect(mock.mcp.statusCalls).toEqual(
       expect.arrayContaining([expect.objectContaining({ directory: "/repo" })]),
     );
@@ -520,9 +523,9 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.question.replyCalls).toHaveLength(0);
   });
 
-  test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
+  test("fails before starting a repository session when the trusted MCP does not connect", async () => {
     const mock = makeMockClient({
-      mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
+      mcpAddResponse: { openducktor: { status: "failed", error: "connection closed" } },
     });
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
 
@@ -535,7 +538,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         runtimePolicy,
         systemPrompt: "repository system",
       }),
-    ).rejects.toThrow('MCP server "openducktor" stayed unavailable after reconnect');
+    ).rejects.toThrow('Status is "failed" (connection closed)');
     expect(mock.session.createCalls).toHaveLength(0);
   });
 

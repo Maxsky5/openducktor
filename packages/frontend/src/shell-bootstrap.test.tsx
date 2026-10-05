@@ -30,6 +30,7 @@ const createTestShellBridge = (): ShellBridge =>
   ({
     client: createHostClientFixture({}),
     subscribeWorkspaceSessionUpdates: async () => () => {},
+    subscribeRuntimeChanges: async () => () => {},
     subscribeRunEvents: async () => () => {},
     subscribeWorkspaceProviderSetupUpdates: async () => () => {},
     subscribeAzureDevOpsConnectionUpdates: async () => () => {},

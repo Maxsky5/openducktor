@@ -1,26 +1,16 @@
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
 import {
-  errorMessage,
   HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
-import type {
-  RuntimeMcpStatusProbeInput,
-  RuntimeMcpStatusProbeResult,
-  RuntimeRegistryError,
-} from "../../ports/runtime-registry-port";
-import { isTimeoutError } from "./runtime-probe-errors";
+import type { RuntimeRegistryError } from "../../ports/runtime-registry-port";
 
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
-const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
-const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
-const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
-const toolIdsSchema = z.array(z.unknown());
 type RuntimeProbeObject = Record<string, JSONType>;
 const runtimeProbeObjectSchema = z.record(z.string(), z.json());
 const isRuntimeProbeObject = (value: JSONType | undefined): value is RuntimeProbeObject =>
@@ -30,17 +20,6 @@ type RuntimeSessionRouteInput = {
   runtimeKind: string;
   runtimeRoute: RuntimeRoute;
   externalSessionId: string;
-  workingDirectory: string;
-};
-
-type RuntimeProbeFailureDetails = {
-  detail?: string;
-  failureKind?: "timeout";
-  method?: string;
-  operation?: string;
-  path: string;
-  status?: number;
-  url?: string;
   workingDirectory: string;
 };
 
@@ -84,67 +63,10 @@ const sessionEndpoint = (endpoint: URL, routePath: string, workingDirectory: str
   return url;
 };
 
-const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string): URL => {
-  const url = new URL(routePath, endpoint);
-  url.searchParams.set("directory", workingDirectory);
-  return url;
-};
-
 const isLiveSessionStatus = (value: JSONType | undefined): boolean => {
   if (!isRuntimeProbeObject(value)) return false;
   const status = value.type;
   return status === "busy" || status === "retry";
-};
-
-const requireObjectPayload = (value: JSONType | null, context: string) => {
-  const parsed = runtimeProbeObjectSchema.safeParse(value);
-  if (!parsed.success) {
-    return Effect.fail(
-      new HostValidationError({
-        message: `${context} must be an object`,
-        details: { context },
-      }),
-    );
-  }
-  return Effect.succeed(parsed.data);
-};
-
-const readStringProperty = (value: RuntimeProbeObject, property: string): string | null => {
-  const parsed = z.string().safeParse(value[property]);
-  if (!parsed.success) return null;
-  const trimmed = parsed.data.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => ({
-  supported: true,
-  connected: false,
-  serverStatus: null,
-  toolIds: [],
-  detail,
-  failureKind: "timeout",
-});
-
-const parseToolIds = (payload: JSONType | null) => {
-  const parsedPayload = toolIdsSchema.safeParse(payload);
-  if (!parsedPayload.success) {
-    return Effect.fail(
-      new HostValidationError({
-        message: "OpenCode tool id payload must be an array",
-        cause: parsedPayload.error,
-      }),
-    );
-  }
-  return Effect.succeed(
-    Array.from(
-      new Set(
-        parsedPayload.data
-          .map((entry) => z.string().safeParse(entry))
-          .map((entry) => (entry.success ? entry.data.trim() : ""))
-          .filter(Boolean),
-      ),
-    ),
-  );
 };
 
 const readBoundedResponseText = (response: Response) =>
@@ -271,197 +193,3 @@ export const probeOpenCodeSessionStatus = ({
       hasLiveSession: isLiveSessionStatus(statuses[externalSessionId]),
     };
   });
-
-const fetchOpenCodeJson = (
-  runtimeRoute: RuntimeRoute,
-  operation: string,
-  method: "GET" | "POST",
-  routePath: string,
-  workingDirectory: string,
-) =>
-  Effect.gen(function* () {
-    const endpoint = yield* requireOpenCodeLocalHttpEndpoint(runtimeRoute, operation);
-    const url = mcpEndpoint(endpoint, routePath, workingDirectory);
-    const response = yield* Effect.tryPromise({
-      try: () =>
-        fetch(url, {
-          method,
-          signal: AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS),
-        }),
-      catch: (cause) => {
-        const details: RuntimeProbeFailureDetails = {
-          operation,
-          method,
-          path: routePath,
-          workingDirectory,
-          url: url.toString(),
-        };
-        if (isTimeoutError(cause)) {
-          details.failureKind = "timeout";
-        }
-        return toHostOperationError(
-          cause,
-          `runtimeRegistry.fetchOpenCodeJson.${operation}`,
-          details,
-        );
-      },
-    });
-    const body = yield* Effect.tryPromise({
-      try: () => response.text(),
-      catch: (cause) => toHostOperationError(cause, "runtimeRegistry.readOpenCodeJsonResponse"),
-    });
-    if (!response.ok) {
-      const detail = body.trim();
-      const timedOut = TIMEOUT_RESPONSE_STATUSES.has(response.status);
-      const details: RuntimeProbeFailureDetails = {
-        status: response.status,
-        detail,
-        path: routePath,
-        workingDirectory,
-      };
-      if (timedOut) {
-        details.failureKind = "timeout";
-      }
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: `runtimeRegistry.fetchOpenCodeJson.${operation}`,
-          message: detail
-            ? `OpenCode ${operation} failed with status ${response.status}: ${detail}`
-            : `OpenCode ${operation} failed with status ${response.status}`,
-          details,
-        }),
-      );
-    }
-    if (body.trim().length === 0) {
-      return null;
-    }
-    return yield* Effect.try({
-      try: () => parseJson(body),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-          details: {
-            operation: `runtimeRegistry.parseOpenCodeJson.${operation}`,
-            path: routePath,
-            workingDirectory,
-          },
-        }),
-    });
-  });
-
-export const probeOpenCodeMcpStatus = ({
-  runtimeRoute,
-  workingDirectory,
-  serverName,
-}: {
-  runtimeRoute: RuntimeRoute;
-  workingDirectory: string;
-  serverName: string;
-}) =>
-  Effect.gen(function* () {
-    if (runtimeRoute.type !== "local_http") {
-      return {
-        supported: false,
-        connected: false,
-        serverStatus: null,
-        toolIds: [],
-        detail: null,
-        failureKind: null,
-      };
-    }
-    const statusPayload = yield* requireObjectPayload(
-      yield* fetchOpenCodeJson(runtimeRoute, "load MCP status", "GET", "/mcp", workingDirectory),
-      "OpenCode MCP status payload",
-    );
-    const rawServer = statusPayload[serverName];
-    if (!rawServer) {
-      return {
-        supported: true,
-        connected: false,
-        serverStatus: null,
-        toolIds: [],
-        detail: `MCP server ${serverName} was not reported by the runtime.`,
-        failureKind: "error" as const,
-      };
-    }
-    const server = yield* requireObjectPayload(rawServer, `OpenCode MCP status for ${serverName}`);
-    const status = readStringProperty(server, "status");
-    if (!status) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `OpenCode MCP status for ${serverName} is missing status`,
-          field: "status",
-          details: { serverName },
-        }),
-      );
-    }
-    const error = readStringProperty(server, "error");
-    if (status !== "connected") {
-      return {
-        supported: true,
-        connected: false,
-        serverStatus: status,
-        toolIds: [],
-        detail: error ?? `MCP server ${serverName} status is ${status}.`,
-        failureKind: "error" as const,
-      };
-    }
-    const toolIds = yield* parseToolIds(
-      yield* fetchOpenCodeJson(
-        runtimeRoute,
-        "load tool ids",
-        "GET",
-        "/experimental/tool/ids",
-        workingDirectory,
-      ),
-    );
-    return {
-      supported: true,
-      connected: true,
-      serverStatus: status,
-      toolIds,
-      detail: null,
-      failureKind: null,
-    };
-  }).pipe(
-    Effect.catchAll((error) =>
-      isTimeoutError(error)
-        ? Effect.succeed(timeoutMcpProbeResult(errorMessage(error)))
-        : Effect.fail(error),
-    ),
-  );
-
-export const probeCodexMcpStatus = ({
-  runtimeRoute,
-  serverName,
-}: RuntimeMcpStatusProbeInput): RuntimeMcpStatusProbeResult => {
-  if (runtimeRoute.type !== "stdio") {
-    return {
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: "Codex MCP status probing requires a host-managed stdio app-server runtime.",
-      failureKind: "error",
-    };
-  }
-  if (serverName !== "openducktor") {
-    return {
-      supported: true,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: `MCP server ${serverName} is not configured for Codex app-server runtimes.`,
-      failureKind: "error",
-    };
-  }
-  return {
-    supported: true,
-    connected: true,
-    serverStatus: "connected",
-    toolIds: CODEX_ODT_TOOL_IDS,
-    detail: null,
-    failureKind: null,
-  };
-};

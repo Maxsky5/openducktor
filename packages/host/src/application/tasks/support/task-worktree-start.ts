@@ -158,7 +158,10 @@ export const prepareNewTaskWorktree = (
             }),
           );
         }
-      }),
+      }).pipe(
+        // An interrupted setup has no caller that holds this cleanup yet.
+        Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
+      ),
     );
 
     if (setupResult._tag === "Left") {

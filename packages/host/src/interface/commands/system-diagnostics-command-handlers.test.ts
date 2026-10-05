@@ -48,7 +48,12 @@ const createDiagnosticsService = () => {
     taskStoreCheck,
     systemCheck,
   } satisfies SystemDiagnosticsService;
-  return { runtimeCheck, service, systemCheck, taskStoreCheck };
+  return {
+    runtimeCheck,
+    service,
+    systemCheck,
+    taskStoreCheck,
+  };
 };
 describe("createSystemDiagnosticsCommandHandlers", () => {
   test("routes diagnostics commands to the service", async () => {

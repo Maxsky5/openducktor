@@ -1,3 +1,4 @@
+import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { describe, expect, test } from "bun:test";
 import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -90,7 +91,7 @@ describe("global Custom Agent Roles", () => {
       Effect.all(
         [
           service.createCustomAgentRole({ name: "One", systemPrompt: "One" }),
-          service.saveSettingsSnapshot({
+          saveSettingsSnapshot(service, {
             ...snapshot,
             chat: { ...snapshot.chat, showThinkingMessages: true },
           }),

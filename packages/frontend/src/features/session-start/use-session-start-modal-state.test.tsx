@@ -14,15 +14,15 @@ import type {
 import { QueryClient } from "@tanstack/react-query";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import {
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type { HostRuntimeStatusMap } from "@/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createChecksStateContextValue,
   createDeferred,
-  createRepoRuntimeHealthContextValue,
+  createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -217,9 +217,11 @@ const createReadyRuntimeHealthMap = (runtimeDefinitions: RuntimeDescriptor[]) =>
     definitionsByKind.set(definition.kind, definition);
   }
 
-  const runtimeHealthByKind: RepoRuntimeHealthMap = {};
+  const runtimeHealthByKind: HostRuntimeStatusMap = {};
   for (const definition of definitionsByKind.values()) {
-    runtimeHealthByKind[definition.kind] = createRepoRuntimeHealthFixture({ status: "ready" });
+    runtimeHealthByKind[definition.kind] = createHostRuntimeStatusFixture({
+      kind: definition.kind,
+    });
   }
   return runtimeHealthByKind;
 };
@@ -238,16 +240,16 @@ const createHookHarness = (
       }),
   };
   const checksStateContext = options?.checksStateContext ?? createChecksStateContextValue();
-  const repoRuntimeHealthContext =
-    options?.repoRuntimeHealthContext ??
-    createRepoRuntimeHealthContextValue({
-      runtimeHealthByRuntime: createReadyRuntimeHealthMap(runtimeDefinitions),
+  const hostRuntimeStatusContext =
+    options?.hostRuntimeStatusContext ??
+    createHostRuntimeStatusContextValue({
+      statusByKind: createReadyRuntimeHealthMap(runtimeDefinitions),
     });
   const harness = createSharedHookHarness(useSessionStartModalState, hookProps, {
     ...options,
     runtimeDefinitionsContextRef,
     checksStateContext,
-    repoRuntimeHealthContext,
+    hostRuntimeStatusContext,
   });
   return {
     ...harness,
@@ -352,24 +354,17 @@ describe("useSessionStartModalState", () => {
 
   test("waits for runtime readiness before loading the modal catalog", async () => {
     const loadCatalog = mock(async () => runtimeCatalogFor(CATALOG));
-    const repoRuntimeHealthContextRef = {
-      current: createRepoRuntimeHealthContextValue({
-        runtimeHealthByRuntime: {
-          opencode: createRepoRuntimeHealthFixture({
-            status: "not_started",
-            runtime: {
-              status: "not_started",
-              stage: "idle",
-              detail: "Runtime has not been started yet.",
-            },
-          }),
+    const hostRuntimeStatusContextRef = {
+      current: createHostRuntimeStatusContextValue({
+        statusByKind: {
+          opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
         },
       }),
     };
     const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
       loadCatalog,
     });
-    const harness = createHookHarness(props, { repoRuntimeHealthContextRef });
+    const harness = createHookHarness(props, { hostRuntimeStatusContextRef });
 
     await harness.mount();
 
@@ -388,9 +383,9 @@ describe("useSessionStartModalState", () => {
     expect(loadCatalog).not.toHaveBeenCalled();
     expect(harness.getLatest().isCatalogLoading).toBe(true);
 
-    repoRuntimeHealthContextRef.current = createRepoRuntimeHealthContextValue({
-      runtimeHealthByRuntime: {
-        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+    hostRuntimeStatusContextRef.current = createHostRuntimeStatusContextValue({
+      statusByKind: {
+        opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
     });
     await harness.update(props);

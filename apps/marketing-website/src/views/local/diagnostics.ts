@@ -1,7 +1,7 @@
 // The Diagnostics sheet of the Local view. Sources: diagnostics-panel.tsx,
-// diagnostics-panel-sections.tsx, and diagnostics-panel-model.ts in
-// packages/frontend/src/components/features/diagnostics, and repo-runtime-health.ts. The
-// repository, the user name, and the paths are samples.
+// diagnostics-panel-sections.tsx, and the diagnostics-*-model.ts files in
+// packages/frontend/src/components/features/diagnostics. The repository, the user name, and
+// the paths are samples.
 import type { DiagState } from "../../replica/diagnostics/model";
 import type { RuntimeKind } from "../../sample/models";
 import { CONFIG_PATH, REPOSITORY_PATH, WORKSPACE } from "../../sample/workspace";

@@ -3,6 +3,7 @@ import {
   type CustomAgentRole,
   type CustomAgentRoleInput,
   DEFAULT_BRANCH_PREFIX,
+  type GlobalConfig,
   type GlobalGitConfig,
   type KanbanTaskCardView,
   globalConfigSchema,
@@ -112,9 +113,21 @@ export type WorkspaceSettingsService = {
     hooks: RepoHooks,
   ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   getSettingsSnapshot(): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
-  saveSettingsSnapshot(
+  /** Validates a settings save without writing it. */
+  prepareSettingsSnapshot(
     snapshot: SettingsSnapshotSaveInput,
-  ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
+  ): Effect.Effect<PreparedSettingsSnapshot, WorkspaceSettingsError>;
+  /**
+   * Validates a settings save, then lets `commit` decide whether to run `write`.
+   * The whole call holds the config write lock.
+   */
+  saveSettingsSnapshotWith<A, E>(
+    snapshot: SettingsSnapshotSaveInput,
+    commit: (
+      prepared: PreparedSettingsSnapshot,
+      write: Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>,
+    ) => Effect.Effect<A, E>,
+  ): Effect.Effect<A, E | WorkspaceSettingsError>;
   updateAgentModelFavorites(
     favorites: AgentModelFavorite[],
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
@@ -123,6 +136,10 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   setTheme(theme: ThemePreference): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;
+};
+export type PreparedSettingsSnapshot = {
+  readonly current: GlobalConfig;
+  readonly next: GlobalConfig;
 };
 export type WorkspaceAddInput = {
   repoPath: string;

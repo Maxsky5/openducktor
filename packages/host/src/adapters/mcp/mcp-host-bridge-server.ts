@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   type GetWorkspacesResult,
+  type HostMcpBridgeStatus,
   type OdtHostBridgeReady,
   type OdtToolErrorPayload,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect, Exit, FiberId } from "effect";
 import { z } from "zod";
 import type {
   OdtMcpBridgeError,
@@ -15,8 +16,12 @@ import type {
   WorkspaceScopedOdtToolResult,
 } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
-import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
+import {
+  causeMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
+import type { OpenDucktorMcpBridgeConnection } from "./openducktor-mcp-environment";
 import {
   type McpBridgeDiscoveryFile,
   removeMcpBridgeDiscoveryFile,
@@ -34,8 +39,10 @@ export type McpHostBridgeConnectionInput = {
 export type McpHostBridgeServer = {
   ensureConnection(
     input: McpHostBridgeConnectionInput,
-  ): Effect.Effect<OpenCodeMcpBridgeConnection, HostOperationErrorAggregate>;
+  ): Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationErrorAggregate>;
   ensureExternalDiscoveryReady(): Effect.Effect<void, HostOperationErrorAggregate>;
+  /** The current bridge state. The host starts the bridge; reading the status never starts it. */
+  status(): HostMcpBridgeStatus;
   close(): Effect.Effect<McpHostBridgeCloseResult, HostOperationErrorAggregate>;
 };
 
@@ -48,6 +55,8 @@ export type CreateMcpHostBridgeServerInput = {
   bridgeService: OdtMcpBridgeService;
   discoveryPath: string;
   workspaceSettingsService: WorkspaceSettingsService;
+  /** Receives each status change, so clients see it without reading again. */
+  onStatusChanged: (status: HostMcpBridgeStatus) => void;
   token?: string;
 };
 
@@ -263,12 +272,32 @@ export const createMcpHostBridgeServer = ({
   bridgeService,
   discoveryPath,
   workspaceSettingsService,
+  onStatusChanged,
   token = randomUUID(),
 }: CreateMcpHostBridgeServerInput): McpHostBridgeServer => {
   let server: Server | null = null;
   let baseUrl: string | null = null;
   let publishedDiscovery: McpBridgeDiscoveryFile | null = null;
   let startupFlight: McpHostBridgeStartup | null = null;
+  /** A failed startup stays failed. Operations that need the bridge report it; none retry it. */
+  let startupFailure: string | null = null;
+  const startupFailureMessage = (cause: string) =>
+    `The OpenDucktor MCP host bridge did not start: ${cause} Fix the cause, then restart OpenDucktor.`;
+  let status: HostMcpBridgeStatus = {
+    state: "starting",
+    hostUrl: null,
+    failure: null,
+    updatedAt: new Date().toISOString(),
+    revision: 0,
+  };
+  const changeStatus = (change: Pick<HostMcpBridgeStatus, "state" | "hostUrl" | "failure">) => {
+    status = {
+      ...change,
+      updatedAt: new Date().toISOString(),
+      revision: status.revision + 1,
+    };
+    onStatusChanged(status);
+  };
 
   const startBridge = (): Effect.Effect<StartedMcpHostBridge, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
@@ -333,6 +362,9 @@ export const createMcpHostBridgeServer = ({
           if (startupFlight) {
             return { _tag: "existing" as const, flight: startupFlight };
           }
+          if (startupFailure !== null) {
+            return { _tag: "failed" as const, cause: startupFailure };
+          }
           const flight: McpHostBridgeStartup = {
             deferred: Deferred.unsafeMake(FiberId.none),
           };
@@ -345,6 +377,12 @@ export const createMcpHostBridgeServer = ({
         }
         if (reservation._tag === "existing") {
           return yield* restore(Deferred.await(reservation.flight.deferred));
+        }
+        if (reservation._tag === "failed") {
+          return yield* new HostOperationError({
+            operation: "mcpHostBridgeServer.ensureStarted",
+            message: startupFailureMessage(reservation.cause),
+          });
         }
 
         const { flight } = reservation;
@@ -359,6 +397,16 @@ export const createMcpHostBridgeServer = ({
                 return { baseUrl: started.baseUrl, port: started.port };
               }),
             );
+            if (Exit.isFailure(exit)) {
+              startupFailure = causeMessage(exit.cause);
+              changeStatus({
+                state: "failed",
+                hostUrl: null,
+                failure: startupFailureMessage(startupFailure),
+              });
+            } else {
+              changeStatus({ state: "ready", hostUrl: exit.value.baseUrl, failure: null });
+            }
             yield* Deferred.done(flight.deferred, exit);
           }).pipe(
             Effect.ensuring(
@@ -395,6 +443,7 @@ export const createMcpHostBridgeServer = ({
     ensureExternalDiscoveryReady() {
       return ensureStarted().pipe(Effect.asVoid);
     },
+    status: () => status,
     close() {
       return Effect.gen(function* () {
         if (startupFlight) {

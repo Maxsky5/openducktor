@@ -17,7 +17,7 @@ import * as workers from "@/contexts/DiffWorkerProvider";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import {
-  createRepoRuntimeHealthContextValue,
+  createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
@@ -26,7 +26,7 @@ import {
   ActiveWorkspaceContext,
   AgentOperationsContext,
   AgentSessionsContext,
-  RepoRuntimeHealthContext,
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -36,7 +36,7 @@ import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-tes
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentSessionFixture,
-  createRepoRuntimeHealthFixture,
+  createHostRuntimeStatusFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -134,10 +134,10 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
   });
-  const health = createRepoRuntimeHealthContextValue({
-    runtimeHealthByRuntime: {
-      opencode: createRepoRuntimeHealthFixture(),
-      codex: createRepoRuntimeHealthFixture(),
+  const health = createHostRuntimeStatusContextValue({
+    statusByKind: {
+      opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
+      codex: createHostRuntimeStatusFixture({ kind: "codex" }),
     },
   });
   const operations: AgentOperationsContextValue = {
@@ -180,11 +180,11 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
             }}
           >
             <RuntimeDefinitionsContext value={definitions}>
-              <RepoRuntimeHealthContext value={health}>
+              <HostRuntimeStatusContext value={health}>
                 <AgentSessionsContext value={sessions}>
                   <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
                 </AgentSessionsContext>
-              </RepoRuntimeHealthContext>
+              </HostRuntimeStatusContext>
             </RuntimeDefinitionsContext>
           </ActiveWorkspaceContext>
         </ThemeProvider>

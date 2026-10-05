@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   type KillProcess,
@@ -49,6 +50,28 @@ describe("process-tree", () => {
 
     expect(hasChildren).toBe(false);
   });
+
+  test.skipIf(process.platform === "win32")(
+    "inspects real Unix processes with the default command runner",
+    async () => {
+      const parent = spawn("sh", ["-c", "sleep 30 & wait"], { detached: true, stdio: "ignore" });
+      const idle = spawn("sleep", ["30"], { stdio: "ignore" });
+      try {
+        // Let the shell start its child before the inspection.
+        await Bun.sleep(100);
+        const [parentHasChildren, idleHasChildren] = await Promise.all([
+          Effect.runPromise(processTreeHasChildren(parent.pid ?? 0)),
+          Effect.runPromise(processTreeHasChildren(idle.pid ?? 0)),
+        ]);
+
+        expect(parentHasChildren).toBe(true);
+        expect(idleHasChildren).toBe(false);
+      } finally {
+        if (parent.pid) process.kill(-parent.pid, "SIGKILL");
+        idle.kill("SIGKILL");
+      }
+    },
+  );
 
   test("does not block the event loop while child processes are inspected", async () => {
     let eventLoopProgressed = false;

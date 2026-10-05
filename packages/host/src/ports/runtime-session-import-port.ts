@@ -8,7 +8,8 @@ export type HostSessionImportSource = {
   attach: Effect.Effect<void, HostError>;
 };
 export type RuntimeSessionImportPort = {
-  scanSessions(signal: AbortSignal): {
+  /** Scans root conversations for one workspace repository of the shared runtime. */
+  scanSessions(input: { repoPath: string; signal: AbortSignal }): {
     next(): Effect.Effect<IteratorResult<WorkspaceSessionExternal[]>, HostError>;
   };
   inspectSession(input: SessionRef): Effect.Effect<HostSessionImportSource, HostError>;

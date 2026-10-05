@@ -1,11 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import {
-  type PropsWithChildren,
-  type ReactElement,
-  useCallback,
-  useMemo,
-  useSyncExternalStore,
-} from "react";
+import { type PropsWithChildren, type ReactElement, useMemo, useSyncExternalStore } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -42,7 +35,8 @@ import { AppRuntimeProvider } from "./providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "./providers/delegation-state-provider";
-import { RepoRuntimeHealthProvider } from "./providers/repo-runtime-health-provider";
+import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
+import { HostRuntimeStatusProvider } from "./providers/host-runtime-status-provider";
 import { SpecStateProvider } from "./providers/spec-state-provider";
 import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
@@ -50,15 +44,7 @@ import { NotificationProvider } from "./providers/notification-provider";
 import { WorkspaceActivityProvider } from "./providers/workspace-activity-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { agentEngine, runtimeCatalogOperations, startRepoRuntime } = useMemo(
-    () => createAgentRuntimeServices(),
-    [],
-  );
-  const checkRepoRuntimeHealth = useCallback(
-    (repoPath: string, runtimeKind: RuntimeKind) =>
-      runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
-    [runtimeCatalogOperations],
-  );
+  const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
 
   return (
     <AppRuntimeProvider
@@ -66,25 +52,27 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
       <SpecStateProvider>
-        <RepoRuntimeHealthProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
-          <ChecksStateProvider>
-            <TasksStateProvider>
-              <WorkspaceStateProvider>
-                <WorkspaceActivityProvider>
-                  <NotificationProvider>
-                    <DelegationStateProvider>
-                      <AgentStudioStateProvider agentEngine={agentEngine}>
-                        <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
-                          <AutopilotProvider>{children}</AutopilotProvider>
-                        </AppLifecycleStateProvider>
-                      </AgentStudioStateProvider>
-                    </DelegationStateProvider>
-                  </NotificationProvider>
-                </WorkspaceActivityProvider>
-              </WorkspaceStateProvider>
-            </TasksStateProvider>
-          </ChecksStateProvider>
-        </RepoRuntimeHealthProvider>
+        <HostRuntimeStatusProvider>
+          <DiagnosticsAutoOpenProvider>
+            <ChecksStateProvider>
+              <TasksStateProvider>
+                <WorkspaceStateProvider>
+                  <WorkspaceActivityProvider>
+                    <NotificationProvider>
+                      <DelegationStateProvider>
+                        <AgentStudioStateProvider agentEngine={agentEngine}>
+                          <AppLifecycleStateProvider>
+                            <AutopilotProvider>{children}</AutopilotProvider>
+                          </AppLifecycleStateProvider>
+                        </AgentStudioStateProvider>
+                      </DelegationStateProvider>
+                    </NotificationProvider>
+                  </WorkspaceActivityProvider>
+                </WorkspaceStateProvider>
+              </TasksStateProvider>
+            </ChecksStateProvider>
+          </DiagnosticsAutoOpenProvider>
+        </HostRuntimeStatusProvider>
       </SpecStateProvider>
     </AppRuntimeProvider>
   );

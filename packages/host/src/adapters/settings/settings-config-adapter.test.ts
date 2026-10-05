@@ -1,3 +1,4 @@
+import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import { describe, expect, test } from "bun:test";
@@ -39,7 +40,7 @@ describe("settings config adapter initialization", () => {
       draft.agentRuntimes.opencode.roleOverrides = {
         qa: { rules: [{ permission: "myserver_*", pattern: "*", action: "deny" }] },
       };
-      await Effect.runPromise(service.saveSettingsSnapshot(draft));
+      await Effect.runPromise(saveSettingsSnapshot(service, draft));
       const restartedAdapter = createSettingsConfigAdapter({ configPath });
       const restartedService = createWorkspaceSettingsService(restartedAdapter);
       const loaded = await Effect.runPromise(restartedService.getSettingsSnapshot());
@@ -57,7 +58,7 @@ describe("settings config adapter initialization", () => {
       loaded.agentRuntimes.opencode.defaults.rules = [];
       loaded.agentRuntimes.opencode.executablePath = "/new/opencode";
       loaded.agentRuntimes.opencode.enabled = false;
-      await Effect.runPromise(restartedService.saveSettingsSnapshot(loaded));
+      await Effect.runPromise(saveSettingsSnapshot(restartedService, loaded));
       expect(qa.defaults).toEqual(rules);
       const latest = await Effect.runPromise(
         resolver.resolve({ kind: "workflow", taskId: "task", role: "qa" }),

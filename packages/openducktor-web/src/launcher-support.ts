@@ -42,8 +42,10 @@ export type FrontendServer = {
   close(): Promise<void>;
 };
 type ViteFrontendServer = FrontendServer & {
+  /** The HTTP server that serves the Vite middlewares. The launcher owns it, not Vite. */
   httpServer: {
     closeAllConnections(): void;
+    close(callback: (error?: Error) => void): void;
   };
 };
 type StopLauncherServicesInput = {
@@ -261,10 +263,14 @@ const verifyBackendReadinessAttemptEffect = (
 export const closeFrontendServer = (server: FrontendServer | null): Promise<void> =>
   runWebBoundary(closeFrontendServerEffect(server));
 
-export const closeViteFrontendServer = (server: ViteFrontendServer): Promise<void> => {
-  // Close active HTTP connections before Vite waits for its server to stop.
+export const closeViteFrontendServer = async (server: ViteFrontendServer): Promise<void> => {
+  // Stop listening first, then end open connections, so the close does not wait for a keep-alive
+  // socket. Bun also stops listening in closeAllConnections, so this order works in Node and Bun.
+  const httpServerClosed = new Promise<void>((resolve, reject) =>
+    server.httpServer.close((error) => (error ? reject(error) : resolve())),
+  );
   server.httpServer.closeAllConnections();
-  return server.close();
+  await Promise.all([server.close(), httpServerClosed]);
 };
 
 export const waitForBackendEffect = (

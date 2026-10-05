@@ -4,12 +4,12 @@ import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-act
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
-  inactiveRepoRuntimeReadinessTarget,
-  type RepoRuntimeReadinessState,
-  type RepoRuntimeReadinessTarget,
-  repoRuntimeReadinessTargetForRuntime,
-  resolvingRepoRuntimeReadinessTarget,
-} from "@/lib/repo-runtime-readiness";
+  inactiveRuntimeReadinessTarget,
+  type RuntimeReadinessState,
+  type RuntimeReadinessTarget,
+  runtimeReadinessTargetForRuntime,
+  resolvingRuntimeReadinessTarget,
+} from "@/lib/runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentSessionTranscriptState,
@@ -42,18 +42,18 @@ export const deriveSelectedSessionRuntimeTarget = ({
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
-}): RepoRuntimeReadinessTarget => {
+}): RuntimeReadinessTarget => {
   if (selectedSessionIdentity) {
-    return repoRuntimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind);
+    return runtimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind);
   }
 
   if (selectedTask) {
     return isLoadingRepoSettings
-      ? resolvingRepoRuntimeReadinessTarget
-      : repoRuntimeReadinessTargetForRuntime(resolveConfiguredAgentRuntimeKind(repoSettings, role));
+      ? resolvingRuntimeReadinessTarget
+      : runtimeReadinessTargetForRuntime(resolveConfiguredAgentRuntimeKind(repoSettings, role));
   }
 
-  return inactiveRepoRuntimeReadinessTarget;
+  return inactiveRuntimeReadinessTarget;
 };
 
 export const deriveSelectedSessionViewProjection = ({
@@ -63,7 +63,7 @@ export const deriveSelectedSessionViewProjection = ({
   selectedTask,
   sessionFault,
   readModelLoadState,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   selectedSessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
@@ -71,7 +71,7 @@ export const deriveSelectedSessionViewProjection = ({
   selectedTask: TaskCard | null;
   sessionFault: AgentSessionTransientFault | null;
   readModelLoadState: AgentSessionReadModelLoadState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): SelectedSessionViewProjection => {
   const readModelFailureMessage =
     readModelLoadState.kind === "failed" ? readModelLoadState.message : null;
@@ -89,7 +89,7 @@ export const deriveSelectedSessionViewProjection = ({
       selectedModel: session.selectedModel,
       transcriptState: deriveLoadedAgentSessionTranscriptState({
         session,
-        repoReadinessState,
+        runtimeReadinessState,
       }),
       sessionAuxiliaryError,
     };
@@ -103,7 +103,7 @@ export const deriveSelectedSessionViewProjection = ({
         ? { kind: "failed", message: sessionFault.message }
         : derivePendingSelectedSessionTranscriptState({
             readModelLoadState,
-            repoReadinessState,
+            runtimeReadinessState,
           }),
       sessionAuxiliaryError,
     };
@@ -115,7 +115,7 @@ export const deriveSelectedSessionViewProjection = ({
       selectedModel: null,
       transcriptState: deriveSessionlessTaskTranscriptState({
         readModelLoadState,
-        repoReadinessState,
+        runtimeReadinessState,
       }),
       sessionAuxiliaryError: null,
     };

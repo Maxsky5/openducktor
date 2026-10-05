@@ -6,10 +6,11 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
+import type { AgentEvent, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
+import { createTestMcpBindings } from "./test-support";
 
 type ClientMethodInput<
   Namespace extends keyof OpencodeClient,
@@ -51,10 +52,6 @@ const makeRuntimeSummary = (
 ): RuntimeInstanceSummary => ({
   kind: "opencode",
   runtimeId,
-  repoPath: defaultRepoPath,
-  taskId: null,
-  role: "workspace",
-  workingDirectory: defaultWorkingDirectory,
   runtimeRoute:
     routeType === "local_http"
       ? {
@@ -69,42 +66,15 @@ const makeRuntimeSummary = (
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
-const defaultRepoRuntimeResolver = {
-  requireRepoRuntime: async ({
-    repoPath,
-    runtimeKind,
-  }: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-  }) => ({
-    ...makeRuntimeSummary("local_http"),
-    repoPath,
-    kind: runtimeKind,
-  }),
-};
-
-const makeRepoRuntimeResolver = (routeType: "local_http" | "stdio") => ({
-  requireRepoRuntime: async ({
-    repoPath,
-    runtimeKind,
-  }: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-  }) => ({
-    ...makeRuntimeSummary(routeType),
-    repoPath,
-    kind: runtimeKind,
-  }),
-});
-
 const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
   readonly sessionsForTest: Map<string, SessionRecord>;
 
-  constructor(options: OpencodeSdkAdapterOptions = {}) {
+  constructor(options: Partial<OpencodeSdkAdapterOptions> = {}) {
     const sessions = new Map<string, SessionRecord>();
     super(
       {
-        repoRuntimeResolver: defaultRepoRuntimeResolver,
+        runtime: makeRuntimeSummary("local_http"),
+        mcpBindings: createTestMcpBindings(),
         ...options,
       },
       { sessions, runtimeEventTransports: new Map() },
@@ -179,13 +149,9 @@ test("rejects missing resume scope before runtime side effects", async () => {
   const createClient = mock(() => {
     throw new Error("createClient should not be called");
   });
-  const requireRepoRuntime = mock(async () => {
-    throw new Error("requireRepoRuntime should not be called");
-  });
   const adapter = new OpencodeSdkAdapter({
     resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     createClient,
-    repoRuntimeResolver: { requireRepoRuntime },
   });
 
   await expect(
@@ -197,7 +163,6 @@ test("rejects missing resume scope before runtime side effects", async () => {
     }),
   ).rejects.toThrow("Cannot resume OpenCode session without session context.");
   expect(createClient).toHaveBeenCalledTimes(0);
-  expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
   expect(adapter.sessionsForTest.size).toBe(0);
 });
 
@@ -424,6 +389,7 @@ const makeMockClient = (
       },
     },
     mcp: {
+      add: async () => ({ data: { openducktor: { status: "connected" } }, error: undefined }),
       status: async (input?: ClientMethodInput<"mcp", "status">) => {
         mcpStatusCalls.push(input);
         return { data: { openducktor: { status: "connected" } }, error: undefined };
@@ -490,16 +456,13 @@ const makeMockClient = (
 };
 
 describe("opencode-sdk-adapter", () => {
-  test("startSession requires the live repo runtime before creating a new session", async () => {
+  test("startSession creates the session through the bound runtime route", async () => {
     const mockClient = makeMockClient();
-    const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const createClient = mock(() => mockClient.client);
     const adapter = new OpencodeSdkAdapter({
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-      createClient: () => mockClient.client,
+      createClient,
       now: () => "2026-02-22T12:00:00.000Z",
-      repoRuntimeResolver: {
-        requireRepoRuntime,
-      },
     });
 
     await adapter.startSession({
@@ -511,19 +474,21 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(createClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: defaultWorkingDirectory,
+      }),
+    );
   });
 
-  test("resumeSession requires the live repo runtime without listing live runtimes", async () => {
+  test("resumeSession resumes the session through the bound runtime route", async () => {
     const mockClient = makeMockClient();
-    const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const createClient = mock(() => mockClient.client);
     const adapter = new OpencodeSdkAdapter({
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-      createClient: () => mockClient.client,
+      createClient,
       now: () => "2026-02-22T12:00:00.000Z",
-      repoRuntimeResolver: {
-        requireRepoRuntime,
-      },
     });
 
     await adapter.resumeSession({
@@ -536,7 +501,12 @@ describe("opencode-sdk-adapter", () => {
       externalSessionId: "external-session-1",
     });
 
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(createClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: defaultWorkingDirectory,
+      }),
+    );
     expect(mockClient.getCalls).toEqual([
       { directory: defaultWorkingDirectory, sessionID: "external-session-1" },
     ]);
@@ -735,10 +705,10 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("checks same-directory MCP health without tool discovery", async () => {
+  test("binds MCP once per directory and re-adds it when the bound server fails", async () => {
     const mock = makeMockClient();
     const statusCalls: Array<{ directory: string }> = [];
-    const connectCalls: Array<{ directory: string; name: string }> = [];
+    const addCalls: Array<{ directory?: string; name?: string }> = [];
     const toolIdCalls: Array<{ directory: string }> = [];
     const statusResponses = [
       { openducktor: { status: "connected" } },
@@ -748,7 +718,6 @@ describe("opencode-sdk-adapter", () => {
           error: "MCP error -32000: Connection closed",
         },
       },
-      { openducktor: { status: "connected" } },
     ];
     let statusResponseIndex = 0;
     const client = {
@@ -761,9 +730,9 @@ describe("opencode-sdk-adapter", () => {
           statusResponseIndex += 1;
           return { data: response, error: undefined };
         },
-        connect: async (input: { directory: string; name: string }) => {
-          connectCalls.push(input);
-          return { data: true, error: undefined };
+        add: async (input?: { directory?: string; name?: string }) => {
+          addCalls.push({ directory: input?.directory, name: input?.name });
+          return { data: { openducktor: { status: "connected" as const } }, error: undefined };
         },
       },
       tool: {
@@ -807,14 +776,10 @@ describe("opencode-sdk-adapter", () => {
     expect(statusCalls).toEqual([
       { directory: "/repo/.openducktor/worktrees/task-1" },
       { directory: "/repo/.openducktor/worktrees/task-1" },
-      { directory: "/repo/.openducktor/worktrees/task-1" },
-      { directory: "/repo/.openducktor/worktrees/task-1" },
     ]);
-    expect(connectCalls).toEqual([
-      {
-        directory: "/repo/.openducktor/worktrees/task-1",
-        name: "openducktor",
-      },
+    expect(addCalls).toEqual([
+      { directory: "/repo/.openducktor/worktrees/task-1", name: "openducktor" },
+      { directory: "/repo/.openducktor/worktrees/task-1", name: "openducktor" },
     ]);
     expect(toolIdCalls).toEqual([]);
     const reconnectEvents = events.filter(({ type }) => type === "mcp_reconnect_started");
@@ -895,9 +860,6 @@ describe("opencode-sdk-adapter", () => {
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
-      repoRuntimeResolver: {
-        requireRepoRuntime: async () => makeRuntimeSummary("local_http"),
-      },
     });
 
     await adapter.loadRuntimeCatalog({
@@ -920,7 +882,7 @@ describe("opencode-sdk-adapter", () => {
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
-      repoRuntimeResolver: makeRepoRuntimeResolver("stdio"),
+      runtime: makeRuntimeSummary("stdio"),
     });
 
     await expect(
@@ -937,14 +899,13 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("fails repository history restoration on a missing bound OpenCode route", async () => {
-    const requireRepoRuntime = mock(async () => makeRuntimeSummary("stdio"));
     const createClient = mock(() => {
       throw new Error("createClient should not be called");
     });
     const adapter = new OpencodeSdkAdapter({
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
       createClient,
-      repoRuntimeResolver: { requireRepoRuntime },
+      runtime: makeRuntimeSummary("stdio"),
     });
 
     await expect(
@@ -956,7 +917,6 @@ describe("opencode-sdk-adapter", () => {
     ).rejects.toThrow(
       "runtime 'runtime-opencode-1' is missing required route contract 'local_http' for repo '/repo'",
     );
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(createClient).toHaveBeenCalledTimes(0);
   });
 

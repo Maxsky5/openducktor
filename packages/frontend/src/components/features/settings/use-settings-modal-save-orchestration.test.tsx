@@ -1,20 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type {
+  RuntimeLifecycleImpact,
+  SettingsSnapshot,
+  SettingsSnapshotSaveInput,
+} from "@openducktor/contracts";
+import type { SettingsSaveOutcome } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { startHostRuntimeEventsHarness } from "@/test-utils/host-runtime-events-harness";
+import {
+  createHostRuntimeStatusContextValue,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { SettingsSaveValidation } from "./settings-modal-save-policy";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
+import {
+  RUNTIME_IMPACT_CHANGED_NOTICE,
+  type RuntimeImpactReviewState,
+} from "@/components/features/runtimes/runtime-impact-review";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useSettingsModalSaveOrchestration>[0];
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSettingsModalSaveOrchestration, initialProps);
+const createHookHarness = (
+  initialProps: HookArgs,
+  options?: Parameters<typeof createSharedHookHarness>[2],
+) => createSharedHookHarness(useSettingsModalSaveOrchestration, initialProps, options);
 
 const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
@@ -71,13 +87,17 @@ const createArgs = (
   validation: createValidation(),
   onRuntimeAvailabilityError: () => {},
   saveGlobalGitConfig: mock(async () => {}),
-  saveSettingsSnapshot: mock(async () => {}),
+  previewSettingsSnapshotRuntime: mock(async () => ({ impact: null })),
+  saveSettingsSnapshot: mock(async () => savedSettingsResult()),
   loadSettingsSnapshot: mock(async () => createSnapshot()),
   isAgentModelFavoritesMutationPending: false,
   isKanbanTaskCardViewMutationPending: false,
   wasKanbanTaskCardViewEdited: false,
   ...overrides,
 });
+
+const isReviewReady = (review: RuntimeImpactReviewState | null): boolean =>
+  review !== null && review.impact !== null && !review.isLoadingImpact;
 
 const createDeferred = <TValue,>() => {
   let resolve!: (value: TValue | PromiseLike<TValue>) => void;
@@ -94,7 +114,9 @@ const createDeferred = <TValue,>() => {
 describe("useSettingsModalSaveOrchestration", () => {
   test("saves the preferred tool through the settings snapshot", async () => {
     const system = { preferredOpenInToolId: "zed" as const };
-    const save = mock(async (_snapshot: Parameters<HookArgs["saveSettingsSnapshot"]>[0]) => {});
+    const save = mock(async (_snapshot: Parameters<HookArgs["saveSettingsSnapshot"]>[0]) =>
+      savedSettingsResult(),
+    );
     const harness = createHookHarness(
       createArgs(
         {
@@ -135,7 +157,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("blocks prompt validation errors before persistence", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs({
         validation: createValidation({ prompt: { hasErrors: true, errorCount: 2 } }),
@@ -158,7 +180,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("blocks a full snapshot save while favorites are being written", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs(
         {
@@ -184,7 +206,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("blocks a full snapshot save while the task card view is being written", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs(
         {
@@ -219,7 +241,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     ];
     latestSnapshot.kanban.taskCardView = "compact";
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs(
         {
@@ -241,6 +263,7 @@ describe("useSettingsModalSaveOrchestration", () => {
         agentModelFavorites: latestSnapshot.agentModelFavorites,
         kanban: expect.objectContaining({ taskCardView: "compact" }),
       }),
+      undefined,
     );
     await harness.unmount();
   });
@@ -250,7 +273,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     const snapshotDraft = createSnapshot();
     const latestSnapshot = createSnapshot();
     latestSnapshot.kanban.taskCardView = "compact";
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs(
         {
@@ -273,12 +296,13 @@ describe("useSettingsModalSaveOrchestration", () => {
       expect.objectContaining({
         kanban: expect.objectContaining({ taskCardView: "normal" }),
       }),
+      undefined,
     );
     await harness.unmount();
   });
 
   test("blocks runtime executable errors before persistence", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs({
         validation: createValidation({
@@ -325,7 +349,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("blocks unacknowledged dangerous Codex settings before persistence", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs({
         validation: createValidation({ hasUnacknowledgedCodexDangerousSettings: true }),
@@ -350,7 +374,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("saves dangerous effective Codex read-only role settings after acknowledgement", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.codex = {
       ...snapshotDraft.agentRuntimes.codex,
@@ -429,7 +453,7 @@ describe("useSettingsModalSaveOrchestration", () => {
 
   test("returns true without persistence when nothing is dirty", async () => {
     const saveGlobalGitConfig = mock(async () => {});
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs({
         saveGlobalGitConfig,
@@ -455,6 +479,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     const deferredSave = createDeferred<void>();
     const saveSettingsSnapshot = mock(async () => {
       await deferredSave.promise;
+      return savedSettingsResult();
     });
     const harness = createHookHarness(
       createArgs(
@@ -554,7 +579,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("saves the prepared snapshot when non-git sections are dirty", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const snapshotDraft = createSnapshot();
     snapshotDraft.chat.showThinkingMessages = true;
     snapshotDraft.appearance.horizontalScrollbarVisibility = "show";
@@ -595,13 +620,14 @@ describe("useSettingsModalSaveOrchestration", () => {
         },
         reusablePrompts: [],
       }),
+      undefined,
     );
 
     await harness.unmount();
   });
 
   test("surfaces save-preparation errors before persistence", async () => {
-    const saveSettingsSnapshot = mock(async () => {});
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const snapshotDraft = createSnapshot();
     snapshotDraft.reusablePrompts = [
       {
@@ -636,5 +662,244 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
+  });
+});
+
+describe("useSettingsModalSaveOrchestration runtime review", () => {
+  const impactWith = (confirmation: string, sessions: number): RuntimeLifecycleImpact => ({
+    kinds: [
+      {
+        kind: "opencode",
+        runtimeId: "opencode-1",
+        effect: "replace",
+        oldExecutablePath: "/old/opencode",
+        newExecutablePath: "/new/opencode",
+      },
+    ],
+    workspaces:
+      sessions === 0
+        ? []
+        : [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              sessions: Array.from({ length: sessions }, (_, index) => ({
+                ref: {
+                  repoPath: "/repo",
+                  runtimeKind: "opencode" as const,
+                  workingDirectory: "/repo",
+                  externalSessionId: `session-${index}`,
+                },
+                title: `Session ${index}`,
+                activity: "running" as const,
+                pendingInputCount: 0,
+              })),
+            },
+          ],
+    confirmation,
+  });
+  const runtimeDraft = (): SettingsSnapshot => {
+    const snapshot = createSnapshot();
+    return {
+      ...snapshot,
+      agentRuntimes: {
+        ...snapshot.agentRuntimes,
+        opencode: {
+          ...snapshot.agentRuntimes.opencode,
+          enabled: true,
+          executablePath: "/new/opencode",
+        },
+      },
+    };
+  };
+  const runtimeArgs = (overrides: Partial<HookArgs>) =>
+    createArgs(
+      {
+        loadedSnapshot: createSnapshot(),
+        snapshotDraft: runtimeDraft(),
+        loadSettingsSnapshot: mock(async () => createSnapshot()),
+        ...overrides,
+      },
+      { ...EMPTY_DIRTY_SECTIONS, agentRuntimes: true },
+    );
+
+  test("asks for review before a save that stops live sessions", async () => {
+    const save = mock(async (_snapshot: SettingsSnapshotSaveInput, _confirmation?: string) =>
+      savedSettingsResult(),
+    );
+    const harness = createHookHarness(
+      runtimeArgs({
+        previewSettingsSnapshotRuntime: mock(async () => ({ impact: impactWith("token-1", 1) })),
+        saveSettingsSnapshot: save,
+      }),
+    );
+    try {
+      await harness.mount();
+      let submitted: Promise<boolean> = Promise.resolve(false);
+      await harness.run((state) => {
+        submitted = state.submit();
+      });
+      await harness.waitFor((state) => isReviewReady(state.runtimeReview));
+      expect(save).not.toHaveBeenCalled();
+      expect(harness.getLatest().runtimeReview?.notice).toBeNull();
+
+      await harness.run((state) => state.confirmRuntimeReview());
+      expect(await submitted).toBe(true);
+      expect(save.mock.calls[0]?.[1]).toBe("token-1");
+      await harness.waitFor((state) => state.runtimeReview === null);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps an open review current from live session events", async () => {
+    let previewToken = "token-1";
+    const preview = mock(async () => ({ impact: impactWith(previewToken, 1) }));
+    const save = mock(async (_snapshot: SettingsSnapshotSaveInput, _confirmation?: string) =>
+      savedSettingsResult(),
+    );
+    const events = startHostRuntimeEventsHarness();
+    const harness = createHookHarness(
+      runtimeArgs({ previewSettingsSnapshotRuntime: preview, saveSettingsSnapshot: save }),
+      {
+        hostRuntimeStatusContext: createHostRuntimeStatusContextValue({
+          runtimeEvents: events.owner,
+        }),
+      },
+    );
+    try {
+      await harness.mount();
+      let submitted: Promise<boolean> = Promise.resolve(false);
+      await harness.run((state) => {
+        submitted = state.submit();
+      });
+      await harness.waitFor((state) => isReviewReady(state.runtimeReview));
+      const readsBeforeChange = preview.mock.calls.length;
+
+      previewToken = "token-2";
+      await harness.run(() => {
+        events.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
+      });
+      await harness.waitFor(
+        (state) =>
+          isReviewReady(state.runtimeReview) &&
+          state.runtimeReview?.impact?.confirmation === "token-2",
+      );
+      expect(preview.mock.calls.length).toBe(readsBeforeChange + 1);
+
+      await harness.run((state) => state.confirmRuntimeReview());
+      expect(await submitted).toBe(true);
+      expect(save.mock.calls.map((call) => call[1])).toEqual(["token-2"]);
+    } finally {
+      await harness.unmount();
+      events.owner.stop();
+    }
+  });
+
+  test("cancel keeps the draft and writes nothing", async () => {
+    const save = mock(async () => savedSettingsResult());
+    const harness = createHookHarness(
+      runtimeArgs({
+        previewSettingsSnapshotRuntime: mock(async () => ({ impact: impactWith("token-1", 2) })),
+        saveSettingsSnapshot: save,
+      }),
+    );
+    try {
+      await harness.mount();
+      let submitted: Promise<boolean> = Promise.resolve(false);
+      await harness.run((state) => {
+        submitted = state.submit();
+      });
+      await harness.waitFor((state) => state.runtimeReview !== null);
+      await harness.run((state) => state.cancelRuntimeReview());
+
+      expect(await submitted).toBe(false);
+      expect(save).not.toHaveBeenCalled();
+      expect(harness.getLatest().runtimeReview).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("a changed impact opens the review again with a notice", async () => {
+    let calls = 0;
+    const save = mock(
+      async (
+        _snapshot: SettingsSnapshotSaveInput,
+        _confirmation?: string,
+      ): Promise<SettingsSaveOutcome> => {
+        calls += 1;
+        return calls === 1
+          ? { type: "runtime_impact_changed", impact: impactWith("token-2", 2) }
+          : savedSettingsResult();
+      },
+    );
+    const harness = createHookHarness(
+      runtimeArgs({
+        previewSettingsSnapshotRuntime: mock(async () => ({ impact: impactWith("token-1", 1) })),
+        saveSettingsSnapshot: save,
+      }),
+    );
+    try {
+      await harness.mount();
+      let submitted: Promise<boolean> = Promise.resolve(false);
+      await harness.run((state) => {
+        submitted = state.submit();
+      });
+      await harness.waitFor((state) => isReviewReady(state.runtimeReview));
+      await harness.run((state) => state.confirmRuntimeReview());
+      await harness.waitFor(
+        (state) => state.runtimeReview?.notice === RUNTIME_IMPACT_CHANGED_NOTICE,
+      );
+      expect(harness.getLatest().runtimeReview?.impact?.confirmation).toBe("token-2");
+
+      await harness.run((state) => state.confirmRuntimeReview());
+      expect(await submitted).toBe(true);
+      expect(save.mock.calls.map((call) => call[1])).toEqual(["token-1", "token-2"]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("saves directly with the confirmation when no live session is affected", async () => {
+    const save = mock(async (_snapshot: SettingsSnapshotSaveInput, _confirmation?: string) =>
+      savedSettingsResult(),
+    );
+    const harness = createHookHarness(
+      runtimeArgs({
+        previewSettingsSnapshotRuntime: mock(async () => ({ impact: impactWith("token-1", 0) })),
+        saveSettingsSnapshot: save,
+      }),
+    );
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.submit()).toBe(true);
+      });
+      expect(save.mock.calls[0]?.[1]).toBe("token-1");
+      expect(harness.getLatest().runtimeReview).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("skips the preview when no runtime lifecycle setting changed", async () => {
+    const preview = mock(async () => ({ impact: null }));
+    const harness = createHookHarness(
+      createArgs(
+        { previewSettingsSnapshotRuntime: preview },
+        { ...EMPTY_DIRTY_SECTIONS, appearance: true },
+      ),
+    );
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.submit()).toBe(true);
+      });
+      expect(preview).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 });

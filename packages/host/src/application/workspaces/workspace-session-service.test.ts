@@ -1,3 +1,4 @@
+import { createRuntimeOrchestrator, planSettingsChange } from "@openducktor/runtime-orchestration";
 import {
   readWorkspaceSessionArchivePreview,
   removeWorkspaceSessionWorktree,
@@ -14,7 +15,12 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
-import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
+import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
+import {
+  createTestRuntimeDrivers,
+  testRuntimeHandle,
+  testRuntimeSettings,
+} from "../../test-support/runtime-orchestrator-test-support";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -258,16 +264,12 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       },
       runtime: {
-        runtimeEnsure: ({ repoPath }) =>
+        requireReady: () =>
           Effect.sync(() => {
-            calls.push("ensure-runtime");
+            calls.push("require-runtime");
             return {
-              kind: "opencode",
+              kind: "opencode" as const,
               runtimeId: "runtime",
-              repoPath,
-              taskId: null,
-              role: "workspace",
-              workingDirectory: repoPath,
               runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
               startedAt: "2026-09-07T00:00:00Z",
               descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -494,34 +496,51 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(restored.archivedAt).toBeNull();
   });
 
-  test("first-send startup completes through the real runtime registry cancellation race", async () => {
+  test("first-send startup requires the shared runtime to be ready in the real registry", async () => {
     const h = setup();
-    const runtime = await Effect.runPromise(
-      h.dependencies.runtime.runtimeEnsure({
-        repoPath: database.repoPath,
-        runtimeKind: "opencode",
-      }),
-    );
-    const registry = createRuntimeRegistry({ runtimes: [runtime] });
+    const orchestrator = createRuntimeOrchestrator({
+      drivers: createTestRuntimeDrivers((kind) =>
+        Effect.succeed(testRuntimeHandle(kind, "shared-opencode")),
+      ),
+      settings: {
+        readRuntimeSettings: () => Effect.succeed(testRuntimeSettings()),
+        listWorkspaces: () => Effect.succeed([]),
+      },
+      liveSessions: { listAffectedSessions: () => Effect.succeed([]) },
+      observer: { statusChanged: () => {}, backgroundFailure: () => {} },
+    });
+    const registry = createRuntimeRegistryPort(orchestrator);
     const service = createWorkspaceSessionService({
       ...h.dependencies,
-      runtime: { runtimeEnsure: registry.ensureWorkspaceRuntime },
+      runtime: { requireReady: registry.requireReady },
     });
     const draft = await Effect.runPromise(service.create(input()));
-    const fiber = Effect.runFork(
-      service.start({ workspaceId: "fairnest", sessionId: draft.session.id }),
-    );
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
     try {
-      const completed = await Effect.runPromise(
-        Fiber.await(fiber).pipe(Effect.timeoutOption("200 millis")),
+      // The frontend never starts a runtime: a disabled kind fails before any live session starts.
+      await expect(Effect.runPromise(service.start(ref))).rejects.toThrow(
+        "The OpenCode runtime is disabled. Enable it in Settings > Runtimes.",
       );
-      expect(Option.isSome(completed)).toBe(true);
-      const created = await Effect.runPromise(Fiber.join(fiber));
+      expect(h.starts).toEqual([]);
+      expect((await Effect.runPromise(service.get(ref))).externalSessionId).toBeNull();
+
+      // Enable OpenCode through a saved settings change.
+      await Effect.runPromise(
+        orchestrator.withSettingsChange(["opencode"], (session) =>
+          session.apply(
+            planSettingsChange(
+              testRuntimeSettings(),
+              testRuntimeSettings({ opencode: "opencode" }),
+            ),
+          ),
+        ),
+      );
+      const created = await Effect.runPromise(service.start(ref));
+      expect(created.session.externalSessionId).toBe("native-1");
+      expect(h.starts).toHaveLength(1);
       expect(await Effect.runPromise(service.listActive("fairnest"))).toEqual([created.session]);
     } finally {
-      // Release the registry's cancellation branch even when the regression deadlocks creation.
       await Effect.runPromise(registry.stopAllRuntimes());
-      await Effect.runPromise(Fiber.await(fiber));
     }
   });
 
@@ -537,7 +556,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       else h.roles.splice(0, 1);
       const ref = { workspaceId: "fairnest", sessionId: created.session.id };
       const started = await Effect.runPromise(h.service.start(ref));
-      expect(h.calls).toEqual(["save", "ensure-runtime", "start", "bind"]);
+      expect(h.calls).toEqual(["save", "require-runtime", "start", "bind"]);
       expect(h.starts[0]).toMatchObject({
         repoPath: database.repoPath,
         workingDirectory: database.repoPath,
@@ -1495,10 +1514,10 @@ describe("host-owned Workspace Session lifecycle", () => {
                   ),
               },
               runtime: {
-                runtimeEnsure: (request) =>
+                requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
                     Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.runtimeEnsure(request)),
+                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
               worktreeFiles: {
@@ -1548,10 +1567,10 @@ describe("host-owned Workspace Session lifecycle", () => {
             const service = createWorkspaceSessionService({
               ...h.dependencies,
               runtime: {
-                runtimeEnsure: (request) =>
+                requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
                     Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.runtimeEnsure(request)),
+                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
             });

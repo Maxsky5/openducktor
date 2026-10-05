@@ -1,5 +1,5 @@
 import type { SessionHistoryFailure } from "@openducktor/contracts";
-import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { hasRenderableSessionTranscript } from "./session-transcript-content";
@@ -30,30 +30,30 @@ export const isAgentSessionTranscriptVisible = (
 
 export const deriveRuntimeBoundTranscriptEmptyState = ({
   reason,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   reason: AgentSessionTranscriptEmptyReason;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionTranscriptState =>
-  repoReadinessState === "ready" ? { kind: "empty", reason } : { kind: "runtime_waiting" };
+  runtimeReadinessState === "ready" ? { kind: "empty", reason } : { kind: "runtime_waiting" };
 
 export const deriveRuntimeBoundTranscriptLoadingState = ({
   reason,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   reason: AgentSessionTranscriptLoadingReason;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionTranscriptState =>
-  repoReadinessState === "ready"
+  runtimeReadinessState === "ready"
     ? { kind: "session_loading", reason }
     : { kind: "runtime_waiting" };
 
 export const deriveLoadedAgentSessionTranscriptState = ({
   session,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   session: AgentSessionState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionTranscriptState => {
   if (session.historyLoadState === "failed") {
     const historyFailure = session.historyLoadFailure;
@@ -74,7 +74,7 @@ export const deriveLoadedAgentSessionTranscriptState = ({
 
   return deriveRuntimeBoundTranscriptLoadingState({
     reason: "history",
-    repoReadinessState,
+    runtimeReadinessState,
   });
 };
 
@@ -87,31 +87,31 @@ const deriveReadModelFailureTranscriptState = (
 
 export const derivePendingSelectedSessionTranscriptState = ({
   readModelLoadState,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   readModelLoadState: AgentSessionReadModelLoadState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionTranscriptState =>
   deriveReadModelFailureTranscriptState(readModelLoadState) ??
   deriveRuntimeBoundTranscriptLoadingState({
     reason: "preparing",
-    repoReadinessState,
+    runtimeReadinessState,
   });
 
 export const deriveSessionlessTaskTranscriptState = ({
   readModelLoadState,
-  repoReadinessState,
+  runtimeReadinessState,
 }: {
   readModelLoadState: AgentSessionReadModelLoadState;
-  repoReadinessState: RepoRuntimeReadinessState;
+  runtimeReadinessState: RuntimeReadinessState;
 }): AgentSessionTranscriptState =>
   deriveReadModelFailureTranscriptState(readModelLoadState) ??
   (readModelLoadState.kind === "loading"
     ? deriveRuntimeBoundTranscriptLoadingState({
         reason: "preparing",
-        repoReadinessState,
+        runtimeReadinessState,
       })
     : deriveRuntimeBoundTranscriptEmptyState({
         reason: "sessionless",
-        repoReadinessState,
+        runtimeReadinessState,
       }));

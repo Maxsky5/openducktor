@@ -1,6 +1,5 @@
 import type {
   AgentRuntimes,
-  RuntimeCheck,
   RuntimeDescriptor,
   TaskCard,
   TaskStoreCheck,
@@ -25,7 +24,7 @@ import type {
   AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
-  RepoRuntimeHealthContextValue,
+  HostRuntimeStatusContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
   WorkspaceBranchStateContextValue,
@@ -39,7 +38,7 @@ export const WorkspaceBranchStateContext = createContext<WorkspaceBranchStateCon
   null,
 );
 export const WorkspacePresenceContext = createContext<WorkspacePresenceContextValue | null>(null);
-export const RepoRuntimeHealthContext = createContext<RepoRuntimeHealthContextValue | null>(null);
+export const HostRuntimeStatusContext = createContext<HostRuntimeStatusContextValue | null>(null);
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
@@ -75,12 +74,7 @@ export type RuntimeDefinitionsContextValue = {
 };
 
 export type ChecksOperationsContextValue = {
-  refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  clearActiveTaskStoreCheck: () => void;
-  setIsLoadingChecks: (value: boolean) => void;
-  hasRuntimeCheck: () => boolean;
-  hasCachedTaskStoreCheck: (repoPath: string) => boolean;
 };
 
 export type TaskSnapshotContextValue = {
@@ -132,8 +126,8 @@ export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
 export const useChecksStateContext = (): ChecksStateContextValue =>
   useRequiredContext(ChecksStateContext, "useChecksStateContext");
 
-export const useRepoRuntimeHealthContext = (): RepoRuntimeHealthContextValue =>
-  useRequiredContext(RepoRuntimeHealthContext, "useRepoRuntimeHealthContext");
+export const useHostRuntimeStatusContext = (): HostRuntimeStatusContextValue =>
+  useRequiredContext(HostRuntimeStatusContext, "useHostRuntimeStatusContext");
 
 export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
   useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");

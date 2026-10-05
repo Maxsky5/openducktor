@@ -45,10 +45,6 @@ import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registr
 const runtime: RuntimeInstanceSummary = {
   kind: "codex",
   runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
   runtimeRoute: { type: "stdio", identity: "runtime-1" },
   startedAt: "2026-07-16T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
@@ -110,6 +106,19 @@ const codexPolicy: CodexEffectivePolicy = {
 const resolveRuntimePolicy = (_scope: AgentSessionScope) => Effect.succeed(codexPolicy);
 
 const noBackgroundFailure = () => Effect.void;
+
+const mcpServerConfigFor = (repoPath: string) => ({
+  command: ["odt-mcp", "--stdio"] as const,
+  environment: {
+    ODT_WORKSPACE_ID: `workspace:${repoPath}`,
+    ODT_HOST_URL: "http://127.0.0.1:4000",
+    ODT_HOST_TOKEN: "host-token",
+    ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+    ODT_ALLOWED_TOOLS: "odt_read_task",
+  },
+});
+
+const resolveMcpServerConfig = (repoPath: string) => Effect.succeed(mcpServerConfigFor(repoPath));
 
 const liveSnapshot = (): AgentSessionLiveSnapshot => ({
   ref,
@@ -395,10 +404,85 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("binds the native controller to the workspace MCP server of each session repository", async () => {
+    const harness = createControllerHarness();
+    const resolvedRepos: string[] = [];
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig: (repoPath) =>
+          repoPath === "/repo-missing"
+            ? Effect.fail(
+                new HostOperationError({
+                  operation: "test.resolveMcpServerConfig",
+                  message: "Workspace is not registered. Add the repository in OpenDucktor.",
+                }),
+              )
+            : Effect.sync(() => {
+                resolvedRepos.push(repoPath);
+                return mcpServerConfigFor(repoPath);
+              }),
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation.");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    const resolve = harness.getOptions().resolveManagedMcpServer;
+
+    await expect(resolve("/repo-a")).resolves.toEqual(mcpServerConfigFor("/repo-a"));
+    await expect(resolve("/repo-b")).resolves.toEqual(mcpServerConfigFor("/repo-b"));
+    await expect(resolve("/repo-missing")).rejects.toThrow(
+      "Workspace is not registered. Add the repository in OpenDucktor.",
+    );
+    expect(resolvedRepos).toEqual(["/repo-a", "/repo-b"]);
+    await Effect.runPromise(prepared.discard());
+  });
+
+  test("scans native sessions of the shared runtime without a runtime repository", async () => {
+    const harness = createControllerHarness();
+    const listings: unknown[] = [];
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation.");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: (options) => ({
+          ...harness.createController(options),
+          listSessionMetadataPage: async (input) => {
+            listings.push({ runtimeId: input.runtimeId, pageToken: input.pageToken });
+            return { sessions: [], nextPageToken: null };
+          },
+        }),
+      })(runtime),
+    );
+    const reader = prepared.adapter.sessionImport.scanSessions({
+      repoPath: "/repo-b",
+      signal: new AbortController().signal,
+    });
+
+    await expect(Effect.runPromise(reader.next())).resolves.toEqual({ done: false, value: [] });
+    await expect(Effect.runPromise(reader.next())).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(listings).toEqual([{ runtimeId: runtime.runtimeId, pageToken: undefined }]);
+    await Effect.runPromise(prepared.discard());
+  });
+
   test("shares question history when it rebuilds a runtime adapter", async () => {
     const harness = createControllerHarness();
     const histories: CodexAppServerAdapterOptions["questionHistory"][] = [];
     const prepare = createCodexLiveSessionAdapterPreparer({
+      resolveMcpServerConfig,
       prepareImageGenerations: async () => {
         throw new Error("Unexpected image preparation.");
       },
@@ -440,6 +524,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [initial, idle] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation.");
         },
@@ -465,7 +550,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         transcriptEvents: [],
         catalogInvalidated: false,
       });
-      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([initial, idle]);
+      expect(await Effect.runPromise(adapter.listSnapshots())).toEqual([initial, idle]);
       changes.length = 0;
       await Effect.runPromise(
         adapter.updateSessionModel({
@@ -508,7 +593,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
             : [],
         ),
       ).toEqual(["first", "second", "third"]);
-      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([changed, idle]);
+      expect(await Effect.runPromise(adapter.listSnapshots())).toEqual([changed, idle]);
       changes.length = 0;
       await Effect.runPromise(adapter.releaseSession(ref));
       expect(changes).toEqual([{ type: "session_removed", ref }]);
@@ -521,7 +606,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         transcriptEvents: [],
         catalogInvalidated: false,
       });
-      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([idle]);
+      expect(await Effect.runPromise(adapter.listSnapshots())).toEqual([idle]);
     } finally {
       await Effect.runPromise(prepared.discard());
     }
@@ -540,6 +625,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ sessionDiffs });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -598,6 +684,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -633,13 +720,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         params: { threadId: "thread-1", turnId: "turn-1" },
       },
     ]);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("retains acceptance when the live projection cannot publish", async () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -689,6 +777,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -753,6 +842,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     };
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -794,6 +884,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -861,6 +952,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const policyScopes: AgentSessionScope[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -909,6 +1001,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -942,12 +1035,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -977,11 +1072,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
-  test("invalidates catalogs at repo scope when Codex reports changed skills", async () => {
+  test("invalidates the catalogs of live and catalog-only repositories when Codex reports changed skills", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -993,6 +1089,16 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
+    // A workspace reads the catalog before it has a live session. The read result is not needed.
+    await Effect.runPromise(
+      Effect.either(
+        prepared.adapter.queries.loadRuntimeCatalog({
+          repoPath: "/repo-b",
+          runtimeKind: "codex",
+          workingDirectory: "/repo-b",
+        }),
+      ),
+    );
 
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: runtime.runtimeId,
@@ -1003,11 +1109,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       catalogInvalidated: true,
     });
 
-    expect(changes).toContainEqual({
-      type: "catalog_invalidated",
-      repoPath: "/repo",
-      runtimeKind: "codex",
-    });
+    for (const repoPath of ["/repo", "/repo-b"]) {
+      expect(changes).toContainEqual({
+        type: "catalog_invalidated",
+        repoPath,
+        runtimeKind: "codex",
+      });
+    }
   });
 
   test("clears the current projection when controller cleanup fails", async () => {
@@ -1020,6 +1128,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1043,7 +1152,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       "controller cleanup failed",
     );
 
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("rehydrates three current pending approvals in the first snapshot after renderer reload", async () => {
@@ -1066,12 +1175,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
     const harness = createControllerHarness({ initialSnapshots: snapshots });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1112,6 +1223,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1148,7 +1260,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await firstMutation;
     expect(changes).toEqual([{ type: "session_upsert", snapshot: liveSnapshot() }]);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([
       liveSnapshot(),
     ]);
 
@@ -1169,6 +1281,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1195,7 +1308,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       }),
     ).rejects.toThrow("externalSessionId");
     expect(changes).toEqual([]);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("reports a failed runtime event projection through the host background-failure boundary", async () => {
@@ -1226,6 +1339,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     } satisfies RuntimeLiveSessionLifecyclePort;
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1266,11 +1380,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     ).toEqual([]);
   });
 
-  test("rejects fault refs outside the owning Codex projection and preserves an exact ref", async () => {
+  test("rejects non-Codex fault refs and publishes Codex faults with their session ref", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1284,18 +1399,6 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     const onLiveSessionMutation = harness.getOptions().onLiveSessionMutation;
 
-    await expect(
-      onLiveSessionMutation?.({
-        runtimeId: runtime.runtimeId,
-        snapshotMode: "delta",
-        removedRefs: [],
-        snapshots: [liveSnapshot()],
-        transcriptEvents: [],
-        catalogInvalidated: false,
-        fault: "Codex event processing failed.",
-        faultRef: { ...ref, repoPath: "/other-repo" },
-      }),
-    ).rejects.toThrow("faultRef outside repo");
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
@@ -1324,7 +1427,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     ).resolves.toBeUndefined();
     expect(changes).toContainEqual({
       type: "fault",
-      repoPath: runtime.repoPath,
+      repoPath: ref.repoPath,
       operation: "codex-live-session.process-event",
       message: "Codex event processing failed.",
       ref,
@@ -1358,6 +1461,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1384,7 +1488,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await mutation;
 
     expect(changes).toEqual([]);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("commits context and pending replies while leaving runtime removal to the lifecycle", async () => {
@@ -1392,6 +1496,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1440,7 +1545,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const releasedRefs = await Effect.runPromise(prepared.adapter.releaseRuntime());
     expect(releasedRefs).toEqual([ref]);
     expect(changes).toHaveLength(changeCountBeforeRelease);
-    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
   });
 
   test("returns nullable Codex context usage through the public host adapter", async () => {
@@ -1450,6 +1555,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1484,6 +1590,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     };
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1534,6 +1641,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1572,6 +1680,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1598,6 +1707,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
@@ -1621,6 +1731,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
         },
@@ -1681,6 +1792,7 @@ for (const action of ["stop", "release"] as const) {
       const lifecycle = createLifecycle(changes);
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
+          resolveMcpServerConfig,
           prepareImageGenerations: async () => {
             throw new Error("Unexpected image preparation");
           },
@@ -1750,6 +1862,7 @@ test("interrupting an image read aborts the controller's preparation signal", as
   const harness = createControllerHarness();
   const prepared = await Effect.runPromise(
     createCodexLiveSessionAdapterPreparer({
+      resolveMcpServerConfig,
       prepareImageGenerations: async () => {
         throw new Error("Unexpected image preparation");
       },

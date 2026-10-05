@@ -6,8 +6,7 @@ import type {
   AgentSessionScope,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
-  RepoRuntimeRef,
-  RepoRuntimeRouteResolution,
+  BoundRuntimeRoute,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import type {
@@ -19,6 +18,7 @@ import type {
 } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type { ParsedOpencodePart } from "./opencode-ingress";
+import type { OpencodeMcpDirectoryBindings } from "./opencode-mcp-bindings";
 import type { RuntimeEventSubscribers } from "./runtime-event-subscribers";
 
 export type SessionInput = RuntimeWorkingDirectoryRef &
@@ -113,10 +113,6 @@ export type ClientFactory = (input: {
   workingDirectory?: string;
 }) => OpencodeClient;
 
-export type RepoRuntimeResolverPort = {
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
-};
-
 export type OpencodeStreamEventLog = {
   externalSessionId: string;
   relevant: boolean;
@@ -134,6 +130,9 @@ export type OpencodeSdkAdapterOptions = {
   resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
   now?: () => string;
   createClient?: ClientFactory;
-  repoRuntimeResolver?: RepoRuntimeResolverPort;
+  /** The one OpenCode runtime this adapter instance controls. */
+  runtime: BoundRuntimeRoute;
+  /** Binds the OpenDucktor MCP server to each session directory. Workflow sessions require it. */
+  mcpBindings?: OpencodeMcpDirectoryBindings;
   logEvent?: OpencodeEventLogger;
 };

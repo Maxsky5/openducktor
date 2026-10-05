@@ -17,7 +17,7 @@ import {
 type NotificationEnvelope =
   | z.input<typeof notificationFrameEnvelopeSchema>
   | z.input<typeof notificationFailureEnvelopeSchema>;
-const harness = () => {
+const harness = ({ hostShutdownStarted = false } = {}) => {
   const handlers = new Map<string, Parameters<IpcMain["handle"]>[1]>();
   const ipc = {
     handle(channel: string, callback: Parameters<IpcMain["handle"]>[1]) {
@@ -25,6 +25,7 @@ const harness = () => {
     },
   };
   let receive: (frame: NotificationStreamFrame) => void = () => {};
+  let failStream: (error: Error) => void = () => {};
   const stop = mock(() => {});
   const reportDeliveryFailure = mock(() => {});
   // SAFETY: Registration uses only handle; the stream fake implements the host stream contract.
@@ -42,6 +43,9 @@ const harness = () => {
                 receive = (frame) => {
                   emit.single(frame);
                 };
+                failStream = (error) => {
+                  emit.fail(error);
+                };
               }),
               () => Effect.sync(stop),
             ),
@@ -49,6 +53,7 @@ const harness = () => {
         ),
     },
     reportDeliveryFailure,
+    () => hostShutdownStarted,
   );
   const frame = {
     isDestroyed: () => false,
@@ -80,6 +85,10 @@ const harness = () => {
     reportDeliveryFailure,
     emit: async (value: NotificationStreamFrame) => {
       receive(value);
+      await flush();
+    },
+    fail: async (error: Error) => {
+      failStream(error);
       await flush();
     },
   };
@@ -121,6 +130,28 @@ test("frame and terminal send failures are reported and contained during teardow
   expect(h.sender.listenerCount("destroyed")).toBe(0);
   await h.emit(attachedFrame());
   expect(h.frame.send).toHaveBeenCalledTimes(2);
+});
+test("a host stream failure is reported to the log and the renderer", async () => {
+  const h = harness();
+  await h.attach();
+
+  await h.fail(new Error("Notification stream failed."));
+
+  expect(h.reportDeliveryFailure).toHaveBeenCalledTimes(1);
+  expect(h.frame.send.mock.calls.map(([channel]) => channel)).toEqual([
+    NOTIFICATION_STREAM_FAILURE,
+  ]);
+  expect(h.sender.listenerCount("destroyed")).toBe(0);
+});
+test("the stream end at host shutdown releases the subscription without a failure", async () => {
+  const h = harness({ hostShutdownStarted: true });
+  await h.attach();
+
+  await h.fail(new Error("Notification host stopped. Reconnect to the host."));
+
+  expect(h.reportDeliveryFailure).not.toHaveBeenCalled();
+  expect(h.frame.send).not.toHaveBeenCalled();
+  expect(h.sender.listenerCount("destroyed")).toBe(0);
 });
 test("stalled renderer delivery fails after the bounded unacknowledged window", async () => {
   const h = harness();

@@ -1,4 +1,4 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
@@ -76,6 +76,12 @@ const createDeferred = <T,>() => {
 };
 
 describe("TaskDescriptionEditor", () => {
+  // The first Visual mount imports Tiptap and its extensions. Import them once here, so each
+  // editor wait measures the mount, not this cold import, which is slow on a loaded CI runner.
+  beforeAll(async () => {
+    await import("./task-description-visual-editor");
+  }, 10_000);
+
   test("locks Visual input and image paths until the form unlocks", async () => {
     const onChange = mock((_value: string) => {});
     const onUpload = mock(createProps().onUpload);

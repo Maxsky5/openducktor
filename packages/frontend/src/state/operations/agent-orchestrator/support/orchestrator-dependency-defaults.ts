@@ -14,7 +14,6 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
   },
   runtimeHostPort: {
     gitCanonicalizePath: (...args) => host.gitCanonicalizePath(...args),
-    runtimeEnsure: (...args) => host.runtimeEnsure(...args),
     agentSessionWorkflowStart: (...args) => host.agentSessionWorkflowStart(...args),
   },
   liveSessionHostPort: {

@@ -147,12 +147,12 @@ const listModelPickerRuntimes = (
 
 const listEnabledModelPickerRuntimes = (
   hasSessionTarget: boolean,
-  isRepoRuntimeReady: boolean,
+  isRuntimeReady: boolean,
   isModelPickerOpen: boolean,
   runtimeKinds: RuntimeDescriptor["kind"][],
   selectedRuntimeKind: RuntimeDescriptor["kind"] | null | undefined,
 ): RuntimeDescriptor["kind"][] => {
-  if (hasSessionTarget || !isRepoRuntimeReady) {
+  if (hasSessionTarget || !isRuntimeReady) {
     return [];
   }
   if (isModelPickerOpen) {
@@ -192,8 +192,8 @@ export function useAgentStudioChatComposer({
   const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
   const lastSessionModelRepairKeyRef = useRef<string | null>(null);
-  const repoReadinessState = selectedSession.runtimeReadiness.state;
-  const isRepoRuntimeReady = repoReadinessState === "ready";
+  const runtimeReadinessState = selectedSession.runtimeReadiness.state;
+  const isRuntimeReady = runtimeReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
   const defaultSelection = useMemo(
     () =>
@@ -235,10 +235,10 @@ export function useAgentStudioChatComposer({
     () =>
       resolveChatComposerPromptInputRuntime({
         workspaceRepoPath,
-        repoReadinessState,
+        runtimeReadinessState,
         source: promptInputRuntimeSource,
       }),
-    [promptInputRuntimeSource, repoReadinessState, workspaceRepoPath],
+    [promptInputRuntimeSource, runtimeReadinessState, workspaceRepoPath],
   );
   const promptInputRuntimeKind =
     promptInputRuntime.state === "available"
@@ -286,7 +286,7 @@ export function useAgentStudioChatComposer({
     () =>
       listEnabledModelPickerRuntimes(
         hasSessionTarget,
-        isRepoRuntimeReady,
+        isRuntimeReady,
         isModelPickerOpen,
         modelPickerRuntimeKinds,
         selectedRuntimeKind,
@@ -294,7 +294,7 @@ export function useAgentStudioChatComposer({
     [
       hasSessionTarget,
       isModelPickerOpen,
-      isRepoRuntimeReady,
+      isRuntimeReady,
       modelPickerRuntimeKinds,
       selectedRuntimeKind,
     ],
@@ -385,7 +385,7 @@ export function useAgentStudioChatComposer({
   const composerCatalog = hasSessionTarget ? null : (selectedComposerResource?.catalog ?? null);
   const isLoadingComposerCatalog = hasSessionTarget
     ? isSessionModelCatalogLoading
-    : isRepoRuntimeReady && (selectedComposerResource?.isFetching ?? false);
+    : isRuntimeReady && (selectedComposerResource?.isFetching ?? false);
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -555,8 +555,7 @@ export function useAgentStudioChatComposer({
   };
 
   return {
-    newSessionCatalog:
-      isRepoRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
+    newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
     isSelectedSessionModelSendable,

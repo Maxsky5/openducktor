@@ -13,7 +13,6 @@ type UseWorkspaceOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
-  clearActiveTaskStoreCheck: () => void;
   hostClient?: WorkspaceOperationsHostClient;
 };
 
@@ -21,7 +20,6 @@ export function useWorkspaceOperations({
   activeWorkspace,
   setActiveWorkspace,
   clearTaskData,
-  clearActiveTaskStoreCheck,
   hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
   const activeRepo = activeWorkspace?.repoPath ?? null;
@@ -78,7 +76,6 @@ export function useWorkspaceOperations({
     activeWorkspace,
     setActiveWorkspace,
     clearTaskData,
-    clearActiveTaskStoreCheck,
     clearBranchData,
     hostClient,
   });

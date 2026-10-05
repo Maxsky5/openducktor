@@ -39,6 +39,12 @@ const INVALIDATING_PARENT_ROUTED_EVENT = {
   invalidatesSessions: true,
   usesParentSessionRouting: true,
 } as const satisfies OpencodeEventPolicy;
+const RUNTIME_LIFECYCLE_EVENT = {
+  ingress: "validate",
+  route: "ignore",
+  invalidatesSessions: false,
+  usesParentSessionRouting: false,
+} as const satisfies OpencodeEventPolicy;
 const INVALIDATION_ONLY_EVENT = {
   ingress: "validate",
   route: "ignore",
@@ -135,7 +141,7 @@ export const OPENCODE_EVENT_POLICY_BY_TYPE = {
   "worktree.failed": IGNORE_EVENT,
   "server.connected": IGNORE_EVENT,
   "global.disposed": IGNORE_EVENT,
-  "server.instance.disposed": IGNORE_EVENT,
+  "server.instance.disposed": RUNTIME_LIFECYCLE_EVENT,
 } as const satisfies Record<SdkEvent["type"], OpencodeEventPolicy>;
 
 type OpencodeEventType = keyof typeof OPENCODE_EVENT_POLICY_BY_TYPE;

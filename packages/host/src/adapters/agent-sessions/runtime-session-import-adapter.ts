@@ -6,8 +6,8 @@ import type { RuntimeSessionImportPort } from "../../ports/runtime-session-impor
 export const createRuntimeSessionImportAdapter = (
   native: NativePort,
 ): RuntimeSessionImportPort => ({
-  scanSessions: (signal) => {
-    const iterator = native.scanSessions(signal)[Symbol.asyncIterator]();
+  scanSessions: (input) => {
+    const iterator = native.scanSessions(input)[Symbol.asyncIterator]();
     return {
       next: () =>
         Effect.tryPromise({

@@ -94,7 +94,13 @@ const workspaceState = (
   loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
-  saveSettingsSnapshot: async () => {},
+  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
+  saveSettingsSnapshot: async () => ({
+    type: "saved" as const,
+    workspaces: [],
+    runtimeApplications: [],
+    refreshError: null,
+  }),
   saveAgentModelFavorites: async () => createSettingsSnapshotFixture(),
   ...overrides,
 });

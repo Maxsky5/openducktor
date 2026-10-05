@@ -1,11 +1,10 @@
 import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
-import { classifyRepoRuntimeHealth } from "@/lib/repo-runtime-health";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
-import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type { DiagnosticsFailureKind, ObservedCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
-type DiagnosticsToastSeverity = Exclude<RepoRuntimeFailureKind, "timeout" | null>;
+type NonNullDiagnosticsFailureKind = Exclude<DiagnosticsFailureKind, null>;
+type DiagnosticsToastSeverity = Exclude<DiagnosticsFailureKind, "timeout" | null>;
 type AvailabilityVerb = "is" | "are";
 
 export type DiagnosticsToastIssue = {
@@ -23,19 +22,13 @@ type DiagnosticsIssueMeta = {
 
 type DiagnosticsIssueCandidate = DiagnosticsIssueMeta & {
   detail: string | null;
-  failureKind: NonNullRepoRuntimeFailureKind;
+  failureKind: NonNullDiagnosticsFailureKind;
 };
 
 type BuildDiagnosticsToastIssuesArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheck: RuntimeCheck | null;
-  runtimeCheckError: string | null;
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheck: TaskStoreCheck | null;
-  taskStoreCheckError: string | null;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  runtimeCheck: ObservedCheck<RuntimeCheck>;
+  taskStoreCheck: ObservedCheck<TaskStoreCheck>;
 };
 
 const CLI_TOOLS_ISSUE_META: DiagnosticsIssueMeta = {
@@ -108,7 +101,7 @@ const buildDiagnosticsToastIssue = ({
 const buildDiagnosticsIssueCandidate = (
   meta: DiagnosticsIssueMeta,
   detail: string | null,
-  failureKind: RepoRuntimeFailureKind,
+  failureKind: DiagnosticsFailureKind,
 ): DiagnosticsIssueCandidate | null => {
   if (detail === null || failureKind === null) {
     return null;
@@ -140,110 +133,40 @@ export const getCliToolsCheckFailureDetail = (
   return null;
 };
 
-const getRuntimeCheckIssueCandidate = (
-  runtimeCheck: RuntimeCheck | null,
-  runtimeCheckError: string | null,
-  runtimeCheckFailureKind: RepoRuntimeFailureKind,
-): DiagnosticsIssueCandidate | null => {
-  const detail = getCliToolsCheckFailureDetail(runtimeCheck, runtimeCheckError);
-  const failureKind =
-    runtimeCheckFailureKind ?? (hasCliToolCheckFailure(runtimeCheck) ? "error" : null);
+const getRuntimeCheckIssueCandidate = ({
+  data,
+  error,
+  failureKind: readFailureKind,
+}: ObservedCheck<RuntimeCheck>): DiagnosticsIssueCandidate | null => {
+  const detail = getCliToolsCheckFailureDetail(data, error);
+  const failureKind = readFailureKind ?? (hasCliToolCheckFailure(data) ? "error" : null);
   return buildDiagnosticsIssueCandidate(CLI_TOOLS_ISSUE_META, detail, failureKind);
 };
 
-const getTaskStoreCheckIssueCandidate = (
-  taskStoreCheck: TaskStoreCheck | null,
-  taskStoreCheckError: string | null,
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind,
-): DiagnosticsIssueCandidate | null => {
-  const detail = hasTaskStoreCheckFailure(taskStoreCheck)
-    ? (taskStoreCheck?.repoStoreHealth?.detail ??
-      taskStoreCheckError ??
-      taskStoreCheck?.taskStoreError ??
-      null)
-    : (taskStoreCheckError ??
-      taskStoreCheck?.repoStoreHealth?.detail ??
-      taskStoreCheck?.taskStoreError ??
-      null);
-  const failureKind =
-    taskStoreCheckFailureKind ?? (hasTaskStoreCheckFailure(taskStoreCheck) ? "error" : null);
+const getTaskStoreCheckIssueCandidate = ({
+  data,
+  error,
+  failureKind: readFailureKind,
+}: ObservedCheck<TaskStoreCheck>): DiagnosticsIssueCandidate | null => {
+  const detail = hasTaskStoreCheckFailure(data)
+    ? (data?.repoStoreHealth?.detail ?? error ?? data?.taskStoreError ?? null)
+    : (error ?? data?.repoStoreHealth?.detail ?? data?.taskStoreError ?? null);
+  const failureKind = readFailureKind ?? (hasTaskStoreCheckFailure(data) ? "error" : null);
   return buildDiagnosticsIssueCandidate(TASK_STORE_ISSUE_META, detail, failureKind);
-};
-
-const getRuntimeHealthIssueCandidates = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap,
-): DiagnosticsIssueCandidate[] => {
-  const issueCandidates: DiagnosticsIssueCandidate[] = [];
-
-  for (const definition of runtimeDefinitions) {
-    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-    if (!runtimeHealth) {
-      continue;
-    }
-
-    const runtimeIssue =
-      classifyRepoRuntimeHealth(runtimeHealth) === "blocked"
-        ? buildDiagnosticsIssueCandidate(
-            {
-              id: `diagnostics:runtime:${definition.kind}`,
-              label: `${definition.label} runtime`,
-              availabilityVerb: "is",
-            },
-            runtimeHealth.runtime.detail,
-            runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
-          )
-        : null;
-
-    if (runtimeIssue !== null) {
-      issueCandidates.push(runtimeIssue);
-      continue;
-    }
-
-    if (
-      runtimeHealth.runtime.status !== "ready" ||
-      !definition.capabilities.optionalSurfaces.supportsMcpStatus
-    ) {
-      continue;
-    }
-
-    const mcpIssue = buildDiagnosticsIssueCandidate(
-      {
-        id: `diagnostics:mcp:${definition.kind}`,
-        label: `${definition.label} OpenDucktor MCP`,
-        availabilityVerb: "is",
-      },
-      runtimeHealth.mcp?.detail ?? null,
-      runtimeHealth.mcp?.status === "error" ? "error" : (runtimeHealth.mcp?.failureKind ?? null),
-    );
-
-    if (mcpIssue !== null) {
-      issueCandidates.push(mcpIssue);
-    }
-  }
-
-  return issueCandidates;
 };
 
 export const buildDiagnosticsToastIssues = ({
   activeWorkspace,
-  runtimeDefinitions,
   runtimeCheck,
-  runtimeCheckError,
-  runtimeCheckFailureKind,
   taskStoreCheck,
-  taskStoreCheckError,
-  taskStoreCheckFailureKind,
-  runtimeHealthByRuntime,
 }: BuildDiagnosticsToastIssuesArgs): DiagnosticsToastIssue[] => {
   if (activeWorkspace === null) {
     return [];
   }
 
   return [
-    getRuntimeCheckIssueCandidate(runtimeCheck, runtimeCheckError, runtimeCheckFailureKind),
-    getTaskStoreCheckIssueCandidate(taskStoreCheck, taskStoreCheckError, taskStoreCheckFailureKind),
-    ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
+    getRuntimeCheckIssueCandidate(runtimeCheck),
+    getTaskStoreCheckIssueCandidate(taskStoreCheck),
   ].reduce<DiagnosticsToastIssue[]>((issues, issueCandidate) => {
     if (issueCandidate !== null && issueCandidate.failureKind === "error") {
       issues.push(buildDiagnosticsToastIssue(issueCandidate));

@@ -2,7 +2,6 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as approvalPolicy from "../session-read-model/pending-approval-policy";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentRuntimeCatalog } from "@openducktor/core";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
@@ -2422,39 +2421,6 @@ describe("useRepoSessionReadModel", () => {
       expect(invalidateQueries).toHaveBeenNthCalledWith(1, {
         queryKey: ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"],
       });
-    } finally {
-      await state.harness.unmount();
-    }
-  });
-
-  test("invalidates session and catalog reads when the runtime changes", async () => {
-    const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
-    });
-    const catalogKey = ["runtime-catalog", "catalog", "/repo", "claude", "/repo"];
-    const otherCatalogKey = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
-    state.queryClient.setQueryData<AgentRuntimeCatalog>(catalogKey, {
-      models: { status: "failed", message: "models unavailable" },
-    });
-    state.queryClient.setQueryData<AgentRuntimeCatalog>(otherCatalogKey, {
-      models: { status: "failed", message: "models unavailable" },
-    });
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      await state.harness.run(async () => {
-        state.emit({
-          type: "runtime_changed",
-          scope: { repoPath: "/repo", runtimeKind: "claude" },
-          state: "stopped",
-        });
-      });
-
-      await waitFor(() =>
-        expect(state.queryClient.getQueryState(catalogKey)?.isInvalidated).toBe(true),
-      );
-      expect(state.queryClient.getQueryState(otherCatalogKey)?.isInvalidated).toBe(false);
     } finally {
       await state.harness.unmount();
     }

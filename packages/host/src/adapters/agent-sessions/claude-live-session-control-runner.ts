@@ -29,27 +29,32 @@ export const createClaudeControlRunner = ({
   ) => Effect.Effect<Value, HostError>;
   retainSummary: (
     operation: string,
+    repoPath: string,
     summary: AgentSessionSummary,
     options: SummaryOptions,
   ) => Effect.Effect<AgentSessionSummary, HostError>;
   reportProjectionFailure: (
     operation: string,
+    repoPath: string,
     failure: HostError,
   ) => Effect.Effect<void, HostError>;
 }) => ({
+  /** `repoPath` is the repository of the request. Summaries carry no repository. */
   runSummary: (
     operation: string,
+    repoPath: string,
     run: () => Effect.Effect<AgentSessionSummary, HostError>,
     options: SummaryOptions = {},
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     runControlMutation(
       run().pipe(
-        Effect.flatMap((summary) => retainSummary(operation, summary, options)),
+        Effect.flatMap((summary) => retainSummary(operation, repoPath, summary, options)),
         Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
       ),
     ),
   runTitleUpdate: (
     operation: string,
+    repoPath: string,
     run: () => Effect.Effect<AgentSessionTitleUpdateResult, HostError>,
   ): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> =>
     runControlMutation(
@@ -57,8 +62,8 @@ export const createClaudeControlRunner = ({
         Effect.flatMap((result) =>
           commitTitleUpdate(
             result,
-            (summary) => retainSummary(operation, summary, { keepActivity: true }),
-            (failure) => reportProjectionFailure(operation, failure),
+            (summary) => retainSummary(operation, repoPath, summary, { keepActivity: true }),
+            (failure) => reportProjectionFailure(operation, repoPath, failure),
           ),
         ),
       ),
@@ -66,14 +71,14 @@ export const createClaudeControlRunner = ({
 });
 
 export const createClaudeProjectionFailureReporter =
-  (dependencies: { commit: CommitMutation; repoPath: string }) =>
-  (operation: string, failure: HostError): Effect.Effect<void, HostError> =>
+  (dependencies: { commit: CommitMutation }) =>
+  (operation: string, repoPath: string, failure: HostError): Effect.Effect<void, HostError> =>
     dependencies.commit(`${operation}.report-projection-failure`, () => ({
       value: undefined,
       changes: [
         {
           type: "fault",
-          repoPath: dependencies.repoPath,
+          repoPath,
           operation,
           message: failure.message,
         },

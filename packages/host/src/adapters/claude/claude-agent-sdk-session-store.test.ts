@@ -74,7 +74,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -85,7 +84,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.stopSession({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -124,7 +122,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
 
     await Effect.runPromise(
       store.stopSession({
-        repoPath: "/repo",
         runtimeKind: "claude",
         workingDirectory: "/repo",
         externalSessionId: "session-1",
@@ -188,7 +185,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -219,7 +215,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -239,7 +234,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     const probe = () =>
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -267,7 +261,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -289,7 +282,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -321,7 +313,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await expect(
       Effect.runPromise(
         store.probeSessionStatus({
-          repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo",
           externalSessionId: "session-1",
@@ -483,7 +474,6 @@ describe("createClaudeAgentSdkSessionStore", () => {
 
     const stopPromise = Effect.runPromise(
       store.stopSession({
-        repoPath: "/repo",
         runtimeKind: "claude",
         workingDirectory: "/repo",
         externalSessionId: "session-1",
@@ -556,5 +546,117 @@ describe("createClaudeAgentSdkSessionStore", () => {
     expect(session.queuedSdkMessages).toEqual([]);
     expect(session.pendingQuestions.size).toBe(0);
     expect(session.query.close).toHaveBeenCalled();
+  });
+
+  describe("with sessions from two repositories", () => {
+    const createOtherRepositorySession = (overrides: Partial<ClaudeSession> = {}) => {
+      const base = createSession();
+      return createSession({
+        externalSessionId: "session-2",
+        input: { ...base.input, repoPath: "/other-repo", workingDirectory: "/other-repo/wt" },
+        summary: {
+          ...base.summary,
+          externalSessionId: "session-2",
+          workingDirectory: "/other-repo/wt",
+        },
+        query: createClaudeQueryFixture({ close: mock(() => {}) }),
+        ...overrides,
+      });
+    };
+
+    test("stops a session by kind, id, and working directory without a repository", async () => {
+      const finished: string[] = [];
+      const store = createClaudeAgentSdkSessionStore({
+        emit: (session, event) => {
+          if (event.type === "session_finished") {
+            finished.push(`${session.input.repoPath}:${event.externalSessionId}`);
+          }
+        },
+      });
+      const repoSession = createSession({ activity: "running", sdkState: "running" });
+      const otherSession = createOtherRepositorySession({
+        activity: "running",
+        sdkState: "running",
+      });
+      store.set(repoSession);
+      store.set(otherSession);
+      const otherTarget = {
+        runtimeKind: "claude" as const,
+        workingDirectory: "/other-repo/wt/",
+        externalSessionId: "session-2",
+      };
+
+      await expect(Effect.runPromise(store.probeSessionStatus(otherTarget))).resolves.toEqual({
+        supported: true,
+        hasLiveSession: true,
+      });
+      await Effect.runPromise(store.stopSession(otherTarget));
+
+      expect(finished).toEqual(["/other-repo:session-2"]);
+      expect(store.get("session-2")).toBeUndefined();
+      expect(store.get("session-1")).toBe(repoSession);
+      expect(repoSession.query.close).not.toHaveBeenCalled();
+    });
+
+    test("rejects a stop target from another working directory", async () => {
+      const store = createClaudeAgentSdkSessionStore();
+      const otherSession = createOtherRepositorySession({ activity: "running" });
+      store.set(otherSession);
+      const target = {
+        runtimeKind: "claude" as const,
+        workingDirectory: "/repo",
+        externalSessionId: "session-2",
+      };
+
+      await expect(Effect.runPromise(store.probeSessionStatus(target))).resolves.toEqual({
+        supported: true,
+        hasLiveSession: false,
+      });
+      await expect(Effect.runPromise(store.stopSession(target))).rejects.toThrow(
+        "Cannot stop claude session 'session-2' in working directory '/repo' because the registered Claude session uses working directory '/other-repo/wt'.",
+      );
+      expect(store.get("session-2")).toBe(otherSession);
+    });
+
+    test("releases the sessions of every repository owned by the runtime", async () => {
+      const finished: string[] = [];
+      const store = createClaudeAgentSdkSessionStore({
+        emit: (session, event) => {
+          if (event.type === "session_finished") {
+            finished.push(`${session.input.repoPath}:${event.externalSessionId}`);
+          }
+        },
+      });
+      const denied: string[] = [];
+      const repoSession = createSession();
+      const otherSession = createOtherRepositorySession();
+      otherSession.pendingApprovals.set("approval-1", {
+        event: {
+          type: "approval_required",
+          externalSessionId: "session-2",
+          timestamp: "2026-06-25T20:00:00.000Z",
+          requestId: "approval-1",
+          requestType: "command_execution",
+          title: "Run command",
+        },
+        resolve: (result) => denied.push(result.behavior),
+      });
+      const replacementSession = createSession({
+        externalSessionId: "session-3",
+        runtimeId: "runtime-2",
+        query: createClaudeQueryFixture({ close: mock(() => {}) }),
+      });
+      store.set(repoSession);
+      store.set(otherSession);
+      store.set(replacementSession);
+
+      await Effect.runPromise(store.stopSessionsForRuntime("runtime-1"));
+
+      expect(finished).toEqual(["/repo:session-1", "/other-repo:session-2"]);
+      expect(denied).toEqual(["deny"]);
+      expect(otherSession.pendingApprovals.size).toBe(0);
+      expect([...store.values()]).toEqual([replacementSession]);
+      expect(replacementSession.query.close).not.toHaveBeenCalled();
+    });
   });
 });

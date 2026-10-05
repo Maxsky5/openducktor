@@ -23,7 +23,7 @@ import {
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
-import type { CodexChildProcess } from "./codex-workspace-runtime-cleanup";
+import type { CodexChildProcess } from "./codex-runtime-cleanup";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;

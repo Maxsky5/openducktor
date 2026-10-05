@@ -8,8 +8,8 @@ import {
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
-  makeRuntimeSummary,
   RecordingTransport,
+  expectedThreadConfig,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
@@ -75,14 +75,10 @@ describe("CodexContextUsageLoader", () => {
   });
 
   test("rejects before runtime binding and during preparation", async () => {
-    const runtime = createDeferred<ReturnType<typeof makeRuntimeSummary>>();
-    const { adapter, transports } = createHarness({
-      repoRuntimeResolver: { requireRepoRuntime: () => runtime.promise },
-    });
+    const { adapter, transports } = createHarness();
     const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
     await adapter.releaseSession(codexSessionRef("thread-idle"));
     await expect(loading).rejects.toThrow("was released while loading context usage");
-    runtime.resolve(makeRuntimeSummary("runtime-live"));
     expect(transports.get("runtime-live")?.calls ?? []).toEqual([]);
 
     const preparationStarted = createDeferred<void>();
@@ -104,13 +100,9 @@ describe("CodexContextUsageLoader", () => {
   });
 
   test("treats runtime release before binding as terminal", async () => {
-    const runtime = createDeferred<ReturnType<typeof makeRuntimeSummary>>();
-    const { adapter, transports } = createHarness({
-      repoRuntimeResolver: { requireRepoRuntime: () => runtime.promise },
-    });
+    const { adapter, transports } = createHarness();
     const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
     adapter.releaseRuntime("runtime-live");
-    runtime.resolve(makeRuntimeSummary("runtime-live"));
 
     await expect(loading).rejects.toThrow("was released while loading context usage");
     expect(transports.get("runtime-live")?.calls ?? []).toEqual([]);
@@ -283,10 +275,7 @@ describe("CodexContextUsageLoader", () => {
         expect.objectContaining({
           method: "thread/resume",
           params: expect.objectContaining({
-            config: {
-              "mcp_servers.openducktor.enabled": true,
-              "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-            },
+            config: expectedThreadConfig("/repo", AGENT_ROLE_TOOL_POLICY.build),
             threadId: "grandchild-thread",
             cwd: "/repo",
             excludeTurns: false,

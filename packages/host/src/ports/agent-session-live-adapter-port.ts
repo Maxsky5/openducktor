@@ -75,11 +75,10 @@ export type AgentSessionLiveAdapterMutation<Success> = {
   readonly changes: ReadonlyArray<AgentSessionLiveAdapterChange>;
 };
 
-/** Routing metadata. It never crosses the host boundary. */
+/** Routing metadata of one shared runtime. It never crosses the host boundary. */
 export type AgentSessionLiveAdapterBinding = {
   readonly runtimeId: string;
   readonly runtimeKind: RuntimeKind;
-  readonly repoPath: string;
 };
 
 type RunLiveMutation = <A>(
@@ -90,19 +89,18 @@ type RunLiveMutation = <A>(
 export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBinding {
   readonly runtimeId: string;
   readonly runtimeKind: RuntimeKind;
-  readonly repoPath: string;
   readonly #run: RunLiveMutation;
 
   constructor(binding: AgentSessionLiveAdapterBinding, run: RunLiveMutation) {
     this.runtimeId = binding.runtimeId;
     this.runtimeKind = binding.runtimeKind;
-    this.repoPath = binding.repoPath;
     this.#run = run;
   }
 
   readonly runMutation: RunLiveMutation = (mutation) => this.#run(mutation);
 }
 
+/** The repository identifies the caller. The kind alone selects the shared runtime. */
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 type AgentSessionLiveAdapterBase = {
@@ -121,13 +119,13 @@ type AgentSessionLiveAdapterBase = {
     input: AgentGeneratedImageReadInput,
   ) => Effect.Effect<AgentGeneratedImageSource, HostError>;
   readonly binding: AgentSessionLiveRegistration;
+  /** Reads the sessions of one repository again. Sessions of other repositories stay unchanged. */
   readonly refreshSnapshots?: (
     repoPath: string,
     roots?: AgentSessionAuthorizedRoot[],
   ) => Effect.Effect<void, HostError>;
-  readonly listSnapshots: (
-    repoPath: string,
-  ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
+  /** Lists every live session of this runtime, across all repositories. */
+  readonly listSnapshots: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   readonly readSnapshot: (
     ref: AgentSessionLiveRef,
   ) => Effect.Effect<AgentSessionLiveReadResult, HostError>;
@@ -202,7 +200,7 @@ export type AgentSessionLiveAdapterPort =
 export type AgentSessionLiveAdapterRegistryPort = {
   readonly register: (adapter: AgentSessionLiveAdapterPort) => Effect.Effect<void, HostError>;
   readonly remove: (runtimeId: string) => Effect.Effect<AgentSessionLiveAdapterPort | null>;
-  readonly listForRepo: (repoPath: string) => ReadonlyArray<AgentSessionLiveAdapterPort>;
+  readonly list: () => ReadonlyArray<AgentSessionLiveAdapterPort>;
   readonly resolveForScope: (
     scope: AgentSessionLiveAdapterScope,
   ) => Effect.Effect<AgentSessionLiveAdapterPort, HostError>;

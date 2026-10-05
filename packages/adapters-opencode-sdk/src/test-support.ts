@@ -1,9 +1,9 @@
+import type { ManagedMcpServer } from "@openducktor/core";
 import {
   createOpencodeClient,
   type OpencodeClient,
   type Session,
 } from "@opencode-ai/sdk/v2/client";
-import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
@@ -12,6 +12,10 @@ import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import type { ParsedOpencodeMessage } from "./opencode-ingress";
 import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
+import {
+  createOpencodeMcpDirectoryBindings,
+  type OpencodeMcpDirectoryBindings,
+} from "./opencode-mcp-bindings";
 import { z } from "zod";
 import {
   createOpencodeEventFixtures,
@@ -117,29 +121,33 @@ export const sessionRuntimeRef = (
   };
 };
 
-const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind) => ({
-  kind: runtimeKind,
+export const TEST_MCP_SERVER_CONFIG: ManagedMcpServer = {
+  command: ["openducktor-mcp"],
+  environment: { ODT_WORKSPACE_ID: "workspace-1" },
+};
+
+export const createTestMcpBindings = (
+  config: ManagedMcpServer = TEST_MCP_SERVER_CONFIG,
+): OpencodeMcpDirectoryBindings =>
+  createOpencodeMcpDirectoryBindings({ resolveServerConfig: async () => config });
+
+const DEFAULT_RUNTIME_SUMMARY = {
+  kind: "opencode" as const,
   runtimeId: "runtime-opencode-1",
-  repoPath,
-  taskId: null,
-  role: "workspace" as const,
-  workingDirectory: defaultRuntimeConnection.workingDirectory,
   runtimeRoute: {
     type: "local_http" as const,
     endpoint: defaultRuntimeConnection.endpoint,
   },
   startedAt: "2026-02-17T12:00:00Z",
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-});
+};
 
 export class OpencodeSdkAdapter extends BaseOpencodeSdkAdapter {
   constructor(options: Partial<ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0]> = {}) {
     super({
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-      repoRuntimeResolver: {
-        requireRepoRuntime: async ({ repoPath, runtimeKind }) =>
-          createDefaultRuntimeSummary(repoPath, runtimeKind),
-      },
+      runtime: DEFAULT_RUNTIME_SUMMARY,
+      mcpBindings: createTestMcpBindings(),
       ...options,
     });
   }
@@ -181,6 +189,7 @@ export type MockTool = {
 };
 
 export type MockMcp = {
+  addCalls: ClientMethodInput<"mcp", "add">[];
   statusCalls: ClientMethodInput<"mcp", "status">[];
   connectCalls: ClientMethodInput<"mcp", "connect">[];
 };
@@ -274,6 +283,7 @@ export type MakeMockClientInput = {
   agentsResult?: AgentsMockResult;
   toolIdsResponse?: string[];
   mcpStatusResponse?: Record<string, MockMcpStatus>;
+  mcpAddResponse?: Record<string, MockMcpStatus>;
 };
 
 export const makeMockClient = ({
@@ -299,6 +309,7 @@ export const makeMockClient = ({
   agentsResult,
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
   mcpStatusResponse = { openducktor: { status: "connected" } },
+  mcpAddResponse = { openducktor: { status: "connected" } },
 }: MakeMockClientInput = {}) => {
   const session: MockSession = {
     createCalls: [],
@@ -327,6 +338,7 @@ export const makeMockClient = ({
     listCalls: [],
   };
   const mcp: MockMcp = {
+    addCalls: [],
     statusCalls: [],
     connectCalls: [],
   };
@@ -628,6 +640,13 @@ export const makeMockClient = ({
     },
     mcp: {
       ...baseClient.mcp,
+      add: async (input: ClientMethodInput<"mcp", "add">) => {
+        mcp.addCalls.push(input);
+        return {
+          data: mcpAddResponse,
+          error: undefined,
+        };
+      },
       status: async (input: ClientMethodInput<"mcp", "status">) => {
         mcp.statusCalls.push(input);
         return {

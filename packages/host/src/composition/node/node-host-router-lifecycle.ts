@@ -46,6 +46,7 @@ export const createNodeHostRouterLifecycle = ({
   lifecycleLogger,
   mcpHostBridge,
   runtimeRegistry,
+  initializeRuntimes,
   startupSweep,
   taskAssetStagingService,
   taskSyncService,
@@ -65,6 +66,8 @@ export const createNodeHostRouterLifecycle = ({
   lifecycleLogger: HostLifecycleLogger;
   mcpHostBridge: McpHostBridgeServer | null | undefined;
   runtimeRegistry: RuntimeRegistryPort;
+  /** Starts enabled shared runtimes in the background. */
+  initializeRuntimes: () => Effect.Effect<void>;
   startupSweep: () => Effect.Effect<void, TaskStoreError>;
   taskAssetStagingService: Pick<TaskAssetStagingService, "shutdownCleanup">;
   taskSyncService: Pick<TaskSyncService, "startPullRequestSyncLoop"> | null;
@@ -72,6 +75,7 @@ export const createNodeHostRouterLifecycle = ({
 }): NodeHostRouterLifecycle => {
   let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
   let taskAssetStagingSwept = false;
+  let runtimesInitialized = false;
   const stopPullRequestSyncLoop = () =>
     Effect.gen(function* () {
       if (!pullRequestSyncLoop) {
@@ -96,16 +100,20 @@ export const createNodeHostRouterLifecycle = ({
           taskAssetStagingSwept = true;
         }
         if (mcpHostBridge) {
-          yield* mcpHostBridge.ensureExternalDiscoveryReady().pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostOperationError({
-                  operation: "mcp-host-bridge.ensure-external-discovery",
-                  message: cause.message,
-                  cause,
-                }),
-            ),
-          );
+          // The bridge has independent readiness. Its failure stays visible in the bridge check
+          // and blocks only operations that need the bridge.
+          const bridge = yield* Effect.either(mcpHostBridge.ensureExternalDiscoveryReady());
+          if (bridge._tag === "Left") {
+            yield* writeHostLifecycleLog(
+              lifecycleLogger,
+              "error",
+              `The OpenDucktor MCP host bridge did not start: ${bridge.left.message}`,
+            );
+          }
+        }
+        if (!runtimesInitialized) {
+          runtimesInitialized = true;
+          yield* initializeRuntimes();
         }
         yield* notifications.initialize();
         if (taskSyncService && pullRequestSyncLoop === null) {

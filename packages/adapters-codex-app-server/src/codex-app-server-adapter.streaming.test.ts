@@ -1013,7 +1013,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("rejects subagent reference sends before initializing a missing local session", async () => {
-    const { adapter, transports, requireRepoRuntime } = createHarness();
+    const { adapter, transports } = createHarness();
 
     await expect(
       adapter.sendUserMessage(
@@ -1032,8 +1032,6 @@ describe("CodexAppServerAdapter streaming", () => {
         }),
       ),
     ).rejects.toThrow("Codex app-server does not support 'subagent_reference' user message parts.");
-
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
     expect(transports.size).toBe(0);
   });
 

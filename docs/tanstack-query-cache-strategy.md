@@ -52,9 +52,11 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 | Agent session list | 30 sec |
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
-| Runtime instance list | 10 sec |
+| Host runtime and MCP bridge status | Infinite, updated by events |
 
-Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, and `runtime.ts`.
+Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
+
+The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
 ### Checks and file data
 
@@ -62,7 +64,6 @@ Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.t
 |---|---:|
 | Runtime check | 5 min |
 | Task store check | 60 sec |
-| Repository runtime health | 60 sec |
 | Directory listing | 1 sec |
 | Branches | 60 sec |
 | Current branch | 60 sec |
@@ -108,7 +109,7 @@ Keep these values outside TanStack Query:
 - Pending permission and question state.
 - Composer input.
 - Event-driven orchestration state.
-- Commands such as `runtimeEnsure`, `buildStart`, `gitPushBranch`, and `taskTransition`.
+- Commands such as `runtimeRestart`, `buildStart`, `gitPushBranch`, and `taskTransition`.
 
 ## Generated images
 

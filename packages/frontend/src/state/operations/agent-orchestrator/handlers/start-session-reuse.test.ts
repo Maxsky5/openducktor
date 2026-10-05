@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
@@ -17,6 +16,7 @@ import {
   taskFixture,
   workflowSessionStartSummary,
 } from "./start-session.test-helpers";
+import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 
 interface SessionsRefContract {
   current: AgentSessionCollection;
@@ -249,9 +249,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -316,9 +314,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -536,9 +532,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     let loadSourceSessionCalls = 0;
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;
@@ -615,9 +609,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     let loadSourceSessionCalls = 0;
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter({
-      resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    });
+    const adapter = createTestOpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
       startCalls += 1;

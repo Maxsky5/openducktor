@@ -66,10 +66,6 @@ const historyHarness = async (
   const runtime: RuntimeInstanceSummary = {
     runtimeId: "runtime-1",
     kind: "codex",
-    repoPath,
-    workingDirectory: repoPath,
-    taskId: null,
-    role: "workspace",
     runtimeRoute: { type: "host_service", identity: "runtime-1" },
     startedAt: "2026-09-12T10:00:00.000Z",
     descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
@@ -79,7 +75,7 @@ const historyHarness = async (
   await Effect.runPromise(
     adapterRegistry.register(
       createAgentSessionRuntimeAdapterTestDouble(
-        { repoPath, runtimeKind: "codex", runtimeId: runtime.runtimeId },
+        { runtimeKind: "codex", runtimeId: runtime.runtimeId },
         {
           readSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
           queries: {
@@ -97,7 +93,7 @@ const historyHarness = async (
   );
   const dependencies = {
     adapterRegistry,
-    runtimeRegistry: { findWorkspaceRuntime: () => Effect.succeed(runtime) },
+    runtimeRegistry: { requireReady: () => Effect.succeed(runtime) },
     gitPort: {
       canonicalizePath: settingsConfig.canonicalizePath,
       isGitRepository: () => Effect.succeed(true),

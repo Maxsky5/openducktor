@@ -2,8 +2,8 @@ import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
-import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
 import {
@@ -42,9 +42,9 @@ export function useSessionTranscriptSurfaceModel({
     hasWorkspace,
   });
 
-  const runtimeReadiness = useRepoRuntimeReadiness({
+  const runtimeReadiness = useRuntimeReadiness({
     hasWorkspace,
-    runtimeTarget: repoRuntimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
+    runtimeTarget: runtimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
   });
   const { refreshChecks: refreshRuntimeChecks } = runtimeReadiness;
 
@@ -52,7 +52,7 @@ export function useSessionTranscriptSurfaceModel({
     isOpen,
     repoPath: workspaceRepoPath,
     target,
-    repoReadinessState: runtimeReadiness.state,
+    runtimeReadinessState: runtimeReadiness.state,
     liveSession,
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({

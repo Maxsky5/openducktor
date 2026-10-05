@@ -18,6 +18,7 @@ export const registerElectronNotificationStreamIpc = (
   ipcMain: IpcMain,
   stream: EffectNodeHostCommandRouter["notificationStream"],
   reportDeliveryFailure: (failure: { cause: unknown; subscriptionId: string }) => void,
+  isHostShutdownStarted: () => boolean,
 ) => {
   const subscriptions = new Map<
     string,
@@ -83,7 +84,11 @@ export const registerElectronNotificationStreamIpc = (
               }
             }),
           ),
-          Effect.catchAll((cause) => Effect.sync(() => failDelivery(cause))),
+          // Host shutdown ends every stream. The renderer closes with the host, so this end is
+          // not a delivery failure.
+          Effect.catchAll((cause) =>
+            Effect.sync(() => (isHostShutdownStarted() ? release() : failDelivery(cause))),
+          ),
         ),
       );
       const navigation = (

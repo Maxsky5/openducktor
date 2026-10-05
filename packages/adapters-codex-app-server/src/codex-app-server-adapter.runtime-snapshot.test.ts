@@ -17,6 +17,7 @@ import {
   RecordingTransport,
   requestThreadId,
   waitForEvent,
+  expectedThreadConfig,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type {
@@ -820,10 +821,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       method: "thread/resume",
       params: expect.objectContaining({
         threadId: "parent-thread",
-        config: {
-          "mcp_servers.openducktor.enabled": true,
-          "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-        },
+        config: expectedThreadConfig("/repo", AGENT_ROLE_TOOL_POLICY.build),
       }),
     });
   });

@@ -1,3 +1,6 @@
+/** The name under which runtimes register the managed OpenDucktor MCP server. */
+export const ODT_MCP_SERVER_NAME = "openducktor";
+
 export const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
 
 export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [

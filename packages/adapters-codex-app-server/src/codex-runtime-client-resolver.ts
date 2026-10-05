@@ -8,7 +8,6 @@ import {
   type PolicyBoundSessionRef,
   type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
-  requireRepoRuntimeRef,
   requireSessionWorkingDirectory,
   type SearchAgentFilesInput,
   type StartAgentSessionInput,
@@ -29,8 +28,6 @@ type RuntimeClientInput =
   | LoadAgentSessionDiffInput
   | LoadAgentSessionTodosInput
   | SearchAgentFilesInput;
-
-type CodexRepoRuntimeRef = { repoPath: string; runtimeKind: "codex" };
 
 export class CodexRuntimeClientResolver {
   private readonly clientsByRuntimeId = new Map<string, CodexAppServerClient>();
@@ -59,24 +56,7 @@ export class CodexRuntimeClientResolver {
       requireSessionWorkingDirectory(input.workingDirectory, action);
     }
 
-    const resolver = this.options.repoRuntimeResolver;
-    if (!resolver) {
-      throw new Error(
-        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime 'codex'.`,
-      );
-    }
-
-    const requestedRuntimeRef = requireRepoRuntimeRef(input, action);
-    if (requestedRuntimeRef.runtimeKind !== "codex") {
-      throw new Error(`Codex App Server can only ${action} for runtime 'codex'.`);
-    }
-    const runtimeRef: CodexRepoRuntimeRef = {
-      repoPath: requestedRuntimeRef.repoPath,
-      runtimeKind: requestedRuntimeRef.runtimeKind,
-    };
-    const runtime = await resolver.requireRepoRuntime(runtimeRef);
-
-    const { runtimeId } = resolveCodexRuntimeClientInput(runtime, runtimeRef, action);
+    const { runtimeId } = resolveCodexRuntimeClientInput(this.options.runtime, input, action);
     return {
       runtimeId,
       client: this.clientForRuntime(runtimeId),

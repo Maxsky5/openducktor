@@ -64,6 +64,7 @@ const toolDiscovery: ToolDiscoveryPort = {
 };
 
 const runtimeHealth: RuntimeHealthPort = {
+  readVersion: () => Effect.succeed(null),
   getRuntimeHealth(kind, executablePath) {
     return Effect.succeed({
       kind,
@@ -141,6 +142,7 @@ describe("runtime executable check service", () => {
         const release = yield* Deferred.make<void>();
         const startedKinds: RuntimeKind[] = [];
         const concurrentRuntimeHealth: RuntimeHealthPort = {
+          readVersion: () => Effect.succeed(null),
           getRuntimeHealth(kind, executablePath) {
             return Effect.gen(function* () {
               startedKinds.push(kind);

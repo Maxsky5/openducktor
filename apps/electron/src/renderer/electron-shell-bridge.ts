@@ -15,6 +15,7 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
+const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
 let nextDevServerTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
@@ -60,6 +61,8 @@ export const createElectronShellBridge = (): ShellBridge => {
     client,
     subscribeWorkspaceSessionUpdates: async (listener) =>
       electronApi.subscribe("openducktor://workspace-session-updated", listener),
+    subscribeRuntimeChanges: async (listener) =>
+      electronApi.subscribe(RUNTIME_CHANGED_EVENT_CHANNEL, listener),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,

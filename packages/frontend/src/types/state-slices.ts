@@ -8,11 +8,14 @@ import type {
   PullRequest,
   RepoDevServerScript,
   RuntimeApprovalReplyOutcome,
+  HostRuntimeEvent,
   RuntimeCheck,
   RuntimeKind,
   SettingsRepoConfig,
   SettingsSnapshot,
+  SettingsSnapshotRuntimePreview,
   SettingsSnapshotSaveInput,
+  SettingsSnapshotSaveResult,
   TaskAssetDescriptionMutation,
   TaskCard,
   TaskCreateInput,
@@ -47,7 +50,7 @@ import type {
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { AgentSessionTransientFault } from "./agent-session-transient-fault";
-import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
+import type { HostRuntimeStatusMap, HostStatusSnapshot, ObservedCheck } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
@@ -123,7 +126,14 @@ export type WorkspaceStateContextValue = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  /** Validates a save and returns the live sessions it would stop. It writes nothing. */
+  previewSettingsSnapshotRuntime: (
+    snapshot: SettingsSnapshotSaveInput,
+  ) => Promise<SettingsSnapshotRuntimePreview>;
+  saveSettingsSnapshot: (
+    snapshot: SettingsSnapshotSaveInput,
+    runtimeConfirmation?: string,
+  ) => Promise<SettingsSaveOutcome>;
   saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 };
 
@@ -147,24 +157,46 @@ export type WorkspacePresenceContextValue = {
 };
 
 export type ChecksStateContextValue = {
-  runtimeCheck: RuntimeCheck | null;
-  taskStoreCheck: TaskStoreCheck | null;
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
-  isLoadingChecks: boolean;
+  runtimeCheck: ObservedCheck<RuntimeCheck>;
+  /** The selected workspace repository that the task store check below describes. */
+  checksRepoPath: string | null;
+  taskStoreCheck: ObservedCheck<TaskStoreCheck>;
+  isRefreshingChecks: boolean;
+  /** Reruns host checks and, when a workspace is selected, workspace checks. Never starts a runtime. */
   refreshChecks: () => Promise<void>;
 };
 
-export type RefreshRepoRuntimeHealthOptions = {
-  reloadCatalogs?: boolean;
+/** The health of live host runtime updates. */
+export type HostRuntimeStreamHealth = {
+  /** Live runtime updates are unavailable. */
+  error: string | null;
+  /** Changes each time live updates fail or recover. */
+  epoch: number;
 };
 
-export type RepoRuntimeHealthContextValue = {
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  isLoadingRepoRuntimeHealth: boolean;
-  refreshRepoRuntimeHealth: (
-    options?: RefreshRepoRuntimeHealthOptions,
-  ) => Promise<RepoRuntimeHealthMap>;
+export type HostRuntimeEventListener = {
+  onEvent: (event: HostRuntimeEvent) => void;
+  /** Live updates failed or recovered. `getStreamHealth` returns the new state. */
+  onStreamChange: () => void;
+};
+
+/** The host runtime event stream. The host runtime status owner is its only subscriber. */
+export type HostRuntimeEvents = {
+  subscribeEvents: (listener: HostRuntimeEventListener) => () => void;
+  getStreamHealth: () => HostRuntimeStreamHealth;
+};
+
+export type HostRuntimeStatusContextValue = {
+  snapshot: HostStatusSnapshot | null;
+  statusByKind: HostRuntimeStatusMap;
+  /** True only with live updates and a successful baseline read. */
+  isCurrent: boolean;
+  isLoading: boolean;
+  readError: string | null;
+  streamError: string | null;
+  isRefreshing: boolean;
+  refresh: () => Promise<void>;
+  runtimeEvents: HostRuntimeEvents;
 };
 
 export type TasksStateContextValue = {
@@ -267,3 +299,11 @@ export type AgentOperationsContextValue = {
     sessionScope?: AgentSessionScope,
   ) => Promise<void>;
 };
+
+/**
+ * The host result of a settings save. A written save keeps its runtime application results when
+ * the local cache reload fails. `refreshError` reports that failure.
+ */
+export type SettingsSaveOutcome =
+  | (Extract<SettingsSnapshotSaveResult, { type: "saved" }> & { refreshError: string | null })
+  | Extract<SettingsSnapshotSaveResult, { type: "runtime_impact_changed" }>;

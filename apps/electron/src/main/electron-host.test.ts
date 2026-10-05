@@ -1,18 +1,22 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type {
-  GlobalConfig,
-  HostEventEnvelope,
-  RepoConfig,
-  RuntimeInstanceSummary,
-  TaskCard,
-  TaskMetadataPayload,
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type GlobalConfig,
+  type HostEventEnvelope,
+  type HostRuntimeStatus,
+  hostRuntimeSnapshotSchema,
+  type RepoConfig,
+  type RuntimeKind,
+  type RuntimeRoute,
+  runtimeLifecycleImpactSchema,
+  type TaskCard,
+  type TaskMetadataPayload,
 } from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
-  createRuntimeRegistry,
   type DevServerProcessPort,
   Effect,
   type FilesystemPort,
@@ -22,8 +26,7 @@ import {
   type OpenInToolsPort,
   ProcessEnvironmentError,
   type RuntimeHealthPort,
-  type RuntimeRegistryPort,
-  type RuntimeWorkspaceStarterPort,
+  type RuntimeStarterPort,
   type SettingsConfigPort,
   type SystemCommandPort,
   type TaskStorePort,
@@ -31,7 +34,6 @@ import {
 } from "@openducktor/host";
 import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
-type RuntimeRegistryEntry = RuntimeInstanceSummary;
 type ElectronHostCommandRouterInput = Parameters<
   typeof createProductionElectronHostCommandRouter
 >[0];
@@ -113,6 +115,20 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 
+/** Saved runtime settings that enable the given kinds. */
+const agentRuntimes = (
+  enabled: Partial<Record<RuntimeKind, boolean>>,
+): GlobalConfig["agentRuntimes"] => ({
+  ...DEFAULT_AGENT_RUNTIMES,
+  opencode: { enabled: enabled.opencode ?? false, executablePath: "opencode" },
+  codex: {
+    ...DEFAULT_AGENT_RUNTIMES.codex,
+    enabled: enabled.codex ?? false,
+    executablePath: "codex",
+  },
+  claude: { enabled: enabled.claude ?? false, executablePath: "claude" },
+});
+
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   version: 2,
   theme: "light",
@@ -131,11 +147,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       { eventId: "taskProgressedToHumanReview", actionIds: [] },
     ],
   },
-  agentRuntimes: {
-    opencode: { enabled: true },
-    codex: { enabled: false },
-    claude: { enabled: false },
-  },
+  agentRuntimes: agentRuntimes({ opencode: true }),
   workspaces: {},
   workspaceOrder: [],
   recentWorkspaces: [],
@@ -309,6 +321,7 @@ const createSystemCommands = (): SystemCommandPort => ({
 });
 
 const createRuntimeHealth = (): RuntimeHealthPort => ({
+  readVersion: (kind) => Effect.succeed(`${kind} 1.0.0`),
   getRuntimeHealth: (kind) =>
     Effect.succeed({
       kind,
@@ -674,22 +687,72 @@ const createEventBus = () => {
   return { eventBus, events };
 };
 
+type RuntimeStartInput = Parameters<RuntimeStarterPort["startRuntime"]>[0];
+type FakeRuntimeStarter = RuntimeStarterPort & {
+  starts: RuntimeStartInput[];
+  stops: string[];
+};
+
+/** Starts an in-memory runtime of each requested kind. */
+const createRuntimeStarter = (
+  runtimeRoute: RuntimeRoute = { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+): FakeRuntimeStarter => {
+  const starts: RuntimeStartInput[] = [];
+  const stops: string[] = [];
+  return {
+    starts,
+    stops,
+    startRuntime: (input) =>
+      Effect.sync(() => {
+        starts.push(input);
+        const kindStarts = starts.filter((start) => start.runtimeKind === input.runtimeKind);
+        const runtimeId = `${input.runtimeKind}-${kindStarts.length}`;
+        return {
+          runtime: {
+            kind: input.runtimeKind,
+            runtimeId,
+            runtimeRoute,
+            startedAt: "2026-05-10T10:00:00.000Z",
+            descriptor: input.descriptor,
+          },
+          configuredExecutablePath: input.runtimeKind,
+          effectiveExecutablePath: `/bin/${input.runtimeKind}`,
+          stop: () => Effect.sync(() => void stops.push(runtimeId)),
+        };
+      }),
+  };
+};
+
+type ElectronHostCommandRouter = Awaited<ReturnType<typeof createElectronHostCommandRouter>>;
+
+const runtimeStatuses = async (router: ElectronHostCommandRouter): Promise<HostRuntimeStatus[]> =>
+  hostRuntimeSnapshotSchema.parse(await router.invoke("runtime_status")).runtimes;
+
+/** Polls `runtime_status` until every listed kind reaches the state. */
+const waitForRuntimeState = async (
+  router: ElectronHostCommandRouter,
+  kinds: ReadonlyArray<RuntimeKind>,
+  state: HostRuntimeStatus["state"],
+): Promise<HostRuntimeStatus[]> => {
+  const deadline = Date.now() + 800;
+  while (Date.now() < deadline) {
+    const statuses = await runtimeStatuses(router);
+    const matching = statuses.filter(
+      (status) => kinds.includes(status.kind) && status.state === state,
+    );
+    if (matching.length === kinds.length) {
+      return matching;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for the ${kinds.join(", ")} runtimes to become ${state}.`);
+};
+
 describe("createElectronHostCommandRouter", () => {
-  test("disposes registered runtimes on host shutdown", async () => {
+  test("stops every shared runtime on host shutdown", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-dispose-"));
-    const stoppedRuntimes: string[] = [];
     const lifecycleLogs: string[] = [];
-    const registeredRuntime = {
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/repo",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
-      startedAt: "2026-05-13T00:00:00Z",
-      descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
-    } satisfies RuntimeInstanceSummary;
+    const runtimeStarter = createRuntimeStarter();
     try {
       const router = await createElectronHostCommandRouter({
         lifecycleLogger: {
@@ -705,38 +768,27 @@ describe("createElectronHostCommandRouter", () => {
           OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
           PATH: "/usr/bin:/bin",
         },
-        runtimeRegistry: {
-          ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
-          findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
-          listRuntimes: () => Effect.succeed([registeredRuntime]),
-          listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
-          stopRuntime: (runtimeId) =>
-            Effect.sync(() => {
-              stoppedRuntimes.push(runtimeId);
-              return true;
-            }),
-          stopAllRuntimes: () =>
-            Effect.sync(() => {
-              stoppedRuntimes.push("runtime-1");
-              return [registeredRuntime];
-            }),
-          stopSession: () => Effect.succeed(undefined),
-          probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
-          probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
-        },
-        settingsConfig: createSettingsConfig(),
+        runtimeHealth: createRuntimeHealth(),
+        runtimeStarter,
+        settingsConfig: createSettingsConfig(
+          globalConfig({ agentRuntimes: agentRuntimes({ opencode: true, codex: true }) }),
+        ),
       });
+      await router.initialize();
+      await waitForRuntimeState(router, ["opencode", "codex"], "ready");
 
       await expect(router.dispose()).resolves.toBeUndefined();
 
-      expect(stoppedRuntimes).toEqual(["runtime-1"]);
+      expect(runtimeStarter.stops.toSorted()).toEqual(["codex-1", "opencode-1"]);
       expect(lifecycleLogs).toEqual(
         expect.arrayContaining([
           "Shutting down OpenDucktor host services",
           "No dev servers are running",
           "Stopping registered agent runtimes",
-          "Stopped opencode runtime runtime-1 for task workspace (workspace)",
-          "No MCP host bridge server is running",
+          "Stopping the OpenCode runtime opencode-1.",
+          "The OpenCode runtime stopped.",
+          "Stopping the Codex runtime codex-1.",
+          "The Codex runtime stopped.",
           "OpenDucktor host services stopped",
         ]),
       );
@@ -852,114 +904,74 @@ describe("createElectronHostCommandRouter", () => {
     });
   });
 
-  test("registers migrated runtime definition host commands", async () => {
-    const runtimeStarts: unknown[] = [];
+  test("lists, requires, and restarts shared runtimes through host commands", async () => {
     const opencodeDescriptor = createRuntimeDefinitionsService()
       .listRuntimeDefinitions()
       .find((descriptor) => descriptor.kind === "opencode");
     if (!opencodeDescriptor) {
       throw new Error("OpenCode runtime descriptor missing from test fixture.");
     }
-    const workspaceStarter: RuntimeWorkspaceStarterPort = {
-      startWorkspaceRuntime: (input) =>
-        Effect.sync(() => {
-          runtimeStarts.push(input);
-          const runtime = {
-            kind: "opencode",
-            runtimeId: "runtime-1",
-            repoPath: input.repoPath,
-            taskId: null,
-            role: "workspace",
-            workingDirectory: input.workingDirectory,
-            runtimeRoute: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4096",
-            },
-            startedAt: "2026-05-10T10:00:00.000Z",
-            descriptor: opencodeDescriptor,
-          };
-          return {
-            runtime,
-            isAlive: () => true,
-            stop: () => Effect.succeed(undefined),
-          };
-        }),
-    };
-    const runtimeRegistry = createRuntimeRegistry({ workspaceStarter });
+    const runtimeStarter = createRuntimeStarter();
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      runtimeRegistry: {
-        ...runtimeRegistry,
-        probeMcpStatus: () =>
-          Effect.succeed({
-            supported: true,
-            connected: true,
-            serverStatus: "connected",
-            toolIds: ["odt_read_task"],
-            detail: null,
-            failureKind: null,
-          }),
-      },
-      settingsConfig: createSettingsConfig(),
+      runtimeHealth: createRuntimeHealth(),
+      runtimeStarter,
+      settingsConfig: createSettingsConfig(globalConfig()),
     });
 
-    await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
-      { kind: "opencode" },
-      { kind: "codex" },
-      { kind: "claude" },
-    ]);
-    await expect(
-      router.invoke("runtime_list", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toEqual([]);
-    await expect(
-      router.invoke("repo_runtime_health", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      status: "ready",
-      runtime: { status: "ready", stage: "runtime_ready" },
-      mcp: { status: "connected", toolIds: ["odt_read_task"] },
-    });
-    await expect(
-      router.invoke("runtime_ensure", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({
-      kind: "opencode",
-      repoPath: "/repo",
-      role: "workspace",
-      workingDirectory: "/repo",
-    });
-    await expect(
-      router.invoke("runtime_list", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject([{ runtimeId: "runtime-1" }]);
-    await expect(
-      router.invoke("runtime_require", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
-    expect(runtimeStarts).toEqual([
-      {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        workingDirectory: "/repo",
+    try {
+      await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
+        { kind: "opencode" },
+        { kind: "codex" },
+        { kind: "claude" },
+      ]);
+
+      await router.initialize();
+      const [ready] = await waitForRuntimeState(router, ["opencode"], "ready");
+      expect(ready).toMatchObject({
+        kind: "opencode",
+        enabled: true,
+        runtimeId: "opencode-1",
+        trigger: "host_startup",
+        failure: null,
+      });
+      await expect(router.invoke("runtime_require", { runtimeKind: "opencode" })).resolves.toEqual({
+        kind: "opencode",
+        runtimeId: "opencode-1",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+        startedAt: "2026-05-10T10:00:00.000Z",
         descriptor: opencodeDescriptor,
-      },
-    ]);
-    await expect(router.invoke("runtime_stop", { runtimeId: "missing" })).rejects.toThrow(
-      "Runtime not found: missing",
-    );
+      });
+      await expect(router.invoke("runtime_require", { runtimeKind: "codex" })).rejects.toThrow();
+
+      const impact = runtimeLifecycleImpactSchema.parse(
+        await router.invoke("runtime_restart_impact", { runtimeKind: "opencode" }),
+      );
+      expect(impact.kinds).toEqual([
+        expect.objectContaining({ kind: "opencode", runtimeId: "opencode-1", effect: "restart" }),
+      ]);
+      expect(impact.workspaces).toEqual([]);
+      await expect(
+        router.invoke("runtime_restart", {
+          runtimeKind: "opencode",
+          confirmation: impact.confirmation,
+        }),
+      ).resolves.toMatchObject({
+        type: "completed",
+        status: { kind: "opencode", state: "ready", runtimeId: "opencode-2", failure: null },
+      });
+      expect(
+        runtimeStarter.starts.map(({ runtimeKind, descriptor }) => ({ runtimeKind, descriptor })),
+      ).toEqual([
+        { runtimeKind: "opencode", descriptor: opencodeDescriptor },
+        { runtimeKind: "opencode", descriptor: opencodeDescriptor },
+      ]);
+      expect(runtimeStarter.stops).toEqual(["opencode-1"]);
+    } finally {
+      await router.dispose();
+    }
   });
 
   test("registers migrated passive dev server state command", async () => {
@@ -1146,51 +1158,52 @@ describe("createElectronHostCommandRouter", () => {
       git: createGit(),
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
+      runtimeHealth: createRuntimeHealth(),
       settingsConfig: createSettingsConfig(
         globalConfig({
-          agentRuntimes: {
-            opencode: { enabled: true },
-            codex: { enabled: true },
-            claude: { enabled: true },
-          },
+          agentRuntimes: agentRuntimes({ opencode: true, codex: true, claude: true }),
           workspaces: { repo: repoConfig() },
           workspaceOrder: ["repo"],
         }),
       ),
     });
 
-    for (const runtimeKind of ["claude", "codex", "opencode"] as const) {
-      await expect(
-        router.invoke("runtime_ensure", { runtimeKind, repoPath: "/repo" }),
-      ).rejects.toThrow(
-        `Failed to start ${runtimeKind} runtime because the user PATH is unavailable. ${diagnostic.message}`,
-      );
+    try {
+      await router.initialize();
+      const statuses = await waitForRuntimeState(router, ["claude", "codex", "opencode"], "error");
+
+      for (const runtimeKind of ["claude", "codex", "opencode"] as const) {
+        expect(statuses.find((status) => status.kind === runtimeKind)).toMatchObject({
+          runtimeId: null,
+          failure: {
+            phase: "start",
+            message: expect.stringContaining(
+              `Failed to start ${runtimeKind} runtime because the user PATH is unavailable. ${diagnostic.message}`,
+            ),
+          },
+        });
+        await expect(router.invoke("runtime_require", { runtimeKind })).rejects.toThrow();
+      }
+    } finally {
+      await router.dispose();
     }
   });
 
-  test("blocks an injected runtime registry when the user PATH is unavailable", async () => {
+  test("blocks an injected runtime starter when the user PATH is unavailable", async () => {
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
       reason: "timed_out",
       shell: "/bin/zsh",
     });
-    let startCalls = 0;
-    const runtimeRegistry = createRuntimeRegistry({
-      workspaceStarter: {
-        startWorkspaceRuntime: () =>
-          Effect.sync(() => {
-            startCalls += 1;
-            throw new Error("Injected runtime registry must not start.");
-          }),
-      },
-    });
+    const runtimeStarter = createRuntimeStarter();
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
-      runtimeRegistry,
+      runtimeHealth: createRuntimeHealth(),
+      runtimeStarter,
       settingsConfig: createSettingsConfig(
         globalConfig({
           workspaces: { repo: repoConfig() },
@@ -1199,12 +1212,20 @@ describe("createElectronHostCommandRouter", () => {
       ),
     });
 
-    await expect(
-      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
-    ).rejects.toThrow(
-      `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
-    );
-    expect(startCalls).toBe(0);
+    try {
+      await router.initialize();
+      const [status] = await waitForRuntimeState(router, ["opencode"], "error");
+
+      expect(status?.failure).toMatchObject({
+        phase: "start",
+        message: expect.stringContaining(
+          `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
+        ),
+      });
+      expect(runtimeStarter.starts).toEqual([]);
+    } finally {
+      await router.dispose();
+    }
   });
 
   test("registers migrated read-only git host commands", async () => {
@@ -1602,52 +1623,27 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toEqual([]);
 
-    const stoppedSessions: unknown[] = [];
-    const opencodeDescriptor = createRuntimeDefinitionsService()
-      .listRuntimeDefinitions()
-      .find((descriptor) => descriptor.kind === "opencode");
-    if (!opencodeDescriptor) {
-      throw new Error("OpenCode runtime descriptor missing from test fixture.");
-    }
-    const sessionRuntime: RuntimeRegistryEntry = {
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/repo/worktree",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-      startedAt: "2026-05-10T10:00:00.000Z",
-      descriptor: opencodeDescriptor,
-    };
-    const sessionRuntimeRegistry: RuntimeRegistryPort = {
-      ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime ensure"),
-      findRuntimeById: (runtimeId) =>
-        Effect.succeed(runtimeId === sessionRuntime.runtimeId ? sessionRuntime : null),
-      listRuntimes: () => Effect.succeed([sessionRuntime]),
-      listRuntimesByRepo: (input) =>
-        Effect.succeed(
-          sessionRuntime.repoPath === input.repoPath &&
-            (!input.runtimeKind || sessionRuntime.kind === input.runtimeKind)
-            ? [sessionRuntime]
-            : [],
-        ),
-      stopRuntime: () => Effect.dieMessage("unexpected runtime stop"),
-      stopAllRuntimes: () => Effect.succeed([]),
-      stopSession: (input) =>
-        Effect.sync(() => {
-          stoppedSessions.push(input);
-        }),
-      probeSessionStatus: () => Effect.dieMessage("unexpected session probe"),
-      probeMcpStatus: () => Effect.dieMessage("unexpected MCP probe"),
-    };
+    const sessionAborts: string[] = [];
+    const opencodeServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url);
+        sessionAborts.push(`${request.method} ${url.pathname}${url.search}`);
+        return Response.json(true);
+      },
+    });
     const sessionTaskStore = createTaskStore();
     const sessionStopRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      runtimeRegistry: sessionRuntimeRegistry,
-      settingsConfig: createSettingsConfig(),
+      runtimeHealth: createRuntimeHealth(),
+      runtimeStarter: createRuntimeStarter({
+        type: "local_http",
+        endpoint: opencodeServer.url.origin,
+      }),
+      settingsConfig: createSettingsConfig(globalConfig()),
       taskStore: {
         ...sessionTaskStore,
         getTaskMetadata: () =>
@@ -1675,25 +1671,27 @@ describe("createElectronHostCommandRouter", () => {
           } satisfies TaskMetadataPayload),
       },
     });
-    await expect(
-      sessionStopRouter.invoke("agent_session_stop", {
-        request: {
-          repoPath: "/repo",
-          taskId: "task-1",
-          externalSessionId: "external-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      }),
-    ).resolves.toEqual({ ok: true });
-    expect(stoppedSessions).toEqual([
-      {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        externalSessionId: "external-session-1",
-        workingDirectory: "/repo/worktree",
-      },
-    ]);
+    try {
+      await sessionStopRouter.initialize();
+      await waitForRuntimeState(sessionStopRouter, ["opencode"], "ready");
+      await expect(
+        sessionStopRouter.invoke("agent_session_stop", {
+          request: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            externalSessionId: "external-session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
+        }),
+      ).resolves.toEqual({ ok: true });
+      expect(sessionAborts).toEqual([
+        "POST /session/external-session-1/abort?directory=%2Frepo%2Fworktree",
+      ]);
+    } finally {
+      await sessionStopRouter.dispose();
+      await opencodeServer.stop(true);
+    }
 
     await expect(
       router.invoke("set_spec", {
@@ -2794,26 +2792,7 @@ describe("createElectronHostCommandRouter", () => {
       ...createSettingsConfig(config),
       pathExists: (path) => Effect.succeed(path === "/repo"),
     };
-    const runtimeRegistry: RuntimeRegistryPort = {
-      ensureWorkspaceRuntime: (input) =>
-        Effect.succeed({
-          kind: input.runtimeKind,
-          runtimeId: "runtime-1",
-          repoPath: input.repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: input.workingDirectory,
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4096",
-          },
-          startedAt: "2026-05-10T10:00:00.000Z",
-          descriptor: input.descriptor,
-        }),
-      listRuntimes: () => Effect.succeed([]),
-      stopRuntime: () => Effect.succeed(false),
-      stopSession: () => Effect.succeed(undefined),
-    };
+    const runtimeStarter = createRuntimeStarter();
     const worktreeFiles: WorktreeFilePort = {
       ensureDirectory: () => Effect.succeed(undefined),
       copyConfiguredPaths: () => Effect.succeed(undefined),
@@ -2827,21 +2806,29 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      runtimeRegistry,
+      runtimeHealth: createRuntimeHealth(),
+      runtimeStarter,
       settingsConfig,
       taskStore: createTaskStore(),
       worktreeFiles,
     });
 
-    await expect(
-      router.invoke("build_start", {
-        repoPath: "/repo",
-        taskId: "task-1",
+    try {
+      await router.initialize();
+      await waitForRuntimeState(router, ["opencode"], "ready");
+      await expect(
+        router.invoke("build_start", {
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
+      ).resolves.toEqual({
         runtimeKind: "opencode",
-      }),
-    ).resolves.toEqual({
-      runtimeKind: "opencode",
-      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
-    });
+        workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
+      });
+      expect(runtimeStarter.starts.map((start) => start.runtimeKind)).toEqual(["opencode"]);
+    } finally {
+      await router.dispose();
+    }
   });
 });

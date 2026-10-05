@@ -180,7 +180,14 @@ export const createWorkspaceSettingsServiceTestDouble = <
   ),
   resolveWorkspacePath: unexpectedEffectCall("workspace settings service", "resolveWorkspacePath"),
   saveRepoSettings: unexpectedEffectCall("workspace settings service", "saveRepoSettings"),
-  saveSettingsSnapshot: unexpectedEffectCall("workspace settings service", "saveSettingsSnapshot"),
+  saveSettingsSnapshotWith: unexpectedEffectCall(
+    "workspace settings service",
+    "saveSettingsSnapshotWith",
+  ),
+  prepareSettingsSnapshot: unexpectedEffectCall(
+    "workspace settings service",
+    "prepareSettingsSnapshot",
+  ),
   selectWorkspace: unexpectedEffectCall("workspace settings service", "selectWorkspace"),
   setTheme: unexpectedEffectCall("workspace settings service", "setTheme"),
   updateAgentModelFavorites: unexpectedEffectCall(

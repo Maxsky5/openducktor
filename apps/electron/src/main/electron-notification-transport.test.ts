@@ -156,6 +156,7 @@ const harness = () => {
       },
     },
     deliveryFailure,
+    () => false,
   );
   return {
     stream,

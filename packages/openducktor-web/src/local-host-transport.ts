@@ -25,6 +25,7 @@ import {
 } from "@openducktor/frontend/lib/browser-live/constants";
 import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
 import type {
+  RuntimeChangeListener,
   TaskStreamFrame,
   TaskStreamSubscription,
 } from "@openducktor/frontend/lib/shell-bridge";
@@ -69,6 +70,7 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
+const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
 const HOST_EVENT_STREAM_PATH = "events";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
@@ -79,6 +81,8 @@ type BrowserSseChannel = {
   listeners: Map<number, BrowserSseListenerRegistration>;
   ready: Promise<void>;
   readTransportEpoch: () => string | null;
+  /** The warning of the current connection failure, or null while the stream is connected. */
+  readConnectionWarning: () => string | null;
   handleMessage: EventListener;
   handleOpen: EventListener;
   handleError: EventListener;
@@ -341,6 +345,7 @@ const getSseChannelEffect = (
       };
       let hasOpened = false;
       let hasReportedConnectionError = false;
+      let connectionWarning: string | null = null;
       let transportEpoch: string | null = null;
       let resolveReady: () => void = () => {};
       const ready = new Promise<void>((resolve) => {
@@ -369,13 +374,15 @@ const getSseChannelEffect = (
       const handleOpen: EventListener = () => {
         transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
         nextSseTransportEpoch += 1;
+        // An open after a reported failure is a recovery, also when it is the first open.
+        const recovers = connectionWarning !== null;
+        connectionWarning = null;
+        hasReportedConnectionError = false;
         if (!hasOpened) {
           hasOpened = true;
-          hasReportedConnectionError = false;
           resolveReady();
-          return;
+          if (!recovers) return;
         }
-        hasReportedConnectionError = false;
         dispatchBrowserSseListeners(
           snapshotControlListeners(),
           browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
@@ -392,9 +399,10 @@ const getSseChannelEffect = (
           return;
         }
         if (hasOpened) {
+          connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`;
           const warningPayload = browserLiveControlEvent(
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-            `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`,
+            connectionWarning,
           );
           try {
             dispatchBrowserSseListeners(snapshotControlListeners(), warningPayload);
@@ -403,12 +411,10 @@ const getSseChannelEffect = (
           }
           return;
         }
+        connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`;
         dispatchBrowserSseListeners(
           snapshotControlListeners(),
-          browserLiveControlEvent(
-            BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-            `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`,
-          ),
+          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, connectionWarning),
         );
         hasReportedConnectionError = true;
       };
@@ -439,6 +445,7 @@ const getSseChannelEffect = (
         listeners,
         ready,
         readTransportEpoch: () => transportEpoch,
+        readConnectionWarning: () => connectionWarning,
         handleMessage,
         handleOpen,
         handleError,
@@ -489,6 +496,19 @@ const subscribeSseChannelEffect = (
           message: `EventSource ${HOST_EVENT_STREAM_PATH} opened without a transport epoch.`,
           details: { path: HOST_EVENT_STREAM_PATH },
         });
+      }
+      // The first open does not prove the stream is connected now. A control subscriber that
+      // joins during a connection failure gets that failure before its subscription is ready.
+      const connectionWarning = activeChannel.readConnectionWarning();
+      if (
+        receivesControlEvents &&
+        connectionWarning !== null &&
+        activeChannel.listeners.get(listenerId) === registration
+      ) {
+        dispatchBrowserSseListeners(
+          [registration.listener],
+          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, connectionWarning),
+        );
       }
       return transportEpoch;
     });
@@ -635,6 +655,21 @@ export const subscribeLocalHostWorkspaceSessionUpdates = async (
       if (isBrowserSseControlEvent(event)) {
         listener(event);
       } else if (event.channel === "openducktor://workspace-session-updated") {
+        listener(event.payload);
+      }
+    }),
+  );
+  return subscription.unsubscribe;
+};
+
+export const subscribeLocalHostRuntimeChanges = async (
+  listener: RuntimeChangeListener,
+): Promise<() => void> => {
+  const subscription = await runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {
+      if (isBrowserSseControlEvent(event)) {
+        listener(event);
+      } else if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) {
         listener(event.payload);
       }
     }),

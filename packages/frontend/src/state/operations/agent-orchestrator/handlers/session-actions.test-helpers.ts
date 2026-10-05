@@ -23,7 +23,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { closeProjectedBackgroundQuestions } from "../session-read-model/agent-session-live-projection";
 import { createSessionTurnState } from "../support/session-turn-state";
 import { createTaskCardFixture } from "../test-utils";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "./opencode-agent-engine.test-support";
 import { createAgentSessionActions } from "./session-actions";
 
 type BuildSessionOverrides = AgentSessionFixtureOverrides;
@@ -90,9 +93,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     sessionsRef: overrideSessionsRef,
     ...actionOverrides
   } = overrides;
-  const adapterCandidate =
-    adapterOverride ??
-    new OpencodeSdkAdapter({ resolveCreationSettings: async () => ({ defaults: [], role: [] }) });
+  const adapterCandidate = adapterOverride ?? createTestOpencodeSdkAdapter();
   const adapter =
     adapterCandidate instanceof OpencodeSdkAdapter
       ? createOpenCodeAgentEngineTestAdapter(adapterCandidate)
@@ -136,7 +137,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     },
     canonicalizePath: async (path) => path,
     startWorkflowSession: defaultStartWorkflowSession,
-    ensureExistingSessionRuntime: async () => {},
     loadTaskDocuments: async () => ({
       specMarkdown: "",
       planMarkdown: "",

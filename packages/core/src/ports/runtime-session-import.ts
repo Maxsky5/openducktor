@@ -7,6 +7,10 @@ export type RuntimeSessionImportSource = {
   attach(): Promise<void>;
 };
 export type RuntimeSessionImportPort = {
-  scanSessions(signal: AbortSignal): AsyncIterable<WorkspaceSessionExternal[]>;
+  /** Scans root conversations for one workspace repository. The host still filters scope. */
+  scanSessions(input: {
+    repoPath: string;
+    signal: AbortSignal;
+  }): AsyncIterable<WorkspaceSessionExternal[]>;
   inspectSession(input: SessionRef): Promise<RuntimeSessionImportSource>;
 };

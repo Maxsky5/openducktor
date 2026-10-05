@@ -1,3 +1,4 @@
+import type { ManagedMcpServerResolver } from "@openducktor/core";
 import type { CodexImageGenerationPreparer } from "./codex-image-generation";
 import type {
   AgentSessionLiveRef,
@@ -58,9 +59,8 @@ import type {
   AgentSessionRuntimePolicy,
   AgentSessionSummary,
   AgentSkillCatalog,
+  BoundRuntimeRoute,
   ForkAgentSessionInput,
-  RepoRuntimeRef,
-  RepoRuntimeRouteResolution,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -119,10 +119,6 @@ export type CodexServerRequestResponder = (
 ) => Promise<void>;
 
 export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;
-
-export type CodexRepoRuntimeResolverPort = {
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
-};
 
 export type CodexModelCatalogRecord = CodexAppServerModel;
 
@@ -217,7 +213,10 @@ export type CodexAppServerClient = {
 };
 
 type CodexAppServerAdapterBaseOptions = {
-  repoRuntimeResolver: CodexRepoRuntimeResolverPort;
+  /** The one Codex runtime this adapter instance controls. */
+  runtime: BoundRuntimeRoute;
+  /** Resolves the managed MCP server sent with every thread start, resume, and fork. */
+  resolveManagedMcpServer: ManagedMcpServerResolver;
   transportFactory: CodexJsonRpcTransportFactory;
   respondServerRequest?: CodexServerRequestResponder;
   onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;

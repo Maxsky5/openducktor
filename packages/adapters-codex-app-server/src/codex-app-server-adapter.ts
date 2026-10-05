@@ -117,7 +117,11 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
-import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
+import {
+  type CodexSessionScopePolicy,
+  resolveCodexSessionScopePolicy,
+} from "./codex-session-scope-policy";
+import { type CodexThreadConfig, resolveCodexThreadConfig } from "./codex-managed-mcp";
 import {
   CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -331,6 +335,7 @@ export class CodexAppServerAdapter
       localSessions: this.localSessions,
       subagents: this.subagents,
       prepareRuntime: (runtimeId) => this.prepareRuntime(runtimeId),
+      threadConfig: (repoPath, sessionPolicy) => this.threadConfig(repoPath, sessionPolicy),
       clearThreadInventory: (runtimeId) => this.clearThreadInventory(runtimeId),
     });
   }
@@ -403,6 +408,18 @@ export class CodexAppServerAdapter
     return respondServerRequest;
   }
 
+  /** Binds the managed MCP server of the session's workspace to one thread request. */
+  private threadConfig(
+    repoPath: string,
+    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
+  ): Promise<CodexThreadConfig> {
+    return resolveCodexThreadConfig(
+      this.options.resolveManagedMcpServer,
+      repoPath,
+      sessionPolicy.enabledTools,
+    );
+  }
+
   private clearThreadInventory(runtimeId: string): void {
     this.threadInventory.clearInventory(runtimeId);
   }
@@ -442,9 +459,10 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
+    const config = await this.threadConfig(input.repoPath, sessionPolicy);
     const response = await client.threadStart({
       ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
+      config,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
       historyMode: "paginated",
@@ -499,7 +517,9 @@ export class CodexAppServerAdapter
       if (current) {
         const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
         await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+        const config = await this.threadConfig(input.repoPath, sessionPolicy);
         const response = await client.threadResume({
+          config,
           threadId: input.externalSessionId,
           excludeTurns: true,
         });
@@ -565,7 +585,7 @@ export class CodexAppServerAdapter
     );
     const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
+      config: await this.threadConfig(input.repoPath, sessionPolicy),
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       excludeTurns: true,
@@ -712,11 +732,13 @@ export class CodexAppServerAdapter
       }),
     );
     const preserveNativeSettings = current?.preserveNativeSettings === true;
+    // Preserved native settings keep the thread policy, but the managed MCP server is always bound.
+    const config = await this.threadConfig(input.repoPath, sessionPolicy);
     const threadResumeInput: CodexAppServerThreadResumeParams = preserveNativeSettings
-      ? { threadId: input.externalSessionId, excludeTurns: true }
+      ? { config, threadId: input.externalSessionId, excludeTurns: true }
       : {
           ...codexTransportPolicy(policy),
-          config: sessionPolicy.threadConfig,
+          config,
           threadId: input.externalSessionId,
           cwd: input.workingDirectory,
           excludeTurns: true,
@@ -768,9 +790,10 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
+    const config = await this.threadConfig(input.repoPath, sessionPolicy);
     const response = await client.threadFork({
       ...codexTransportPolicy(policy),
-      config: sessionPolicy.threadConfig,
+      config,
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
@@ -1122,9 +1145,16 @@ export class CodexAppServerAdapter
     };
   }
 
-  async listSessionMetadataPage(input: SessionRef & { pageToken?: string; signal: AbortSignal }) {
-    const { client } = await this.runtimeClients.resolve(input, "list external sessions");
-    return listCodexSessionMetadataPage(client, input);
+  /** Lists native root sessions of every directory. The caller filters by repository. */
+  async listSessionMetadataPage(input: {
+    runtimeId: string;
+    pageToken?: string;
+    signal: AbortSignal;
+  }) {
+    return listCodexSessionMetadataPage(
+      this.runtimeClients.clientForRuntime(input.runtimeId),
+      input,
+    );
   }
 
   async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportSource> {
@@ -1142,7 +1172,14 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
     const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "open existing Codex session",
+    );
+    const config = await this.threadConfig(input.repoPath, sessionPolicy);
     const response = await client.threadResume({
+      config,
       threadId: input.externalSessionId,
       excludeTurns: true,
     });
@@ -1239,12 +1276,13 @@ export class CodexAppServerAdapter
       "ensure Codex session state",
     );
     const policy = sessionPolicy.runtimePolicy;
+    const config = await this.threadConfig(input.repoPath, sessionPolicy);
     const threadResumeInput: CodexAppServerThreadResumeParams =
       sessionPolicy.kind === "repository"
-        ? { threadId: input.externalSessionId, excludeTurns: true }
+        ? { config, threadId: input.externalSessionId, excludeTurns: true }
         : {
             ...codexTransportPolicy(policy),
-            config: sessionPolicy.threadConfig,
+            config,
             threadId: input.externalSessionId,
             cwd: input.workingDirectory,
             excludeTurns: true,

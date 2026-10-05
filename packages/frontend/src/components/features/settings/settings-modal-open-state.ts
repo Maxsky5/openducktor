@@ -30,7 +30,7 @@ export function getOpenState(
     },
     workspaceSelectionPolicy:
       target.scope === "repository" ? target.workspaceSelectionPolicy : undefined,
-    focusRequest: target.scope === "repository" ? (target.contentFocus ?? null) : null,
+    focusRequest: target.contentFocus ?? null,
   };
 }
 
