@@ -165,7 +165,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "For comparisons or mappings, use tables when entries share the same fields. Use numbered lists for ordered steps. Omit empty sections and remove repeated explanations without dropping requirements.",
         "Use inline code for file paths, identifiers, commands, and literal values. Put multi-line code, schemas, payloads, commands, and configuration in fenced code blocks with a language tag. Keep each sample short and limited to the lines that make the point.",
         "Add a Mermaid diagram in a fenced code block tagged mermaid when a flow, sequence, state change, or relationship between parts is easier to see than to read. Pick the diagram that fits: flowchart for structure and decisions, sequenceDiagram for interactions over time, stateDiagram-v2 for lifecycles, erDiagram for data relationships. Introduce each diagram with one sentence that says what it shows, and keep every requirement and decision in the text as well.",
-        "Keep each diagram focused on one idea with about 12 nodes or fewer; split a larger one. The viewer renders Mermaid in strict mode with its own theme: use short plain-text labels, wrap labels that contain punctuation in double quotes, and do not add HTML, click handlers, or theme and style directives.",
+        "Keep each diagram focused on one idea; split a larger one. The viewer renders Mermaid in strict mode with its own theme: use short plain-text labels, wrap labels that contain punctuation in double quotes, and do not add HTML, click handlers, or theme and style directives.",
       ]),
       bulletSection("Fail-fast rules", [
         "Do not introduce fallback logic that hides a broken primary path.",

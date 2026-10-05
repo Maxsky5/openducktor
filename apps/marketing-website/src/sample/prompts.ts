@@ -3,7 +3,7 @@
 // settings-modal-prompt-components.tsx, and settings-modal-constants.ts in
 // packages/frontend/src/components/features/settings.
 
-/** The QA Role Base prompt (system.role.qa.base, built-in version 6) up to the new line. */
+/** The QA Role Base prompt (system.role.qa.base) up to the new line. */
 export const QA_BASE_BEFORE =
   "You are the QA Agent for OpenDucktor. Decide whether the implementation meets the task requirements and is ready for human review.\n\nReview:";
 
