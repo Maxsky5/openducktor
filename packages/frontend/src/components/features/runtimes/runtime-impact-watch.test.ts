@@ -169,13 +169,15 @@ describe("watchRuntimeImpact", () => {
     harness.owner.stop();
   });
 
-  test("a resumed review without changes shows the impact that replaced it", async () => {
+  test("shows a replacing impact at once, also while paused, and keeps it on resume", async () => {
     const harness = createHarness();
     const watch = harness.open();
     await harness.resolveRead(0, impact("token-1"));
 
     watch.pause();
     watch.replace(impact("token-2"));
+    // The host answer comes with the notice, so the dialog shows both in one render.
+    expect(harness.latest()).toEqual({ impact: impact("token-2"), isLoading: false, error: null });
     watch.resume();
 
     expect(harness.reads).toHaveLength(1);

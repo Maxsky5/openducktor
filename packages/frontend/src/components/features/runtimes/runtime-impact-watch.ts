@@ -123,9 +123,10 @@ export const watchRuntimeImpact = ({
   void read();
 
   return {
+    // The host returns this impact with its answer, so it shows at once, also while paused.
     replace: (next) => {
       impact = next;
-      publish();
+      if (!closed) onState({ impact, isLoading, error: streamFailure ?? readError });
     },
     pause: () => {
       paused = true;
