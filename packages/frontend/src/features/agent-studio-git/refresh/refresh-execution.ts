@@ -1,4 +1,4 @@
-import type { GitDiffRefreshMode } from "../contracts";
+import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import type { DiffRefreshContext, RefreshRequest, RefreshScopeContext } from "./refresh-types";
 import { createScheduledFetchCooldownKey, shouldRunScheduledFetch } from "./scheduled-fetch-policy";
 
@@ -18,17 +18,6 @@ type RunDiffRefreshRequestDeps = {
   refreshActiveScopeSummary: (context: RefreshScopeContext) => Promise<void>;
 };
 
-const refreshModePriority = (mode: GitDiffRefreshMode): number => {
-  switch (mode) {
-    case "hard":
-      return 3;
-    case "soft":
-      return 2;
-    case "scheduled":
-      return 1;
-  }
-};
-
 export const mergeRefreshRequests = (
   current: RefreshRequest | null,
   next: RefreshRequest,
@@ -37,7 +26,7 @@ export const mergeRefreshRequests = (
     return next;
   }
 
-  return refreshModePriority(next.mode) > refreshModePriority(current.mode) ? next : current;
+  return gitRefreshPriority(next.mode) > gitRefreshPriority(current.mode) ? next : current;
 };
 
 const hasSameRefreshContext = (

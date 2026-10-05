@@ -214,6 +214,7 @@ export function TaskExecutionFileExplorerPanel({
   model: {
     rootPath: requestedRootPath,
     targetBranch,
+    branchKey,
     unavailableReason,
     isActive,
     selectedFile,
@@ -228,7 +229,12 @@ export function TaskExecutionFileExplorerPanel({
     isError: isTreeError,
     isLoading: isTreeLoading,
   } = useQuery({
-    ...workspaceFileTreeQueryOptions(requestedRootPath ?? "__inactive_file_tree__", targetBranch),
+    ...workspaceFileTreeQueryOptions(
+      requestedRootPath ?? "__inactive_file_tree__",
+      targetBranch,
+      undefined,
+      branchKey,
+    ),
     enabled: isActive && requestedRootPath !== null,
   });
   const resolvedRootPath = treeData?.rootPath ?? null;
@@ -243,6 +249,9 @@ export function TaskExecutionFileExplorerPanel({
   const fileTreeInputPaths = useMemo(
     () => buildTaskExecutionFileTreeInputPaths(treeData?.entries),
     [treeData?.entries],
+  );
+  const appliedPathsRef = useRef<{ rootPath: string | null; paths: readonly string[] } | null>(
+    null,
   );
   const selectionRef = useRef<SelectionContextRef>({
     entriesByPath,
@@ -287,13 +296,31 @@ export function TaskExecutionFileExplorerPanel({
 
   useEffect(() => {
     if (!preparedInput) {
+      appliedPathsRef.current = null;
       fileTree.resetPaths({ preparedInput: EMPTY_TREE_INPUT });
       fileTree.setGitStatus([]);
       return;
     }
 
+    const applied = appliedPathsRef.current;
+    if (
+      applied?.rootPath === rootPath &&
+      applied.paths.length === fileTreeInputPaths.length &&
+      applied.paths.every((path, index) => path === fileTreeInputPaths[index])
+    )
+      return;
+    appliedPathsRef.current = { rootPath, paths: fileTreeInputPaths };
+    const query = fileTree.getSearchValue();
     fileTree.resetPaths({ preparedInput });
+    if (query) {
+      // resetPaths keeps old search matches, so rerun the search against the new paths.
+      fileTree.setSearch(null);
+      fileTree.setSearch(query);
+    }
     fileTree.setIcons("complete");
+  }, [fileTree, preparedInput, fileTreeInputPaths, rootPath]);
+
+  useEffect(() => {
     fileTree.setGitStatus(gitStatusEntries);
   }, [fileTree, gitStatusEntries, preparedInput]);
 

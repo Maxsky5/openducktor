@@ -11,7 +11,7 @@ import type { FileDiff, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { filesystemQueryKeys, workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
 import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
 import {
   type AddInlineCommentDraftInput,
@@ -302,6 +302,67 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentsPageRightPanelModel", () => {
+  test("keeps a changed detached HEAD out of the selected explorer cache", async () => {
+    buildToolsSnapshotState.current = {
+      ...createSnapshot(),
+      repositoryBranchIdentityKey: "detached:head-before",
+    };
+    const queryClient = createQueryClient();
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({ activeTabId: "file_explorer", isPanelOpen: true }),
+      { queryClient },
+    );
+    let head = "head-before";
+    const unused = async (): Promise<never> => {
+      throw new Error("Not used by the explorer read.");
+    };
+    const treeHost = {
+      filesystemListDirectory: unused,
+      filesystemReadTextFile: unused,
+      filesystemWriteTextFile: unused,
+      filesystemRefreshTree: async () => ({
+        kind: "snapshot" as const,
+        rootPath: "/repo",
+        context: {
+          rootPath: "/repo",
+          gitDirectory: "/repo/.git",
+          branch: null,
+          head,
+          targetBranch: "origin/main",
+          targetRevision: "target",
+          indexVersion: "index",
+          sparsePolicy: "",
+        },
+        cursor: { viewId: head, revision: 0 },
+        entries: [],
+      }),
+    };
+
+    try {
+      await harness.mount();
+      const model = harness.getLatest().rightPanelModel?.fileExplorerModel;
+      if (!model?.rootPath) throw new Error("Expected a file explorer root.");
+      const options = workspaceFileTreeQueryOptions(
+        model.rootPath,
+        model.targetBranch,
+        treeHost,
+        model.branchKey,
+      );
+      await queryClient.fetchQuery(options);
+      head = "head-after";
+      await expect(queryClient.fetchQuery(options)).rejects.toThrow(
+        "Workspace branch changed during file refresh. Refresh again.",
+      );
+      expect(queryClient.getQueryData(options.queryKey)).toMatchObject({
+        context: { head: "head-before" },
+      });
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("reads the dev server for the snapshot target", async () => {
     const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
 
@@ -418,6 +479,40 @@ describe("useAgentsPageRightPanelModel", () => {
 
     await harness.unmount();
     queryClient.clear();
+  });
+
+  test("manual Git refresh clears inactive trees and refreshes selected content", async () => {
+    const queryClient = createQueryClient();
+    const rootPath = "/repo/.worktrees/task-1";
+    const snapshot = createSnapshot();
+    snapshot.gitPanelContextMode = "worktree";
+    snapshot.worktree.path = rootPath;
+    snapshot.diffData.refresh = refreshWorktreeMock;
+    buildToolsSnapshotState.current = snapshot;
+    const selectedFile = { rootPath, relativePath: "src/index.ts" };
+    const treeKey = filesystemQueryKeys.tree(rootPath, "origin/main");
+    const textKey = filesystemQueryKeys.textFile(rootPath, selectedFile.relativePath);
+    queryClient.setQueryData(treeKey, { entries: [] });
+    queryClient.setQueryData(textKey, { kind: "text" });
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({ activeTabId: "git", isPanelOpen: true, selectedFile }),
+      { queryClient },
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.rightPanelModel?.gitModel.refresh();
+      });
+
+      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(queryClient.getQueryState(treeKey)).toBeUndefined();
+      expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
   });
 
   test("does not prefetch CI review data without a linked pull request", async () => {

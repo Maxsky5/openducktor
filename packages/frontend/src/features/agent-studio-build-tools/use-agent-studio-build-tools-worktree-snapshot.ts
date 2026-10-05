@@ -61,6 +61,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
   gitPanelContextMode: AgentStudioGitPanelContextMode;
   targetBranchState: ReturnType<typeof resolveTaskTargetBranchState>;
   resolvedGitPanelBranch: string | null;
+  repositoryBranchIdentityKey: string | null;
   worktree: BuildToolsWorktreeSnapshotState;
   diffData: DiffDataState;
   /** The right panel reads the dev server for this target. */
@@ -218,6 +219,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       gitPanelContextMode,
       targetBranchState: taskTargetBranchState,
       resolvedGitPanelBranch,
+      repositoryBranchIdentityKey,
       worktree,
       diffData,
       devServerTarget,
@@ -234,6 +236,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       openInTarget,
       repoPath,
       resolvedGitPanelBranch,
+      repositoryBranchIdentityKey,
       selectedTaskId,
       selectedView.role,
       taskTargetBranchState,

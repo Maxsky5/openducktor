@@ -64,6 +64,7 @@ const renderPanel = () => {
       />
     </QueryClientProvider>,
   );
+  return client;
 };
 
 // Pierre Trees renders the tree in a shadow root and updates it after a task.
@@ -84,6 +85,30 @@ const treeRowPaths = (): string[] =>
 const searchField = (): HTMLElement => screen.getByRole("textbox", { name: "Search files" });
 
 describe("TaskExecutionFileExplorerPanel search", () => {
+  test.each(["util", "added"])(
+    "updates an open search for %s after file paths change",
+    async (query) => {
+      const client = renderPanel();
+      await flushTree();
+      fireEvent.change(searchField(), { target: { value: query } });
+      await flushTree();
+
+      await act(async () => {
+        client.setQueryData(workspaceFileTreeQueryOptions(ROOT_PATH, null).queryKey, {
+          ...TREE,
+          entries: [
+            ...TREE.entries.filter((item) => item.path !== "src/lib/util.ts"),
+            entry("file", `src/lib/${query}-next.ts`),
+          ],
+        });
+      });
+      await flushTree();
+
+      expect(searchField()).toHaveProperty("value", query);
+      expect(treeRowPaths()).toEqual(["src/", "src/lib/", `src/lib/${query}-next.ts`]);
+    },
+  );
+
   test("filters the tree with the shared search field instead of the Pierre Trees input", async () => {
     renderPanel();
     await flushTree();

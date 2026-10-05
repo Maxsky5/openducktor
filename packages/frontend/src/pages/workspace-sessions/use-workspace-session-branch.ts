@@ -42,7 +42,8 @@ export function useWorkspaceSessionBranch({
     if (lastBranch.current === key) return;
     lastBranch.current = key;
     if (!isWorktree && isSwitchingBranch) return;
-    void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
+    // File queries render their own refresh errors.
+    void invalidateWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
   }, [isSwitchingBranch, isWorktree, previewBranch, queryClient, workingDirectory]);
 
   const refreshBranch = useCallback(() => {
@@ -122,8 +123,8 @@ function branchState(
 }
 
 function branchKeyFor(branch: GitCurrentBranch | null, isWorktree: boolean): string {
-  if (isWorktree) return branchIdentity(branch) ?? "unknown";
-  return branch?.name ?? (branch?.detached ? "detached" : "unknown");
+  if (isWorktree || branch?.detached) return branchIdentity(branch) ?? "unknown";
+  return branch?.name ?? "unknown";
 }
 
 function branchIdentity(branch: GitCurrentBranch | null): string | null {

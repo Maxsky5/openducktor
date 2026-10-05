@@ -641,7 +641,7 @@ test("the tools panel starts beside the chat header", () => {
   }
 });
 
-test("a sidebar branch switch reads the file tree once", async () => {
+test("a branch change and later refresh each obtain a current read", async () => {
   const treeKey = filesystemQueryKeys.tree("/repo");
   let treeReads = 0;
   function ChatWithTree() {
@@ -665,7 +665,7 @@ test("a sidebar branch switch reads the file tree once", async () => {
     });
     view.setBranch("feature");
 
-    expect(treeReads).toBe(2);
+    expect(treeReads).toBe(3);
   } finally {
     view.unmount();
     queryClient.clear();
@@ -921,7 +921,7 @@ test("a file edit refreshes file queries while the tools panel is closed", async
 
     await waitFor(() => {
       expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
-      expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(treeKey)).toBeUndefined();
     });
   } finally {
     view.unmount();

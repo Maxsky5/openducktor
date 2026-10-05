@@ -635,29 +635,86 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByText("discard me")).toBeNull();
   });
 
-  test("keeps the live editor mounted when a background file refresh fails", async () => {
-    const onClose = mock(() => {});
-    render(renderPreview({ selectedFile: firstFile, onClose }));
-    await screen.findByText("const first = true;");
-    const item = firstCodeViewItem();
-    act(() => {
-      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
-    });
-    await waitForDirtyFile();
-    readTextFileMock.mockImplementationOnce(async () => {
-      throw new Error("Refresh failed.");
-    });
+  test.each([
+    { outcome: "failed", saving: false },
+    { outcome: "unsupported", saving: false },
+    { outcome: "failed", saving: true },
+    { outcome: "unsupported", saving: true },
+  ] as const)(
+    "shows a $outcome disk refresh while retaining the editor, pending save=$saving",
+    async ({ outcome, saving }) => {
+      const onClose = mock(() => {});
+      render(renderPreview({ selectedFile: firstFile, onClose }));
+      await screen.findByText("const first = true;");
+      const item = firstCodeViewItem();
+      act(() => {
+        latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
+      });
+      await waitForDirtyFile();
+      const pendingSave = createDeferred<WorkspaceTextFileWriteResult>();
+      if (saving) {
+        writeTextFileMock.mockImplementationOnce(() => pendingSave.promise);
+        await runAsyncUiAction(() =>
+          fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+        );
+        await screen.findByRole("button", { name: "Saving file" });
+      }
+      readTextFileMock.mockImplementationOnce(async () => {
+        if (outcome === "failed") throw new Error("Refresh failed.");
+        return {
+          kind: "unsupported",
+          rootPath: firstFile.rootPath,
+          relativePath: firstFile.relativePath,
+          reason: "binary",
+          message: "Binary files cannot be previewed as text.",
+          size: 3,
+          mtimeMs: 2,
+        };
+      });
 
-    await act(async () => {
-      await latestQueryClient?.invalidateQueries();
-    });
+      await act(async () => {
+        await latestQueryClient?.invalidateQueries();
+      });
 
-    await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId("mock-code-view")).toBeTruthy();
-    expect(codeViewMountCount).toBe(1);
-    expect(codeViewUnmountCount).toBe(0);
-    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
-  });
+      await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
+      const message =
+        outcome === "failed" ? "Refresh failed." : "Binary files cannot be previewed as text.";
+      await screen.findByText(message);
+      expect(screen.getByRole("alert").textContent).toContain(message);
+      expect(screen.getByTestId("mock-code-view")).toBeTruthy();
+      expect(codeViewMountCount).toBe(1);
+      expect(codeViewUnmountCount).toBe(0);
+      expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+      const recovery = createDeferred<WorkspaceTextFileReadResult>();
+      readTextFileMock.mockImplementationOnce(() => recovery.promise);
+      let refresh: Promise<void> | undefined;
+      await act(async () => {
+        refresh = latestQueryClient?.invalidateQueries();
+      });
+      await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(3));
+      expect(screen.getByRole("alert").textContent).toContain(message);
+      await runAsyncUiAction(() =>
+        recovery.resolve(textFileResult(firstFile, "current disk content")),
+      );
+      await refresh;
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+      expect(codeViewMountCount).toBe(1);
+      expect(codeViewUnmountCount).toBe(0);
+      await waitForDirtyFile();
+      if (saving) {
+        await act(async () => {
+          pendingSave.resolve(textFileWriteResult(firstFile, "local draft", "saved-draft"));
+          await pendingSave.promise;
+        });
+        await waitForCleanFile();
+      } else {
+        await runAsyncUiAction(() =>
+          fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+        );
+      }
+      expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({ contents: "local draft" });
+    },
+  );
 
   test("shows a clean file's refreshed unsupported state", async () => {
     const onClose = mock(() => {});

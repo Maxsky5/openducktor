@@ -7,6 +7,7 @@ import type {
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { workspaceReadContext } from "./workspace-refresh";
 import { hostClient as host } from "@/lib/host-client";
 
 type GitBranchesQueryHost = Pick<typeof host, "gitGetBranches">;
@@ -153,8 +154,17 @@ const worktreeStatusQueryOptions = (
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
-    queryFn: (): Promise<GitWorktreeStatus> =>
-      hostClient.gitGetWorktreeStatus(repoPath, targetBranch, diffScope, workingDir ?? undefined),
+    queryFn: ({ client }): Promise<GitWorktreeStatus> => {
+      const args: Parameters<GitWorktreeStatusQueryHost["gitGetWorktreeStatus"]> = [
+        repoPath,
+        targetBranch,
+        diffScope,
+        workingDir ?? undefined,
+      ];
+      const readContext = workspaceReadContext(client, workingDir ?? repoPath);
+      if (readContext) args.push(readContext);
+      return hostClient.gitGetWorktreeStatus(...args);
+    },
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
@@ -167,13 +177,17 @@ const worktreeStatusSummaryQueryOptions = (
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatusSummary(repoPath, targetBranch, diffScope, workingDir),
-    queryFn: (): Promise<GitWorktreeStatusSummary> =>
-      hostClient.gitGetWorktreeStatusSummary(
+    queryFn: ({ client }): Promise<GitWorktreeStatusSummary> => {
+      const args: Parameters<GitWorktreeStatusSummaryQueryHost["gitGetWorktreeStatusSummary"]> = [
         repoPath,
         targetBranch,
         diffScope,
         workingDir ?? undefined,
-      ),
+      ];
+      const readContext = workspaceReadContext(client, workingDir ?? repoPath);
+      if (readContext) args.push(readContext);
+      return hostClient.gitGetWorktreeStatusSummary(...args);
+    },
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 

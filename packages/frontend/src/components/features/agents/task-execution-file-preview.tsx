@@ -329,24 +329,29 @@ function FilePreviewHeader({
   );
 }
 
-function FileSaveErrorBanner({
-  message,
+function FileErrorBanner({
+  saveError,
+  readError,
   canReview,
   isReviewingConflict,
   onReview,
 }: {
-  message: string | null;
+  saveError: string | null;
+  readError: string | null;
   canReview: boolean;
   isReviewingConflict: boolean;
   onReview: () => void;
 }): ReactElement | null {
-  if (!message) return null;
+  if (!saveError && !readError) return null;
   return (
     <div
       className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
       role="alert"
     >
-      <span className="min-w-0 flex-1">{message}</span>
+      <div className="min-w-0 flex-1 space-y-1">
+        {readError && readError !== saveError ? <p>{readError}</p> : null}
+        {saveError ? <p>{saveError}</p> : null}
+      </div>
       {canReview ? (
         <Button
           type="button"
@@ -446,6 +451,7 @@ const resultBelongsToSelectedFile = (
 function resolveFilePreviewPresentation({
   selectedFile,
   currentEditorSnapshot,
+  currentSnapshot,
   retainedSnapshot,
   preservePreviousSnapshot,
   isFileFetching,
@@ -457,6 +463,7 @@ function resolveFilePreviewPresentation({
 }: {
   selectedFile: TaskExecutionSelectedFile | null;
   currentEditorSnapshot: FilePreviewSnapshot | null;
+  currentSnapshot: FilePreviewSnapshot | null;
   retainedSnapshot: FilePreviewSnapshot | null;
   preservePreviousSnapshot: boolean;
   isFileFetching: boolean;
@@ -489,7 +496,20 @@ function resolveFilePreviewPresentation({
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     message = visibleSnapshot.result.message;
   }
-  return { visibleSnapshot, isSwitchingFiles, codeViewFileId, hasActiveEditorSession, message };
+  let readError: string | null = null;
+  if (hasActiveEditorSession) {
+    if (isFileError) readError = errorMessage(fileError);
+    else if (currentSnapshot?.result.kind === "unsupported")
+      readError = currentSnapshot.result.message;
+  }
+  return {
+    visibleSnapshot,
+    isSwitchingFiles,
+    codeViewFileId,
+    hasActiveEditorSession,
+    message,
+    readError,
+  };
 }
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
@@ -582,19 +602,26 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     readyCurrentSnapshot,
     selectedFile,
   ]);
-  const { visibleSnapshot, isSwitchingFiles, codeViewFileId, hasActiveEditorSession, message } =
-    resolveFilePreviewPresentation({
-      selectedFile,
-      currentEditorSnapshot,
-      retainedSnapshot,
-      preservePreviousSnapshot,
-      isFileFetching,
-      isCurrentSnapshotReady,
-      editor,
-      isFileError,
-      isFileLoading,
-      fileError,
-    });
+  const {
+    visibleSnapshot,
+    isSwitchingFiles,
+    codeViewFileId,
+    hasActiveEditorSession,
+    message,
+    readError,
+  } = resolveFilePreviewPresentation({
+    selectedFile,
+    currentEditorSnapshot,
+    currentSnapshot,
+    retainedSnapshot,
+    preservePreviousSnapshot,
+    isFileFetching,
+    isCurrentSnapshotReady,
+    editor,
+    isFileError,
+    isFileLoading,
+    fileError,
+  });
   const codeViewOptions = useMemo<CodeViewOptions<undefined, undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
@@ -746,8 +773,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         onSave={() => void editor.save()}
         onClose={onClose}
       />
-      <FileSaveErrorBanner
-        message={editor.saveError}
+      <FileErrorBanner
+        saveError={editor.saveError}
+        readError={readError}
         canReview={editor.canReviewConflict}
         isReviewingConflict={editor.isReviewingConflict}
         onReview={() => void editor.reviewLatestVersion()}

@@ -214,7 +214,8 @@ function getGitInfoHeaderProps(
     targetBranchOptions: model.targetBranchOptions ?? [],
     targetBranchSelectionValue: model.targetBranchSelectionValue ?? "",
     setDiffScope: view.handleDiffScopeChange,
-    onRefresh: () => void model.refresh(),
+    // Git and file queries show their own errors. Keep a read failure out of the app error boundary.
+    onRefresh: () => void model.refresh().catch(() => {}),
   };
   if (model.onUpdateTargetBranch) {
     props.onUpdateTargetBranch = model.onUpdateTargetBranch;

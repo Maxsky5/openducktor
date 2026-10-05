@@ -3,7 +3,7 @@ import { CancelledError, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { invalidateWorkspaceFileQueries } from "../../queries/filesystem";
+import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "../../queries/filesystem";
 import {
   currentBranchQueryOptions,
   gitQueryKeys,
@@ -170,6 +170,10 @@ export function useWorkspaceBranchOperations({
       const cancelBranchQueries = async (): Promise<void> => {
         await Promise.all([
           queryClient.cancelQueries(
+            { queryKey: filesystemQueryKeys.treeRoot(repoPath) },
+            { silent: true },
+          ),
+          queryClient.cancelQueries(
             { queryKey: gitQueryKeys.currentBranch(repoPath), exact: true },
             { silent: true },
           ),
@@ -217,6 +221,8 @@ export function useWorkspaceBranchOperations({
           return;
         }
 
+        // Old explorer observers still use the previous branch until React renders.
+        queryClient.removeQueries({ queryKey: filesystemQueryKeys.treeRoot(repoPath) });
         queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
         onSwitched?.();
         await Promise.all([
