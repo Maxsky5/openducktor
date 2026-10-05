@@ -168,61 +168,69 @@ describe("node task asset file port", () => {
     expect(await readdir(path.dirname(quarantineRoot))).not.toContain(quarantineId);
   });
 
-  test("lets only one concurrent host claim a dead-owner quarantine", async () => {
-    const { aliveProcessIds, configDir, createPort, port } = await createHarness();
-    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }));
-    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
-    const quarantineId = await Effect.runPromise(
-      port.quarantineAssets({
-        workspaceId,
-        taskId,
-        assetIds: [assetId],
-        promotedAssetIds: [],
-        operation: "update",
-      }),
-    );
-    if (!quarantineId) {
-      throw new Error("Expected an asset quarantine.");
-    }
-    aliveProcessIds.delete(10_001);
-    aliveProcessIds.add(10_002);
-    aliveProcessIds.add(10_003);
-    const recoveryOwners = [
-      { instanceId: "10000000-0000-4000-8000-000000000002", processId: 10_002 },
-      { instanceId: "10000000-0000-4000-8000-000000000003", processId: 10_003 },
-    ];
-    const ownersRoot = path.join(configDir, "task-asset-owners");
-    await mkdir(ownersRoot, { recursive: true });
-    for (const owner of recoveryOwners) {
-      await writeFile(
-        path.join(ownersRoot, `${owner.instanceId}.json`),
-        JSON.stringify({
-          version: 1,
-          instanceId: owner.instanceId,
-          processId: owner.processId,
-          startedAtMs: owner.processId,
+  // The claim relies on an exclusive rename. Node renames by path on Windows (MoveFileExW), so a
+  // second claim of a moved quarantine fails. Bun, which runs these tests, renames through a handle
+  // that it opens first, so two concurrent claims in one Bun process can both succeed there.
+  test.skipIf(process.platform === "win32")(
+    "lets only one concurrent host claim a dead-owner quarantine",
+    async () => {
+      const { aliveProcessIds, configDir, createPort, port } = await createHarness();
+      await Effect.runPromise(
+        port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }),
+      );
+      await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
+      const quarantineId = await Effect.runPromise(
+        port.quarantineAssets({
+          workspaceId,
+          taskId,
+          assetIds: [assetId],
+          promotedAssetIds: [],
+          operation: "update",
         }),
       );
-    }
-    const firstRecoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
-    const secondRecoveryPort = createPort("10000000-0000-4000-8000-000000000003", 10_003);
+      if (!quarantineId) {
+        throw new Error("Expected an asset quarantine.");
+      }
+      aliveProcessIds.delete(10_001);
+      aliveProcessIds.add(10_002);
+      aliveProcessIds.add(10_003);
+      const recoveryOwners = [
+        { instanceId: "10000000-0000-4000-8000-000000000002", processId: 10_002 },
+        { instanceId: "10000000-0000-4000-8000-000000000003", processId: 10_003 },
+      ];
+      const ownersRoot = path.join(configDir, "task-asset-owners");
+      await mkdir(ownersRoot, { recursive: true });
+      for (const owner of recoveryOwners) {
+        await writeFile(
+          path.join(ownersRoot, `${owner.instanceId}.json`),
+          JSON.stringify({
+            version: 1,
+            instanceId: owner.instanceId,
+            processId: owner.processId,
+            startedAtMs: owner.processId,
+          }),
+        );
+      }
+      const firstRecoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
+      const secondRecoveryPort = createPort("10000000-0000-4000-8000-000000000003", 10_003);
 
-    const results = await Promise.all([
-      Effect.runPromise(firstRecoveryPort.listQuarantines()),
-      Effect.runPromise(secondRecoveryPort.listQuarantines()),
-    ]);
+      const results = await Promise.all([
+        Effect.runPromise(firstRecoveryPort.listQuarantines()),
+        Effect.runPromise(secondRecoveryPort.listQuarantines()),
+      ]);
 
-    expect(results.flat()).toEqual([
-      {
-        id: quarantineId,
-        workspaceId,
-        taskId,
-        operation: "update",
-        assetIds: [assetId],
-        promotedAssetIds: [],
-      },
-    ]);
-  });
+      expect(results.flat()).toEqual([
+        {
+          id: quarantineId,
+          workspaceId,
+          taskId,
+          operation: "update",
+          assetIds: [assetId],
+          promotedAssetIds: [],
+        },
+      ]);
+    },
+  );
 
   test("rejects traversal identifiers and never follows a durable symlink", async () => {
     const { configDir, port } = await createHarness();
