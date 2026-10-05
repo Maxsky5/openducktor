@@ -1,4 +1,8 @@
 import {
+  type WorkspaceFileTreeRefreshInput,
+  type WorkspaceFileTreeRefreshResult,
+  workspaceFileTreeRefreshInputSchema,
+  workspaceFileTreeRefreshResultSchema,
   type DirectoryListing,
   directoryListingSchema,
   type FilesystemListDirectoryInput,
@@ -90,6 +94,16 @@ export class HostFilesystemClient {
 
   async filesystemListTree(input: string | WorkspaceFileTreeInput): Promise<WorkspaceFileTree> {
     return filesystemListTree(this.invokeFn, input);
+  }
+
+  async filesystemRefreshTree(
+    input: WorkspaceFileTreeRefreshInput,
+  ): Promise<WorkspaceFileTreeRefreshResult> {
+    return this.invokeFn(
+      "filesystem_refresh_tree",
+      workspaceFileTreeRefreshInputSchema.parse(input),
+      workspaceFileTreeRefreshResultSchema,
+    );
   }
 
   async filesystemReadTextFile(input: {

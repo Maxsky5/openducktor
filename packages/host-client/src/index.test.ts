@@ -233,6 +233,27 @@ describe("HostClient", () => {
     expect(listing.entries[0]?.isGitRepo).toBe(true);
   });
 
+  test("routes the versioned file refresh and rejects malformed responses without another command", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command !== "filesystem_refresh_tree") throw new Error(`Unexpected command: ${command}`);
+      return { kind: "reset_required", reason: "missing_view" };
+    });
+    const input = {
+      rootPath: " /repo ",
+      mode: "incremental" as const,
+      base: { viewId: "view", revision: 1 },
+      refreshId: "refresh",
+    };
+    expect(await client.filesystemRefreshTree(input)).toEqual({
+      kind: "reset_required",
+      reason: "missing_view",
+    });
+    expect(calls).toEqual([{ command: "filesystem_refresh_tree", args: input }]);
+    const malformed = createClient(() => ({ kind: "patch", upserts: [] }));
+    await expect(malformed.client.filesystemRefreshTree(input)).rejects.toThrow();
+    expect(malformed.calls).toHaveLength(1);
+  });
+
   test("writes text files through the shared host command and parses the result", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "filesystem_write_text_file") {

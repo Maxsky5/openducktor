@@ -84,6 +84,8 @@ const createFakeGitPort = ({
   directories?: string[];
   worktreeDirectories?: string[];
 } = {}): Parameters<typeof createWorkspaceFilesService>[1] => ({
+  getFileTreeContext: () => Effect.die("Unexpected getFileTreeContext"),
+  listFileRegions: () => Effect.die("Unexpected listFileRegions"),
   isGitRepository: () => Effect.succeed(isRepository),
   getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
   getRepositoryRoot: () => Effect.succeed(repositoryRoot),

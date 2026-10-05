@@ -1,4 +1,5 @@
 import type {
+  GitReadContext,
   GitConflictOperation,
   GitDiffScope,
   GitTargetBranch,
@@ -15,6 +16,7 @@ export type CreateGitServiceInput = {
   worktreeFiles?: WorktreeFilePort;
 };
 export type GitScopeInput = {
+  readContext?: GitReadContext;
   repoPath: string;
   workingDir?: string;
 };

@@ -83,7 +83,7 @@ test("invalidates the visible file when the panel is hidden", async () => {
     selectedFile.rootPath,
     selectedFile.relativePath,
   );
-  const unrelatedFileQueryKey = filesystemQueryKeys.textFile(selectedFile.rootPath, "src/other.ts");
+  const unrelatedFileQueryKey = filesystemQueryKeys.textFile("/other-workspace", "src/other.ts");
   render(
     <QueryProvider useIsolatedClient>
       <SeedQueryData

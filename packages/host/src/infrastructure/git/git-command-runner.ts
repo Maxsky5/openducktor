@@ -48,6 +48,8 @@ const createGitEnvironment = (
 ): NodeJS.ProcessEnv => ({
   ...normalizeProcessEnvironment(env, platform),
   GIT_TERMINAL_PROMPT: "0",
+  // Read commands must not rewrite the index while the file tree reads its version.
+  GIT_OPTIONAL_LOCKS: "0",
 });
 export type ResolveGitCommand = () => Effect.Effect<string, HostOperationErrorAggregate>;
 export type GitCommandLaunchOptions = (

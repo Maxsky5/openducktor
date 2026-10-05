@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryObserver, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { filesystemQueryKeys } from "../../queries/filesystem";
+import { filesystemQueryKeys, workspaceFileTreeQueryOptions } from "../../queries/filesystem";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
@@ -86,7 +86,73 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 };
 
 describe("use-workspace-branch-operations", () => {
-  test("switching the root branch stales only its Git and file reads", async () => {
+  test("completes a branch switch while the old explorer is active", async () => {
+    let branch = "main";
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: branch, detached: false }));
+    workspaceHost.gitGetBranches = mock(async () => [
+      { name: branch, isCurrent: true, isRemote: false },
+    ]);
+    workspaceHost.gitSwitchBranch = mock(async () => {
+      branch = "feature";
+      return { name: branch, detached: false };
+    });
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+    let stop: (() => void) | undefined;
+    const reads: string[] = [];
+    try {
+      await harness.mount();
+      await harness.run((value) => value.refreshBranches());
+      const client = harness.getQueryClient();
+      const options = workspaceFileTreeQueryOptions(
+        "/repo-a",
+        null,
+        {
+          filesystemListDirectory: async () => {
+            throw new Error("unexpected directory read");
+          },
+          filesystemReadTextFile: async () => {
+            throw new Error("unexpected text read");
+          },
+          filesystemWriteTextFile: async () => {
+            throw new Error("unexpected text write");
+          },
+          filesystemRefreshTree: async () => {
+            reads.push(branch);
+            return {
+              kind: "snapshot",
+              rootPath: "/repo-a",
+              context: {
+                rootPath: "/repo-a",
+                gitDirectory: "/repo-a/.git",
+                branch,
+                head: branch,
+                targetBranch: null,
+                targetRevision: null,
+                indexVersion: "index",
+                sparsePolicy: "policy",
+              },
+              cursor: { viewId: branch, revision: 0 },
+              entries: [],
+            };
+          },
+        },
+        "main",
+      );
+      await client.fetchQuery(options);
+      stop = new QueryObserver(client, { ...options, refetchOnMount: false }).subscribe(() => {});
+      await harness.run((value) => value.switchBranch("feature"));
+      expect(harness.getLatest().activeBranch?.name).toBe("feature");
+      expect(harness.getLatest().branches).toEqual([
+        { name: "feature", isCurrent: true, isRemote: false },
+      ]);
+      expect(reads).toEqual(["main"]);
+      expect(client.getQueryData(options.queryKey)).toBeUndefined();
+    } finally {
+      stop?.();
+      await harness.unmount();
+    }
+  });
+  test("switching the root branch clears its tree and leaves other worktrees alone", async () => {
     workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
     workspaceHost.gitGetBranches = mock(async () => [
       { name: "main", isCurrent: false, isRemote: false },
@@ -111,13 +177,16 @@ describe("use-workspace-branch-operations", () => {
         "",
       );
       const rootTree = filesystemQueryKeys.tree("/repo-a");
-      for (const key of [rootGit, worktreeGit, rootTree]) client.setQueryData(key, {});
+      const worktreeTree = filesystemQueryKeys.tree("/worktree");
+      for (const key of [rootGit, worktreeGit, rootTree, worktreeTree])
+        client.setQueryData<unknown>(key, {});
 
       await harness.run((value) => value.switchBranch("feature"));
 
       expect(client.getQueryState(rootGit)?.isInvalidated).toBe(true);
-      expect(client.getQueryState(rootTree)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(rootTree)).toBeUndefined();
       expect(client.getQueryState(worktreeGit)?.isInvalidated).toBe(false);
+      expect(client.getQueryState(worktreeTree)?.isInvalidated).toBe(false);
     } finally {
       await harness.unmount();
     }

@@ -6,7 +6,7 @@ import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { worktreeBranchQueryOptions } from "@/state/queries/git";
+import { currentBranchQueryOptions, worktreeBranchQueryOptions } from "@/state/queries/git";
 
 test("switching worktrees refreshes file data when both branches have the same name", async () => {
   configureShellBridge(
@@ -42,9 +42,7 @@ test("switching worktrees refreshes file data when both branches have the same n
     await waitFor(() => expect(view.result.current.previewBranch).toBe("branch:main"));
     view.rerender({ path: "/repo/second" });
     await waitFor(() =>
-      expect(
-        queryClient.getQueryState(filesystemQueryKeys.tree("/repo/second"))?.isInvalidated,
-      ).toBe(true),
+      expect(queryClient.getQueryState(filesystemQueryKeys.tree("/repo/second"))).toBeUndefined(),
     );
   } finally {
     view.unmount();
@@ -168,3 +166,60 @@ test("a worktree branch check keeps Git ready while the file preview waits", asy
     configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+test.each([
+  { name: "repository", isWorktree: false, workingDirectory: "/repo" },
+  { name: "worktree", isWorktree: true, workingDirectory: "/repo/worktree" },
+])(
+  "$name detached branch keys follow the commit after a manual read",
+  async ({ isWorktree, workingDirectory }) => {
+    let revision = "first";
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { gitGetCurrentBranch: async () => ({ detached: true, revision }) },
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const branchQuery = isWorktree
+      ? worktreeBranchQueryOptions("/repo", workingDirectory)
+      : currentBranchQueryOptions("/repo");
+    queryClient.setQueryData(branchQuery.queryKey, { detached: true, revision });
+    const view = renderHook(
+      () =>
+        useWorkspaceSessionBranch({
+          repoPath: "/repo",
+          workingDirectory,
+          isWorktree,
+          isSwitchingBranch: false,
+          activeBranch: null,
+        }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+    try {
+      expect(view.result.current.branchKey).toBe("detached:first");
+      await waitFor(
+        () =>
+          expect(
+            (isWorktree ? view.result.current.worktreeBranch : view.result.current.rootBranch)
+              .isFetching,
+          ).toBe(false),
+        { timeout: 500 },
+      );
+      revision = "second";
+      await act(async () => {
+        expect(await view.result.current.readBranch()).toBe("detached:second");
+      });
+      await waitFor(() => expect(view.result.current.branchKey).toBe("detached:second"), {
+        timeout: 500,
+      });
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);

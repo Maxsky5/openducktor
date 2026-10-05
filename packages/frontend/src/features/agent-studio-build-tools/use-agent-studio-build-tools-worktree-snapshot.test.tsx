@@ -628,6 +628,32 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
+  test("keeps the selected detached revision for repository file reads", async () => {
+    const args = createBaseArgs({
+      activeBranch: { detached: true, revision: "head-before" },
+      selectedView: createSelectedView({
+        role: "spec",
+        loadedSession: createAgentSessionFixture({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+          workingDirectory: "/repo",
+        }),
+      }),
+    });
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+      expect(harness.getLatest().repositoryBranchIdentityKey).toBe("detached:head-before");
+      await harness.update({
+        ...args,
+        activeBranch: { detached: true, revision: "head-after" },
+      });
+      expect(harness.getLatest().repositoryBranchIdentityKey).toBe("detached:head-after");
+      expect(harness.getLatest().resolvedGitPanelBranch).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("preserves target-branch validation for repository-mode UI locking without blocking diff", async () => {
     const harness = createHookHarness(
       createBaseArgs({

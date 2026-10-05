@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
+import { renewWorkspaceReadContext } from "@/state/queries/workspace-refresh";
 import type { GitDiffRefresh } from "../contracts";
 import { mergeRefreshRequests, runDiffRefreshRequest } from "./refresh-execution";
 import type { DiffRefreshContext, RefreshRequest, RefreshScopeContext } from "./refresh-types";
@@ -96,7 +97,9 @@ export function useAgentStudioDiffRefreshController({
     scheduledFetchAtByContextRef.current = new Map<string, number>();
   }
   const scheduledFetchAtByContext = scheduledFetchAtByContextRef.current;
-  refreshContextRef.current = refreshContext;
+  useLayoutEffect(() => {
+    refreshContextRef.current = refreshContext;
+  }, [refreshContext]);
 
   const runRefreshRequest = useCallback(
     (activeRefreshRequest: RefreshRequest): Promise<boolean> =>
@@ -106,12 +109,15 @@ export function useAgentStudioDiffRefreshController({
         setRefreshError: refreshUi.setContextRefreshError,
         scheduledFetchAtByContext,
         nowMs: Date.now,
-        fetchRemote: (context) =>
-          hostClient.gitFetchRemote(
+        fetchRemote: async (context) => {
+          const result = await hostClient.gitFetchRemote(
             context.repoPath,
             context.targetBranch,
             context.workingDir ?? undefined,
-          ),
+          );
+          renewWorkspaceReadContext(queryClient, context.workingDir ?? context.repoPath);
+          return result;
+        },
         invalidateRepoBranches: (repoPath) => invalidateRepoBranchesQuery(queryClient, repoPath),
         refreshActiveScope,
         refreshActiveScopeSummary,

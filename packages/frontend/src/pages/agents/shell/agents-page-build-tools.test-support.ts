@@ -62,6 +62,7 @@ export const createBuildToolsSnapshotFixture = ({
   gitPanelContextMode: "repository",
   openInTarget: { path: null, disabledReason: null },
   resolvedGitPanelBranch: null,
+  repositoryBranchIdentityKey: null,
   targetBranchState: {
     validationError: null,
     effectiveTargetBranch: { remote: "origin", branch: "main" },

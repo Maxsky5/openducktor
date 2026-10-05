@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   DirectoryListing,
-  WorkspaceFileTree,
+  WorkspaceFileTreeRefreshResult,
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteResult,
@@ -20,7 +20,7 @@ const unusedDirectoryListing = async (): Promise<DirectoryListing> => {
   throw new Error("not used");
 };
 
-const unusedTree = async (): Promise<WorkspaceFileTree> => {
+const unusedTree = async (): Promise<WorkspaceFileTreeRefreshResult> => {
   throw new Error("not used");
 };
 
@@ -30,7 +30,7 @@ const unusedTextFile = async (): Promise<WorkspaceTextFileReadResult> => {
 
 describe("workspaceFileTreeQueryOptions", () => {
   test("passes the target branch to the filesystem tree host read", async () => {
-    const inputs: Array<Parameters<HostClient["filesystemListTree"]>[0]> = [];
+    const inputs: Array<Parameters<HostClient["filesystemRefreshTree"]>[0]> = [];
     const hostClient = {
       filesystemListDirectory: async (): Promise<DirectoryListing> => ({
         currentPath: "/repo",
@@ -39,12 +39,24 @@ describe("workspaceFileTreeQueryOptions", () => {
         homePath: "/home/dev",
         entries: [],
       }),
-      filesystemListTree: async (
-        input: Parameters<HostClient["filesystemListTree"]>[0],
-      ): Promise<WorkspaceFileTree> => {
+      filesystemRefreshTree: async (
+        input: Parameters<HostClient["filesystemRefreshTree"]>[0],
+      ): Promise<WorkspaceFileTreeRefreshResult> => {
         inputs.push(input);
         return {
+          kind: "snapshot",
           rootPath: "/repo",
+          context: {
+            rootPath: "/repo",
+            gitDirectory: "/repo/.git",
+            branch: "main",
+            head: "head",
+            targetBranch: "origin/main",
+            targetRevision: "target",
+            indexVersion: "index",
+            sparsePolicy: "",
+          },
+          cursor: { viewId: "view", revision: 0 },
           entries: [],
         };
       },
@@ -67,13 +79,20 @@ describe("workspaceFileTreeQueryOptions", () => {
       workspaceFileTreeQueryOptions("/repo", "origin/main", hostClient),
     );
 
-    expect(inputs).toEqual([{ rootPath: "/repo", targetBranch: "origin/main" }]);
+    expect(inputs).toEqual([
+      {
+        rootPath: "/repo",
+        targetBranch: "origin/main",
+        mode: "full",
+        refreshId: expect.any(String),
+      },
+    ]);
   });
 
   test("updates the exact text cache and invalidates only the workspace tree after save", async () => {
     const hostClient = {
       filesystemListDirectory: unusedDirectoryListing,
-      filesystemListTree: unusedTree,
+      filesystemRefreshTree: unusedTree,
       filesystemReadTextFile: unusedTextFile,
       filesystemWriteTextFile: async (
         input: WorkspaceTextFileWriteInput,
@@ -135,7 +154,7 @@ describe("workspaceFileTreeQueryOptions", () => {
     };
     const hostClient = {
       filesystemListDirectory: unusedDirectoryListing,
-      filesystemListTree: unusedTree,
+      filesystemRefreshTree: unusedTree,
       filesystemReadTextFile: unusedTextFile,
       filesystemWriteTextFile: async () => {
         throw new Error("The file changed after it was loaded.");

@@ -1,4 +1,6 @@
 import type {
+  GitReadContext,
+  WorkspaceFileTreeContext,
   CommitsAheadBehind,
   FileDiff,
   FileStatus,
@@ -106,6 +108,7 @@ export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
 export type GitPort = {
+  releaseReadCaptures(): Effect.Effect<void>;
   canonicalizePath(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
   getRepositoryRoot(workingDirectory: string): Effect.Effect<string, GitPortError>;
@@ -127,22 +130,39 @@ export type GitPort = {
     relativePath?: string,
     options?: GitFileListOptions,
   ): Effect.Effect<GitFileListEntry[], GitPortError>;
-  getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
-  getStatus(workingDir: string): Effect.Effect<GitFileStatus[], GitPortError>;
+  getFileTreeContext(
+    workingDir: string,
+    targetBranch?: string,
+  ): Effect.Effect<WorkspaceFileTreeContext, GitPortError>;
+  listFileRegions(
+    workingDir: string,
+    regions: string[],
+  ): Effect.Effect<GitFileListEntry[], GitPortError>;
+  getCurrentBranch(
+    workingDir: string,
+    readContext?: GitReadContext,
+  ): Effect.Effect<GitCurrentBranch, GitPortError>;
+  getStatus(
+    workingDir: string,
+    readContext?: GitReadContext,
+  ): Effect.Effect<GitFileStatus[], GitPortError>;
   listChangedFiles(
     workingDir: string,
     targetBranch: string,
+    readContext?: GitReadContext,
   ): Effect.Effect<GitChangedFile[], GitPortError>;
   getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;
   getWorktreeStatusData(
     workingDir: string,
     targetBranch: string,
     diffScope: GitDiffScope,
+    readContext?: GitReadContext,
   ): Effect.Effect<GitWorktreeStatusData, GitPortError>;
   getWorktreeStatusSummaryData(
     workingDir: string,
     targetBranch: string,
     diffScope: GitDiffScope,
+    readContext?: GitReadContext,
   ): Effect.Effect<GitWorktreeStatusSummaryData, GitPortError>;
   createWorktree(
     repoPath: string,

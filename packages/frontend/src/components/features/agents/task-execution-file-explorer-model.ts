@@ -15,6 +15,7 @@ export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): s
 
 export type TaskExecutionFileExplorerPanelModel = {
   rootPath: string | null;
+  branchKey?: string;
   targetBranch: string | null;
   unavailableReason: string | null;
   isActive: boolean;

@@ -12,7 +12,7 @@ import { errorMessage } from "@/lib/errors";
 import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
-import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
@@ -103,7 +103,8 @@ export function WorkspaceSessionContent({
         );
       }
       if (workingDirectory && scope === "all" && !refresh) {
-        void invalidateWorkspaceFileQueries(queryClient, workingDirectory);
+        // File queries render their own refresh errors.
+        void refreshWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
       }
       void refresh?.(scope);
     },
@@ -114,7 +115,7 @@ export function WorkspaceSessionContent({
     if (!actions) throw new Error("The file preview is not ready. Open the chat again.");
     return actions.onSelectFile(file);
   }, []);
-  const onFileSaved = useCallback(() => refreshAfterChange("git"), [refreshAfterChange]);
+  const onFileSaved = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
   const onToolRefresh = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
   const { refetch: refetchConfig } = repoConfig;
   const retryTarget = useCallback(async () => {

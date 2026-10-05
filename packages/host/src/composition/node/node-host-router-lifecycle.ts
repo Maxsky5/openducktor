@@ -35,6 +35,7 @@ export type NodeHostRouterLifecycle = {
 
 export const createNodeHostRouterLifecycle = ({
   assets,
+  shutdownWorkspaceFiles,
   initializeAdmission,
   shutdownWorkspaceImports,
   unsubscribeImportCatalogs,
@@ -52,6 +53,7 @@ export const createNodeHostRouterLifecycle = ({
   taskSyncService,
   terminalService,
 }: {
+  shutdownWorkspaceFiles: () => Effect.Effect<void>;
   initializeAdmission: () => Effect.Effect<void, WorkspaceSettingsError>;
   shutdownWorkspaceImports: () => Effect.Effect<void, HostOperationErrorAggregate>;
   unsubscribeImportCatalogs: (() => void) | undefined;
@@ -133,6 +135,7 @@ export const createNodeHostRouterLifecycle = ({
         const shutdownResult = yield* Effect.either(
           runShutdownSteps(
             [
+              { label: "workspace file reads", run: shutdownWorkspaceFiles },
               { label: "notifications", run: notifications.dispose },
               { label: "workspace session imports", run: shutdownWorkspaceImports },
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },

@@ -214,6 +214,7 @@ export function TaskExecutionFileExplorerPanel({
   model: {
     rootPath: requestedRootPath,
     targetBranch,
+    branchKey,
     unavailableReason,
     isActive,
     selectedFile,
@@ -228,7 +229,12 @@ export function TaskExecutionFileExplorerPanel({
     isError: isTreeError,
     isLoading: isTreeLoading,
   } = useQuery({
-    ...workspaceFileTreeQueryOptions(requestedRootPath ?? "__inactive_file_tree__", targetBranch),
+    ...workspaceFileTreeQueryOptions(
+      requestedRootPath ?? "__inactive_file_tree__",
+      targetBranch,
+      undefined,
+      branchKey,
+    ),
     enabled: isActive && requestedRootPath !== null,
   });
   const resolvedRootPath = treeData?.rootPath ?? null;
@@ -243,6 +249,9 @@ export function TaskExecutionFileExplorerPanel({
   const fileTreeInputPaths = useMemo(
     () => buildTaskExecutionFileTreeInputPaths(treeData?.entries),
     [treeData?.entries],
+  );
+  const appliedPathsRef = useRef<{ rootPath: string | null; paths: readonly string[] } | null>(
+    null,
   );
   const selectionRef = useRef<SelectionContextRef>({
     entriesByPath,
@@ -287,13 +296,43 @@ export function TaskExecutionFileExplorerPanel({
 
   useEffect(() => {
     if (!preparedInput) {
+      // A full refresh can drop cached data. Keep folder state until the next tree arrives.
+      if (requestedRootPath !== null) return;
+      appliedPathsRef.current = null;
       fileTree.resetPaths({ preparedInput: EMPTY_TREE_INPUT });
       fileTree.setGitStatus([]);
       return;
     }
 
-    fileTree.resetPaths({ preparedInput });
+    const applied = appliedPathsRef.current;
+    if (
+      applied?.rootPath === rootPath &&
+      applied.paths.length === fileTreeInputPaths.length &&
+      applied.paths.every((path, index) => path === fileTreeInputPaths[index])
+    )
+      return;
+    if (applied?.rootPath === rootPath) {
+      const oldPaths = new Set(applied.paths);
+      const newPaths = new Set(fileTreeInputPaths);
+      fileTree.batch([
+        ...applied.paths
+          .filter((path) => !newPaths.has(path))
+          // Remove children first so each directory is empty when it is removed.
+          .sort((left, right) => right.length - left.length)
+          .map((path) => ({ type: "remove" as const, path })),
+        ...fileTreeInputPaths
+          .filter((path) => !oldPaths.has(path))
+          .map((path) => ({ type: "add" as const, path })),
+      ]);
+    } else {
+      fileTree.setSearch(null);
+      fileTree.resetPaths({ preparedInput });
+    }
+    appliedPathsRef.current = { rootPath, paths: fileTreeInputPaths };
     fileTree.setIcons("complete");
+  }, [fileTree, preparedInput, fileTreeInputPaths, rootPath, requestedRootPath]);
+
+  useEffect(() => {
     fileTree.setGitStatus(gitStatusEntries);
   }, [fileTree, gitStatusEntries, preparedInput]);
 

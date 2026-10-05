@@ -103,7 +103,8 @@ export function useAgentStudioBuildWorktreeRefresh({
     });
 
     if (shouldRefresh) {
-      void refreshWorktree("soft");
+      // Refresh errors remain in the affected Git and file views.
+      void refreshWorktree("soft").catch(() => {});
     }
   }, [loadedSession, processedToolMessageKeys, refreshWorktree, role]);
 }

@@ -14,9 +14,10 @@ import { toast } from "sonner";
 import { useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import { errorMessage } from "@/lib/errors";
+import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch } from "@/lib/target-branch";
-import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { filesystemQueryKeys, refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   gitComparisonTargetQueryOptions,
   invalidateGitWorkingDirectoryQueries,
@@ -113,6 +114,7 @@ function WorkspaceSessionTools({
     enableScheduledRefresh: false,
   });
   const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
+    branchKey,
     branchReady,
     diffData,
     refetchComparison,
@@ -146,15 +148,18 @@ function WorkspaceSessionTools({
     };
   }, [workingDirectory]);
   const refreshDiffData = useCallback(() => refresh("soft"), [refresh]);
-  const fileModel = workspaceFileModel({
-    workingDirectory,
-    resolvedTarget,
-    isReady,
-    branchReady,
-    activeTabId,
-    selectedFile,
-    onSelectFile,
-  });
+  const fileModel = {
+    ...workspaceFileModel({
+      workingDirectory,
+      resolvedTarget,
+      isReady,
+      branchReady,
+      activeTabId,
+      selectedFile,
+      onSelectFile,
+    }),
+    branchKey,
+  };
   return (
     <WorkspaceSessionGitTools
       key={branchKey}
@@ -176,6 +181,7 @@ function WorkspaceSessionTools({
             label: "File explorer",
             icon: FolderTree,
             content: <TaskExecutionFileExplorerPanel model={fileModel} />,
+            keepMounted: true,
           },
         ],
         activeTabId,
@@ -234,6 +240,7 @@ type WorkspaceRefresh = {
 };
 
 function useWorkspaceSessionRefresh({
+  branchKey,
   branchReady,
   diffData,
   refetchComparison,
@@ -244,6 +251,7 @@ function useWorkspaceSessionRefresh({
   workingDirectory,
   repoPath,
 }: {
+  branchKey: string;
   branchReady: boolean;
   diffData: ReturnType<typeof useAgentStudioDiffData>;
   refetchComparison: WorkspaceComparison["refetchComparison"];
@@ -275,7 +283,13 @@ function useWorkspaceSessionRefresh({
         }
         await refreshWorkspaceSessionData({
           queryClient,
-          diffData: { refresh: refreshDiff, refreshInactiveScope, refreshAllScopes },
+          diffData: {
+            refresh: refreshDiff,
+            refreshInactiveScope,
+            refreshAllScopes,
+            diffScope: diffData.diffScope,
+          },
+          branchKey,
           refetchComparison,
           resolvedTarget,
           target,
@@ -293,9 +307,11 @@ function useWorkspaceSessionRefresh({
     },
     [
       branchReady,
+      branchKey,
       refreshDiff,
       refreshInactiveScope,
       refreshAllScopes,
+      diffData.diffScope,
       queryClient,
       refetchComparison,
       resolvedTarget,
@@ -402,8 +418,9 @@ async function refreshWorkspaceSessionData(input: {
   queryClient: QueryClient;
   diffData: Pick<
     ReturnType<typeof useAgentStudioDiffData>,
-    "refresh" | "refreshInactiveScope" | "refreshAllScopes"
+    "refresh" | "refreshInactiveScope" | "refreshAllScopes" | "diffScope"
   >;
+  branchKey: string;
   refetchComparison: WorkspaceComparison["refetchComparison"];
   resolvedTarget: string | null;
   target: GitTargetBranch | null;
@@ -416,6 +433,7 @@ async function refreshWorkspaceSessionData(input: {
   const {
     queryClient,
     diffData,
+    branchKey,
     refetchComparison,
     resolvedTarget,
     target,
@@ -470,15 +488,22 @@ async function refreshWorkspaceSessionData(input: {
     }
     await diffData.refreshAllScopes();
   };
-  await Promise.all([
-    refreshGit(),
-    includeFiles && workingDirectory
-      ? invalidateWorkspaceFileQueries(queryClient, workingDirectory)
-      : Promise.resolve(),
-    includeFiles && workingDirectory
-      ? invalidateGitWorkingDirectoryQueries(queryClient, repoPath, workingDirectory)
-      : Promise.resolve(),
-  ]);
+  if (includeFiles && workingDirectory) {
+    await refreshWorkspaceFileQueries(
+      queryClient,
+      workingDirectory,
+      mode === "hard" ? "full" : "incremental",
+      {
+        consumer: diffData.refresh,
+        context: JSON.stringify([repoPath, resolvedTarget, branchKey, diffData.diffScope]),
+        priority: gitRefreshPriority(mode),
+        mayFetch: resolvedTarget !== null && mode !== "soft",
+        run: refreshGit,
+      },
+    );
+  } else {
+    await refreshGit();
+  }
 }
 
 type WorkspaceComparison = {

@@ -173,6 +173,7 @@ const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfi
 });
 
 const createGit = (): GitPort => ({
+  releaseReadCaptures: () => Effect.void,
   canonicalizePath: (path) => Effect.succeed(path),
   isGitRepository: () => Effect.succeed(true),
   shareGitCommonDirectory: () => Effect.succeed(true),

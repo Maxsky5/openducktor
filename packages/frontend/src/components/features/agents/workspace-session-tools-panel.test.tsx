@@ -6,6 +6,8 @@ import type {
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
   WorkspaceFileTree,
+  WorkspaceFileTreeRefreshInput,
+  WorkspaceFileTreeRefreshResult,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -390,6 +392,26 @@ test.each([
   }
 });
 
+const treeSnapshot = (
+  input: WorkspaceFileTreeRefreshInput,
+  entries: WorkspaceFileTree["entries"] = [],
+): WorkspaceFileTreeRefreshResult => ({
+  kind: "snapshot",
+  rootPath: input.rootPath,
+  entries,
+  context: {
+    rootPath: input.rootPath,
+    gitDirectory: `${input.rootPath}/.git`,
+    branch: "feature",
+    head: "head",
+    targetBranch: input.targetBranch ?? null,
+    targetRevision: input.targetBranch ? "target" : null,
+    indexVersion: "index",
+    sparsePolicy: "policy",
+  },
+  cursor: { viewId: "view", revision: 0 },
+});
+
 test.each(["available", "unavailable", "error"] as const)(
   "holds the file tree until the %s comparison outcome",
   async (outcome) => {
@@ -402,7 +424,7 @@ test.each(["available", "unavailable", "error"] as const)(
           failComparison = reject;
         }),
     );
-    const treeReads: Array<string | { rootPath: string; targetBranch?: string | null }> = [];
+    const treeReads: WorkspaceFileTreeRefreshInput[] = [];
     configureShellBridge(
       createShellBridgeFixture({
         client: {
@@ -411,9 +433,9 @@ test.each(["available", "unavailable", "error"] as const)(
           gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
             worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
-          filesystemListTree: async (input) => {
+          filesystemRefreshTree: async (input) => {
             treeReads.push(input);
-            return { rootPath: "/repo", entries: [] };
+            return treeSnapshot(input);
           },
         },
       }),
@@ -443,8 +465,13 @@ test.each(["available", "unavailable", "error"] as const)(
       await waitFor(() => expect(treeReads).toHaveLength(1));
       expect(treeReads).toEqual([
         outcome === "available"
-          ? { rootPath: "/repo", targetBranch: targetReference }
-          : { rootPath: "/repo" },
+          ? {
+              rootPath: "/repo",
+              targetBranch: targetReference,
+              mode: "full",
+              refreshId: expect.any(String),
+            }
+          : { rootPath: "/repo", mode: "full", refreshId: expect.any(String) },
       ]);
     } finally {
       view.unmount();
@@ -458,11 +485,26 @@ test("a save refresh reads Git without reading the file tree again", async () =>
   const gitGetWorktreeStatus = mock(async (_repoPath: string, targetBranch: string) =>
     worktreeStatus(targetBranch),
   );
-  const filesystemListTree = mock(
-    async (input: { rootPath: string }): Promise<WorkspaceFileTree> => ({
-      rootPath: input.rootPath,
-      entries: [],
-    }),
+  const filesystemRefreshTree = mock(
+    async (input: WorkspaceFileTreeRefreshInput): Promise<WorkspaceFileTreeRefreshResult> =>
+      input.mode === "full"
+        ? treeSnapshot(input)
+        : {
+            kind: "unchanged",
+            rootPath: input.rootPath,
+            context: {
+              rootPath: input.rootPath,
+              gitDirectory: `${input.rootPath}/.git`,
+              branch: "feature",
+              head: "head",
+              targetBranch: input.targetBranch ?? null,
+              targetRevision: input.targetBranch ? "target" : null,
+              indexVersion: "index",
+              sparsePolicy: "policy",
+            },
+            base: input.base,
+            cursor: input.base,
+          },
   );
   configureShellBridge(
     createShellBridgeFixture({
@@ -472,7 +514,7 @@ test("a save refresh reads Git without reading the file tree again", async () =>
         gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
           worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
-        filesystemListTree,
+        filesystemRefreshTree,
       },
     }),
   );
@@ -492,15 +534,15 @@ test("a save refresh reads Git without reading the file tree again", async () =>
       ),
     );
     fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
-    await waitFor(() => expect(filesystemListTree).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(filesystemRefreshTree).toHaveBeenCalledTimes(1));
     await act(async () => {
       await refresh?.("git");
     });
-    expect(filesystemListTree).toHaveBeenCalledTimes(1);
+    expect(filesystemRefreshTree).toHaveBeenCalledTimes(1);
     await act(async () => {
       await refresh?.("all");
     });
-    expect(filesystemListTree).toHaveBeenCalledTimes(2);
+    expect(filesystemRefreshTree).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
     queryClient.clear();
@@ -608,7 +650,7 @@ test.each(["recovers", "fails"] as const)(
       );
     }
     const queryClient = createQueryClient();
-    const treeKey = filesystemQueryKeys.tree("/repo", null);
+    const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
     const textKey = filesystemQueryKeys.textFile("/repo", "draft.txt");
     queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
     queryClient.setQueryData(textKey, "old text");
@@ -987,7 +1029,7 @@ test("a missing target fetch failure tells the user what failed", async () => {
     }),
   );
   const queryClient = createQueryClient();
-  const treeKey = filesystemQueryKeys.tree("/repo", null);
+  const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
     <QueryClientProvider client={queryClient}>
@@ -1008,7 +1050,7 @@ test("a missing target fetch failure tells the user what failed", async () => {
     );
     await waitFor(() => expect(comparison).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(statusTargets.length).toBeGreaterThan(localReads));
-    await waitFor(() => expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true));
+    await waitFor(() => expect(queryClient.getQueryData(treeKey)).toBeUndefined());
   } finally {
     view.unmount();
     queryClient.clear();
@@ -1036,7 +1078,7 @@ test("returning to the app rechecks the target and file tree", async () => {
     }),
   );
   const queryClient = createQueryClient();
-  const treeKey = filesystemQueryKeys.tree("/repo", targetReference);
+  const treeKey = filesystemQueryKeys.tree("/repo", targetReference, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
     <QueryClientProvider client={queryClient}>
@@ -1081,24 +1123,21 @@ test("refresh recovers local Git and file reads when the comparison target disap
     }
     return worktreeSummary(targetBranch);
   });
-  const filesystemListTree = mock(
-    async (input: { rootPath: string; targetBranch?: string }): Promise<WorkspaceFileTree> => {
+  const filesystemRefreshTree = mock(
+    async (input: WorkspaceFileTreeRefreshInput): Promise<WorkspaceFileTreeRefreshResult> => {
       fileTreeTargets.push(input.targetBranch);
       if (!targetAvailable && input.targetBranch) {
         throw new Error("File tree used the removed target");
       }
-      return {
-        rootPath: input.rootPath,
-        entries: [
-          {
-            path: "draft.txt",
-            kind: "file",
-            size: 1,
-            mtimeMs: 1,
-            gitStatus: "modified",
-          },
-        ],
-      };
+      return treeSnapshot(input, [
+        {
+          path: "draft.txt",
+          kind: "file",
+          size: 1,
+          mtimeMs: 1,
+          gitStatus: "modified",
+        },
+      ]);
     },
   );
   configureShellBridge(
@@ -1107,7 +1146,7 @@ test("refresh recovers local Git and file reads when the comparison target disap
         gitGetComparisonTarget: comparison,
         gitGetWorktreeStatus,
         gitGetWorktreeStatusSummary,
-        filesystemListTree,
+        filesystemRefreshTree,
         gitGetBranches: async () => [],
       },
     }),
@@ -1147,8 +1186,9 @@ test("refresh recovers local Git and file reads when the comparison target disap
     fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
     await waitFor(() =>
       expect(
-        queryClient.getQueryData<WorkspaceFileTree>(filesystemQueryKeys.tree("/repo", null))
-          ?.entries,
+        queryClient.getQueryData<WorkspaceFileTree>(
+          filesystemQueryKeys.tree("/repo", null, "feature"),
+        )?.entries,
       ).toHaveLength(1),
     );
     expect(fileTreeTargets).toContain(undefined);

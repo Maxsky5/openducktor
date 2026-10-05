@@ -4,7 +4,7 @@ import { useOptionalAgentSessionTranscriptDialog } from "@/components/features/a
 import { MemoizedTaskExecutionPanel } from "@/components/features/agents/task-execution-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
@@ -37,7 +37,8 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
     () =>
       registerFileSaveHandler?.((savedRepoPath, savedTaskId) => {
         if (savedRepoPath === repoPath && savedTaskId === taskId && contextMode === "worktree")
-          void refreshWorktree("soft");
+          // File queries render refresh failures independently from the completed save.
+          void refreshWorktree("soft").catch(() => {});
       }),
     [registerFileSaveHandler, repoPath, taskId, contextMode, refreshWorktree],
   );
@@ -85,10 +86,8 @@ export function AgentsPageSelectedFileRefreshRuntime({
 }: AgentStudioSelectedFileRefreshModel): null {
   const queryClient = useQueryClient();
   const refreshSelectedFile = useCallback<GitDiffRefresh>(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: filesystemQueryKeys.textFile(selectedFile.rootPath, selectedFile.relativePath),
-    });
-  }, [queryClient, selectedFile.relativePath, selectedFile.rootPath]);
+    await refreshWorkspaceFileQueries(queryClient, selectedFile.rootPath);
+  }, [queryClient, selectedFile.rootPath]);
 
   useAgentStudioBuildWorktreeRefresh({
     selectedView,

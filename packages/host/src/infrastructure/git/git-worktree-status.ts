@@ -1,5 +1,6 @@
-import type { GitDiffScope } from "@openducktor/contracts";
+import type { GitDiffScope, GitCurrentBranch } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { GitFileStatus, GitPortError } from "../../ports/git-port";
 import { type GitCommandRunner, requireNonEmptyEffect } from "./git-command-runner";
 import { buildFileDiffs, loadBranchChangesDiffPayload, loadDiffPayload } from "./git-diff";
 import { fileStatusCounts, getCurrentBranchUnchecked, getStatusUnchecked } from "./git-status";
@@ -10,22 +11,30 @@ import {
   resolveUpstreamAheadBehind,
   resolveUpstreamTargetForBranch,
 } from "./git-upstream";
+type WorktreeReads = {
+  branch: () => Effect.Effect<GitCurrentBranch, GitPortError>;
+  status: () => Effect.Effect<GitFileStatus[], GitPortError>;
+};
 export const buildWorktreeStatusData = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,
   diffScope: GitDiffScope,
+  reads: WorktreeReads = {
+    branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
+    status: () => getStatusUnchecked(runner, workingDirectory),
+  },
 ) =>
   Effect.gen(function* () {
     const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
-    const currentBranch = yield* getCurrentBranchUnchecked(runner, workingDirectory);
+    const currentBranch = yield* reads.branch();
     const upstreamTarget = yield* resolveUpstreamTargetForBranch(
       runner,
       workingDirectory,
       currentBranch.name,
     );
     const effectiveTargetBranch = resolveEffectiveTargetBranch(target, upstreamTarget);
-    const fileStatuses = yield* getStatusUnchecked(runner, workingDirectory);
+    const fileStatuses = yield* reads.status();
     const rawDiffPayload =
       diffScope === "target"
         ? effectiveTargetBranch
@@ -73,17 +82,21 @@ export const buildWorktreeStatusSummaryData = (
   workingDirectory: string,
   targetBranch: string,
   _diffScope: GitDiffScope,
+  reads: WorktreeReads = {
+    branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
+    status: () => getStatusUnchecked(runner, workingDirectory),
+  },
 ) =>
   Effect.gen(function* () {
     const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
-    const currentBranch = yield* getCurrentBranchUnchecked(runner, workingDirectory);
+    const currentBranch = yield* reads.branch();
     const upstreamTarget = yield* resolveUpstreamTargetForBranch(
       runner,
       workingDirectory,
       currentBranch.name,
     );
     const effectiveTargetBranch = resolveEffectiveTargetBranch(target, upstreamTarget);
-    const fileStatuses = yield* getStatusUnchecked(runner, workingDirectory);
+    const fileStatuses = yield* reads.status();
     const targetAheadBehind = yield* commitsAgainstTargetOrDefault(
       runner,
       workingDirectory,

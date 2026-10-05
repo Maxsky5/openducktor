@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
 import {
@@ -5,6 +6,10 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { readFileTreeContext } from "../../infrastructure/git/git-file-tree-context";
+import { createGitReadCapture } from "../../infrastructure/git/git-read-capture";
+import type { GitReadContext, GitCurrentBranch } from "@openducktor/contracts";
+import type { GitFileStatus, GitChangedFile } from "../../ports/git-port";
 import { loadChangedFiles } from "../../infrastructure/git/git-changed-files";
 import {
   createDefaultGitRunner,
@@ -68,6 +73,8 @@ export type CreateGitCliAdapterInput = (
 ) & {
   processEnv?: NodeJS.ProcessEnv;
 };
+
+const FILE_LIST_ARGS = ["ls-files", "-t", "-s", "-co", "-k", "--exclude-standard", "-z", "--"];
 
 const parseMaterializedGitFiles = (
   output: string,
@@ -143,7 +150,55 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
   const runner =
     input.runner ?? createDefaultGitRunner(processEnv, { resolveCommand: input.resolveCommand });
 
+  const captureStatus = createGitReadCapture<GitFileStatus[]>();
+  const captureBranch = createGitReadCapture<GitCurrentBranch>();
+  const captureChanges = createGitReadCapture<GitChangedFile[]>();
+  const captureIdentity = (dir: string) =>
+    runGit(runner, dir, ["rev-parse", "--absolute-git-dir"]).pipe(
+      Effect.flatMap((output) =>
+        Effect.tryPromise({
+          try: () => realpath(output.trim()),
+          catch: (cause) => toHostOperationError(cause, "git.readContext"),
+        }),
+      ),
+    );
+  const status = (dir: string, context?: GitReadContext) =>
+    Effect.gen(function* () {
+      if (!context) return yield* getStatusUnchecked(runner, dir);
+      return yield* captureStatus(
+        yield* captureIdentity(dir),
+        context,
+        getStatusUnchecked(runner, dir),
+      );
+    });
+  const branch = (dir: string, context?: GitReadContext) =>
+    Effect.gen(function* () {
+      if (!context) return yield* getCurrentBranchUnchecked(runner, dir);
+      return yield* captureBranch(
+        yield* captureIdentity(dir),
+        context,
+        getCurrentBranchUnchecked(runner, dir),
+      );
+    });
   return {
+    releaseReadCaptures: () =>
+      Effect.sync(() => {
+        captureStatus.clear();
+        captureBranch.clear();
+        captureChanges.clear();
+      }),
+    getFileTreeContext: (dir, target) => readFileTreeContext(runner, dir, target),
+    listFileRegions(dir, regions) {
+      return Effect.gen(function* () {
+        const files = new Map<string, GitFileListEntry>();
+        for (const args of regionCommands(regions)) {
+          const output = yield* runGit(runner, dir, args);
+          const batch = yield* parseMaterializedGitFiles(output);
+          for (const file of batch) files.set(file.path, file);
+        }
+        return [...files.values()];
+      });
+    },
     canonicalizePath(inputPath) {
       return Effect.tryPromise({
         try: () => realpath(inputPath),
@@ -249,28 +304,26 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
           relativePath === undefined
             ? "."
             : `:(${options?.caseInsensitive ? "icase," : ""}literal)${relativePath}`;
-        const output = yield* runGit(runner, workingDirectory, [
-          "ls-files",
-          "-t",
-          "-s",
-          "-co",
-          "-k",
-          "--exclude-standard",
-          "-z",
-          "--",
-          pathspec,
-        ]);
+        const output = yield* runGit(runner, workingDirectory, [...FILE_LIST_ARGS, pathspec]);
         return yield* parseMaterializedGitFiles(output);
       });
     },
-    getCurrentBranch(workingDirectory) {
-      return getCurrentBranchUnchecked(runner, workingDirectory);
+    getCurrentBranch(workingDirectory, context) {
+      return branch(workingDirectory, context);
     },
-    getStatus(workingDirectory) {
-      return getStatusUnchecked(runner, workingDirectory);
+    getStatus(workingDirectory, context) {
+      return status(workingDirectory, context);
     },
-    listChangedFiles(workingDirectory, targetBranch) {
-      return loadChangedFiles(runner, workingDirectory, targetBranch);
+    listChangedFiles(workingDirectory, targetBranch, context) {
+      return Effect.gen(function* () {
+        if (!context) return yield* loadChangedFiles(runner, workingDirectory, targetBranch);
+        const identity = yield* captureIdentity(workingDirectory);
+        return yield* captureChanges(
+          JSON.stringify([identity, targetBranch]),
+          context,
+          loadChangedFiles(runner, workingDirectory, targetBranch),
+        );
+      });
     },
     getDiff(workingDirectory, targetBranch) {
       return Effect.gen(function* () {
@@ -285,11 +338,17 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         );
       });
     },
-    getWorktreeStatusData(workingDirectory, targetBranch, diffScope) {
-      return buildWorktreeStatusData(runner, workingDirectory, targetBranch, diffScope);
+    getWorktreeStatusData(workingDirectory, targetBranch, diffScope, context) {
+      return buildWorktreeStatusData(runner, workingDirectory, targetBranch, diffScope, {
+        branch: () => branch(workingDirectory, context),
+        status: () => status(workingDirectory, context),
+      });
     },
-    getWorktreeStatusSummaryData(workingDirectory, targetBranch, diffScope) {
-      return buildWorktreeStatusSummaryData(runner, workingDirectory, targetBranch, diffScope);
+    getWorktreeStatusSummaryData(workingDirectory, targetBranch, diffScope, context) {
+      return buildWorktreeStatusSummaryData(runner, workingDirectory, targetBranch, diffScope, {
+        branch: () => branch(workingDirectory, context),
+        status: () => status(workingDirectory, context),
+      });
     },
     createWorktree(repoPath, worktreePath, branch, createBranch, startPoint) {
       return createWorktree(runner, repoPath, worktreePath, branch, createBranch, startPoint);
@@ -376,6 +435,29 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
   };
 };
+
+function* regionCommands(regions: string[]): Generator<string[]> {
+  const windows = process.platform === "win32";
+  // Leave room for the executable and environment. Windows scripts also add UTF-16 quoting and argument names.
+  const limit = windows ? 16 * 1024 : 64 * 1024;
+  const size = (arg: string) =>
+    windows ? Buffer.byteLength(arg, "utf8") * 4 + 64 : Buffer.byteLength(arg, "utf8") + 16;
+  const prefixSize = FILE_LIST_ARGS.reduce((total, arg) => total + size(arg), 0);
+  let args = [...FILE_LIST_ARGS];
+  let bytes = prefixSize;
+  for (const path of regions) {
+    const arg = `:(literal)${path}`;
+    const argSize = size(arg);
+    if (args.length > FILE_LIST_ARGS.length && bytes + argSize > limit) {
+      yield args;
+      args = [...FILE_LIST_ARGS];
+      bytes = prefixSize;
+    }
+    args.push(arg);
+    bytes += argSize;
+  }
+  if (args.length > FILE_LIST_ARGS.length) yield args;
+}
 
 const parseRemoteUrls = (output: string): string[] =>
   output

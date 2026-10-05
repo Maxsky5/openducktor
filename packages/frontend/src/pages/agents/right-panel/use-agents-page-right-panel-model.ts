@@ -15,11 +15,12 @@ import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-stu
 import type { DiffScope, GitDiffRefresh } from "@/features/agent-studio-git";
 import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
+import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState } from "@/state";
-import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
@@ -340,37 +341,6 @@ export function useAgentsPageRightPanelModel({
     taskId: selectedView.taskId,
     sessionIdentity: selectedView.selectedSession.identity,
   });
-  const diffModel = useMemo(() => {
-    const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
-      subjectKey: gitPanelSubjectKey,
-      branches,
-      buildToolsSnapshot,
-      gitActions,
-      selectedTask: selectedView.selectedTask,
-      commentOwner,
-      detectingPullRequestTaskId,
-      onDetectPullRequest,
-      gitProviderContext,
-      gitProviderReadError,
-    };
-    if (setTaskTargetBranch) {
-      input.setTaskTargetBranch = setTaskTargetBranch;
-    }
-    return buildAgentsPageDiffModel(input);
-  }, [
-    buildToolsSnapshot,
-    branches,
-    commentOwner,
-    gitActions,
-    onDetectPullRequest,
-    gitProviderContext,
-    gitProviderReadError,
-    gitPanelSubjectKey,
-    detectingPullRequestTaskId,
-    setTaskTargetBranch,
-    selectedView.selectedTask,
-  ]);
-
   const fileExplorerRoot = useMemo(
     () =>
       resolveTaskExecutionFileExplorerRoot({
@@ -397,10 +367,16 @@ export function useAgentsPageRightPanelModel({
     hasLoadedRepositoryStatus: diffData.loadedScopesByScope[diffData.diffScope],
     targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
   });
+  const fileExplorerBranchKey = buildToolsSnapshot.repositoryBranchIdentityKey?.startsWith(
+    "detached:",
+  )
+    ? buildToolsSnapshot.repositoryBranchIdentityKey
+    : (buildToolsSnapshot.resolvedGitPanelBranch ?? "__unknown_branch__");
   const fileExplorerModel = useMemo(
     () => ({
       ...fileExplorerRoot,
       targetBranch: fileExplorerTargetBranch,
+      branchKey: fileExplorerBranchKey,
       isActive: activeTabId === "file_explorer" && isPanelOpen,
       selectedFile,
       onSelectFile,
@@ -409,6 +385,7 @@ export function useAgentsPageRightPanelModel({
       activeTabId,
       fileExplorerRoot,
       fileExplorerTargetBranch,
+      fileExplorerBranchKey,
       isPanelOpen,
       onSelectFile,
       selectedFile,
@@ -469,6 +446,90 @@ export function useAgentsPageRightPanelModel({
       pullRequestReviewUnavailableReason,
     ],
   );
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    async (mode): Promise<void> => {
+      const fileQueryRoots = new Set(
+        [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
+          (rootPath): rootPath is string => rootPath !== null,
+        ),
+      );
+      const refreshGit = () => refreshBuildToolsWorktree(mode);
+      if (fileQueryRoots.size === 0) {
+        await refreshGit();
+        return;
+      }
+      await Promise.all(
+        [...fileQueryRoots].map((rootPath, index) =>
+          refreshWorkspaceFileQueries(
+            queryClient,
+            rootPath,
+            mode === "soft" || mode === "scheduled" ? "incremental" : "full",
+            index === 0
+              ? {
+                  consumer: refreshBuildToolsWorktree,
+                  context: JSON.stringify([
+                    workspaceRepoPath,
+                    selectedView.taskId,
+                    diffData.worktreePath,
+                    diffData.targetBranch,
+                    diffData.diffScope,
+                    fileExplorerBranchKey,
+                  ]),
+                  priority: gitRefreshPriority(mode ?? "hard"),
+                  mayFetch: mode !== "soft",
+                  run: refreshGit,
+                }
+              : undefined,
+          ),
+        ),
+      );
+    },
+    [
+      fileExplorerRoot.rootPath,
+      queryClient,
+      refreshBuildToolsWorktree,
+      selectedFile,
+      workspaceRepoPath,
+      selectedView.taskId,
+      diffData.worktreePath,
+      diffData.targetBranch,
+      diffData.diffScope,
+      fileExplorerBranchKey,
+    ],
+  );
+
+  const diffModel = useMemo(() => {
+    const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
+      subjectKey: gitPanelSubjectKey,
+      branches,
+      buildToolsSnapshot,
+      gitActions,
+      selectedTask: selectedView.selectedTask,
+      commentOwner,
+      detectingPullRequestTaskId,
+      onDetectPullRequest,
+      gitProviderContext,
+      gitProviderReadError,
+    };
+    if (setTaskTargetBranch) {
+      input.setTaskTargetBranch = setTaskTargetBranch;
+    }
+    return { ...buildAgentsPageDiffModel(input), refresh: refreshWorktree };
+  }, [
+    buildToolsSnapshot,
+    refreshWorktree,
+    branches,
+    commentOwner,
+    gitActions,
+    onDetectPullRequest,
+    gitProviderContext,
+    gitProviderReadError,
+    gitPanelSubjectKey,
+    detectingPullRequestTaskId,
+    setTaskTargetBranch,
+    selectedView.selectedTask,
+  ]);
+
   const rightPanelModel = useMemo(
     () =>
       buildTaskExecutionPanelModel({
@@ -491,21 +552,6 @@ export function useAgentsPageRightPanelModel({
       tabs,
       visibleDevServerModel,
     ],
-  );
-  const refreshWorktree = useCallback<GitDiffRefresh>(
-    async (mode): Promise<void> => {
-      const refreshes: Promise<unknown>[] = [refreshBuildToolsWorktree(mode)];
-      const fileQueryRoots = new Set(
-        [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
-          (rootPath): rootPath is string => rootPath !== null,
-        ),
-      );
-      for (const rootPath of fileQueryRoots) {
-        refreshes.push(invalidateWorkspaceFileQueries(queryClient, rootPath));
-      }
-      await Promise.all(refreshes);
-    },
-    [fileExplorerRoot.rootPath, queryClient, refreshBuildToolsWorktree, selectedFile],
   );
 
   return {

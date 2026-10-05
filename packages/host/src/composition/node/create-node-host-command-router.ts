@@ -353,6 +353,8 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceProviderSetup,
     devServerService,
     imageWorkers: defaultPorts.imageWorkers,
+    shutdownWorkspaceFiles: () =>
+      workspaceFilesService.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
     lifecycleLogger,
     mcpHostBridge: mcpBridge,
     runtimeRegistry,

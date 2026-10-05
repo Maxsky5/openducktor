@@ -162,6 +162,23 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 describe("AgentStudioGitPanel", () => {
   setupAgentStudioGitPanelTests();
 
+  test("keeps refresh failures in the affected view", async () => {
+    const error = "Could not read the selected file.";
+    const refresh = mock(async () => {
+      throw new Error(error);
+    });
+    render(createElement(AgentStudioGitPanel, { model: baseModel({ refresh, error }) }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+      await flush();
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(error)).toBeDefined();
+    expect(screen.getByTestId("agent-studio-git-refresh-button")).toBeDefined();
+  });
+
   test("renders branch context labels and git action controls", async () => {
     const refresh = mock(async () => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
