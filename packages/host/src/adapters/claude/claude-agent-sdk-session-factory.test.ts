@@ -4,6 +4,8 @@ import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
+import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
@@ -609,6 +611,7 @@ describe("createClaudeAgentSdkSession", () => {
       await expect(creation).rejects.toThrow("rename unavailable");
 
       expect(events.some((event) => event.type === "session_started")).toBe(false);
+      expect(events.some((event) => event.type === "transcript_retracted")).toBe(false);
       expect(sessionStore.get("session-1")).toBeUndefined();
     } finally {
       streamFinished.resolve();
@@ -707,13 +710,19 @@ describe("createClaudeAgentSdkSession", () => {
     }
   });
 
-  test("waits for the continuation admission before reporting a running session", async () => {
+  test("waits for continuation admission before clearing prior policy feedback", async () => {
     const streamFinished = deferred<void>();
     const admissionGate = deferred<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       async *[Symbol.asyncIterator]() {
         await admissionGate.promise;
+        yield claudeSdkMessageFixture({
+          type: "system",
+          subtype: "init",
+          permissionMode: "default",
+          session_id: "session-continuation",
+        });
         yield {
           ...claudeSdkMessageFixture({
             type: "user",
@@ -740,6 +749,27 @@ describe("createClaudeAgentSdkSession", () => {
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const events: AgentEvent[] = [];
+      const priorSession = createEventTestSession();
+      priorSession.externalSessionId = "session-continuation";
+      priorSession.requestedPermissionMode = "auto";
+      handleClaudeSdkMessage({
+        session: priorSession,
+        message: claudeSdkMessageFixture({
+          type: "system",
+          subtype: "init",
+          permissionMode: "default",
+          session_id: "session-continuation",
+        }),
+        timestamp: "2026-06-25T19:59:00.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+      });
+      const priorNotice = events.find((event) => event.type === "session_policy_notice");
+      expect(priorNotice).toBeDefined();
       const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
@@ -792,14 +822,22 @@ describe("createClaudeAgentSdkSession", () => {
 
       await Promise.resolve();
       await Promise.resolve();
-      expect(events).toEqual([]);
+      expect(events.map((event) => event.type)).toEqual(["session_policy_notice"]);
 
       admissionGate.resolve();
       await expect(creation).resolves.toMatchObject({
         externalSessionId: "session-continuation",
         status: "running",
       });
-      expect(events.map((event) => event.type)).toEqual(["session_started"]);
+      expect(events.map((event) => event.type)).toEqual([
+        "session_policy_notice",
+        "transcript_retracted",
+        "session_started",
+      ]);
+      expect(events[1]).toMatchObject({
+        externalSessionId: "session-continuation",
+        messageIds: [priorNotice?.messageId],
+      });
       expect(onContinuationAdmission).toHaveBeenCalledTimes(1);
       const session = sessionStore.get("session-continuation");
       if (!session) {
@@ -889,7 +927,10 @@ describe("createClaudeAgentSdkSession", () => {
         externalSessionId: "session-continuation",
         status: "running",
       });
-      expect(events.map((event) => event.type)).toEqual(["session_started"]);
+      expect(events.map((event) => event.type)).toEqual([
+        "transcript_retracted",
+        "session_started",
+      ]);
       const session = sessionStore.get("session-continuation");
       if (!session) {
         throw new Error("Expected the admitted continuation session");
@@ -993,6 +1034,7 @@ describe("createClaudeAgentSdkSession", () => {
 
       expect(sessionStore.get("session-continuation")).toBeUndefined();
       expect(events.some((event) => event.type === "session_started")).toBe(false);
+      expect(events.some((event) => event.type === "transcript_retracted")).toBe(false);
       expect(
         events.some((event) => event.type === "session_finished" || event.type === "session_error"),
       ).toBe(false);

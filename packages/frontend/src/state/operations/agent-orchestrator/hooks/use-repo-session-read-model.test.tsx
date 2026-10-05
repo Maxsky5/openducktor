@@ -288,7 +288,7 @@ describe("useRepoSessionReadModel", () => {
     },
   );
 
-  test("keeps a startup permission mismatch warning through workflow registration", async () => {
+  test("keeps a mismatch warning through workflow registration and clears it on recovery", async () => {
     const state = createState(
       (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
       [],
@@ -351,6 +351,41 @@ describe("useRepoSessionReadModel", () => {
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId, content: reported.message }),
       ]);
+      state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
+      state.emit({
+        type: "transcript_event",
+        event: {
+          type: "transcript_retracted",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+          timestamp: "2026-10-03T10:00:02Z",
+          messageIds: [reported.messageId],
+        },
+      });
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
+      state.replaceSession(session);
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
+      state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
+        expect.objectContaining({ id: reported.messageId }),
+      ]);
+      state.emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [{ ...liveSession, policyNotice: reported }],
+      });
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
+        expect.objectContaining({ id: reported.messageId, content: reported.message }),
+      ]);
+      // A reconnect can receive the cleared snapshot without the recovery event.
+      state.emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot({ ref, activity: "running" })],
+      });
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
+      state.replaceSession(session);
+      expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
     } finally {
       consumer.close();
       await state.harness.unmount();

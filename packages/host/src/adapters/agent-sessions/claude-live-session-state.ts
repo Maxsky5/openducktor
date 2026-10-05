@@ -322,6 +322,14 @@ export const createClaudeLiveSessionState = ({
       changes.push(
         ...commitSnapshot({ ...snapshot, policyNotice: { messageId, message, timestamp } }),
       );
+    } else if (
+      event.type === "transcript_retracted" &&
+      snapshot.policyNotice &&
+      event.messageIds.includes(snapshot.policyNotice.messageId)
+    ) {
+      const nextSnapshot = { ...snapshot };
+      delete nextSnapshot.policyNotice;
+      changes.push(...commitSnapshot(nextSnapshot));
     } else if (event.type === "session_status") {
       changes.push(
         ...commitSnapshot({ ...snapshot, activity: activityForStatus(event.status, snapshot) }),

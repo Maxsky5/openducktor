@@ -74,7 +74,7 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
-  test("retains the latest permission notice across control summaries and drops it on removal", () => {
+  test("retains permission notices across control summaries until retraction or removal", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.applyControlSummary(summary);
     const notice = {
@@ -82,13 +82,16 @@ describe("Claude host live-session state", () => {
       externalSessionId: ref.externalSessionId,
       timestamp: "2026-10-03T10:00:00Z",
       messageId: "claude-permission-mode:session-1",
-      message: "Automatic approvals requested; native mode is unconfirmed.",
+      message: "Claude requested auto mode, but reports default mode.",
     };
     state.applyEvent(session, notice);
     expect(state.listSnapshots(runtime.repoPath)).toMatchObject([
       { policyNotice: { message: notice.message, messageId: notice.messageId } },
     ]);
-    const applied = { ...notice, message: "Claude reports automatic approvals are active." };
+    const applied = {
+      ...notice,
+      message: "Claude requested auto mode, but reports acceptEdits mode.",
+    };
     state.applyEvent(session, applied);
     state.applyControlSummary(summary);
     expect(state.readSnapshot(ref)).toMatchObject({
@@ -101,6 +104,28 @@ describe("Claude host live-session state", () => {
         },
       },
     });
+    state.applyEvent(session, {
+      type: "transcript_retracted",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-10-03T10:00:01Z",
+      messageIds: ["unrelated-message"],
+    });
+    expect(state.listSnapshots(runtime.repoPath)[0]).toHaveProperty("policyNotice");
+    const retraction = {
+      type: "transcript_retracted" as const,
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-10-03T10:00:02Z",
+      messageIds: [notice.messageId],
+    };
+    const changes = state.applyEvent(session, retraction);
+    expect(changes).toMatchObject([
+      { type: "session_upsert", snapshot: { ref } },
+      { type: "transcript_event", event: retraction },
+    ]);
+    expect(changes[0]).not.toHaveProperty("snapshot.policyNotice");
+    state.applyControlSummary(summary);
+    expect(state.listSnapshots(runtime.repoPath)[0]).not.toHaveProperty("policyNotice");
+    state.applyEvent(session, notice);
     state.removeSession(ref);
     expect(state.applyEvent(session, notice)).toEqual([]);
     state.applyControlSummary(summary);

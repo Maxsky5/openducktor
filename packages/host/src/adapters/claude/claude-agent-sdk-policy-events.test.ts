@@ -25,9 +25,12 @@ const createPolicyEventHarness = (requestedMode?: string) => {
   };
 };
 
-test.each(["auto", "acceptEdits"])(
-  "warns only when Claude reports a mode other than requested %s",
-  (requestedMode) => {
+test.each([
+  ["auto", "status"],
+  ["acceptEdits", "init"],
+] as const)(
+  "retracts the warning when requested %s mode returns in %s metadata",
+  (requestedMode, recoverySubtype) => {
     const { events, handle } = createPolicyEventHarness(requestedMode);
     handle(claudeSdkMessageFixture({ type: "system", subtype: "init", permissionMode: "default" }));
     expect(events).toEqual([
@@ -41,16 +44,31 @@ test.each(["auto", "acceptEdits"])(
     expect(events[0]).toHaveProperty("message", expect.stringContaining("default"));
     const messageId = events.find((event) => event.type === "session_policy_notice")?.messageId;
     handle(claudeSdkMessageFixture({ type: "system", subtype: "status" }));
-    for (const permissionMode of ["default", requestedMode, requestedMode] as const) {
-      handle(claudeSdkMessageFixture({ type: "system", subtype: "status", permissionMode }));
-    }
+    handle(
+      claudeSdkMessageFixture({ type: "system", subtype: "status", permissionMode: "default" }),
+    );
     expect(events).toHaveLength(1);
+    for (let report = 0; report < 2; report++) {
+      handle(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: recoverySubtype,
+          permissionMode: requestedMode,
+        }),
+      );
+    }
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({
+      type: "transcript_retracted",
+      externalSessionId: "session-1",
+      messageIds: [messageId],
+    });
     handle(
       claudeSdkMessageFixture({ type: "system", subtype: "status", permissionMode: "default" }),
     );
     handle(claudeSdkMessageFixture({ type: "system", subtype: "init", permissionMode: "default" }));
-    expect(events).toHaveLength(2);
-    expect(events[1]).toMatchObject({
+    expect(events).toHaveLength(3);
+    expect(events[2]).toMatchObject({
       type: "session_policy_notice",
       externalSessionId: "session-1",
       messageId,

@@ -240,6 +240,14 @@ export const createClaudeAgentSdkSession = async ({
   }
   session.summary.status = isContinuation ? "running" : "idle";
   const timestamp = now();
+  if (isContinuation) {
+    emit(session, {
+      type: "transcript_retracted",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      messageIds: [`claude-permission-mode:${session.externalSessionId}`],
+    });
+  }
   emit(session, {
     type: "session_started",
     externalSessionId: session.externalSessionId,

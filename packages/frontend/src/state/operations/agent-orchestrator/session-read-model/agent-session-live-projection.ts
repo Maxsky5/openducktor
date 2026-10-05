@@ -493,17 +493,32 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
 const resetSessionLiveStateForSnapshot = (
   session: AgentSessionState,
   hasLiveSnapshot: boolean,
-): AgentSessionState => ({
-  ...session,
-  ...(hasLiveSnapshot
-    ? projectObservedSessionActivity(session, "idle")
-    : settleAbsentSessionActivity(session)),
-  runtimeStatusMessage: null,
-  livePresence: hasLiveSnapshot ? "present" : "absent",
-  pendingApprovals: [],
-  pendingQuestions: [],
-  contextUsage: null,
-});
+): AgentSessionState => {
+  // The session store restores current policy feedback from the host snapshot.
+  const messages = session.messages.items.filter(
+    (message) =>
+      message.meta?.kind !== "session_notice" || message.meta.reason !== "runtime_policy",
+  );
+  return {
+    ...session,
+    ...(hasLiveSnapshot
+      ? projectObservedSessionActivity(session, "idle")
+      : settleAbsentSessionActivity(session)),
+    messages:
+      messages.length === session.messages.items.length
+        ? session.messages
+        : createSessionMessagesState(
+            session.externalSessionId,
+            messages,
+            session.messages.version + 1,
+          ),
+    runtimeStatusMessage: null,
+    livePresence: hasLiveSnapshot ? "present" : "absent",
+    pendingApprovals: [],
+    pendingQuestions: [],
+    contextUsage: null,
+  };
+};
 
 /**
  * Sessions that survive an authoritative snapshot without live evidence.
