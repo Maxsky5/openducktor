@@ -187,6 +187,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             externalSessionId,
           });
 
+      const queries = createRuntimeQueryAdapter(controller);
       const adapter: AgentSessionRuntimeAdapterPort = {
         sessionImport: createCodexSessionImportAdapter(
           controller,
@@ -194,7 +195,13 @@ export const createCodexLiveSessionAdapterPreparer = ({
           resolveRuntimePolicy,
           refreshProjection,
         ),
-        queries: createRuntimeQueryAdapter(controller),
+        queries: {
+          ...queries,
+          loadRuntimeCatalog: (input) => {
+            projection.recordCatalogRepository(input.repoPath);
+            return queries.loadRuntimeCatalog(input);
+          },
+        },
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: projection.binding,

@@ -48,6 +48,8 @@ export const createCodexLiveSessionProjection = ({
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
 }) => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
+  // A repository can read the catalog before it has a live session.
+  const catalogRepoPaths = new Set<string>();
   const binding = liveSessionLifecycle.createRuntimeRegistration({
     runtimeId: runtime.runtimeId,
     runtimeKind: "codex" as const,
@@ -98,7 +100,7 @@ export const createCodexLiveSessionProjection = ({
               [...snapshotsByRef.values()].map((snapshot) => snapshot.ref.repoPath),
             );
             if (parsed.catalogInvalidated) {
-              for (const repoPath of liveRepoPaths) {
+              for (const repoPath of new Set([...liveRepoPaths, ...catalogRepoPaths])) {
                 changes.push({ type: "catalog_invalidated", repoPath, runtimeKind: "codex" });
               }
             }
@@ -243,6 +245,8 @@ export const createCodexLiveSessionProjection = ({
 
   return {
     binding,
+    /** A runtime-wide catalog change also invalidates each catalog that this runtime served. */
+    recordCatalogRepository: (repoPath: string) => void catalogRepoPaths.add(repoPath),
     applyMutation,
     enqueueMutation,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),

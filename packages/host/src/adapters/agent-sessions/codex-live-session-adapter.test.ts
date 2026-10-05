@@ -1072,7 +1072,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
-  test("invalidates catalogs at repo scope when Codex reports changed skills", async () => {
+  test("invalidates the catalogs of live and catalog-only repositories when Codex reports changed skills", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
@@ -1089,6 +1089,16 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
+    // A workspace reads the catalog before it has a live session. The read result is not needed.
+    await Effect.runPromise(
+      Effect.either(
+        prepared.adapter.queries.loadRuntimeCatalog({
+          repoPath: "/repo-b",
+          runtimeKind: "codex",
+          workingDirectory: "/repo-b",
+        }),
+      ),
+    );
 
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: runtime.runtimeId,
@@ -1099,11 +1109,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       catalogInvalidated: true,
     });
 
-    expect(changes).toContainEqual({
-      type: "catalog_invalidated",
-      repoPath: "/repo",
-      runtimeKind: "codex",
-    });
+    for (const repoPath of ["/repo", "/repo-b"]) {
+      expect(changes).toContainEqual({
+        type: "catalog_invalidated",
+        repoPath,
+        runtimeKind: "codex",
+      });
+    }
   });
 
   test("clears the current projection when controller cleanup fails", async () => {

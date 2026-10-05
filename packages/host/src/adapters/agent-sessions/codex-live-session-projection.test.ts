@@ -199,6 +199,37 @@ test("routes runtime-wide changes to each repository with a live session", async
   ]);
 });
 
+test("invalidates the catalog of a repository that the runtime served without a live session", async () => {
+  const changes: AgentSessionLiveAdapterChange[] = [];
+  const projection = recordingProjection(changes);
+  const base = { runtimeId: "runtime", transcriptEvents: [], catalogInvalidated: false };
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "full",
+      snapshots: [snapshot("a", "/repo-a")],
+    }),
+  );
+  projection.recordCatalogRepository("/repo-b");
+  projection.recordCatalogRepository("/repo-a");
+  changes.length = 0;
+
+  await Effect.runPromise(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [],
+      removedRefs: [],
+      catalogInvalidated: true,
+    }),
+  );
+
+  expect(changes).toEqual([
+    { type: "catalog_invalidated", repoPath: "/repo-a", runtimeKind: "codex" },
+    { type: "catalog_invalidated", repoPath: "/repo-b", runtimeKind: "codex" },
+  ]);
+});
+
 test("text deltas preserve transcript order with zero snapshot equality serializations", () => {
   const transcript: string[] = [];
   const projection = createCodexLiveSessionProjection({
