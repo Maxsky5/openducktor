@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import {
   hasNestedNodeErrorCode,
@@ -15,6 +16,8 @@ import {
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
+import { addGitWorktree, initGitRepository } from "../../test-support/git-repository-fixture";
+import { removeTestDirectory } from "../../test-support/temp-directory";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 
 test("checks real legacy directories when the workspace base is absent and rejects symlink escapes", async () => {
@@ -33,7 +36,7 @@ test("checks real legacy directories when the workspace base is absent and rejec
     const escapedDirectory = join(workingDirectory, "escape");
     await symlink(outsideDirectory, escapedDirectory, "junction");
     const dependencies = {
-      gitPort: { isRegisteredWorktree: () => Effect.succeed(false) },
+      gitPort: createGitPortTestDouble({ isGitRepository: () => Effect.succeed(false) }),
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "missing-workspace-base"),
@@ -98,28 +101,22 @@ test("checks real legacy directories when the workspace base is absent and rejec
   }
 });
 
+// Real Git repositories and worktrees spawn many processes on Windows.
 test("accepts registered worktrees outside the managed worktree roots", async () => {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-runtime-directory-"));
   try {
     const root = await realpath(temporaryDirectory);
     const repoPath = join(root, "repo");
     const externalWorktree = join(root, "external", "feature");
-    const unregisteredDirectory = join(root, "external", "other");
     const externalWorktreeAlias = join(root, "feature-alias");
-    await Promise.all([
-      mkdir(repoPath),
-      mkdir(externalWorktree, { recursive: true }),
-      mkdir(unregisteredDirectory, { recursive: true }),
-    ]);
+    const otherRepository = join(root, "external", "other");
+    await Promise.all([mkdir(repoPath), mkdir(otherRepository, { recursive: true })]);
+    initGitRepository(repoPath);
+    initGitRepository(otherRepository);
+    addGitWorktree(repoPath, externalWorktree, "feature");
     await symlink(externalWorktree, externalWorktreeAlias, "junction");
-    const registeredChecks: Array<{ repoPath: string; worktreePath: string }> = [];
     const dependencies = {
-      gitPort: {
-        isRegisteredWorktree: (checkedRepoPath: string, worktreePath: string) => {
-          registeredChecks.push({ repoPath: checkedRepoPath, worktreePath });
-          return Effect.succeed(checkedRepoPath === repoPath && worktreePath === externalWorktree);
-        },
-      },
+      gitPort: createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "managed"),
@@ -143,21 +140,19 @@ test("accepts registered worktrees outside the managed worktree roots", async ()
         workingDirectory: externalWorktreeAlias,
       }),
     );
-    expect(registeredChecks).toEqual([{ repoPath, worktreePath: externalWorktree }]);
-
-    const unregisteredError = await Effect.runPromise(
+    const otherRepositoryError = await Effect.runPromise(
       Effect.flip(
         requireRuntimeWorkingDirectory(dependencies, {
           repoPath,
-          workingDirectory: unregisteredDirectory,
+          workingDirectory: otherRepository,
         }),
       ),
     );
-    expect(unregisteredError).toBeInstanceOf(HostValidationError);
+    expect(otherRepositoryError).toBeInstanceOf(HostValidationError);
   } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
+    await removeTestDirectory(temporaryDirectory);
   }
-});
+}, 15_000);
 
 for (const base of ["/workspace", "/legacy"]) {
   for (const code of ["EACCES", "EIO", "ENOTDIR"]) {

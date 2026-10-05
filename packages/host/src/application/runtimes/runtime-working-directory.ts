@@ -5,12 +5,15 @@ import {
   type HostOperationErrorAggregate,
   HostValidationError,
 } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import {
+  classifyWorkspaceCheckout,
+  type WorkspaceCheckoutGitPort,
+} from "../workspaces/workspace-checkout";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
 
 export type RuntimeWorkingDirectoryDependencies = {
-  gitPort: Pick<GitPort, "isRegisteredWorktree">;
+  gitPort: WorkspaceCheckoutGitPort;
   settingsConfig: Pick<
     SettingsConfigPort,
     | "canonicalizePath"
@@ -62,10 +65,12 @@ export const requireRuntimeWorkingDirectory = (
       return;
     }
 
-    // Session import accepts registered worktrees outside the managed worktree roots.
-    if (
-      yield* dependencies.gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorkingDirectory)
-    ) {
+    // External worktrees match only at their root, the same as session import.
+    const checkout = yield* classifyWorkspaceCheckout(dependencies.gitPort, {
+      canonicalRepoPath,
+      canonicalDirectory: canonicalWorkingDirectory,
+    });
+    if (checkout === "local_worktree") {
       return;
     }
 

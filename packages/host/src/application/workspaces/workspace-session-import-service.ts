@@ -24,6 +24,7 @@ import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-runti
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
+import { classifyWorkspaceCheckout } from "./workspace-checkout";
 
 const MAX_CATALOGS = 8;
 const MAX_RECORDS = 100_000;
@@ -115,29 +116,38 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
   const targetFor = (repoPath: string, workingDirectory: string) =>
     Effect.gen(function* () {
       const canonical = yield* git.canonicalizePath(workingDirectory);
-      if (!(yield* git.isGitRepository(canonical)))
-        return yield* invalid(
-          `Directory is unavailable: ${workingDirectory}. Restore it before importing.`,
-        );
-      if (canonical === repoPath)
-        return {
-          kind: "local_repo_root",
-          workingDirectory,
-        } satisfies WorkspaceSessionExecutionTarget;
-      if (
-        !(yield* git.shareGitCommonDirectory(repoPath, canonical)) ||
-        !(yield* git.isRegisteredWorktree(repoPath, canonical))
-      )
-        return yield* invalid(
-          "The source directory is not a registered worktree of this workspace.",
-        );
-      const branch = yield* git.getCurrentBranch(canonical);
-      return {
-        kind: "local_worktree",
-        workingDirectory,
-        branchName: branch.detached ? null : (branch.name ?? null),
-        worktreeState: "present",
-      } satisfies WorkspaceSessionExecutionTarget;
+      const checkout = yield* classifyWorkspaceCheckout(git, {
+        canonicalRepoPath: repoPath,
+        canonicalDirectory: canonical,
+      });
+      switch (checkout) {
+        case "not_git_directory":
+          return yield* invalid(
+            `Directory is unavailable: ${workingDirectory}. Restore it before importing.`,
+          );
+        case "outside_workspace":
+          return yield* invalid(
+            "The source directory is not a registered worktree of this workspace.",
+          );
+        case "local_repo_root":
+          return {
+            kind: "local_repo_root",
+            workingDirectory,
+          } satisfies WorkspaceSessionExecutionTarget;
+        case "local_worktree": {
+          const branch = yield* git.getCurrentBranch(canonical);
+          return {
+            kind: "local_worktree",
+            workingDirectory,
+            branchName: branch.detached ? null : (branch.name ?? null),
+            worktreeState: "present",
+          } satisfies WorkspaceSessionExecutionTarget;
+        }
+        default: {
+          const unhandledCheckout: never = checkout;
+          return yield* invalid(`Unsupported workspace checkout: ${String(unhandledCheckout)}`);
+        }
+      }
     });
   const candidateDirectory = (directory: string) =>
     git.canonicalizePath(directory).pipe(
