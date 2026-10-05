@@ -1,4 +1,5 @@
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
+import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
@@ -52,6 +53,7 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
 });
 
 const workingDirectoryDependencies = {
+  gitPort: createGitPortTestDouble({ isGitRepository: () => Effect.succeed(false) }),
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),
     defaultRepoWorktreeBasePath: () => "/legacy-worktrees/repo",

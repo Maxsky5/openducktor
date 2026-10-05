@@ -21,6 +21,7 @@ import { resolveRepoPath } from "./runtime-request-resolution";
 import { toCatalogResponse } from "./agent-runtime-catalog-response";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
+import type { WorkspaceCheckoutGitPort } from "../workspaces/workspace-checkout";
 import {
   requireManagedHistoryDirectory,
   type RuntimeHistoryWorkingDirectoryDependencies,
@@ -30,7 +31,7 @@ import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-q
 export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   runtimeRegistry: Pick<RuntimeRegistryPort, "requireReady">;
-  gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
+  gitPort: Pick<GitPort, "canonicalizePath"> & WorkspaceCheckoutGitPort;
   taskReader: Pick<TaskReader, "getTaskMetadata">;
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
 };

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import {
   hasNestedNodeErrorCode,
@@ -11,9 +12,16 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import {
+  createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
+import {
+  addGitWorktree,
+  gitFixtureEnv,
+  initGitRepository,
+} from "../../test-support/git-repository-fixture";
+import { removeTestDirectory } from "../../test-support/temp-directory";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 
 test("checks real legacy directories when the workspace base is absent and rejects symlink escapes", async () => {
@@ -32,6 +40,7 @@ test("checks real legacy directories when the workspace base is absent and rejec
     const escapedDirectory = join(workingDirectory, "escape");
     await symlink(outsideDirectory, escapedDirectory, "junction");
     const dependencies = {
+      gitPort: createGitPortTestDouble({ isGitRepository: () => Effect.succeed(false) }),
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "missing-workspace-base"),
@@ -96,6 +105,62 @@ test("checks real legacy directories when the workspace base is absent and rejec
   }
 });
 
+// Real Git repositories and worktrees spawn many processes on Windows.
+test("accepts registered worktrees outside the managed worktree roots", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-runtime-directory-"));
+  try {
+    const root = await realpath(temporaryDirectory);
+    const repoPath = join(root, "repo");
+    const externalWorktree = join(root, "external", "feature");
+    const externalWorktreeAlias = join(root, "feature-alias");
+    const otherRepository = join(root, "external", "other");
+    await Promise.all([mkdir(repoPath), mkdir(otherRepository, { recursive: true })]);
+    initGitRepository(repoPath);
+    initGitRepository(otherRepository);
+    addGitWorktree(repoPath, externalWorktree, "feature");
+    await symlink(externalWorktree, externalWorktreeAlias, "junction");
+    const dependencies = {
+      gitPort: createGitCliAdapter({
+        processEnv: gitFixtureEnv,
+        resolveCommand: () => Effect.succeed("git"),
+      }),
+      settingsConfig: {
+        ...createSettingsConfigAdapter(),
+        defaultWorktreeBasePath: () => join(root, "managed"),
+        defaultRepoWorktreeBasePath: () => join(root, "legacy"),
+      },
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "workspace",
+              workspaceName: "Workspace",
+              repoPath,
+            }),
+          ),
+      }),
+    };
+
+    await Effect.runPromise(
+      requireRuntimeWorkingDirectory(dependencies, {
+        repoPath,
+        workingDirectory: externalWorktreeAlias,
+      }),
+    );
+    const otherRepositoryError = await Effect.runPromise(
+      Effect.flip(
+        requireRuntimeWorkingDirectory(dependencies, {
+          repoPath,
+          workingDirectory: otherRepository,
+        }),
+      ),
+    );
+    expect(otherRepositoryError).toBeInstanceOf(HostValidationError);
+  } finally {
+    await removeTestDirectory(temporaryDirectory);
+  }
+}, 15_000);
+
 for (const base of ["/workspace", "/legacy"]) {
   for (const code of ["EACCES", "EIO", "ENOTDIR"]) {
     test(`preserves ${code} from allowed base ${base}`, async () => {
@@ -109,6 +174,7 @@ for (const base of ["/workspace", "/legacy"]) {
         Effect.flip(
           requireRuntimeWorkingDirectory(
             {
+              gitPort: createGitPortTestDouble({}),
               settingsConfig: createSettingsConfigTestDouble({
                 canonicalizePath: (path) => {
                   paths.push(path);

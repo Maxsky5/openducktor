@@ -156,7 +156,11 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const workingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
+  const workingDirectoryDependencies = {
+    gitPort: git,
+    settingsConfig,
+    workspaceSettingsService,
+  };
   // The runtimes read the bridge at use time through `resolveBridge`. The default bridge needs
   // services that this function creates after the runtimes, so it gets its value further down.
   let resolvedMcpHostBridge = mcpHostBridge;
@@ -367,7 +371,6 @@ export const assembleNodeEffectHostCommandRouter = (
         ...workingDirectoryDependencies,
         adapterRegistry: liveSessionAdapterRegistry,
         runtimeRegistry,
-        gitPort: git,
         taskReader: taskStore,
         worktreeReads: taskSessionLifecycleCoordinator,
         worktreeFiles,

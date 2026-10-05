@@ -11,6 +11,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import { runHookCommandsAllowFailure } from "../tasks/support/workflow-hooks";
+import { classifyWorkspaceCheckout, type WorkspaceCheckoutGitPort } from "./workspace-checkout";
 
 export type WorkspaceSessionTargetDependencies = {
   git: GitPort;
@@ -20,20 +21,18 @@ export type WorkspaceSessionTargetDependencies = {
 };
 
 export const validateWorkspaceSessionTarget = (
-  {
-    git,
-  }: {
-    git: Pick<
-      GitPort,
-      "canonicalizePath" | "isGitRepository" | "shareGitCommonDirectory" | "isRegisteredWorktree"
-    >;
-  },
+  { git }: { git: Pick<GitPort, "canonicalizePath"> & WorkspaceCheckoutGitPort },
   repoPath: string,
   target: WorkspaceSessionExecutionTarget,
 ) =>
   Effect.gen(function* () {
+    const canonicalRepoPath = yield* git.canonicalizePath(repoPath);
     const canonicalPath = yield* git.canonicalizePath(target.workingDirectory);
-    if (!(yield* git.isGitRepository(canonicalPath))) {
+    const checkout = yield* classifyWorkspaceCheckout(git, {
+      canonicalRepoPath,
+      canonicalDirectory: canonicalPath,
+    });
+    if (checkout === "not_git_directory") {
       return yield* Effect.fail(
         new HostValidationError({
           message: `Workspace Session directory is not the saved canonical Git directory: ${target.workingDirectory}`,
@@ -41,28 +40,31 @@ export const validateWorkspaceSessionTarget = (
         }),
       );
     }
-    if (target.kind === "local_repo_root") {
-      if (canonicalPath !== (yield* git.canonicalizePath(repoPath))) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: "Workspace Session checkout no longer matches its Workspace.",
-            field: "workingDirectory",
-          }),
-        );
-      }
+    if (checkout === target.kind) {
       return;
     }
-    if (
-      !(yield* git.shareGitCommonDirectory(repoPath, canonicalPath)) ||
-      !(yield* git.isRegisteredWorktree(repoPath, canonicalPath))
-    ) {
+    if (target.kind === "local_repo_root") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Workspace Session directory is not a registered worktree of ${repoPath}: ${canonicalPath}`,
+          message: "Workspace Session checkout no longer matches its Workspace.",
           field: "workingDirectory",
         }),
       );
     }
+    if (checkout === "local_repo_root") {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `Workspace Session worktree resolves to the Workspace repository root: ${canonicalPath}. Select a session that uses a worktree.`,
+          field: "workingDirectory",
+        }),
+      );
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        message: `Workspace Session directory is not a registered worktree of ${repoPath}: ${canonicalPath}`,
+        field: "workingDirectory",
+      }),
+    );
   });
 
 export const withWorkspaceSessionTarget = <A, E>(

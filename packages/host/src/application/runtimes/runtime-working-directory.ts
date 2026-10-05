@@ -6,9 +6,14 @@ import {
   HostValidationError,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import {
+  classifyWorkspaceCheckout,
+  type WorkspaceCheckoutGitPort,
+} from "../workspaces/workspace-checkout";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
 
 export type RuntimeWorkingDirectoryDependencies = {
+  gitPort: WorkspaceCheckoutGitPort;
   settingsConfig: Pick<
     SettingsConfigPort,
     | "canonicalizePath"
@@ -57,6 +62,15 @@ export const requireRuntimeWorkingDirectory = (
       canonicalLegacyWorktreeBasePath !== null &&
       pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)
     ) {
+      return;
+    }
+
+    // External worktrees match only at their root, the same as session import.
+    const checkout = yield* classifyWorkspaceCheckout(dependencies.gitPort, {
+      canonicalRepoPath,
+      canonicalDirectory: canonicalWorkingDirectory,
+    });
+    if (checkout === "local_worktree") {
       return;
     }
 
