@@ -2,19 +2,18 @@ import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
 import { requireBoundSessionAssociation } from "../support/session-runtime-ref";
+import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
+import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 import {
-  requestedSessionHistoryLoadPolicy,
-  retainedSessionRevalidationHistoryLoadPolicy,
-  type SessionHistoryLoadPolicy,
-  selectedSessionBaselineHistoryLoadPolicy,
-  transcriptGapRecoveryHistoryLoadPolicy,
+  abandonSessionHistoryLoad,
+  claimSessionHistoryLoad,
+  failSessionHistoryLoad,
 } from "./session-history-load-policy";
 import type { SessionHistoryReadGeneration } from "./session-history-read-generation";
 import type { LoadSessionHistorySystemPromptContext } from "./workflow-session-history-policy";
@@ -33,52 +32,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   historyReadGeneration: SessionHistoryReadGeneration;
 };
 
-type SessionHistoryLoadClaim = {
-  session: AgentSessionState | null;
-  claimedLoad: boolean;
-};
-
 const SESSION_HISTORY_LOAD_LIMIT = 600;
-
-const claimSessionHistoryLoad = ({
-  identity,
-  policy,
-  readSessionSnapshot,
-  updateSession,
-}: {
-  identity: AgentSessionIdentity;
-  policy: SessionHistoryLoadPolicy;
-  readSessionSnapshot: ReadSessionSnapshot;
-  updateSession: UpdateSession;
-}): SessionHistoryLoadClaim => {
-  const currentSession = readSessionSnapshot(identity);
-  if (!currentSession) {
-    return { session: null, claimedLoad: false };
-  }
-
-  let claimedLoad = false;
-  updateSession(identity, (current) => {
-    const claimed = policy.claimLoad(current);
-    claimedLoad = claimed !== null;
-    return claimed ?? current;
-  });
-
-  return { session: readSessionSnapshot(identity), claimedLoad };
-};
-
-const resetLoadingSessionHistory = (
-  identity: AgentSessionIdentity,
-  updateSession: UpdateSession,
-  policy: SessionHistoryLoadPolicy,
-): AgentSessionState | null => updateSession(identity, policy.abandonLoad);
-
-const failSessionHistoryLoad = (
-  identity: AgentSessionIdentity,
-  updateSession: UpdateSession,
-  policy: SessionHistoryLoadPolicy,
-  failure: SessionHistoryFailure,
-): AgentSessionState | null =>
-  updateSession(identity, (session) => policy.failLoad(session, failure));
 
 const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure => {
   if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
@@ -113,20 +67,17 @@ type LoadSessionHistoryIntoStoreArgs = {
   historyReadGeneration: SessionHistoryReadGeneration;
 };
 
-const loadSessionHistoryIntoStoreWithPolicy = async ({
+export const loadSessionHistoryIntoStore = async ({
   repoPath,
   adapter,
   readSessionSnapshot,
   updateSession,
   identity,
-  policy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
   isStaleRepoOperation,
   historyReadGeneration,
-}: LoadSessionHistoryIntoStoreArgs & {
-  policy: SessionHistoryLoadPolicy;
-}): Promise<AgentSessionState | null> => {
+}: LoadSessionHistoryIntoStoreArgs): Promise<AgentSessionState | null> => {
   if (isStaleRepoOperation()) {
     return null;
   }
@@ -136,26 +87,22 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     requireBoundSessionAssociation(currentSession, "load history");
   }
 
-  const loadClaim = claimSessionHistoryLoad({
-    identity,
-    policy,
-    readSessionSnapshot,
-    updateSession,
+  let claimedLoad = false;
+  updateSession(identity, (current) => {
+    const claimed = claimSessionHistoryLoad(current);
+    claimedLoad = claimed !== null;
+    return claimed ?? current;
   });
-  if (!loadClaim.session) {
-    return null;
-  }
+  const loadingSession = readSessionSnapshot(identity);
+  if (!loadingSession || !claimedLoad) return loadingSession;
 
-  if (!loadClaim.claimedLoad) {
-    return loadClaim.session;
-  }
-
-  const loadingSession = loadClaim.session;
   const readToken = historyReadGeneration.begin(identity);
-  const isSupersededRead = (): boolean => !historyReadGeneration.isLatest(identity, readToken);
+  const isSupersededRead = (): boolean =>
+    !historyReadGeneration.isLatest(identity, readToken) ||
+    !["loading", "refreshing"].includes(readSessionSnapshot(identity)?.historyLoadState ?? "");
   const finishStaleHistoryLoad = (): null => {
     if (!isSupersededRead()) {
-      resetLoadingSessionHistory(identity, updateSession, policy);
+      updateSession(identity, abandonSessionHistoryLoad);
     }
     return null;
   };
@@ -217,9 +164,10 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       return finishSupersededHistoryRead();
     }
 
-    return updateSession(identity, (current) =>
-      policy.applyLoadedHistory(current, history, messagesAtReadStart, questionsAtReadStart),
+    updateSession(identity, (current) =>
+      applyLoadedSessionHistory(current, history, messagesAtReadStart, questionsAtReadStart),
     );
+    return readSessionSnapshot(identity);
   } catch (error) {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -227,145 +175,48 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (isSupersededRead()) {
       return finishSupersededHistoryRead();
     }
-    const failedSession = failSessionHistoryLoad(
-      identity,
-      updateSession,
-      policy,
-      sessionHistoryFailureFromError(error),
+    updateSession(identity, (session) =>
+      failSessionHistoryLoad(session, sessionHistoryFailureFromError(error)),
     );
-    if (policy.propagateFailure) {
-      throw error;
-    }
-    return failedSession?.historyLoadState === "loaded" ? failedSession : null;
+    const failedSession = readSessionSnapshot(identity);
+    return failedSession && hasLoadedSessionHistory(failedSession) ? failedSession : null;
   } finally {
     historyReadGeneration.finish(identity, readToken);
   }
 };
 
-export const loadSessionHistoryIntoStore = async (
-  args: LoadSessionHistoryIntoStoreArgs,
-): Promise<AgentSessionState | null> =>
-  loadSessionHistoryIntoStoreWithPolicy({
-    ...args,
-    policy: requestedSessionHistoryLoadPolicy,
-  });
-
-export const loadSelectedSessionBaselineHistoryIntoStore = async (
-  args: LoadSessionHistoryIntoStoreArgs,
-): Promise<AgentSessionState | null> =>
-  loadSessionHistoryIntoStoreWithPolicy({
-    ...args,
-    policy: selectedSessionBaselineHistoryLoadPolicy,
-  });
-
-export const reloadSessionHistoryIntoStore = async (
-  args: LoadSessionHistoryIntoStoreArgs,
-): Promise<AgentSessionState | null> =>
-  loadSessionHistoryIntoStoreWithPolicy({
-    ...args,
-    policy: transcriptGapRecoveryHistoryLoadPolicy,
-  });
-
-export const revalidateSessionHistoryIntoStore = async (
-  args: LoadSessionHistoryIntoStoreArgs,
-): Promise<AgentSessionState | null> =>
-  loadSessionHistoryIntoStoreWithPolicy({
-    ...args,
-    policy: retainedSessionRevalidationHistoryLoadPolicy,
-  });
-
-const createLoadSessionHistoryWithPolicy = ({
-  workspaceRepoPath,
-  adapter,
-  repoEpochRef,
-  currentWorkspaceRepoPathRef,
-  readSessionSnapshot,
-  updateSession,
-  loadSystemPromptContext,
-  loadSettingsSnapshot,
-  historyReadGeneration,
-  policy,
-  skipInFlightLoads = false,
-}: CreateLoadAgentSessionHistoryArgs & {
-  policy: SessionHistoryLoadPolicy;
-  skipInFlightLoads?: boolean;
-}): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
-  const inFlightSessionKeys = new Set<string>();
-  return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
-    const session = readSessionSnapshot(sessionIdentity);
-    if (!session) {
-      throw new Error(
-        `Cannot load history for unknown session '${sessionIdentity.externalSessionId}'.`,
-      );
+export const createLoadAgentSessionHistory =
+  ({
+    workspaceRepoPath,
+    adapter,
+    repoEpochRef,
+    currentWorkspaceRepoPathRef,
+    readSessionSnapshot,
+    updateSession,
+    loadSystemPromptContext,
+    loadSettingsSnapshot,
+    historyReadGeneration,
+  }: CreateLoadAgentSessionHistoryArgs): ((
+    identity: AgentSessionIdentity,
+  ) => Promise<AgentSessionState | null>) =>
+  async (identity) => {
+    if (!readSessionSnapshot(identity)) {
+      throw new Error(`Cannot load history for unknown session '${identity.externalSessionId}'.`);
     }
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean =>
-      repoEpochRef.current !== repoEpochAtStart || currentWorkspaceRepoPathRef.current !== repoPath;
-    if (isStaleRepoOperation()) {
-      return null;
-    }
-
-    const input: Parameters<typeof loadSessionHistoryIntoStoreWithPolicy>[0] = {
+    const input: LoadSessionHistoryIntoStoreArgs = {
       repoPath,
       adapter,
       readSessionSnapshot,
       updateSession,
-      identity: sessionIdentity,
-      policy,
+      identity,
       loadSystemPromptContext,
-      isStaleRepoOperation,
       historyReadGeneration,
+      isStaleRepoOperation: () =>
+        repoEpochRef.current !== repoEpochAtStart ||
+        currentWorkspaceRepoPathRef.current !== repoPath,
     };
-    if (loadSettingsSnapshot) {
-      input.loadSettingsSnapshot = loadSettingsSnapshot;
-    }
-    if (!skipInFlightLoads) {
-      return loadSessionHistoryIntoStoreWithPolicy(input);
-    }
-
-    const sessionKey = agentSessionIdentityKey(sessionIdentity);
-    if (inFlightSessionKeys.has(sessionKey)) {
-      return readSessionSnapshot(sessionIdentity);
-    }
-    inFlightSessionKeys.add(sessionKey);
-    try {
-      return await loadSessionHistoryIntoStoreWithPolicy(input);
-    } finally {
-      inFlightSessionKeys.delete(sessionKey);
-    }
+    if (loadSettingsSnapshot) input.loadSettingsSnapshot = loadSettingsSnapshot;
+    return loadSessionHistoryIntoStore(input);
   };
-};
-
-export const createLoadAgentSessionHistory = (
-  args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
-  createLoadSessionHistoryWithPolicy({
-    ...args,
-    policy: requestedSessionHistoryLoadPolicy,
-  });
-
-export const createLoadSelectedSessionBaselineHistory = (
-  args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
-  createLoadSessionHistoryWithPolicy({
-    ...args,
-    policy: selectedSessionBaselineHistoryLoadPolicy,
-  });
-
-export const createReloadAgentSessionHistory = (
-  args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
-  createLoadSessionHistoryWithPolicy({
-    ...args,
-    policy: transcriptGapRecoveryHistoryLoadPolicy,
-  });
-
-export const createRevalidateAgentSessionHistory = (
-  args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
-  createLoadSessionHistoryWithPolicy({
-    ...args,
-    policy: retainedSessionRevalidationHistoryLoadPolicy,
-    skipInFlightLoads: true,
-  });

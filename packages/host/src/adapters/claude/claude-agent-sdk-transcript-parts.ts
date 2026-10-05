@@ -3,12 +3,48 @@ import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeDecodedToolResult } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
-import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
+import { previewInput, readStringProp, toolPartPresentation } from "./claude-agent-sdk-utils";
 
 type ClaudeTextPart = Extract<AgentStreamPart, { kind: "text" }>;
 type ClaudeReasoningPart = Extract<AgentStreamPart, { kind: "reasoning" }>;
 type ClaudeToolPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type ClaudeFinishStepPart = Extract<AgentStreamPart, { kind: "step" }>;
+
+/** Split SDK snapshots and history entries must use the same block identities. */
+export const projectClaudeAssistantBlock = ({
+  block,
+  index,
+  messageId,
+  hasToolUse,
+}: {
+  block: Parameters<typeof readStringProp>[0];
+  index: number;
+  messageId: string;
+  hasToolUse: boolean;
+}): ClaudeTextPart | ClaudeReasoningPart | null => {
+  const type = readStringProp(block, "type");
+  if (type === "text") {
+    const text = readStringProp(block, "text");
+    return text?.trim()
+      ? createClaudeAssistantTextPart({
+          messageId,
+          partId: hasToolUse ? `${messageId}:text:${index}` : `${messageId}:text`,
+          text,
+        })
+      : null;
+  }
+  if (type === "thinking") {
+    const text = readStringProp(block, "thinking") ?? readStringProp(block, "text");
+    return text
+      ? createClaudeAssistantReasoningPart({
+          messageId,
+          partId: `${messageId}:thinking:${index}`,
+          text,
+        })
+      : null;
+  }
+  return null;
+};
 
 export const createClaudeAssistantTextPart = ({
   messageId,

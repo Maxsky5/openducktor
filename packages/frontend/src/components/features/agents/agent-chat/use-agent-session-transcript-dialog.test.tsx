@@ -26,6 +26,8 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
   AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
   AgentSessionsContext,
   HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
@@ -184,7 +186,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
             <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
               <AgentSessionsContext.Provider value={sessionStore}>
                 <AgentOperationsContext.Provider value={operations}>
-                  {children}
+                  <AgentSessionHistoryLoadContext
+                    value={{ loadAgentSessionHistory: operations.loadAgentSessionHistory }}
+                  >
+                    <AgentSessionReadModelStateContext
+                      value={{
+                        sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo-a" },
+                        reloadSessionReadModel: () => {},
+                        getSessionFault: () => null,
+                        workspaceSessionRecordsError: null,
+                      }}
+                    >
+                      {children}
+                    </AgentSessionReadModelStateContext>
+                  </AgentSessionHistoryLoadContext>
                 </AgentOperationsContext.Provider>
               </AgentSessionsContext.Provider>
             </HostRuntimeStatusContext.Provider>
@@ -331,7 +346,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
           <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
               <AgentOperationsContext.Provider value={operations}>
-                {children}
+                <AgentSessionHistoryLoadContext
+                  value={{ loadAgentSessionHistory: operations.loadAgentSessionHistory }}
+                >
+                  <AgentSessionReadModelStateContext
+                    value={{
+                      sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo-a" },
+                      reloadSessionReadModel: () => {},
+                      getSessionFault: () => null,
+                      workspaceSessionRecordsError: null,
+                    }}
+                  >
+                    {children}
+                  </AgentSessionReadModelStateContext>
+                </AgentSessionHistoryLoadContext>
               </AgentOperationsContext.Provider>
             </AgentSessionsContext.Provider>
           </HostRuntimeStatusContext.Provider>
@@ -420,7 +448,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
           <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
               <AgentOperationsContext.Provider value={operations}>
-                {children}
+                <AgentSessionHistoryLoadContext
+                  value={{ loadAgentSessionHistory: operations.loadAgentSessionHistory }}
+                >
+                  <AgentSessionReadModelStateContext
+                    value={{
+                      sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo-a" },
+                      reloadSessionReadModel: () => {},
+                      getSessionFault: () => null,
+                      workspaceSessionRecordsError: null,
+                    }}
+                  >
+                    {children}
+                  </AgentSessionReadModelStateContext>
+                </AgentSessionHistoryLoadContext>
               </AgentOperationsContext.Provider>
             </AgentSessionsContext.Provider>
           </HostRuntimeStatusContext.Provider>

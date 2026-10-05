@@ -235,6 +235,48 @@ const createRepositoryConflictRetryState = (
   });
 
 describe("useRepoSessionReadModel", () => {
+  test("keeps current history through metadata snapshots and marks it stale on reconnect or stream failure", async () => {
+    const state = createState((emit) =>
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+    );
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.updateSession(record, (current) => ({ ...current, historyLoadState: "loaded" }));
+      });
+      const messages = state.getSession()?.messages;
+      await state.harness.run(() =>
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ title: "Updated title" })],
+        }),
+      );
+      expect(state.getSession()?.historyLoadState).toBe("loaded");
+      await state.harness.run(() =>
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          isConnectionSnapshot: true,
+          sessions: [snapshot()],
+        }),
+      );
+      expect(state.getSession()?.historyLoadState).toBe("stale");
+      expect(state.getSession()?.messages).toBe(messages);
+      await state.harness.run(() => {
+        state.updateSession(record, (current) => ({ ...current, historyLoadState: "loaded" }));
+      });
+      await state.harness.run(() =>
+        state.emit({ type: "fault", repoPath: "/repo", message: "Disconnected" }),
+      );
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
+      expect(state.getSession()?.historyLoadState).toBe("stale");
+      expect(state.getSession()?.messages).toBe(messages);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
   test.each(["snapshot", "session_upsert"] as const)(
     "publishes policy feedback and session fields together for %s",
     async (type) => {

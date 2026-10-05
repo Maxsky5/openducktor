@@ -2,7 +2,10 @@ import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import { hasRenderableSessionTranscript } from "./session-transcript-content";
+import {
+  hasLoadedSessionHistory,
+  hasRenderableSessionTranscript,
+} from "./session-transcript-content";
 
 export type AgentSessionTranscriptEmptyReason = "inactive" | "sessionless" | "unavailable";
 export type AgentSessionTranscriptLoadingReason = "preparing" | "history";
@@ -67,7 +70,7 @@ export const deriveLoadedAgentSessionTranscriptState = ({
       : { kind: "failed", message };
   }
 
-  if (session.historyLoadState === "loaded") {
+  if (hasLoadedSessionHistory(session)) {
     const historyFailure = session.historyLoadFailure;
     return historyFailure ? { kind: "visible", historyFailure } : { kind: "visible" };
   }

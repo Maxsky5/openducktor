@@ -87,7 +87,7 @@ const appendMessageRows = (
   rows: AgentChatTranscriptRow[],
   sessionKey: string,
   message: AgentChatMessage,
-  messageIndex: number,
+  occurrence: number,
   showThinkingMessages: boolean,
 ): string | null => {
   if (message.role === "thinking" && !showThinkingMessages) {
@@ -98,7 +98,7 @@ const appendMessageRows = (
   const turnDurationMs = assistantMeta?.durationMs;
   const shouldShowTurnDuration =
     isFinalAssistantChatMessage(message) && turnDurationMs !== undefined && turnDurationMs > 0;
-  const rowKey = `${sessionKey}:${messageIndex}:${message.id}`;
+  const rowKey = `${sessionKey}:${encodeURIComponent(message.id)}:${occurrence}`;
   const forkBoundaryMeta =
     message.meta?.kind === "session_notice" && message.meta.reason === "session_forked"
       ? message.meta
@@ -153,9 +153,12 @@ export function createAgentChatTranscriptModelBuilder(
     activeStreamingAssistantMessageId: null,
   };
   let nextMessageIndex = 0;
+  const occurrences = new Map<string, number>();
 
-  const processMessage = (message: AgentChatMessage, messageIndex: number): void => {
+  const processMessage = (message: AgentChatMessage): void => {
     updateAggregateMetadataForMessage({ message, metadata });
+    const occurrence = occurrences.get(message.id) ?? 0;
+    occurrences.set(message.id, occurrence + 1);
 
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
@@ -168,7 +171,7 @@ export function createAgentChatTranscriptModelBuilder(
       turnRowStartIndexes.push(nextRowStart);
     }
 
-    const rowKey = appendMessageRows(rows, sessionKey, message, messageIndex, showThinkingMessages);
+    const rowKey = appendMessageRows(rows, sessionKey, message, occurrence, showThinkingMessages);
     if (message.role === "user") {
       metadata.lastUserMessageKey = rowKey;
     }
@@ -180,7 +183,7 @@ export function createAgentChatTranscriptModelBuilder(
       while (processedCount < maxMessages && nextMessageIndex < messageCount) {
         const message = getSessionMessageAt(session, nextMessageIndex);
         if (message) {
-          processMessage(message, nextMessageIndex);
+          processMessage(message);
         }
         nextMessageIndex += 1;
         processedCount += 1;
@@ -293,21 +296,19 @@ export function updateAgentChatTranscriptModelFromPrefix({
   const rows = previousTranscriptModel.rows.slice(0, firstTailRowIndex);
   const metadata = buildMetadataFromRows(rows);
 
-  let messageIndex = startMessageIndex;
+  const occurrences = new Map<string, number>();
+  for (let index = 0; index < startMessageIndex; index += 1) {
+    const message = getSessionMessageAt(session, index);
+    if (message) occurrences.set(message.id, (occurrences.get(message.id) ?? 0) + 1);
+  }
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
-    const currentMessageIndex = messageIndex;
-    messageIndex += 1;
+    const occurrence = occurrences.get(message.id) ?? 0;
+    occurrences.set(message.id, occurrence + 1);
     updateAggregateMetadataForMessage({ message, metadata });
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }
-    const rowKey = appendMessageRows(
-      rows,
-      sessionKey,
-      message,
-      currentMessageIndex,
-      showThinkingMessages,
-    );
+    const rowKey = appendMessageRows(rows, sessionKey, message, occurrence, showThinkingMessages);
     if (message.role === "user") {
       metadata.lastUserMessageKey = rowKey;
     }

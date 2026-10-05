@@ -28,6 +28,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { upsertSessionMessage } from "./operations/agent-orchestrator/support/messages";
 import { buildSessionPolicyNoticeMessage } from "./operations/agent-orchestrator/support/session-notice-messages";
+import { markSessionHistoriesStale } from "./operations/agent-orchestrator/history/session-history-freshness";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -150,24 +151,11 @@ export const createAgentSessionsStore = (
     }));
   };
 
-  // A repository switch drops the late result of an unfinished history load.
-  // Return it to not requested, so the next visit requests the baseline history
-  // again.
-  const resetLoadingHistoryLoads = (collection: AgentSessionCollection): AgentSessionCollection => {
-    let next = collection;
-    for (const session of listAgentSessions(collection)) {
-      if (session.historyLoadState === "loading") {
-        next = replaceAgentSession(next, { ...session, historyLoadState: "not_requested" });
-      }
-    }
-    return next;
-  };
-
   const retainActiveCollection = (): void => {
     if (workspaceRepoPath === null) {
       return;
     }
-    retainedCollections.set(workspaceRepoPath, resetLoadingHistoryLoads(sessionCollection));
+    retainedCollections.set(workspaceRepoPath, markSessionHistoriesStale(sessionCollection));
   };
 
   const activateCollection = (repoPath: string | null): AgentSessionCollection => {

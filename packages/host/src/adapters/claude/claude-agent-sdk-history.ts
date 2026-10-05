@@ -8,6 +8,7 @@ import {
   moveNestedResultToEnd,
   projectClaudeHistoryAssistantMessage,
   removeClaudeHistoryFinishStep,
+  updateClaudeHistoryAssistantSnapshot,
 } from "./claude-agent-sdk-history-assistant";
 import {
   isNestedHistoryEntry,
@@ -133,15 +134,7 @@ export const toClaudeHistoryMessages = (
       history.push(snapshot);
       return snapshot;
     }
-    const nextPartIds = new Set(snapshot.parts.map((part) => part.partId));
-    // Tool-call maps retain this object, so update it without replacing its identity.
-    Object.assign(existingMessage, snapshot, {
-      text: snapshot.text.trim().length > 0 ? snapshot.text : existingMessage.text,
-      parts: [
-        ...existingMessage.parts.filter((part) => !nextPartIds.has(part.partId)),
-        ...snapshot.parts,
-      ],
-    });
+    updateClaudeHistoryAssistantSnapshot(existingMessage, snapshot);
     return existingMessage;
   };
   const resetCurrentUserTurnAssistantTracking = () => {

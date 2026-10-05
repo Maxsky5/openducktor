@@ -491,6 +491,24 @@ export const upsertSessionMessageByTimestamp = (
   return insertSessionMessageByTimestamp(previous, message);
 };
 
+export const sessionMessageSourceId = (message: AgentChatMessage): string => {
+  const meta = message.meta;
+  if ((meta?.kind === "assistant" || meta?.kind === "subagent") && meta.sourceMessageId) {
+    return meta.sourceMessageId;
+  }
+  const prefix = meta?.kind === "tool" ? "tool:" : meta?.kind === "reasoning" ? "thinking:" : null;
+  const partId =
+    meta?.kind === "tool"
+      ? meta.callId.trim() || meta.partId
+      : meta?.kind === "reasoning"
+        ? meta.partId
+        : null;
+  if (prefix && partId && message.id.startsWith(prefix) && message.id.endsWith(`:${partId}`)) {
+    return message.id.slice(prefix.length, -(partId.length + 1));
+  }
+  return message.id;
+};
+
 export const sessionMessageBelongsToSourceMessage = (
   message: AgentChatMessage,
   sourceMessageId: string,
@@ -498,8 +516,7 @@ export const sessionMessageBelongsToSourceMessage = (
   message.id === sourceMessageId ||
   message.id.startsWith(`thinking:${sourceMessageId}:`) ||
   message.id.startsWith(`tool:${sourceMessageId}:`) ||
-  (message.meta?.kind === "assistant" && message.meta.sourceMessageId === sourceMessageId) ||
-  (message.meta?.kind === "subagent" && message.meta.sourceMessageId === sourceMessageId);
+  sessionMessageSourceId(message) === sourceMessageId;
 
 export const findFirstChangedSessionMessageIndex = (
   previousMessages: SessionMessagesState | null,

@@ -8,7 +8,11 @@ import {
 import { render } from "@testing-library/react";
 import { act, createElement, useSyncExternalStore } from "react";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionHistoryLoadContext, AgentSessionsContext } from "@/state/app-state-contexts";
+import {
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
+  AgentSessionsContext,
+} from "@/state/app-state-contexts";
 import { createAgentSessionTranscriptEventConsumer } from "@/state/operations/agent-orchestrator/events/session-transcript-events";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -166,8 +170,7 @@ test.each([
     let deferHistory = false;
     let historyStarted = false;
     const historyActions: AgentSessionHistoryLoadContextValue = {
-      loadSelectedSessionBaselineHistory: async () => null,
-      revalidateAgentSessionHistory: async (identity) => {
+      loadAgentSessionHistory: async (identity) => {
         if (!deferHistory || identity.externalSessionId !== firstSession.externalSessionId) {
           return null;
         }
@@ -200,7 +203,18 @@ test.each([
         createElement(
           AgentSessionHistoryLoadContext.Provider,
           { value: historyActions },
-          createElement(Probe, { identity }),
+          createElement(
+            AgentSessionReadModelStateContext.Provider,
+            {
+              value: {
+                sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+                reloadSessionReadModel: () => {},
+                getSessionFault: () => null,
+                workspaceSessionRecordsError: null,
+              },
+            },
+            createElement(Probe, { identity }),
+          ),
         ),
       );
     const driver = createAnimationFrameTestDriver();
@@ -293,6 +307,7 @@ test.each([
         });
       });
       await driver.flushTimers(20);
+      store.updateSession(firstSession, (current) => ({ ...current, historyLoadState: "stale" }));
       deferHistory = true;
       const beforeSwitch = observedStates.length;
       rendered.rerender(view(firstSession));

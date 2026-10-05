@@ -18,6 +18,7 @@ import {
   retryAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
+import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
@@ -31,6 +32,7 @@ import {
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
+import { markSessionHistoriesStale } from "../history/session-history-freshness";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
@@ -681,11 +683,27 @@ export const useRepoSessionReadModel = ({
     };
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
+        markHistoryStale();
         liveStreamFailureRef.current = message;
         setSessionReadModelLoadState(
           failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
         );
       }
+    };
+    const markHistoryStale = (): void => {
+      const filters = { queryKey: agentSessionHistoryQueryKeys.workspace(repoPath) };
+      const cancelledReads = queryClient.cancelQueries(filters);
+      commitSessionCollection((current) => ({
+        collection: markSessionHistoriesStale(current),
+        result: undefined,
+      }));
+      runOrchestratorSideEffect(
+        "session-history-invalidate",
+        cancelledReads.then(() =>
+          queryClient.invalidateQueries({ ...filters, refetchType: "active" }),
+        ),
+        { tags: { repoPath } },
+      );
     };
     const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
       if (actions.length === 0) {
@@ -718,6 +736,7 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
+      if (envelope.isConnectionSnapshot) markHistoryStale();
       commitProjected((current) => {
         const registered = applyWorkspaceRecords(applyLoadedRecords(current, current), current);
         const projected = buildAgentSessionLiveCollection({

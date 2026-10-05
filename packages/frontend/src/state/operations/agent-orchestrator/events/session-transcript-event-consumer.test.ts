@@ -3,7 +3,7 @@ import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-live-projection";
-import { reloadSessionHistoryIntoStore } from "../history/session-history-loader";
+import { loadSessionHistoryIntoStore } from "../history/session-history-loader";
 import { createSessionHistoryReadGeneration } from "../history/session-history-read-generation";
 import { createSessionTurnState } from "../support/session-turn-state";
 import type { UpdateSession } from "./session-event-types";
@@ -159,7 +159,11 @@ describe("agent session transcript event consumer", () => {
             Date.parse("2026-10-02T11:57:55.010Z"),
           ]);
 
-          await reloadSessionHistoryIntoStore({
+          createSessionUpdater(sessionsRef)(liveRef, (current) => ({
+            ...current,
+            historyLoadState: "stale",
+          }));
+          await loadSessionHistoryIntoStore({
             repoPath: liveRef.repoPath,
             identity: liveRef,
             loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),

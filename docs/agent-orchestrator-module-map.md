@@ -2,7 +2,7 @@
 
 Use this map before you change `packages/frontend/src/state/operations/agent-orchestrator`, a task session flow, or session navigation.
 
-The host owns live session truth for task and workspace sessions. SQLite owns their durable records. The renderer holds one projection of those sources. History loads only for the selected session.
+The host owns live session truth for task and workspace sessions. SQLite owns their durable records. The renderer holds one projection of those sources. History loads only for an open transcript that needs a baseline or missed live events.
 
 Pass primitive identity through these modules. Use `workspaceRepoPath` for repository session state. Pass `workspaceId` only to code that reads repository config. Do not pass `ActiveWorkspace` into transcript, action, or read-model modules.
 
@@ -20,8 +20,8 @@ Rules:
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
 - All reads and writes target the active repository. A session outside the active collection resolves to no session.
-- A repository switch keeps retained transcripts. The store serves the retained transcript immediately and the selected session revalidates its history in the background.
-- An unfinished history load returns to not requested when its repository becomes inactive, so the next visit loads the baseline history again.
+- A repository switch keeps retained transcripts and marks their history stale. The store serves the retained transcript immediately. An open transcript view refreshes it in the background.
+- An unfinished baseline read returns to `not_requested` when its repository becomes inactive. An interrupted refresh returns to `stale` and keeps its visible baseline.
 
 ## Activity state
 
@@ -52,6 +52,18 @@ Rules:
 - Load one missing source record through `source-session-loader.ts`. Do not load its transcript or refresh the full repository model.
 
 This owner does not load catalogs, file status, diff, selected history, or page navigation. It does not select a native runtime protocol.
+
+## Transcript history
+
+Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, and `state/queries/agent-session-history.ts`.
+
+Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
+
+A stream gap, connection snapshot, observation failure, or repository switch marks retained history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+
+TanStack Query owns native history reads and their cancellation. The session store owns the merge with live messages. A late read cannot replace newer live text or tool results, restore removed responses or answered questions, or drop known tool timing. An unchanged merge keeps the message objects and transcript revision. Failed reads keep an actionable error and wait for a retry.
+
+Unregistered external sessions and child transcripts keep their Query-owned read-only projection. They cannot create a registered session or replace its transcript.
 
 `commitTranscriptActivity` applies transcript activity through the same collection commit before transcript assembly. It retains required pending-input links, including terminal child updates. It does not collect approval policy actions or reconcile workspace targets. Snapshots, session upserts or removals, and durable ownership updates retain those checks. Unchanged text deltas still reach transcript assembly.
 
@@ -197,7 +209,7 @@ Rules:
 - Combine live summaries and durable records before selection. Resolve one candidate.
 - `selected-session-view-projection.ts` walks the facts once. Do not repeat its branch logic in hooks.
 - The view is passive. History and runtime-data owners make requests.
-- A transcript stays in loading until history is `loaded`. If a visible transcript later fails to reload, keep the visible transcript with the error state.
+- A transcript stays in loading until it has a baseline or live rows. `loaded`, `stale`, and `refreshing` keep a visible baseline. A failed refresh keeps the transcript with its error state.
 - `transcript/session-transcript-state.ts` owns runtime waiting, session loading, visible, and failed states.
 - Use `selectedSessionIdentity !== null` for existence. Do not add `hasSession`.
 - Keep `selectedSessionActivityState`, selected role, and `selectedSessionModel` as separate facts.
@@ -214,7 +226,7 @@ The repository read model key is repository plus task ID set. Task title, status
 
 Files: `components/features/agents/agent-chat/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, and `agent-chat-transcript-model-build.ts`.
 
-The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions.
+The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Unregistered Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions. Row keys use native message identity, so older history rows do not change the keys of visible rows.
 
 - Background updates preserve cache recency. Selection determines which entries stay cached.
 - Selection also schedules stale cached entries when their selected build stopped on deselection. Other inactive builds continue through the switch.

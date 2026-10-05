@@ -15,12 +15,14 @@ import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
+import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
 import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
   deriveRuntimeBoundTranscriptLoadingState,
+  deriveLoadedAgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import {
   runtimeSessionHistoryRefQueryOptions,
@@ -152,7 +154,8 @@ export function useRuntimeTranscriptSessionHistory({
   runtimeReadinessState,
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
+  const { readSessionHistory, loadAgentSessionHistory, replyAgentApproval, answerAgentQuestion } =
+    useAgentOperations();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
   const queryClient = useQueryClient();
   const { stableTarget, emptyReason, matchingSession, targetRuntimeKind } =
@@ -172,6 +175,8 @@ export function useRuntimeTranscriptSessionHistory({
     [matchingSession, targetScope],
   );
   const sessionScope = scopeResult.kind === "resolved" ? scopeResult.sessionScope : null;
+  const storedSession = getStoredSession(matchingSession, scopeResult);
+  useSelectedSessionHistoryLoad({ session: storedSession, runtimeReadinessState });
   const runtimeSessionRefInput = useMemo(() => {
     if (repoPath === null || stableTarget === null || scopeResult.kind === "conflict") {
       return null;
@@ -208,13 +213,14 @@ export function useRuntimeTranscriptSessionHistory({
     ? errorMessageFromUnknown(runtimeSessionRefQuery.error, "Failed to resolve runtime policy.")
     : null;
   const shouldLoadHistory =
-    emptyReason === null &&
-    runtimeSessionRef !== null &&
-    matchingSession?.historyLoadState !== "loaded";
+    emptyReason === null && runtimeSessionRef !== null && storedSession === null;
   const historyQuery = useQuery(
-    shouldLoadHistory && runtimeReadinessState === "ready" && runtimeSessionRef !== null
-      ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
-      : skippedTranscriptHistoryQueryOptions,
+    getTranscriptHistoryQueryOptions({
+      shouldLoadHistory,
+      runtimeReadinessState,
+      runtimeSessionRef,
+      readSessionHistory,
+    }),
   );
   const { refetch: refetchHistory } = historyQuery;
   const skillsQuery = useQuery(
@@ -231,7 +237,7 @@ export function useRuntimeTranscriptSessionHistory({
     let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {
       transcriptSession = toAgentChatTranscriptSession(
-        historyQuery.data
+        storedSession === null && historyQuery.data
           ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data)
           : matchingSession,
       );
@@ -247,41 +253,42 @@ export function useRuntimeTranscriptSessionHistory({
           skillReferences: skillSurface.catalog?.skills ?? [],
         }
       : null;
-  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillSurface.catalog, stableTarget]);
-  const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
-    if (scopeResult.kind === "conflict") {
-      return { kind: "failed", message: scopeResult.message };
-    }
-    if (session !== null) {
-      return { kind: "visible" };
-    }
-    if (emptyReason !== null) {
-      return { kind: "empty", reason: emptyReason };
-    }
-    if (runtimePolicyError !== null && runtimeReadinessState === "ready") {
-      return { kind: "failed", message: runtimePolicyError };
-    }
-    if (historyQuery.error && runtimeReadinessState === "ready") {
-      return {
-        kind: "failed",
-        message: errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history."),
-      };
-    }
-    return deriveRuntimeBoundTranscriptLoadingState({
-      reason: "history",
-      runtimeReadinessState,
-    });
   }, [
-    emptyReason,
-    historyQuery.error,
-    runtimeReadinessState,
-    runtimePolicyError,
-    session,
-    scopeResult,
+    historyQuery.data,
+    matchingSession,
+    storedSession,
+    shouldLoadHistory,
+    skillSurface.catalog,
+    stableTarget,
   ]);
+  const transcriptState = useMemo(
+    () =>
+      getTranscriptState({
+        scopeResult,
+        storedSession,
+        session,
+        emptyReason,
+        runtimePolicyError,
+        historyError: historyQuery.error,
+        runtimeReadinessState,
+      }),
+    [
+      emptyReason,
+      historyQuery.error,
+      runtimeReadinessState,
+      runtimePolicyError,
+      session,
+      scopeResult,
+      storedSession,
+    ],
+  );
   const retryHistory = useCallback(() => {
-    void refetchHistory();
-  }, [refetchHistory]);
+    if (storedSession !== null) {
+      void loadAgentSessionHistory(storedSession);
+    } else {
+      void refetchHistory();
+    }
+  }, [loadAgentSessionHistory, refetchHistory, storedSession]);
   const [isRetryingSkills, setIsRetryingSkills] = useState(false);
   const retrySkills = useCallback(() => {
     if (runtimeRef === null) {
@@ -299,8 +306,12 @@ export function useRuntimeTranscriptSessionHistory({
     session,
     interactionSession: matchingSession,
     transcriptState,
-    retryHistory: historyQuery.error !== null ? retryHistory : null,
-    isRetryingHistory: historyQuery.isFetching,
+    retryHistory:
+      historyQuery.error !== null || storedSession?.historyLoadFailure ? retryHistory : null,
+    isRetryingHistory:
+      historyQuery.isFetching ||
+      storedSession?.historyLoadState === "loading" ||
+      storedSession?.historyLoadState === "refreshing",
     skillSurfaceError: skillSurface.error,
     retrySkills: skillSurface.error !== null ? retrySkills : null,
     isRetryingSkills,
@@ -312,6 +323,78 @@ export function useRuntimeTranscriptSessionHistory({
 type TranscriptScopeResult =
   | { kind: "resolved"; sessionScope: AgentSessionScope | null }
   | { kind: "conflict"; message: string };
+
+const getStoredSession = (
+  session: AgentSessionState | null,
+  scopeResult: TranscriptScopeResult,
+): AgentSessionState | null => {
+  if (scopeResult.kind === "conflict" || session?.sessionAssociation.kind === "unbound") {
+    return null;
+  }
+  return session;
+};
+
+const getTranscriptHistoryQueryOptions = ({
+  shouldLoadHistory,
+  runtimeReadinessState,
+  runtimeSessionRef,
+  readSessionHistory,
+}: {
+  shouldLoadHistory: boolean;
+  runtimeReadinessState: RuntimeReadinessState;
+  runtimeSessionRef: PolicyBoundSessionRef | null;
+  readSessionHistory: AgentOperationsContextValue["readSessionHistory"];
+}) =>
+  shouldLoadHistory && runtimeReadinessState === "ready" && runtimeSessionRef !== null
+    ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
+    : skippedTranscriptHistoryQueryOptions;
+
+const getTranscriptState = ({
+  scopeResult,
+  storedSession,
+  session,
+  emptyReason,
+  runtimePolicyError,
+  historyError,
+  runtimeReadinessState,
+}: {
+  scopeResult: TranscriptScopeResult;
+  storedSession: AgentSessionState | null;
+  session: AgentChatTranscriptSession | null;
+  emptyReason: AgentSessionTranscriptEmptyReason | null;
+  runtimePolicyError: string | null;
+  historyError: Error | null;
+  runtimeReadinessState: RuntimeReadinessState;
+}): AgentSessionTranscriptState => {
+  if (scopeResult.kind === "conflict") {
+    return { kind: "failed", message: scopeResult.message };
+  }
+  if (storedSession !== null) {
+    return deriveLoadedAgentSessionTranscriptState({
+      session: storedSession,
+      runtimeReadinessState,
+    });
+  }
+  if (session !== null) {
+    return { kind: "visible" };
+  }
+  if (emptyReason !== null) {
+    return { kind: "empty", reason: emptyReason };
+  }
+  if (runtimePolicyError !== null && runtimeReadinessState === "ready") {
+    return { kind: "failed", message: runtimePolicyError };
+  }
+  if (historyError && runtimeReadinessState === "ready") {
+    return {
+      kind: "failed",
+      message: errorMessageFromUnknown(historyError, "Failed to load transcript history."),
+    };
+  }
+  return deriveRuntimeBoundTranscriptLoadingState({
+    reason: "history",
+    runtimeReadinessState,
+  });
+};
 
 const getTranscriptScope = ({
   session,

@@ -1,4 +1,5 @@
 import { mergeAgentImageGeneration } from "@openducktor/core";
+import { replaceEqualDeep } from "@tanstack/react-query";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   matchesLoadedTool,
@@ -14,6 +15,7 @@ import {
   getSessionMessages,
   haveSameUserMessageAttachmentIdentity,
   isFinalAssistantChatMessage,
+  sessionMessageSourceId,
   someSessionMessage,
   type SessionMessageOwner,
 } from "./messages";
@@ -403,10 +405,21 @@ const findMatchingCurrentMessages = ({
 const mergeSameMessageId = (
   loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage | undefined,
-  messagesAtReadStart?: AgentSessionState["messages"],
+  beforeRead?: AgentChatMessage,
+  readStarted = false,
 ): AgentChatMessage => {
   if (!currentMessage) {
     return loadedMessage;
+  }
+
+  if (
+    readStarted &&
+    beforeRead !== currentMessage &&
+    (currentMessage.meta?.kind === "assistant" ||
+      currentMessage.meta?.kind === "reasoning" ||
+      currentMessage.meta?.kind === "tool")
+  ) {
+    return currentMessage;
   }
 
   if (isSessionSystemPromptMessage(loadedMessage) && isSessionSystemPromptMessage(currentMessage)) {
@@ -442,23 +455,28 @@ const mergeSameMessageId = (
     loadedMessage.meta?.kind === "image_generation" &&
     currentMessage.meta?.kind === "image_generation"
   ) {
-    const beforeRead = messagesAtReadStart?.items.find(
-      (message) => message.id === currentMessage.id,
-    )?.meta;
     return {
       ...currentMessage,
       meta: mergeAgentImageGeneration(
         currentMessage.meta,
         loadedMessage.meta,
         "history",
-        beforeRead?.kind === "image_generation" ? beforeRead : undefined,
+        beforeRead?.meta?.kind === "image_generation" ? beforeRead.meta : undefined,
       ),
     };
   }
 
-  if (isFinalAssistantChatMessage(loadedMessage) && currentMessage.role === "assistant") {
+  if (
+    loadedMessage.meta?.kind === "assistant" &&
+    currentMessage.role === "assistant" &&
+    (isFinalAssistantChatMessage(loadedMessage) ||
+      (readStarted &&
+        beforeRead === currentMessage &&
+        currentMessage.meta?.kind === "assistant" &&
+        !isFinalAssistantChatMessage(currentMessage)))
+  ) {
     const mergedMeta =
-      currentMessage.meta && loadedMessage.meta
+      currentMessage.meta?.kind === "assistant"
         ? { ...currentMessage.meta, ...loadedMessage.meta }
         : (loadedMessage.meta ?? currentMessage.meta);
     const mergedMessage: AgentChatMessage = { ...currentMessage, ...loadedMessage };
@@ -619,6 +637,13 @@ export const mergeHistoryMessages = (
 
   if (getSessionMessageCount(loadedOwner) > 0) {
     const currentIndex = buildCurrentMessageIndex(currentOwner);
+    const beforeReadById = new Map(
+      messagesAtReadStart?.items.map((message) => [message.id, message]),
+    );
+    const removedSourceIds = new Set(messagesAtReadStart?.items.map(sessionMessageSourceId));
+    forEachSessionMessage(currentOwner, (message) =>
+      removedSourceIds.delete(sessionMessageSourceId(message)),
+    );
     const finalAssistantSourceIds = new Set<string>();
     forEachSessionMessage(loadedOwner, (message) => {
       if (
@@ -630,6 +655,13 @@ export const mergeHistoryMessages = (
       }
     });
     forEachSessionMessage(loadedOwner, (message) => {
+      // A retraction or compaction during this read must not restore removed rows.
+      if (
+        removedSourceIds.has(sessionMessageSourceId(message)) ||
+        (beforeReadById.has(message.id) && !currentIndex.firstById.has(message.id))
+      ) {
+        return;
+      }
       const wholeMessage = findWholeAssistantMessage(message, currentIndex.firstById);
       if (wholeMessage) {
         // History can lag live text. Keep its live row until the source finishes.
@@ -653,7 +685,15 @@ export const mergeHistoryMessages = (
       }
       const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
         (currentMerged, matchingCurrentMessage) =>
-          mergeSameMessageId(currentMerged, matchingCurrentMessage, messagesAtReadStart),
+          replaceEqualDeep(
+            matchingCurrentMessage,
+            mergeSameMessageId(
+              currentMerged,
+              matchingCurrentMessage,
+              beforeReadById.get(matchingCurrentMessage.id),
+              messagesAtReadStart !== undefined,
+            ),
+          ),
         message,
       );
       pushMergedMessage(mergedMessage);
@@ -680,6 +720,12 @@ export const mergeHistoryMessages = (
           minimumInsertionIndex,
         );
 
+  if (
+    resultMessages.length === currentMessages.items.length &&
+    resultMessages.every((message, index) => message === currentMessages.items[index])
+  ) {
+    return currentMessages;
+  }
   return createSessionMessagesState(externalSessionId, resultMessages, currentMessages.version + 1);
 };
 

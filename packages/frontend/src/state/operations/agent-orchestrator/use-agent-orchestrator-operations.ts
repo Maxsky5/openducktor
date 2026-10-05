@@ -1,10 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
-import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
+import {
+  agentSessionHistoryQueryKeys,
+  sessionHistoryQueryOptions,
+} from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
@@ -20,12 +22,8 @@ import type { EnsureSession, UpdateSession } from "./events/session-event-types"
 import { createAgentSessionTranscriptEventConsumer } from "./events/session-transcript-events";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import {
-  createLoadAgentSessionHistory,
-  createLoadSelectedSessionBaselineHistory,
-  createReloadAgentSessionHistory,
-  createRevalidateAgentSessionHistory,
-} from "./history/session-history-loader";
+import { createLoadAgentSessionHistory } from "./history/session-history-loader";
+import { markSessionHistoriesStale } from "./history/session-history-freshness";
 import { createSessionHistoryReadGeneration } from "./history/session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
@@ -164,7 +162,10 @@ export function useAgentOrchestratorOperations({
     const loaderArgs = {
       workspaceRepoPath,
       workspaceId,
-      adapter: agentEngine,
+      adapter: {
+        loadSessionHistory: (input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) =>
+          queryClient.fetchQuery(sessionHistoryQueryOptions(input, agentEngine.loadSessionHistory)),
+      },
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       readSessionSnapshot: sessionStore.getSessionSnapshot,
@@ -180,9 +181,6 @@ export function useAgentOrchestratorOperations({
 
     return {
       loadAgentSessionHistory: createLoadAgentSessionHistory(loaderArgs),
-      loadSelectedSessionBaselineHistory: createLoadSelectedSessionBaselineHistory(loaderArgs),
-      reloadAgentSessionHistory: createReloadAgentSessionHistory(loaderArgs),
-      revalidateAgentSessionHistory: createRevalidateAgentSessionHistory(loaderArgs),
     };
   }, [
     agentEngine,
@@ -198,20 +196,16 @@ export function useAgentOrchestratorOperations({
     workspaceRepoPath,
   ]);
   const recoverTranscriptGap = useCallback(async (): Promise<void> => {
-    const loadedSessions = sessionStore
-      .listSessionSnapshots()
-      .filter((session) => session.historyLoadState === "loaded");
-
-    await Promise.all([
-      ...loadedSessions.map((session) =>
-        sessionHistoryLoaders.reloadAgentSessionHistory(toAgentSessionIdentity(session)),
-      ),
-      queryClient.invalidateQueries({
-        queryKey: agentSessionHistoryQueryKeys.all,
-        refetchType: "active",
-      }),
-    ]);
-  }, [queryClient, sessionHistoryLoaders, sessionStore]);
+    if (!workspaceRepoPath) return;
+    const filters = { queryKey: agentSessionHistoryQueryKeys.workspace(workspaceRepoPath) };
+    const cancelledReads = queryClient.cancelQueries(filters);
+    sessionStore.setSessionCollection(markSessionHistoriesStale);
+    await cancelledReads;
+    await queryClient.invalidateQueries({
+      ...filters,
+      refetchType: "active",
+    });
+  }, [queryClient, sessionStore, workspaceRepoPath]);
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     workspaceId,
@@ -340,8 +334,7 @@ export function useAgentOrchestratorOperations({
   );
   const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(
     () => ({
-      loadSelectedSessionBaselineHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
-      revalidateAgentSessionHistory: sessionHistoryLoaders.revalidateAgentSessionHistory,
+      loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
     }),
     [sessionHistoryLoaders],
   );

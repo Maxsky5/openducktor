@@ -9,7 +9,13 @@ import type { PropsWithChildren } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
-import { AgentOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
+import { useAgentOperations } from "@/state/app-state-provider";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -28,7 +34,7 @@ const session = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionStat
   createAgentSessionFixture(
     {
       externalSessionId: "thread-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: { kind: "unbound" },
 
       runtimeKind: "codex",
       workingDirectory: "/repo/worktree",
@@ -72,16 +78,38 @@ const operations = (
   answerAgentQuestion: async () => undefined,
 });
 
+const HistoryOwner = ({ children }: PropsWithChildren) => {
+  const { loadAgentSessionHistory } = useAgentOperations();
+  return (
+    <AgentSessionHistoryLoadContext.Provider value={{ loadAgentSessionHistory }}>
+      <AgentSessionReadModelStateContext.Provider
+        value={{
+          sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+          reloadSessionReadModel: () => {},
+          getSessionFault: () => null,
+          workspaceSessionRecordsError: null,
+        }}
+      >
+        {children}
+      </AgentSessionReadModelStateContext.Provider>
+    </AgentSessionHistoryLoadContext.Provider>
+  );
+};
+
 const createHarness = (
   liveSession: AgentSessionState,
   readSessionHistory: AgentOperationsContextValue["readSessionHistory"],
   targetSessionScope?: AgentSessionScope,
+  loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"] = async () =>
+    null,
 ) => {
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
       <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
-        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-          {children}
+        <AgentOperationsContext.Provider
+          value={operations(loadAgentSessionHistory, readSessionHistory)}
+        >
+          <HistoryOwner>{children}</HistoryOwner>
         </AgentOperationsContext.Provider>
       </RuntimeDefinitionsContext.Provider>
     </QueryProvider>
@@ -150,22 +178,29 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("uses matching target and live workflow scopes", async () => {
+  test("uses the canonical owner for a registered workflow transcript", async () => {
     const readSessionHistory = mock(async () => []);
+    const loadAgentSessionHistory = mock(async () => null);
     const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
-    const harness = createHarness(
-      session({ runtimeKind: "opencode", sessionAssociation: workflowScope }),
-      readSessionHistory,
-      workflowScope,
-    );
-
+    const live = session({ runtimeKind: "opencode", sessionAssociation: workflowScope });
+    const harness = createHarness(live, readSessionHistory, workflowScope, loadAgentSessionHistory);
     try {
       await harness.mount();
-      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
-
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionScope: workflowScope }),
-      );
+      expect(loadAgentSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: live.externalSessionId,
+        runtimeKind: live.runtimeKind,
+        workingDirectory: live.workingDirectory,
+      });
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      await harness.update({
+        isOpen: true,
+        repoPath: "/repo",
+        target: { ...live, sessionScope: workflowScope },
+        runtimeReadinessState: "ready",
+        liveSession: { ...live, historyLoadState: "loaded" },
+      });
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().session?.messages).toBe(live.messages);
     } finally {
       await harness.unmount();
     }
@@ -173,11 +208,18 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
   test("rejects conflicting target and live workflow scopes", async () => {
     const readSessionHistory = mock(async () => []);
-    const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory, {
-      kind: "workflow",
-      taskId: "task-2",
-      role: "qa",
-    });
+    const harness = createHarness(
+      session({
+        runtimeKind: "opencode",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+      readSessionHistory,
+      {
+        kind: "workflow",
+        taskId: "task-2",
+        role: "qa",
+      },
+    );
 
     try {
       await harness.mount();
@@ -200,7 +242,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       <QueryProvider useIsolatedClient>
         <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryProvider>
@@ -254,7 +296,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       <QueryProvider useIsolatedClient>
         <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryProvider>
@@ -306,7 +348,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       <QueryClientProvider client={queryClient}>
         <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
@@ -445,7 +487,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
         >
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
@@ -532,7 +574,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
         >
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
@@ -616,7 +658,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
         >
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            {children}
+            <HistoryOwner>{children}</HistoryOwner>
           </AgentOperationsContext.Provider>
         </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>

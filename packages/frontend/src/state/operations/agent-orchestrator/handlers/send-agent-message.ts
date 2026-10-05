@@ -36,6 +36,7 @@ import { removeRunningSessionCompactionNotices } from "../support/session-notice
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
+import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
 const withSendScope = (
@@ -307,12 +308,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const sendAttempt = isBusyQueuedSend
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
-    const resolvedQuestionRequestIds =
-      readySession.historyLoadState === "loaded"
-        ? readySession.pendingQuestions
-            .filter((request) => request.blocking === false && request.source === undefined)
-            .map((request) => request.requestId)
-        : undefined;
+    const resolvedQuestionRequestIds = hasLoadedSessionHistory(readySession)
+      ? readySession.pendingQuestions
+          .filter((request) => request.blocking === false && request.source === undefined)
+          .map((request) => request.requestId)
+      : undefined;
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(

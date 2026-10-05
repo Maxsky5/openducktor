@@ -54,12 +54,8 @@ interface SessionReadModelLoadStateRefContract {
   current: AgentSessionReadModelLoadState;
 }
 
-interface LoadSelectedSessionBaselineHistoryRefContract {
-  current: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
-}
-
-interface RevalidateAgentSessionHistoryRefContract {
-  current: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"];
+interface LoadAgentSessionHistoryRefContract {
+  current: AgentSessionHistoryLoadContextValue["loadAgentSessionHistory"];
 }
 
 interface ReadSessionTodosRefContract {
@@ -82,10 +78,7 @@ type UseAgentStudioSelectionControllerHook =
 const sessionReadModelLoadStateRef: SessionReadModelLoadStateRefContract = {
   current: unavailableAgentSessionReadModelLoadState,
 };
-const loadSelectedSessionBaselineHistoryRef: LoadSelectedSessionBaselineHistoryRefContract = {
-  current: async () => null,
-};
-const revalidateAgentSessionHistoryRef: RevalidateAgentSessionHistoryRefContract = {
+const loadAgentSessionHistoryRef: LoadAgentSessionHistoryRefContract = {
   current: async () => null,
 };
 const readSessionTodosRef: ReadSessionTodosRefContract = {
@@ -103,8 +96,7 @@ let sessionStore = createAgentSessionsStore(null);
 type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
-  loadSelectedSessionBaselineHistory?: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
-  revalidateAgentSessionHistory?: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"];
+  loadAgentSessionHistory?: AgentSessionHistoryLoadContextValue["loadAgentSessionHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   loadAgentSessionContext?: AgentOperationsContextValue["loadAgentSessionContext"];
   getSessionFault?: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
@@ -192,10 +184,8 @@ const applyTestContextOverrides = (
   sessionReadModelLoadStateRef.current =
     contextOverrides.sessionReadModelLoadState ??
     defaultSessionReadModelLoadState(hookArgs.workspaceRepoPath);
-  loadSelectedSessionBaselineHistoryRef.current =
-    contextOverrides.loadSelectedSessionBaselineHistory ?? (async () => null);
-  revalidateAgentSessionHistoryRef.current =
-    contextOverrides.revalidateAgentSessionHistory ?? (async () => null);
+  loadAgentSessionHistoryRef.current =
+    contextOverrides.loadAgentSessionHistory ?? (async () => null);
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
   loadAgentSessionContextRef.current =
     contextOverrides.loadAgentSessionContext ?? (async () => undefined);
@@ -244,8 +234,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     answerAgentQuestion: async () => undefined,
   });
   const agentSessionHistoryLoadValue = (): AgentSessionHistoryLoadContextValue => ({
-    loadSelectedSessionBaselineHistory: loadSelectedSessionBaselineHistoryRef.current,
-    revalidateAgentSessionHistory: revalidateAgentSessionHistoryRef.current,
+    loadAgentSessionHistory: loadAgentSessionHistoryRef.current,
   });
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <AgentOperationsContext.Provider value={agentOperationsValue()}>
@@ -960,7 +949,7 @@ describe("useAgentStudioSelectionController", () => {
         taskIdParam: "task-1",
         sessionExternalIdParam: sessionExternalIdParam(session),
       }),
-      { loadSelectedSessionBaselineHistory: loadSessionHistory },
+      { loadAgentSessionHistory: loadSessionHistory },
     );
 
     try {
@@ -997,7 +986,7 @@ describe("useAgentStudioSelectionController", () => {
         taskIdParam: "task-1",
         sessionExternalIdParam: sessionExternalIdParam(session),
       }),
-      { loadSelectedSessionBaselineHistory: loadSessionHistory },
+      { loadAgentSessionHistory: loadSessionHistory },
     );
 
     try {
@@ -1037,7 +1026,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionExternalIdParam: sessionExternalIdParam(session),
       }),
       {
-        loadSelectedSessionBaselineHistory: loadSessionHistory,
+        loadAgentSessionHistory: loadSessionHistory,
         hostRuntimeStatusContext: {
           statusByKind: {
             opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
@@ -1075,7 +1064,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionExternalIdParam: sessionExternalIdParam(session),
       }),
       {
-        loadSelectedSessionBaselineHistory: loadSessionHistory,
+        loadAgentSessionHistory: loadSessionHistory,
         loadAgentSessionContext: loadSessionContext,
         hostRuntimeStatusContext: {
           statusByKind: {
@@ -1224,7 +1213,7 @@ describe("useAgentStudioSelectionController", () => {
       }),
       {
         sessionReadModelLoadState: loadingAgentSessionReadModelLoadState(workspaceRepoPath),
-        loadSelectedSessionBaselineHistory: loadSessionHistory,
+        loadAgentSessionHistory: loadSessionHistory,
         readSessionTodos,
         loadAgentSessionContext,
         runtimeDefinitionsContext: { loadRepoRuntimeCatalog },
