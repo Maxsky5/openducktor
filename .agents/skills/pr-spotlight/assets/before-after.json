@@ -1,0 +1,171 @@
+{
+  "version": 2,
+  "id": "before-after-example",
+  "durationNanos": 8000000000,
+  "actors": [
+    {
+      "id": "title",
+      "recipe": "text",
+      "data": {
+        "text": "Change the response, keep the trigger",
+        "center": [960, 110],
+        "fontSize": 40,
+        "color": [220, 226, 234]
+      }
+    },
+    {
+      "id": "flow",
+      "recipe": "sequence",
+      "data": {
+        "origin": [220, 250],
+        "width": 1480,
+        "rowHeight": 100,
+        "participants": [
+          {
+            "id": "ui",
+            "label": "UI"
+          },
+          {
+            "id": "host",
+            "label": "Host"
+          }
+        ],
+        "rows": [
+          {
+            "kind": "message",
+            "id": "trigger",
+            "slot": 0,
+            "from": "ui",
+            "to": "host",
+            "label": "One item changes",
+            "tone": "request"
+          },
+          {
+            "kind": "message",
+            "id": "before",
+            "slot": 1,
+            "from": "host",
+            "to": "ui",
+            "label": "Before: replace all items",
+            "tone": "warning",
+            "reply": true
+          },
+          {
+            "kind": "message",
+            "id": "after",
+            "slot": 1,
+            "from": "host",
+            "to": "ui",
+            "label": "After: send changed items",
+            "tone": "success",
+            "reply": true
+          },
+          {
+            "kind": "note",
+            "id": "outcome",
+            "slot": 2,
+            "over": ["ui"],
+            "text": "Keep unchanged items",
+            "tone": "success"
+          }
+        ],
+        "slots": 3
+      }
+    },
+    {
+      "id": "phase",
+      "recipe": "text",
+      "data": {
+        "text": "Before",
+        "center": [960, 850],
+        "fontSize": 34,
+        "color": [220, 226, 234]
+      }
+    },
+    {
+      "id": "footer",
+      "recipe": "text",
+      "data": {
+        "text": "Illustrative template. Verify both paths in the source.",
+        "center": [960, 950],
+        "fontSize": 26,
+        "color": [220, 226, 234]
+      }
+    }
+  ],
+  "continuousChannels": [
+    {
+      "id": "flow-row.trigger.reveal",
+      "actorId": "flow",
+      "property": "row.trigger.reveal",
+      "initial": 1,
+      "events": []
+    },
+    {
+      "id": "flow-row.before.reveal",
+      "actorId": "flow",
+      "property": "row.before.reveal",
+      "initial": 1,
+      "events": []
+    },
+    {
+      "id": "flow-row.before.opacity",
+      "actorId": "flow",
+      "property": "row.before.opacity",
+      "initial": 1,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 3700000000,
+          "target": 0,
+          "durationNanos": 300000000,
+          "curve": "smoothstep"
+        }
+      ]
+    },
+    {
+      "id": "flow-row.after.reveal",
+      "actorId": "flow",
+      "property": "row.after.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 4000000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    },
+    {
+      "id": "flow-row.outcome.reveal",
+      "actorId": "flow",
+      "property": "row.outcome.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 5000000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    }
+  ],
+  "stateChannels": [
+    {
+      "id": "phase-content",
+      "actorId": "phase",
+      "state": "content",
+      "initial": "Before",
+      "events": [
+        {
+          "atNanos": 4000000000,
+          "value": "After"
+        }
+      ]
+    }
+  ]
+}

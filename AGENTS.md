@@ -121,6 +121,8 @@ Read [docs/testing.md](docs/testing.md) before you add or change tests.
 
 ## Finish
 
+When preparing a PR that needs a visual explanation, follow [pr-spotlight](.agents/skills/pr-spotlight/SKILL.md) for scene authoring and media delivery.
+
 Run every full repository check before you complete any change:
 
 ```sh

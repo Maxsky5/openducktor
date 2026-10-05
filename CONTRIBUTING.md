@@ -171,6 +171,8 @@ OpenDucktor uses one SQLite database per configured workspace.
 
 ## Pull Requests
 
+Use [pr-spotlight](.agents/skills/pr-spotlight/SKILL.md) when a diagram or short animation helps reviewers understand a PR. Ask Codex, OpenCode, or Claude Code to use `pr-spotlight`, or follow its setup and render commands.
+
 When opening a pull request:
 
 - Explain the user-facing or maintainer-facing problem being solved.

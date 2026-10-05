@@ -1,0 +1,124 @@
+{
+  "version": 2,
+  "id": "code-change-example",
+  "durationNanos": 8000000000,
+  "actors": [
+    {
+      "id": "title",
+      "recipe": "text",
+      "data": {
+        "text": "Replace one call, keep the surrounding code",
+        "center": [960, 105],
+        "fontSize": 36,
+        "color": [220, 226, 234]
+      }
+    },
+    {
+      "id": "code",
+      "recipe": "editor",
+      "data": {
+        "fileName": "example.ts (illustrative)",
+        "lines": [
+          {
+            "id": "context",
+            "parts": [
+              {
+                "id": "context-body",
+                "spans": [
+                  {
+                    "text": "async function refresh() {",
+                    "style": "plain"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "before",
+            "parts": [
+              {
+                "id": "before-body",
+                "spans": [
+                  {
+                    "text": "  return readAllItems();",
+                    "style": "plain"
+                  }
+                ]
+              }
+            ],
+            "mark": "removed"
+          },
+          {
+            "id": "after",
+            "parts": [
+              {
+                "id": "after-body",
+                "spans": [
+                  {
+                    "text": "  return readChangedItems();",
+                    "style": "plain"
+                  }
+                ]
+              }
+            ],
+            "mark": "added"
+          },
+          {
+            "id": "end",
+            "parts": [
+              {
+                "id": "end-body",
+                "spans": [
+                  {
+                    "text": "}",
+                    "style": "plain"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "initialLineIds": ["context", "before", "end"],
+        "finalLineIds": ["context", "after", "end"],
+        "snapshots": [
+          {
+            "atNanos": 4000000000,
+            "lineIds": ["context", "after", "end"]
+          }
+        ],
+        "lineHeight": 44,
+        "enteringOffsetX": 0,
+        "focusLineId": "context",
+        "focusHeight": 44
+      }
+    },
+    {
+      "id": "footer",
+      "recipe": "text",
+      "data": {
+        "text": "Illustrative template. Replace with a short excerpt from the actual diff.",
+        "center": [960, 970],
+        "fontSize": 24,
+        "color": [220, 226, 234]
+      }
+    }
+  ],
+  "continuousChannels": [
+    {
+      "id": "code-mark.before",
+      "actorId": "code",
+      "property": "mark.before",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 3000000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    }
+  ],
+  "stateChannels": []
+}

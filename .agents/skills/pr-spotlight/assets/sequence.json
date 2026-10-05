@@ -1,0 +1,149 @@
+{
+  "version": 2,
+  "id": "sequence-example",
+  "durationNanos": 8000000000,
+  "actors": [
+    {
+      "id": "title",
+      "recipe": "text",
+      "data": {
+        "text": "One request, one result",
+        "center": [960, 110],
+        "fontSize": 40,
+        "color": [220, 226, 234]
+      }
+    },
+    {
+      "id": "flow",
+      "recipe": "sequence",
+      "data": {
+        "origin": [220, 250],
+        "width": 1480,
+        "rowHeight": 100,
+        "participants": [
+          {
+            "id": "ui",
+            "label": "UI"
+          },
+          {
+            "id": "host",
+            "label": "Host"
+          },
+          {
+            "id": "source",
+            "label": "Source"
+          }
+        ],
+        "rows": [
+          {
+            "kind": "message",
+            "id": "request",
+            "from": "ui",
+            "to": "host",
+            "label": "Request data",
+            "tone": "request"
+          },
+          {
+            "kind": "message",
+            "id": "read",
+            "from": "host",
+            "to": "source",
+            "label": "Read source",
+            "tone": "plain"
+          },
+          {
+            "kind": "message",
+            "id": "result",
+            "from": "source",
+            "to": "host",
+            "label": "Return result",
+            "tone": "success",
+            "reply": true
+          },
+          {
+            "kind": "message",
+            "id": "reply",
+            "from": "host",
+            "to": "ui",
+            "label": "Update view",
+            "tone": "success",
+            "reply": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "footer",
+      "recipe": "text",
+      "data": {
+        "text": "Illustrative template. Replace labels with facts from the diff.",
+        "center": [960, 950],
+        "fontSize": 26,
+        "color": [220, 226, 234]
+      }
+    }
+  ],
+  "continuousChannels": [
+    {
+      "id": "flow-row.request.reveal",
+      "actorId": "flow",
+      "property": "row.request.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 500000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    },
+    {
+      "id": "flow-row.read.reveal",
+      "actorId": "flow",
+      "property": "row.read.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 1700000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    },
+    {
+      "id": "flow-row.result.reveal",
+      "actorId": "flow",
+      "property": "row.result.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 2900000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    },
+    {
+      "id": "flow-row.reply.reveal",
+      "actorId": "flow",
+      "property": "row.reply.reveal",
+      "initial": 0,
+      "events": [
+        {
+          "operation": "ease",
+          "atNanos": 4100000000,
+          "target": 1,
+          "durationNanos": 600000000,
+          "curve": "smoothstep"
+        }
+      ]
+    }
+  ],
+  "stateChannels": []
+}
