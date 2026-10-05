@@ -544,7 +544,11 @@ describe("discoverToolPath", () => {
       resolveCalls += 1;
       return originalResolve(command, options);
     };
-    const adapter = createToolDiscoveryAdapter({ env: {}, systemCommands });
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: { platform: "linux" },
+      systemCommands,
+    });
 
     await Effect.runPromise(adapter.resolveTool("codex"));
     await Effect.runPromise(adapter.resolveTool("codex"));
