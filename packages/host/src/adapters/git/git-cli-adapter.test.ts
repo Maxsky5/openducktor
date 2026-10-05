@@ -107,6 +107,30 @@ describe("createGitCliAdapter", () => {
       { kind: "file", path: "src/[index].ts" },
     ]);
   });
+  test("merges overlapping regions across commands without losing collision data", async () => {
+    let commands = 0;
+    const git = createGitCliAdapter({
+      runner: (_dir, args) => {
+        commands += 1;
+        const stdout = args.includes(":(literal)collision")
+          ? "K collision/\0H 100644 abc123 0\tcollision\0? collision/child.txt\0"
+          : args.includes(":(literal)collision/child.txt")
+            ? "? collision/child.txt\0"
+            : "";
+        return Effect.succeed({ ok: true, stdout, stderr: "" });
+      },
+    });
+    const regions = [
+      "collision",
+      ...Array.from({ length: 1_000 }, (_, index) => `absent/${index}-${"a".repeat(90)}.txt`),
+      "collision/child.txt",
+    ];
+    await expect(Effect.runPromise(git.listFileRegions("/repo", regions))).resolves.toEqual([
+      { kind: "file", path: "collision", worktreeKind: "directory" },
+      { kind: "file", path: "collision/child.txt" },
+    ]);
+    expect(commands).toBeGreaterThan(1);
+  });
   test("limits a case-insensitive file lookup to one literal path", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

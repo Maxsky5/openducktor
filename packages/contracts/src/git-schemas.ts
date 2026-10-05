@@ -24,6 +24,10 @@ export const workspaceRecordSchema = z.object({
 });
 export type WorkspaceRecord = z.infer<typeof workspaceRecordSchema>;
 
+// Refresh IDs identify one logical read, not permission or Query identity.
+export const gitReadContextSchema = z.object({ refreshId: z.string().min(1).max(128) }).strict();
+export type GitReadContext = z.infer<typeof gitReadContextSchema>;
+
 export const gitBranchSchema = z.object({
   worktreePath: z.string().min(1).optional(),
   name: z.string(),

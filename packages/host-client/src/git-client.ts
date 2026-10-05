@@ -1,4 +1,5 @@
 import {
+  type GitReadContext,
   type CommitsAheadBehind,
   commitsAheadBehindSchema,
   type FileDiff,
@@ -212,23 +213,29 @@ const gitCommitsAheadBehind = async (
   );
 };
 
+type WorktreeStatusReadArgs = {
+  repoPath: string;
+  targetBranch: string;
+  diffScope: "target" | "uncommitted";
+  workingDir: string | null;
+  readContext?: GitReadContext;
+};
 const gitGetWorktreeStatus = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
+  readContext?: GitReadContext,
 ): Promise<GitWorktreeStatus> => {
-  return invokeFn(
-    "git_get_worktree_status",
-    {
-      repoPath,
-      targetBranch,
-      diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
-      workingDir: workingDir ?? null,
-    },
-    gitWorktreeStatusSchema,
-  );
+  const args: WorktreeStatusReadArgs = {
+    repoPath,
+    targetBranch,
+    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+    workingDir: workingDir ?? null,
+  };
+  if (readContext) args.readContext = readContext;
+  return invokeFn("git_get_worktree_status", args, gitWorktreeStatusSchema);
 };
 
 const gitGetWorktreeStatusSummary = async (
@@ -237,17 +244,16 @@ const gitGetWorktreeStatusSummary = async (
   targetBranch: string,
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
+  readContext?: GitReadContext,
 ): Promise<GitWorktreeStatusSummary> => {
-  return invokeFn(
-    "git_get_worktree_status_summary",
-    {
-      repoPath,
-      targetBranch,
-      diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
-      workingDir: workingDir ?? null,
-    },
-    gitWorktreeStatusSummarySchema,
-  );
+  const args: WorktreeStatusReadArgs = {
+    repoPath,
+    targetBranch,
+    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+    workingDir: workingDir ?? null,
+  };
+  if (readContext) args.readContext = readContext;
+  return invokeFn("git_get_worktree_status_summary", args, gitWorktreeStatusSummarySchema);
 };
 
 const gitCommitAll = async (
@@ -448,8 +454,16 @@ export class HostGitClient {
     targetBranch: string,
     diffScope?: "target" | "uncommitted",
     workingDir?: string,
+    readContext?: GitReadContext,
   ): Promise<GitWorktreeStatus> {
-    return gitGetWorktreeStatus(this.invokeFn, repoPath, targetBranch, diffScope, workingDir);
+    return gitGetWorktreeStatus(
+      this.invokeFn,
+      repoPath,
+      targetBranch,
+      diffScope,
+      workingDir,
+      readContext,
+    );
   }
 
   async gitGetWorktreeStatusSummary(
@@ -457,6 +471,7 @@ export class HostGitClient {
     targetBranch: string,
     diffScope?: "target" | "uncommitted",
     workingDir?: string,
+    readContext?: GitReadContext,
   ): Promise<GitWorktreeStatusSummary> {
     return gitGetWorktreeStatusSummary(
       this.invokeFn,
@@ -464,6 +479,7 @@ export class HostGitClient {
       targetBranch,
       diffScope,
       workingDir,
+      readContext,
     );
   }
 

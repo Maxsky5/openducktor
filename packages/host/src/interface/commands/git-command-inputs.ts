@@ -1,4 +1,5 @@
 import {
+  gitReadContextSchema,
   type GitResetWorktreeSelectionRequest,
   gitConflictOperationSchema,
   gitDiffScopeSchema,
@@ -258,6 +259,12 @@ export const parseGitWorktreeStatusInput = (input: HostCommandArgs): GitWorktree
   };
   if (workingDir) {
     result.workingDir = workingDir;
+  }
+  if (record.readContext !== undefined) {
+    const parsed = gitReadContextSchema.safeParse(record.readContext);
+    if (!parsed.success)
+      throw new HostValidationError({ field: "readContext", message: parsed.error.message });
+    result.readContext = parsed.data;
   }
   return result;
 };

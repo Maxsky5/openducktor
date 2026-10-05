@@ -150,6 +150,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           workingDirectory,
           targetBranch,
           diffScope,
+          input.readContext,
         );
         const observedAtMs = yield* Clock.currentTimeMillis;
         const snapshot = createWorktreeSnapshot(
@@ -199,6 +200,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           workingDirectory,
           targetBranch,
           diffScope,
+          input.readContext,
         );
         const observedAtMs = yield* Clock.currentTimeMillis;
         const snapshot = createWorktreeSnapshot(

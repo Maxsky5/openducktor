@@ -1,4 +1,5 @@
 import {
+  workspaceFileTreeRefreshInputSchema,
   type WorkspaceTextFileWriteInput,
   workspaceTextFileWriteInputSchema,
 } from "@openducktor/contracts";
@@ -69,6 +70,16 @@ const parseWriteTextFileInput = (args: HostCommandArgs): WorkspaceTextFileWriteI
 
 export const createWorkspaceFilesCommandHandlers = (workspaceFilesService: WorkspaceFilesService) =>
   ({
+    filesystem_refresh_tree: (args) => {
+      const parsed = workspaceFileTreeRefreshInputSchema.safeParse(args);
+      if (!parsed.success)
+        throw new HostValidationError({
+          field: "filesystem_refresh_tree input",
+          message: parsed.error.message,
+          cause: parsed.error,
+        });
+      return workspaceFilesService.refreshTree(parsed.data);
+    },
     filesystem_list_tree: (args) => workspaceFilesService.listTree(parseListTreeInput(args)),
     filesystem_read_text_file: (args) =>
       workspaceFilesService.readTextFile(parseReadTextFileInput(args)),

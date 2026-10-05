@@ -108,3 +108,77 @@ export const workspaceTextFileWriteFailureSchema = z
   })
   .strict();
 export type WorkspaceTextFileWriteFailure = z.infer<typeof workspaceTextFileWriteFailureSchema>;
+
+export const workspaceFileTreeCursorSchema = z
+  .object({
+    viewId: z.string().min(1),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WorkspaceFileTreeCursor = z.infer<typeof workspaceFileTreeCursorSchema>;
+export const workspaceFileTreeContextSchema = z
+  .object({
+    rootPath: z.string().min(1),
+    gitDirectory: z.string().min(1),
+    branch: z.string().nullable(),
+    head: z.string().nullable(),
+    targetBranch: z.string().nullable(),
+    targetRevision: z.string().nullable(),
+    indexVersion: z.string().nullable(),
+    sparsePolicy: z.string(),
+  })
+  .strict();
+export type WorkspaceFileTreeContext = z.infer<typeof workspaceFileTreeContextSchema>;
+const refreshInputFields = {
+  rootPath: z.string().min(1),
+  targetBranch: z.string().min(1).optional(),
+  refreshId: z.string().min(1).max(128),
+};
+export const workspaceFileTreeRefreshInputSchema = z.discriminatedUnion("mode", [
+  z.object({ ...refreshInputFields, mode: z.literal("full") }).strict(),
+  z
+    .object({
+      ...refreshInputFields,
+      mode: z.literal("incremental"),
+      base: workspaceFileTreeCursorSchema,
+    })
+    .strict(),
+]);
+export type WorkspaceFileTreeRefreshInput = z.infer<typeof workspaceFileTreeRefreshInputSchema>;
+const refreshResultFields = {
+  rootPath: z.string().min(1),
+  context: workspaceFileTreeContextSchema,
+  cursor: workspaceFileTreeCursorSchema,
+};
+export const workspaceFileTreeRefreshResultSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...refreshResultFields,
+      kind: z.literal("snapshot"),
+      entries: z.array(workspaceFileTreeEntrySchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...refreshResultFields,
+      kind: z.literal("patch"),
+      base: workspaceFileTreeCursorSchema,
+      upserts: z.array(workspaceFileTreeEntrySchema),
+      removals: z.array(z.string().min(1)),
+    })
+    .strict(),
+  z
+    .object({
+      ...refreshResultFields,
+      kind: z.literal("unchanged"),
+      base: workspaceFileTreeCursorSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("reset_required"),
+      reason: z.enum(["missing_view", "expired_revision", "context_changed"]),
+    })
+    .strict(),
+]);
+export type WorkspaceFileTreeRefreshResult = z.infer<typeof workspaceFileTreeRefreshResultSchema>;

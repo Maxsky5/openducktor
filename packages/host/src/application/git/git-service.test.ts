@@ -180,6 +180,15 @@ const createFakeGitPort = ({
           }),
       });
     },
+    getFileTreeContext() {
+      return Effect.die("Unexpected getFileTreeContext");
+    },
+    releaseReadCaptures() {
+      return Effect.void;
+    },
+    listFileRegions() {
+      return Effect.die("Unexpected listFileRegions");
+    },
     listFiles() {
       return Effect.succeed([]);
     },

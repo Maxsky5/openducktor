@@ -32,7 +32,7 @@ export const requireRelativePath = (
 };
 
 export const isContainedPath = (
-  filesystem: FilesystemPort,
+  filesystem: Pick<FilesystemPort, "relative">,
   canonicalRoot: string,
   canonicalCandidate: string,
 ): boolean => {
@@ -42,7 +42,7 @@ export const isContainedPath = (
 };
 
 export const toWorkspaceRelativeGitPath = (
-  filesystem: FilesystemPort,
+  filesystem: Pick<FilesystemPort, "join" | "relative">,
   repositoryRoot: string,
   workspaceRoot: string,
   repositoryRelativePath: string,
@@ -55,7 +55,7 @@ export const toWorkspaceRelativeGitPath = (
 };
 
 export const toWorkspaceRelativeCanonicalGitPath = (
-  filesystem: FilesystemPort,
+  filesystem: Pick<FilesystemPort, "relative">,
   workspaceRoot: string,
   absolutePath: string,
 ): string => {
