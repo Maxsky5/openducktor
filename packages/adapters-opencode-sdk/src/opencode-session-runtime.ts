@@ -613,25 +613,31 @@ export const createPrepareOpencodeSessionRuntime = (
       sendUserMessage: (messageInput) => {
         const pending = { ref: messageInput, controller: new AbortController() };
         pendingSends.add(pending);
+        const signal = pending.controller.signal;
+        let abort!: () => void;
+        const aborted = new Promise<never>((_resolve, reject) => {
+          abort = () => reject(signal.reason);
+        });
+        const clearPending = (): void => {
+          signal.removeEventListener("abort", abort);
+          pendingSends.delete(pending);
+        };
+        signal.addEventListener("abort", abort, { once: true });
         let markSent!: () => void;
         const sent = new Promise<void>((resolve) => {
           markSent = resolve;
         });
-        const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve())
-          .then(() => {
-            requireActive();
-            pending.controller.signal.throwIfAborted();
-            return controlAdapter.sendUserMessage(messageInput, {
-              signal: pending.controller.signal,
-              onSent: () => {
-                pendingSends.delete(pending);
-                markSent();
-              },
-            });
-          })
-          .finally(() => {
-            pendingSends.delete(pending);
+        const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve()).then(() => {
+          requireActive();
+          signal.throwIfAborted();
+          return controlAdapter.sendUserMessage(messageInput, {
+            signal,
+            onSent: () => {
+              clearPending();
+              markSent();
+            },
           });
+        });
         // Reads can restore permissions, so hold them until the native call or failure.
         // A pending reply or stream admission must not block reads.
         setAttachTail(
@@ -644,7 +650,8 @@ export const createPrepareOpencodeSessionRuntime = (
             ),
           ]),
         );
-        return sending;
+        // Stop releases the caller while reads still wait for unfinished setup.
+        return Promise.race([sending, aborted]).finally(clearPending);
       },
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),
       updateSessionTitle: (titleInput) => controlAdapter.updateSessionTitle(titleInput),

@@ -459,7 +459,9 @@ describe("OpenCode session runtime connection", () => {
     const started = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     let reading: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
+    let nextRead: ReturnType<typeof prepared.connection.readSessionSources> | undefined;
     let sending: Promise<unknown> | undefined;
+    let readCalls = 0;
     const get = harness.client.session.get;
     try {
       await prepared.connection.startSession({
@@ -468,6 +470,7 @@ describe("OpenCode session runtime connection", () => {
         systemPrompt: "Build it",
       });
       harness.client.session.get = async (...args) => {
+        readCalls++;
         started.resolve();
         await finish.promise;
         return get(...args);
@@ -480,19 +483,27 @@ describe("OpenCode session runtime connection", () => {
       );
       if (action === "stop") await prepared.connection.stopSession(root);
       else await prepared.connection.releaseSession(root);
+      expect(
+        await Promise.race([
+          sending,
+          new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+        ]),
+      ).toMatchObject({ error: expect.stringContaining("canceled") });
+      nextRead = prepared.connection.readSessionSources("/repo", [root]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(readCalls).toBe(1);
       finish.resolve();
-      await reading;
+      await Promise.all([reading, nextRead]);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(calls).toEqual([]);
-      expect(await sending).toMatchObject({ error: expect.stringContaining("canceled") });
       harness.client.session.get = get;
       await prepared.connection.resumeSession({ ...root, runtimePolicy: { kind: "opencode" } });
       await prepared.connection.sendUserMessage(userSend(root, "prompt"));
       expect(calls).toEqual(["prompt"]);
     } finally {
       finish.resolve();
+      await Promise.allSettled([reading, nextRead, sending]);
       await prepared.release();
-      await Promise.allSettled([reading, sending]);
     }
   });
 
@@ -530,16 +541,84 @@ describe("OpenCode session runtime connection", () => {
       await started.promise;
       if (action === "stop") await prepared.connection.stopSession(root);
       else await prepared.connection.releaseSession(root);
+      expect(
+        await Promise.race([
+          sending,
+          new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+        ]),
+      ).toMatchObject({ error: expect.stringContaining("canceled") });
       finish.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(calls).toEqual([]);
-      expect(await sending).toMatchObject({ error: expect.stringContaining("canceled") });
     } finally {
       finish.resolve();
       await prepared.release();
       await sending;
     }
   });
+
+  test.each(["read", "mcp"] as const)(
+    "runtime release cancels a send while %s stays blocked",
+    async (waiting) => {
+      const harness = createLiveClientHarness();
+      harness.setPendingApproval(false);
+      const calls: string[] = [];
+      recordNativeSends(harness, calls);
+      const prepared = await createPrepareRuntime(harness)(runtimeInput);
+      const root = workflowRoot();
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      let reading: Promise<unknown> | undefined;
+      let sending: Promise<unknown> | undefined;
+      try {
+        await prepared.connection.startSession({
+          ...root,
+          runtimePolicy: { kind: "opencode" },
+          systemPrompt: "Build it",
+        });
+        if (waiting === "read") {
+          const get = harness.client.session.get;
+          harness.client.session.get = async (...args) => {
+            started.resolve();
+            await finish.promise;
+            return get(...args);
+          };
+          reading = prepared.connection.readSessionSources("/repo", [root]).then(
+            (value) => ({ value }),
+            (error: Error) => ({ error }),
+          );
+          await started.promise;
+        } else {
+          const status = harness.client.mcp.status;
+          harness.client.mcp.status = async (...args) => {
+            started.resolve();
+            await finish.promise;
+            return status(...args);
+          };
+        }
+        sending = prepared.connection.sendUserMessage(userSend(root, "prompt")).then(
+          (message) => ({ message }),
+          (error: Error) => ({ error: error.message }),
+        );
+        await started.promise;
+        await prepared.release();
+        expect(
+          await Promise.race([
+            sending,
+            new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+          ]),
+        ).toMatchObject({ error: expect.stringContaining("canceled") });
+        finish.resolve();
+        await Promise.allSettled([reading, sending]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(calls).toEqual([]);
+      } finally {
+        finish.resolve();
+        await Promise.allSettled([reading, sending]);
+        await prepared.release();
+      }
+    },
+  );
 
   test.each(["read", "mcp"] as const)(
     "a paused %s in one repository does not block another",
