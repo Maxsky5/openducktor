@@ -165,7 +165,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "For comparisons or mappings, use tables when entries share the same fields. Use numbered lists for ordered steps. Omit empty sections and remove repeated explanations without dropping requirements.",
         "Use inline code for file paths, identifiers, commands, and literal values. Put multi-line code, schemas, payloads, commands, and configuration in fenced code blocks with a language tag. Keep each sample short and limited to the lines that make the point.",
         "Add a Mermaid diagram in a fenced code block tagged mermaid when a flow, sequence, state change, or relationship between parts is easier to see than to read. Pick the diagram that fits: flowchart for structure and decisions, sequenceDiagram for interactions over time, stateDiagram-v2 for lifecycles, erDiagram for data relationships. Introduce each diagram with one sentence that says what it shows, and keep every requirement and decision in the text as well.",
-        "Keep each diagram focused on one idea with about 12 nodes or fewer; split a larger one. The viewer renders Mermaid in strict mode: use short plain-text labels, wrap labels that contain punctuation in double quotes, and do not add HTML, click handlers, or theme and style directives.",
+        "Keep each diagram focused on one idea with about 12 nodes or fewer; split a larger one. The viewer renders Mermaid in strict mode with its own theme: use short plain-text labels, wrap labels that contain punctuation in double quotes, and do not add HTML, click handlers, or theme and style directives.",
       ]),
       bulletSection("Fail-fast rules", [
         "Do not introduce fallback logic that hides a broken primary path.",
@@ -283,7 +283,8 @@ const AGENT_PROMPT_DEFINITIONS = {
       ]),
       bulletSection("Plan document", [
         "Use the following sections as the document's structure. Scale the detail to the task. A reader should see the shape of the change from its diagrams, tables, and code blocks before reading the prose.",
-        "## Approach: Explain the chosen design and why it fits the task and existing codebase. Show the target design in a Mermaid diagram of the changed modules and how they connect, or of the main runtime flow. Skip the diagram only when the change stays inside one module and changes no flow or state. When alternatives explain a meaningful tradeoff, compare them in a table with the reason for the choice. Reference the source requirements for the problem and scope.",
+        "## Approach: Explain the chosen design and why it fits the task and existing codebase. Reference the source requirements for the problem and scope. When alternatives explain a meaningful tradeoff, compare them in a table with the reason for the choice.",
+        "Show the target design in a Mermaid diagram of the changed modules and how they connect, or of the main runtime flow. Skip the diagram only when the change stays inside one module and changes no flow or state.",
         "## Design: Start with a table of the changed modules or files, the change in each, and its reason. Then give each changed module or boundary a ### subheading. Describe responsibilities, interfaces, inputs and outputs, state ownership, and failure behavior as applicable. Show how the changed parts connect.",
         "Show each new or changed contract in a fenced code block: type or schema shape, function signature, event or payload example, or configuration. Write the contract lines and leave function bodies to Builder. Add a short sketch when it shows an intended pattern faster than prose, and label it as a suggestion. Add a sequenceDiagram when the change alters an interaction across modules, and a stateDiagram-v2 when it changes a lifecycle or status.",
         "## Requirement coverage: Cover all requirements, including scope and constraints. Connect each required outcome to the design that provides it in a table with one row per requirement. Use the spec's requirement names when a spec exists. Otherwise, use the task requirement wording as references so Builder can find the source of each obligation.",
@@ -345,7 +346,8 @@ const AGENT_PROMPT_DEFINITIONS = {
       bulletSection("QA report", [
         "Use the following sections as the report's structure.",
         "## Verdict: State approved or rejected and the main reason in one or two sentences.",
-        "## Findings: Report material findings with severity, location, impact, and a concrete correction. Start with a table of each finding's severity, location as `path:line`, and one-line summary. Then explain each finding under its own ### subheading. Support findings with code or check results, quote the relevant code in a short fenced block when it makes the defect clear, and distinguish defects from optional improvements. Omit this section when there are no findings.",
+        "## Findings: Report material findings with severity, location, impact, and a concrete correction. Start with a table of each finding's severity, location as `path:line`, and one-line summary. Omit this section when there are no findings.",
+        "Explain each finding under its own ### subheading. Support it with code or check results, quote the relevant code in a short fenced block when it makes the defect clear, and distinguish defects from optional improvements.",
         "## Verification: Show the checks you ran and their results in a table, then state any limits. Do not add an exhaustive evidence checklist.",
       ]),
       bulletSection("Verdict", [
