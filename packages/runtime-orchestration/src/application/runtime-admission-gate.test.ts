@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FiberId } from "effect";
 import { RuntimeUnavailableError } from "../errors";
 import { createRuntimeAdmissionGate } from "./runtime-admission-gate";
 
@@ -40,6 +40,48 @@ describe("runtime admission gate", () => {
     if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
     expect(Exit.isInterrupted(result)).toBe(false);
     expect(Cause.pretty(result.cause)).toContain("The runtime stopped first. Retry later.");
+  });
+
+  test("registers an admitted control before a lifecycle action can drain the gate", async () => {
+    // A fiber yields after a fixed number of operations. Each run starts admit after one more
+    // step, so one run yields between the open check and the control registration. A lifecycle
+    // action then closes and drains the gate before the fiber resumes.
+    const steps = (count: number) => {
+      let effect: Effect.Effect<void> = Effect.void;
+      for (let step = 0; step < count; step += 1)
+        effect = effect.pipe(Effect.zipRight(Effect.void));
+      return effect;
+    };
+    let admitted = 0;
+    let rejected = 0;
+    for (let count = 1000; count < 2100; count += 1) {
+      const gate = createRuntimeAdmissionGate();
+      gate.open("codex");
+      const release = Deferred.unsafeMake<void>(FiberId.none);
+      let entered = false;
+      const control = Effect.sync(() => {
+        entered = true;
+      }).pipe(Effect.zipRight(Deferred.await(release)));
+      const caller = Effect.runFork(
+        steps(count).pipe(Effect.zipRight(gate.admit("codex", control))),
+      );
+      gate.close("codex", unavailable);
+      const drain = Effect.runFork(gate.drain("codex"));
+      await Effect.runPromise(Effect.yieldNow());
+
+      if (entered) {
+        admitted += 1;
+        expect(drain.unsafePoll()).toBeNull();
+      } else {
+        rejected += 1;
+      }
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.await(caller));
+      await Effect.runPromise(Fiber.join(drain));
+    }
+    // The sweep crossed the yield point: some callers passed the gate and some did not.
+    expect(admitted).toBeGreaterThan(0);
+    expect(rejected).toBeGreaterThan(0);
   });
 
   test("an interrupted caller interrupts its control and leaves the gate", async () => {

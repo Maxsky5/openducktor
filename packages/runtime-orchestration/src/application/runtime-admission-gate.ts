@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { Deferred, Effect, Exit, Fiber, FiberId } from "effect";
+import { Deferred, Effect, Exit, Fiber, FiberId, Runtime } from "effect";
 import { RuntimeUnavailableError } from "../errors";
 
 type Control = Fiber.RuntimeFiber<unknown, unknown>;
@@ -82,10 +82,17 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
     admit: <A, E, R>(runtimeKind: RuntimeKind, effect: Effect.Effect<A, E, R>) =>
       Effect.uninterruptibleMask((restore): Effect.Effect<A, E | RuntimeUnavailableError, R> =>
         Effect.gen(function* () {
+          const runtime = yield* Effect.runtime<R>();
           const entry = entryFor(runtimeKind);
-          if (!entry.open) return yield* unavailableError(entry);
-          const control = yield* Effect.fork(restore(effect));
-          entry.controls.add(control);
+          // Check the gate and register the control in one synchronous step. A fiber can yield
+          // between operations, and a lifecycle action must never drain without this control.
+          const control = yield* Effect.sync(() => {
+            if (!entry.open) return null;
+            const started = Runtime.runFork(runtime)(restore(effect));
+            entry.controls.add(started);
+            return started;
+          });
+          if (control === null) return yield* unavailableError(entry);
           const exit = yield* restore(Fiber.await(control)).pipe(
             // An interrupted caller interrupts its control.
             Effect.onInterrupt(() => Fiber.interrupt(control)),
