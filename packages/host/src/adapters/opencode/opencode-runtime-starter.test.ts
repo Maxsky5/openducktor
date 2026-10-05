@@ -403,13 +403,15 @@ describe("createOpenCodeRuntimeStarter", () => {
       expect(handle.effectiveExecutablePath).toBe(opencodeBinary);
       expect(portProbeCalls).toEqual([43123, 43123, 43123]);
       await waitFor(() => existsSync(environmentCapturePath));
-      expect(JSON.parse(await readFile(environmentCapturePath, "utf8"))).toEqual({
+      const { cwd, ...environment } = JSON.parse(await readFile(environmentCapturePath, "utf8"));
+      expect(environment).toEqual({
         password: null,
         username: null,
         configContent: '{"logLevel":"WARN"}',
         odtNames: [],
-        cwd: await realpath(launchDirectory),
       });
+      // Compare resolved paths: Windows can report the short 8.3 name, macOS the /private path.
+      expect(await realpath(cwd)).toBe(await realpath(launchDirectory));
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
       expect(exits).toEqual([]);
     } finally {
