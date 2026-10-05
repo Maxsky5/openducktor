@@ -301,6 +301,10 @@ export const createAgentSessionLiveStateService = ({
       return result;
     });
 
+  // A lifecycle action drains admitted controls. It stops and releases the sessions itself.
+  const runAdmittedControl: typeof runControl = (scope, control, isCommitted) =>
+    runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
+
   const service: AgentSessionLiveStateService = {
     refresh: (input) =>
       refreshGate.run(
@@ -478,9 +482,9 @@ export const createAgentSessionLiveStateService = ({
       }),
     ),
     updateSessionModel: (input) =>
-      runControl(input, (adapter) => adapter.updateSessionModel(input)),
+      runAdmittedControl(input, (adapter) => adapter.updateSessionModel(input)),
     updateSessionTitle: (input) =>
-      runControl(
+      runAdmittedControl(
         input,
         (adapter) => adapter.updateSessionTitle(input),
         (outcome) => outcome.status === "renamed",

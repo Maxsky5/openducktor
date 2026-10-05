@@ -190,6 +190,58 @@ describe("shared live runtime across repositories", () => {
     expect(starts).toEqual([startInput]);
   });
 
+  test("admits model and title updates only while the kind accepts controls", async () => {
+    const admission = createTestRuntimeAdmissionGate();
+    const { service } = createHarness({ runtimeAdmission: admission });
+    const calls: string[] = [];
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        sharedAdapter("codex-runtime", "codex", {
+          listSnapshots: () => Effect.succeed([]),
+          updateSessionModel: () => Effect.sync(() => void calls.push("model")),
+          updateSessionTitle: () =>
+            Effect.sync(() => {
+              calls.push("title");
+              return { status: "renamed" as const };
+            }),
+        }),
+      ),
+    );
+    const sessionRef = {
+      repoPath: "/repo-a",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo-a",
+      externalSessionId: "session-1",
+    };
+    const modelInput = {
+      ...sessionRef,
+      sessionScope: { kind: "repository" as const },
+      model: null,
+    };
+    const titleInput = { ...sessionRef, title: "Renamed" };
+
+    // A lifecycle action holds the kind, so it must not detach the adapter under these updates.
+    admission.close("codex", {
+      state: "restarting",
+      message: "The Codex runtime is restarting.",
+      nextAction: "Wait for the runtime to become ready.",
+    });
+    for (const update of [
+      service.updateSessionModel(modelInput),
+      service.updateSessionTitle(titleInput),
+    ]) {
+      expect((await expectHostFailure(update)).message).toBe(
+        "The Codex runtime is restarting. Wait for the runtime to become ready.",
+      );
+    }
+    expect(calls).toEqual([]);
+
+    admission.open("codex");
+    await Effect.runPromise(service.updateSessionModel(modelInput));
+    await Effect.runPromise(service.updateSessionTitle(titleInput));
+    expect(calls).toEqual(["model", "title"]);
+  });
+
   test("runtime release publishes removals for the sessions of every repository", async () => {
     const { events, service } = createHarness();
     const first = snapshot(ref("/repo-a", "session-a"));
