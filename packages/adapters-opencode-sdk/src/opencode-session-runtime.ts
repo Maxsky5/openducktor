@@ -306,14 +306,32 @@ export const createPrepareOpencodeSessionRuntime = (
       }
     };
 
-    let readSessionSourcesTail = Promise.resolve();
+    const attachTails = new Map<string, Promise<void>>();
+    const pendingSends = new Set<{ ref: SessionRef; controller: AbortController }>();
+    const setAttachTail = (repoPath: string, tail: Promise<void>): void => {
+      attachTails.set(repoPath, tail);
+      void tail.then(() => {
+        if (attachTails.get(repoPath) === tail) attachTails.delete(repoPath);
+      });
+    };
+    const cancelPendingSends = (ref: SessionRef, action: "stopped" | "released"): void => {
+      for (const pending of pendingSends) {
+        if (agentSessionRefsEqual(pending.ref, ref)) {
+          pending.controller.abort(
+            new Error(
+              `Pending OpenCode message for session '${ref.externalSessionId}' was canceled because the session was ${action}. Resume the session to send a new message.`,
+            ),
+          );
+        }
+      }
+    };
     const authorizedRootsByRepo = new Map<string, AgentSessionAuthorizedRoot[]>();
     const admittedRoots = new Map<string, AgentSessionAuthorizedRoot>();
     const readSessionSources = (
       repoPath: string,
       roots?: AgentSessionAuthorizedRoot[],
     ): Promise<OpencodeRuntimeSnapshotRead> => {
-      const read = readSessionSourcesTail.then(async () => {
+      const read = (attachTails.get(repoPath) ?? Promise.resolve()).then(async () => {
         requireActive();
         const foreignRoot = roots?.find((root) => root.repoPath !== repoPath);
         if (foreignRoot) {
@@ -430,9 +448,12 @@ export const createPrepareOpencodeSessionRuntime = (
           for (const finish of finishPermissionSetups) finish();
         }
       });
-      readSessionSourcesTail = read.then(
-        () => undefined,
-        () => undefined,
+      setAttachTail(
+        repoPath,
+        read.then(
+          () => undefined,
+          () => undefined,
+        ),
       );
       return read;
     };
@@ -589,11 +610,50 @@ export const createPrepareOpencodeSessionRuntime = (
         });
         return summary;
       },
-      sendUserMessage: (messageInput) => controlAdapter.sendUserMessage(messageInput),
+      sendUserMessage: (messageInput) => {
+        const pending = { ref: messageInput, controller: new AbortController() };
+        pendingSends.add(pending);
+        let markSent!: () => void;
+        const sent = new Promise<void>((resolve) => {
+          markSent = resolve;
+        });
+        const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve())
+          .then(() => {
+            requireActive();
+            pending.controller.signal.throwIfAborted();
+            return controlAdapter.sendUserMessage(messageInput, {
+              signal: pending.controller.signal,
+              onSent: () => {
+                pendingSends.delete(pending);
+                markSent();
+              },
+            });
+          })
+          .finally(() => {
+            pendingSends.delete(pending);
+          });
+        // Reads can restore permissions, so hold them until the native call or failure.
+        // A pending reply or stream admission must not block reads.
+        setAttachTail(
+          messageInput.repoPath,
+          Promise.race([
+            sent,
+            sending.then(
+              () => undefined,
+              () => undefined,
+            ),
+          ]),
+        );
+        return sending;
+      },
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),
       updateSessionTitle: (titleInput) => controlAdapter.updateSessionTitle(titleInput),
-      stopSession: (ref) => controlAdapter.stopSession(ref),
+      stopSession: (ref) => {
+        cancelPendingSends(ref, "stopped");
+        return controlAdapter.stopSession(ref);
+      },
       releaseSession: async (ref) => {
+        cancelPendingSends(ref, "released");
         await controlAdapter.releaseSession(ref);
         const admittedRoot = admittedRoots.get(ref.externalSessionId);
         if (admittedRoot && agentSessionRefsEqual(admittedRoot, ref)) {
@@ -637,6 +697,15 @@ export const createPrepareOpencodeSessionRuntime = (
     let observationReleased = false;
     const release = async (): Promise<void> => {
       released = true;
+      for (const pending of pendingSends) {
+        pending.controller.abort(
+          new Error(
+            `Pending OpenCode message for session '${pending.ref.externalSessionId}' was canceled because runtime '${input.runtimeId}' was released. Reconnect the runtime to send a new message.`,
+          ),
+        );
+      }
+      pendingSends.clear();
+      attachTails.clear();
       forwardingListener = null;
       mcpBindings.clear();
       const failures: Error[] = [];

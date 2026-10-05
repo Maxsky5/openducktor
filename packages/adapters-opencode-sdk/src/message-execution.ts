@@ -32,6 +32,8 @@ type PreparedUserSend = {
     session: SessionRecord;
     messageId: string;
     modelInput: ReturnType<typeof normalizeModelInput>;
+    onSent: (() => void) | undefined;
+    signal: AbortSignal | undefined;
   }) => Promise<{ assistantMessageId: string | null }>;
 };
 
@@ -43,12 +45,19 @@ export type AdmittedUserMessage = {
   model?: AgentModelSelection;
 };
 
-export const sendUserMessage = async (input: {
-  session: SessionRecord;
-  request: SendAgentUserMessageInput;
-  messageId?: string;
-  admission?: Promise<void>;
-}): Promise<AdmittedUserMessage> => {
+export type UserSendOptions = {
+  onSent?: () => void;
+  signal?: AbortSignal;
+};
+
+export const sendUserMessage = async (
+  input: {
+    session: SessionRecord;
+    request: SendAgentUserMessageInput;
+    messageId?: string;
+    admission?: Promise<void>;
+  } & UserSendOptions,
+): Promise<AdmittedUserMessage> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
   let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
@@ -104,6 +113,8 @@ export const sendUserMessage = async (input: {
       session: input.session,
       messageId,
       modelInput,
+      onSent: input.onSent,
+      signal: input.signal,
     });
     let assistantMessageId: string | null = null;
     if (input.admission) {
@@ -330,7 +341,7 @@ export const usesPromptAsyncTransport = (parts: SendAgentUserMessageInput["parts
 
 const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend => {
   return {
-    execute: async ({ session, messageId, modelInput }) => {
+    execute: async ({ session, messageId, modelInput, onSent, signal }) => {
       const promptParts = toPromptParts(request.parts, session.input.workingDirectory);
       const promptRequest: Parameters<typeof session.client.session.promptAsync>[0] = {
         sessionID: session.externalSessionId,
@@ -351,7 +362,10 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         promptRequest.agent = modelInput.agent;
       }
 
-      const response = await session.client.session.promptAsync(promptRequest);
+      signal?.throwIfAborted();
+      const pending = session.client.session.promptAsync(promptRequest);
+      onSent?.();
+      const response = await pending;
       if (response.error) {
         throw toOpenCodeRequestError("prompt session", response.error, response.response);
       }
@@ -367,7 +381,7 @@ const prepareSlashCommandSend = (
   slashCommandRequest: SlashCommandExecutionRequest,
 ): PreparedUserSend => {
   return {
-    execute: async ({ session, messageId, modelInput }) => {
+    execute: async ({ session, messageId, modelInput, onSent, signal }) => {
       const commandModel = toCommandModelInput(modelInput);
 
       const commandRequest: Parameters<typeof session.client.session.command>[0] = {
@@ -386,10 +400,13 @@ const prepareSlashCommandSend = (
       if (modelInput.agent) {
         commandRequest.agent = modelInput.agent;
       }
-      const response = await session.client.session.command(commandRequest, {
+      signal?.throwIfAborted();
+      const pending = session.client.session.command(commandRequest, {
         // SAFETY: The SDK calls standard fetch; Bun adds an unused preconnect member to its ambient type.
         fetch: fetchOpenCodeCommand as typeof globalThis.fetch,
       });
+      onSent?.();
+      const response = await pending;
       if (response.error) {
         throw toOpenCodeRequestError("run slash command", response.error, response.response);
       }
@@ -401,7 +418,7 @@ const prepareSlashCommandSend = (
 };
 
 const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
-  execute: async ({ session, modelInput }) => {
+  execute: async ({ session, modelInput, onSent, signal }) => {
     if (!modelInput.model) {
       throw toOpenCodeRequestError(
         "compact session",
@@ -409,12 +426,15 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
       );
     }
     try {
-      const response = await session.client.session.summarize({
+      signal?.throwIfAborted();
+      const pending = session.client.session.summarize({
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
         providerID: modelInput.model.providerID,
         modelID: modelInput.model.modelID,
       });
+      onSent?.();
+      const response = await pending;
       if ("error" in response && response.error) {
         throw toOpenCodeRequestError("compact session", response.error, response.response);
       }
