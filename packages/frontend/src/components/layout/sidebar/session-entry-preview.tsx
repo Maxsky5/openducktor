@@ -182,7 +182,7 @@ export function SessionEntryPreview({
           align="start"
           sideOffset={12}
           collisionPadding={12}
-          className="w-[420px] max-w-[calc(100vw-24px)] max-h-[min(680px,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain break-words rounded-xl p-0 text-popover-foreground shadow-lg"
+          className="w-[420px] max-w-[calc(100vw-24px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain break-words rounded-xl p-0 text-popover-foreground shadow-lg"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             if (keyboard.current) content.current?.focus();
