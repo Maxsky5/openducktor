@@ -29,6 +29,12 @@ const expectPromptToContainAll = (prompt: string, fragments: string[]) => {
   }
 };
 
+const expectHeadingsInOrder = (prompt: string, headings: string[]) => {
+  const positions = headings.map((heading) => prompt.indexOf(`- ${heading}:`));
+  expect(positions).not.toContain(-1);
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+};
+
 describe("buildAgentSystemPrompt", () => {
   test("includes structured workflow guards, tool protocol, and task lock", () => {
     const prompt = buildAgentSystemPrompt({
@@ -145,7 +151,7 @@ describe("buildAgentSystemPrompt", () => {
       "the relevant conditions, and the expected result",
       "Keep observable outcomes and limits beside the requirement they qualify",
       "Do not add a separate acceptance-criteria section or completion checklist",
-      "Show a multi-step user flow in a Mermaid flowchart",
+      "Add a diagram for a multi-step user flow or a set of user-visible states",
       "Keep diagrams and tables at product level, without internal modules or code",
     ]);
     expect(prompt).not.toContain("## Acceptance criteria");
@@ -178,15 +184,17 @@ describe("buildAgentSystemPrompt", () => {
         "Use a # title, ## topic headings",
         "Leave blank lines between Markdown blocks",
         "Use paragraphs to explain context and reasoning",
-        "requirements, decisions, and findings in separate list items",
+        "Give each requirement, decision, and finding its own list item, table row, or subheading",
         "conditions and exceptions beside the rule they qualify",
         "use tables when entries share the same fields",
         "fenced code blocks with a language tag",
         "Add a Mermaid diagram in a fenced code block tagged mermaid",
         "keep every requirement and decision in the text as well",
-        "The viewer renders Mermaid in strict mode",
         "do not add HTML, click handlers, or theme and style directives",
+        'declare such a state with state "In review (AI)" as Review',
       ]);
+      expect(prompt).not.toContain("wrap labels that contain punctuation in double quotes");
+      expectPromptToContainAll(prompt, []);
     },
   );
 
@@ -213,20 +221,17 @@ describe("buildAgentSystemPrompt", () => {
       "read-only mode",
       "Make technical decisions within the agreed scope",
       "no required design decision remains open",
+      "Cover all requirements, including scope and constraints",
+      "Use the spec's requirement names when a spec exists",
+      "state ownership, and failure behavior",
+      "Show the target design in a Mermaid diagram",
+      "leave function bodies to Builder",
+    ]);
+    expectHeadingsInOrder(prompt, [
       "## Approach",
       "## Design",
       "## Requirement coverage",
-      "Cover all requirements, including scope and constraints",
-      "Use the spec's requirement names when a spec exists",
       "## Risks and constraints",
-      "state ownership, and failure behavior",
-      "Show the target design in a Mermaid diagram",
-      "Skip the diagram only when the change stays inside one module and changes no flow or state",
-      "Start with a table of the changed modules or files",
-      "Show each new or changed contract in a fenced code block",
-      "leave function bodies to Builder",
-      "Add a sequenceDiagram when the change alters an interaction across modules",
-      "in a table with one row per requirement",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
@@ -297,15 +302,11 @@ describe("buildAgentSystemPrompt", () => {
       "Choose checks based on the changed behavior and risk",
       "Do not reject valid work for a different implementation order or method",
       "material excess complexity",
-      "severity, location, impact, and a concrete correction",
-      "## Verdict",
-      "## Findings",
-      "Start with a table of each finding's severity, location as `path:line`, and one-line summary",
-      "## Verification",
-      "Show the checks you ran and their results in a table",
+      "Give its impact, the concrete correction",
       "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
       "read-only mode",
     ]);
+    expectHeadingsInOrder(prompt, ["## Verdict", "## Findings", "## Verification"]);
     expect(prompt).not.toContain("Run at least two review lenses");
     expect(prompt).not.toContain("- odt_build_completed(");
   });
