@@ -7,6 +7,11 @@ export const showSessionStartMessageRecovery = (result: SessionStartWorkflowResu
   toast.error("Session started, but the first message failed.", {
     description: result.postStartActionError.message,
     duration: Infinity,
+    classNames: {
+      toast: "!flex-col !items-stretch",
+      content: "w-full",
+      actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
+    },
     action: {
       label: "Retry message",
       onClick: () => {

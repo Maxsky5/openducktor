@@ -1,7 +1,10 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { createElement } from "react";
 import { toast, type Action } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { createSonnerNotificationAdapter } from "@/features/notifications/notification-delivery";
 import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
 import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
@@ -9,6 +12,48 @@ import type { NotificationBridge } from "@/lib/shell-bridge";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionStartWorkflowRunner } from "./session-start-orchestration";
+import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
+
+test("renders Retry below the recovery error at full width", async () => {
+  const description = "Recovery layout test: the first message failed";
+  const retry = mock(async () => {});
+  const view = render(createElement(Toaster));
+  let toastId: string | number | undefined;
+  try {
+    act(() => {
+      showSessionStartMessageRecovery({
+        externalSessionId: "layout-session",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        postStartActionError: new Error(description),
+        retryPostStartMessage: retry,
+      });
+      toastId = toast
+        .getHistory()
+        .find((item) => "description" in item && item.description === description)?.id;
+    });
+    const error = await screen.findByText(description, {}, { timeout: 800 });
+    const toastElement = error.closest<HTMLElement>("[data-sonner-toast]");
+    if (!toastElement) throw new Error("The recovery toast was not rendered.");
+    const retryButton = within(toastElement).getByRole("button", { name: "Retry message" });
+    const content = error.closest<HTMLElement>("[data-content]");
+    if (!content) throw new Error("The recovery error content was not rendered.");
+    expect(toastElement.className).toContain("!flex-col");
+    expect(toastElement.className).toContain("!items-stretch");
+    expect(content.className).toContain("w-full");
+    expect(retryButton.className).toContain("!w-full");
+    expect(retryButton.className).toContain("!bg-primary");
+    expect(retryButton.className).toContain("!text-primary-foreground");
+    const children = Array.from(toastElement.children);
+    expect(children.indexOf(content)).toBeLessThan(children.indexOf(retryButton));
+    expect(within(toastElement).getByRole("button", { name: "Close toast" })).toBeDefined();
+    fireEvent.click(retryButton);
+    expect(retry).toHaveBeenCalledTimes(1);
+  } finally {
+    if (toastId !== undefined) act(() => toast.dismiss(toastId));
+    view.unmount();
+  }
+});
 
 test.each(["in_app", "both", "os", "disabled"] as const)(
   "shows one recovery toast and preserves external delivery with %s notifications",
