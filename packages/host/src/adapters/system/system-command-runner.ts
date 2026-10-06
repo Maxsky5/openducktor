@@ -17,7 +17,8 @@ import type {
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 
 export type CreateSystemCommandRunnerInput = {
-  env?: NodeJS.ProcessEnv;
+  /** Reads the environment when a command runs, so it uses the latest user PATH. */
+  readEnv?: () => NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
 };
 
@@ -44,17 +45,16 @@ const firstNonEmptyLine = (value: string): string | null =>
     .find(Boolean) ?? null;
 
 export const createSystemCommandRunner = ({
-  env: inputEnv = process.env,
+  readEnv = () => process.env,
   platform = process.platform,
 }: CreateSystemCommandRunnerInput = {}): SystemCommandPort => {
-  const env = normalizeProcessEnvironment(inputEnv, platform);
   const runCommandAllowFailure: SystemCommandPort["runCommandAllowFailure"] = (
     command,
     args,
     options = {},
   ) =>
     Effect.gen(function* () {
-      const commandEnv = normalizeProcessEnvironment({ ...env, ...options.env }, platform);
+      const commandEnv = normalizeProcessEnvironment({ ...readEnv(), ...options.env }, platform);
       const resolvedCommand = yield* resolveCommandPath(
         command,
         { env: commandEnv },
@@ -211,7 +211,7 @@ export const createSystemCommandRunner = ({
 
   return {
     resolveCommandPath(command, options?: SystemCommandResolveOptions) {
-      const commandEnv = normalizeProcessEnvironment(options?.env ?? env, platform);
+      const commandEnv = normalizeProcessEnvironment(options?.env ?? readEnv(), platform);
       return resolveCommandPath(
         command,
         { env: commandEnv, searchPath: options?.searchPath },

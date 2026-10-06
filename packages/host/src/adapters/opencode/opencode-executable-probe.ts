@@ -66,7 +66,7 @@ export type CreateOpenCodeExecutableProbeInput = {
   connectTimeoutMs?: number;
   platform?: ProcessTreePlatform;
   portAllocator?: LocalPortAllocator;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   processTreeTerminator?: ProcessTreeTerminator;
   readinessProbe?: OpenCodeReadinessProbe;
   retryDelayMs?: number;
@@ -82,7 +82,7 @@ export const createOpenCodeExecutableProbe = ({
     pickFreePort().pipe(
       Effect.mapError((cause) => toHostOperationError(cause, "opencodeExecutableProbe.pickPort")),
     ),
-  processEnv = process.env,
+  readEnv = () => process.env,
   processTreeTerminator = terminateProcessTree,
   readinessProbe = isOpenCodeHealthy,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
@@ -99,7 +99,7 @@ export const createOpenCodeExecutableProbe = ({
             createProcessCommandLaunch(
               executablePath,
               ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
-              buildOpenCodeExecutableProbeEnvironment(processEnv),
+              buildOpenCodeExecutableProbeEnvironment(readEnv()),
               platform,
             ),
           catch: (cause) =>

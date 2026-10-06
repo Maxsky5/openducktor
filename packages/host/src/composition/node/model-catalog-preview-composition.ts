@@ -3,9 +3,10 @@ import type { RuntimeDefinitionsService } from "../../application/runtimes/runti
 import { createModelCatalogPreviewService } from "../../application/runtimes/model-catalog-preview-service";
 import { createNodeModelCatalogPreview } from "../../adapters/runtimes/process-model-catalog-preview";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import { guardModelCatalogPreview } from "./user-path-guards";
 
 export const createModelCatalogPreviewComposition = (
-  { settingsConfig, toolDiscovery, processEnvironment }: NodeHostDefaultPorts,
+  { settingsConfig, toolDiscovery, userEnvironment, readEnv, startupEnv }: NodeHostDefaultPorts,
   gitPort: GitPort,
   runtimeDefinitionsService: RuntimeDefinitionsService,
   clientVersion?: string,
@@ -13,11 +14,13 @@ export const createModelCatalogPreviewComposition = (
   createModelCatalogPreviewService({
     gitPort,
     runtimeDefinitionsService,
-    readModels: createNodeModelCatalogPreview({
-      settingsConfig,
-      toolDiscovery,
-      processEnv: processEnvironment.environment,
-      processPathError: processEnvironment.error?.message ?? null,
-      clientVersion: clientVersion ?? processEnvironment.environment.npm_package_version ?? "0.0.0",
-    }),
+    readModels: guardModelCatalogPreview(
+      createNodeModelCatalogPreview({
+        settingsConfig,
+        toolDiscovery,
+        readEnv,
+        clientVersion: clientVersion ?? startupEnv.npm_package_version ?? "0.0.0",
+      }),
+      userEnvironment,
+    ),
   });

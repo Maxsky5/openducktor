@@ -10,11 +10,11 @@ export const createClaudeModelCatalogPreview =
   ({
     settingsConfig,
     toolDiscovery,
-    processEnv,
+    readEnv,
   }: {
     settingsConfig: SettingsConfigPort;
     toolDiscovery: ToolDiscoveryPort;
-    processEnv: NodeJS.ProcessEnv;
+    readEnv: () => NodeJS.ProcessEnv;
   }) =>
   (repoPath: string) =>
     Effect.gen(function* () {
@@ -24,7 +24,7 @@ export const createClaudeModelCatalogPreview =
         toolDiscovery,
       });
       return yield* Effect.tryPromise({
-        try: () => loadClaudeModelCatalog(repoPath, processEnv, executablePath, query),
+        try: () => loadClaudeModelCatalog(repoPath, readEnv(), executablePath, query),
         catch: (cause) => toHostOperationError(cause, "claudeModelCatalogPreview.read"),
       });
     });

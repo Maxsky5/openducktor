@@ -78,13 +78,13 @@ export const buildClaudeExecutableProbeOptions = ({
 
 export type CreateClaudeExecutableProbeInput = {
   initializationTimeoutMs?: number;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   queryFactory?: ClaudeQueryFactory;
 };
 
 export const createClaudeExecutableProbe = ({
   initializationTimeoutMs = DEFAULT_INITIALIZATION_TIMEOUT_MS,
-  processEnv = process.env,
+  readEnv = () => process.env,
   queryFactory = (input) => query(input),
 }: CreateClaudeExecutableProbeInput = {}): RuntimeExecutableProbePort => ({
   probeExecutable(executablePath) {
@@ -96,7 +96,7 @@ export const createClaudeExecutableProbe = ({
             prompt: createIdlePrompt(abortController.signal),
             options: buildClaudeExecutableProbeOptions({
               executablePath,
-              processEnv,
+              processEnv: readEnv(),
               abortController,
             }),
           }),

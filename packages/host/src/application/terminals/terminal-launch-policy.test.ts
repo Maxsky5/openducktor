@@ -43,7 +43,7 @@ describe("terminal launch policy", () => {
         createTerminalLaunchPolicy({
           filesystem,
           resolveEnvironment: createTerminalLaunchEnvironment({
-            processEnv,
+            readEnv: () => processEnv,
             platform: "darwin",
             readUserShell: () => null,
           }),
@@ -68,7 +68,7 @@ describe("terminal launch policy", () => {
         createTerminalLaunchPolicy({
           filesystem: nonDirectory,
           resolveEnvironment: createTerminalLaunchEnvironment({
-            processEnv: { SHELL: shellPath },
+            readEnv: () => ({ SHELL: shellPath }),
             platform: "darwin",
           }),
         })({ workingDir: "/file", context: {} }, { columns: 80, rows: 24 }),

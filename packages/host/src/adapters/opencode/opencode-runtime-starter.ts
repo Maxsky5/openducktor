@@ -40,7 +40,7 @@ export type CreateOpenCodeRuntimeStarterInput = {
   prepareLiveSessionAdapter: OpenCodeLiveSessionAdapterPreparer;
   /** Process working directory of the shared server. Sessions select their own directories. */
   launchDirectory: string;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   startupTimeoutMs?: number;
   connectTimeoutMs?: number;
   retryDelayMs?: number;
@@ -95,7 +95,7 @@ export const createOpenCodeRuntimeStarter = ({
   liveSessionLifecycle,
   prepareLiveSessionAdapter,
   launchDirectory,
-  processEnv = process.env,
+  readEnv = () => process.env,
   startupTimeoutMs = DEFAULT_STARTUP_TIMEOUT_MS,
   connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
@@ -128,7 +128,7 @@ export const createOpenCodeRuntimeStarter = ({
       const port = yield* portAllocator().pipe(
         Effect.mapError((cause) => toHostOperationError(cause, "opencodeRuntime.pickFreePort")),
       );
-      const runtimeEnv = buildManagedOpenCodeEnvironment(processEnv);
+      const runtimeEnv = buildManagedOpenCodeEnvironment(readEnv());
       const command = createProcessCommandLaunch(
         binary,
         ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],

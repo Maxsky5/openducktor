@@ -255,7 +255,6 @@ describe("createOpenInToolsAdapter", () => {
     });
     const port = createOpenInToolsAdapter({
       platform: "win32",
-      processEnv: { ComSpec: String.raw`C:\Windows\System32\cmd.exe` },
       systemCommands,
     });
 
@@ -407,12 +406,12 @@ describe("createOpenInToolsAdapter", () => {
       );
       const systemCommands = createSystemCommandRunner({
         platform: "win32",
-        env: {
+        readEnv: () => ({
           PATH: toolDirectory,
           PATHEXT: ".CMD",
           ODT_OPEN_IN_MARKER: markerPath,
           ComSpec: process.env.ComSpec,
-        },
+        }),
       });
       const port = createOpenInToolsAdapter({ platform: "win32", systemCommands });
 

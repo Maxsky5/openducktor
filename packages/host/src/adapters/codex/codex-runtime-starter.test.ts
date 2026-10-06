@@ -168,7 +168,7 @@ describe("createCodexRuntimeStarter", () => {
         toolDiscovery: stubTools({ codex: codexBinary }),
         launchDirectory,
         // A host started from a workspace terminal can inherit workspace MCP values.
-        processEnv: {
+        readEnv: () => ({
           ...process.env,
           CODEX_CAPTURE_PATH: capturePath,
           ODT_WORKSPACE_ID: "inherited-workspace",
@@ -176,7 +176,7 @@ describe("createCodexRuntimeStarter", () => {
           ODT_HOST_TOKEN: "inherited-token",
           ODT_FORBID_WORKSPACE_ID_INPUT: "true",
           ODT_ALLOWED_TOOLS: "odt_read_task",
-        },
+        }),
         clientVersion: "0.3.1-test",
         requestTimeoutMs: 4000,
         now: () => new Date("2026-05-10T10:00:00.000Z"),
@@ -401,7 +401,7 @@ describe("createCodexRuntimeStarter", () => {
 
       const starter = createStarter({
         codexAppServer,
-        processEnv: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` },
+        readEnv: () => ({ ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` }),
         processTreeTerminator: () =>
           Effect.gen(function* () {
             markProcessCleanupStarted();
@@ -464,20 +464,20 @@ describe("createCodexRuntimeStarter", () => {
       const localAppData = join(root, "local-app-data");
       const starter = createStarter({
         systemCommands: createSystemCommandRunner({
-          env: {
+          readEnv: () => ({
             ...process.env,
             LOCALAPPDATA: localAppData,
             PATH: pathWithFakeRuntime,
             PATHEXT: ".CMD",
-          },
+          }),
           platform: "win32",
         }),
-        processEnv: {
+        readEnv: () => ({
           ...process.env,
           LOCALAPPDATA: localAppData,
           PATH: pathWithFakeRuntime,
           PATHEXT: ".CMD",
-        },
+        }),
         codexAppServer,
         clientVersion: "0.3.1-test",
         requestTimeoutMs: 4_000,

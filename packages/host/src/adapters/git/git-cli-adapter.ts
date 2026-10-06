@@ -71,7 +71,7 @@ export type CreateGitCliAdapterInput = (
   | { resolveCommand?: never; runner: GitCommandRunner }
   | { resolveCommand: ResolveGitCommand; runner?: never }
 ) & {
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
 };
 
 const FILE_LIST_ARGS = ["ls-files", "-t", "-s", "-co", "-k", "--exclude-standard", "-z", "--"];
@@ -146,9 +146,9 @@ const parseMaterializedGitFiles = (
   });
 
 export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort => {
-  const processEnv = input.processEnv ?? process.env;
+  const readEnv = input.readEnv ?? (() => process.env);
   const runner =
-    input.runner ?? createDefaultGitRunner(processEnv, { resolveCommand: input.resolveCommand });
+    input.runner ?? createDefaultGitRunner(readEnv, { resolveCommand: input.resolveCommand });
 
   const captureStatus = createGitReadCapture<GitFileStatus[]>();
   const captureBranch = createGitReadCapture<GitCurrentBranch>();

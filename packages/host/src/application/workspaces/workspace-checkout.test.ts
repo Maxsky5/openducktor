@@ -13,7 +13,7 @@ import { removeTestDirectory } from "../../test-support/temp-directory";
 import { classifyWorkspaceCheckout } from "./workspace-checkout";
 
 const git = createGitCliAdapter({
-  processEnv: gitFixtureEnv,
+  readEnv: () => gitFixtureEnv,
   resolveCommand: () => Effect.succeed("git"),
 });
 

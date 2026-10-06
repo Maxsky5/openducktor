@@ -109,7 +109,7 @@ const cleanupCodexProbe = ({
 
 export type CreateCodexExecutableProbeInput = {
   clientVersion?: string;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   requestTimeoutMs?: number;
   stopTimeoutMs?: number;
   platform?: ProcessTreePlatform;
@@ -118,7 +118,7 @@ export type CreateCodexExecutableProbeInput = {
 
 export const createCodexExecutableProbe = ({
   clientVersion = "0.0.0",
-  processEnv = process.env,
+  readEnv = () => process.env,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   platform = process.platform,
@@ -129,7 +129,7 @@ export const createCodexExecutableProbe = ({
       acquire: Effect.gen(function* () {
         const command = yield* Effect.try({
           try: () =>
-            createProcessCommandLaunch(executablePath, ["app-server"], processEnv, platform),
+            createProcessCommandLaunch(executablePath, ["app-server"], readEnv(), platform),
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.buildCommand", { executablePath }),
         });

@@ -26,9 +26,9 @@ export const createNodeWorkspaceProviderSetup = (
   const settings = createWorkspaceSettingsService(ports.settingsConfig);
   const { eventBus } = input;
   const fetchImplementation = input.azureDevOpsFetch ?? fetch;
-  const { git, configDir, systemCommands, toolDiscovery, processEnvironment } = ports;
+  const { git, configDir, startupEnv, systemCommands, toolDiscovery } = ports;
   const credentials = createWorkspaceProviderSetupCredentials({
-    clientId: resolveAzureDevOpsEntraClientId(processEnvironment.environment),
+    clientId: resolveAzureDevOpsEntraClientId(startupEnv),
     protectedStorage: createAzureDevOpsProtectedStorage({ configDir: configDir.root }),
     credentialIndex: createAzureDevOpsCredentialIndex({ configDir: configDir.root }),
     fetchImplementation,

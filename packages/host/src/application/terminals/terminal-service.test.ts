@@ -173,7 +173,7 @@ const makeService = async (
     workspaceSessions: { settings: targets.settings, store: targets.store },
     ptyPort: pty.port,
     resolveLaunchEnvironment: createTerminalLaunchEnvironment({
-      processEnv: { PATH: "/usr/bin" },
+      readEnv: () => ({ PATH: "/usr/bin" }),
       platform: "darwin",
       readUserShell: () => shellPath,
     }),

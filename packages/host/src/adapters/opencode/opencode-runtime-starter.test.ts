@@ -65,7 +65,7 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
     launchDirectory,
     liveSessionLifecycle,
     prepareLiveSessionAdapter,
-    processEnv,
+    readEnv,
     systemCommands,
     toolDiscovery,
     ...starterInput
@@ -81,8 +81,8 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
   const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
     systemCommands: systemCommands ?? createSystemCommands(),
   };
-  if (processEnv !== undefined) {
-    toolDiscoveryInput.env = processEnv;
+  if (readEnv !== undefined) {
+    toolDiscoveryInput.readEnv = readEnv;
   }
   const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
   const runtimeStarterInput: Parameters<typeof createEffectOpenCodeRuntimeStarter>[0] = {
@@ -120,8 +120,8 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
       }),
     ...starterInput,
   };
-  if (processEnv !== undefined) {
-    runtimeStarterInput.processEnv = processEnv;
+  if (readEnv !== undefined) {
+    runtimeStarterInput.readEnv = readEnv;
   }
   return createEffectOpenCodeRuntimeStarter(runtimeStarterInput);
 };
@@ -342,7 +342,7 @@ describe("createOpenCodeRuntimeStarter", () => {
       const portProbeCalls: number[] = [];
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
-        processEnv: {
+        readEnv: () => ({
           ...process.env,
           OPENCODE_SERVER_PASSWORD: "inherited-password",
           OPENCODE_SERVER_USERNAME: "inherited-username",
@@ -352,7 +352,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           ODT_HOST_TOKEN: "inherited-token",
           ODT_FORBID_WORKSPACE_ID_INPUT: "true",
           ODT_ALLOWED_TOOLS: "odt_read_task",
-        },
+        }),
         launchDirectory,
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 2000,
@@ -1149,10 +1149,10 @@ describe("createOpenCodeRuntimeStarter", () => {
       const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommandRunner({
-          env: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+          readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
           platform: "win32",
         }),
-        processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+        readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),

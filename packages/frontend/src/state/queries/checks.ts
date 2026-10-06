@@ -13,6 +13,8 @@ export type ChecksQueryDependencies = {
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
+// A forced runtime check resolves the user PATH again. That probe alone can take 15 seconds.
+const RUNTIME_CHECK_TIMEOUT_MS = 30_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
@@ -52,11 +54,12 @@ export const classifyDiagnosticsQueryError = (cause: unknown): ClassifiedDiagnos
 export const withDiagnosticsQueryTimeout = async <T>(
   promise: Promise<T>,
   scheduler: ScheduleTask,
+  timeoutMs = DIAGNOSTICS_QUERY_TIMEOUT_MS,
 ): Promise<T> => {
   const { promise: timeoutPromise, reject: rejectTimeout } = Promise.withResolvers<never>();
   const cancelTimeout = scheduler(() => {
-    rejectTimeout(new DiagnosticsQueryTimeoutError(DIAGNOSTICS_QUERY_TIMEOUT_MS));
-  }, DIAGNOSTICS_QUERY_TIMEOUT_MS);
+    rejectTimeout(new DiagnosticsQueryTimeoutError(timeoutMs));
+  }, timeoutMs);
 
   try {
     return await Promise.race([promise, timeoutPromise]);
@@ -79,7 +82,7 @@ export const runtimeCheckQueryOptions = (
   queryOptions({
     queryKey: checksQueryKeys.runtime(),
     queryFn: (): Promise<RuntimeCheck> =>
-      withDiagnosticsQueryTimeout(runtimeCheck(force), scheduler),
+      withDiagnosticsQueryTimeout(runtimeCheck(force), scheduler, RUNTIME_CHECK_TIMEOUT_MS),
     staleTime: RUNTIME_CHECK_STALE_TIME_MS,
   });
 

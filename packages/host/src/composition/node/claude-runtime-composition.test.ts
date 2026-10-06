@@ -99,6 +99,7 @@ const createComposition = (options: {
   const input: Parameters<typeof createClaudeRuntimeComposition>[0] = {
     liveSessionLifecycle: createLiveSessionLifecycle(options.calls),
     onBackgroundFailure: () => Effect.void,
+    readEnv: () => process.env,
     resolveMcpBridgeConnection: () =>
       Effect.succeed({
         workspaceId: "workspace-1",

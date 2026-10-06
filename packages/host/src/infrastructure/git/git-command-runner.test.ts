@@ -30,7 +30,7 @@ const withFakeGitCommand = async (run: (root: string, command: string) => Promis
 describe("createDefaultGitRunner", () => {
   test("runs an explicit Git command through the platform launch path", async () => {
     await withFakeGitCommand(async (root, command) => {
-      const runner = createDefaultGitRunner(process.env, {
+      const runner = createDefaultGitRunner(() => process.env, {
         command,
         platform: process.platform,
       });
@@ -48,7 +48,7 @@ describe("createDefaultGitRunner", () => {
   test("resolves Git lazily through the configured discovery function and caches success", async () => {
     await withFakeGitCommand(async (root, command) => {
       let resolveCount = 0;
-      const runner = createDefaultGitRunner(process.env, {
+      const runner = createDefaultGitRunner(() => process.env, {
         platform: process.platform,
         resolveCommand: () =>
           Effect.sync(() => {
@@ -73,7 +73,7 @@ for (const stdin of [undefined, ""]) {
     const root = await mkdtemp(path.join(tmpdir(), "odt-git-exit-"));
     try {
       await writeFile(path.join(root, "file.txt"), "hello\n");
-      const runner = createDefaultGitRunner(process.env, { command: "git" });
+      const runner = createDefaultGitRunner(() => process.env, { command: "git" });
       for (const [args, code] of [
         [["diff", "--no-index", "--", "file.txt", "file.txt"], 0],
         [["diff", "--no-index", "--", "/dev/null", "file.txt"], 1],

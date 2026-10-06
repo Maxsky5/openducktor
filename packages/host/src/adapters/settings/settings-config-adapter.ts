@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
-import { Clock, Deferred, Effect, FiberId } from "effect";
+import { Clock, Effect } from "effect";
 import { z } from "zod";
 import {
   type LoadedGlobalConfig,
@@ -27,6 +27,7 @@ import {
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { createSharedFlight } from "../../effect/shared-flight";
 import { parseJson } from "../../effect/json";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
@@ -138,11 +139,6 @@ export type CreateSettingsConfigAdapterInput = {
   ) => Effect.Effect<LoadedGlobalConfig, SettingsConfigError>;
 };
 
-type SettingsInitializationFlight = Deferred.Deferred<LoadedGlobalConfig, SettingsConfigError>;
-
-const makeSettingsInitializationFlight = (): SettingsInitializationFlight =>
-  Deferred.unsafeMake(FiberId.none);
-
 const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config: GlobalConfig) =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
@@ -206,29 +202,7 @@ export const createSettingsConfigAdapter = ({
       USER_SETTINGS_FILENAME,
     );
   const baseDir = path.dirname(resolvedConfigPath);
-  let initializationFlight: SettingsInitializationFlight | null = null;
-
-  const completeInitialization = (
-    legacyConfig: PersistedGlobalConfigV2 | null,
-    flight: SettingsInitializationFlight,
-    initializer: NonNullable<CreateSettingsConfigAdapterInput["initializeConfig"]>,
-  ) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        initializer(legacyConfig).pipe(
-          Effect.tap((config) => persistGlobalConfig(resolvedConfigPath, baseDir, config)),
-        ),
-      );
-      yield* Deferred.done(flight, exit);
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (initializationFlight === flight) {
-            initializationFlight = null;
-          }
-        }),
-      ),
-    );
+  const initialization = createSharedFlight<LoadedGlobalConfig, SettingsConfigError>();
 
   const initializeOnce = (legacyConfig: PersistedGlobalConfigV2 | null) => {
     if (!initializeConfig) {
@@ -240,23 +214,11 @@ export const createSettingsConfigAdapter = ({
       );
     }
     const initializer = initializeConfig;
-    return Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const reservation = yield* Effect.sync(() => {
-          if (initializationFlight) {
-            return { created: false as const, flight: initializationFlight };
-          }
-          const flight = makeSettingsInitializationFlight();
-          initializationFlight = flight;
-          return { created: true as const, flight };
-        });
-        if (reservation.created) {
-          yield* Effect.forkDaemon(
-            completeInitialization(legacyConfig, reservation.flight, initializer),
-          );
-        }
-        return yield* restore(Deferred.await(reservation.flight));
-      }),
+    // A caller that joins a running initialization gets its result. Its own legacy config is unused.
+    return initialization.run(
+      Effect.suspend(() => initializer(legacyConfig)).pipe(
+        Effect.tap((config) => persistGlobalConfig(resolvedConfigPath, baseDir, config)),
+      ),
     );
   };
 

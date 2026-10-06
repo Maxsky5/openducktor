@@ -1147,6 +1147,70 @@ describe("createElectronHostCommandRouter", () => {
     expect(startCalls).toBe(0);
   });
 
+  test("resolves PATH again on a forced runtime check and then allows starts", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 15000 ms.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    let probeCalls = 0;
+    let startCalls = 0;
+    const readyDevServers = createDevServerProcesses();
+    const devServerProcesses: DevServerProcessPort = {
+      start: (input) =>
+        Effect.suspend(() => {
+          startCalls += 1;
+          return readyDevServers.start(input);
+        }),
+    };
+    const router = await createElectronHostCommandRouter({
+      devServerProcesses,
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: {
+        ...pathFailure(diagnostic),
+        readLoginShellPath: () =>
+          Effect.suspend(() => {
+            probeCalls += 1;
+            return probeCalls === 1 ? Effect.fail(diagnostic) : Effect.succeed("/opt/tools/bin");
+          }),
+      },
+      runtimeHealth: createRuntimeHealth(),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: {
+            repo: repoConfig({
+              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+            }),
+          },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+      systemCommands: createSystemCommands(),
+    });
+    const startDevServer = () =>
+      router.invoke("dev_server_start", {
+        repoPath: "/repo",
+        owner: { kind: "task", taskId: "task-1" },
+      });
+
+    await expect(router.invoke("runtime_check", { force: false })).resolves.toMatchObject({
+      pathOk: false,
+      errors: [diagnostic.message],
+    });
+    await expect(startDevServer()).rejects.toThrow(diagnostic.message);
+    await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
+      pathOk: true,
+      errors: [],
+    });
+    await startDevServer();
+
+    expect(probeCalls).toBe(2);
+    expect(startCalls).toBe(1);
+  });
+
   test("blocks every runtime start when the user PATH is unavailable", async () => {
     const diagnostic = new ProcessEnvironmentError({
       message:

@@ -6,7 +6,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeHealth,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
@@ -16,6 +16,11 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createUserEnvironment } from "../../infrastructure/process/user-environment";
+import type {
+  UserEnvironmentPort,
+  UserEnvironmentResolution,
+} from "../../ports/user-environment-port";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
@@ -172,14 +177,49 @@ const createTaskStore = (
           }),
       }),
   });
+const resolutionOf = (message: string | null): UserEnvironmentResolution => ({
+  environment: {},
+  error:
+    message === null
+      ? null
+      : new ProcessEnvironmentError({ message, reason: "timed_out", shell: "/bin/zsh" }),
+});
+/** A user environment whose PATH stays as given. */
+const userEnvironmentWith = (error: string | null = null) =>
+  createUserEnvironment(resolutionOf(error), Effect.succeed(resolutionOf(error)));
+/** A user environment whose refresh applies the next queued PATH error. */
+const createRefreshableUserEnvironment = (
+  initialError: string | null,
+  refreshErrors: (string | null)[],
+) => {
+  let refreshCount = 0;
+  const userEnvironment = createUserEnvironment(
+    resolutionOf(initialError),
+    Effect.sync(() => {
+      refreshCount += 1;
+      return resolutionOf(refreshErrors.shift() ?? null);
+    }),
+  );
+  return { userEnvironment, refreshCount: () => refreshCount };
+};
+const createEnabledRuntimeSettings = () => {
+  const config = createDefaultGlobalConfig();
+  config.agentRuntimes.opencode.enabled = true;
+  return createSettingsConfig(config);
+};
 const createSystemDiagnosticsServiceForTest = (
-  input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
+  input: Omit<
+    Parameters<typeof createSystemDiagnosticsService>[0],
+    "toolDiscovery" | "userEnvironment"
+  > & {
     toolDiscovery?: ToolDiscoveryPort;
+    userEnvironment?: UserEnvironmentPort;
   },
 ) =>
   createSystemDiagnosticsService({
     ...input,
     toolDiscovery: input.toolDiscovery ?? createToolDiscoveryPort(),
+    userEnvironment: input.userEnvironment ?? userEnvironmentWith(),
   });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports Git, runtime health, and config enablement", async () => {
@@ -346,7 +386,7 @@ describe("createSystemDiagnosticsService", () => {
       shell: "/bin/zsh",
     });
     const service = createSystemDiagnosticsServiceForTest({
-      pathError: processEnvironmentError.message,
+      userEnvironment: userEnvironmentWith(processEnvironmentError.message),
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
@@ -359,6 +399,109 @@ describe("createSystemDiagnosticsService", () => {
 
     expect(check.pathOk).toBe(false);
     expect(check.errors).toContain(processEnvironmentError.message);
+  });
+  test("runtimeCheck resolves PATH again only when the check is forced", async () => {
+    const pathError = "Failed to resolve PATH from the interactive login shell.";
+    const { userEnvironment, refreshCount } = createRefreshableUserEnvironment(pathError, [null]);
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+      userEnvironment,
+    });
+
+    const cachedCheck = await Effect.runPromise(service.runtimeCheck(false));
+    const forcedCheck = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(cachedCheck.pathOk).toBe(false);
+    expect(cachedCheck.errors).toContain(pathError);
+    expect(refreshCount()).toBe(1);
+    expect(forcedCheck.pathOk).toBe(true);
+    expect(forcedCheck.errors).not.toContain(pathError);
+  });
+  test("runtimeCheck does not reuse a cached result after a refresh changes PATH and fails", async () => {
+    const pathError = "Failed to resolve PATH: login shell timed out.";
+    const { userEnvironment } = createRefreshableUserEnvironment(null, [pathError]);
+    let failHealth = false;
+    const runtimeHealthPort: RuntimeHealthPort = {
+      readVersion: () => Effect.succeed(null),
+      getRuntimeHealth: (kind) =>
+        failHealth
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "test.runtimeHealth",
+                message: "Runtime health probe failed.",
+              }),
+            )
+          : Effect.succeed(runtimeHealth(kind)),
+    };
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: runtimeHealthPort,
+      settingsConfig: createEnabledRuntimeSettings(),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+      userEnvironment,
+    });
+
+    const healthyCheck = await Effect.runPromise(service.runtimeCheck(false));
+    failHealth = true;
+    const forcedResult = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.either));
+    failHealth = false;
+    const nextCheck = await Effect.runPromise(service.runtimeCheck(false));
+
+    expect(healthyCheck.pathOk).toBe(true);
+    expect(forcedResult._tag).toBe("Left");
+    expect(nextCheck.pathOk).toBe(false);
+    expect(nextCheck.errors).toContain(pathError);
+  });
+  test("runtimeCheck keeps the result of a newer PATH resolution over an older overlapping check", async () => {
+    const pathError = "Failed to resolve PATH: login shell timed out.";
+    const { userEnvironment } = createRefreshableUserEnvironment(pathError, [null]);
+    const program = Effect.gen(function* () {
+      const olderCheckStarted = yield* Deferred.make<void>();
+      const releaseOlderCheck = yield* Deferred.make<void>();
+      let healthCalls = 0;
+      const runtimeHealthPort: RuntimeHealthPort = {
+        readVersion: () => Effect.succeed(null),
+        getRuntimeHealth: (kind) =>
+          Effect.gen(function* () {
+            healthCalls += 1;
+            if (healthCalls === 1) {
+              yield* Deferred.succeed(olderCheckStarted, undefined);
+              yield* Deferred.await(releaseOlderCheck);
+            }
+            return runtimeHealth(kind);
+          }),
+      };
+      const service = createSystemDiagnosticsServiceForTest({
+        runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+        runtimeHealth: runtimeHealthPort,
+        settingsConfig: createEnabledRuntimeSettings(),
+        systemCommands: createSystemCommandPort(),
+        repoStoreDiagnostics: createTaskStore(),
+        userEnvironment,
+      });
+
+      const olderCheck = yield* Effect.fork(service.runtimeCheck(false));
+      yield* Deferred.await(olderCheckStarted);
+      const forcedCheck = yield* service.runtimeCheck(true);
+      yield* Deferred.succeed(releaseOlderCheck, undefined);
+      const olderResult = yield* Fiber.join(olderCheck);
+      const nextCheck = yield* service.runtimeCheck(false);
+      return { forcedCheck, olderResult, nextCheck, healthCalls };
+    });
+
+    const { forcedCheck, olderResult, nextCheck, healthCalls } = await Effect.runPromise(program);
+
+    expect(olderResult.pathOk).toBe(false);
+    expect(forcedCheck.pathOk).toBe(true);
+    expect(nextCheck.pathOk).toBe(true);
+    expect(nextCheck.errors).toEqual([]);
+    // The next ordinary check reads the cached result of the forced check.
+    expect(healthCalls).toBe(2);
   });
   test("runtimeCheck reads config without initialization when PATH is unavailable", async () => {
     const pathError = "Failed to resolve PATH from the interactive login shell.";
@@ -373,7 +516,7 @@ describe("createSystemDiagnosticsService", () => {
       },
     } satisfies SettingsConfigPort;
     const service = createSystemDiagnosticsServiceForTest({
-      pathError,
+      userEnvironment: userEnvironmentWith(pathError),
       runtimeDefinitionsService: createRuntimeDefinitions(["codex"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig,
@@ -400,7 +543,9 @@ describe("createSystemDiagnosticsService", () => {
       readConfig: () => Effect.fail(settingsError),
     } satisfies SettingsConfigPort;
     const service = createSystemDiagnosticsServiceForTest({
-      pathError: "Failed to resolve PATH from the interactive login shell.",
+      userEnvironment: userEnvironmentWith(
+        "Failed to resolve PATH from the interactive login shell.",
+      ),
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig,

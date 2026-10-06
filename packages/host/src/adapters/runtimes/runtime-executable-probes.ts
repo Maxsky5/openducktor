@@ -5,21 +5,18 @@ import { createOpenCodeExecutableProbe } from "../opencode/opencode-executable-p
 
 export const createRuntimeExecutableProbes = ({
   clientVersion,
-  processEnv,
+  readEnv,
 }: {
   clientVersion?: string;
-  processEnv?: NodeJS.ProcessEnv;
-} = {}): RuntimeExecutableProbesByKind => {
-  const codexInput: Parameters<typeof createCodexExecutableProbe>[0] = {};
+  readEnv: () => NodeJS.ProcessEnv;
+}): RuntimeExecutableProbesByKind => {
+  const codexInput: Parameters<typeof createCodexExecutableProbe>[0] = { readEnv };
   if (clientVersion) {
     codexInput.clientVersion = clientVersion;
   }
-  if (processEnv) {
-    codexInput.processEnv = processEnv;
-  }
   return {
-    claude: createClaudeExecutableProbe(processEnv ? { processEnv } : {}),
+    claude: createClaudeExecutableProbe({ readEnv }),
     codex: createCodexExecutableProbe(codexInput),
-    opencode: createOpenCodeExecutableProbe(processEnv ? { processEnv } : {}),
+    opencode: createOpenCodeExecutableProbe({ readEnv }),
   };
 };

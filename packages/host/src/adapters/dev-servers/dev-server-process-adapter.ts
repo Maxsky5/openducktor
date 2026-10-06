@@ -25,7 +25,7 @@ import {
 } from "../../ports/dev-server-process-port";
 
 export type CreateDevServerProcessAdapterInput = {
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   startGracePeriodMs?: number;
   stopTimeoutMs?: number;
 };
@@ -144,7 +144,7 @@ const trackDevServerProcess = ({
 };
 
 export const createDevServerProcessAdapter = ({
-  processEnv = process.env,
+  readEnv = () => process.env,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateDevServerProcessAdapterInput = {}): DevServerProcessPort => ({
@@ -153,7 +153,7 @@ export const createDevServerProcessAdapter = ({
       Effect.gen(function* () {
         const { command, cwd, env, onExit, onOutput } = input;
         const commandEnv = sanitizeChildProcessEnvironment(
-          { ...processEnv, ...env },
+          { ...readEnv(), ...env },
           process.platform,
         );
         const launch = yield* Effect.try({

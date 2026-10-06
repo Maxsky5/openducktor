@@ -24,7 +24,7 @@ describe("createOpenCodeExecutableProbe", () => {
     };
     const probe = createOpenCodeExecutableProbe({
       portAllocator: () => Effect.succeed(4567),
-      processEnv: { PATH: "/usr/bin" },
+      readEnv: () => ({ PATH: "/usr/bin" }),
       processTreeTerminator,
       readinessProbe(port, timeoutMs) {
         readinessCalls.push([port, timeoutMs]);

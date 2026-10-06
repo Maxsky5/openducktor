@@ -15,13 +15,12 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
           const defaultPorts = yield* createNodeHostDefaultPorts(input, imageWorkers).pipe(
             Effect.mapError((cause) => toHostOperationError(cause, "host.create-router")),
           );
-          const { configDir, git, processEnvironment, systemCommands, toolDiscovery } =
-            defaultPorts;
+          const { configDir, git, startupEnv, systemCommands, toolDiscovery } = defaultPorts;
           const gitProviders = yield* createNodeGitProviderComposition({
             azureDevOpsFetch: input.azureDevOpsFetch,
             configDir: configDir.root,
             gitPort: git,
-            processEnv: processEnvironment.environment,
+            processEnv: startupEnv,
             eventBus: input.eventBus,
             systemCommands,
             toolDiscovery,

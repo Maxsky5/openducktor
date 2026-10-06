@@ -1,6 +1,4 @@
-import { Effect } from "effect";
 import type { ModelCatalogPreviewReader } from "../../application/runtimes/model-catalog-preview-service";
-import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createClaudeModelCatalogPreview } from "../claude/claude-model-catalog-preview";
@@ -10,41 +8,27 @@ import { createOpenCodeModelCatalogPreview } from "../opencode/opencode-model-ca
 export const createNodeModelCatalogPreview = ({
   settingsConfig,
   toolDiscovery,
-  processEnv,
-  processPathError,
+  readEnv,
   clientVersion,
 }: {
   settingsConfig: SettingsConfigPort;
   toolDiscovery: ToolDiscoveryPort;
-  processEnv: NodeJS.ProcessEnv;
-  processPathError: string | null;
+  readEnv: () => NodeJS.ProcessEnv;
   clientVersion: string;
 }): ModelCatalogPreviewReader => {
-  const readClaude = createClaudeModelCatalogPreview({
-    settingsConfig,
-    toolDiscovery,
-    processEnv,
-  });
+  const readClaude = createClaudeModelCatalogPreview({ settingsConfig, toolDiscovery, readEnv });
   const readCodex = createCodexModelCatalogPreview({
     settingsConfig,
     toolDiscovery,
-    processEnv,
+    readEnv,
     clientVersion,
   });
   const readOpenCode = createOpenCodeModelCatalogPreview({
     settingsConfig,
     toolDiscovery,
-    processEnv,
+    readEnv,
   });
   return ({ repoPath, runtimeKind }) => {
-    if (processPathError) {
-      return Effect.fail(
-        new HostOperationError({
-          operation: "modelCatalogPreview.resolveEnvironment",
-          message: `Cannot load ${runtimeKind} models because the user PATH is unavailable. ${processPathError}`,
-        }),
-      );
-    }
     switch (runtimeKind) {
       case "claude":
         return readClaude(repoPath);

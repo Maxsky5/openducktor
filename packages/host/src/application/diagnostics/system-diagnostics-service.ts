@@ -22,11 +22,13 @@ import type {
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "../../ports/tool-discovery-port";
+import type { UserEnvironmentPort } from "../../ports/user-environment-port";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
 type CachedRuntimeCheck = {
   checkedAt: number;
   configSignature: string;
+  pathRevision: number;
   value: RuntimeCheck;
 };
 export type SystemDiagnosticsService = {
@@ -41,7 +43,7 @@ export type SystemDiagnosticsError =
   | TaskStoreError
   | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
-const loadGlobalConfig = (settingsConfig: SettingsConfigPort, pathError?: string | null) =>
+const loadGlobalConfig = (settingsConfig: SettingsConfigPort, pathError: string | null) =>
   settingsConfig
     .readConfig({ initialize: pathError == null })
     .pipe(Effect.map((config) => config ?? createDefaultGlobalConfig()));
@@ -111,24 +113,24 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
-  pathError,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
   systemCommands,
   toolDiscovery,
   repoStoreDiagnostics,
+  userEnvironment,
 }: {
-  pathError?: string | null;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   repoStoreDiagnostics: RepoStoreDiagnostics;
+  userEnvironment: UserEnvironmentPort;
 }): SystemDiagnosticsService => {
   let cachedRuntimeCheck: CachedRuntimeCheck | null = null;
-  const probeRuntimeCheck = (config: LoadedGlobalConfig) =>
+  const probeRuntimeCheck = (config: LoadedGlobalConfig, pathError: string | null) =>
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
       const gitVersion = yield* versionForResolvedTool("git", gitTool.path, (path) =>
@@ -156,9 +158,7 @@ export const createSystemDiagnosticsService = ({
         },
         { concurrency: "unbounded" },
       );
-      const errors = [pathError ?? null, gitError].filter(
-        (error): error is string => error !== null,
-      );
+      const errors = [pathError, gitError].filter((error): error is string => error !== null);
       for (const runtime of runtimes) {
         if (runtime.enabled && runtime.error) {
           errors.push(runtime.error);
@@ -175,11 +175,18 @@ export const createSystemDiagnosticsService = ({
   const runtimeCheck = (forceRefresh?: boolean) =>
     Effect.gen(function* () {
       const force = forceRefresh ?? false;
+      if (force) {
+        // A forced check reads PATH again, so shell startup fixes apply without a restart.
+        yield* userEnvironment.refresh();
+      }
+      const { revision, error } = userEnvironment.current();
+      const pathError = error?.message ?? null;
       const config = yield* loadGlobalConfig(settingsConfig, pathError);
       const configSignature = runtimeConfigSignature(config);
       if (!force && cachedRuntimeCheck) {
         const now = yield* Clock.currentTimeMillis;
         if (
+          cachedRuntimeCheck.pathRevision === revision &&
           cachedRuntimeCheck.configSignature === configSignature &&
           now - cachedRuntimeCheck.checkedAt <= RUNTIME_CHECK_CACHE_TTL_MS
         ) {
@@ -187,13 +194,17 @@ export const createSystemDiagnosticsService = ({
         }
         cachedRuntimeCheck = null;
       }
-      const check = yield* probeRuntimeCheck(config);
-      const checkedAt = yield* Clock.currentTimeMillis;
-      cachedRuntimeCheck = {
-        checkedAt,
-        configSignature,
-        value: check,
-      };
+      const check = yield* probeRuntimeCheck(config, pathError);
+      // A check of an older PATH resolution must not replace the result of a newer one.
+      if (userEnvironment.current().revision === revision) {
+        const checkedAt = yield* Clock.currentTimeMillis;
+        cachedRuntimeCheck = {
+          checkedAt,
+          configSignature,
+          pathRevision: revision,
+          value: check,
+        };
+      }
       return check;
     });
   const taskStoreCheck = (repoPath: string) =>

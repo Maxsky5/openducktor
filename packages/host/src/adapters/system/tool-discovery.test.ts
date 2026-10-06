@@ -71,7 +71,7 @@ const discoverBuiltInTool = ({
   systemCommands?: SystemCommandPort;
   toolId: ToolDiscoveryId;
 }) => {
-  const adapter = createToolDiscoveryAdapter({ env, options, systemCommands });
+  const adapter = createToolDiscoveryAdapter({ readEnv: () => env, options, systemCommands });
   return Effect.runPromise(adapter.resolveToolPath(toolId));
 };
 
@@ -86,7 +86,7 @@ const discoverBuiltInToolResult = ({
   systemCommands?: SystemCommandPort;
   toolId: ToolDiscoveryId;
 }): Promise<ResolvedTool> => {
-  const adapter = createToolDiscoveryAdapter({ env, options, systemCommands });
+  const adapter = createToolDiscoveryAdapter({ readEnv: () => env, options, systemCommands });
   return Effect.runPromise(adapter.resolveTool(toolId));
 };
 
@@ -105,7 +105,7 @@ describe("discoverToolPath", () => {
             platform: "linux",
           },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
+            readEnv: () => ({ PATH: "" }),
             platform: "linux",
           }),
           toolId: "opencode",
@@ -134,7 +134,7 @@ describe("discoverToolPath", () => {
           env: { OPENDUCKTOR_BUN_PATH: override },
           options: { homeDir: root, platform: "win32" },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
+            readEnv: () => ({ PATH: "" }),
             platform: "win32",
           }),
           toolId: "bun",
@@ -154,7 +154,10 @@ describe("discoverToolPath", () => {
         await writeExecutable(join(directory, executableName));
       }
       const env = { PATH: pathDir };
-      const systemCommands = createSystemCommandRunner({ env, platform: process.platform });
+      const systemCommands = createSystemCommandRunner({
+        readEnv: () => env,
+        platform: process.platform,
+      });
       const resolve = spyOn(systemCommands, "resolveCommandPath");
       const options = { homeDir: root, platform: process.platform };
 
@@ -248,7 +251,7 @@ describe("discoverToolPath", () => {
             providedToolPaths: { bun: provided },
           },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
+            readEnv: () => ({ PATH: "" }),
             platform: "linux",
           }),
           toolId: "bun",
@@ -266,7 +269,7 @@ describe("discoverToolPath", () => {
             providedToolPaths: { bun: provided },
           },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
+            readEnv: () => ({ PATH: "" }),
             platform: "linux",
           }),
           toolId: "bun",
@@ -316,7 +319,7 @@ describe("discoverToolPath", () => {
     const systemCommands = createSystemCommands({ available: ["opencode"] });
     const resolve = spyOn(systemCommands, "resolveCommandPath");
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: {
         bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
         platform: "linux",
@@ -356,7 +359,7 @@ describe("discoverToolPath", () => {
       await writeFile(bundled, "");
 
       const systemCommands = createSystemCommandRunner({
-        env: { PATHEXT: ".CMD;.BAT", PATH: "" },
+        readEnv: () => ({ PATHEXT: ".CMD;.BAT", PATH: "" }),
         platform: "win32",
       });
 
@@ -384,7 +387,7 @@ describe("discoverToolPath", () => {
           env: { PATH: root },
           options: { homeDir: root, platform: "linux" },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: root },
+            readEnv: () => ({ PATH: root }),
             platform: "linux",
           }),
           toolId: "bun",
@@ -395,7 +398,7 @@ describe("discoverToolPath", () => {
 
   test("keeps artifact bundled tool directories scoped to their tool id", async () => {
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: {
         bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
         platform: "linux",
@@ -412,10 +415,10 @@ describe("discoverToolPath", () => {
         const executable = join(root, overrideCase.command);
         await writeExecutable(executable);
         const adapter = createToolDiscoveryAdapter({
-          env: { [overrideCase.variable]: executable },
+          readEnv: () => ({ [overrideCase.variable]: executable }),
           options: { homeDir: root, platform: "linux" },
           systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
+            readEnv: () => ({ PATH: "" }),
             platform: "linux",
           }),
         });
@@ -433,13 +436,13 @@ describe("discoverToolPath", () => {
       await writeExecutable(provided);
 
       const adapter = createToolDiscoveryAdapter({
-        env: {},
+        readEnv: () => ({}),
         options: {
           platform: "linux",
           providedToolPaths: { bun: provided },
         },
         systemCommands: createSystemCommandRunner({
-          env: { PATH: "" },
+          readEnv: () => ({ PATH: "" }),
           platform: "linux",
         }),
       });
@@ -456,13 +459,13 @@ describe("discoverToolPath", () => {
       await writeExecutable(override);
 
       const adapter = createToolDiscoveryAdapter({
-        env: { OPENDUCKTOR_BUN_PATH: override },
+        readEnv: () => ({ OPENDUCKTOR_BUN_PATH: override }),
         options: {
           platform: "linux",
           providedToolPaths: { bun: provided },
         },
         systemCommands: createSystemCommandRunner({
-          env: { PATH: "" },
+          readEnv: () => ({ PATH: "" }),
           platform: "linux",
         }),
       });
@@ -473,7 +476,7 @@ describe("discoverToolPath", () => {
 
   test("rejects invalid provided tool paths before PATH", async () => {
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: {
         platform: "linux",
         providedToolPaths: { bun: "/missing/provided-bun" },
@@ -488,7 +491,7 @@ describe("discoverToolPath", () => {
 
   test("reports descriptor override variables for PATH-resolved built-in tools", async () => {
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: { platform: "linux" },
       systemCommands: createSystemCommands(),
     });
@@ -518,7 +521,7 @@ describe("discoverToolPath", () => {
       },
     };
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: { platform: "linux" },
       systemCommands,
     });
@@ -545,7 +548,7 @@ describe("discoverToolPath", () => {
       return originalResolve(command, options);
     };
     const adapter = createToolDiscoveryAdapter({
-      env: {},
+      readEnv: () => ({}),
       options: { platform: "linux" },
       systemCommands,
     });
@@ -563,10 +566,10 @@ describe("discoverToolPath", () => {
       const executable = join(root, executableName);
       await writeExecutable(executable);
       const adapter = createToolDiscoveryAdapter({
-        env: {},
+        readEnv: () => ({}),
         options: { platform: process.platform },
         systemCommands: createSystemCommandRunner({
-          env: { PATH: root },
+          readEnv: () => ({ PATH: root }),
           platform: process.platform,
         }),
       });
@@ -595,7 +598,7 @@ describe("discoverToolPath", () => {
       return originalResolve(command, options);
     };
     const adapter = createToolDiscoveryAdapter({
-      env: { PATH: "/tools" },
+      readEnv: () => ({ PATH: "/tools" }),
       options: { platform: "linux" },
       systemCommands,
     });

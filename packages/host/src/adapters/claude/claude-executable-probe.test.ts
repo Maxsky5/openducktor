@@ -28,7 +28,7 @@ describe("createClaudeExecutableProbe", () => {
       releaseCleanup = resolve;
     });
     const probe = createClaudeExecutableProbe({
-      processEnv: { PATH: "/usr/bin" },
+      readEnv: () => ({ PATH: "/usr/bin" }),
       queryFactory(input) {
         receivedOptions = input.options;
         return {
