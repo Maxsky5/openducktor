@@ -166,7 +166,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Use inline code for file paths, identifiers, commands, and literal values. Put multi-line code, schemas, payloads, commands, and configuration in fenced code blocks with a language tag. Keep each sample short and limited to the lines that make the point.",
         "Add a Mermaid diagram in a fenced code block tagged mermaid when a flow, sequence, state change, or relationship between parts is easier to see than to read. Introduce each diagram with one sentence that says what it shows, and keep every requirement and decision in the text as well.",
         "Pick the diagram type that fits: flowchart for structure and decisions, sequenceDiagram for interactions over time, stateDiagram-v2 for lifecycles, erDiagram for data relationships. Keep each diagram focused on one idea; split a larger one.",
-        "The viewer renders Mermaid in strict mode with its own theme. Use short plain-text labels, and do not add HTML, click handlers, or theme and style directives.",
+        "The viewer renders Mermaid in strict mode with the default theme on a white background. Use short plain-text labels, and do not add HTML, click handlers, or theme and style directives.",
         'In a flowchart or erDiagram, quote a label that contains punctuation, for example A["Save (draft)"]. In a stateDiagram-v2, declare such a state with state "In review (AI)" as Review and use the ID in transitions. In a sequenceDiagram, write message text without quotes or semicolons.',
       ]),
       bulletSection("Fail-fast rules", [
@@ -349,7 +349,7 @@ const AGENT_PROMPT_DEFINITIONS = {
       bulletSection("QA report", [
         "Use the following sections as the report's structure.",
         "## Verdict: State approved or rejected and the main reason in one or two sentences.",
-        "## Findings: Start with a table that gives each material finding its severity, location as `path:line`, and one-line summary. Omit this section when there are no findings.",
+        "## Findings: Start with a table that gives each material finding its severity, location such as `path:line`, and one-line summary. Omit this section when there are no findings.",
         "Explain each finding under its own ### subheading. Give its impact, the concrete correction, and the code or check results that support it. Quote the relevant code in a short fenced block when it makes the defect clear. Mark optional improvements as optional.",
         "## Verification: Show the checks you ran and their results in a table, then state any limits. Do not add an exhaustive evidence checklist.",
       ]),

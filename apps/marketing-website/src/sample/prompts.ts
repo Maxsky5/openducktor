@@ -20,7 +20,7 @@ export const QA_BASE_AFTER = [
   "QA report:",
   "- Use the following sections as the report's structure.",
   "- ## Verdict: State approved or rejected and the main reason in one or two sentences.",
-  "- ## Findings: Start with a table that gives each material finding its severity, location as `path:line`, and one-line summary. Omit this section when there are no findings.",
+  "- ## Findings: Start with a table that gives each material finding its severity, location such as `path:line`, and one-line summary. Omit this section when there are no findings.",
   "- Explain each finding under its own ### subheading. Give its impact, the concrete correction, and the code or check results that support it. Quote the relevant code in a short fenced block when it makes the defect clear. Mark optional improvements as optional.",
   "- ## Verification: Show the checks you ran and their results in a table, then state any limits. Do not add an exhaustive evidence checklist.",
   "",

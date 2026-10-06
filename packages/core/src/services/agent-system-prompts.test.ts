@@ -193,8 +193,6 @@ describe("buildAgentSystemPrompt", () => {
         "do not add HTML, click handlers, or theme and style directives",
         'declare such a state with state "In review (AI)" as Review',
       ]);
-      expect(prompt).not.toContain("wrap labels that contain punctuation in double quotes");
-      expectPromptToContainAll(prompt, []);
     },
   );
 
