@@ -63,7 +63,7 @@ const MARKDOWN_CLASSES = {
     "prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5",
     "prose-strong:text-foreground prose-em:text-foreground prose-li:text-foreground",
     "prose-hr:my-4 prose-hr:border-input",
-    "prose-table:my-3 prose-th:border-input prose-td:border-input",
+    "prose-table:my-3 prose-th:border-input prose-td:border-input prose-td:wrap-anywhere",
     "prose-code:rounded-md prose-code:px-1 prose-code:text-[12px] prose-code:font-medium prose-code:text-rose-600 prose-code:dark:text-rose-400",
     "prose-code:before:content-none prose-code:after:content-none",
     "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-foreground",

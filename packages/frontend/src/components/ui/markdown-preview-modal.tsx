@@ -35,7 +35,7 @@ export function MarkdownPreviewModal({
 }: MarkdownPreviewModalProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col overflow-hidden p-0">
+      <DialogContent className="flex max-w-5xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
           <DialogTitle className={title ? "text-xl font-semibold" : "sr-only"}>
             {title ?? "Document Preview"}
