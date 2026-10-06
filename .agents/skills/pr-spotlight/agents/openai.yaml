@@ -1,5 +1,5 @@
 # Optional Codex UI metadata.
 interface:
   display_name: "PR spotlight"
-  short_description: "Explain PR changes with diagrams and short animations"
-  default_prompt: "Use $pr-spotlight to explain this PR with a diagram or short animation."
+  short_description: "Explain PR changes with clear diagrams and useful motion"
+  default_prompt: "Use $pr-spotlight to explain this PR with a clear diagram, or a short animation when motion is needed to understand the change."
