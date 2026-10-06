@@ -222,8 +222,11 @@ describe("buildAgentSystemPrompt", () => {
       "Cover all requirements, including scope and constraints",
       "Use the spec's requirement names when a spec exists",
       "state ownership, and failure behavior",
-      "Show the target design in a Mermaid diagram",
-      "leave function bodies to Builder",
+      "Work as a software architect",
+      "Stay at the architecture level",
+      "refer to requirements by name instead of restating the spec",
+      "Show the target design in one Mermaid diagram",
+      "Write only its signature or shape",
     ]);
     expectHeadingsInOrder(prompt, [
       "## Approach",
