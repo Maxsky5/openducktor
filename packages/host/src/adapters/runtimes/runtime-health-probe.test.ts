@@ -57,7 +57,7 @@ const createProbe = (
 ) =>
   createRuntimeHealthProbe(
     systemCommands,
-    createToolDiscoveryAdapter({ env: {}, systemCommands }),
+    createToolDiscoveryAdapter({ readEnv: () => ({}), systemCommands }),
     executableProbes,
   );
 

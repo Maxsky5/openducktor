@@ -34,7 +34,6 @@ export type CreateOpenInToolsAdapterInput = {
     inputPath: string,
   ) => Effect.Effect<string, HostPathAccessErrorAggregate | HostPathNotFoundErrorAggregate>;
   systemCommands?: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure">;
-  processEnv?: NodeJS.ProcessEnv;
 };
 
 type RunOpenInCommand = Pick<SystemCommandPort, "runCommandAllowFailure">["runCommandAllowFailure"];
@@ -112,8 +111,7 @@ export const createOpenInToolsAdapter = ({
   pathExists = defaultPathExists,
   pathIsDirectory = defaultPathIsDirectory,
   homeDirectory = homedir,
-  processEnv = process.env,
-  systemCommands = createSystemCommandRunner({ env: processEnv, platform }),
+  systemCommands = createSystemCommandRunner({ platform }),
   realpathFn = (inputPath) =>
     Effect.tryPromise({
       try: () => realpath(inputPath),

@@ -34,8 +34,8 @@ import { toHostOperationError } from "../../effect/host-errors";
 import {
   type CreateProcessEnvironmentInput,
   createProcessEnvironment,
-  type ProcessEnvironmentResolution,
 } from "../../infrastructure/process/process-environment";
+import { createUserEnvironment } from "../../infrastructure/process/user-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
@@ -59,8 +59,12 @@ import {
   type ToolDiscoveryPort,
   ToolDiscoveryPortTag,
 } from "../../ports/tool-discovery-port";
+import type {
+  UserEnvironmentPort,
+  UserEnvironmentResolution,
+} from "../../ports/user-environment-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
-import { guardDevServerStart } from "./user-path-start-guard";
+import { guardDevServerStart, guardRuntimeConfigInitializer } from "./user-path-guards";
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
@@ -73,7 +77,6 @@ export type NodeHostDefaultPorts = {
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
   configDir: OpenDucktorConfigDir;
-  processEnvironment: ProcessEnvironmentResolution;
   runtimeDistribution: HostRuntimeDistribution;
   runtimeExecutableProbes: RuntimeExecutableProbesByKind;
   runtimeHealth: RuntimeHealthPort;
@@ -81,6 +84,11 @@ export type NodeHostDefaultPorts = {
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   terminalPty: TerminalPtyPort;
+  userEnvironment: UserEnvironmentPort;
+  /** Reads the current environment. Call it when a child process starts. */
+  readEnv: () => NodeJS.ProcessEnv;
+  /** The environment at host startup. Use it only for values that do not depend on `PATH`. */
+  startupEnv: NodeJS.ProcessEnv;
   worktreeFiles: WorktreeFilePort;
 };
 
@@ -148,30 +156,30 @@ const makeNodeHostDefaultPorts = (
   imageWorkers: GeneratedImageWorkers,
 ) =>
   Effect.gen(function* () {
-    const sourceProcessEnvironment = input.processEnv
-      ? {
-          status: "ready" as const,
-          environment: input.processEnv,
-          error: null,
-        }
-      : yield* createProcessEnvironment(input.processEnvironmentInput);
-    const sourceEnv = sourceProcessEnvironment.environment;
+    const resolveEnvironment: Effect.Effect<UserEnvironmentResolution> = input.processEnv
+      ? Effect.succeed({ environment: input.processEnv, error: null })
+      : // Each run reads the login shell and builds a new environment.
+        Effect.suspend(() => createProcessEnvironment(input.processEnvironmentInput));
+    const startupEnvironment = yield* resolveEnvironment;
     return yield* Effect.try({
       try: () => {
         const configDir: OpenDucktorConfigDir = {
-          root: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
+          root: resolveOpenDucktorBaseDir(input.configDirScope, startupEnvironment.environment),
           scope: input.configDirScope,
         };
-        const processEnv = {
-          ...sourceEnv,
-          OPENDUCKTOR_CONFIG_DIR: configDir.root,
-        };
-        const processEnvironment = {
-          ...sourceProcessEnvironment,
-          environment: processEnv,
-        };
-        const systemCommands =
-          input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
+        const withConfigDir = (
+          resolution: UserEnvironmentResolution,
+        ): UserEnvironmentResolution => ({
+          ...resolution,
+          environment: { ...resolution.environment, OPENDUCKTOR_CONFIG_DIR: configDir.root },
+        });
+        const userEnvironment = createUserEnvironment(
+          withConfigDir(startupEnvironment),
+          resolveEnvironment.pipe(Effect.map(withConfigDir)),
+        );
+        const readEnv = () => userEnvironment.current().environment;
+        const startupEnv = readEnv();
+        const systemCommands = input.systemCommands ?? createSystemCommandRunner({ readEnv });
         const bundledToolBinDirs =
           input.runtimeDistribution.mode === "artifact" &&
           input.runtimeDistribution.bundledToolBinDirs
@@ -187,12 +195,12 @@ const makeNodeHostDefaultPorts = (
         const toolDiscovery =
           input.toolDiscovery ??
           createToolDiscoveryAdapter({
-            env: processEnv,
+            readEnv,
             options: toolDiscoveryOptions,
             systemCommands,
           });
         const runtimeExecutableProbeInput: Parameters<typeof createRuntimeExecutableProbes>[0] = {
-          processEnv,
+          readEnv,
         };
         if (input.clientVersion) {
           runtimeExecutableProbeInput.clientVersion = input.clientVersion;
@@ -203,25 +211,14 @@ const makeNodeHostDefaultPorts = (
         const runtimeHealth =
           input.runtimeHealth ??
           createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
-        const initializeRuntimeConfig =
-          processEnvironment.status === "ready"
-            ? createRuntimeConfigInitializer(toolDiscovery)
-            : () =>
-                Effect.fail(
-                  toHostOperationError(
-                    processEnvironment.error,
-                    "runtimeConfig.resolveEnvironment",
-                    {
-                      reason: processEnvironment.error.reason,
-                      shell: processEnvironment.error.shell,
-                    },
-                  ),
-                );
         const settingsConfig =
           input.settingsConfig ??
           createSettingsConfigAdapter({
-            environment: processEnv,
-            initializeConfig: initializeRuntimeConfig,
+            environment: startupEnv,
+            initializeConfig: guardRuntimeConfigInitializer(
+              createRuntimeConfigInitializer(toolDiscovery),
+              userEnvironment,
+            ),
           });
         const defaultCodexAppServer = createCodexAppServerTransportRegistry();
         const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
@@ -233,14 +230,14 @@ const makeNodeHostDefaultPorts = (
           codexAppServer,
           codexTransportRegistry,
           devServerProcesses: guardDevServerStart(
-            input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
-            processEnvironment,
+            input.devServerProcesses ?? createDevServerProcessAdapter({ readEnv }),
+            userEnvironment,
           ),
           filesystem: input.filesystem ?? createFilesystemAdapter(),
           git:
             input.git ??
             createGitCliAdapter({
-              processEnv,
+              readEnv,
               resolveCommand: () =>
                 toolDiscovery.resolveToolPath("git").pipe(
                   Effect.mapError((cause) =>
@@ -253,10 +250,8 @@ const makeNodeHostDefaultPorts = (
           generatedImageFiles:
             input.generatedImageFiles ?? createGeneratedImageFileAdapter(imageWorkers),
           localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
-          openInTools:
-            input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
+          openInTools: input.openInTools ?? createOpenInToolsAdapter({ systemCommands }),
           configDir,
-          processEnvironment,
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,
           runtimeHealth,
@@ -264,6 +259,9 @@ const makeNodeHostDefaultPorts = (
           systemCommands,
           toolDiscovery,
           terminalPty: input.terminalPty,
+          userEnvironment,
+          readEnv,
+          startupEnv,
           worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
         };
       },

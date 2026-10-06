@@ -19,7 +19,7 @@ export type CreateOpenCodeRuntimeCompositionInput = {
   /** Process working directory of the shared OpenCode server, such as the user home directory. */
   launchDirectory: string;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
-  processEnv: NodeJS.ProcessEnv;
+  readEnv: () => NodeJS.ProcessEnv;
   resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
   settingsConfig: SettingsConfigPort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
@@ -29,7 +29,7 @@ export type CreateOpenCodeRuntimeCompositionInput = {
 export const createOpenCodeRuntimeComposition = ({
   launchDirectory,
   liveSessionLifecycle,
-  processEnv,
+  readEnv,
   resolveMcpServerConfig,
   settingsConfig,
   taskSessionLifecycleCoordinator,
@@ -60,7 +60,7 @@ export const createOpenCodeRuntimeComposition = ({
 
   return createOpenCodeRuntimeStarter({
     toolDiscovery,
-    processEnv,
+    readEnv,
     launchDirectory,
     liveSessionLifecycle,
     prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({

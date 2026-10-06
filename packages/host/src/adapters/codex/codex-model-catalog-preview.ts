@@ -36,7 +36,7 @@ export const createCodexModelCatalogPreview =
   ({
     settingsConfig,
     toolDiscovery,
-    processEnv,
+    readEnv,
     clientVersion,
     processTreeTerminator = terminateProcessTree,
     requestTimeoutMs = REQUEST_TIMEOUT_MS,
@@ -44,7 +44,7 @@ export const createCodexModelCatalogPreview =
   }: {
     settingsConfig: SettingsConfigPort;
     toolDiscovery: ToolDiscoveryPort;
-    processEnv: NodeJS.ProcessEnv;
+    readEnv: () => NodeJS.ProcessEnv;
     clientVersion: string;
     processTreeTerminator?: ProcessTreeTerminator;
     requestTimeoutMs?: number;
@@ -58,7 +58,7 @@ export const createCodexModelCatalogPreview =
         toolDiscovery,
       });
       const command = yield* Effect.try({
-        try: () => createProcessCommandLaunch(binary, ["app-server"], processEnv, process.platform),
+        try: () => createProcessCommandLaunch(binary, ["app-server"], readEnv(), process.platform),
         catch: (cause) => toHostOperationError(cause, "codexModelCatalogPreview.command"),
       });
       const cleanup: PreviewCleanup = { failure: null };

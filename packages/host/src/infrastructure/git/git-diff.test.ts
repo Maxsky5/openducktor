@@ -269,7 +269,7 @@ test("matches the recorded patches with real Git, including directory expansion"
     supported.map((fixture) => fixture.file),
     async (root) => {
       const { createDefaultGitRunner } = await import("./git-command-runner");
-      const runner = createDefaultGitRunner(process.env, { command: "git" });
+      const runner = createDefaultGitRunner(() => process.env, { command: "git" });
       await Effect.runPromise(runner(root, ["init", "--quiet"]));
       await Effect.runPromise(runner(root, ["config", "core.autocrlf", "false"]));
       for (const fixture of supported)

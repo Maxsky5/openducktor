@@ -16,7 +16,10 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 
 describe("createSystemCommandRunner", () => {
   test("returns binary stdout as base64 and stops oversized output", async () => {
-    const port = createSystemCommandRunner({ env: process.env, platform: process.platform });
+    const port = createSystemCommandRunner({
+      readEnv: () => process.env,
+      platform: process.platform,
+    });
     const args = ["-e", "process.stdout.write(Buffer.from([0, 255, 128, 1]))"];
     const result = await Effect.runPromise(
       port.runCommandAllowFailure("bun", args, { stdoutEncoding: "base64", maxStdoutBytes: 4 }),
@@ -30,7 +33,10 @@ describe("createSystemCommandRunner", () => {
   });
 
   test("preserves a nonzero process exit code", async () => {
-    const port = createSystemCommandRunner({ env: process.env, platform: process.platform });
+    const port = createSystemCommandRunner({
+      readEnv: () => process.env,
+      platform: process.platform,
+    });
 
     const result = await Effect.runPromise(
       port.runCommandAllowFailure("bun", ["-e", "process.exit(8)"]),
@@ -41,10 +47,10 @@ describe("createSystemCommandRunner", () => {
 
   test("passes the explicit environment to spawned commands", async () => {
     const port = createSystemCommandRunner({
-      env: {
+      readEnv: () => ({
         PATH: process.env.PATH,
         OPENDUCKTOR_TEST_VALUE: "from-host-env",
-      },
+      }),
       platform: process.platform,
     });
 
@@ -58,12 +64,12 @@ describe("createSystemCommandRunner", () => {
 
   test("per-command environment overrides inherited values", async () => {
     const port = createSystemCommandRunner({
-      env: {
+      readEnv: () => ({
         PATH: process.env.PATH,
         FORCE_COLOR: "1",
         CLICOLOR_FORCE: "1",
         NO_COLOR: "0",
-      },
+      }),
       platform: process.platform,
     });
 
@@ -90,7 +96,7 @@ describe("createSystemCommandRunner", () => {
 
   test("fails before spawn when command discovery cannot resolve the executable", async () => {
     const port = createSystemCommandRunner({
-      env: { PATH: "" },
+      readEnv: () => ({ PATH: "" }),
       platform: "linux",
     });
 
@@ -98,6 +104,21 @@ describe("createSystemCommandRunner", () => {
       Effect.runPromise(port.runCommandAllowFailure("missing-tool", [])),
     ).rejects.toThrow("Command missing-tool not found.");
   });
+
+  test.skipIf(process.platform === "win32")(
+    "reads the environment for each command, so a later PATH applies",
+    async () => {
+      let env: NodeJS.ProcessEnv = { PATH: "" };
+      const port = createSystemCommandRunner({ readEnv: () => env, platform: process.platform });
+
+      const before = await Effect.runPromise(port.resolveCommandPath("sh"));
+      env = { PATH: "/bin:/usr/bin" };
+      const after = await Effect.runPromise(port.resolveCommandPath("sh"));
+
+      expect(before).toBeNull();
+      expect(after).toMatch(/\/sh$/);
+    },
+  );
 
   test("runs Windows cmd and bat launchers with arguments on native Windows", async () => {
     if (process.platform !== "win32") {
@@ -113,7 +134,7 @@ describe("createSystemCommandRunner", () => {
       await writeFile(bat, "@echo off\r\necho bat:%~1:%~2\r\n");
 
       const port = createSystemCommandRunner({
-        env: { PATH: toolDir, PATHEXT: ".CMD;.BAT", ComSpec: process.env.ComSpec },
+        readEnv: () => ({ PATH: toolDir, PATHEXT: ".CMD;.BAT", ComSpec: process.env.ComSpec }),
         platform: "win32",
       });
 
@@ -164,7 +185,7 @@ describe("createSystemCommandRunner", () => {
       );
 
       const port = createSystemCommandRunner({
-        env: { PATH: root, PATHEXT: ".CMD", ComSpec: process.env.ComSpec },
+        readEnv: () => ({ PATH: root, PATHEXT: ".CMD", ComSpec: process.env.ComSpec }),
         platform: "win32",
       });
       const args = [

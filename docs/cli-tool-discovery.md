@@ -43,18 +43,28 @@ Use `@openducktor/path-support` to parse a user path. Supply home directory and 
 
 `createNodeHostDefaultPorts` builds these values in order:
 
-1. `processEnv` from one asynchronous interactive login shell probe on POSIX, or from platform environment rules on Windows.
-2. `systemCommands` from that environment.
+1. `userEnvironment` from one asynchronous interactive login shell probe on POSIX, or from platform environment rules on Windows.
+2. `systemCommands` that read the current environment for each command.
 3. `toolDiscovery` from system commands, environment, shell paths, and distribution paths.
 4. Adapters and services that use `toolDiscovery`.
 
 Electron, the published web package, and web workspace mode use this setup.
 
-The POSIX probe uses a login-style `argv0`, interactive login command flags, and a minimal environment. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries and keeps this snapshot for the app lifetime. Dev servers, runtime sessions, tool discovery, Git, and terminals receive the same snapshot. Windows uses its normalized inherited environment and does not run a shell probe.
+The POSIX probe uses a login-style `argv0`, interactive login command flags, and a minimal environment. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries. The probe has a 15 second limit, because interactive shell startup files can be slow. Windows uses its normalized inherited environment and does not run a shell probe.
 
-The probe has no PTY. Shell startup lines that require a real tty can produce a different result in an integrated terminal. Changes to shell startup files take effect after OpenDucktor restarts.
+`UserEnvironmentPort` in `packages/host/src/ports/user-environment-port.ts` owns the current result. Dev servers, runtime starts, tool discovery, Git, model catalog previews, and terminals read it through `readEnv` when they start a child process. Do not copy the environment when an adapter is created. A running runtime keeps the environment of its own start.
 
-If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Dev server and runtime starts also show the error and do not start a child process.
+Values that do not use `PATH` read `startupEnv`, the environment at host startup. Examples are the config directory, the MCP discovery path, and the Azure DevOps client ID.
+
+The probe has no PTY. Shell startup lines that require a real tty can produce a different result in an integrated terminal.
+
+A forced runtime check runs the probe again. The Refresh action in Diagnostics sends a forced check. Concurrent refreshes share one probe. A refresh changes the `PATH` that later child processes receive. It also uses the current account login shell. A change to the `SHELL` variable of the OpenDucktor process takes effect after OpenDucktor restarts.
+
+Tool discovery keeps the tool paths that it found before. A refresh does not search again for those tools. It only lets a tool that was not found before be found.
+
+If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Dev server starts, runtime starts, model catalog previews, and runtime config initialization fail with the error and do not start a child process. The guards for these operations are in `packages/host/src/composition/node/user-path-guards.ts`. After a refresh resolves `PATH`, the user restarts the failed runtimes from Diagnostics.
+
+A failed refresh also removes `PATH` from the shared environment, even when the previous probe was successful. Git commands and system commands then run without the user `PATH` until a refresh is successful.
 
 ## Search order
 

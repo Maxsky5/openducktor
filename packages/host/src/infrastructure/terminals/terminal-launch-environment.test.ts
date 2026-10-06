@@ -21,10 +21,10 @@ testIfPosixShellIsAvailable(
       await chmod(shellPath, 0o755);
 
       const environment = await resolveEnvironment({
-        processEnv: {
+        readEnv: () => ({
           PATH: "/already/resolved:/usr/bin",
           SHELL: shellPath,
-        },
+        }),
         platform: "darwin",
         readUserShell: () => null,
       });
@@ -48,10 +48,10 @@ testIfPosixShellIsAvailable(
       await chmod(shellPath, 0o755);
 
       const environment = await resolveEnvironment({
-        processEnv: {
+        readEnv: () => ({
           PATH: "/usr/bin",
           SHELL: "/bin/bash",
-        },
+        }),
         platform: "linux",
         readUserShell: () => shellPath,
       });
@@ -71,10 +71,10 @@ testIfPosixShellIsAvailable(
   "falls back to the inherited SHELL value when the account shell is unavailable",
   async () => {
     const environment = await resolveEnvironment({
-      processEnv: {
+      readEnv: () => ({
         PATH: "/usr/bin",
         SHELL: "/bin/bash",
-      },
+      }),
       platform: "linux",
       readUserShell: () => null,
     });
@@ -88,10 +88,10 @@ testIfPosixShellIsAvailable(
   "falls back to the inherited SHELL value when the account shell is not absolute",
   async () => {
     const environment = await resolveEnvironment({
-      processEnv: {
+      readEnv: () => ({
         PATH: "/usr/bin",
         SHELL: "/bin/bash",
-      },
+      }),
       platform: "linux",
       readUserShell: () => "zsh",
     });
@@ -104,10 +104,10 @@ testIfPosixShellIsAvailable(
 testIfPosixShellIsAvailable("fails when neither shell value is absolute", async () => {
   const result = await Effect.runPromiseExit(
     createTerminalLaunchEnvironment({
-      processEnv: {
+      readEnv: () => ({
         PATH: "/usr/bin",
         SHELL: "bash",
-      },
+      }),
       platform: "linux",
       readUserShell: () => "zsh",
     })(),
@@ -119,7 +119,7 @@ testIfPosixShellIsAvailable("fails when neither shell value is absolute", async 
 
 test("uses ComSpec for Windows terminals", async () => {
   const environment = await resolveEnvironment({
-    processEnv: { ComSpec: "/windows/system32/cmd.exe", Path: "/windows/system32" },
+    readEnv: () => ({ ComSpec: "/windows/system32/cmd.exe", Path: "/windows/system32" }),
     platform: "win32",
   });
 
@@ -129,7 +129,7 @@ test("uses ComSpec for Windows terminals", async () => {
 
 test("falls back to the account shell for Windows terminals", async () => {
   const environment = await resolveEnvironment({
-    processEnv: { Path: "/windows/system32" },
+    readEnv: () => ({ Path: "/windows/system32" }),
     platform: "win32",
     readUserShell: () => "/windows/system32/windows-powershell.exe",
   });
@@ -141,7 +141,7 @@ test("falls back to the account shell for Windows terminals", async () => {
 test("fails when Windows has no absolute shell", async () => {
   const result = await Effect.runPromiseExit(
     createTerminalLaunchEnvironment({
-      processEnv: { Path: "/windows/system32" },
+      readEnv: () => ({ Path: "/windows/system32" }),
       platform: "win32",
       readUserShell: () => "powershell.exe",
     })(),

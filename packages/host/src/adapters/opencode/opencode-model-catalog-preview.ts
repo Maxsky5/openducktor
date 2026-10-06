@@ -42,7 +42,7 @@ export const createOpenCodeModelCatalogPreview =
   ({
     settingsConfig,
     toolDiscovery,
-    processEnv,
+    readEnv,
     portAllocator = pickFreePort,
     processTreeTerminator = terminateProcessTree,
     readinessProbe = isOpenCodeHealthy,
@@ -53,7 +53,7 @@ export const createOpenCodeModelCatalogPreview =
   }: {
     settingsConfig: SettingsConfigPort;
     toolDiscovery: ToolDiscoveryPort;
-    processEnv: NodeJS.ProcessEnv;
+    readEnv: () => NodeJS.ProcessEnv;
     portAllocator?: typeof pickFreePort;
     processTreeTerminator?: ProcessTreeTerminator;
     readinessProbe?: typeof isOpenCodeHealthy;
@@ -70,7 +70,7 @@ export const createOpenCodeModelCatalogPreview =
         toolDiscovery,
       });
       const port = yield* portAllocator();
-      const runtimeEnv: NodeJS.ProcessEnv = { ...processEnv, OPENCODE_CONFIG_CONTENT: "{}" };
+      const runtimeEnv: NodeJS.ProcessEnv = { ...readEnv(), OPENCODE_CONFIG_CONTENT: "{}" };
       delete runtimeEnv.OPENCODE_SERVER_PASSWORD;
       delete runtimeEnv.OPENCODE_SERVER_USERNAME;
       const command = yield* Effect.try({

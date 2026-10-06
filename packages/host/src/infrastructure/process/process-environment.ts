@@ -2,10 +2,11 @@ import { accessSync, constants } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, delimiter, isAbsolute } from "node:path";
 import { Effect } from "effect";
+import type { UserEnvironmentResolution } from "../../ports/user-environment-port";
 import { probeLoginShellPath } from "./login-shell-path-probe";
 import { ProcessEnvironmentError, processEnvironmentError } from "./process-environment-error";
 
-const LOGIN_SHELL_TIMEOUT_MS = 5_000;
+const LOGIN_SHELL_TIMEOUT_MS = 15_000;
 
 const HOST_CONTROL_ENV_NAMES = [
   "ODT_WORKSPACE_ID",
@@ -22,22 +23,7 @@ const HOST_CONTROL_ENV_NAMES = [
 
 export type ReadUserShell = () => string | null;
 
-export {
-  ProcessEnvironmentError,
-  type ProcessEnvironmentErrorReason,
-} from "./process-environment-error";
-
-export type ProcessEnvironmentResolution =
-  | {
-      status: "ready";
-      environment: NodeJS.ProcessEnv;
-      error: null;
-    }
-  | {
-      status: "path_unavailable";
-      environment: NodeJS.ProcessEnv;
-      error: ProcessEnvironmentError;
-    };
+export { ProcessEnvironmentError } from "./process-environment-error";
 
 export type ReadLoginShellPath = (
   env: NodeJS.ProcessEnv,
@@ -203,7 +189,7 @@ export const resolveUserLoginShell = (
 
 export const createProcessEnvironment = (
   input: CreateProcessEnvironmentInput = {},
-): Effect.Effect<ProcessEnvironmentResolution> => {
+): Effect.Effect<UserEnvironmentResolution> => {
   const {
     baseEnv = process.env,
     loginShellTimeoutMs = LOGIN_SHELL_TIMEOUT_MS,
@@ -213,7 +199,7 @@ export const createProcessEnvironment = (
   } = input;
   const env = normalizeProcessEnvironment(baseEnv, platform);
   if (platform === "win32") {
-    return Effect.succeed({ status: "ready", environment: env, error: null });
+    return Effect.succeed({ environment: env, error: null });
   }
 
   const shell = resolveUserLoginShell(env, readUserShell);
@@ -225,12 +211,11 @@ export const createProcessEnvironment = (
     const shellName = env.SHELL?.trim() || "unknown";
     deletePathEnvironmentValue(env, platform);
     return Effect.succeed({
-      status: "path_unavailable",
       environment: env,
       error: processEnvironmentError(
         shellName,
         "shell_unavailable",
-        `Failed to resolve PATH: no executable login shell is available. Check the account login shell or set SHELL to an absolute executable path, then restart OpenDucktor. Current SHELL: ${shellName}.`,
+        `Failed to resolve PATH: no executable login shell is available. Fix the account login shell, then select Refresh in Diagnostics. If you set SHELL to an absolute executable path instead, restart OpenDucktor. Current SHELL: ${shellName}.`,
       ),
     });
   }
@@ -241,10 +226,10 @@ export const createProcessEnvironment = (
     ? readLoginShellPath(probeEnv, shell)
     : probeLoginShellPath(probeEnv, shell, loginShellTimeoutMs);
   return Effect.either(loginShellPath).pipe(
-    Effect.map((result): ProcessEnvironmentResolution => {
+    Effect.map((result): UserEnvironmentResolution => {
       if (result._tag === "Left") {
         deletePathEnvironmentValue(env, platform);
-        return { status: "path_unavailable", environment: env, error: result.left };
+        return { environment: env, error: result.left };
       }
 
       setPathEnvironmentValue(
@@ -252,7 +237,7 @@ export const createProcessEnvironment = (
         mergePathValues(result.right, inheritedPath, pathDelimiterForPlatform(platform)),
         platform,
       );
-      return { status: "ready", environment: env, error: null };
+      return { environment: env, error: null };
     }),
   );
 };

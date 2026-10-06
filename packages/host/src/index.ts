@@ -85,9 +85,8 @@ export {
 export {
   createProcessEnvironment,
   ProcessEnvironmentError,
-  type ProcessEnvironmentErrorReason,
-  type ProcessEnvironmentResolution,
 } from "./infrastructure/process/process-environment";
+export type { UserEnvironmentResolution, UserPathErrorReason } from "./ports/user-environment-port";
 export {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,

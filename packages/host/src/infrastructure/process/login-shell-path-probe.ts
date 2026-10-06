@@ -145,7 +145,7 @@ export const probeLoginShellPath = (
               processEnvironmentError(
                 shell,
                 "invalid_output",
-                `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no PATH between the environment markers. Check shell startup output and restart OpenDucktor.`,
+                `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no PATH between the environment markers. Check shell startup output, then select Refresh in Diagnostics.`,
               ),
             ),
       );
@@ -157,7 +157,7 @@ export const probeLoginShellPath = (
           processEnvironmentError(
             shell,
             "invalid_output",
-            `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no environment markers. Check shell startup output and restart OpenDucktor.`,
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no environment markers. Check shell startup output, then select Refresh in Diagnostics.`,
           ),
         ),
       );
@@ -190,7 +190,7 @@ export const probeLoginShellPath = (
             processEnvironmentError(
               shell,
               "output_limit",
-              `Failed to resolve PATH from interactive login shell ${shell}: startup output exceeded ${MAX_OUTPUT_BYTES} bytes. Reduce output from shell startup files.`,
+              `Failed to resolve PATH from interactive login shell ${shell}: startup output exceeded ${MAX_OUTPUT_BYTES} bytes. Reduce output from shell startup files, then select Refresh in Diagnostics.`,
             ),
           ),
         );
@@ -223,7 +223,7 @@ export const probeLoginShellPath = (
             processEnvironmentError(
               shell,
               "unexpected_exit",
-              `Failed to resolve PATH from interactive login shell ${shell}: the probe ended with ${reason}. Fix errors in the shell startup files and restart OpenDucktor.`,
+              `Failed to resolve PATH from interactive login shell ${shell}: the probe ended with ${reason}. Fix errors in the shell startup files, then select Refresh in Diagnostics.`,
             ),
           ),
         );
@@ -250,7 +250,7 @@ export const probeLoginShellPath = (
         processEnvironmentError(
           shell,
           "timed_out",
-          `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for commands that wait for input.`,
+          `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for slow commands or commands that wait for input, then select Refresh in Diagnostics.`,
         ),
     }),
   );

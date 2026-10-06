@@ -1,23 +1,16 @@
 import { Data } from "effect";
-
-export type ProcessEnvironmentErrorReason =
-  | "invalid_output"
-  | "output_limit"
-  | "shell_unavailable"
-  | "spawn_failed"
-  | "timed_out"
-  | "unexpected_exit";
+import type { UserPathErrorReason } from "../../ports/user-environment-port";
 
 export class ProcessEnvironmentError extends Data.TaggedError("ProcessEnvironmentError")<{
   readonly message: string;
-  readonly reason: ProcessEnvironmentErrorReason;
+  readonly reason: UserPathErrorReason;
   readonly shell: string;
   readonly cause?: unknown;
 }> {}
 
 export const processEnvironmentError = (
   shell: string,
-  reason: ProcessEnvironmentErrorReason,
+  reason: UserPathErrorReason,
   message: string,
   cause?: unknown,
 ): ProcessEnvironmentError =>

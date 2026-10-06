@@ -30,7 +30,7 @@ const createPreview = (
   createCodexModelCatalogPreview({
     settingsConfig: createFixedRuntimeSettingsConfig("codex", executablePath),
     toolDiscovery: createToolDiscovery(),
-    processEnv: process.env,
+    readEnv: () => process.env,
     clientVersion: "test",
     ...overrides,
   });

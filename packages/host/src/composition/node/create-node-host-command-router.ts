@@ -95,15 +95,16 @@ export const assembleNodeEffectHostCommandRouter = (
     localAttachments,
     openInTools,
     configDir,
-    processEnvironment,
     runtimeHealth,
     settingsConfig: baseSettingsConfig,
     systemCommands,
     terminalPty,
     toolDiscovery,
+    userEnvironment,
+    readEnv,
+    startupEnv,
     worktreeFiles,
   } = defaultPorts;
-  const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const notificationComposition = createNodeNotificationServices(baseSettingsConfig, eventBus);
   const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup({ ...defaultPorts, settingsConfig }, input);
@@ -114,7 +115,7 @@ export const assembleNodeEffectHostCommandRouter = (
     configuredTaskStore,
     isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
-    processEnv,
+    processEnv: startupEnv,
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
@@ -148,13 +149,13 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
-    pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
     runtimeHealth,
     settingsConfig,
     systemCommands,
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
+    userEnvironment,
   });
   const workingDirectoryDependencies = {
     gitPort: git,
@@ -200,7 +201,7 @@ export const assembleNodeEffectHostCommandRouter = (
         store: assets.workspaceSessionStore,
       },
       ptyPort: terminalPty,
-      resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
+      resolveLaunchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
     }),
   );
   const devServerService = createDevServerService({
@@ -310,7 +311,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   resolvedMcpHostBridge ??= createMcpHostBridgeServer({
     bridgeService: odtMcpBridgeService,
-    discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
+    discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, startupEnv),
     workspaceSettingsService,
     onStatusChanged: eventBus ? createMcpBridgeStatusPublisher(eventBus, hostInstanceId) : () => {},
   });

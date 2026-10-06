@@ -35,7 +35,7 @@ export type CreateCodexRuntimeStarterInput = {
   prepareLiveSessionAdapter: CodexLiveSessionAdapterPreparer;
   /** Process working directory. The shared app-server belongs to no repository. */
   launchDirectory: string;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv?: () => NodeJS.ProcessEnv;
   clientVersion?: string;
   requestTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -59,8 +59,8 @@ export const createCodexRuntimeStarter = ({
   liveSessionLifecycle,
   prepareLiveSessionAdapter,
   launchDirectory,
-  processEnv = process.env,
-  clientVersion = processEnv.npm_package_version ?? "0.0.0",
+  readEnv = () => process.env,
+  clientVersion = readEnv().npm_package_version ?? "0.0.0",
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
@@ -83,7 +83,7 @@ export const createCodexRuntimeStarter = ({
             binary,
             ["app-server"],
             // Each thread receives its workspace MCP binding through per-thread config.
-            withoutOpenDucktorMcpEnvironment(processEnv),
+            withoutOpenDucktorMcpEnvironment(readEnv()),
             platform,
           ),
         catch: (cause) =>

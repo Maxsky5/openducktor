@@ -28,7 +28,7 @@ export const createStarter = (input: StarterInput): RuntimeStarterPort => {
   const {
     liveSessionLifecycle,
     prepareLiveSessionAdapter,
-    processEnv,
+    readEnv,
     systemCommands,
     toolDiscovery,
     ...overrides
@@ -44,8 +44,8 @@ export const createStarter = (input: StarterInput): RuntimeStarterPort => {
   const discovery: Parameters<typeof createToolDiscoveryAdapter>[0] = {
     systemCommands: systemCommands ?? stubCommands(),
   };
-  if (processEnv !== undefined) {
-    discovery.env = processEnv;
+  if (readEnv !== undefined) {
+    discovery.readEnv = readEnv;
   }
   const tools = toolDiscovery ?? createToolDiscoveryAdapter(discovery);
   const options: CreateCodexRuntimeStarterInput = {
@@ -69,8 +69,8 @@ export const createStarter = (input: StarterInput): RuntimeStarterPort => {
         })),
     ...overrides,
   };
-  if (processEnv !== undefined) {
-    options.processEnv = processEnv;
+  if (readEnv !== undefined) {
+    options.readEnv = readEnv;
   }
   return createCodexRuntimeStarter(options);
 };

@@ -38,7 +38,7 @@ import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeStatusPublisher } from "./runtime-lifecycle-publisher";
-import { guardRuntimeStart } from "./user-path-start-guard";
+import { guardRuntimeStart } from "./user-path-guards";
 
 /** Composes the shared runtime of each kind, its registry, and its lifecycle service. */
 export const createNodeHostRuntimeComposition = ({
@@ -77,13 +77,13 @@ export const createNodeHostRuntimeComposition = ({
   const {
     codexAppServer,
     codexTransportRegistry,
-    processEnvironment,
     runtimeDistribution,
     runtimeExecutableProbes,
     runtimeHealth,
     toolDiscovery,
+    userEnvironment,
+    readEnv,
   } = defaultPorts;
-  const processEnv = processEnvironment.environment;
   const mcpServerConfigFor = (runtimeName: string) =>
     createOpenDucktorMcpServerConfigResolver({
       resolveBridge,
@@ -97,7 +97,7 @@ export const createNodeHostRuntimeComposition = ({
     launchPolicy: createClaudeLaunchPolicy(settingsConfig),
     liveSessionLifecycle: liveState,
     onBackgroundFailure,
-    processEnv,
+    readEnv,
     runtimeExecutableProbe: runtimeExecutableProbes.claude,
     runtimeDistribution,
     toolDiscovery,
@@ -123,7 +123,7 @@ export const createNodeHostRuntimeComposition = ({
           ),
         ),
     }),
-    processEnv,
+    readEnv,
   };
   if (clientVersion) codexStarterInput.clientVersion = clientVersion;
   const runtimeStarters = {
@@ -132,7 +132,7 @@ export const createNodeHostRuntimeComposition = ({
     opencode: createOpenCodeRuntimeComposition({
       launchDirectory,
       liveSessionLifecycle: liveState,
-      processEnv,
+      readEnv,
       resolveMcpServerConfig: mcpServerConfigFor("OpenCode"),
       settingsConfig,
       taskSessionLifecycleCoordinator,
@@ -174,7 +174,7 @@ export const createNodeHostRuntimeComposition = ({
       startRuntime: (runtimeInput) =>
         runtimeStarters[runtimeInput.runtimeKind].startRuntime(runtimeInput),
     },
-    processEnvironment,
+    userEnvironment,
   );
   const orchestrator = createRuntimeOrchestrator({
     drivers: createRuntimeDrivers({

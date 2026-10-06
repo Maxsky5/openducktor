@@ -121,7 +121,7 @@ test("accepts registered worktrees outside the managed worktree roots", async ()
     await symlink(externalWorktree, externalWorktreeAlias, "junction");
     const dependencies = {
       gitPort: createGitCliAdapter({
-        processEnv: gitFixtureEnv,
+        readEnv: () => gitFixtureEnv,
         resolveCommand: () => Effect.succeed("git"),
       }),
       settingsConfig: {

@@ -188,11 +188,11 @@ setInterval(() => {}, 1000);
 `,
     );
     const port = createDevServerProcessAdapter({
-      processEnv: {
+      readEnv: () => ({
         ...process.env,
         ODT_PROCESS_ENV_VALUE: "from-process-env",
         OPENDUCKTOR_APP_TOKEN: "must-not-reach-child",
-      },
+      }),
       startGracePeriodMs: 20,
       stopTimeoutMs: 750,
     });
@@ -296,7 +296,7 @@ setInterval(() => {}, 1000);
 `,
     );
     const port = createDevServerProcessAdapter({
-      processEnv: { ...process.env, HOME: root },
+      readEnv: () => ({ ...process.env, HOME: root }),
       startGracePeriodMs: 50,
       stopTimeoutMs: 750,
     });
@@ -346,7 +346,7 @@ setInterval(() => {}, 1000);
       );
       expect(resolution.error).toBeNull();
       const port = createDevServerProcessAdapter({
-        processEnv: resolution.environment,
+        readEnv: () => resolution.environment,
         startGracePeriodMs: 50,
         stopTimeoutMs: 750,
       });
@@ -521,7 +521,7 @@ setInterval(() => {}, 1000);
     }
 
     const port = createEffectDevServerProcessAdapter({
-      processEnv: { PATH: process.env.PATH },
+      readEnv: () => ({ PATH: process.env.PATH }),
       startGracePeriodMs: 1_000,
       stopTimeoutMs: 100,
     });
@@ -550,7 +550,7 @@ setInterval(() => {}, 1000);
     }
 
     const port = createEffectDevServerProcessAdapter({
-      processEnv: { PATH: process.env.PATH },
+      readEnv: () => ({ PATH: process.env.PATH }),
       startGracePeriodMs: 20,
       stopTimeoutMs: 100,
     });
@@ -596,7 +596,7 @@ setInterval(() => {}, 1000);
       ] as const) {
         const outputs: string[] = [];
         const port = createDevServerProcessAdapter({
-          processEnv: { ...process.env, ComSpec: process.env.ComSpec },
+          readEnv: () => ({ ...process.env, ComSpec: process.env.ComSpec }),
           startGracePeriodMs: 100,
           stopTimeoutMs: 1_000,
         });

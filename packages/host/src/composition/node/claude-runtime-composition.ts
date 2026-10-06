@@ -25,7 +25,7 @@ export type ClaudeRuntimeComposition = {
 export type CreateClaudeRuntimeCompositionInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
-  processEnv?: NodeJS.ProcessEnv;
+  readEnv: () => NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
@@ -44,7 +44,7 @@ export type CreateClaudeRuntimeCompositionInput = {
 export const createClaudeRuntimeComposition = ({
   liveSessionLifecycle,
   onBackgroundFailure,
-  processEnv,
+  readEnv,
   resolveMcpBridgeConnection,
   runtimeExecutableProbe,
   runtimeDistribution,
@@ -62,14 +62,13 @@ export const createClaudeRuntimeComposition = ({
       launchPolicy,
       emit: eventHub.emit,
       onBackgroundFailure,
+      // Each runtime start reads the environment once, like the other runtime processes.
+      processEnv: readEnv(),
       resolveMcpBridgeConnection,
       runtimeDistribution,
       sessionStore,
       toolDiscovery,
     };
-    if (processEnv) {
-      agentSdkServiceInput.processEnv = processEnv;
-    }
     return createClaudeLiveSessionAdapterPreparer({
       eventHub,
       liveSessionLifecycle,

@@ -1,8 +1,9 @@
 import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
 import { normalizeUserPathInput } from "@openducktor/path-support";
-import { Deferred, Effect, FiberId } from "effect";
+import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
+import { createKeyedSharedFlight } from "../../effect/shared-flight";
 import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
@@ -308,83 +309,40 @@ const discoverToolPath = (
     toolId,
   });
 
-type ToolDiscoveryFlight = {
-  deferred: Deferred.Deferred<ResolvedTool, ToolDiscoveryError>;
-};
-
-const makeToolDiscoveryFlight = (): ToolDiscoveryFlight => ({
-  deferred: Deferred.unsafeMake(FiberId.none),
-});
-
 export const createToolDiscoveryAdapter = ({
-  env = process.env,
+  readEnv = () => process.env,
   options = {},
   systemCommands,
 }: {
-  env?: NodeJS.ProcessEnv;
+  /** Reads the environment for each discovery, so it uses the latest user PATH. */
+  readEnv?: () => NodeJS.ProcessEnv;
   options?: ToolDiscoveryPathOptions;
   systemCommands: SystemCommandPort;
 }): ToolDiscoveryPort => {
   const cachedTools = new Map<ToolDiscoveryId, ResolvedTool>();
-  const flights = new Map<ToolDiscoveryId, ToolDiscoveryFlight>();
+  const flight = createKeyedSharedFlight<ToolDiscoveryId, ResolvedTool, ToolDiscoveryError>();
 
-  const completeFlight = (toolId: ToolDiscoveryId, flight: ToolDiscoveryFlight) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(discoverToolPath(toolId, systemCommands, env, options));
-      if (exit._tag === "Success") {
-        cachedTools.set(toolId, exit.value);
+  const resolveTool: ToolDiscoveryPort["resolveTool"] = (toolId) =>
+    Effect.suspend(() => {
+      const cachedTool = cachedTools.get(toolId);
+      if (cachedTool !== undefined) {
+        return Effect.succeed(cachedTool);
       }
-      yield* Deferred.done(flight.deferred, exit);
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (flights.get(toolId) === flight) {
-            flights.delete(toolId);
-          }
-        }),
-      ),
-    );
-
-  const resolveTool: ToolDiscoveryPort["resolveTool"] = (toolId) => {
-    const cachedTool = cachedTools.get(toolId);
-    if (cachedTool !== undefined) {
-      return Effect.succeed(cachedTool);
-    }
-
-    return Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const reservation = yield* Effect.sync(() => {
-          const reservedCachedTool = cachedTools.get(toolId);
-          if (reservedCachedTool !== undefined) {
-            return { _tag: "cached" as const, tool: reservedCachedTool };
-          }
-
-          const existingFlight = flights.get(toolId);
-          if (existingFlight) {
-            return { _tag: "existing" as const, flight: existingFlight };
-          }
-
-          const flight = makeToolDiscoveryFlight();
-          flights.set(toolId, flight);
-          return { _tag: "created" as const, flight };
-        });
-
-        if (reservation._tag === "cached") {
-          return reservation.tool;
-        }
-
-        if (reservation._tag === "created") {
-          yield* Effect.forkDaemon(completeFlight(toolId, reservation.flight));
-        }
-
-        return yield* restore(Deferred.await(reservation.flight.deferred));
-      }),
-    );
-  };
+      return flight.run(
+        toolId,
+        Effect.suspend(() => discoverToolPath(toolId, systemCommands, readEnv(), options)).pipe(
+          Effect.tap((tool) =>
+            Effect.sync(() => {
+              cachedTools.set(toolId, tool);
+            }),
+          ),
+        ),
+      );
+    });
 
   return {
     discoverTool(toolId) {
-      return discoverToolPath(toolId, systemCommands, env, options);
+      return discoverToolPath(toolId, systemCommands, readEnv(), options);
     },
     resolveTool,
     resolveToolPath(toolId) {
@@ -407,7 +365,7 @@ export const createToolDiscoveryAdapter = ({
         context,
         detailKey: "executablePath",
         displayLabel: "Saved path",
-        env,
+        env: readEnv(),
         invalidError: (message, details) =>
           invalidSavedToolPathError(descriptor, toolId, message, details),
         rawPath: executablePath,

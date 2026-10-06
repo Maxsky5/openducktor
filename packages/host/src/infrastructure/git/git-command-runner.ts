@@ -199,14 +199,14 @@ const runSpawnedGit = (
     child.stdin.end(options.stdin);
   });
 export const createDefaultGitRunner = (
-  env: NodeJS.ProcessEnv,
+  readEnv: () => NodeJS.ProcessEnv,
   launchOptions: GitCommandLaunchOptions,
 ): GitCommandRunner => {
   const resolveCommand = createGitCommandResolver(launchOptions);
   return (workingDirectory, args, options) =>
     Effect.gen(function* () {
       const platform = launchOptions.platform ?? process.platform;
-      const commandEnv = createGitEnvironment(env, platform);
+      const commandEnv = createGitEnvironment(readEnv(), platform);
       const command = yield* resolveCommand();
       if (options?.stdin !== undefined) {
         return yield* runSpawnedGit(

@@ -34,7 +34,7 @@ const createPreview = (
   createOpenCodeModelCatalogPreview({
     settingsConfig: createFixedRuntimeSettingsConfig("opencode", executablePath),
     toolDiscovery,
-    processEnv: process.env,
+    readEnv: () => process.env,
     portAllocator: () => Effect.succeed(4567),
     ...overrides,
   });

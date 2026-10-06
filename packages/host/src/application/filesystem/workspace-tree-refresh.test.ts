@@ -18,7 +18,7 @@ const withRepository = async (
   run: (root: string, command: (args: string[]) => Promise<void>) => Promise<void>,
 ) => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-tree-refresh-"));
-  const runner = createDefaultGitRunner(process.env, { command: "git" });
+  const runner = createDefaultGitRunner(() => process.env, { command: "git" });
   const command = async (args: string[]) => {
     await Effect.runPromise(runner(root, args));
   };
@@ -42,7 +42,7 @@ const withRepository = async (
 describe("workspace tree refresh", () => {
   test("full refresh includes Git badges for edits made during the inventory read", async () => {
     await withRepository(async (root) => {
-      const liveRunner = createDefaultGitRunner(process.env, { command: "git" });
+      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
       let edited = false;
       const git = createGitCliAdapter({
         runner: (dir, args, options) =>
@@ -85,7 +85,7 @@ describe("workspace tree refresh", () => {
     async (mode) => {
       await withRepository(async (root) => {
         const git = createGitCliAdapter({
-          runner: createDefaultGitRunner(process.env, { command: "git" }),
+          runner: createDefaultGitRunner(() => process.env, { command: "git" }),
         });
         const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
         try {
@@ -155,7 +155,7 @@ describe("workspace tree refresh", () => {
           names.slice(start, start + 100).map((name) => writeFile(path.join(root, name), "new\n")),
         );
       }
-      const liveRunner = createDefaultGitRunner(process.env, { command: "git" });
+      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
       let batches = 0;
       let failSecondBatch = false;
       const failure = new HostOperationError({
@@ -346,7 +346,7 @@ describe("workspace tree refresh", () => {
   test("keeps rename endpoints correct across a selected subdirectory", async () => {
     await withRepository(async (root, command) => {
       const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(process.env, { command: "git" }),
+        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
       });
       const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
       const selectedRoot = path.join(root, "src");
@@ -389,7 +389,7 @@ describe("workspace tree refresh", () => {
   test("returns net changes for older clients, shares a projection across bases, and resets expired cursors", async () => {
     await withRepository(async (root) => {
       const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(process.env, { command: "git" }),
+        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
       });
       const context = await Effect.runPromise(git.getFileTreeContext(root));
       let modified = false,
@@ -517,7 +517,7 @@ describe("workspace tree refresh", () => {
     await withRepository(async (root, command) => {
       await command(["branch", "other"]);
       const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(process.env, { command: "git" }),
+        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
       });
       let switchDuringRead = false;
       const service = createWorkspaceFilesService(createFilesystemAdapter(), {
@@ -563,7 +563,7 @@ describe("workspace tree refresh", () => {
     await withRepository(async (root) => {
       const start = Effect.runSync(Deferred.make<void>()),
         release = Effect.runSync(Deferred.make<void>());
-      const liveRunner = createDefaultGitRunner(process.env, { command: "git" });
+      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
       let inventories = 0,
         shouldFail = false;
       const runner: GitCommandRunner = (dir, args, options) =>
@@ -627,7 +627,7 @@ describe("workspace tree refresh", () => {
 
 function treeFixture(root: string) {
   const calls: string[][] = [];
-  const runner = createDefaultGitRunner(process.env, { command: "git" });
+  const runner = createDefaultGitRunner(() => process.env, { command: "git" });
   const git = createGitCliAdapter({
     runner: (dir, args, options) => {
       calls.push(args);

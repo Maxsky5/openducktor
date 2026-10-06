@@ -105,7 +105,6 @@ describe("createProcessEnvironment", () => {
     );
 
     expect(resolution).toEqual({
-      status: "ready",
       environment: { Path: "C:\\Windows\\System32" },
       error: null,
     });

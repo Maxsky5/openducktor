@@ -10,7 +10,7 @@ import {
 } from "../process/process-environment";
 
 type TerminalLaunchEnvironmentInput = {
-  processEnv: NodeJS.ProcessEnv;
+  readEnv: () => NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   readUserShell?: ReadUserShell;
 };
@@ -38,13 +38,13 @@ const resolveTerminalShell = ({
 
 export const createTerminalLaunchEnvironment =
   ({
-    processEnv,
+    readEnv,
     platform = process.platform,
     readUserShell = accountUserShell,
   }: TerminalLaunchEnvironmentInput): TerminalLaunchEnvironmentPort =>
   () =>
     Effect.gen(function* () {
-      const environment = sanitizeChildProcessEnvironment(processEnv, platform);
+      const environment = sanitizeChildProcessEnvironment(readEnv(), platform);
       const shell = resolveTerminalShell({ environment, platform, readUserShell });
       if (!shell) {
         return yield* new TerminalServiceError({
