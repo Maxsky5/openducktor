@@ -41,6 +41,9 @@ import {
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const codexAppServerJsonObjectSchema = z.record(z.string(), z.json());
 const codexRpcErrorSchema = z.object({ code: z.number().int(), message: z.string() });
+const exitDetail = (exitCode: number | null, signal: NodeJS.Signals | null): string =>
+  signal === null ? `process exited with code ${exitCode}` : `process exited from signal ${signal}`;
+
 export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
@@ -367,9 +370,11 @@ export const createCodexAppServerTransport = (
     if (closed) return;
     unexpectedStdoutCloseTimer = setTimeout(() => {
       unexpectedStdoutCloseTimer = null;
-      if (!closed && !fatalError) {
-        failFast(processClosedError("stdout closed unexpectedly"));
-      }
+      if (closed || fatalError) return;
+      // The process can exit before its `close` event, which also waits for stderr.
+      const exited = child.exitCode !== null || child.signalCode !== null;
+      const detail = exited ? `closed: ${exitDetail(child.exitCode, child.signalCode)}` : null;
+      failFast(processClosedError(detail ?? "stdout closed unexpectedly"));
     }, 25);
   });
   const stderrLines = createInterface({ input: child.stderr });
@@ -387,11 +392,7 @@ export const createCodexAppServerTransport = (
   child.once("close", (exitCode, signal) => {
     clearUnexpectedStdoutCloseTimer();
     if (!closed) {
-      const detail =
-        signal === null
-          ? `process exited with code ${exitCode}`
-          : `process exited from signal ${signal}`;
-      failFast(processClosedError(`closed: ${detail}`));
+      failFast(processClosedError(`closed: ${exitDetail(exitCode, signal)}`));
       return;
     }
     closed = true;
