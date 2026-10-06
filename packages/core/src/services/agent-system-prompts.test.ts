@@ -192,6 +192,7 @@ describe("buildAgentSystemPrompt", () => {
         "keep every requirement and decision in the text as well",
         "do not add HTML, click handlers, or theme and style directives",
         'declare such a state with state "In review (AI)" as Review',
+        "Draw flowcharts top to bottom with flowchart TD",
       ]);
     },
   );
@@ -224,6 +225,8 @@ describe("buildAgentSystemPrompt", () => {
       "state ownership, and failure behavior",
       "Work as a software architect",
       "Stay at the architecture level",
+      "Include a detail only when changing it would change the architecture, a contract, or a required behavior",
+      "Do not show internal module functions, configuration objects, or call sites",
       "refer to requirements by name instead of restating the spec",
       "Show the target design in one Mermaid diagram",
       "Write only its signature or shape",
