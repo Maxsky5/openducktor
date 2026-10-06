@@ -27,7 +27,7 @@ export function AgentChatThread({
   visitKey = 0,
 }: {
   model: AgentChatThreadModel;
-  visitKey?: number;
+  visitKey?: number | string;
 }): ReactElement {
   const {
     transcript,

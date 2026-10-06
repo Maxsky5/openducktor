@@ -14,7 +14,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
@@ -57,7 +57,7 @@ type UseWorkspaceSelectionOperationsResult = {
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;
-  selectWorkspace: (workspaceId: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
   reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
@@ -281,7 +281,8 @@ export function useWorkspaceSelectionOperations({
       return;
     }
 
-    applyActiveWorkspaceFromRecords(workspaceListQuery.data);
+    const records = workspaceListQuery.data;
+    startTransition(() => applyActiveWorkspaceFromRecords(records));
   }, [applyActiveWorkspaceFromRecords, workspaceListQuery.data]);
 
   useEffect(() => {
@@ -403,7 +404,7 @@ export function useWorkspaceSelectionOperations({
   );
 
   const selectWorkspace = useCallback(
-    async (workspaceId: string): Promise<void> => {
+    async (workspaceId: string, onSelected?: () => void): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
 
       setIsSwitchingWorkspace(true);
@@ -412,7 +413,11 @@ export function useWorkspaceSelectionOperations({
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
 
         if (workspaceSwitchVersionRef.current === switchVersion) {
-          applyWorkspaceRecord(selectedWorkspace);
+          // Keep the route and workspace in the same render when opening a session.
+          startTransition(() => {
+            applyWorkspaceRecord(selectedWorkspace);
+            onSelected?.();
+          });
         }
       } catch (error) {
         if (workspaceSwitchVersionRef.current === switchVersion) {
@@ -423,7 +428,7 @@ export function useWorkspaceSelectionOperations({
         }
       } finally {
         if (workspaceSwitchVersionRef.current === switchVersion) {
-          setIsSwitchingWorkspace(false);
+          startTransition(() => setIsSwitchingWorkspace(false));
         }
       }
     },

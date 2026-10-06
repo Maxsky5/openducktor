@@ -19,6 +19,7 @@ import {
   ChecksStateContext,
   RuntimeDefinitionsContext,
   TasksStateContext,
+  WorkspaceBranchStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import {
@@ -566,19 +567,21 @@ const notificationContextValue: NotificationContextValue = {
 
 const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   <WorkspaceStateContext.Provider value={workspaceStateValue()}>
-    <ChecksStateContext.Provider value={checksStateValue()}>
-      <TasksStateContext.Provider value={tasksState}>
-        <AgentOperationsContext.Provider value={agentOperations}>
-          <AgentSessionsContext.Provider value={sessionStore}>
-            <NotificationContext.Provider value={notificationContextValue}>
-              <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
-                {children}
-              </RuntimeDefinitionsContext.Provider>
-            </NotificationContext.Provider>
-          </AgentSessionsContext.Provider>
-        </AgentOperationsContext.Provider>
-      </TasksStateContext.Provider>
-    </ChecksStateContext.Provider>
+    <WorkspaceBranchStateContext.Provider value={workspaceStateValue()}>
+      <ChecksStateContext.Provider value={checksStateValue()}>
+        <TasksStateContext.Provider value={tasksState}>
+          <AgentOperationsContext.Provider value={agentOperations}>
+            <AgentSessionsContext.Provider value={sessionStore}>
+              <NotificationContext.Provider value={notificationContextValue}>
+                <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+                  {children}
+                </RuntimeDefinitionsContext.Provider>
+              </NotificationContext.Provider>
+            </AgentSessionsContext.Provider>
+          </AgentOperationsContext.Provider>
+        </TasksStateContext.Provider>
+      </ChecksStateContext.Provider>
+    </WorkspaceBranchStateContext.Provider>
   </WorkspaceStateContext.Provider>
 );
 

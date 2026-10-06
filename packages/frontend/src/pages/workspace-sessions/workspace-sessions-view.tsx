@@ -47,6 +47,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   const location = useLocation();
   const navigationType = useNavigationType();
   const { sessionId, creating, updateNavigation } = useWorkspaceSessionNavigation({
+    workspaceId: workspace.workspaceId,
     locationKey: location.key,
     navigationType,
     searchParams: params,
@@ -54,10 +55,18 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   });
   const records = useQuery(workspaceSessionListQueryOptions(workspace.workspaceId));
   const sessions = records.data ?? [];
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createWorkspaceId, setCreateWorkspaceId] = useState<string | null>(null);
+  const createOpen = createWorkspaceId === workspace.workspaceId;
+  if (createWorkspaceId !== null && createWorkspaceId !== workspace.workspaceId) {
+    setCreateWorkspaceId(null);
+  }
   const [createAttempt, setCreateAttempt] = useState(0);
   const archiveCloseAutoFocusRef = useRef<((event: Event) => void) | null>(null);
   const mounted = useMountedRef();
+  const workspaceIdRef = useRef(workspace.workspaceId);
+  useLayoutEffect(() => {
+    workspaceIdRef.current = workspace.workspaceId;
+  }, [workspace.workspaceId]);
   const { selected: requestedSelected, missingSessionId } = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
     sessions: records.data,
@@ -69,15 +78,24 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     guardWorkspaceChange,
     updateNavigation,
     cancelPending,
+    workspace.workspaceId,
   );
-  const selected = useVisibleSessionRecord(sessions, visibleSelectedId, requestedSelected);
+  const selected = useVisibleSessionRecord(
+    workspace.workspaceId,
+    sessions,
+    visibleSelectedId,
+    requestedSelected,
+  );
   const selectedId = selected?.id ?? null;
   const terminalModel = useWorkspaceSessionTerminals({
     workspace,
     selected,
     sessions,
   });
-  const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(selectedId);
+  const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(
+    workspace.workspaceId,
+    selectedId,
+  );
   useEffect(() => {
     if (records.data && missingSessionId === null && sessionId !== requestedSelectedId)
       updateNavigation({ sessionId: requestedSelectedId });
@@ -103,7 +121,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   });
   const setCreating = (open: boolean) => {
     if (open) setCreateAttempt((attempt) => attempt + 1);
-    setCreateOpen(open);
+    setCreateWorkspaceId(open ? workspace.workspaceId : null);
     if (!open && creating) updateNavigation({ creating: false });
   };
   if (records.isPending)
@@ -157,6 +175,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         isArchiving={archive.isPending}
       />
       <WorkspaceSessionDialogs
+        key={workspace.workspaceId}
         workspace={workspace}
         archiveTarget={archiveTarget}
         archivePending={archive.isPending}
@@ -171,8 +190,8 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         createAttempt={createAttempt}
         onCreateClose={() => setCreating(false)}
         onCreated={(record) => {
-          if (mounted.current) {
-            setCreateOpen(false);
+          if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
+            setCreateWorkspaceId(null);
             updateNavigation({ sessionId: record.id, creating: false });
           }
         }}
@@ -273,41 +292,56 @@ function WorkspaceSessionActiveContent({
 }
 
 function useVisibleSessionRecord(
+  workspaceId: string,
   sessions: WorkspaceSession[],
   visibleId: string | null,
   fallback: WorkspaceSession | null,
 ): WorkspaceSession | null {
   const visible = sessions.find((record) => record.id === visibleId) ?? null;
-  const lastVisible = useRef<WorkspaceSession | null>(null);
+  const lastVisible = useRef<{ workspaceId: string; record: WorkspaceSession } | null>(null);
   useLayoutEffect(() => {
-    if (visible) lastVisible.current = visible;
-  }, [visible]);
-  return visible ?? (lastVisible.current?.id === visibleId ? lastVisible.current : fallback);
+    if (visible) lastVisible.current = { workspaceId, record: visible };
+  }, [visible, workspaceId]);
+  return (
+    visible ??
+    (lastVisible.current?.workspaceId === workspaceId && lastVisible.current.record.id === visibleId
+      ? lastVisible.current.record
+      : fallback)
+  );
 }
 
-function useSessionPanelState(selectedId: string | null) {
+function useSessionPanelState(workspaceId: string, selectedId: string | null) {
   const { isOpen, toggle: togglePanel } = useRightPanelOpen();
   type TabState = Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">;
-  const [panelStates, setPanelStates] = useState<Record<string, TabState>>({});
+  const [scope, setScope] = useState<{ workspaceId: string; panels: Record<string, TabState> }>({
+    workspaceId,
+    panels: {},
+  });
+  if (scope.workspaceId !== workspaceId) setScope({ workspaceId, panels: {} });
+  const panelStates = scope.workspaceId === workspaceId ? scope.panels : {};
   const panelState: WorkspaceSessionPanelState = selectedId
     ? { isOpen, ...(panelStates[selectedId] ?? { activeTabId: "git", selectedFile: null }) }
     : { isOpen: false, activeTabId: "git", selectedFile: null };
-  const onPanelStateChange = useCallback((sessionId: string, update: Partial<TabState>) => {
-    setPanelStates((current) => {
-      const previous = current[sessionId] ?? {
-        activeTabId: "git",
-        selectedFile: null,
-      };
-      const next = { ...previous, ...update };
-      if (
-        previous.activeTabId === next.activeTabId &&
-        previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
-        previous.selectedFile?.relativePath === next.selectedFile?.relativePath
-      )
-        return current;
-      return { ...current, [sessionId]: next };
-    });
-  }, []);
+  const onPanelStateChange = useCallback(
+    (sessionId: string, update: Partial<TabState>) => {
+      setScope((current) => {
+        if (current.workspaceId !== workspaceId) return current;
+        const previous = current.panels[sessionId] ?? {
+          activeTabId: "git",
+          selectedFile: null,
+        };
+        const next = { ...previous, ...update };
+        if (
+          previous.activeTabId === next.activeTabId &&
+          previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
+          previous.selectedFile?.relativePath === next.selectedFile?.relativePath
+        )
+          return current;
+        return { ...current, panels: { ...current.panels, [sessionId]: next } };
+      });
+    },
+    [workspaceId],
+  );
   return { panelState, onPanelStateChange, togglePanel };
 }
 
@@ -335,12 +369,25 @@ function useWorkspaceSessionArchive({
   completeArchive: ReturnType<typeof useVisibleSessionId>["completeArchive"];
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"];
 }) {
-  const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
-  const archive = useArchiveWorkspaceSession((record) => {
+  const [archiveScope, setArchiveScope] = useState<{
+    workspaceId: string;
+    target: WorkspaceSession | null;
+  }>({ workspaceId: workspace.workspaceId, target: null });
+  const archiveTarget =
+    archiveScope.workspaceId === workspace.workspaceId ? archiveScope.target : null;
+  if (archiveScope.workspaceId !== workspace.workspaceId) {
+    setArchiveScope({ workspaceId: workspace.workspaceId, target: null });
+  }
+  const setArchiveTarget = (target: WorkspaceSession | null) =>
+    setArchiveScope({ workspaceId: workspace.workspaceId, target });
+  const archive = useArchiveWorkspaceSession((record, input) => {
+    if (input.workspaceId !== workspace.workspaceId) return;
     if (mounted.current && selectedId === record.id)
       completeArchive(sessions.find((entry) => entry.id !== record.id)?.id ?? null);
     if (mounted.current) setArchiveTarget(null);
   });
+  const resetArchive = archive.reset;
+  useEffect(() => resetArchive(), [resetArchive, workspace.workspaceId]);
   const beginArchive = (
     sessionId: string,
     removeWorktree: boolean,

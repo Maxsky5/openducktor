@@ -35,7 +35,6 @@ export type WorkspaceSessionSelection = {
   missingSessionId: string | null;
 };
 
-// The owning page is keyed by workspaceId, just like its local navigation state.
 export function useWorkspaceSessionSelection({
   workspaceId,
   sessions,
@@ -46,10 +45,20 @@ export function useWorkspaceSessionSelection({
   requestedSessionId: string | null | undefined;
 }): WorkspaceSessionSelection {
   const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
-  const [lastSessionId, setLastSessionId] = useState(() => readSelection(storageKey));
-  const persistedSessionId = useRef(lastSessionId);
+  const [lastSelection, setLastSelection] = useState(() => ({
+    workspaceId,
+    sessionId: readSelection(storageKey),
+  }));
+  const persistedSelection = useRef(lastSelection);
   const [persistenceError, setPersistenceError] = useState<Error | null>(null);
-  const preferredId = requestedSessionId === undefined ? lastSessionId : requestedSessionId;
+  let currentSelection = lastSelection;
+  if (lastSelection.workspaceId !== workspaceId) {
+    currentSelection = { workspaceId, sessionId: readSelection(storageKey) };
+    setLastSelection(currentSelection);
+    setPersistenceError(null);
+  }
+  const preferredId =
+    requestedSessionId === undefined ? currentSelection.sessionId : requestedSessionId;
   // Only a restored selection falls back to the first chat. A requested chat that is missing
   // stays unselected, so another conversation is never shown in its place.
   const selected =
@@ -66,10 +75,11 @@ export function useWorkspaceSessionSelection({
     if (
       !hasLoadedSessions ||
       missingSessionId !== null ||
-      selectedId === persistedSessionId.current
+      (workspaceId === persistedSelection.current.workspaceId &&
+        selectedId === persistedSelection.current.sessionId)
     )
       return;
-    setLastSessionId(selectedId);
+    setLastSelection({ workspaceId, sessionId: selectedId });
     let pending = true;
     let cancel = () => {};
     const flush = (): void => {
@@ -78,7 +88,7 @@ export function useWorkspaceSessionSelection({
       cancel();
       try {
         writeSelection(storageKey, selectedId);
-        persistedSessionId.current = selectedId;
+        persistedSelection.current = { workspaceId, sessionId: selectedId };
       } catch (cause) {
         setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
       }
@@ -95,8 +105,8 @@ export function useWorkspaceSessionSelection({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
-  }, [hasLoadedSessions, missingSessionId, selectedId, storageKey]);
+  }, [hasLoadedSessions, missingSessionId, selectedId, storageKey, workspaceId]);
 
-  if (persistenceError) throw persistenceError;
+  if (persistenceError && lastSelection.workspaceId === workspaceId) throw persistenceError;
   return { selected, missingSessionId };
 }

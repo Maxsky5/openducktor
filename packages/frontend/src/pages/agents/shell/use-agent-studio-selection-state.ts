@@ -35,6 +35,7 @@ type SelectionStateSnapshot = {
 
 export type AgentStudioSelectionStateModel = {
   selection: AgentStudioSelectionState;
+  isRoutePending: boolean;
   selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
@@ -178,6 +179,7 @@ export function useAgentStudioSelectionState({
 
   return {
     selection,
+    isRoutePending: currentSnapshot.routeQueryKey !== routeSelectionQueryKey,
     selectAgentStudioSelection,
   };
 }

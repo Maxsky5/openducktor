@@ -4,8 +4,13 @@ import type {
   TaskCard,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { type QueryObserverResult, useQueries, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import {
+  type QueryObserverResult,
+  replaceEqualDeep,
+  useQueries,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -80,34 +85,48 @@ export function useSessionNavigationModel(
 
   const live = useWorkspaceSessionLiveSnapshot();
 
+  const previousModel = useRef<SessionNavigationModel | undefined>(undefined);
   const model = useMemo(() => {
-    return buildSessionNavigationModel(
-      workspaces.map((workspace, index) => {
-        const tasks = taskReads[index] ?? { status: "loading" };
-        const taskSessions = new Map<string, SessionNavigationRead<AgentSessionRecord[]>>(
-          tasks.status === "ready"
-            ? tasks.data.map((task) => [
-                task.id,
-                listReadByKey.get(
-                  agentSessionListTargetKey({ repoPath: workspace.repoPath, taskId: task.id }),
-                ) ?? { status: "loading" },
-              ])
-            : [],
-        );
-        return {
-          workspace,
-          tasks,
-          taskSessions,
-          workspaceSessions: withRecordStreamError(
-            workspaceSessionReads[index],
-            live.sessionRecordsError,
-          ),
-          live: live.statesByWorkspaceId.get(workspace.workspaceId) ?? { kind: "unknown" },
-        };
-      }),
-      grouping,
+    return replaceEqualDeep(
+      previousModel.current,
+      buildSessionNavigationModel(
+        workspaces.map((workspace, index) => {
+          const tasks = taskReads[index] ?? { status: "loading" };
+          const taskSessions = new Map<string, SessionNavigationRead<AgentSessionRecord[]>>(
+            tasks.status === "ready"
+              ? tasks.data.map((task) => [
+                  task.id,
+                  listReadByKey.get(
+                    agentSessionListTargetKey({ repoPath: workspace.repoPath, taskId: task.id }),
+                  ) ?? { status: "loading" },
+                ])
+              : [],
+          );
+          return {
+            workspace: {
+              workspaceId: workspace.workspaceId,
+              workspaceName: workspace.workspaceName,
+              repoPath: workspace.repoPath,
+              abbreviation: workspace.abbreviation,
+              tileColor: workspace.tileColor,
+              iconDataUrl: workspace.iconDataUrl,
+            },
+            tasks,
+            taskSessions,
+            workspaceSessions: withRecordStreamError(
+              workspaceSessionReads[index],
+              live.sessionRecordsError,
+            ),
+            live: live.statesByWorkspaceId.get(workspace.workspaceId) ?? { kind: "unknown" },
+          };
+        }),
+        grouping,
+      ),
     );
   }, [grouping, listReadByKey, live, taskReads, workspaceSessionReads, workspaces]);
+  useLayoutEffect(() => {
+    previousModel.current = model;
+  }, [model]);
 
   const retrySource = useCallback(
     (issue: SessionNavigationSourceIssue): void => {

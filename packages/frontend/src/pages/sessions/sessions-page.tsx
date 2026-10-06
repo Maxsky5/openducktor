@@ -52,10 +52,10 @@ export function SessionsPage(): ReactElement {
     if (tasks.some((task) => task.id === taskId && task.status === "closed")) {
       return <Navigate to="/kanban" replace />;
     }
-    return <AgentsPage key={activeWorkspace.workspaceId} />;
+    return <AgentsPage />;
   }
   if (kind === "workspace") {
-    return <WorkspaceSessionsPage key={activeWorkspace.workspaceId} />;
+    return <WorkspaceSessionsPage />;
   }
   return <SessionsEmptyState key={activeWorkspace.workspaceId} workspace={activeWorkspace} />;
 }

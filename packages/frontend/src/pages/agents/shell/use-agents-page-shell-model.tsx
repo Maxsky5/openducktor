@@ -8,7 +8,7 @@ import {
   useAgentOperations,
   useAgentSessionSummaries,
   useTasksState,
-  useWorkspaceState,
+  useWorkspaceBranchState,
 } from "@/state/app-state-provider";
 import { useAgentStudioTerminals } from "../terminals/use-agent-studio-terminals";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
@@ -27,7 +27,7 @@ import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-
 
 type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
-  activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
+  activeWorkspace: ReturnType<typeof useWorkspaceBranchState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
@@ -52,7 +52,7 @@ type AgentsPageShellModel = {
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
-  const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const { activeBranch, branches, activeWorkspace } = useWorkspaceBranchState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();

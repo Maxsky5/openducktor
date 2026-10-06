@@ -1,9 +1,11 @@
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { WorkspaceSessions } from "./workspace-sessions-view";
 
-export default function WorkspaceSessionsPage(): ReactElement {
+const WorkspaceSessionsPage = memo(function WorkspaceSessionsPage(): ReactElement {
   const workspace = useActiveWorkspace();
   if (!workspace) return <p className="p-6">Select a workspace.</p>;
-  return <WorkspaceSessions key={workspace.workspaceId} workspace={workspace} />;
-}
+  return <WorkspaceSessions workspace={workspace} />;
+});
+
+export default WorkspaceSessionsPage;

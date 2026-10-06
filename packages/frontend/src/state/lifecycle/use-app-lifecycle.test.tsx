@@ -37,6 +37,40 @@ const taskViewSync: TaskViewSync = {
 };
 
 describe("useAppLifecycle task stream", () => {
+  test("keeps repository reads running when only workspace metadata changes", async () => {
+    const refreshBranches = mock(async () => {});
+    const refreshTaskStoreCheckForRepo = mock(async () => makeTaskStoreCheck());
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Old name",
+        repoPath: "/repo-a",
+      },
+      refreshBranches,
+      refreshTaskStoreCheckForRepo,
+      taskStreamControllerFactory: () => ({ start: async () => {}, stop: async () => {} }),
+    };
+    const harness = createHookHarness(
+      (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
+      initialArgs,
+      {
+        wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      },
+    );
+    try {
+      await harness.mount();
+      await waitFor(() => expect(refreshBranches).toHaveBeenCalledTimes(1));
+      await harness.update({
+        ...initialArgs,
+        activeWorkspace: { ...initialArgs.activeWorkspace!, workspaceName: "New name" },
+      });
+      expect(refreshBranches).toHaveBeenCalledTimes(1);
+      expect(refreshTaskStoreCheckForRepo).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
   test("loads tasks after switching to a repository the stream has not claimed", async () => {
     const loadWorkspaceTasks = mock(async () => {});
     const factory = ({

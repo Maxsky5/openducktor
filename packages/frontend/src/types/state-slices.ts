@@ -113,7 +113,7 @@ export type WorkspaceStateContextValue = {
     workspaceId: string,
     draft: WorkspaceModelDefaultsDraft,
   ) => Promise<void>;
-  selectWorkspace: (workspaceId: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
   reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;

@@ -1,5 +1,5 @@
 import { CircleAlert, LoaderCircle } from "lucide-react";
-import { useId, type ReactElement } from "react";
+import { memo, useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
@@ -100,7 +100,7 @@ export function SessionNavigationRail({
   );
 }
 
-function SessionRailIcon({
+const SessionRailIcon = memo(function SessionRailIcon({
   entry,
   isSelected,
   isVisible,
@@ -123,9 +123,7 @@ function SessionRailIcon({
         aria-current={isSelected ? "true" : undefined}
         aria-label={sessionEntryAccessibleName(entry)}
         aria-describedby={readStatusId}
-        onClick={() => {
-          if (!isVisible) onOpen(entry);
-        }}
+        onClick={() => onOpen(entry)}
         className={cn(
           // The margin keeps the group label in view when the rail scrolls to this icon.
           "relative flex size-9 shrink-0 cursor-pointer scroll-mt-8 items-center justify-center rounded-md outline-none",
@@ -143,7 +141,7 @@ function SessionRailIcon({
       </button>
     </SessionEntryPreview>
   );
-}
+});
 
 function SessionRailGroup({
   group,

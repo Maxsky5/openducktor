@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen, TriangleAlert } from "lucide-react";
-import { type ReactElement, useCallback, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   buildSessionNavigationHref,
+  sessionNavigationTargetKey,
   type SessionNavigationTarget,
 } from "@/features/session-navigation/session-navigation-target";
 import { useSessionNavigationModel } from "@/features/session-navigation/use-session-navigation-model";
@@ -118,7 +119,8 @@ export function WorkspaceSidebar({
   onOpenRepositoryModal,
 }: WorkspaceSidebarProps): ReactElement {
   const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
-  const { workspaces, activeWorkspace } = useWorkspaceState();
+  const { workspaces, activeWorkspace, isSwitchingWorkspace, selectWorkspace } =
+    useWorkspaceState();
   const navigate = useNavigate();
   const [scope, setScope] = useState<SessionNavigationScope>("current");
   const scopedWorkspaces = useMemo(() => {
@@ -135,14 +137,61 @@ export function WorkspaceSidebar({
   const listScopeKey =
     scope === "all" ? scope : `${scope}:${activeWorkspace?.workspaceId ?? "none"}`;
 
+  const navigation = useRef({
+    activeWorkspace,
+    visibleTarget,
+    isSwitchingWorkspace,
+    guardTransition,
+    navigate,
+    selectWorkspace,
+  });
+  useLayoutEffect(() => {
+    navigation.current = {
+      activeWorkspace,
+      visibleTarget,
+      isSwitchingWorkspace,
+      guardTransition,
+      navigate,
+      selectWorkspace,
+    };
+  }, [
+    activeWorkspace,
+    visibleTarget,
+    isSwitchingWorkspace,
+    guardTransition,
+    navigate,
+    selectWorkspace,
+  ]);
   const openEntry = useCallback(
     (entry: SessionNavigationEntry, target: SessionNavigationTarget = entry.target): void => {
+      const {
+        activeWorkspace,
+        visibleTarget,
+        isSwitchingWorkspace,
+        guardTransition,
+        navigate,
+        selectWorkspace,
+      } = navigation.current;
+      // Reopening the visible session can cancel a pending workspace switch.
+      if (
+        !isSwitchingWorkspace &&
+        visibleTarget &&
+        sessionNavigationTargetKey(target) === sessionNavigationTargetKey(visibleTarget)
+      )
+        return;
       const href = buildSessionNavigationHref(target);
       guardTransition(() => {
-        void navigate(href);
+        if (target.workspaceId === activeWorkspace?.workspaceId && !isSwitchingWorkspace) {
+          void navigate(href);
+          return;
+        }
+        // Selection reports host failures; leave the current conversation open on failure.
+        void selectWorkspace(target.workspaceId, () => {
+          void navigate(href);
+        }).catch(() => {});
       });
     },
-    [guardTransition, navigate],
+    [],
   );
 
   return (

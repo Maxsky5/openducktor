@@ -89,6 +89,7 @@ function RoutedSessionHarness() {
     run,
     ({ sessionId }) => setRequested(sessionId === "second" ? "second" : "first"),
     cancelPending,
+    "workspace-a",
   );
   const shown = visible === "second" ? "second" : "first";
   const [selectedFiles, setSelectedFiles] = useState<{

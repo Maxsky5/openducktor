@@ -125,18 +125,21 @@ export function useAgentsPageRouteSessionModel({
   ]);
 
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
-  const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
-    useAgentStudioSelectionState({
-      activeWorkspaceId,
-      routeSessionIdentity,
-      isWorkspaceRestorePending,
-      taskIdParam,
-      sessionExternalIdParam,
-      hasExplicitRoleParam,
-      roleFromQuery,
-      scheduleQueryUpdate,
-      requestContextTransition: taskExecutionFilePreview.requestContextTransition,
-    });
+  const {
+    selection: selectionState,
+    isRoutePending,
+    selectAgentStudioSelection: applyAgentStudioSelection,
+  } = useAgentStudioSelectionState({
+    activeWorkspaceId,
+    routeSessionIdentity,
+    isWorkspaceRestorePending,
+    taskIdParam,
+    sessionExternalIdParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scheduleQueryUpdate,
+    requestContextTransition: taskExecutionFilePreview.requestContextTransition,
+  });
   const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -178,6 +181,7 @@ export function useAgentsPageRouteSessionModel({
         canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
         !isWorkspaceRestorePending &&
+        !isRoutePending &&
         selection.view.selectedTask !== null,
     });
   const retryNavigationPersistence = useCallback((): void => {
@@ -195,12 +199,12 @@ export function useAgentsPageRouteSessionModel({
   ]);
 
   useEffect(() => {
-    if (!selection.queryUpdate) {
+    if (isRoutePending || !selection.queryUpdate) {
       return;
     }
 
     scheduleQueryUpdate(selection.queryUpdate);
-  }, [scheduleQueryUpdate, selection.queryUpdate]);
+  }, [isRoutePending, scheduleQueryUpdate, selection.queryUpdate]);
 
   useTaskPreviewTransitionGuard(taskExecutionFilePreview, workspaceRepoPath);
 

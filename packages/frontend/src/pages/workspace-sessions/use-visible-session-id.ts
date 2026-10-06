@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import type { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 
@@ -7,11 +7,21 @@ export function useVisibleSessionId(
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"],
   updateNavigation: ReturnType<typeof useWorkspaceSessionNavigation>["updateNavigation"],
   cancelPendingChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["cancelPending"],
+  workspaceId: string,
 ) {
-  const [visibleSelectedId, setVisibleSelectedId] = useState<string | null>(requestedSelectedId);
+  const [visible, setVisible] = useState({ workspaceId, sessionId: requestedSelectedId });
+  const visibleSelectedId =
+    visible.workspaceId === workspaceId ? visible.sessionId : requestedSelectedId;
   const [retryCount, setRetryCount] = useState(0);
   const pendingRef = useRef<{ target: string | null } | null>(null);
   const canceledTargetRef = useRef<string | null | undefined>(undefined);
+  if (visible.workspaceId !== workspaceId) {
+    setVisible({ workspaceId, sessionId: requestedSelectedId });
+  }
+  useLayoutEffect(() => {
+    pendingRef.current = null;
+    canceledTargetRef.current = undefined;
+  }, [workspaceId]);
 
   useEffect(() => {
     if (requestedSelectedId === visibleSelectedId) {
@@ -34,7 +44,7 @@ export function useVisibleSessionId(
         if (pendingRef.current !== pending) return;
         pendingRef.current = null;
         canceledTargetRef.current = undefined;
-        setVisibleSelectedId(requestedSelectedId);
+        setVisible({ workspaceId, sessionId: requestedSelectedId });
       },
       () => {
         if (pendingRef.current !== pending) return;
@@ -50,6 +60,7 @@ export function useVisibleSessionId(
     retryCount,
     updateNavigation,
     visibleSelectedId,
+    workspaceId,
   ]);
 
   const leaveRemovedChat = useCallback(() => {
@@ -66,10 +77,10 @@ export function useVisibleSessionId(
     (sessionId: string | null) => {
       pendingRef.current = null;
       canceledTargetRef.current = undefined;
-      setVisibleSelectedId(sessionId);
+      setVisible({ workspaceId, sessionId });
       updateNavigation({ sessionId });
     },
-    [updateNavigation],
+    [updateNavigation, workspaceId],
   );
   return { visibleSelectedId, leaveRemovedChat, completeArchive };
 }

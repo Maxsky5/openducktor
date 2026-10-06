@@ -100,3 +100,31 @@ test("keeps a missing requested chat unselected and keeps the saved selection", 
     localStorage.removeItem(key);
   }
 });
+
+test("restores each workspace's saved chat when the page stays mounted", () => {
+  const workspaceA = crypto.randomUUID();
+  const workspaceB = crypto.randomUUID();
+  const keyA = workspaceSessionSelectionStorageKey(workspaceA);
+  const keyB = workspaceSessionSelectionStorageKey(workspaceB);
+  localStorage.setItem(keyA, "First");
+  localStorage.setItem(keyB, "Second");
+  const sessions = [record("First"), record("Second")];
+  const h = renderHook(
+    (workspaceId: string) =>
+      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined }),
+    { initialProps: workspaceA },
+  );
+  try {
+    h.rerender(workspaceB);
+    expect(h.result.current.selected?.id).toBe("Second");
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(localStorage.getItem(keyA)).toBe("First");
+    expect(localStorage.getItem(keyB)).toBe("Second");
+    h.rerender(workspaceA);
+    expect(h.result.current.selected?.id).toBe("First");
+  } finally {
+    h.unmount();
+    localStorage.removeItem(keyA);
+    localStorage.removeItem(keyB);
+  }
+});

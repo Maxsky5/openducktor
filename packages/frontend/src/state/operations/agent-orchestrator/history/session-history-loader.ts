@@ -5,8 +5,10 @@ import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
-import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
-import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
+import {
+  type LoadSettingsSnapshotForRuntimePolicy,
+  resolveRuntimeSessionContextRef,
+} from "../support/session-runtime-policy";
 import { requireBoundSessionAssociation } from "../support/session-runtime-ref";
 import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
@@ -33,27 +35,6 @@ type CreateLoadAgentSessionHistoryArgs = {
 };
 
 const SESSION_HISTORY_LOAD_LIMIT = 600;
-
-const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure => {
-  if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
-    return cause.failure.sessionHistoryFailure;
-  }
-  if (cause instanceof HostInvokeError && cause.failure?.kind === "runtime_query") {
-    const failure = cause.failure.runtimeQueryFailure;
-    return (
-      failure.sessionHistoryFailure ?? {
-        code: failure.code === "invalid_runtime_response" ? failure.code : "request_failed",
-        summary: failure.summary,
-        detail: failure.detail,
-      }
-    );
-  }
-  return {
-    code: "request_failed",
-    summary: "Conversation history could not be loaded.",
-    detail: cause instanceof Error ? cause.message : String(cause),
-  };
-};
 
 type LoadSessionHistoryIntoStoreArgs = {
   repoPath: string;
@@ -106,8 +87,6 @@ export const loadSessionHistoryIntoStore = async ({
     }
     return null;
   };
-  const finishSupersededHistoryRead = (): AgentSessionState | null => readSessionSnapshot(identity);
-
   try {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -118,7 +97,7 @@ export const loadSessionHistoryIntoStore = async ({
       return finishStaleHistoryLoad();
     }
     if (isSupersededRead()) {
-      return finishSupersededHistoryRead();
+      return readSessionSnapshot(identity);
     }
 
     const sessionForHistory = readSessionSnapshot(identity);
@@ -143,7 +122,7 @@ export const loadSessionHistoryIntoStore = async ({
       return finishStaleHistoryLoad();
     }
     if (isSupersededRead()) {
-      return finishSupersededHistoryRead();
+      return readSessionSnapshot(identity);
     }
 
     const historyInput: Parameters<typeof adapter.loadSessionHistory>[0] = {
@@ -161,7 +140,7 @@ export const loadSessionHistoryIntoStore = async ({
       return finishStaleHistoryLoad();
     }
     if (isSupersededRead()) {
-      return finishSupersededHistoryRead();
+      return readSessionSnapshot(identity);
     }
 
     updateSession(identity, (current) =>
@@ -173,7 +152,7 @@ export const loadSessionHistoryIntoStore = async ({
       return finishStaleHistoryLoad();
     }
     if (isSupersededRead()) {
-      return finishSupersededHistoryRead();
+      return readSessionSnapshot(identity);
     }
     updateSession(identity, (session) =>
       failSessionHistoryLoad(session, sessionHistoryFailureFromError(error)),
@@ -220,3 +199,24 @@ export const createLoadAgentSessionHistory =
     if (loadSettingsSnapshot) input.loadSettingsSnapshot = loadSettingsSnapshot;
     return loadSessionHistoryIntoStore(input);
   };
+
+const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure => {
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
+    return cause.failure.sessionHistoryFailure;
+  }
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "runtime_query") {
+    const failure = cause.failure.runtimeQueryFailure;
+    return (
+      failure.sessionHistoryFailure ?? {
+        code: failure.code === "invalid_runtime_response" ? failure.code : "request_failed",
+        summary: failure.summary,
+        detail: failure.detail,
+      }
+    );
+  }
+  return {
+    code: "request_failed",
+    summary: "Conversation history could not be loaded.",
+    detail: cause instanceof Error ? cause.message : String(cause),
+  };
+};

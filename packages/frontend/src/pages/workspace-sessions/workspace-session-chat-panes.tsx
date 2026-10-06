@@ -27,8 +27,14 @@ export function WorkspaceSessionChatPanes({
 }: ChatPane & { sessionIds: readonly string[] }) {
   const [panes, setPanes] = useState<ChatPane[]>([]);
   const ids = new Set(sessionIds);
+  const currentKey = chatPaneKey(current);
   const retained = panes
-    .filter((pane) => pane.record.id !== current.record.id && ids.has(pane.record.id))
+    .filter(
+      (pane) =>
+        chatPaneKey(pane) !== currentKey &&
+        // Only the current workspace's records can tell us which chats were removed.
+        (pane.workspace.workspaceId !== current.workspace.workspaceId || ids.has(pane.record.id)),
+    )
     .slice(-(MAX_CACHED_TRANSCRIPTS - 1));
   const shown = [...retained, current];
   const last = panes.at(-1);
@@ -47,12 +53,12 @@ export function WorkspaceSessionChatPanes({
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
       {shown
-        .toSorted((left, right) => left.record.id.localeCompare(right.record.id))
+        .toSorted((left, right) => chatPaneKey(left).localeCompare(chatPaneKey(right)))
         .map((pane) => (
           <WorkspaceSessionChatPane
-            key={pane.record.id}
+            key={chatPaneKey(pane)}
             {...pane}
-            mode={pane.record.id === current.record.id ? "visible" : "hidden"}
+            mode={chatPaneKey(pane) === currentKey ? "visible" : "hidden"}
           />
         ))}
     </div>
@@ -84,6 +90,10 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
     </Activity>
   );
 });
+
+function chatPaneKey(pane: ChatPane): string {
+  return `${pane.workspace.workspaceId}:${pane.record.id}`;
+}
 
 const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneContent({
   workspace,

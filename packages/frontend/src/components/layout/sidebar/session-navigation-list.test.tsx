@@ -220,9 +220,9 @@ describe("SessionNavigationList", () => {
     ).toBeNull();
 
     fireEvent.click(row);
-    expect(onOpen).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledWith(selected);
     fireEvent.click(screen.getByRole("button", { name: /Task other/ }));
-    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
   test("shows task details and observation faults on focus without a native browser tooltip", async () => {

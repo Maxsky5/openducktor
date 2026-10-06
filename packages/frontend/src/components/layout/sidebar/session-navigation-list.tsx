@@ -1,5 +1,5 @@
 import { ChevronDown, LoaderCircle } from "lucide-react";
-import { type ReactElement, useId, useState } from "react";
+import { memo, type ReactElement, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
@@ -128,7 +128,7 @@ function SessionRowMetadata({
   );
 }
 
-function SessionRow({
+const SessionRow = memo(function SessionRow({
   entry,
   isSelected,
   isVisible,
@@ -165,9 +165,7 @@ function SessionRow({
             : "")
         }
         aria-describedby={readStatusId}
-        onClick={() => {
-          if (!isVisible) onOpen(entry);
-        }}
+        onClick={() => onOpen(entry)}
         className={cn(
           // The margin keeps the group header in view when the list scrolls to this row.
           "relative flex w-full min-w-0 cursor-pointer scroll-mt-10 flex-col rounded-md px-2.5 py-1.5 text-left outline-none",
@@ -211,7 +209,7 @@ function SessionRow({
       </button>
     </SessionEntryPreview>
   );
-}
+});
 
 function SessionGroupSection({
   group,
