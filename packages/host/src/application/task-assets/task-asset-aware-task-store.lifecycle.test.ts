@@ -631,7 +631,11 @@ describe("asset-aware task store lifecycle", () => {
       }),
     );
     const store = createTaskAssetAwareTaskStore({
-      inner: { ...harness.innerStore, deleteTask: () => Effect.succeed(false) },
+      inner: {
+        ...harness.innerStore,
+        deleteTask: () => Effect.succeed(false),
+        updateTask: () => Effect.succeed(task),
+      },
       filePort: harness.filePort,
       registry: harness.registry,
       persistence: null,

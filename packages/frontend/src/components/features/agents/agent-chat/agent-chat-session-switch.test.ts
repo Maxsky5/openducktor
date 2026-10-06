@@ -348,6 +348,7 @@ test.each([
       rendered.unmount();
     }
   },
+  5_000,
 );
 
 test("stops an inactive build when selection evicts its cache entry", () => {

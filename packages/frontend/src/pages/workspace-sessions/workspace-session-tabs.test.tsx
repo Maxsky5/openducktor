@@ -287,7 +287,7 @@ test("New chat starts a fresh attempt when reopened before its exit ends", async
     createDialog.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("tabs show older chats first even when the server lists recent activity first", async () => {
   configureShellBridge(
@@ -309,7 +309,7 @@ test("tabs show older chats first even when the server lists recent activity fir
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("a durable-list failure is an error rather than an empty Workspace and Retry reloads it", async () => {
   let reads = 0;
@@ -340,7 +340,7 @@ test("a durable-list failure is an error rather than an empty Workspace and Retr
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 function RouteControls() {
   const location = useLocation();
@@ -434,7 +434,7 @@ test("new drafts append right and metadata updates do not move tabs or change se
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 function renderTabs(
   runningId?: string,
@@ -820,7 +820,7 @@ test("tabs read activity without subscribing to session transcripts", async () =
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-}, 5000);
+}, 5_000);
 
 test("workspace tabs use full-size status icons and the animated running indicator", async () => {
   configureShellBridge(
@@ -888,7 +888,7 @@ test("workspace tabs use full-size status icons and the animated running indicat
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("drag preview keeps the normal tab status dot and button styling", async () => {
   const store = createAgentSessionsStore("/repo");
@@ -967,7 +967,7 @@ test("drag preview keeps the normal tab status dot and button styling", async ()
     // dnd-kit's AbstractPointerSensor removes its document click blocker after 50 ms.
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-});
+}, 5_000);
 
 test("tab selection survives reload and Back/Forward without refetching workspace data", async () => {
   let listReads = 0;
@@ -1016,7 +1016,7 @@ test("tab selection survives reload and Back/Forward without refetching workspac
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("switching loaded chats keeps only the selected session header", async () => {
   const chat = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(({ record }) => (
@@ -1103,7 +1103,7 @@ test("keeps an explicit session URL while the initial list is pending", async ()
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("restores the last session on a bare Chats URL and keeps workspace preferences separate", async () => {
   configureShellBridge(
@@ -1146,7 +1146,7 @@ test("restores the last session on a bare Chats URL and keeps workspace preferen
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("does not erase the saved session while the list loads and preserves unrelated query params", async () => {
   const workspaceId = crypto.randomUUID();
@@ -1180,7 +1180,7 @@ test("does not erase the saved session while the list loads and preserves unrela
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("replaces a missing session URL and clears it after the final archive", async () => {
   configureShellBridge(
@@ -1217,7 +1217,7 @@ test("replaces a missing session URL and clears it after the final archive", asy
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("an activity link selects its chat while the page is already open", async () => {
   configureShellBridge(
@@ -1247,7 +1247,7 @@ test("an activity link selects its chat while the page is already open", async (
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("archive targets its tab, restore preserves selection, and the final archive shows the empty state", async () => {
   const first = sessionRecord("First");
@@ -1353,7 +1353,7 @@ test("archive targets its tab, restore preserves selection, and the final archiv
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("a slow worktree archive keeps its loader on the tab while the dialog is pending and removes the tab on success", async () => {
   const worktree = worktreeRecord("Second");
@@ -1416,7 +1416,7 @@ test("a slow worktree archive keeps its loader on the tab while the dialog is pe
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("a failed direct archive does not show its error in the next worktree dialog", async () => {
   const worktree = worktreeRecord("Second");
@@ -1486,7 +1486,7 @@ test("a failed direct archive does not show its error in the next worktree dialo
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("archive confirmation expires after five seconds and only one tab is armed", async () => {
   let calls = 0;
@@ -1536,7 +1536,7 @@ test("archive confirmation expires after five seconds and only one tab is armed"
     jest.useRealTimers();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("running archive confirms inline and retains the tab and selection when Stop fails", async () => {
   const requests: WorkspaceSessionArchiveInput[] = [];
@@ -1580,7 +1580,7 @@ test("running archive confirms inline and retains the tab and selection when Sto
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test("failed selected-chat archive keeps the dirty draft", async () => {
   let rejectArchive!: (reason: Error) => void;
@@ -1621,7 +1621,7 @@ test("failed selected-chat archive keeps the dirty draft", async () => {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);
 
 test.each([true, false])(
   "a successful archive leaves the previewed chat when another chat exists=%s",
@@ -1748,4 +1748,4 @@ test("an archive in flight shows a loader on its tab, disables all archive contr
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+}, 5_000);

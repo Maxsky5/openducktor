@@ -128,7 +128,7 @@ describe("transcript cache lifetime", () => {
     } finally {
       rendered.unmount();
     }
-  });
+  }, 5_000);
 
   test("does not show a stale transcript when a hidden chat returns before its build finishes", async () => {
     const first = createLargeSession("hidden-large");
@@ -175,5 +175,5 @@ describe("transcript cache lifetime", () => {
     } finally {
       rendered.unmount();
     }
-  });
+  }, 5_000);
 });

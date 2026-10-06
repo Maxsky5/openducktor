@@ -1009,7 +1009,15 @@ describe("TerminalService", () => {
         await waitForPtyOperation(pty.operations, "pause");
         expect(events).toEqual([]);
         drainGate.resolve();
-        if (result === "sink failure") await expect(attaching).rejects.toThrow("socket closed");
+        // Await the promise directly: on Windows, Bun can stall timers while `expect(...).rejects`
+        // waits, and this attach waits for a timer-driven screen parse.
+        if (result === "sink failure")
+          expect(
+            await attaching.then(
+              () => null,
+              (cause: unknown) => String(cause),
+            ),
+          ).toContain("socket closed");
         else {
           await attaching;
           expect(events).toEqual(["snapshot", "screen_restore"]);

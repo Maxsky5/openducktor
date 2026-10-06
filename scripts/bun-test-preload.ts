@@ -73,6 +73,7 @@ if (usesWorkerTempDirectory) {
     }
   });
 }
+// Removing a worker temp tree can exceed the 1000 ms test budget on a loaded Windows runner.
 afterAll((): void => {
   // Windows keeps handles on the temp tree while the worker runs, so a failure here is a leak, not a defect.
   removeWorkerDirectoryAfterFile(configDir);
@@ -82,7 +83,7 @@ afterAll((): void => {
   if (globalThis.document !== undefined) {
     globalThis.document.documentElement.classList.remove("light", "dark");
   }
-});
+}, 5_000);
 
 if (testRoot === repoRoot || testRoot === frontendRoot) {
   const frontendRequire = createRequire(

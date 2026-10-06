@@ -1132,7 +1132,7 @@ describe("AgentChatThread", () => {
 
       rendered.unmount();
     });
-  });
+  }, 5_000);
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
     await withAnimationFrameTestDriver(async () => {

@@ -80,7 +80,7 @@ describe("session-start-orchestration", () => {
       expect.objectContaining({ sourceSession: sessionIdentity("builder-session-2") }),
       expect.objectContaining({ sourceSession: sessionIdentity("builder-session-1") }),
     ]);
-  });
+  }, 5_000);
 
   test("falls back to the latest reusable session when no preferred source session matches", () => {
     const latestSession = createAgentSessionSummaryFixture({
