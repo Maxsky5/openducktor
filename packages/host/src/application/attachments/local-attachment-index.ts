@@ -55,7 +55,7 @@ const readStagedAttachmentDirectoryModifiedTimeMs = (
   attachmentDirectory: string,
 ): Effect.Effect<number | null, HostOperationError> =>
   localAttachmentPort.modifiedTimeMs(attachmentDirectory).pipe(
-    Effect.catchAll((error) => {
+    Effect.catch((error) => {
       if (hasNestedNodeErrorCode(error, "ENOENT")) {
         return Effect.succeed(null);
       }
@@ -115,7 +115,7 @@ export const loadStagedAttachmentIndex = (
       attachmentDirectory,
     );
     const entries = yield* localAttachmentPort.readDirectory(attachmentDirectory).pipe(
-      Effect.catchAll((error) => {
+      Effect.catch((error) => {
         if (hasNestedNodeErrorCode(error, "ENOENT")) {
           return Effect.succeed([]);
         }
@@ -187,7 +187,7 @@ export const resolveIndexedStagedAttachment = (
         continue;
       }
       const modifiedTimeMs = yield* localAttachmentPort.modifiedTimeMs(match.entry.path).pipe(
-        Effect.catchAll((error) => {
+        Effect.catch((error) => {
           if (hasNestedNodeErrorCode(error, "ENOENT")) {
             removeIndexedStagedAttachment(index, lookupToken, match.entry.path);
             return Effect.succeed(null);

@@ -25,6 +25,7 @@ import type {
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
+import { createSerialLane } from "../../effect/serial-gate";
 
 type OpenCodeLiveSessionState = ReturnType<typeof createOpenCodeLiveSessionState>;
 
@@ -78,7 +79,7 @@ export const createOpenCodeSessionControlAdapter = ({
   ): Effect.Effect<Success, HostError> => {
     let serializeSend = serializeSendBySession.get(sessionKey);
     if (!serializeSend) {
-      serializeSend = Effect.unsafeMakeSemaphore(1).withPermits(1);
+      serializeSend = createSerialLane().run;
       serializeSendBySession.set(sessionKey, serializeSend);
     }
     return serializeSend(effect);

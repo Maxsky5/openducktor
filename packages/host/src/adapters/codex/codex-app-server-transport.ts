@@ -213,12 +213,12 @@ export const createCodexAppServerTransport = (
           details: { runtimeId, id, method: request.method },
         }),
     });
-    const parsedResult = Effect.runSync(Effect.either(parsedResultEffect));
-    if (parsedResult._tag === "Left") {
-      request.reject(parsedResult.left);
+    const parsedResult = Effect.runSync(Effect.result(parsedResultEffect));
+    if (parsedResult._tag === "Failure") {
+      request.reject(parsedResult.failure);
       return;
     }
-    request.resolve(parsedResult.right);
+    request.resolve(parsedResult.success);
   };
   type StreamEventInput =
     | Omit<Extract<CodexAppServerStreamEvent, { kind: "notification" }>, "receivedAt">
@@ -424,7 +424,7 @@ export const createCodexAppServerTransport = (
               return yield* response;
             }),
           ({ release }, exit) =>
-            Effect.sync(() => release({ keepRequestId: Exit.isInterrupted(exit) })),
+            Effect.sync(() => release({ keepRequestId: Exit.hasInterrupts(exit) })),
         );
       });
     },

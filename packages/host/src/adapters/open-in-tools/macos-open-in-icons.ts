@@ -88,7 +88,7 @@ const readBundleIconFile = ({
       "defaults",
       ["read", infoPlistPath, "CFBundleIconFile"],
       "openInTools.icon.readBundleIconFile",
-    ).pipe(Effect.catchAll(() => Effect.succeed(null)));
+    ).pipe(Effect.catch(() => Effect.succeed(null)));
     const iconName = output?.stdout.trim();
     return iconName ? iconFileName(iconName) : null;
   });
@@ -106,7 +106,7 @@ const resolveMetadataIconFile = ({
       "mdls",
       ["-name", "kMDItemIconFile", "-raw", appPath],
       "openInTools.icon.resolveMetadataIconFile",
-    ).pipe(Effect.catchAll(() => Effect.succeed(null)));
+    ).pipe(Effect.catch(() => Effect.succeed(null)));
     const iconName = output?.stdout.trim();
     if (!iconName || iconName === "(null)") {
       return null;
@@ -122,7 +122,7 @@ const findFirstResourceIcon = (
     const entries = yield* readDirectoryEntries(
       resourcesPath,
       "openInTools.icon.findFirstResourceIcon",
-    ).pipe(Effect.catchAll(() => Effect.succeed([])));
+    ).pipe(Effect.catch(() => Effect.succeed([])));
     return entries.find((entry) => path.extname(entry).toLowerCase() === ".icns") ?? null;
   });
 
@@ -178,7 +178,7 @@ const resolveBestIconsetRepresentation = (
     const entries = yield* readDirectoryEntries(
       iconsetDirectory,
       "openInTools.icon.resolveBestIconsetRepresentation",
-    ).pipe(Effect.catchAll(() => Effect.succeed([])));
+    ).pipe(Effect.catch(() => Effect.succeed([])));
     let bestMatch: IconsetRepresentation | null = null;
 
     for (const entry of entries) {
@@ -219,7 +219,7 @@ const extractBestPngFromIconset = ({
       ? yield* readBinaryFile(bestIconPath, "openInTools.icon.readIconsetRepresentation")
       : null;
   }).pipe(
-    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.catch(() => Effect.succeed(null)),
     Effect.ensuring(removePath(iconsetDirectory, true).pipe(Effect.ignore)),
   );
 };
@@ -242,7 +242,7 @@ const convertIconToPng = ({
     );
     return yield* readBinaryFile(outputPath, "openInTools.icon.readConvertedPng");
   }).pipe(
-    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.catch(() => Effect.succeed(null)),
     Effect.ensuring(removePath(outputPath).pipe(Effect.ignore)),
   );
 };

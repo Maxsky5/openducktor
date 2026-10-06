@@ -137,7 +137,7 @@ const createFakeGitPort = ({
       return Effect.succeed(false);
     },
     listWorktrees() {
-      return Effect.dieMessage("unexpected list worktrees");
+      return Effect.die(new Error("unexpected list worktrees"));
     },
     referenceExists(workingDir, reference) {
       calls.push(`referenceExists:${workingDir}:${reference}`);
@@ -602,8 +602,8 @@ const createFakeSettingsConfig = (
   },
 });
 const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
-  prepareWorktreeAliasRemoval: () => Effect.dieMessage("Unexpected alias removal"),
-  resolveWorktreeRemovalPath: () => Effect.dieMessage("Unexpected removal path resolution"),
+  prepareWorktreeAliasRemoval: () => Effect.die(new Error("Unexpected alias removal")),
+  resolveWorktreeRemovalPath: () => Effect.die(new Error("Unexpected removal path resolution")),
   ensureDirectory(path) {
     return Effect.tryPromise({
       try: async () => {

@@ -71,9 +71,9 @@ const pullRequestResponse = {
 describe("Azure DevOps review adapter", () => {
   test("preserves policy and thread states", async () => {
     const repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {
-      detectRepository: () => Effect.dieMessage("unexpected detection"),
+      detectRepository: () => Effect.die(new Error("unexpected detection")),
       getRepository: () => Effect.succeed(repository),
-      getMapping: () => Effect.dieMessage("unexpected mapping"),
+      getMapping: () => Effect.die(new Error("unexpected mapping")),
     };
     const client: AzureDevOpsRestClient = {
       request: (_config, _repository, request) =>
@@ -81,7 +81,7 @@ describe("Azure DevOps review adapter", () => {
           ? Effect.succeed({ body: pullRequestResponse.repository, continuationToken: null })
           : request.operation === "read pull request review"
             ? Effect.succeed({ body: pullRequestResponse, continuationToken: null })
-            : Effect.dieMessage(`unexpected request: ${request.operation}`),
+            : Effect.die(new Error(`unexpected request: ${request.operation}`)),
       readContinuationPages: (_config, _repository, request) => {
         if (request.operation === "read pull request threads") {
           return Effect.succeed([
@@ -260,7 +260,7 @@ describe("Azure DevOps review adapter", () => {
             continuationToken: null,
           });
         }
-        return Effect.dieMessage(`unexpected request: ${request.operation}`);
+        return Effect.die(new Error(`unexpected request: ${request.operation}`));
       },
       readContinuationPages: (_config, _repository, request) =>
         request.operation === "read pull request iterations"
@@ -341,9 +341,9 @@ describe("Azure DevOps review adapter", () => {
 });
 
 const reviewRepositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {
-  detectRepository: () => Effect.dieMessage("unexpected detection"),
+  detectRepository: () => Effect.die(new Error("unexpected detection")),
   getRepository: () => Effect.succeed(repository),
-  getMapping: () => Effect.dieMessage("unexpected mapping"),
+  getMapping: () => Effect.die(new Error("unexpected mapping")),
 };
 
 type AzureBuildFixture = {
@@ -370,7 +370,7 @@ const reviewClient = ({
     const buildId = Number(request.path.split("/").at(-1));
     const build = builds[buildId];
     return build === undefined
-      ? Effect.dieMessage(`unexpected request: ${request.operation}`)
+      ? Effect.die(new Error(`unexpected request: ${request.operation}`))
       : Effect.succeed({ body: build, continuationToken: null });
   },
   readContinuationPages: () => Effect.succeed([]),

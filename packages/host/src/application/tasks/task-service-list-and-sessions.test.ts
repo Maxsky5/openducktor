@@ -454,27 +454,19 @@ describe("createTaskService list and session reads", () => {
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {
       getTaskMetadata(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push(input);
-            return {
-              spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-              plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
-              qaReport: {
-                markdown: "# QA",
-                verdict: "approved",
-                updatedAt: "2026-05-10T12:00:00.000Z",
-                revision: 3,
-              },
-              agentSessions: [session],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push(input);
+          return {
+            spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+            plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
+            qaReport: {
+              markdown: "# QA",
+              verdict: "approved",
+              updatedAt: "2026-05-10T12:00:00.000Z",
+              revision: 3,
+            },
+            agentSessions: [session],
+          };
         });
       },
       createTask() {

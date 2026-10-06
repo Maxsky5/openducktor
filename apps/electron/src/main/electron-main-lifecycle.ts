@@ -27,8 +27,10 @@ const captureLoggingFailure = async (
   operation: () => Effect.Effect<void, Error>,
 ): Promise<Error | undefined> => {
   try {
-    const result = await Effect.runPromise(Effect.either(operation()));
-    return result._tag === "Left" ? toLifecycleError(result.left, "electron.main.log") : undefined;
+    const result = await Effect.runPromise(Effect.result(operation()));
+    return result._tag === "Failure"
+      ? toLifecycleError(result.failure, "electron.main.log")
+      : undefined;
   } catch (cause) {
     return toLifecycleError(cause, "electron.main.log");
   }

@@ -67,8 +67,8 @@ export const stopScriptProcessHandle = ({
   updateScriptState: UpdateScriptState;
 }) =>
   Effect.gen(function* () {
-    const stopResult = yield* Effect.either(handle.stop());
-    if (stopResult._tag === "Right") {
+    const stopResult = yield* Effect.result(handle.stop());
+    if (stopResult._tag === "Success") {
       const isCurrentHandle = runtime.processes.get(scriptId) === handle;
       if (isCurrentHandle) {
         runtime.unresolvedStops.delete(scriptId);
@@ -86,7 +86,7 @@ export const stopScriptProcessHandle = ({
       return null;
     }
 
-    const message = errorMessage(stopResult.left);
+    const message = errorMessage(stopResult.failure);
     updateScriptState(runtime, scriptId, (script) => {
       script.status = "failed";
       script.lastError = message;

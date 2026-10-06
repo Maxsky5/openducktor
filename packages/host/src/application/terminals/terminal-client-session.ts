@@ -6,6 +6,7 @@ import {
 import { Effect } from "effect";
 import type { TerminalService } from "./terminal-service";
 import { TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export type TerminalClientSession = {
   handle(message: TerminalClientMessage, payload: Uint8Array): Effect.Effect<void>;
@@ -22,7 +23,7 @@ export const createTerminalClientSession = ({
   send(message: TerminalServerMessage, payload: Uint8Array): void;
 }): TerminalClientSession => {
   const attachedTerminalIds = new Set<string>();
-  const operations = Effect.unsafeMakeSemaphore(1);
+  const operations = createSerialLane();
   let closed = false;
   const attachmentId = (terminalId: string): string => `${clientId}:${terminalId}`;
   const sendFailure = (
@@ -95,17 +96,17 @@ export const createTerminalClientSession = ({
     );
   };
   const close = (): Effect.Effect<void, TerminalServiceError> =>
-    operations.withPermits(1)(
+    operations.run(
       Effect.gen(function* () {
         closed = true;
         const terminalIds = [...attachedTerminalIds];
         let firstFailure: TerminalServiceError | undefined;
         for (const terminalId of terminalIds) {
-          const result = yield* Effect.either(
+          const result = yield* Effect.result(
             terminalService.detach(terminalId, attachmentId(terminalId)),
           );
-          if (result._tag === "Left" && result.left.code !== "terminal_not_found") {
-            firstFailure ??= result.left;
+          if (result._tag === "Failure" && result.failure.code !== "terminal_not_found") {
+            firstFailure ??= result.failure;
             continue;
           }
           attachedTerminalIds.delete(terminalId);
@@ -116,7 +117,7 @@ export const createTerminalClientSession = ({
 
   return {
     handle: (message, payload) =>
-      operations.withPermits(1)(Effect.suspend(() => handleMessage(message, payload))),
+      operations.run(Effect.suspend(() => handleMessage(message, payload))),
     close,
   };
 };

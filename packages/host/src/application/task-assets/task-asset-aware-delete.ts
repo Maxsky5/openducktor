@@ -70,7 +70,7 @@ export const createTaskAssetAwareDelete =
     });
 
     return remove.pipe(
-      Effect.catchAll((cause) => {
+      Effect.catch((cause) => {
         const error = asTaskAssetError({
           cause,
           operation: "delete",

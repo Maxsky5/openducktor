@@ -43,7 +43,7 @@ export const writeCodexAppServerRequestLine = ({
       catch: (cause) => createWriteError(runtimeId, cause),
     });
 
-    yield* Effect.async<void, HostOperationError<CodexAppServerWriteErrorDetails>>((resume) => {
+    yield* Effect.callback<void, HostOperationError<CodexAppServerWriteErrorDetails>>((resume) => {
       let active = true;
       let writeReturned = false;
       let writeFailedSynchronously = false;

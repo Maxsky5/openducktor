@@ -49,16 +49,16 @@ const checkRuntimeExecutable = ({
 }) =>
   Effect.gen(function* () {
     const suppliedPath = input.mode === "validate" ? (input.paths[kind] ?? "") : "";
-    const resolution = yield* Effect.either(
+    const resolution = yield* Effect.result(
       input.mode === "discover"
         ? discoverToolFresh(toolDiscovery, kind)
         : validateExactToolPath(toolDiscovery, kind, suppliedPath),
     );
-    if (resolution._tag === "Left") {
-      return invalidRow(kind, suppliedPath, resolution.left);
+    if (resolution._tag === "Failure") {
+      return invalidRow(kind, suppliedPath, resolution.failure);
     }
 
-    const executablePath = resolution.right.path;
+    const executablePath = resolution.success.path;
     const health = yield* runtimeHealth.getRuntimeHealth(kind, executablePath);
     return {
       kind,

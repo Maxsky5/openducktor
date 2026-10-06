@@ -3,7 +3,7 @@ import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import {
@@ -87,7 +87,7 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null
   if (!Exit.isFailure(exit)) {
     return null;
   }
-  const failureOption = Chunk.head(Cause.failures(exit.cause));
+  const failureOption = Cause.findErrorOption(exit.cause);
   return failureOption._tag === "Some" ? failureOption.value : null;
 };
 
@@ -103,10 +103,11 @@ const createLiveSessionDependencies = ({
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
     supportsSessionControl: false,
-    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
-    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+    beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
+    releaseGeneratedImageBatch: () =>
+      Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+    describeGeneratedImages: () => Effect.die(new Error("Unexpected describeGeneratedImages")),
+    resolveGeneratedImageSource: () => Effect.die(new Error("Unexpected generated image read")),
     binding: new AgentSessionLiveRegistration(
       { runtimeId: "runtime-1", runtimeKind: "claude" },
       (mutation) => Effect.map(mutation, ({ value }) => value),

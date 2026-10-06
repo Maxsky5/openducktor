@@ -52,7 +52,6 @@ export type TerminalPtyPort = {
   ): Effect.Effect<TerminalPtyHandle, TerminalPtyError>;
 };
 
-export class TerminalPtyPortTag extends Context.Tag("@openducktor/host/TerminalPtyPort")<
-  TerminalPtyPortTag,
-  TerminalPtyPort
->() {}
+export class TerminalPtyPortTag extends Context.Service<TerminalPtyPortTag, TerminalPtyPort>()(
+  "@openducktor/host/TerminalPtyPort",
+) {}

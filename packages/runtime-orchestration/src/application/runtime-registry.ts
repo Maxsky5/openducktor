@@ -6,7 +6,7 @@ import {
   type RuntimeInstanceSummary,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { Deferred, type Duration, Effect, Fiber, FiberId, Option } from "effect";
+import { Deferred, type Duration, Effect, Fiber, Option } from "effect";
 import {
   RuntimeLifecycleBusyError,
   RuntimeShutdownError,
@@ -71,7 +71,7 @@ export type CreateRuntimeRegistryInput<E> = {
   onStatusChanged: (change: RuntimeStatusChange) => void;
   now: () => Date;
   /** How long a lifecycle action or shutdown waits for admitted controls before it cancels them. */
-  controlGrace: Duration.DurationInput;
+  controlGrace: Duration.Input;
 };
 
 /** Owns one slot for each runtime kind: its resource, generation, state, and last failure. */
@@ -215,14 +215,17 @@ export const createRuntimeRegistry = <E>({
             Effect.suspend(() => {
               const slot = reserved.find((candidate) => candidate.kind === kind);
               if (!slot?.reserved) {
-                return Effect.dieMessage(
-                  `The ${kind} runtime is not part of this lifecycle reservation.`,
+                return Effect.die(
+                  new Error(`The ${kind} runtime is not part of this lifecycle reservation.`),
                 );
               }
               // Shutdown waits for this action before it stops the remaining resources.
-              const applying = Deferred.unsafeMake<void>(FiberId.none);
+              const applying = Deferred.makeUnsafe<void>();
               slot.applying = applying;
               return applyRequest(slot, request).pipe(
+                Effect.withSpan("runtime.lifecycle.apply", {
+                  attributes: { runtimeKind: kind, trigger: request.trigger },
+                }),
                 Effect.ensuring(
                   Effect.suspend(() => {
                     if (slot.applying === applying) slot.applying = null;
@@ -251,60 +254,57 @@ export const createRuntimeRegistry = <E>({
           }),
         );
       }),
-    stopAll: () =>
-      Effect.gen(function* () {
-        shuttingDown = true;
-        const owned = [...slots.values()];
-        for (const slot of owned) syncAdmission(slot);
-        yield* Effect.forEach(
-          owned.flatMap((slot) => (slot.startFiber ? [slot.startFiber] : [])),
-          Fiber.interrupt,
-          { concurrency: "unbounded", discard: true },
-        );
-        // A running lifecycle action cannot start anything now. Wait until it owns no resource.
-        yield* Effect.forEach(
-          owned.flatMap((slot) => (slot.applying ? [slot.applying] : [])),
-          Deferred.await,
-          { concurrency: "unbounded", discard: true },
-        );
-        // Admission is closed. Let admitted controls finish before their runtime stops.
-        yield* Effect.forEach(
-          owned,
-          (slot) =>
-            drainOrCancel(
-              slot,
-              `OpenDucktor stopped the ${label(slot.kind)} runtime before this action finished. Retry it after OpenDucktor starts again.`,
-            ),
-          { concurrency: "unbounded", discard: true },
-        );
-        const stopped: RuntimeInstanceSummary[] = [];
-        const failures: string[] = [];
-        for (const slot of owned) {
-          const runtime = slot.handle?.runtime ?? null;
-          if (!slot.handle && !slot.orphanCleanup) continue;
-          const result = yield* stopHandle(
+    stopAll: Effect.fn("runtime.shutdown")(function* () {
+      shuttingDown = true;
+      const owned = [...slots.values()];
+      for (const slot of owned) syncAdmission(slot);
+      yield* Fiber.interruptAll(
+        owned.flatMap((slot) => (slot.startFiber ? [slot.startFiber] : [])),
+      );
+      // A running lifecycle action cannot start anything now. Wait until it owns no resource.
+      yield* Effect.forEach(
+        owned.flatMap((slot) => (slot.applying ? [slot.applying] : [])),
+        Deferred.await,
+        { concurrency: "unbounded", discard: true },
+      );
+      // Admission is closed. Let admitted controls finish before their runtime stops.
+      yield* Effect.forEach(
+        owned,
+        (slot) =>
+          drainOrCancel(
             slot,
-            {
-              trigger: "shutdown",
-              enabled: slot.enabled,
-              configuredExecutablePath: slot.configuredExecutablePath,
-            },
-            "stopping",
+            `OpenDucktor stopped the ${label(slot.kind)} runtime before this action finished. Retry it after OpenDucktor starts again.`,
+          ),
+        { concurrency: "unbounded", discard: true },
+      );
+      const stopped: RuntimeInstanceSummary[] = [];
+      const failures: string[] = [];
+      for (const slot of owned) {
+        const runtime = slot.handle?.runtime ?? null;
+        if (!slot.handle && !slot.orphanCleanup) continue;
+        const result = yield* stopHandle(
+          slot,
+          {
+            trigger: "shutdown",
+            enabled: slot.enabled,
+            configuredExecutablePath: slot.configuredExecutablePath,
+          },
+          "stopping",
+        );
+        if (result) {
+          update(slot, { state: "disabled", failure: null });
+          if (runtime) stopped.push(runtime);
+        } else {
+          failures.push(
+            `Failed stopping the ${slot.kind} runtime ${runtime?.runtimeId ?? "(partly started)"}: ${slot.failure?.message ?? "unknown error"}`,
           );
-          if (result) {
-            update(slot, { state: "disabled", failure: null });
-            if (runtime) stopped.push(runtime);
-          } else {
-            failures.push(
-              `Failed stopping the ${slot.kind} runtime ${runtime?.runtimeId ?? "(partly started)"}: ${slot.failure?.message ?? "unknown error"}`,
-            );
-          }
         }
-        if (failures.length > 0) {
-          return yield* new RuntimeShutdownError({ message: failures.join("\n"), failures });
-        }
-        return stopped;
-      }),
+      }
+      if (failures.length > 0) {
+        return yield* new RuntimeShutdownError({ message: failures.join("\n"), failures });
+      }
+      return stopped;
+    }),
     stopSession: (target) =>
       admission.admit(
         target.runtimeKind,

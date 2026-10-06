@@ -73,7 +73,7 @@ export type CodexAppServerPort = {
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
 
-export class CodexAppServerPortTag extends Context.Tag("@openducktor/host/CodexAppServerPort")<
+export class CodexAppServerPortTag extends Context.Service<
   CodexAppServerPortTag,
   CodexAppServerPort
->() {}
+>()("@openducktor/host/CodexAppServerPort") {}

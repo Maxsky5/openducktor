@@ -19,7 +19,7 @@ Use Effect for host work that performs I/O or can fail.
 - Application services use `Effect.gen` and typed failures.
 - Expected host failures use tagged errors, usually `Data.TaggedError`.
 - Adapters wrap Node, process, file, HTTP, and third-party Promise APIs with `Effect.try`, `Effect.tryPromise`, or resource operators.
-- Use `Context.Tag` and `Layer` when they make dependency setup clear.
+- Use `Context.Service` and `Layer` when they make dependency setup clear.
 - Keep Promise values at Electron IPC, browser HTTP/SSE, shell bridges, test harnesses, and other external Promise APIs.
 - The command router provides an Effect API and a Promise adapter.
 - Use a retry, polling, schedule, fiber, or fallback only when the product contract calls for it.

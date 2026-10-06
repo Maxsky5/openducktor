@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { HostRuntimeService } from "../application/runtimes/host-runtime-service";
 
 const unexpectedCall = (method: string) => () =>
-  Effect.dieMessage(`Unexpected host runtime service call: ${method}`);
+  Effect.die(new Error(`Unexpected host runtime service call: ${method}`));
 
 export const createHostRuntimeServiceTestDouble = (
   overrides: Partial<HostRuntimeService> = {},

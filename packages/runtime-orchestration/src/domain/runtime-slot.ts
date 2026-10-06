@@ -35,7 +35,7 @@ export type SlotResources = {
   orphanCleanup: Effect.Effect<void, unknown> | null;
   generation: Generation | null;
   /** The start in progress. Shutdown interrupts it. */
-  startFiber: Fiber.RuntimeFiber<RuntimeHandle, unknown> | null;
+  startFiber: Fiber.Fiber<RuntimeHandle, unknown> | null;
   /** Resolves when the running lifecycle action ends. Shutdown waits for it. */
   applying: Deferred.Deferred<void> | null;
   /** True while a lifecycle reservation owns the slot. Admission stays closed meanwhile. */

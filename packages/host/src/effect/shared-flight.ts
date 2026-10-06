@@ -1,4 +1,4 @@
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect } from "effect";
 
 /**
  * Runs work at most once per key at a time. A caller that asks for a key while its work runs waits
@@ -9,16 +9,15 @@ export const createKeyedSharedFlight = <K, A, E>() => {
   const flights = new Map<K, Deferred.Deferred<A, E>>();
 
   const complete = (key: K, deferred: Deferred.Deferred<A, E>, work: Effect.Effect<A, E>) =>
-    Effect.exit(work).pipe(
-      Effect.flatMap((exit) => Deferred.done(deferred, exit)),
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (flights.get(key) === deferred) {
-            flights.delete(key);
-          }
-        }),
-      ),
-    );
+    Effect.onExit(work, (exit) =>
+      Effect.sync(() => {
+        // Release the key before waking callers, so a caller that resumes can start a new run.
+        if (flights.get(key) === deferred) {
+          flights.delete(key);
+        }
+        Deferred.doneUnsafe(deferred, exit);
+      }),
+    ).pipe(Effect.ignore);
 
   const run = (key: K, work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
     Effect.uninterruptibleMask((restore) =>
@@ -29,13 +28,13 @@ export const createKeyedSharedFlight = <K, A, E>() => {
           if (existing) {
             return { created: false, deferred: existing };
           }
-          const deferred = Deferred.unsafeMake<A, E>(FiberId.none);
+          const deferred = Deferred.makeUnsafe<A, E>();
           flights.set(key, deferred);
           return { created: true, deferred };
         });
         if (reservation.created) {
           // A fork inherits the uninterruptible region. Time limits in the work need interruption.
-          yield* Effect.forkDaemon(Effect.interruptible(complete(key, reservation.deferred, work)));
+          yield* Effect.forkDetach(Effect.interruptible(complete(key, reservation.deferred, work)));
         }
         return yield* restore(Deferred.await(reservation.deferred));
       }),

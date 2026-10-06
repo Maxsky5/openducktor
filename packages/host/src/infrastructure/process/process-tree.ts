@@ -68,7 +68,7 @@ export const waitForObservedState = ({
   timeoutMs: number;
 }): Effect.Effect<boolean> => {
   if (isComplete()) return Effect.succeed(true);
-  return Effect.async<boolean>((resume, signal) => {
+  return Effect.callback<boolean>((resume, signal) => {
     let settled = false;
     const finish = (value: boolean) => {
       if (settled) return;
@@ -115,7 +115,7 @@ export const processTreeIsAlive = (
 ): boolean => processIsAlive(platform === "win32" ? pid : -pid, kill);
 
 const runProcessCommand: ProcessCommandRunner = (command, args) =>
-  Effect.async<ProcessCommandResult>((resume, signal) => {
+  Effect.callback<ProcessCommandResult>((resume, signal) => {
     // Shutdown inspects process trees after a terminal signal. In its own process group, a
     // repeated Ctrl+C cannot kill the inspection and make the runtime stop fail. `execFile`
     // ignores `detached`, so this runner uses `spawn`.
@@ -344,7 +344,7 @@ const waitForSignalTargetsExit = (
   timeoutMs: number,
 ): Effect.Effect<boolean> => {
   if (signalTargetsAreClosed(targets, dependencies)) return Effect.succeed(true);
-  return Effect.async<boolean>((resume, signal) => {
+  return Effect.callback<boolean>((resume, signal) => {
     const deadline = Date.now() + timeoutMs;
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const finish = (closed: boolean): void => {

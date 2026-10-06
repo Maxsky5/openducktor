@@ -179,7 +179,7 @@ export const readAzureSuggestionFiles = ({
                   catch: asValidationError,
                 }),
               ),
-              Effect.catchAll((cause) => {
+              Effect.catch((cause) => {
                 const suggestionFile: AzureSuggestionFile = {
                   content: null,
                   warning: `Azure DevOps suggestion source could not be loaded: ${errorMessage(cause)}`,

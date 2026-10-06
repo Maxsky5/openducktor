@@ -188,8 +188,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
             });
           }),
         releaseSession: () => Effect.void,
-        stopSession: () => Effect.dieMessage("Idle sessions must not be stopped"),
-        updateSessionTitle: () => Effect.dieMessage("Unexpected live session title update"),
+        stopSession: () => Effect.die(new Error("Idle sessions must not be stopped")),
+        updateSessionTitle: () => Effect.die(new Error("Unexpected live session title update")),
         read: (ref) => Effect.succeed({ type: "missing", ref }),
       },
     };

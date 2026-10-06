@@ -49,7 +49,7 @@ const resolvedMergedPullRequest = (providerId: string): ProviderPullRequest => (
 });
 
 const unexpected = <Success>(): Effect.Effect<Success, never> =>
-  Effect.dieMessage("unexpected provider operation");
+  Effect.die(new Error("unexpected provider operation"));
 
 const createPullRequestPort = (
   providerId: string,

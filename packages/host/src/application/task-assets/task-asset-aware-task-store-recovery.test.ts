@@ -71,7 +71,7 @@ const captureTaskAssetError = async <A>(effect: Effect.Effect<A, unknown>) => {
   if (Exit.isSuccess(exit)) {
     throw new Error("Expected a task asset failure.");
   }
-  const failure = Array.from(Cause.failures(exit.cause))[0];
+  const failure = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0];
   if (failure instanceof TaskAssetError) {
     return failure;
   }
@@ -394,7 +394,9 @@ describe("asset-aware task store", () => {
     if (Exit.isSuccess(failedExit)) {
       throw new Error("Expected the stale save to fail.");
     }
-    expect(Array.from(Cause.failures(failedExit.cause))[0]).toMatchObject({
+    expect(
+      failedExit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+    ).toMatchObject({
       _tag: "TaskAssetError",
       failedPhase: "verify_update_snapshot",
       durableState: "unchanged",

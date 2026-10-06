@@ -25,7 +25,7 @@ export const writeJsonLine = (
   stdin: Writable,
   payload: CodexTransportResponseMessage | CodexTransportNotifyMessage,
 ): Effect.Effect<void, HostOperationErrorAggregate> =>
-  Effect.async((resume) => {
+  Effect.callback((resume) => {
     let active = true;
     stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
       if (!active) {

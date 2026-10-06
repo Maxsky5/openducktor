@@ -102,19 +102,20 @@ testIfPosixShellIsAvailable(
 );
 
 testIfPosixShellIsAvailable("fails when neither shell value is absolute", async () => {
-  const result = await Effect.runPromiseExit(
-    createTerminalLaunchEnvironment({
-      readEnv: () => ({
-        PATH: "/usr/bin",
-        SHELL: "bash",
-      }),
-      platform: "linux",
-      readUserShell: () => "zsh",
-    })(),
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      createTerminalLaunchEnvironment({
+        readEnv: () => ({
+          PATH: "/usr/bin",
+          SHELL: "bash",
+        }),
+        platform: "linux",
+        readUserShell: () => "zsh",
+      })(),
+    ),
   );
 
-  expect(result._tag).toBe("Failure");
-  expect(String(result)).toContain("shell_unavailable");
+  expect(failure.code).toBe("shell_unavailable");
 });
 
 test("uses ComSpec for Windows terminals", async () => {
@@ -139,14 +140,15 @@ test("falls back to the account shell for Windows terminals", async () => {
 });
 
 test("fails when Windows has no absolute shell", async () => {
-  const result = await Effect.runPromiseExit(
-    createTerminalLaunchEnvironment({
-      readEnv: () => ({ Path: "/windows/system32" }),
-      platform: "win32",
-      readUserShell: () => "powershell.exe",
-    })(),
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      createTerminalLaunchEnvironment({
+        readEnv: () => ({ Path: "/windows/system32" }),
+        platform: "win32",
+        readUserShell: () => "powershell.exe",
+      })(),
+    ),
   );
 
-  expect(result._tag).toBe("Failure");
-  expect(String(result)).toContain("shell_unavailable");
+  expect(failure.code).toBe("shell_unavailable");
 });

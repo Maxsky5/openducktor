@@ -193,7 +193,7 @@ export const createTaskAssetAwareUpdate =
     });
 
     return update.pipe(
-      Effect.catchAll((cause) => {
+      Effect.catch((cause) => {
         const error = asTaskAssetError({
           cause,
           operation: "update",

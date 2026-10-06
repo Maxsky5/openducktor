@@ -154,7 +154,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   ) {
     return requireClaudeSessionScope(input.sessionScope, "continue interrupted Claude turn").pipe(
       Effect.flatMap((scope) =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
             yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
@@ -266,7 +266,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   inspectSessionForImport(input: SessionRef, runtimeId: string) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
         getClaudeSessionMetadata(input),
       );
@@ -308,7 +308,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const scope = yield* requireClaudeSessionScope(
         input.sessionScope,
         "send Claude user message",
@@ -387,7 +387,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     sessionInput: ClaudeSessionLaunchInput,
     onContinuationAdmission?: () => void,
   ) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const isNew = !sessionInput.options.resume || sessionInput.options.forkSession === true;
       const claudePolicy = isNew
         ? yield* this.input.launchPolicy.resolve({
@@ -467,7 +467,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         return existing;
       });
     }
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.createSession(
         input,
         runtimeId,

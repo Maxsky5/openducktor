@@ -19,7 +19,7 @@ export const prepareWorktreeAliasRemoval: WorktreeFilePort["prepareWorktreeAlias
       try: () => lstat(aliasEntryPath),
       catch: (cause) => toHostOperationError(cause, "worktreeFile.inspectAlias", { aliasPath }),
     }).pipe(
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
       ),
     );
@@ -42,7 +42,7 @@ export const prepareWorktreeAliasRemoval: WorktreeFilePort["prepareWorktreeAlias
           try: () => readlink(aliasEntryPath),
           catch: (cause) => toHostOperationError(cause, "worktreeFile.recheckAlias", { aliasPath }),
         }).pipe(
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
           ),
         );
@@ -61,7 +61,7 @@ export const prepareWorktreeAliasRemoval: WorktreeFilePort["prepareWorktreeAlias
             }),
         }).pipe(
           Effect.as(true),
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(false) : Effect.fail(error),
           ),
         );

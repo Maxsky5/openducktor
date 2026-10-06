@@ -9,7 +9,7 @@ import {
 import { Effect } from "effect";
 import type { z } from "zod";
 import type { WorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
-import type { WorkspaceSessionUpdatedPublisher } from "../../application/workspaces/workspace-session-runtime-persistence";
+import type { WorkspaceSessionUpdatedPublisher } from "../../application/workspaces/workspace-session-persistence-callbacks";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";

@@ -64,15 +64,15 @@ export const createTaskDocumentUseCases = ({
 
       const document = yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
       if (current.status === "open") {
-        const transition = yield* Effect.either(
+        const transition = yield* Effect.result(
           taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" }),
         );
-        if (transition._tag === "Left") {
+        if (transition._tag === "Failure") {
           return yield* Effect.fail(
             new TaskMutationProgressFailure({
               operation: "set-spec",
               changes: { taskIds: [taskId], removedTaskIds: [] },
-              failure: transition.left,
+              failure: transition.failure,
             }),
           );
         }

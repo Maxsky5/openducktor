@@ -76,6 +76,8 @@ test("full replay and queued live frames survive a delayed IPC response and ackn
     expect(replay.frames).toEqual([]);
     response.resolve();
     const stopReplay = await pending;
+    // The host sends the queued live frames after the renderer acknowledges the replay batch.
+    await new Promise((resolve) => setImmediate(resolve));
     expect(replay.frames).toHaveLength(514);
     expect(replay.frames[0]).toMatchObject({ type: "attached", reason: "replay", cursor });
     expect(replay.frames.slice(1).map((frame) => frame.cursor.sequence)).toEqual(
@@ -141,7 +143,7 @@ const harness = () => {
     {
       ...stream,
       subscribe(input) {
-        return Stream.unwrapScoped(
+        return Stream.unwrap(
           Effect.acquireRelease(
             Effect.sync(() => {
               active += 1;

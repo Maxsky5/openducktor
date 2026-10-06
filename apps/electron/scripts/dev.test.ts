@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Cause, Chunk, Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import type {
   ElectronDevRendererWatcher,
   ElectronRendererDevServer,
@@ -156,7 +156,7 @@ describe("electron dev script", () => {
         throw new Error("Expected mainEffect to fail for an invalid renderer dev port.");
       }
 
-      const failureOption = Chunk.head(Cause.failures(exit.cause));
+      const failureOption = Cause.findErrorOption(exit.cause);
       expect(failureOption._tag).toBe("Some");
       if (failureOption._tag !== "Some") {
         throw new Error("Expected mainEffect to fail through the typed error channel.");
@@ -167,7 +167,7 @@ describe("electron dev script", () => {
         operation: "electron.dev.resolve-renderer-dev-port",
         field: "ELECTRON_RENDERER_DEV_PORT",
       });
-      expect(Chunk.isEmpty(Cause.defects(exit.cause))).toBe(true);
+      expect(!Cause.hasDies(exit.cause)).toBe(true);
     } finally {
       if (originalPort === undefined) {
         delete process.env.ELECTRON_RENDERER_DEV_PORT;
@@ -1010,7 +1010,7 @@ describe("electron dev script", () => {
         throw new Error("Expected mainEffect to fail for an invalid config directory.");
       }
 
-      const failureOption = Chunk.head(Cause.failures(exit.cause));
+      const failureOption = Cause.findErrorOption(exit.cause);
       expect(failureOption._tag).toBe("Some");
       if (failureOption._tag !== "Some") {
         throw new Error("Expected the config failure in the typed error channel.");
@@ -1020,7 +1020,7 @@ describe("electron dev script", () => {
         _tag: "ElectronValidationError",
         operation: "electron.dev.resolve-devtools-active-port-path",
       });
-      expect(Chunk.isEmpty(Cause.defects(exit.cause))).toBe(true);
+      expect(!Cause.hasDies(exit.cause)).toBe(true);
     } finally {
       process.argv = originalArgv;
       if (originalConfigDir === undefined) {
@@ -1052,7 +1052,7 @@ describe("electron dev script", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const fiber = yield* Effect.fork(
+        const fiber = yield* Effect.forkChild(
           runElectronDevLifecycleEffect({
             buildBundles: () => Effect.void,
             electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
@@ -1110,7 +1110,7 @@ describe("electron dev script", () => {
       throw new Error("Expected initial lifecycle setup failure to fail the Effect.");
     }
 
-    const failureOption = Chunk.head(Cause.failures(exit.cause));
+    const failureOption = Cause.findErrorOption(exit.cause);
     expect(failureOption._tag).toBe("Some");
     if (failureOption._tag !== "Some") {
       throw new Error("Expected setup failure in the typed failure channel.");

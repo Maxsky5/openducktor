@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../../effect/host-errors";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { createTaskSyncServiceForTest, createEventBus } from "./task-sync-service.test-support";
@@ -286,7 +287,7 @@ describe("task mutation gate and pull request sync", () => {
             error: () =>
               Effect.sync(() => {
                 logCalls += 1;
-              }).pipe(Effect.zipRight(Deferred.succeed(logged, undefined))),
+              }).pipe(Effect.andThen(Deferred.succeed(logged, undefined))),
           },
           taskService: {
             repoPullRequestSyncDetailed: () =>
@@ -321,7 +322,7 @@ describe("task mutation gate and pull request sync", () => {
         yield* Deferred.await(logged);
         yield* loop.stop();
         return { logCalls };
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
 
     expect(logCalls).toBe(1);
@@ -407,7 +408,7 @@ describe("task mutation gate and pull request sync", () => {
 
         const loop = yield* service.startPullRequestSyncLoop();
         const reportedFailure = yield* Deferred.await(failureReported);
-        const stopResult = yield* Effect.either(loop.stop());
+        const stopResult = yield* Effect.result(loop.stop());
         return { reportedFailure, stopResult };
       }),
     );
@@ -417,11 +418,11 @@ describe("task mutation gate and pull request sync", () => {
       operation: "task-sync.log-iteration-failure",
       cause: persistenceError,
     });
-    expect(stopResult._tag).toBe("Left");
-    if (stopResult._tag === "Right") {
+    expect(stopResult._tag).toBe("Failure");
+    if (stopResult._tag === "Success") {
       throw new Error("expected task-sync loop logging failure");
     }
-    expect(stopResult.left).toMatchObject({
+    expect(stopResult.failure).toMatchObject({
       _tag: "HostOperationError",
       operation: "task-sync.log-iteration-failure",
       cause: persistenceError,
@@ -465,23 +466,23 @@ describe("task mutation gate and pull request sync", () => {
 
         const loop = yield* service.startPullRequestSyncLoop();
         yield* Deferred.await(logStarted);
-        const stopFiber = yield* Effect.fork(
+        const stopFiber = yield* Effect.forkChild(
           Effect.gen(function* () {
             yield* Deferred.succeed(stopStarted, undefined);
-            return yield* Effect.either(loop.stop());
+            return yield* Effect.result(loop.stop());
           }),
         );
         yield* Deferred.await(stopStarted);
-        yield* Effect.yieldNow();
-        const stopBeforeRelease = yield* Fiber.poll(stopFiber);
+        yield* Effect.yieldNow;
+        const stopBeforeRelease = stopFiber.pollUnsafe();
         yield* Deferred.succeed(releaseLog, undefined);
         const stopResult = yield* Fiber.join(stopFiber);
         return { stopBeforeRelease, stopResult };
       }),
     );
 
-    expect(stopBeforeRelease._tag).toBe("None");
-    expect(stopResult._tag).toBe("Right");
+    expect(stopBeforeRelease).toBeUndefined();
+    expect(stopResult._tag).toBe("Success");
   });
 
   test("does not lose an admitted lifecycle logging failure racing shutdown", async () => {
@@ -530,23 +531,23 @@ describe("task mutation gate and pull request sync", () => {
 
         const loop = yield* service.startPullRequestSyncLoop();
         yield* Deferred.await(logStarted);
-        const stopFiber = yield* Effect.fork(
+        const stopFiber = yield* Effect.forkChild(
           Effect.gen(function* () {
             yield* Deferred.succeed(stopStarted, undefined);
-            return yield* Effect.either(loop.stop());
+            return yield* Effect.result(loop.stop());
           }),
         );
         yield* Deferred.await(stopStarted);
-        yield* Effect.yieldNow();
-        const stopBeforeRelease = yield* Fiber.poll(stopFiber);
+        yield* Effect.yieldNow;
+        const stopBeforeRelease = stopFiber.pollUnsafe();
         yield* Deferred.succeed(releaseLog, undefined);
         const stopResult = yield* Fiber.join(stopFiber);
         return { stopBeforeRelease, stopResult };
       }),
     );
 
-    expect(stopBeforeRelease._tag).toBe("None");
-    expect(stopResult._tag).toBe("Left");
+    expect(stopBeforeRelease).toBeUndefined();
+    expect(stopResult._tag).toBe("Failure");
     expect(reportedFailures).toEqual([
       expect.objectContaining({
         _tag: "HostOperationError",
@@ -605,9 +606,9 @@ describe("task mutation gate and pull request sync", () => {
         const beforeRelease = [...events];
         yield* Deferred.succeed(releaseSync, undefined);
         yield* Deferred.await(syncFinished);
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         return { beforeRelease, afterRelease: [...events] };
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
 
     expect(eventsBeforeAndAfterRelease).toEqual({ beforeRelease: [], afterRelease: [] });

@@ -1,4 +1,4 @@
-import { Cause, Chunk, Data, Option } from "effect";
+import { Cause, Data, Option } from "effect";
 
 export const jsonIssues = (
   issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
@@ -74,7 +74,7 @@ export const toElectronOperationError = <Details extends object = never>(
 export const causeToElectronBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
 ): Failure | ElectronOperationError<{ defect: true }> => {
-  const firstFailure = Chunk.head(Cause.failures(cause));
+  const firstFailure = Cause.findErrorOption(cause);
   if (Option.isSome(firstFailure)) {
     return firstFailure.value;
   }

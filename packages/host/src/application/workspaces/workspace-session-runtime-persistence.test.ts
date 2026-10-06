@@ -540,7 +540,7 @@ describe("Workspace Session persistence through the shared command module", () =
         getRepoConfig: () => Effect.succeed(config),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
-      runtime: { requireReady: () => Effect.dieMessage("unexpected runtime readiness check") },
+      runtime: { requireReady: () => Effect.die(new Error("unexpected runtime readiness check")) },
       live: {
         ...h.live,
         read: () =>
@@ -585,9 +585,9 @@ describe("Workspace Session persistence through the shared command module", () =
         resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
       }),
       systemCommands: {
-        resolveCommandPath: () => Effect.dieMessage("unused"),
-        versionCommand: () => Effect.dieMessage("unused"),
-        runCommandAllowFailure: () => Effect.dieMessage("unused"),
+        resolveCommandPath: () => Effect.die(new Error("unused")),
+        versionCommand: () => Effect.die(new Error("unused")),
+        runCommandAllowFailure: () => Effect.die(new Error("unused")),
       },
     });
     const command = () =>

@@ -31,7 +31,6 @@ export type OpenInToolsPort = {
   openExternalUrl(url: string): Effect.Effect<void, OpenInToolsPortError>;
 };
 
-export class OpenInToolsPortTag extends Context.Tag("@openducktor/host/OpenInToolsPort")<
-  OpenInToolsPortTag,
-  OpenInToolsPort
->() {}
+export class OpenInToolsPortTag extends Context.Service<OpenInToolsPortTag, OpenInToolsPort>()(
+  "@openducktor/host/OpenInToolsPort",
+) {}

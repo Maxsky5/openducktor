@@ -258,16 +258,16 @@ export const rollbackFailedTaskWorktree = (
   Effect.gen(function* () {
     const cleanupErrors: string[] = [];
     if (createdTrackingRef) {
-      const deleteReferenceResult = yield* Effect.either(
+      const deleteReferenceResult = yield* Effect.result(
         dependencies.gitPort.deleteReference(repoPath, createdTrackingRef),
       );
-      if (deleteReferenceResult._tag === "Left") {
+      if (deleteReferenceResult._tag === "Failure") {
         cleanupErrors.push(
-          `Also failed to delete created upstream tracking ref ${createdTrackingRef}: ${errorMessage(deleteReferenceResult.left)}`,
+          `Also failed to delete created upstream tracking ref ${createdTrackingRef}: ${errorMessage(deleteReferenceResult.failure)}`,
         );
       }
     }
-    const removeWorktreeResult = yield* Effect.either(
+    const removeWorktreeResult = yield* Effect.result(
       removeWorktreeAndFilesystemPath(
         {
           gitPort: dependencies.gitPort,
@@ -283,17 +283,17 @@ export const rollbackFailedTaskWorktree = (
         },
       ),
     );
-    if (removeWorktreeResult._tag === "Left") {
+    if (removeWorktreeResult._tag === "Failure") {
       cleanupErrors.push(
-        `Also failed to remove worktree ${worktreePath}: ${errorMessage(removeWorktreeResult.left)}`,
+        `Also failed to remove worktree ${worktreePath}: ${errorMessage(removeWorktreeResult.failure)}`,
       );
     }
-    const deleteBranchResult = yield* Effect.either(
+    const deleteBranchResult = yield* Effect.result(
       dependencies.gitPort.deleteLocalBranch(repoPath, branch, true),
     );
-    if (deleteBranchResult._tag === "Left") {
+    if (deleteBranchResult._tag === "Failure") {
       cleanupErrors.push(
-        `Also failed to delete branch ${branch}: ${errorMessage(deleteBranchResult.left)}`,
+        `Also failed to delete branch ${branch}: ${errorMessage(deleteBranchResult.failure)}`,
       );
     }
     return cleanupErrors.length === 0 ? "" : `\n${cleanupErrors.join("\n")}`;

@@ -23,6 +23,7 @@ import {
 import { toWorkspaceRelativeGitPath } from "./workspace-files-paths";
 import { compareWorkspacePaths, buildWorkspaceTree } from "./workspace-files-projection";
 import { topPaths, inRegion, parentPath, WorkspaceTreeIndex } from "./workspace-tree-index";
+import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
 
 type TreeGit = Pick<
   GitPort,
@@ -56,7 +57,7 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
   const views = new Map<string, View>();
   let disposed = false;
   // Reserve each root lock before yielding so concurrent reads share it.
-  const locks = new Map<string, { semaphore: Effect.Semaphore; users: number }>();
+  const locks = new Map<string, { lane: SerialLane; users: number }>();
   type Operation = {
     read: Effect.Effect<WorkspaceFileTreeRefreshResult, HostValidationErrorAggregate>;
     settled: boolean;
@@ -99,12 +100,11 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
       if (existing) return respond(existing, yield* existing.read, input);
       const needsFull = input.mode === "full" && views.has(key);
       let gate = locks.get(key);
-      if (!gate)
-        locks.set(key, (gate = { semaphore: Effect.runSync(Effect.makeSemaphore(1)), users: 0 }));
+      if (!gate) locks.set(key, (gate = { lane: createSerialLane(), users: 0 }));
       gate.users += 1;
       const owner = gate;
-      const run = owner.semaphore
-        .withPermits(1)(
+      const run = owner.lane
+        .run(
           Effect.gen(function* () {
             if (disposed)
               return yield* new HostValidationError({
@@ -223,7 +223,7 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
       Effect.gen(function* () {
         disposed = true;
         yield* Effect.all(
-          [...locks.values()].map((owner) => owner.semaphore.withPermits(1)(Effect.void)),
+          [...locks.values()].map((owner) => owner.lane.run(Effect.void)),
           { concurrency: "unbounded" },
         );
         views.clear();

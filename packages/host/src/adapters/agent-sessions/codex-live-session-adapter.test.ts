@@ -139,11 +139,11 @@ const liveSnapshot = (): AgentSessionLiveSnapshot => ({
 });
 
 const codexAppServer = {
-  request: () => Effect.dieMessage("Unexpected request"),
-  listThreadTurns: () => Effect.dieMessage("Unexpected listThreadTurns"),
-  listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
-  listThreads: () => Effect.dieMessage("Unexpected listThreads"),
-  respond: () => Effect.dieMessage("Unexpected respond"),
+  request: () => Effect.die(new Error("Unexpected request")),
+  listThreadTurns: () => Effect.die(new Error("Unexpected listThreadTurns")),
+  listLoadedThreads: () => Effect.die(new Error("Unexpected listLoadedThreads")),
+  listThreads: () => Effect.die(new Error("Unexpected listThreads")),
+  respond: () => Effect.die(new Error("Unexpected respond")),
 } satisfies CodexAppServerPort &
   import("../../ports/codex-session-history-port").CodexSessionHistoryPort;
 
@@ -756,7 +756,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         prepared.adapter.sendUserMessage({
           ...ref,
           sessionScope: { kind: "repository" },
@@ -764,10 +764,10 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         }),
       ),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") throw new Error("Expected publication failure");
-    expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
-    expect(result.left).toMatchObject({
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected publication failure");
+    expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
+    expect(result.failure).toMatchObject({
       failure: { sessionRef: ref, stage: "live_update", acceptedMessage: { type: "user_message" } },
     });
     expect(harness.controlInputs.sends).toHaveLength(1);
@@ -805,7 +805,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
 
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         prepared.adapter.replyQuestion({
           ...ref,
           sessionScope: { kind: "repository" },
@@ -816,10 +816,10 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") throw new Error("Expected publication failure");
-    expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
-    expect(result.left).toMatchObject({
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected publication failure");
+    expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
+    expect(result.failure).toMatchObject({
       failure: {
         sessionRef: ref,
         stage: "live_update",
@@ -860,7 +860,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
 
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         prepared.adapter.replyQuestion({
           ...ref,
           sessionScope: { kind: "repository" },
@@ -871,10 +871,10 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") throw new Error("Expected publication failure");
-    expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
-    expect(result.left).toMatchObject({
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected publication failure");
+    expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
+    expect(result.failure).toMatchObject({
       failure: { sessionRef: ref, stage: "live_update", acceptedMessage },
     });
   });
@@ -1091,7 +1091,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     // A workspace reads the catalog before it has a live session. The read result is not needed.
     await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         prepared.adapter.queries.loadRuntimeCatalog({
           repoPath: "/repo-b",
           runtimeKind: "codex",
@@ -1333,7 +1333,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
                 deliveredChanges.push(...result.changes);
               }),
             ),
-            Effect.zipRight(Effect.fail(deliveryFailure)),
+            Effect.andThen(Effect.fail(deliveryFailure)),
           ),
         ),
     } satisfies RuntimeLiveSessionLifecyclePort;

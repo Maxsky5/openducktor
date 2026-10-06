@@ -47,7 +47,7 @@ const linkedPullRequest = (providerId = "github") => ({
 });
 
 const createGithubCommands = () =>
-  createGithubReviewTestCli(() => Effect.dieMessage("unexpected GitHub command"));
+  createGithubReviewTestCli(() => Effect.die(new Error("unexpected GitHub command")));
 
 const repository = { host: "github.com", owner: "openai", name: "openducktor" };
 
@@ -96,13 +96,13 @@ describe("createGithubPullRequestReviewAdapter", () => {
           repoConfig: createRepoConfig(),
           linkedPullRequest: linkedPullRequest("gitlab"),
         })
-        .pipe(Effect.either),
+        .pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(HostValidationError);
-      expect(result.left.field).toBe("pullRequest.providerId");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(HostValidationError);
+      expect(result.failure.field).toBe("pullRequest.providerId");
     }
     expect(read).not.toHaveBeenCalled();
     expect(getRepository).not.toHaveBeenCalled();
@@ -161,12 +161,12 @@ describe("createGithubPullRequestReviewAdapter", () => {
           repoConfig: createRepoConfig(),
           linkedPullRequest: linkedPullRequest(),
         })
-        .pipe(Effect.either),
+        .pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBe(failure);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBe(failure);
     }
     expect(getRepository).toHaveBeenCalledTimes(1);
   });

@@ -60,16 +60,16 @@ export const probeCodexSessionStatus = (
   CodexSessionStatusProbeError
 > =>
   Effect.gen(function* () {
-    const threadResult = yield* Effect.either(
+    const threadResult = yield* Effect.result(
       readCodexThread(input.codexAppServer, input.runtimeId, input.externalSessionId),
     );
-    if (threadResult._tag === "Left") {
-      if (isCodexThreadNotFoundError(threadResult.left)) {
+    if (threadResult._tag === "Failure") {
+      if (isCodexThreadNotFoundError(threadResult.failure)) {
         return { supported: true, hasLiveSession: false };
       }
-      return yield* Effect.fail(threadResult.left);
+      return yield* Effect.fail(threadResult.failure);
     }
-    const thread = threadResult.right;
+    const thread = threadResult.success;
     const hasLiveSession =
       thread.cwd === input.workingDirectory
         ? yield* isLiveCodexThreadStatus(thread.status.type)

@@ -5,13 +5,13 @@ import type {
 } from "../ports/agent-runtime-query-port";
 
 export const unexpectedRuntimeQueries = {
-  resolveSessionParent: () => Effect.dieMessage("Unexpected query: resolveSessionParent"),
-  loadRuntimeCatalog: () => Effect.dieMessage("Unexpected query: loadRuntimeCatalog"),
-  searchFiles: () => Effect.dieMessage("Unexpected query: searchFiles"),
-  loadSessionHistory: () => Effect.dieMessage("Unexpected query: loadSessionHistory"),
-  loadSessionTodos: () => Effect.dieMessage("Unexpected query: loadSessionTodos"),
-  loadSessionDiff: () => Effect.dieMessage("Unexpected query: loadSessionDiff"),
-  loadFileStatus: () => Effect.dieMessage("Unexpected query: loadFileStatus"),
+  resolveSessionParent: () => Effect.die(new Error("Unexpected query: resolveSessionParent")),
+  loadRuntimeCatalog: () => Effect.die(new Error("Unexpected query: loadRuntimeCatalog")),
+  searchFiles: () => Effect.die(new Error("Unexpected query: searchFiles")),
+  loadSessionHistory: () => Effect.die(new Error("Unexpected query: loadSessionHistory")),
+  loadSessionTodos: () => Effect.die(new Error("Unexpected query: loadSessionTodos")),
+  loadSessionDiff: () => Effect.die(new Error("Unexpected query: loadSessionDiff")),
+  loadFileStatus: () => Effect.die(new Error("Unexpected query: loadFileStatus")),
 } satisfies AgentRuntimeQueryAdapterPort;
 
 export const unexpectedNativeRuntimeQueries = {

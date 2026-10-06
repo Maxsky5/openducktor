@@ -187,7 +187,7 @@ test.each([false, true])(
             .transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" })
             .pipe(Effect.asVoid);
       const second = Effect.runFork(
-        Effect.sync(secondStarted.resolve).pipe(Effect.zipRight(secondMutation)),
+        Effect.sync(secondStarted.resolve).pipe(Effect.andThen(secondMutation)),
       );
       await secondStarted.promise;
       expect(events).toEqual([]);
@@ -247,10 +247,10 @@ test("publishes committed transitions when the rest of a mutation fails", async 
         }),
     });
     const result = await Effect.runPromise(
-      Effect.either(service.setSpec({ repoPath, taskId: task.id, markdown: "Spec" })),
+      Effect.result(service.setSpec({ repoPath, taskId: task.id, markdown: "Spec" })),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure).toBe(failure);
     expect(failures).toEqual([]);
     expect(events).toMatchObject([
       { statusChanges: [{ previousStatus: "open", task: { id: task.id, status: "spec_ready" } }] },
@@ -283,7 +283,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       markdown: "Approved",
     };
     const failed = await Effect.runPromise(collectTaskStatusChanges(store.recordQaOutcome(input)));
-    expect(failed.result._tag).toBe("Left");
+    expect(failed.result._tag).toBe("Failure");
     expect(failed.statusChanges).toEqual([]);
     expect((await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }))).status).toBe(
       "open",
@@ -294,7 +294,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     const completed = await Effect.runPromise(
       collectTaskStatusChanges(store.recordQaOutcome(input)),
     );
-    expect(completed.result._tag).toBe("Right");
+    expect(completed.result._tag).toBe("Success");
     expect(completed.statusChanges).toEqual([
       { previousStatus: "open", task: { id: task.id, title: "Task", status: "human_review" } },
     ]);

@@ -4,7 +4,7 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { Data, Deferred, Effect, Fiber, FiberId } from "effect";
+import { Data, Deferred, Effect, Fiber } from "effect";
 import { RuntimeSettingsError } from "../errors";
 import { planSettingsChange } from "../domain/runtime-lifecycle-plan";
 import type { RuntimeDriver, RuntimeDrivers, RuntimeHandle } from "../ports/runtime-driver";
@@ -268,10 +268,10 @@ describe("runtime orchestrator", () => {
 
   test("an interrupted settings change releases its reservation", async () => {
     const harness = createHarness(settingsWith({ opencode: "opencode" }));
-    const entered = Deferred.unsafeMake<void>(FiberId.none);
+    const entered = Deferred.makeUnsafe<void>();
     const changing = Effect.runFork(
       harness.orchestrator.withSettingsChange(["opencode", "codex"], () =>
-        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
       ),
     );
     await Effect.runPromise(Deferred.await(entered));

@@ -14,7 +14,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "effect": "^3.22.2"
+    "effect": "4.0.1"
   },
   "devDependencies": {
     "bun-types": "^1.4.2"

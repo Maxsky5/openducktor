@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type { ClaudeRuntimeEventListener } from "./claude-live-session-event-hub";
+import { createSerialLane } from "../../effect/serial-gate";
 
 type CreateClaudeLiveSessionEventCoordinatorInput = {
   readonly runtimeId: string;
@@ -19,7 +20,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
     session: ClaudeSessionContext;
     event: ClaudeAgentSdkEvent;
   }> = [];
-  const operationSemaphore = Effect.unsafeMakeSemaphore(1);
+  const operations = createSerialLane();
   let backgroundDrainScheduled = false;
   let forwarding = false;
   let forwardingFailure: HostError | null = null;
@@ -38,9 +39,9 @@ export const createClaudeLiveSessionEventCoordinator = ({
       if (!queued) {
         continue;
       }
-      const result = yield* Effect.either(processEvent(queued.session, queued.event));
-      if (result._tag === "Left" && forwardingFailure === null) {
-        forwardingFailure = result.left;
+      const result = yield* Effect.result(processEvent(queued.session, queued.event));
+      if (result._tag === "Failure" && forwardingFailure === null) {
+        forwardingFailure = result.failure;
       }
     }
   });
@@ -83,18 +84,16 @@ export const createClaudeLiveSessionEventCoordinator = ({
     }
     backgroundDrainScheduled = true;
     Effect.runFork(
-      operationSemaphore
-        .withPermits(1)(drainQueuedEvents)
-        .pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              backgroundDrainScheduled = false;
-              if (forwarding && !released && queuedEvents.length > 0) {
-                drainInBackground();
-              }
-            }),
-          ),
+      operations.run(drainQueuedEvents).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            backgroundDrainScheduled = false;
+            if (forwarding && !released && queuedEvents.length > 0) {
+              drainInBackground();
+            }
+          }),
         ),
+      ),
     );
   };
 
@@ -116,7 +115,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
   };
 
   const flush = (): Effect.Effect<void, HostError> =>
-    operationSemaphore.withPermits(1)(
+    operations.run(
       Effect.gen(function* () {
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();
@@ -127,7 +126,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
     effect: Effect.Effect<Value, HostError>,
     beforeFinalDrain: (value: Value) => Effect.Effect<Value, HostError>,
   ): Effect.Effect<Value, HostError> =>
-    operationSemaphore.withPermits(1)(
+    operations.run(
       Effect.gen(function* () {
         // A control that waited while the runtime was released must not reach the native service.
         if (released) {
@@ -136,13 +135,13 @@ export const createClaudeLiveSessionEventCoordinator = ({
         yield* takeForwardingFailure();
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();
-        const result = yield* Effect.either(effect.pipe(Effect.flatMap(beforeFinalDrain)));
+        const result = yield* Effect.result(effect.pipe(Effect.flatMap(beforeFinalDrain)));
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();
-        if (result._tag === "Left") {
-          return yield* Effect.fail(result.left);
+        if (result._tag === "Failure") {
+          return yield* Effect.fail(result.failure);
         }
-        return result.right;
+        return result.success;
       }),
     );
 
@@ -153,7 +152,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
   const shutdown = <Value>(
     effect: Effect.Effect<Value, HostError>,
   ): Effect.Effect<Value, HostError> =>
-    operationSemaphore.withPermits(1)(
+    operations.run(
       Effect.gen(function* () {
         if (released) {
           return yield* Effect.fail(runtimeReleasedError());
@@ -179,11 +178,11 @@ export const createClaudeLiveSessionEventCoordinator = ({
       finalize: (value: Value) => Effect.Effect<Value, HostError>,
     ): Effect.Effect<Value, HostError> =>
       runExclusiveMutation(effect, (value) =>
-        drainSessionClosureEvents(externalSessionId).pipe(Effect.zipRight(finalize(value))),
+        drainSessionClosureEvents(externalSessionId).pipe(Effect.andThen(finalize(value))),
       ),
     shutdown,
     startForwarding: (): Effect.Effect<void, HostError> =>
-      operationSemaphore.withPermits(1)(
+      operations.run(
         Effect.gen(function* () {
           if (released) {
             return yield* Effect.fail(runtimeReleasedError());

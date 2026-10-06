@@ -46,9 +46,9 @@ export const createEventPublishingTaskService = ({
           const { result, statusChanges } = yield* collectTaskStatusChanges(
             taskService.agentSessionUpdateModel(input),
           );
-          if (result._tag === "Left") return yield* Effect.fail(result.left);
+          if (result._tag === "Failure") return yield* Effect.fail(result.failure);
           return {
-            updated: result.right,
+            updated: result.success,
             publish: taskSyncService.runMutation(
               input.repoPath,
               taskSyncService.publishTasksUpdated(
@@ -70,26 +70,26 @@ export const createEventPublishingTaskService = ({
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
-      if (result._tag === "Left") {
-        if (result.left instanceof TaskMutationProgressFailure) {
+      if (result._tag === "Failure") {
+        if (result.failure instanceof TaskMutationProgressFailure) {
           yield* taskSyncService.publishTasksUpdated(
             repoPath,
-            result.left.changes,
+            result.failure.changes,
             operation,
             statusChanges,
-            result.left.failure,
+            result.failure.failure,
           );
-          return yield* Effect.fail(result.left.failure);
+          return yield* Effect.fail(result.failure.failure);
         }
-        return yield* Effect.fail(result.left);
+        return yield* Effect.fail(result.failure);
       }
       yield* taskSyncService.publishTasksUpdated(
         repoPath,
-        successChanges(result.right),
+        successChanges(result.success),
         operation,
         statusChanges,
       );
-      return result.right;
+      return result.success;
     }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
   const publishAfterConditionalMutation = <A>(
@@ -101,24 +101,24 @@ export const createEventPublishingTaskService = ({
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
-      if (result._tag === "Left") {
-        if (result.left instanceof TaskMutationProgressFailure) {
+      if (result._tag === "Failure") {
+        if (result.failure instanceof TaskMutationProgressFailure) {
           yield* taskSyncService.publishTasksUpdated(
             repoPath,
-            result.left.changes,
+            result.failure.changes,
             operation,
             statusChanges,
-            result.left.failure,
+            result.failure.failure,
           );
-          return yield* Effect.fail(result.left.failure);
+          return yield* Effect.fail(result.failure.failure);
         }
-        return yield* Effect.fail(result.left);
+        return yield* Effect.fail(result.failure);
       }
-      if (!mutated(result.right)) {
-        return result.right;
+      if (!mutated(result.success)) {
+        return result.success;
       }
       yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
-      return result.right;
+      return result.success;
     }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
   return {
@@ -201,19 +201,19 @@ export const createEventPublishingTaskService = ({
       ),
     createTask: (input) =>
       Effect.gen(function* () {
-        const result = yield* Effect.either(taskService.createTask(input));
-        if (result._tag === "Left") {
-          if (result.left instanceof TaskCreationProgressFailure) {
+        const result = yield* Effect.result(taskService.createTask(input));
+        if (result._tag === "Failure") {
+          if (result.failure instanceof TaskCreationProgressFailure) {
             yield* taskSyncService.publishExternalTaskCreated(
               input.repoPath,
-              result.left.createdTask,
+              result.failure.createdTask,
             );
-            return yield* Effect.fail(result.left.failure);
+            return yield* Effect.fail(result.failure.failure);
           }
-          return yield* Effect.fail(result.left);
+          return yield* Effect.fail(result.failure);
         }
-        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.right);
-        return result.right;
+        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.success);
+        return result.success;
       }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation)),
     deleteTask: (input) =>
       publishAfterMutation(

@@ -5,7 +5,7 @@ import {
   type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import { Deferred, Effect, Exit, FiberId } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -81,8 +81,9 @@ export const createLiveSessionAttachment = ({
 }): LiveSessionAttachment => {
   let prepared: PreparedRuntimeLiveSessionAdapter | null = null;
   let registered = false;
-  // Set while a registration runs. A release waits for it, so it knows to release or discard.
-  let registering: Deferred.Deferred<void> | null = null;
+  // Set while an attach runs. A release waits for it, so it knows to release or discard, and it
+  // also stops the forwarding that the attach starts.
+  let attaching: Deferred.Deferred<void> | null = null;
 
   const failIfClosed = (step: string, operation: string) =>
     isClosed()
@@ -108,7 +109,7 @@ export const createLiveSessionAttachment = ({
       prepared = next;
       releasePrepared = createRetryableCleanup(
         Effect.gen(function* () {
-          if (registering) yield* Deferred.await(registering);
+          if (attaching) yield* Deferred.await(attaching);
           yield* (
             registered ? lifecycle.releaseRuntime(runtimeId).pipe(Effect.asVoid) : next.discard()
           ).pipe(
@@ -127,35 +128,37 @@ export const createLiveSessionAttachment = ({
         "before its live-session adapter was registered",
         "registerLiveSessionAdapter",
       );
-      const registration = Deferred.unsafeMake<void>(FiberId.none);
-      registering = registration;
-      yield* lifecycle.registerRuntimeAdapter(adapter.adapter).pipe(
-        Effect.mapError((cause) =>
-          toHostOperationError(cause, `${operationPrefix}.registerLiveSessionAdapter`, {
-            runtimeId,
-          }),
-        ),
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            registered = Exit.isSuccess(exit);
-          }).pipe(Effect.zipRight(Deferred.succeed(registration, undefined))),
-        ),
-      );
-      yield* failIfClosed(
-        "while its live-session adapter was being registered",
-        "registerLiveSessionAdapter",
-      );
-      yield* adapter.startForwarding().pipe(
-        Effect.mapError((cause) =>
-          toHostOperationError(cause, `${operationPrefix}.startLiveSessionForwarding`, {
-            runtimeId,
-          }),
-        ),
-      );
-      yield* failIfClosed(
-        "while live-session forwarding was starting",
-        "startLiveSessionForwarding",
-      );
+      const attached = Deferred.makeUnsafe<void>();
+      attaching = attached;
+      yield* Effect.gen(function* () {
+        yield* lifecycle.registerRuntimeAdapter(adapter.adapter).pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, `${operationPrefix}.registerLiveSessionAdapter`, {
+              runtimeId,
+            }),
+          ),
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              registered = Exit.isSuccess(exit);
+            }),
+          ),
+        );
+        yield* failIfClosed(
+          "while its live-session adapter was being registered",
+          "registerLiveSessionAdapter",
+        );
+        yield* adapter.startForwarding().pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, `${operationPrefix}.startLiveSessionForwarding`, {
+              runtimeId,
+            }),
+          ),
+        );
+        yield* failIfClosed(
+          "while live-session forwarding was starting",
+          "startLiveSessionForwarding",
+        );
+      }).pipe(Effect.ensuring(Deferred.succeed(attached, undefined)));
     }),
     release: Effect.suspend(() => releasePrepared ?? Effect.void),
   };

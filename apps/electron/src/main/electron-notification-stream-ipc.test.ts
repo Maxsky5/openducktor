@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect";
+import { Cause, Effect, Queue, Stream } from "effect";
 import { expect, mock, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import type { z } from "zod";
@@ -36,15 +36,15 @@ const harness = ({ hostShutdownStarted = false } = {}) => {
       publishHealth() {},
       dispose: () => Effect.void,
       subscribe: () =>
-        Stream.asyncPush<NotificationStreamFrame>(
-          (emit) =>
+        Stream.callback<NotificationStreamFrame, Error>(
+          (queue) =>
             Effect.acquireRelease(
               Effect.sync(() => {
                 receive = (frame) => {
-                  emit.single(frame);
+                  Queue.offerUnsafe(queue, frame);
                 };
                 failStream = (error) => {
-                  emit.fail(error);
+                  Queue.failCauseUnsafe(queue, Cause.fail(error));
                 };
               }),
               () => Effect.sync(stop),

@@ -271,7 +271,7 @@ describe("workspace provider setup", () => {
         return yield* Effect.promise(() => finish.promise);
       }),
     );
-    const checking = Effect.runPromise(Effect.either(h.service.status(ref)));
+    const checking = Effect.runPromise(Effect.result(h.service.status(ref)));
     await entered.promise;
     ref = await Effect.runPromise(
       h.service.set(ref, {
@@ -284,7 +284,7 @@ describe("workspace provider setup", () => {
     );
     h.setHealth(unavailable);
     finish.resolve(healthy);
-    expect((await checking)._tag).toBe("Left");
+    expect((await checking)._tag).toBe("Failure");
     const outcome = await Effect.runPromise(h.service.commit(details(ref)));
     expect(outcome.registrationSaved).toBe(false);
     expect(outcome.error).toContain("Provider unavailable");
@@ -321,7 +321,7 @@ describe("workspace provider setup", () => {
     const finishCleanup = Promise.withResolvers<void>();
     let cancel = () => {};
     h.credentials.connection.startCloudSignIn = () =>
-      Effect.async<AzureDevOpsDeviceCode, HostError>((resume) => {
+      Effect.callback<AzureDevOpsDeviceCode, HostError>((resume) => {
         cancel = () => resume(Effect.fail(failure()));
         entered.resolve();
       });
@@ -332,11 +332,11 @@ describe("workspace provider setup", () => {
         yield* Effect.promise(() => finishCleanup.promise);
       }),
     );
-    const start = Effect.runPromise(Effect.either(h.service.signIn(ref)));
+    const start = Effect.runPromise(Effect.result(h.service.signIn(ref)));
     await entered.promise;
     const discard = Effect.runPromise(h.service.discard(ref.setupId));
     await releasing.promise;
-    expect((await start)._tag).toBe("Left");
+    expect((await start)._tag).toBe("Failure");
     await expect(Effect.runPromise(h.service.set(ref, { kind: "none" }))).rejects.toThrow(
       "operation is running",
     );

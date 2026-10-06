@@ -47,7 +47,7 @@ export const createNodeNotificationServices = (
       return {
         ...notifications,
         dispose: () =>
-          Effect.sync(() => unsubscribe?.()).pipe(Effect.zipRight(notifications.dispose())),
+          Effect.sync(() => unsubscribe?.()).pipe(Effect.andThen(notifications.dispose())),
       };
     },
   };

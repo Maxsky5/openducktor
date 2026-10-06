@@ -42,12 +42,12 @@ export const replaceEpicPlanSubtasks = (
       }
       return directSubtasks.map((subtask) => subtask.id);
     });
-    const result = yield* Effect.either(replacement);
-    if (result._tag === "Right") {
-      return result.right;
+    const result = yield* Effect.result(replacement);
+    if (result._tag === "Success") {
+      return result.success;
     }
     if (removedTaskIds.length === 0) {
-      return yield* Effect.fail(result.left);
+      return yield* Effect.fail(result.failure);
     }
     return yield* Effect.fail(
       new TaskMutationProgressFailure({
@@ -56,7 +56,7 @@ export const replaceEpicPlanSubtasks = (
           taskIds: [task.id, ...removedTaskIds],
           removedTaskIds,
         },
-        failure: result.left,
+        failure: result.failure,
       }),
     );
   });

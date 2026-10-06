@@ -84,7 +84,7 @@ export const createOpenCodeModelCatalogPreview =
         catch: (cause) => toHostOperationError(cause, "opencodeModelCatalogPreview.command"),
       });
       const cleanup: PreviewCleanup = { failure: null };
-      const result = yield* Effect.either(
+      const result = yield* Effect.result(
         Effect.acquireUseRelease(
           Effect.try({
             try: () => {
@@ -154,13 +154,15 @@ export const createOpenCodeModelCatalogPreview =
                 try: () => readModelCatalog(repoPath, `http://127.0.0.1:${port}`),
                 catch: (cause) => toHostOperationError(cause, "opencodeModelCatalogPreview.read"),
               }).pipe(
-                Effect.timeoutFail({
+                Effect.timeoutOrElse({
                   duration: `${readTimeoutMs} millis`,
-                  onTimeout: () =>
-                    new HostOperationError({
-                      operation: "opencodeModelCatalogPreview.read",
-                      message: `OpenCode did not return its model catalog within ${readTimeoutMs}ms. Retry the model list.`,
-                    }),
+                  orElse: () =>
+                    Effect.fail(
+                      new HostOperationError({
+                        operation: "opencodeModelCatalogPreview.read",
+                        message: `OpenCode did not return its model catalog within ${readTimeoutMs}ms. Retry the model list.`,
+                      }),
+                    ),
                 }),
               );
             }),
@@ -178,26 +180,26 @@ export const createOpenCodeModelCatalogPreview =
                 : Effect.sync(() => {
                     child.kill();
                   });
-              const outcome = yield* Effect.either(stop);
-              if (outcome._tag === "Left") {
+              const outcome = yield* Effect.result(stop);
+              if (outcome._tag === "Failure") {
                 cleanup.failure = toHostOperationError(
-                  outcome.left,
+                  outcome.failure,
                   "opencodeModelCatalogPreview.cleanup",
                 );
               }
             }),
         ),
       );
-      if (result._tag === "Left") {
+      if (result._tag === "Failure") {
         if (cleanup.failure) {
           return yield* new HostOperationError({
             operation: "opencodeModelCatalogPreview.readAndCleanup",
-            message: `${result.left.message}\nCleanup also failed: ${cleanup.failure.message}`,
-            cause: result.left,
+            message: `${result.failure.message}\nCleanup also failed: ${cleanup.failure.message}`,
+            cause: result.failure,
           });
         }
-        return yield* Effect.fail(result.left);
+        return yield* Effect.fail(result.failure);
       }
       if (cleanup.failure) return yield* Effect.fail(cleanup.failure);
-      return result.right;
+      return result.success;
     });

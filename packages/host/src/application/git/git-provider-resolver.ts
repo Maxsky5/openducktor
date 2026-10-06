@@ -136,8 +136,8 @@ function checkCapability<Port extends { providerId: GitProviderId }>(
 ): Effect.Effect<void, GitProviderRegistrationError> {
   return Effect.gen(function* () {
     const providerId = provider.getDescriptor().id;
-    const portResult = yield* Effect.either(rule.getPort());
-    const hasPort = portResult._tag === "Right";
+    const portResult = yield* Effect.result(rule.getPort());
+    const hasPort = portResult._tag === "Success";
     if (rule.supported !== hasPort) {
       if (rule.supported) {
         return yield* Effect.fail(
@@ -160,13 +160,13 @@ function checkCapability<Port extends { providerId: GitProviderId }>(
       );
     }
 
-    if (portResult._tag === "Right" && portResult.right.providerId !== providerId) {
+    if (portResult._tag === "Success" && portResult.success.providerId !== providerId) {
       return yield* Effect.fail(
         new GitProviderRegistrationError({
           reason: "capability_provider_id_mismatch",
           providerId,
           capability: rule.capability,
-          message: `Git provider '${providerId}' supplies a ${PORT_LABELS[rule.capability]} port owned by '${portResult.right.providerId}'.`,
+          message: `Git provider '${providerId}' supplies a ${PORT_LABELS[rule.capability]} port owned by '${portResult.success.providerId}'.`,
         }),
       );
     }

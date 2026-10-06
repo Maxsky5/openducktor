@@ -214,14 +214,14 @@ export const stopTypescriptHostBackendServicesEffect = ({
       failures.push(
         toWebOperationError(causeToWebBoundaryError(disposeExit.cause), "web.host.dispose"),
       );
-      const logResult = yield* Effect.either(
+      const logResult = yield* Effect.result(
         writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause)),
       );
-      if (logResult._tag === "Left") {
-        failures.push(logResult.left);
+      if (logResult._tag === "Failure") {
+        failures.push(logResult.failure);
       }
     }
-    const stopServerResult = yield* Effect.either(
+    const stopServerResult = yield* Effect.result(
       Effect.tryPromise({
         try: async () => {
           await stopServer();
@@ -234,9 +234,9 @@ export const stopTypescriptHostBackendServicesEffect = ({
           }),
       }),
     );
-    if (stopServerResult._tag === "Left") {
+    if (stopServerResult._tag === "Failure") {
       exitCode = 1;
-      failures.push(stopServerResult.left);
+      failures.push(stopServerResult.failure);
     }
     resolveExited(exitCode);
     const failure = combineWebErrors(

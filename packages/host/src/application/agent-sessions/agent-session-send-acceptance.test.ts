@@ -94,30 +94,32 @@ describe("message acceptance through the command and live adapter modules", () =
           runSend: (_ref, effect) => effect,
           validateRef: () => Effect.void,
           prepareSend: Effect.succeed,
-          prepareResume: () => Effect.dieMessage("unexpected resume"),
-          prepareModelUpdate: () => Effect.dieMessage("unexpected model update"),
+          prepareResume: () => Effect.die(new Error("unexpected resume")),
+          prepareModelUpdate: () => Effect.die(new Error("unexpected model update")),
           recordAcceptedMessage: () => {
             records += 1;
             return Effect.fail(failure);
           },
         },
         canonicalizeRepoPath: Effect.succeed,
-        taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
+        taskReader: { getTask: () => Effect.die(new Error("unexpected task read")) },
         tasks: {
-          agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
-          agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
-          agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
-          transitionTask: () => Effect.dieMessage("unexpected task transition"),
+          agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
+          transitionTask: () => Effect.die(new Error("unexpected task transition")),
         },
-        taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
+        taskLifecycle: {
+          acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")),
+        },
         taskSessionStart: {
-          prepare: () => Effect.dieMessage("unexpected task start"),
-          complete: () => Effect.dieMessage("unexpected task completion"),
+          prepare: () => Effect.die(new Error("unexpected task start")),
+          complete: () => Effect.die(new Error("unexpected task completion")),
         },
-        persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
+        persistTaskModel: () => Effect.die(new Error("unexpected task model write")),
       });
       const sending = Effect.runPromise(
-        Effect.either(
+        Effect.result(
           commands.sendUserMessage({
             ...ref,
             sessionScope: { kind: "repository" },
@@ -136,22 +138,22 @@ describe("message acceptance through the command and live adapter modules", () =
       const result = await sending;
       expect(sends).toBe(1);
       expect(records).toBe(stage === "record" ? 1 : 0);
-      expect(result._tag).toBe("Left");
-      if (result._tag !== "Left") throw new Error("Expected send failure");
-      const mapped = hostInvokeFailureFromError(result.left);
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected send failure");
+      const mapped = hostInvokeFailureFromError(result.failure);
       if (stage === "reject" || stage === "invalid") {
         expect(mapped).toBeUndefined();
-        expect(result.left).not.toBeInstanceOf(AgentSessionMessageAcceptedError);
+        expect(result.failure).not.toBeInstanceOf(AgentSessionMessageAcceptedError);
         return;
       }
-      expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
+      expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
       expect(hostInvokeFailureSchema.parse(mapped)).toMatchObject({
         kind: "agent_session_message_accepted",
         sessionRef: ref,
         acceptedMessage: { messageId: "user-1", message: "Hello" },
         stage: stage === "record" ? "record_message" : "live_update",
       });
-      expect(result.left.message).toContain("Do not send the message again");
+      expect(result.failure.message).toContain("Do not send the message again");
       expect(events.some((event) => event.type === "transcript_event")).toBe(true);
     },
   );

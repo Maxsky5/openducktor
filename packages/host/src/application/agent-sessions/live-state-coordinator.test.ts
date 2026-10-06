@@ -29,7 +29,7 @@ describe("createLiveStateCoordinator", () => {
       ),
     );
 
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     expect(order).toEqual(["first:entered"]);
 
     await Effect.runPromise(Deferred.succeed(release, undefined));

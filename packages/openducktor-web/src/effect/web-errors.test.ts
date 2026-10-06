@@ -6,7 +6,7 @@ describe("web Effect boundary errors", () => {
   test("preserves multiple typed failures on boundary crossing", () => {
     const firstFailure = new WebValidationError({ field: "first", message: "first failed" });
     const secondFailure = new WebValidationError({ field: "second", message: "second failed" });
-    const cause = Cause.parallel(Cause.fail(firstFailure), Cause.fail(secondFailure));
+    const cause = Cause.combine(Cause.fail(firstFailure), Cause.fail(secondFailure));
 
     const error = causeToWebBoundaryError(cause);
 
@@ -32,7 +32,7 @@ describe("web Effect boundary errors", () => {
 
   test("preserves mixed causes instead of unwrapping their typed failure", () => {
     const failure = new WebValidationError({ field: "name", message: "name failed" });
-    const cause = Cause.sequential(Cause.fail(failure), Cause.die(new Error("unexpected")));
+    const cause = Cause.combine(Cause.fail(failure), Cause.die(new Error("unexpected")));
 
     const error = causeToWebBoundaryError(cause);
 

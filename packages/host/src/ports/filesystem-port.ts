@@ -68,7 +68,6 @@ export type FilesystemPort = {
   parent(path: string): string | null;
 };
 
-export class FilesystemPortTag extends Context.Tag("@openducktor/host/FilesystemPort")<
-  FilesystemPortTag,
-  FilesystemPort
->() {}
+export class FilesystemPortTag extends Context.Service<FilesystemPortTag, FilesystemPort>()(
+  "@openducktor/host/FilesystemPort",
+) {}

@@ -36,6 +36,7 @@ import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-no
 import { createOpenCodeAdapterRelease } from "./opencode-live-session-release";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export type PreparedOpenCodeLiveSessionAdapter = Omit<
   PreparedRuntimeLiveSessionAdapter,
@@ -106,12 +107,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         runtime,
         nextOccurrenceId: () => `opencode-pending-${nextOccurrence++}`,
       });
-      const runtimeSemaphore = Effect.unsafeMakeSemaphore(1);
+      const runtimeLane = createSerialLane();
       const binding = liveSessionLifecycle.createRuntimeRegistration({
         runtimeId: runtime.runtimeId,
         runtimeKind: runtime.kind,
       });
-      const serializeRuntime = runtimeSemaphore.withPermits(1);
+      const serializeRuntime = runtimeLane.run;
       const contextLoads = new Map<string, Promise<AgentSessionContextUsage | null>>();
       let released = false;
 

@@ -40,13 +40,13 @@ export const createPullRequestReviewService = ({
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
       let pullRequest: PullRequest | null = null;
       if (input.taskId) {
-        const taskResult = yield* Effect.either(
+        const taskResult = yield* Effect.result(
           taskReader.getTask({ repoPath: repoConfig.repoPath, taskId: input.taskId }),
         );
-        if (taskResult._tag === "Left") {
-          return providerError("unknown", errorMessage(taskResult.left));
+        if (taskResult._tag === "Failure") {
+          return providerError("unknown", errorMessage(taskResult.failure));
         }
-        pullRequest = taskResult.right.pullRequest ?? null;
+        pullRequest = taskResult.success.pullRequest ?? null;
       }
 
       if (!pullRequest) {
@@ -54,12 +54,12 @@ export const createPullRequestReviewService = ({
       }
 
       const providerId = pullRequest.providerId;
-      const providerResult = yield* Effect.either(resolver.resolve(repoConfig));
-      if (providerResult._tag === "Left") {
-        return unavailable(providerId, errorMessage(providerResult.left));
+      const providerResult = yield* Effect.result(resolver.resolve(repoConfig));
+      if (providerResult._tag === "Failure") {
+        return unavailable(providerId, errorMessage(providerResult.failure));
       }
 
-      const provider = providerResult.right;
+      const provider = providerResult.success;
       const descriptor = provider.getDescriptor();
       if (descriptor.id !== providerId) {
         return unavailable(
@@ -75,21 +75,21 @@ export const createPullRequestReviewService = ({
         );
       }
 
-      const reviewPortResult = yield* Effect.either(provider.pullRequestReview());
-      if (reviewPortResult._tag === "Left") {
-        return unavailable(providerId, errorMessage(reviewPortResult.left));
+      const reviewPortResult = yield* Effect.result(provider.pullRequestReview());
+      if (reviewPortResult._tag === "Failure") {
+        return unavailable(providerId, errorMessage(reviewPortResult.failure));
       }
-      const reviewPort = reviewPortResult.right;
-      const contextResult = yield* Effect.either(
+      const reviewPort = reviewPortResult.success;
+      const contextResult = yield* Effect.result(
         reviewPort.readContext({
           repoConfig,
           linkedPullRequest: pullRequest,
         }),
       );
-      if (contextResult._tag === "Left") {
-        return providerError(providerId, errorMessage(contextResult.left));
+      if (contextResult._tag === "Failure") {
+        return providerError(providerId, errorMessage(contextResult.failure));
       }
-      return contextResult.right;
+      return contextResult.success;
     }).pipe(
       Effect.mapError((cause) =>
         cause instanceof HostValidationError

@@ -314,7 +314,7 @@ export const createIssueImportService = ({
     import(input: IssueItemsImportInput) {
       return Effect.gen(function* () {
         const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
-        const preparedGet = yield* Effect.either(reader.prepareGet(repoConfig, scope));
+        const preparedGet = yield* Effect.result(reader.prepareGet(repoConfig, scope));
         const seen = new Set<string>();
         const results: IssueItemsImportResult["results"] = [];
         for (const review of input.items) {
@@ -327,17 +327,17 @@ export const createIssueImportService = ({
             continue;
           }
           seen.add(review.sourceId);
-          if (preparedGet._tag === "Left") {
+          if (preparedGet._tag === "Failure") {
             results.push({
               sourceId: review.sourceId,
               outcome: "failed",
-              reason: errorMessage(preparedGet.left),
+              reason: errorMessage(preparedGet.failure),
             });
             continue;
           }
-          const outcome = yield* Effect.either(
+          const outcome = yield* Effect.result(
             Effect.gen(function* () {
-              const source = yield* preparedGet.right(review.sourceId);
+              const source = yield* preparedGet.success(review.sourceId);
               if (
                 source.sourceId !== review.sourceId ||
                 source.providerId !== reader.providerId ||
@@ -382,13 +382,13 @@ export const createIssueImportService = ({
               return { outcome: "created" as const, taskId: created.task.id };
             }),
           );
-          if (outcome._tag === "Right") {
-            results.push({ sourceId: review.sourceId, ...outcome.right });
+          if (outcome._tag === "Success") {
+            results.push({ sourceId: review.sourceId, ...outcome.success });
           } else {
             results.push({
               sourceId: review.sourceId,
               outcome: "failed",
-              reason: errorMessage(outcome.left),
+              reason: errorMessage(outcome.failure),
             });
           }
         }

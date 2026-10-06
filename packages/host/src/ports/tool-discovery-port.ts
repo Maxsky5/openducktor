@@ -56,7 +56,7 @@ export const validateExactToolPath = (
   executablePath: string,
 ) => port.validateToolPath(toolId, executablePath);
 
-export class ToolDiscoveryPortTag extends Context.Tag("@openducktor/host/ToolDiscoveryPort")<
+export class ToolDiscoveryPortTag extends Context.Service<
   ToolDiscoveryPortTag,
   ToolDiscoveryPort
->() {}
+>()("@openducktor/host/ToolDiscoveryPort") {}

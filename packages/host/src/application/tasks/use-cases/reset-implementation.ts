@@ -183,7 +183,7 @@ export const createTaskImplementationResetUseCase = ({
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
-        Effect.catchAll((error) => {
+        Effect.catch((error) => {
           const decoratedFailure = appendImplementationResetCleanupProgress(error, cleanupProgress);
           const failure = taskStoreWriteCompleted
             ? createTaskMutationProgressFailure("reset-implementation", taskId, decoratedFailure)

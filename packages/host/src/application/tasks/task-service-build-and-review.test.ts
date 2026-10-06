@@ -1785,26 +1785,18 @@ describe("createTaskService build and review", () => {
   test("blocks human change requests when direct merge metadata is pending", async () => {
     const taskStore: TaskStorePort = {
       getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            return {
-              spec: { markdown: "" },
-              plan: { markdown: "" },
-              directMerge: {
-                method: "merge_commit",
-                sourceBranch: "odt/task-1",
-                targetBranch: { remote: "origin", branch: "main" },
-                mergedAt: "2026-05-10T00:00:00.000Z",
-              },
-              agentSessions: [],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          return {
+            spec: { markdown: "" },
+            plan: { markdown: "" },
+            directMerge: {
+              method: "merge_commit",
+              sourceBranch: "odt/task-1",
+              targetBranch: { remote: "origin", branch: "main" },
+              mergedAt: "2026-05-10T00:00:00.000Z",
+            },
+            agentSessions: [],
+          };
         });
       },
       getTask() {

@@ -87,7 +87,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
       return Effect.gen(function* () {
         yield* coordinator.run(
           requireAttached(adapter.binding).pipe(
-            Effect.zipRight(adapterRegistry.register(adapter)),
+            Effect.andThen(adapterRegistry.register(adapter)),
             Effect.tap(() =>
               Effect.sync(() => {
                 registered = true;

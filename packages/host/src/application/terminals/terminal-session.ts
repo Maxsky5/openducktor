@@ -1,5 +1,5 @@
 import type { TerminalSummary } from "@openducktor/contracts";
-import type { Effect } from "effect";
+
 import type {
   TerminalGrid,
   TerminalProducerHandle,
@@ -8,6 +8,7 @@ import type {
 import { TerminalScreenState } from "./terminal-screen-state";
 import { TerminalSessionOutput } from "./terminal-session-output";
 import type { TerminalTitleTracker } from "./terminal-title-tracker";
+import { type SerialLane } from "../../effect/serial-gate";
 
 type TerminalSessionState = {
   onForgotten?: () => void;
@@ -15,7 +16,7 @@ type TerminalSessionState = {
   output: TerminalSessionOutput;
   screen: TerminalScreenState;
   screenReleaseStarted: boolean;
-  operations: Effect.Semaphore;
+  operations: SerialLane;
 };
 
 export type InteractiveTerminalSession = TerminalSessionState & {
@@ -62,7 +63,7 @@ class TerminalSessionResources<Handle extends TerminalProducerHandle> {
 type TerminalSessionInput = {
   summary: TerminalSummary;
   titleTracker: TerminalTitleTracker;
-  operations: Effect.Semaphore;
+  operations: SerialLane;
   replayByteLimit: number;
   grid: TerminalGrid;
 };

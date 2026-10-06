@@ -41,7 +41,7 @@ export const openSqliteTaskStoreConnection: OpenSqliteTaskStoreConnection = (dat
           config: {
             schema: taskStoreSchema,
           },
-        }).pipe(Scope.extend(scope));
+        }).pipe(Scope.provide(scope));
         yield* ensureSchema(connection.database, connection.session, databasePath);
         return {
           release: connection.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void))),

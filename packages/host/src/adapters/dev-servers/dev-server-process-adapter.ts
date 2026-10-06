@@ -253,13 +253,13 @@ export const createDevServerProcessAdapter = ({
               released = true;
             }),
           ).pipe(
-            Effect.catchAllCause((failure) =>
+            Effect.catchCause((failure) =>
               Effect.gen(function* () {
                 stopping = false;
-                const restored = yield* Effect.either(setOutputPaused(outputPaused));
+                const restored = yield* Effect.result(setOutputPaused(outputPaused));
                 return yield* Effect.failCause(
-                  restored._tag === "Left"
-                    ? Cause.sequential(failure, Cause.fail(restored.left))
+                  restored._tag === "Failure"
+                    ? Cause.combine(failure, Cause.fail(restored.failure))
                     : failure,
                 );
               }),

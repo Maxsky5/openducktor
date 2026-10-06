@@ -62,7 +62,7 @@ export const createCodexModelCatalogPreview =
         catch: (cause) => toHostOperationError(cause, "codexModelCatalogPreview.command"),
       });
       const cleanup: PreviewCleanup = { failure: null };
-      const result = yield* Effect.either(
+      const result = yield* Effect.result(
         Effect.acquireUseRelease(
           Effect.try({
             try: () => {
@@ -152,15 +152,15 @@ export const createCodexModelCatalogPreview =
               const outcomes = yield* Effect.all(
                 [
                   ...(transport
-                    ? [Effect.either(transport.rejectPendingRequestsForShutdown())]
+                    ? [Effect.result(transport.rejectPendingRequestsForShutdown())]
                     : []),
-                  Effect.either(stop),
-                  ...(transport ? [Effect.either(transport.close())] : []),
+                  Effect.result(stop),
+                  ...(transport ? [Effect.result(transport.close())] : []),
                 ],
                 { concurrency: 1 },
               );
               const failures = outcomes.flatMap((outcome) =>
-                outcome._tag === "Left" ? [outcome.left.message] : [],
+                outcome._tag === "Failure" ? [outcome.failure.message] : [],
               );
               if (failures.length > 0) {
                 cleanup.failure = new HostOperationError({
@@ -171,16 +171,16 @@ export const createCodexModelCatalogPreview =
             }),
         ),
       );
-      if (result._tag === "Left") {
+      if (result._tag === "Failure") {
         if (cleanup.failure) {
           return yield* new HostOperationError({
             operation: "codexModelCatalogPreview.readAndCleanup",
-            message: `${result.left.message}\nCleanup also failed: ${cleanup.failure.message}`,
-            cause: result.left,
+            message: `${result.failure.message}\nCleanup also failed: ${cleanup.failure.message}`,
+            cause: result.failure,
           });
         }
-        return yield* Effect.fail(result.left);
+        return yield* Effect.fail(result.failure);
       }
       if (cleanup.failure) return yield* Effect.fail(cleanup.failure);
-      return result.right;
+      return result.success;
     });

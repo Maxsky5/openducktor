@@ -3,7 +3,7 @@ import {
   localAttachmentUnavailableDetailsSchema,
 } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
-import { Cause, Chunk, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { z } from "zod";
 import type { ElectronLocalAttachmentPreviewResult } from "../shared/electron-bridge-contract";
 import {
@@ -263,7 +263,7 @@ export const registerElectronLocalAttachmentPreviewProtocol = ({
       return exit.value;
     }
 
-    const firstFailure = Chunk.head(Cause.failures(exit.cause));
+    const firstFailure = Cause.findErrorOption(exit.cause);
     if (Option.isSome(firstFailure) && firstFailure.value instanceof ElectronValidationError) {
       return createLocalAttachmentPreviewErrorResponse(firstFailure.value, 400);
     }

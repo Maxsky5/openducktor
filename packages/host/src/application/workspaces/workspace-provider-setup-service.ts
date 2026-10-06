@@ -317,7 +317,7 @@ export const createWorkspaceProviderSetupService = (input: {
           session,
           Effect.gen(function* () {
             session.progress.error = null;
-            const result = yield* Effect.either(
+            const result = yield* Effect.result(
               Effect.gen(function* () {
                 if (
                   session.progress.workspace &&
@@ -358,8 +358,8 @@ export const createWorkspaceProviderSetupService = (input: {
                 session.progress.phase = "complete";
               }),
             );
-            if (result._tag === "Left")
-              session.progress.error = `${result.left.message} ${session.progress.registrationSaved ? "Workspace and settings are saved. Retry this setup to continue." : "No workspace was created. Correct the input and retry."}`;
+            if (result._tag === "Failure")
+              session.progress.error = `${result.failure.message} ${session.progress.registrationSaved ? "Workspace and settings are saved. Retry this setup to continue." : "No workspace was created. Correct the input and retry."}`;
             return { ...session.progress };
           }),
         );

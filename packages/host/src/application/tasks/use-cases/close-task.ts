@@ -160,7 +160,7 @@ export const createTaskCloseUseCase = ({
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
-        Effect.catchAll((error) =>
+        Effect.catch((error) =>
           Effect.fail(
             appendTaskCleanupProgress(error, {
               operation: "task_close",

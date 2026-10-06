@@ -151,7 +151,7 @@ export const createTaskAssetAwareCreate =
     });
 
     return create.pipe(
-      Effect.catchAll((cause) => {
+      Effect.catch((cause) => {
         if (
           referencedAssetIds.size === 0 &&
           suppliedAssetIds.size === 0 &&

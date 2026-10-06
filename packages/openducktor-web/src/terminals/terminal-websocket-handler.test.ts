@@ -8,6 +8,8 @@ import {
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
 import {
+  createSerialGate,
+  createSerialLane,
   createTerminalService,
   type FilesystemPort,
   type GitPort,
@@ -22,7 +24,7 @@ import {
 } from "./terminal-websocket-handler";
 
 const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
-  Effect.dieMessage(`Unexpected terminal service operation: ${operation}`);
+  Effect.die(new Error(`Unexpected terminal service operation: ${operation}`));
 
 const createTerminalServiceFixture = (
   overrides: Partial<TerminalWebSocketService> = {},
@@ -51,8 +53,8 @@ const makeSocket = (
       pendingBytes: 0,
       pendingFrames: [],
       drainWaiters: new Set(),
-      attachPermit: Effect.unsafeMakeSemaphore(1),
-      messagePermits: new Map(),
+      attachPermit: createSerialLane(),
+      messageGate: createSerialGate(),
       closed: false,
       logger: {
         error: () => Effect.void,
@@ -287,11 +289,11 @@ describe("terminalWebSocketHandler", () => {
     );
     await Bun.sleep(0);
     expect(operations).toEqual(["attach:terminal-1", "write:terminal-1"]);
-    expect(harness.data.messagePermits.size).toBe(1);
+    expect(harness.data.messageGate.isActive("terminal-2")).toBe(true);
     terminalWebSocketHandler.drain(harness.socket);
     await Bun.sleep(0);
     expect(operations).toEqual(["attach:terminal-1", "write:terminal-1", "attach:terminal-2"]);
-    expect(harness.data.messagePermits.size).toBe(0);
+    expect(harness.data.messageGate.isActive("terminal-2")).toBe(false);
   });
 
   test("reports a failed socket send to the terminal attachment", async () => {
@@ -597,7 +599,7 @@ describe("terminalWebSocketHandler", () => {
 
   test("reports a stale attach from the real terminal service as forgotten", async () => {
     const unusedDependency = (operation: string): Effect.Effect<never> =>
-      Effect.dieMessage(`Unexpected stale-attach dependency call: ${operation}`);
+      Effect.die(new Error(`Unexpected stale-attach dependency call: ${operation}`));
     const unusedSyncDependency = (operation: string): never => {
       throw new Error(`Unexpected stale-attach dependency call: ${operation}`);
     };

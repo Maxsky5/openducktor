@@ -31,20 +31,20 @@ export const createGithubProviderHealthPort = ({
         });
       }
 
-      const commandResult = yield* Effect.either(githubCli.resolve());
-      if (commandResult._tag === "Left") {
-        return unhealthy({ reason: errorMessage(commandResult.left) });
+      const commandResult = yield* Effect.result(githubCli.resolve());
+      if (commandResult._tag === "Failure") {
+        return unhealthy({ reason: errorMessage(commandResult.failure) });
       }
-      const command = commandResult.right;
-      const versionResult = yield* Effect.either(command.readVersion({ cwd: repoConfig.repoPath }));
-      if (versionResult._tag === "Left" || versionResult.right === null) {
+      const command = commandResult.success;
+      const versionResult = yield* Effect.result(command.readVersion({ cwd: repoConfig.repoPath }));
+      if (versionResult._tag === "Failure" || versionResult.success === null) {
         const reason =
-          versionResult._tag === "Left"
-            ? `Failed to read GitHub CLI version: ${errorMessage(versionResult.left)}`
+          versionResult._tag === "Failure"
+            ? `Failed to read GitHub CLI version: ${errorMessage(versionResult.failure)}`
             : "Failed to read GitHub CLI version.";
         return unhealthy({ executablePath: command.executablePath, reason });
       }
-      const version = versionResult.right;
+      const version = versionResult.success;
       if (!provider.repository) {
         return unhealthy({
           executablePath: command.executablePath,
@@ -52,36 +52,36 @@ export const createGithubProviderHealthPort = ({
           reason: "GitHub repository coordinates are missing.",
         });
       }
-      const repositoryResult = yield* Effect.either(repositoryPort.getRepository(repoConfig));
-      if (repositoryResult._tag === "Left") {
+      const repositoryResult = yield* Effect.result(repositoryPort.getRepository(repoConfig));
+      if (repositoryResult._tag === "Failure") {
         return unhealthy({
           executablePath: command.executablePath,
           version,
           repositoryMappingValid: false,
-          reason: errorMessage(repositoryResult.left),
+          reason: errorMessage(repositoryResult.failure),
         });
       }
-      const authResult = yield* Effect.either(command.getAuth(repositoryResult.right.host));
-      if (authResult._tag === "Left") {
+      const authResult = yield* Effect.result(command.getAuth(repositoryResult.success.host));
+      if (authResult._tag === "Failure") {
         return unhealthy({
           executablePath: command.executablePath,
           version,
-          reason: `Failed to check GitHub authentication: ${errorMessage(authResult.left)}`,
+          reason: `Failed to check GitHub authentication: ${errorMessage(authResult.failure)}`,
         });
       }
-      if (!authResult.right.authenticated) {
+      if (!authResult.success.authenticated) {
         return unhealthy({
           executablePath: command.executablePath,
           version,
           reason:
-            authResult.right.reason ??
+            authResult.success.reason ??
             "GitHub authentication is not configured. Run `gh auth login`.",
         });
       }
-      const account = authResult.right.account;
-      const mappingResult = yield* Effect.either(repositoryPort.getMapping(repoConfig));
-      if (mappingResult._tag === "Left") {
-        const mappingError = mappingResult.left;
+      const account = authResult.success.account;
+      const mappingResult = yield* Effect.result(repositoryPort.getMapping(repoConfig));
+      if (mappingResult._tag === "Failure") {
+        const mappingError = mappingResult.failure;
         if (mappingError._tag !== "GitProviderRepositoryError") {
           return yield* Effect.fail(mappingError);
         }

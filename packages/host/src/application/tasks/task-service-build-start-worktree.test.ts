@@ -90,7 +90,7 @@ describe("createTaskService build start worktree handling", () => {
       );
       try {
         await started.promise;
-        await Effect.runPromise(Fiber.interruptFork(fiber));
+        fiber.interruptUnsafe();
         finishWrite.release();
         await settled.promise;
         expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
@@ -123,7 +123,7 @@ describe("createTaskService build start worktree handling", () => {
       },
     });
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         service.buildStart({
           repoPath: "/repo",
           taskId: "task-1",
@@ -131,8 +131,8 @@ describe("createTaskService build start worktree handling", () => {
         }),
       ),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure).toBe(failure);
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
@@ -154,7 +154,7 @@ describe("createTaskService build start worktree handling", () => {
       systemCommands: {
         ...deps.systemCommands,
         runCommandAllowFailure: () =>
-          Effect.sync(started.release).pipe(Effect.zipRight(Effect.never)),
+          Effect.sync(started.release).pipe(Effect.andThen(Effect.never)),
       },
     });
     const fiber = Effect.runFork(
@@ -240,7 +240,7 @@ describe("createTaskService build start worktree handling", () => {
     let current = task({ status: "ai_review" });
     const taskStore: TaskStorePort = {
       getTask: () => Effect.sync(() => current),
-      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      transitionTask: () => Effect.die(new Error("unexpected task transition")),
     };
     const deps = createDependencies(calls, taskStore);
     const service = createTaskService({
@@ -344,7 +344,7 @@ describe("createTaskService build start worktree handling", () => {
       const calls: unknown[] = [];
       const taskStore: TaskStorePort = {
         getTask: () => Effect.succeed(task({ status })),
-        transitionTask: () => Effect.dieMessage("unexpected task transition"),
+        transitionTask: () => Effect.die(new Error("unexpected task transition")),
       };
 
       await expect(
@@ -400,13 +400,13 @@ describe("createTaskService build start worktree handling", () => {
     const calls: unknown[] = [];
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      transitionTask: () => Effect.die(new Error("unexpected task transition")),
     });
     const runtimeRegistry: RuntimeRegistryPort = {
       ...dependencies.runtimeRegistry,
       requireReady(runtimeKind) {
         return Effect.sync(() => calls.push({ type: "requireRuntime", runtimeKind })).pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.fail(
               new HostResourceError({
                 resource: "agent_runtime",
@@ -451,15 +451,15 @@ describe("createTaskService build start worktree handling", () => {
           if (trackRollbackAcquisition) {
             rollbackStarted.release();
           }
-        }).pipe(Effect.zipRight(baseCoordinator.acquireWorktreeLifecycle(paths)));
+        }).pipe(Effect.andThen(baseCoordinator.acquireWorktreeLifecycle(paths)));
       },
     };
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
       transitionTask: () =>
         Effect.sync(transitionStarted.release).pipe(
-          Effect.zipRight(Effect.promise(() => transitionFailureRequested.promise)),
-          Effect.zipRight(
+          Effect.andThen(Effect.promise(() => transitionFailureRequested.promise)),
+          Effect.andThen(
             Effect.fail(
               new HostOperationError({
                 operation: "test.transitionTask",
@@ -485,7 +485,7 @@ describe("createTaskService build start worktree handling", () => {
       coordinator.runWorktreeRead(
         "/worktrees/repo/task-1",
         Effect.sync(readStarted.release).pipe(
-          Effect.zipRight(Effect.promise(() => readFinished.promise)),
+          Effect.andThen(Effect.promise(() => readFinished.promise)),
         ),
       ),
     );
@@ -513,7 +513,7 @@ describe("createTaskService build start worktree handling", () => {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
       transitionTask: (input) =>
         Effect.sync(() => calls.push({ type: "transition", input })).pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.fail(
               new HostOperationError({
                 operation: "test.transitionTask",

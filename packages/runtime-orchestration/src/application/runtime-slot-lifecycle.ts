@@ -5,7 +5,7 @@ import {
   type RuntimeKind,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import { Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { causeMessage } from "../domain/failure-message";
 import { type Generation, type Slot, type SlotStatus, toStatus } from "../domain/runtime-slot";
 import type { RuntimeDrivers } from "../ports/runtime-driver";
@@ -183,8 +183,20 @@ export const createRuntimeSlotLifecycle = <E>({
           ),
         ),
       );
-      const fiber = yield* Effect.forkDaemon(start);
-      slot.startFiber = fiber;
+      const context = yield* Effect.context<never>();
+      // Check shutdown, start the fiber, and register it in one synchronous step. A fiber can
+      // yield between operations, and shutdown must never miss a start that it did not stop.
+      const fiber = yield* Effect.sync(() => {
+        if (isShuttingDown()) return null;
+        const started = Effect.runForkWith(context)(start);
+        slot.startFiber = started;
+        return started;
+      });
+      if (fiber === null) {
+        slot.generation = null;
+        update(slot, { state: "disabled", failure: null });
+        return false;
+      }
       const exit = yield* Fiber.await(fiber);
       slot.startFiber = null;
       if (Exit.isFailure(exit)) {
@@ -192,11 +204,12 @@ export const createRuntimeSlotLifecycle = <E>({
         // Release what the failed or interrupted start acquired. A failed cleanup stays owned,
         // and the next stop, restart, or shutdown retries it before anything else.
         const cleanupFailure = yield* runOrphanCleanup(slot);
-        if (Exit.isInterrupted(exit) && cleanupFailure === null) {
+        const interrupted = Cause.hasInterrupts(exit.cause);
+        if (interrupted && cleanupFailure === null) {
           update(slot, { state: "disabled", failure: null });
           return false;
         }
-        const startFailure = Exit.isInterrupted(exit)
+        const startFailure = interrupted
           ? "The start was interrupted by shutdown."
           : causeMessage(exit.cause);
         update(slot, {

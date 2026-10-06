@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createSerialLane } from "../../effect/serial-gate";
 import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import {
   activateTerminalSession,
@@ -42,7 +43,7 @@ const makeSession = async () => {
         disposeCalls += 1;
       },
     },
-    operations: await Effect.runPromise(Effect.makeSemaphore(1)),
+    operations: createSerialLane(),
     replayByteLimit: 1024,
     shell: "/bin/zsh",
     grid: { columns: 80, rows: 24 },

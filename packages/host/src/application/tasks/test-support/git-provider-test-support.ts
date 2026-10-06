@@ -7,18 +7,18 @@ export const createDefaultGitProviderResolver = (): GitProviderResolver => {
     Effect.succeed({
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
       repository: () => ({
-        detectRepository: () => Effect.dieMessage("unexpected repository detection"),
+        detectRepository: () => Effect.die(new Error("unexpected repository detection")),
         getRepository: (configuredRepo: Parameters<GitProviderResolver["resolve"]>[0]) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed(repository)
-            : Effect.dieMessage("test repository mapping is missing");
+            : Effect.die(new Error("test repository mapping is missing"));
         },
         getMapping: (configuredRepo: Parameters<GitProviderResolver["resolve"]>[0]) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed({ repository, remoteName: "origin" })
-            : Effect.dieMessage("test repository mapping is missing");
+            : Effect.die(new Error("test repository mapping is missing"));
         },
       }),
       health: () => ({
@@ -34,9 +34,9 @@ export const createDefaultGitProviderResolver = (): GitProviderResolver => {
             repositoryMappingValid: true,
           }),
       }),
-      pullRequests: () => Effect.dieMessage("unexpected Pull Request port"),
-      pullRequestReview: () => Effect.dieMessage("unexpected Pull Request review port"),
-      issues: () => Effect.dieMessage("unexpected Issue reader port"),
+      pullRequests: () => Effect.die(new Error("unexpected Pull Request port")),
+      pullRequestReview: () => Effect.die(new Error("unexpected Pull Request review port")),
+      issues: () => Effect.die(new Error("unexpected Issue reader port")),
     });
   return { resolve, resolveConfigured: resolve };
 };

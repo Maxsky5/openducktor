@@ -38,10 +38,10 @@ export type DevServerProcessPort = {
   >;
 };
 
-export class DevServerProcessPortTag extends Context.Tag("@openducktor/host/DevServerProcessPort")<
+export class DevServerProcessPortTag extends Context.Service<
   DevServerProcessPortTag,
   DevServerProcessPort
->() {}
+>()("@openducktor/host/DevServerProcessPort") {}
 
 export const devServerExitMessage = (exitCode: number | null, signal: string | null): string => {
   if (exitCode !== null) {

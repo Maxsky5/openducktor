@@ -5,7 +5,7 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import { Cause, Effect, Exit, Fiber, Option } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { causeToHostBoundaryError } from "../../effect/host-errors";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
 import { decodeInlineImage } from "./generated-image-decode";
@@ -121,12 +121,12 @@ for (const [name, base64] of [
 ] as const) {
   test(`${name} fails without including image payloads`, async () => {
     const result = await Effect.runPromise(
-      Effect.either(reader.read({ representation: "inline", base64 }, "image")),
+      Effect.result(reader.read({ representation: "inline", base64 }, "image")),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left.message).toContain("Image 'image'");
-      expect(result.left.message).not.toContain("private-invalid-payload");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure.message).toContain("Image 'image'");
+      expect(result.failure.message).not.toContain("private-invalid-payload");
     }
   });
 }
@@ -143,9 +143,9 @@ test("32 MiB is accepted and one extra decoded byte is rejected, including equal
 
   const path = await imageFile();
   await truncate(path, LOCAL_ATTACHMENT_BYTE_LIMIT + 1);
-  const oversizedFile = await Effect.runPromise(Effect.either(readSavedImage(path, "image")));
-  expect(oversizedFile._tag).toBe("Left");
-  if (oversizedFile._tag === "Left") expect(oversizedFile.left.message).toContain("32 MiB");
+  const oversizedFile = await Effect.runPromise(Effect.result(readSavedImage(path, "image")));
+  expect(oversizedFile._tag).toBe("Failure");
+  if (oversizedFile._tag === "Failure") expect(oversizedFile.failure.message).toContain("32 MiB");
 });
 
 for (const readFails of [false, true]) {
@@ -185,9 +185,11 @@ for (const readFails of [false, true]) {
       );
       expect(Exit.isFailure(exit)).toBe(true);
       if (!Exit.isFailure(exit)) throw new Error("Expected an image read failure");
-      const failures = [...Cause.failures(exit.cause)];
+      const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
       expect(failures).toHaveLength(readFails ? 2 : 1);
-      expect([...Cause.defects(exit.cause)]).toEqual([]);
+      expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual(
+        [],
+      );
       for (const failure of failures) {
         if (failure._tag !== "HostOperationError")
           throw new Error("Expected a typed operation error");
@@ -270,15 +272,17 @@ test("interruption waits for file cleanup and preserves its interruption cause",
       ),
     );
     expect(other.byteLength).toBe(png.byteLength);
-    const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
+    const interrupted = Effect.runPromise(
+      Fiber.interrupt(fiber).pipe(Effect.andThen(Fiber.await(fiber))),
+    );
     await closeStarted.promise;
-    expect(Option.isNone(await Effect.runPromise(Fiber.poll(fiber)))).toBe(true);
+    expect(fiber.pollUnsafe()).toBeUndefined();
     closeResult.resolve();
     const exit = await interrupted;
     expect(Exit.isFailure(exit)).toBe(true);
     if (!Exit.isFailure(exit)) throw new Error("Expected interruption");
-    expect(Cause.isInterrupted(exit.cause)).toBe(true);
-    expect([...Cause.defects(exit.cause)]).toEqual([]);
+    expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+    expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([]);
     expect(closeFile).toHaveBeenCalledTimes(1);
   } finally {
     readResult.reject(new Error("Read cancelled"));

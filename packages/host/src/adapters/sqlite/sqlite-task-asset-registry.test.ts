@@ -185,7 +185,7 @@ describe("SQLite task asset registry", () => {
     if (Exit.isSuccess(exit)) {
       throw new Error("Expected a stale update to fail.");
     }
-    const failure = Array.from(Cause.failures(exit.cause))[0];
+    const failure = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0];
     expect(failure).toBeInstanceOf(TaskAssetError);
     expect(failure).toMatchObject({
       _tag: "TaskAssetError",

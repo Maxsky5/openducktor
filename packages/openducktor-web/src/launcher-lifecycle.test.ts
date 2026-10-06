@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Fiber, Option } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { WebOperationError } from "./effect/web-errors";
 import { createWebLauncherLifecycle, type WebSignalShutdownRequest } from "./launcher-lifecycle";
 import type { FrontendServer } from "./launcher-support";
@@ -35,14 +35,14 @@ describe("createWebLauncherLifecycle", () => {
         });
         yield* lifecycle.registerFrontend(frontendServer);
 
-        const first = yield* Effect.fork(lifecycle.stop());
+        const first = yield* Effect.forkChild(lifecycle.stop());
         yield* Deferred.await(stopStarted);
-        const second = yield* Effect.fork(lifecycle.stop());
-        yield* Effect.yieldNow();
+        const second = yield* Effect.forkChild(lifecycle.stop());
+        yield* Effect.yieldNow;
 
         expect(stopCalls).toBe(1);
-        expect(Option.isNone(yield* Fiber.poll(first))).toBeTrue();
-        expect(Option.isNone(yield* Fiber.poll(second))).toBeTrue();
+        expect(first.pollUnsafe()).toBeUndefined();
+        expect(second.pollUnsafe()).toBeUndefined();
 
         yield* Deferred.succeed(releaseStop, undefined);
         yield* Fiber.join(first);
@@ -102,9 +102,9 @@ describe("createWebLauncherLifecycle", () => {
     );
     await Effect.runPromise(lifecycle.registerFrontend(frontendServer));
 
-    const result = await Effect.runPromise(Effect.either(lifecycle.completeAfterHostExit()));
+    const result = await Effect.runPromise(Effect.result(lifecycle.completeAfterHostExit()));
 
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(closeCalls).toBe(1);
   });
 

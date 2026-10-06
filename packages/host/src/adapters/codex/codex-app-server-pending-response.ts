@@ -108,7 +108,7 @@ export const acquirePendingResponse = ({
       },
     });
 
-    const response = Effect.async<CodexAppServerRequestResult, CodexAppServerTransportError>(
+    const response = Effect.callback<CodexAppServerRequestResult, CodexAppServerTransportError>(
       (resume) => {
         if (settledEffect) {
           resume(settledEffect);

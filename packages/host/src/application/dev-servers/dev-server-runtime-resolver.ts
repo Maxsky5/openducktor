@@ -117,14 +117,14 @@ export const createDevServerRuntimeResolver = ({
               message: `Workspace Session ${owner.sessionId} worktree was removed at ${workingDirectory}. Restore the session worktree before starting dev servers.`,
             });
           }
-          const targetResult = yield* Effect.either(
+          const targetResult = yield* Effect.result(
             validateWorkspaceSessionTarget(workspaceSessions, repoPath, session.executionTarget),
           );
-          if (targetResult._tag === "Left") {
+          if (targetResult._tag === "Failure") {
             return yield* new HostValidationError({
               field: "workingDirectory",
-              message: `Workspace Session ${owner.sessionId} directory ${workingDirectory} is unavailable or invalid: ${errorMessage(targetResult.left)}`,
-              cause: targetResult.left,
+              message: `Workspace Session ${owner.sessionId} directory ${workingDirectory} is unavailable or invalid: ${errorMessage(targetResult.failure)}`,
+              cause: targetResult.failure,
             });
           }
         }

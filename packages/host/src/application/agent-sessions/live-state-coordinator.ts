@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export type LiveStateCoordinator = {
   readonly run: <Success, Failure, Requirements>(
@@ -12,9 +13,9 @@ export type LiveStateCoordinator = {
  * defines the order in which state changes become observable.
  */
 export const createLiveStateCoordinator = (): LiveStateCoordinator => {
-  const semaphore = Effect.unsafeMakeSemaphore(1);
+  const lane = createSerialLane();
 
   return {
-    run: (operation) => semaphore.withPermits(1)(operation),
+    run: (operation) => lane.run(operation),
   };
 };

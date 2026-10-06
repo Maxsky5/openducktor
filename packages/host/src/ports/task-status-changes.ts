@@ -1,15 +1,18 @@
 import type { TaskCard, TaskEventStatusChange, TaskStatus } from "@openducktor/contracts";
-import { Effect, FiberRef } from "effect";
+import { Context, Effect } from "effect";
 
-// Each mutation owns its collection. Concurrent mutations cannot share entries.
-const currentStatusChanges = FiberRef.unsafeMake<TaskEventStatusChange[] | null>(null);
+// Each mutation provides its own collection. Concurrent mutations cannot share entries.
+const CurrentStatusChanges = Context.Reference<TaskEventStatusChange[] | null>(
+  "@openducktor/host/CurrentTaskStatusChanges",
+  { defaultValue: () => null },
+);
 
 export const collectTaskStatusChanges = <A, E, R>(mutation: Effect.Effect<A, E, R>) =>
   Effect.suspend(() => {
     const statusChanges: TaskEventStatusChange[] = [];
-    return Effect.either(mutation).pipe(
+    return Effect.result(mutation).pipe(
       Effect.map((result) => ({ result, statusChanges })),
-      Effect.locally(currentStatusChanges, statusChanges),
+      Effect.provideService(CurrentStatusChanges, statusChanges),
     );
   });
 
@@ -22,7 +25,7 @@ export const recordCommittedTaskStatusChange = ({
   previousStatus: TaskStatus;
 }): Effect.Effect<TaskCard> =>
   Effect.gen(function* () {
-    const changes = yield* FiberRef.get(currentStatusChanges);
+    const changes = yield* CurrentStatusChanges;
     if (changes && previousStatus !== task.status) {
       changes.push({
         previousStatus,

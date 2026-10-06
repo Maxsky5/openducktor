@@ -113,7 +113,7 @@ const configureDatabase = (
 ): Effect.Effect<void, HostOperationErrorAggregate> => {
   const enableForeignKeys = database.exec("PRAGMA foreign_keys = ON;");
   const configure = configureWal
-    ? enableForeignKeys.pipe(Effect.zipRight(database.exec("PRAGMA journal_mode = WAL;")))
+    ? enableForeignKeys.pipe(Effect.andThen(database.exec("PRAGMA journal_mode = WAL;")))
     : enableForeignKeys;
   return configure.pipe(
     Effect.mapError((cause) => toHostOperationError(cause, "sqlite.configureDatabase")),
@@ -156,7 +156,7 @@ const runSqliteTransaction = <TSchema extends Record<string, AnySQLiteTable>, A,
         }),
       catch: (cause) => cause,
     }).pipe(
-      Effect.catchAll((cause): Effect.Effect<A, E | HostOperationErrorAggregate> => {
+      Effect.catch((cause): Effect.Effect<A, E | HostOperationErrorAggregate> => {
         if (cause instanceof SqliteTransactionRollback) {
           return Effect.failCause(cause.failureCause);
         }
@@ -208,7 +208,7 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQ
     yield* Scope.addFinalizer(
       scope,
       close.pipe(
-        Effect.catchAll((cause) =>
+        Effect.catch((cause) =>
           Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
         ),
       ),

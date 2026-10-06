@@ -1,5 +1,5 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { HostOperationError } from "../effect/host-errors";
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 import {
@@ -90,6 +90,68 @@ describe("host lifecycle shutdown", () => {
     ]);
   });
 
+  test.each([
+    {
+      finalizer: "a typed failure",
+      cleanup: Effect.fail(
+        new HostOperationError({
+          operation: "test.finalizer",
+          message: "finalizer cleanup failed",
+        }),
+      ),
+    },
+    {
+      finalizer: "a defect",
+      cleanup: Effect.die(new Error("finalizer cleanup failed")),
+    },
+  ])("keeps every failure of a step whose finalizer adds $finalizer", async ({ cleanup }) => {
+    const logger = createLogger();
+    const calls: string[] = [];
+    const exit = await Effect.runPromiseExit(
+      runShutdownSteps(
+        [
+          {
+            label: "probe resource",
+            run: () =>
+              Effect.acquireUseRelease(
+                Effect.void,
+                () =>
+                  Effect.fail(
+                    new HostOperationError({
+                      operation: "test.primary",
+                      message: "primary cleanup failed",
+                    }),
+                  ),
+                () => cleanup,
+              ),
+          },
+          {
+            label: "later",
+            run: () => Effect.sync(() => void calls.push("later")),
+          },
+        ],
+        logger,
+      ),
+    );
+
+    const failure = Option.getOrThrow(
+      Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none(),
+    );
+    expect(failure).toMatchObject({
+      message: "probe resource: primary cleanup failed\nprobe resource: finalizer cleanup failed",
+      details: {
+        failedSteps: [
+          "probe resource: primary cleanup failed",
+          "probe resource: finalizer cleanup failed",
+        ],
+      },
+    });
+    expect(logger.errors).toEqual([
+      "Failed to stop probe resource: primary cleanup failed\nfinalizer cleanup failed",
+    ]);
+    expect(calls).toEqual(["later"]);
+  });
+
   test("runs every shutdown step when lifecycle logging rejects", async () => {
     const persistenceError = new Error(
       "openducktor.logs.append failed for /tmp/openducktor-host.log",
@@ -115,7 +177,9 @@ describe("host lifecycle shutdown", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+      expect(
+        exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+      ).toMatchObject({
         _tag: "HostOperationError",
         operation: "host.lifecycle.log-info",
         cause: persistenceError,
@@ -152,7 +216,9 @@ describe("host lifecycle shutdown", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+      expect(
+        exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+      ).toMatchObject({
         _tag: "HostOperationError",
         operation: "host.shutdown",
         details: {
@@ -214,7 +280,9 @@ describe("host lifecycle shutdown", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+      expect(
+        exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+      ).toMatchObject({
         _tag: "HostOperationError",
         operation: "host.shutdown.runtimes",
         details: {

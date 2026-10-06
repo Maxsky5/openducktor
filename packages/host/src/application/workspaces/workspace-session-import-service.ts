@@ -7,7 +7,7 @@ import {
   type WorkspaceSessionImportResult,
   type WorkspaceSessionExecutionTarget,
 } from "@openducktor/contracts";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberId } from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber } from "effect";
 import {
   causeMessage,
   type HostError,
@@ -20,11 +20,12 @@ import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-sess
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 import type { RuntimeSessionImportPort } from "../../ports/runtime-session-import-port";
 import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
-import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-runtime-persistence";
+import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-persistence-callbacks";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
 import { classifyWorkspaceCheckout } from "./workspace-checkout";
+import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
 
 const MAX_CATALOGS = 8;
 const MAX_RECORDS = 100_000;
@@ -39,11 +40,11 @@ type Catalog = {
   runtimeId: string;
   controller: AbortController;
   result: Deferred.Deferred<WorkspaceSessionExternal[], HostError>;
-  fiber?: Fiber.RuntimeFiber<void, never>;
-  expiry?: Fiber.RuntimeFiber<void, never>;
+  fiber?: Fiber.Fiber<void, never>;
+  expiry?: Fiber.Fiber<void, never>;
   cursors: Map<string, { search: string; offset: number; pageSize: number }>;
-  gate: Effect.Semaphore;
-  readers: Set<Fiber.RuntimeFiber<WorkspaceSessionExternal[], HostError>>;
+  gate: SerialLane;
+  readers: Set<Fiber.Fiber<WorkspaceSessionExternal[], HostError>>;
   failure?: HostError;
   discovery?: {
     owned: Set<string>;
@@ -89,7 +90,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         ),
   };
   const catalogs = new Map<string, Catalog>();
-  const importGate = Effect.unsafeMakeSemaphore(1);
+  const importGate = createSerialLane();
   const scopeFor = (workspaceId: string) =>
     Effect.gen(function* () {
       const config = yield* settings
@@ -109,9 +110,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         entry.result,
         invalid("Session discovery was closed. Reopen Import session."),
       );
-      if (entry.fiber) yield* Fiber.interruptFork(entry.fiber);
-      yield* Effect.forEach(entry.readers, Fiber.interruptFork, { discard: true });
-      if (entry.expiry) yield* Fiber.interruptFork(entry.expiry);
+      // Signal the fibers without waiting. The expiry fiber runs this release itself.
+      yield* Effect.sync(() => {
+        for (const fiber of [entry.fiber, ...entry.readers, entry.expiry]) fiber?.interruptUnsafe();
+      });
     });
   const targetFor = (repoPath: string, workingDirectory: string) =>
     Effect.gen(function* () {
@@ -151,7 +153,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
     });
   const candidateDirectory = (directory: string) =>
     git.canonicalizePath(directory).pipe(
-      Effect.catchAll((cause) => {
+      Effect.catch((cause) => {
         if (hasNestedNodeErrorCode(cause, "ENOENT") || hasNestedNodeErrorCode(cause, "ENOTDIR"))
           return Effect.succeed(null);
         return Effect.fail(
@@ -275,9 +277,9 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           runtimeKind: input.runtimeKind,
           runtimeId: "",
           controller: new AbortController(),
-          result: Deferred.unsafeMake<WorkspaceSessionExternal[], HostError>(FiberId.none),
+          result: Deferred.makeUnsafe<WorkspaceSessionExternal[], HostError>(),
           cursors: new Map(),
-          gate: Effect.unsafeMakeSemaphore(1),
+          gate: createSerialLane(),
           readers: new Set(),
         };
         catalogs.set(input.catalogRequestId, entry);
@@ -293,15 +295,15 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           selected.runtimeId = adapter.binding.runtimeId;
           return yield* collect(selected, adapter, input.search.toLowerCase(), input.pageSize);
         });
-        selected.fiber = yield* Effect.forkDaemon(
+        selected.fiber = yield* Effect.forkDetach(
           discover.pipe(
             Effect.exit,
             Effect.flatMap((exit) => Deferred.done(selected.result, exit)),
             Effect.asVoid,
           ),
         );
-        selected.expiry = yield* Effect.forkDaemon(
-          Effect.sleep(LIFETIME).pipe(Effect.zipRight(release(input))),
+        selected.expiry = yield* Effect.forkDetach(
+          Effect.sleep(LIFETIME).pipe(Effect.andThen(release(input))),
         );
       }
       if (entry.workspaceId !== input.workspaceId || entry.runtimeKind !== input.runtimeKind)
@@ -320,8 +322,8 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       if (!page || page.search !== search || page.pageSize !== input.pageSize)
         return yield* invalid("The search cursor is invalid. Reload sessions.");
       const selected = entry;
-      const reader = yield* Effect.forkDaemon(
-        entry.gate.withPermits(1)(
+      const reader = yield* Effect.forkDetach(
+        entry.gate.run(
           collect(entry, current, search, page.offset + input.pageSize).pipe(
             Effect.tapError((error) =>
               Effect.sync(() => {
@@ -335,7 +337,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       const records = yield* Fiber.join(reader).pipe(
         Effect.ensuring(
           Fiber.interrupt(reader).pipe(
-            Effect.zipRight(Effect.sync(() => selected.readers.delete(reader))),
+            Effect.andThen(Effect.sync(() => selected.readers.delete(reader))),
           ),
         ),
       );
@@ -361,7 +363,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
     input: WorkspaceSessionImportInput,
   ): Effect.Effect<WorkspaceSessionImportResult, HostError> =>
     Effect.suspend(() => {
-      return importGate.withPermits(1)(
+      return importGate.run(
         Effect.gen(function* () {
           const scope = yield* scopeFor(input.workspaceId);
           const existing = yield* store.findByRuntimeSession({
@@ -454,7 +456,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
               if (!saved.created) return { ...saved, openError: null };
               const opened = yield* Effect.exit(
                 source.attach.pipe(
-                  Effect.zipRight(publishUpdated(input.workspaceId, saved.session)),
+                  Effect.andThen(publishUpdated(input.workspaceId, saved.session)),
                 ),
               );
               return {

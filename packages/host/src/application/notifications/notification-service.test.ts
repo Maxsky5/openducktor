@@ -94,7 +94,11 @@ const transition = (
   ],
   emittedAt: "2026-09-01T00:00:00Z",
 });
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+// Effect v4 runs each scheduled fiber step in a setImmediate callback. An input passes through
+// several queues and fibers before it reaches a frame, so wait a fixed number of event-loop turns.
+const flush = async () => {
+  for (let turn = 0; turn < 20; turn++) await new Promise<void>((resolve) => setImmediate(resolve));
+};
 const occurrences = (frames: NotificationStreamFrame[]) =>
   frames.filter((frame) => frame.type === "occurrence");
 const harness = (
@@ -151,7 +155,7 @@ const harness = (
           frames.push(frame);
         }),
       ),
-      Effect.catchAll((cause) =>
+      Effect.catch((cause) =>
         Effect.sync(() => {
           failures.push(cause);
         }),

@@ -201,7 +201,7 @@ test("a stalled combined response fails once and releases both live subscription
         frame.type === "attached" ? Deferred.succeed(attached, undefined) : Effect.void,
       ),
       Stream.ensuring(
-        Effect.sync(notificationStop).pipe(Effect.zipRight(Deferred.succeed(released, undefined))),
+        Effect.sync(notificationStop).pipe(Effect.andThen(Deferred.succeed(released, undefined))),
       ),
     ),
   );

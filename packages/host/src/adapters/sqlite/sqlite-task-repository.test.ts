@@ -415,7 +415,8 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     const failure = await expectFailureTag(store.listTasks({ repoPath }), "HostOperationError");
     expect(failure).toBeInstanceOf(HostOperationError);
     if (failure instanceof HostOperationError) {
-      expect(failure.operation).toBe("sqliteTaskRepository.ensureSchema");
+      // The migrator runs each query through Effect.runPromise, which rejects with the typed error.
+      expect(failure.operation).toBe("sqliteTaskRepository.runMigrationQuery");
     }
   });
 

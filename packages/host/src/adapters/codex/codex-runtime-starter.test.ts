@@ -84,7 +84,7 @@ describe("createCodexRuntimeStarter", () => {
             }),
           processTreeTerminator: (input) =>
             terminateProcessTree(input).pipe(
-              Effect.zipRight(
+              Effect.andThen(
                 stage === "register"
                   ? Effect.fail(
                       new HostOperationError({
@@ -112,12 +112,12 @@ describe("createCodexRuntimeStarter", () => {
         expect(ownedCleanups).toHaveLength(1);
         const [ownedCleanup] = ownedCleanups;
         if (!ownedCleanup) throw new Error("Startup must hand its cleanup to the host.");
-        const cleanup = await Effect.runPromise(Effect.either(ownedCleanup));
+        const cleanup = await Effect.runPromise(Effect.result(ownedCleanup));
         if (stage === "register") {
-          if (cleanup._tag !== "Left") throw new Error("The owned cleanup must fail.");
-          expect(cleanup.left.message).toContain("cleanup failure during startup");
+          if (cleanup._tag !== "Failure") throw new Error("The owned cleanup must fail.");
+          expect(cleanup.failure.message).toContain("cleanup failure during startup");
         } else {
-          expect(cleanup._tag).toBe("Right");
+          expect(cleanup._tag).toBe("Success");
         }
         expect(discardCount).toBe(stage === "forward" ? 0 : 1);
         expect(releaseCount).toBe(stage === "forward" ? 1 : 0);
@@ -683,7 +683,7 @@ describe("createCodexRuntimeStarter", () => {
           // Wait for the existing transport to reject work before registration settles.
           await waitFor(async () => {
             const result = await Effect.runPromise(
-              Effect.either(
+              Effect.result(
                 codexAppServer.request({
                   runtimeId: "runtime-registration-close",
                   method: "thread/loaded/list",
@@ -691,7 +691,7 @@ describe("createCodexRuntimeStarter", () => {
                 }),
               ),
             );
-            return result._tag === "Left";
+            return result._tag === "Failure";
           });
         }
         await expect(

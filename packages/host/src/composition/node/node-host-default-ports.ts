@@ -130,10 +130,10 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     worktreeFiles: WorktreeFilePort;
   }>;
 
-export class NodeHostDefaultPortsTag extends Context.Tag("@openducktor/host/NodeHostDefaultPorts")<
+export class NodeHostDefaultPortsTag extends Context.Service<
   NodeHostDefaultPortsTag,
   NodeHostDefaultPorts
->() {}
+>()("@openducktor/host/NodeHostDefaultPorts") {}
 
 export type NodeHostDefaultPortServices =
   | CodexAppServerPortTag

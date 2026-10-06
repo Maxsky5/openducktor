@@ -126,15 +126,15 @@ describe("createOpenInToolsAdapter", () => {
       pathExists: (inputPath) => Effect.succeed(inputPath === "/Applications/Finder.app"),
       pathIsDirectory: (inputPath) => Effect.succeed(inputPath.endsWith(".app")),
     });
-    const result = await Effect.runPromise(Effect.either(port.discoverOpenInTools()));
+    const result = await Effect.runPromise(Effect.result(port.discoverOpenInTools()));
 
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") {
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") {
       return;
     }
-    expect(result.left).toBeInstanceOf(HostOperationError);
-    expect(result.left).toHaveProperty("operation", "openInTools.runCommand");
-    expect(result.left.message).toContain("Command mdfind exited unsuccessfully");
+    expect(result.failure).toBeInstanceOf(HostOperationError);
+    expect(result.failure).toHaveProperty("operation", "openInTools.runCommand");
+    expect(result.failure.message).toContain("Command mdfind exited unsuccessfully");
     const parsedError = z
       .object({
         details: z.object({
@@ -143,7 +143,7 @@ describe("createOpenInToolsAdapter", () => {
           stderr: z.string(),
         }),
       })
-      .parse(result.left);
+      .parse(result.failure);
     expect(parsedError.details).toMatchObject({
       args: ["-name", expect.stringMatching(/\.app$/)],
       program: "mdfind",
@@ -228,15 +228,15 @@ describe("createOpenInToolsAdapter", () => {
     });
 
     const result = await Effect.runPromise(
-      Effect.either(port.openDirectoryInTool("/repo", "explorer")),
+      Effect.result(port.openDirectoryInTool("/repo", "explorer")),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") {
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") {
       return;
     }
-    expect(result.left).toBeInstanceOf(HostValidationError);
-    expect(result.left).toHaveProperty("message", "Unsupported Open In tool: explorer");
+    expect(result.failure).toBeInstanceOf(HostValidationError);
+    expect(result.failure).toHaveProperty("message", "Unsupported Open In tool: explorer");
   });
   test("opens external URLs with the platform browser command", async () => {
     const { launches, systemCommands } = createSystemCommands({

@@ -185,12 +185,12 @@ const createRouter = (input: {
 describe("createNodeEffectHostCommandRouter", () => {
   test("returns synchronous setup faults through the Effect channel", async () => {
     const result = await Effect.runPromise(
-      createNodeEffectHostCommandRouter(createFailingRouterInput()).pipe(Effect.either),
+      createNodeEffectHostCommandRouter(createFailingRouterInput()).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toEqual(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toEqual(
         expect.objectContaining({
           _tag: "HostOperationError",
           operation: "host.create-router",
@@ -210,12 +210,12 @@ describe("createNodeEffectHostCommandRouter", () => {
         runtimeDistribution: createRuntimeDistribution(),
         taskEventPublicationReporter: { report: () => Effect.void },
         terminalPty,
-      }).pipe(Effect.either),
+      }).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toEqual(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toEqual(
         expect.objectContaining({
           _tag: "HostOperationError",
           operation: "host.create-router",
@@ -233,12 +233,12 @@ describe("createNodeEffectHostCommandRouter", () => {
 
   test("returns synchronous assembly faults through the Effect channel", async () => {
     const result = await Effect.runPromise(
-      createNodeEffectHostCommandRouter(createAssemblyFailingRouterInput()).pipe(Effect.either),
+      createNodeEffectHostCommandRouter(createAssemblyFailingRouterInput()).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toEqual(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toEqual(
         expect.objectContaining({
           _tag: "HostOperationError",
           operation: "host.create-router",
@@ -420,7 +420,9 @@ describe("createNodeEffectHostCommandRouter", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+      expect(
+        exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+      ).toMatchObject({
         _tag: "HostOperationError",
         cause: persistenceError,
       });
@@ -450,7 +452,9 @@ describe("createNodeEffectHostCommandRouter", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+      expect(
+        exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)[0],
+      ).toMatchObject({
         _tag: "HostOperationError",
         operation: "host.dispose",
         details: {

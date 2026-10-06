@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { checkStartupSettingsEffect, findInvalidSettingsFileError } from "@openducktor/host";
 import { runElectronEffect } from "../effect/electron-boundary";
 import { causeToElectronBoundaryError, ElectronLifecycleError } from "../effect/electron-errors";
@@ -218,7 +218,7 @@ describe("Electron main lifecycle policy", () => {
     if (!Exit.isFailure(exit)) {
       throw new Error("Expected startup to fail after shutdown starts.");
     }
-    const failure = Chunk.head(Cause.failures(exit.cause));
+    const failure = Cause.findErrorOption(exit.cause);
     expect(failure._tag).toBe("Some");
     if (failure._tag !== "Some") {
       throw new Error("Expected startup shutdown failure.");

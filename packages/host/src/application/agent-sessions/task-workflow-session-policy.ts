@@ -102,7 +102,7 @@ const storeControlResult = (
   selectedModel?: AgentSessionRecord["selectedModel"],
 ) =>
   Effect.gen(function* () {
-    const stored = yield* Effect.either(
+    const stored = yield* Effect.result(
       storeWorkflowSession(tasks, {
         repoPath: input.repoPath,
         sessionScope: input.sessionScope,
@@ -111,29 +111,29 @@ const storeControlResult = (
         summary,
       }),
     );
-    if (stored._tag === "Right") {
+    if (stored._tag === "Success") {
       return summary;
     }
     const ref = toControlSessionRef(input.repoPath, summary);
-    const cleaned = yield* Effect.either(
+    const cleaned = yield* Effect.result(
       cleanup === "release" ? runtime.releaseSession(ref) : runtime.stopSession(ref),
     );
-    if (cleaned._tag === "Left") {
+    if (cleaned._tag === "Failure") {
       return yield* Effect.fail(
         new HostOperationError({
           operation: "task-workflow-session.store-control-result",
-          message: `${stored.left.message} Cleanup failed: ${cleaned.left.message}`,
-          cause: { storeFailure: stored.left, cleanupFailure: cleaned.left },
+          message: `${stored.failure.message} Cleanup failed: ${cleaned.failure.message}`,
+          cause: { storeFailure: stored.failure, cleanupFailure: cleaned.failure },
           details: {
             repoPath: input.repoPath,
             externalSessionId: summary.externalSessionId,
-            storeFailure: stored.left,
-            cleanupFailure: cleaned.left,
+            storeFailure: stored.failure,
+            cleanupFailure: cleaned.failure,
           },
         }),
       );
     }
-    return yield* Effect.fail(stored.left);
+    return yield* Effect.fail(stored.failure);
   });
 
 const toRuntimeModel = (

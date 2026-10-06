@@ -16,8 +16,13 @@ import {
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import { Effect, Either, Exit } from "effect";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import { Effect, Exit } from "effect";
+import {
+  errorMessage,
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerRespondInput } from "../../ports/codex-app-server-port";
@@ -77,13 +82,9 @@ export const createCodexLiveSessionAdapterPreparer = ({
             questionHistory,
             prepareImageGenerations,
             runtime,
-            resolveManagedMcpServer: async (repoPath) => {
-              const result = await Effect.runPromise(
-                Effect.either(resolveMcpServerConfig(repoPath)),
-              );
-              if (Either.isLeft(result)) throw result.left;
-              return result.right;
-            },
+            // Effect.runPromise rejects with the typed failure.
+            resolveManagedMcpServer: (repoPath) =>
+              Effect.runPromise(resolveMcpServerConfig(repoPath)),
             transportFactory: (runtimeId) => createCodexRuntimeTransport(codexAppServer, runtimeId),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
             respondServerRequest: (runtimeId, requestId, result, error) => {
@@ -97,10 +98,14 @@ export const createCodexLiveSessionAdapterPreparer = ({
               return Effect.runPromise(codexAppServer.respond(response));
             },
             onRuntimeEventQueueFailure: ({ runtimeId, error }) => {
+              // Keep the original failure as the cause, also when it is already a host error.
               Effect.runFork(
                 onBackgroundFailure(
-                  toHostOperationError(error, "codex-live-session.forward-mutation", {
-                    runtimeId,
+                  new HostOperationError({
+                    operation: "codex-live-session.forward-mutation",
+                    message: errorMessage(error),
+                    cause: error,
+                    details: { runtimeId },
                   }),
                 ),
               );
@@ -168,7 +173,9 @@ export const createCodexLiveSessionAdapterPreparer = ({
               }),
             );
             const projection = yield* Effect.exit(refreshProjection());
-            return yield* Exit.zipRight(Exit.zipRight(settlement, cleanup), projection);
+            const failures = Exit.asVoidAll([settlement, cleanup, projection]);
+            if (Exit.isFailure(failures)) return yield* Effect.failCause(failures.cause);
+            return yield* projection;
           }),
         );
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>

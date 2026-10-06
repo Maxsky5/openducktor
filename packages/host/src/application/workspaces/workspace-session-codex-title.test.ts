@@ -136,7 +136,7 @@ describe("Codex Workspace Session title sync", () => {
     let pendingDuringResume = false;
     h.state.beforeControl = Effect.sync(() => {
       pendingDuringResume = h.persistence.isCodexTitleSyncPending(h.ref);
-    }).pipe(Effect.zipRight(Effect.dieMessage("resume failed")));
+    }).pipe(Effect.andThen(Effect.die(new Error("resume failed"))));
 
     await expect(
       Effect.runPromise(
@@ -186,7 +186,7 @@ describe("Codex Workspace Session title sync", () => {
     const holdingGate = Effect.runPromise(
       h.sessionTitleGate.run(
         h.storeRef,
-        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
       ),
     );
     await Effect.runPromise(Deferred.await(entered));
@@ -256,7 +256,7 @@ describe("Codex Workspace Session title sync", () => {
     const holdingGate = Effect.runPromise(
       h.sessionTitleGate.run(
         h.storeRef,
-        Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
       ),
     );
     await Effect.runPromise(Deferred.await(entered));
@@ -288,6 +288,38 @@ describe("Codex Workspace Session title sync", () => {
     await renaming;
     await waitFor(() => h.titleAttempts.length === 1);
     expect(h.titleAttempts).toEqual(["Manual title"]);
+  });
+
+  test("shutdown stops a queued Codex title sync before it can write", async () => {
+    const h = await createPersistenceHarness(database, "codex");
+    await h.send("First prompt");
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const holdingGate = Effect.runPromise(
+      h.sessionTitleGate.run(
+        h.storeRef,
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      ),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    await h.emit({
+      type: "session_idle",
+      turnCompleted: true,
+      sessionRef: h.ref,
+      externalSessionId: h.ref.externalSessionId,
+      timestamp: "2026-09-07T10:01:00Z",
+    });
+    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(true);
+
+    // Shutdown does not wait for the held gate: it interrupts the queued sync.
+    await Effect.runPromise(h.persistence.shutdown());
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await holdingGate;
+    // A sync that still ran would clear the pending state only after its title write.
+    await waitFor(() => !h.persistence.isCodexTitleSyncPending(h.ref));
+
+    expect(h.titleAttempts).toEqual([]);
+    expect(h.renameFailures).toEqual([]);
   });
 
   test("reports a Codex title failure after acceptance and keeps the intended title", async () => {

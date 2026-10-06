@@ -1,4 +1,4 @@
-import { Effect, FiberRef } from "effect";
+import { Context, Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
@@ -56,6 +56,10 @@ export type WorkspaceAdmissionService = {
   ): Effect.Effect<A, E, R>;
 };
 
+// Each service instance gets its own reference key, so administrative access never crosses
+// to another instance.
+let nextAdministrativeAccessId = 0;
+
 export const createWorkspaceAdmissionService = ({
   workspaceSettingsService,
 }: {
@@ -64,7 +68,11 @@ export const createWorkspaceAdmissionService = ({
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
   const reservationsByWorkspaceId = new Map<string, WorkspaceReservation>();
   const activeProcessStartsByRepoPath = new Map<string, number>();
-  const administrativeWorkspaceIds = FiberRef.unsafeMake<ReadonlySet<string>>(new Set());
+  nextAdministrativeAccessId += 1;
+  const AdministrativeWorkspaceIds = Context.Reference<ReadonlySet<string>>(
+    `@openducktor/host/WorkspaceAdministrativeAccess/${nextAdministrativeAccessId}`,
+    { defaultValue: () => new Set() },
+  );
   let initialized = false;
 
   const replaceBlocked = (nextBlocked: BlockedWorkspace[]): void => {
@@ -119,7 +127,7 @@ export const createWorkspaceAdmissionService = ({
 
   const assertTaskStoreAccess: WorkspaceAdmissionService["assertTaskStoreAccess"] = (input) =>
     ensureInitialized().pipe(
-      Effect.zipRight(FiberRef.get(administrativeWorkspaceIds)),
+      Effect.andThen(AdministrativeWorkspaceIds),
       Effect.flatMap((administrativeAccess) => {
         if (administrativeAccess.has(input.workspaceId)) {
           return Effect.void;
@@ -214,12 +222,10 @@ export const createWorkspaceAdmissionService = ({
       reservationsByWorkspaceId.delete(workspaceId);
     },
     withAdministrativeAccess: (workspaceId, effect) =>
-      FiberRef.get(administrativeWorkspaceIds).pipe(
-        Effect.flatMap((current) =>
-          effect.pipe(
-            Effect.locally(administrativeWorkspaceIds, new Set([...current, workspaceId])),
-          ),
-        ),
+      Effect.updateService(
+        effect,
+        AdministrativeWorkspaceIds,
+        (current) => new Set([...current, workspaceId]),
       ),
   };
 };

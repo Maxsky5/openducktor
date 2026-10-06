@@ -12,7 +12,7 @@ const errorMessage = (cause: unknown): string =>
 export const readMcpBridgeRequestBody = (
   request: IncomingMessage,
 ): Effect.Effect<JSONType, HostOperationErrorAggregate> =>
-  Effect.async<JSONType, HostOperationErrorAggregate>((resume, signal) => {
+  Effect.callback<JSONType, HostOperationErrorAggregate>((resume, signal) => {
     let body = "";
     let receivedBytes = 0;
     let settled = false;

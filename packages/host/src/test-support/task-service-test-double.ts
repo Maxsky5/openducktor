@@ -5,7 +5,7 @@ import type {
 } from "../application/tasks/task-service";
 
 const unexpectedTaskServiceCall = (methodName: keyof TaskService) => () =>
-  Effect.dieMessage(`Unexpected task service call: ${methodName}`);
+  Effect.die(new Error(`Unexpected task service call: ${methodName}`));
 
 const createTaskServiceDefaults = () =>
   ({

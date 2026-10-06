@@ -32,30 +32,30 @@ export const createAgentSessionCommandService = ({
     Effect.uninterruptible(
       Effect.gen(function* () {
         yield* runtime.updateSessionModel(prepared.input);
-        const saved = yield* Effect.either(prepared.save);
-        if (saved._tag === "Right") {
-          yield* saved.right;
+        const saved = yield* Effect.result(prepared.save);
+        if (saved._tag === "Success") {
+          yield* saved.success;
           return;
         }
-        const restored = yield* Effect.either(
+        const restored = yield* Effect.result(
           runtime.updateSessionModel({
             ...prepared.input,
             model: prepared.previousModel,
           }),
         );
-        if (restored._tag === "Left") {
+        if (restored._tag === "Failure") {
           return yield* new HostOperationError({
             operation: "agent-session.update-model",
-            message: `${saved.left.message} Runtime model restore failed: ${restored.left.message}`,
-            cause: { storeFailure: saved.left, restoreFailure: restored.left },
+            message: `${saved.failure.message} Runtime model restore failed: ${restored.failure.message}`,
+            cause: { storeFailure: saved.failure, restoreFailure: restored.failure },
             details: {
               ref: prepared.input,
-              storeFailure: saved.left,
-              restoreFailure: restored.left,
+              storeFailure: saved.failure,
+              restoreFailure: restored.failure,
             },
           });
         }
-        return yield* Effect.fail(saved.left);
+        return yield* Effect.fail(saved.failure);
       }),
     );
 
@@ -67,25 +67,25 @@ export const createAgentSessionCommandService = ({
       repositoryPolicy.run(
         input,
         "load session context",
-        repositoryPolicy.validateRef(input).pipe(Effect.zipRight(runtime.loadContext(input))),
+        repositoryPolicy.validateRef(input).pipe(Effect.andThen(runtime.loadContext(input))),
       ),
     loadSessionDiff: (input: Parameters<typeof runtime.loadSessionDiff>[0]) =>
       repositoryPolicy.run(
         input,
         "load session diff",
-        repositoryPolicy.validateRef(input).pipe(Effect.zipRight(runtime.loadSessionDiff(input))),
+        repositoryPolicy.validateRef(input).pipe(Effect.andThen(runtime.loadSessionDiff(input))),
       ),
     replyApproval: (input: Parameters<typeof runtime.replyApproval>[0]) =>
       repositoryPolicy.run(
         input,
         "reply to approval",
-        repositoryPolicy.validateRef(input).pipe(Effect.zipRight(runtime.replyApproval(input))),
+        repositoryPolicy.validateRef(input).pipe(Effect.andThen(runtime.replyApproval(input))),
       ),
     replyQuestion: (input: Parameters<typeof runtime.replyQuestion>[0]) =>
       repositoryPolicy.run(
         input,
         "reply to question",
-        repositoryPolicy.validateRef(input).pipe(Effect.zipRight(runtime.replyQuestion(input))),
+        repositoryPolicy.validateRef(input).pipe(Effect.andThen(runtime.replyQuestion(input))),
       ),
     stopSession: (input: Parameters<typeof runtime.stopSession>[0]) =>
       repositoryPolicy.run(input, "stop session", runtime.stopSession(input)),
@@ -108,20 +108,20 @@ export const createAgentSessionCommandService = ({
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 const summary = yield* runtime.resumeSession(prepared.input);
-                const saved = yield* Effect.either(prepared.save(summary));
-                if (saved._tag === "Right") return summary;
-                const cleanup = yield* Effect.either(
+                const saved = yield* Effect.result(prepared.save(summary));
+                if (saved._tag === "Success") return summary;
+                const cleanup = yield* Effect.result(
                   runtime.releaseSession(toControlSessionRef(repoPath, summary)),
                 );
-                if (cleanup._tag === "Left") {
+                if (cleanup._tag === "Failure") {
                   return yield* new HostOperationError({
                     operation: "agent-session.resume",
-                    message: `${saved.left.message} Cleanup failed: ${cleanup.left.message}`,
-                    cause: { storeFailure: saved.left, cleanupFailure: cleanup.left },
+                    message: `${saved.failure.message} Cleanup failed: ${cleanup.failure.message}`,
+                    cause: { storeFailure: saved.failure, cleanupFailure: cleanup.failure },
                     details: { ref },
                   });
                 }
-                return yield* Effect.fail(saved.left);
+                return yield* Effect.fail(saved.failure);
               }),
             );
           }),

@@ -38,6 +38,7 @@ export const createNodeHostRouterLifecycle = ({
   shutdownWorkspaceFiles,
   initializeAdmission,
   shutdownWorkspaceImports,
+  shutdownWorkspaceSessionPersistence,
   unsubscribeImportCatalogs,
   notifications,
   azureDevOpsConnection,
@@ -56,6 +57,7 @@ export const createNodeHostRouterLifecycle = ({
   shutdownWorkspaceFiles: () => Effect.Effect<void>;
   initializeAdmission: () => Effect.Effect<void, WorkspaceSettingsError>;
   shutdownWorkspaceImports: () => Effect.Effect<void, HostOperationErrorAggregate>;
+  shutdownWorkspaceSessionPersistence: () => Effect.Effect<void>;
   unsubscribeImportCatalogs: (() => void) | undefined;
   notifications: Pick<NotificationService, "initialize" | "dispose">;
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
@@ -104,12 +106,12 @@ export const createNodeHostRouterLifecycle = ({
         if (mcpHostBridge) {
           // The bridge has independent readiness. Its failure stays visible in the bridge check
           // and blocks only operations that need the bridge.
-          const bridge = yield* Effect.either(mcpHostBridge.ensureExternalDiscoveryReady());
-          if (bridge._tag === "Left") {
+          const bridge = yield* Effect.result(mcpHostBridge.ensureExternalDiscoveryReady());
+          if (bridge._tag === "Failure") {
             yield* writeHostLifecycleLog(
               lifecycleLogger,
               "error",
-              `The OpenDucktor MCP host bridge did not start: ${bridge.left.message}`,
+              `The OpenDucktor MCP host bridge did not start: ${bridge.failure.message}`,
             );
           }
         }
@@ -126,18 +128,19 @@ export const createNodeHostRouterLifecycle = ({
       Effect.gen(function* () {
         unsubscribeImportCatalogs?.();
         const loggingFailures: HostOperationError[] = [];
-        const startLogResult = yield* Effect.either(
+        const startLogResult = yield* Effect.result(
           writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
         );
-        if (startLogResult._tag === "Left") {
-          loggingFailures.push(startLogResult.left);
+        if (startLogResult._tag === "Failure") {
+          loggingFailures.push(startLogResult.failure);
         }
-        const shutdownResult = yield* Effect.either(
+        const shutdownResult = yield* Effect.result(
           runShutdownSteps(
             [
               { label: "workspace file reads", run: shutdownWorkspaceFiles },
               { label: "notifications", run: notifications.dispose },
               { label: "workspace session imports", run: shutdownWorkspaceImports },
+              { label: "workspace session renames", run: shutdownWorkspaceSessionPersistence },
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
               ...(azureDevOpsConnection
                 ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]
@@ -167,31 +170,31 @@ export const createNodeHostRouterLifecycle = ({
             lifecycleLogger,
           ),
         );
-        if (shutdownResult._tag === "Right") {
-          const completeLogResult = yield* Effect.either(
+        if (shutdownResult._tag === "Success") {
+          const completeLogResult = yield* Effect.result(
             writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
           );
-          if (completeLogResult._tag === "Left") {
-            loggingFailures.push(completeLogResult.left);
+          if (completeLogResult._tag === "Failure") {
+            loggingFailures.push(completeLogResult.failure);
           }
         }
-        if (shutdownResult._tag === "Left" && loggingFailures.length > 0) {
+        if (shutdownResult._tag === "Failure" && loggingFailures.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({
               operation: "host.dispose",
-              message: `${shutdownResult.left.message}\nLifecycle logging: ${loggingFailures
+              message: `${shutdownResult.failure.message}\nLifecycle logging: ${loggingFailures
                 .map((failure) => failure.message)
                 .join("\n")}`,
-              cause: shutdownResult.left,
+              cause: shutdownResult.failure,
               details: {
-                shutdownFailure: shutdownResult.left,
+                shutdownFailure: shutdownResult.failure,
                 loggingFailures,
               },
             }),
           );
         }
-        if (shutdownResult._tag === "Left") {
-          return yield* Effect.fail(shutdownResult.left);
+        if (shutdownResult._tag === "Failure") {
+          return yield* Effect.fail(shutdownResult.failure);
         }
         const [loggingFailure] = loggingFailures;
         if (loggingFailures.length === 1 && loggingFailure) {

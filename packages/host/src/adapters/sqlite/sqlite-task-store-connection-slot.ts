@@ -6,6 +6,7 @@ import type {
   OpenSqliteTaskStoreConnection,
 } from "./sqlite-task-store-connection";
 import type { TaskStoreSession } from "./sqlite-task-store-schema";
+import { createSerialLane } from "../../effect/serial-gate";
 
 const SQLITE_TASK_STORE_IDLE_TIMEOUT = "5 minutes";
 
@@ -25,10 +26,10 @@ export const createSqliteTaskStoreConnectionSlot = ({
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection: OpenSqliteTaskStoreConnection;
 }): SqliteTaskStoreConnectionSlot => {
-  const operationSemaphore = Effect.unsafeMakeSemaphore(1);
+  const operations = createSerialLane();
   let closeFailure: HostOperationErrorAggregate | null = null;
   let connection: ManagedSqliteTaskStoreConnection | null = null;
-  let idleClose: Fiber.RuntimeFiber<void, never> | null = null;
+  let idleClose: Fiber.Fiber<void, never> | null = null;
   let idleGeneration = 0;
 
   const stopIdleClose = () =>
@@ -37,7 +38,7 @@ export const createSqliteTaskStoreConnectionSlot = ({
       idleClose = null;
       idleGeneration += 1;
       if (fiber) {
-        yield* Fiber.interruptFork(fiber);
+        yield* Fiber.interrupt(fiber);
       }
     });
 
@@ -49,10 +50,10 @@ export const createSqliteTaskStoreConnectionSlot = ({
       if (!connection) return;
 
       const current = connection;
-      const result = yield* Effect.either(current.release);
-      if (result._tag === "Left") {
-        closeFailure = result.left;
-        return yield* Effect.fail(result.left);
+      const result = yield* Effect.result(current.release);
+      if (result._tag === "Failure") {
+        closeFailure = result.failure;
+        return yield* Effect.fail(result.failure);
       }
       connection = null;
     });
@@ -61,10 +62,10 @@ export const createSqliteTaskStoreConnectionSlot = ({
     Effect.gen(function* () {
       idleGeneration += 1;
       const generation = idleGeneration;
-      const fiber = yield* Effect.forkDaemon(
+      const fiber = yield* Effect.forkDetach(
         Effect.sleep(SQLITE_TASK_STORE_IDLE_TIMEOUT).pipe(
-          Effect.zipRight(
-            operationSemaphore.withPermits(1)(
+          Effect.andThen(
+            operations.run(
               Effect.suspend(() => {
                 if (generation !== idleGeneration) return Effect.void;
                 idleClose = null;
@@ -72,14 +73,14 @@ export const createSqliteTaskStoreConnectionSlot = ({
               }),
             ),
           ),
-          Effect.catchAll(onBackgroundFailure),
+          Effect.catch(onBackgroundFailure),
         ),
       );
       idleClose = fiber;
     });
 
   const run: SqliteTaskStoreConnectionSlot["run"] = (use) =>
-    operationSemaphore.withPermits(1)(
+    operations.run(
       Effect.acquireUseRelease(
         Effect.gen(function* () {
           yield* stopIdleClose();
@@ -87,7 +88,9 @@ export const createSqliteTaskStoreConnectionSlot = ({
             return yield* Effect.fail(closeFailure);
           }
           if (!connection) {
-            connection = yield* openConnection(databasePath);
+            connection = yield* openConnection(databasePath).pipe(
+              Effect.withSpan("taskStore.openConnection"),
+            );
           }
           return connection;
         }),
@@ -97,7 +100,9 @@ export const createSqliteTaskStoreConnectionSlot = ({
     );
 
   const shutdown = () =>
-    operationSemaphore.withPermits(1)(stopIdleClose().pipe(Effect.zipRight(closeCurrent())));
+    operations
+      .run(stopIdleClose().pipe(Effect.andThen(closeCurrent())))
+      .pipe(Effect.withSpan("taskStore.shutdown"));
 
   return { run, shutdown };
 };

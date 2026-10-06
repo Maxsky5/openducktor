@@ -105,7 +105,7 @@ export const prepareNewTaskWorktree = (
             worktreeBase,
           )
         : Effect.succeed("");
-    const setupResult = yield* Effect.either(
+    const setupResult = yield* Effect.result(
       Effect.gen(function* () {
         const targetBranch = yield* effectiveTargetBranchForTask(
           dependencies.workspaceSettingsService,
@@ -164,13 +164,13 @@ export const prepareNewTaskWorktree = (
       ),
     );
 
-    if (setupResult._tag === "Left") {
+    if (setupResult._tag === "Failure") {
       const cleanupError = yield* cleanup();
       return yield* Effect.fail(
         new HostOperationError({
           operation: "task.build_start.prepare_worktree",
-          message: `${errorMessage(setupResult.left)}${cleanupError}`,
-          cause: setupResult.left,
+          message: `${errorMessage(setupResult.failure)}${cleanupError}`,
+          cause: setupResult.failure,
           details: { repoPath: canonicalRepoPath, taskId: task.id, worktreePath },
         }),
       );

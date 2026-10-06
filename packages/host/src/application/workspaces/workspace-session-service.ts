@@ -286,11 +286,11 @@ export const createWorkspaceSessionService = (
                   : null);
               // Codex may write the native name before it reports a failed rename.
               // Keep the saved title so the next attach or rename can try again.
-              const saved = yield* Effect.either(
+              const saved = yield* Effect.result(
                 store.rename({ ...ref, manualTitle: input.manualTitle }),
               );
-              if (saved._tag === "Left") return yield* Effect.fail(saved.left);
-              if (plannedRename === null) return saved.right;
+              if (saved._tag === "Failure") return yield* Effect.fail(saved.failure);
+              if (plannedRename === null) return saved.success;
               if (
                 session.runtimeKind === "codex" &&
                 dependencies.isCodexTitleSyncPending({
@@ -300,8 +300,8 @@ export const createWorkspaceSessionService = (
                   workingDirectory: session.executionTarget.workingDirectory,
                 })
               )
-                return saved.right;
-              const renamed = yield* Effect.either(
+                return saved.success;
+              const renamed = yield* Effect.result(
                 live.updateSessionTitle({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,
@@ -309,28 +309,32 @@ export const createWorkspaceSessionService = (
                   ...plannedRename,
                 }),
               );
-              if (renamed._tag === "Right") return saved.right;
+              if (renamed._tag === "Success") return saved.success;
               if (session.runtimeKind === "codex") {
                 return yield* new HostOperationError({
                   operation: "workspaceSession.rename",
-                  message: `Could not sync this Workspace Session title to Codex. The saved title remains. Reattach this chat or rename it to retry. ${renamed.left.message}`,
-                  cause: renamed.left,
+                  message: `Could not sync this Workspace Session title to Codex. The saved title remains. Reattach this chat or rename it to retry. ${renamed.failure.message}`,
+                  cause: renamed.failure,
                 });
               }
-              const restored = yield* Effect.either(
+              const restored = yield* Effect.result(
                 store.setPersistedTitle({ ...ref, manualTitle: session.manualTitle }),
               );
-              if (restored._tag === "Left") {
+              if (restored._tag === "Failure") {
                 return yield* Effect.fail(
                   new HostOperationError({
                     operation: "workspaceSession.rename.persist",
-                    message: `${renamed.left.message} Restoring the saved title also failed: ${restored.left.message}`,
-                    cause: { runtimeFailure: renamed.left, storeFailure: restored.left },
-                    details: { ref, runtimeFailure: renamed.left, storeFailure: restored.left },
+                    message: `${renamed.failure.message} Restoring the saved title also failed: ${restored.failure.message}`,
+                    cause: { runtimeFailure: renamed.failure, storeFailure: restored.failure },
+                    details: {
+                      ref,
+                      runtimeFailure: renamed.failure,
+                      storeFailure: restored.failure,
+                    },
                   }),
                 );
               }
-              return yield* Effect.fail(renamed.left);
+              return yield* Effect.fail(renamed.failure);
             }),
           ),
         ),

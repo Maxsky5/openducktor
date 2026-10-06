@@ -23,37 +23,37 @@ export const createAgentSessionLiveEnvelopePublisher = (
   ): Effect.Effect<HostError | null, HostError> =>
     Effect.gen(function* () {
       if (envelope.type === "fault") {
-        const faultLogResult = yield* Effect.either(
+        const faultLogResult = yield* Effect.result(
           faultLog(formatAgentSessionLiveFaultLog(envelope)),
         );
-        const publishResult = yield* Effect.either(
+        const publishResult = yield* Effect.result(
           Effect.try({
             try: () => publish(envelope),
             catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
           }),
         );
-        if (faultLogResult._tag === "Left" && publishResult._tag === "Left") {
+        if (faultLogResult._tag === "Failure" && publishResult._tag === "Failure") {
           return yield* Effect.fail(
             new HostOperationError({
               operation: "agent-session-live.publish-fault",
-              message: `Fault logging failed: ${faultLogResult.left.message}\nFault envelope publication failed: ${publishResult.left.message}`,
+              message: `Fault logging failed: ${faultLogResult.failure.message}\nFault envelope publication failed: ${publishResult.failure.message}`,
               cause: {
-                faultLogFailure: faultLogResult.left,
-                publishFailure: publishResult.left,
+                faultLogFailure: faultLogResult.failure,
+                publishFailure: publishResult.failure,
               },
               details: {
                 eventType: envelope.type,
-                faultLogFailure: faultLogResult.left,
-                publishFailure: publishResult.left,
+                faultLogFailure: faultLogResult.failure,
+                publishFailure: publishResult.failure,
               },
             }),
           );
         }
-        if (faultLogResult._tag === "Left") {
-          return faultLogResult.left;
+        if (faultLogResult._tag === "Failure") {
+          return faultLogResult.failure;
         }
-        if (publishResult._tag === "Left") {
-          return yield* Effect.fail(publishResult.left);
+        if (publishResult._tag === "Failure") {
+          return yield* Effect.fail(publishResult.failure);
         }
         return null;
       }
@@ -62,8 +62,8 @@ export const createAgentSessionLiveEnvelopePublisher = (
         catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
       });
       if (persistence) {
-        const persisted = yield* Effect.either(persistence.observe(envelope));
-        if (persisted._tag === "Left") {
+        const persisted = yield* Effect.result(persistence.observe(envelope));
+        if (persisted._tag === "Failure") {
           let ref: AgentSessionLiveRef | undefined;
           if (envelope.type === "transcript_event") ref = envelope.event.sessionRef;
           else if (envelope.type === "session_upsert") ref = envelope.session.ref;
@@ -74,10 +74,10 @@ export const createAgentSessionLiveEnvelopePublisher = (
               repoPath: ref.repoPath,
               ref,
               operation: "agent-session.persist",
-              message: persisted.left.message,
+              message: persisted.failure.message,
             });
           }
-          return persisted.left;
+          return persisted.failure;
         }
       }
       return null;

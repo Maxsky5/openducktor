@@ -17,13 +17,13 @@ export const logDuplicateWebTerminationNotice = (
   reportFailure: (cause: unknown) => void,
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const result = yield* Effect.either(
+    const result = yield* Effect.result(
       writeWebLogEffect(logger, "info", DUPLICATE_TERMINATION_NOTICE),
     );
-    if (result._tag === "Right") {
+    if (result._tag === "Success") {
       return false;
     }
-    yield* Effect.sync(() => reportFailure(result.left));
+    yield* Effect.sync(() => reportFailure(result.failure));
     return true;
   });
 
@@ -178,7 +178,7 @@ export const createWebLauncherLifecycle = (
           const activeShutdown =
             terminationState._tag === "active" ? terminationState.shutdown : null;
           return Deferred.await(stopResult).pipe(
-            Effect.zipRight(activeShutdown ? Effect.promise(() => activeShutdown) : Effect.void),
+            Effect.andThen(activeShutdown ? Effect.promise(() => activeShutdown) : Effect.void),
           );
         }
         stopState = { _tag: "stopping" };

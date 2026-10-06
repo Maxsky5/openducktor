@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../adapters/mcp/mcp-host-bridge-server";
 import type {
   DevServerServiceError,
@@ -9,7 +9,7 @@ import type {
   TerminalServiceError,
 } from "../application/terminals/terminal-service";
 import {
-  causeToHostBoundaryError,
+  causeMessages,
   type HostError,
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -55,9 +55,9 @@ const captureHostLifecycleLogFailure = (
   message: string,
   currentFailure: HostOperationError | undefined,
 ): Effect.Effect<HostOperationError | undefined> =>
-  Effect.either(writeHostLifecycleLog(logger, level, message)).pipe(
+  Effect.result(writeHostLifecycleLog(logger, level, message)).pipe(
     Effect.map((result) =>
-      result._tag === "Left" ? (currentFailure ?? result.left) : currentFailure,
+      result._tag === "Failure" ? (currentFailure ?? result.failure) : currentFailure,
     ),
   );
 
@@ -80,19 +80,22 @@ export const runShutdownSteps = (
       );
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
-        const cause = causeToHostBoundaryError(result.cause);
-        if (isHostLifecycleLoggingFailure(cause)) {
-          loggingFailure ??= cause;
-          continue;
-        }
-        const message = cause instanceof Error ? cause.message : String(cause);
+        // Keep every failure and defect of the step, also those from its finalizers.
+        const stepReasons = result.cause.reasons.filter((reason) => {
+          if (!Cause.isFailReason(reason) || !isHostLifecycleLoggingFailure(reason.error))
+            return true;
+          loggingFailure ??= reason.error;
+          return false;
+        });
+        if (stepReasons.length === 0) continue;
+        const messages = causeMessages(Cause.fromReasons(stepReasons));
         loggingFailure = yield* captureHostLifecycleLogFailure(
           logger,
           "error",
-          `Failed to stop ${step.label}: ${message}`,
+          `Failed to stop ${step.label}: ${messages.join("\n")}`,
           loggingFailure,
         );
-        errors.push(`${step.label}: ${message}`);
+        for (const message of messages) errors.push(`${step.label}: ${message}`);
       } else {
         loggingFailure = yield* captureHostLifecycleLogFailure(
           logger,
@@ -164,18 +167,18 @@ export const createStopRuntimesStep = (
         undefined,
       );
 
-      const stopResult = yield* Effect.either(runtimeRegistry.stopAllRuntimes());
-      if (stopResult._tag === "Left") {
+      const stopResult = yield* Effect.result(runtimeRegistry.stopAllRuntimes());
+      if (stopResult._tag === "Failure") {
         if (!loggingFailure) {
-          return yield* Effect.fail(stopResult.left);
+          return yield* Effect.fail(stopResult.failure);
         }
         return yield* Effect.fail(
           new HostOperationError({
             operation: "host.shutdown.runtimes",
-            message: `${stopResult.left.message}\nLifecycle logging: ${loggingFailure.message}`,
-            cause: stopResult.left,
+            message: `${stopResult.failure.message}\nLifecycle logging: ${loggingFailure.message}`,
+            cause: stopResult.failure,
             details: {
-              runtimeFailure: stopResult.left,
+              runtimeFailure: stopResult.failure,
               loggingFailure,
             },
           }),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, type Duration, Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber, type Duration } from "effect";
 import type { UserEnvironmentResolution } from "../../ports/user-environment-port";
 import { ProcessEnvironmentError } from "./process-environment-error";
 import { createUserEnvironment } from "./user-environment";
@@ -46,13 +46,10 @@ describe("createUserEnvironment", () => {
         }),
       );
 
-      const first = yield* Effect.fork(userEnvironment.refresh());
+      const first = yield* Effect.forkChild(userEnvironment.refresh());
       yield* Deferred.await(started);
-      const second = yield* Effect.fork(userEnvironment.refresh());
-      // The second caller waits on the shared resolution before the gate opens.
-      while ((yield* Fiber.status(second))._tag !== "Suspended") {
-        yield* Effect.yieldNow();
-      }
+      // The second caller starts at once and waits on the shared run.
+      const second = yield* Effect.forkChild(userEnvironment.refresh(), { startImmediately: true });
       yield* Deferred.succeed(gate, undefined);
       yield* Fiber.join(first);
       yield* Fiber.join(second);
@@ -75,17 +72,17 @@ describe("createUserEnvironment", () => {
       Effect.suspend(() => {
         resolveCalls += 1;
         return Effect.never.pipe(
-          Effect.timeoutFail({ duration: "50 millis", onTimeout: () => "timed out" }),
+          Effect.timeoutOrElse({ duration: "50 millis", orElse: () => Effect.fail("timed out") }),
           Effect.orElseSucceed(() => pathFailure),
         );
       }),
     );
-    const refreshWithin = (duration: Duration.DurationInput) =>
+    const refreshWithin = (duration: Duration.Input) =>
       Effect.runPromise(
         userEnvironment.refresh().pipe(
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration,
-            onTimeout: () => new Error("The refresh did not end."),
+            orElse: () => Effect.fail(new Error("The refresh did not end.")),
           }),
         ),
       );

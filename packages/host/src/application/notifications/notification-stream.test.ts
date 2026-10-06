@@ -1,10 +1,11 @@
-import { Effect, Fiber, Scheduler, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
   type NotificationStreamFrame,
   type SelectedNotification,
 } from "@openducktor/contracts";
+import { createControlledScheduler } from "../../effect/test-support/controlled-scheduler";
 import { createNotificationStream } from "./notification-stream";
 const selected = (id: string): SelectedNotification => ({
   occurrence: {
@@ -18,7 +19,11 @@ const selected = (id: string): SelectedNotification => ({
   settings: createDefaultNotificationSettings(),
   preferenceRevision: 1,
 });
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+// Effect v4 runs each scheduled fiber step in a setImmediate callback. A frame passes through
+// several fibers before it reaches a listener, so wait a fixed number of event-loop turns.
+const flush = async () => {
+  for (let turn = 0; turn < 20; turn++) await new Promise<void>((resolve) => setImmediate(resolve));
+};
 test("two subscribers share selections; new attachment is silent and reconnect replays original preferences", async () => {
   const stream = watchStream();
   const first: NotificationStreamFrame[] = [];
@@ -117,22 +122,21 @@ test("a full reconnect replay leaves room for live frames before delivery starts
   if (attached._tag !== "Some") throw new Error("Missing attachment");
   for (let index = 0; index < 256; index++) stream.publishOccurrence(selected(String(index)));
   const frames: NotificationStreamFrame[] = [];
-  const scheduler = new Scheduler.ControlledScheduler();
+  const controlled = createControlledScheduler();
   const fiber = Effect.runFork(
     stream.subscribe({ cursor: attached.value.cursor }).pipe(
       Stream.take(259),
       Stream.runForEach((frame) => Effect.sync(() => frames.push(frame))),
     ),
-    { scheduler },
+    { scheduler: controlled.scheduler },
   );
   try {
     // Pause delivery while the native event source continues to publish.
-    scheduler.step();
+    controlled.step();
     expect(frames).toEqual([]);
     stream.publishOccurrence(selected("first-live"));
     stream.publishOccurrence(selected("second-live"));
-    scheduler.deferred = true;
-    scheduler.step();
+    controlled.release();
     await Effect.runPromise(Fiber.join(fiber).pipe(Effect.timeout("500 millis")));
     expect(frames[0]).toMatchObject({ type: "attached", reason: "replay" });
     expect(frames.map((frame) => frame.cursor.sequence)).toEqual(
@@ -143,8 +147,7 @@ test("a full reconnect replay leaves room for live frames before delivery starts
       { selected: { occurrence: { occurrenceId: "second-live" } } },
     ]);
   } finally {
-    scheduler.deferred = true;
-    scheduler.step();
+    controlled.release();
     await Effect.runPromise(Fiber.interrupt(fiber));
     await Effect.runPromise(stream.dispose());
   }
@@ -215,7 +218,7 @@ const watchStream = () => {
           Stream.runForEach((frame) =>
             Effect.try({ try: () => onFrame(frame), catch: (cause) => cause }),
           ),
-          Effect.catchAll((cause) => Effect.sync(() => onFailure(cause))),
+          Effect.catch((cause) => Effect.sync(() => onFailure(cause))),
         ),
       );
       return () => {

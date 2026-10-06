@@ -64,17 +64,19 @@ describe("terminal launch policy", () => {
     const { root, shellPath } = await createFakeShell();
     try {
       const nonDirectory = { ...filesystem, stat: () => Effect.succeed({ isDirectory: false }) };
-      const result = await Effect.runPromiseExit(
-        createTerminalLaunchPolicy({
-          filesystem: nonDirectory,
-          resolveEnvironment: createTerminalLaunchEnvironment({
-            readEnv: () => ({ SHELL: shellPath }),
-            platform: "darwin",
-          }),
-        })({ workingDir: "/file", context: {} }, { columns: 80, rows: 24 }),
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          createTerminalLaunchPolicy({
+            filesystem: nonDirectory,
+            resolveEnvironment: createTerminalLaunchEnvironment({
+              readEnv: () => ({ SHELL: shellPath }),
+              platform: "darwin",
+            }),
+          })({ workingDir: "/file", context: {} }, { columns: 80, rows: 24 }),
+        ),
       );
-      expect(result._tag).toBe("Failure");
-      expect(String(result)).toContain("working_directory_not_directory");
+
+      expect(failure.code).toBe("working_directory_not_directory");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -204,24 +204,24 @@ describe("GithubProviderAdapter", () => {
     ]);
 
     const result = await Effect.runPromise(
-      Effect.either(github.repository().detectRepository("/repo")),
+      Effect.result(github.repository().detectRepository("/repo")),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(GitProviderRepositoryError);
-      if (result.left instanceof GitProviderRepositoryError) {
-        expect(result.left.reason).toBe("no_matching_remote");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(GitProviderRepositoryError);
+      if (result.failure instanceof GitProviderRepositoryError) {
+        expect(result.failure.reason).toBe("no_matching_remote");
       }
     }
   });
 
   test("returns typed failures for missing and ambiguous repository remotes", async () => {
     const missing = await Effect.runPromise(
-      Effect.either(createDetectionAdapter([]).repository().detectRepository("/repo")),
+      Effect.result(createDetectionAdapter([]).repository().detectRepository("/repo")),
     );
     const ambiguous = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         createDetectionAdapter([
           "git@github.com:Maxsky5/openducktor.git",
           "git@github.com:someone/openducktor.git",
@@ -231,17 +231,17 @@ describe("GithubProviderAdapter", () => {
       ),
     );
 
-    expect(missing._tag).toBe("Left");
-    expect(ambiguous._tag).toBe("Left");
-    if (missing._tag === "Left" && ambiguous._tag === "Left") {
-      expect(missing.left).toBeInstanceOf(GitProviderRepositoryError);
-      expect(ambiguous.left).toBeInstanceOf(GitProviderRepositoryError);
+    expect(missing._tag).toBe("Failure");
+    expect(ambiguous._tag).toBe("Failure");
+    if (missing._tag === "Failure" && ambiguous._tag === "Failure") {
+      expect(missing.failure).toBeInstanceOf(GitProviderRepositoryError);
+      expect(ambiguous.failure).toBeInstanceOf(GitProviderRepositoryError);
       if (
-        missing.left instanceof GitProviderRepositoryError &&
-        ambiguous.left instanceof GitProviderRepositoryError
+        missing.failure instanceof GitProviderRepositoryError &&
+        ambiguous.failure instanceof GitProviderRepositoryError
       ) {
-        expect(missing.left.reason).toBe("no_matching_remote");
-        expect(ambiguous.left.reason).toBe("ambiguous_matching_remotes");
+        expect(missing.failure.reason).toBe("no_matching_remote");
+        expect(ambiguous.failure.reason).toBe("ambiguous_matching_remotes");
       }
     }
   });
@@ -310,15 +310,15 @@ describe("GithubProviderAdapter", () => {
     const config = repoConfig("github.mycorp.com:8443");
 
     const repository = await Effect.runPromise(
-      Effect.either(github.repository().getRepository(config)),
+      Effect.result(github.repository().getRepository(config)),
     );
     const health = await Effect.runPromise(github.health().getStatus(config));
 
-    expect(repository._tag).toBe("Left");
-    if (repository._tag === "Left") {
-      expect(repository.left).toBeInstanceOf(HostValidationError);
-      if (repository.left instanceof HostValidationError) {
-        expect(repository.left.field).toBe("git.provider.repository.host");
+    expect(repository._tag).toBe("Failure");
+    if (repository._tag === "Failure") {
+      expect(repository.failure).toBeInstanceOf(HostValidationError);
+      if (repository.failure instanceof HostValidationError) {
+        expect(repository.failure.field).toBe("git.provider.repository.host");
       }
     }
     expect(health).toMatchObject({
@@ -343,16 +343,16 @@ describe("GithubProviderAdapter", () => {
     });
 
     const mapping = await Effect.runPromise(
-      Effect.either(github.repository().getMapping(repoConfig())),
+      Effect.result(github.repository().getMapping(repoConfig())),
     );
     const health = await Effect.runPromise(github.health().getStatus(repoConfig()));
 
-    expect(mapping._tag).toBe("Left");
-    if (mapping._tag === "Left") {
-      expect(mapping.left).toBeInstanceOf(GitProviderRepositoryError);
-      if (mapping.left instanceof GitProviderRepositoryError) {
-        expect(mapping.left.reason).toBe("ambiguous_matching_remotes");
-        expect(mapping.left.remoteNames).toEqual(["origin", "backup"]);
+    expect(mapping._tag).toBe("Failure");
+    if (mapping._tag === "Failure") {
+      expect(mapping.failure).toBeInstanceOf(GitProviderRepositoryError);
+      if (mapping.failure instanceof GitProviderRepositoryError) {
+        expect(mapping.failure.reason).toBe("ambiguous_matching_remotes");
+        expect(mapping.failure.remoteNames).toEqual(["origin", "backup"]);
       }
     }
     expect(health).toMatchObject({

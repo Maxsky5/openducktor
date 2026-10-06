@@ -54,16 +54,16 @@ export const createNodeWorkspaceProviderSetup = (
       eventBus?.publish({ channel: "openducktor://workspace-provider-setup-updated", payload }),
     inspectGithub: (repoPath, host) =>
       Effect.gen(function* () {
-        const commandResult = yield* Effect.either(githubCli.resolve());
-        if (commandResult._tag === "Left")
+        const commandResult = yield* Effect.result(githubCli.resolve());
+        if (commandResult._tag === "Failure")
           return {
             executablePath: null,
             version: null,
             authenticated: false,
             account: null,
-            reason: commandResult.left.message,
+            reason: commandResult.failure.message,
           };
-        const command = commandResult.right;
+        const command = commandResult.success;
         const version = yield* command.readVersion({ cwd: repoPath });
         const auth = yield* command.getAuth(host);
         return { executablePath: command.executablePath, version, ...auth };

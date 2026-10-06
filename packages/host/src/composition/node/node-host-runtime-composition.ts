@@ -153,7 +153,7 @@ export const createNodeHostRuntimeComposition = ({
   const writeLog = (level: "info" | "error", message: string) =>
     Effect.runFork(
       writeHostLifecycleLog(lifecycleLogger, level, message).pipe(
-        Effect.catchAll(onBackgroundFailure),
+        Effect.catch(onBackgroundFailure),
       ),
     );
   // Every runtime state change reaches the host log, even when no frontend is connected.

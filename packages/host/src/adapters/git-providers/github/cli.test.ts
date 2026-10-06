@@ -15,10 +15,10 @@ type RunCall = {
 };
 
 const createToolDiscovery = (executablePath = "/usr/local/bin/gh"): ToolDiscoveryPort => ({
-  discoverTool: () => Effect.dieMessage("Unexpected discoverTool call"),
-  resolveTool: () => Effect.dieMessage("Unexpected resolveTool call"),
+  discoverTool: () => Effect.die(new Error("Unexpected discoverTool call")),
+  resolveTool: () => Effect.die(new Error("Unexpected resolveTool call")),
   resolveToolPath: () => Effect.succeed(executablePath),
-  validateToolPath: () => Effect.dieMessage("Unexpected validateToolPath call"),
+  validateToolPath: () => Effect.die(new Error("Unexpected validateToolPath call")),
 });
 
 const createSystemCommandPort = ({

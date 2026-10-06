@@ -38,13 +38,13 @@ const createHarness = ({
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
-      cleanupTaskSessions: () => Effect.dieMessage("must not stop sessions"),
+      cleanupTaskSessions: () => Effect.die(new Error("must not stop sessions")),
     },
     devServerService: createDirectMergeDevServerService(calls),
     terminalService: {
       acquireTaskCleanup: () =>
         Effect.sync(() => calls.push("cleanup")).pipe(
-          Effect.zipRight(cleanup),
+          Effect.andThen(cleanup),
           Effect.as({ closedTerminalIds: [] }),
         ),
     },
@@ -125,8 +125,8 @@ describe("direct merge completion session guard", () => {
     "completes according to the persisted %s status",
     async (status) => {
       const { service, calls } = createHarness({ status });
-      const result = await Effect.runPromise(Effect.either(service.completeDirectMerge(input)));
-      expect(result._tag).toBe(status === "blocked" ? "Left" : "Right");
+      const result = await Effect.runPromise(Effect.result(service.completeDirectMerge(input)));
+      expect(result._tag).toBe(status === "blocked" ? "Failure" : "Success");
       expect(calls.filter((call) => call === "closed")).toHaveLength(
         status === "human_review" ? 1 : 0,
       );
@@ -161,20 +161,20 @@ describe("direct merge completion session guard", () => {
           const release = yield* Deferred.make<void>();
           const { service, coordinator } = createHarness({
             sync: Deferred.succeed(entered, undefined).pipe(
-              Effect.zipRight(Deferred.await(release)),
+              Effect.andThen(Deferred.await(release)),
               Effect.as({ ahead: 0, behind: 0 }),
             ),
           });
           const completion = yield* Effect.forkScoped(service.completeDirectMerge(input));
           yield* Deferred.await(entered);
-          const start = yield* Effect.either(
+          const start = yield* Effect.result(
             Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "start session")),
           );
-          const block = yield* Effect.either(
+          const block = yield* Effect.result(
             service.buildBlocked({ ...input, reason: "Needs work" }),
           );
-          expect(start._tag).toBe("Left");
-          expect(block._tag).toBe("Left");
+          expect(start._tag).toBe("Failure");
+          expect(block._tag).toBe("Failure");
           yield* Deferred.succeed(release, undefined);
           expect((yield* Fiber.join(completion)).status).toBe("closed");
           yield* coordinator.acquireLifecycle("/repo", ["task-1"], "start session");

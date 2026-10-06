@@ -19,10 +19,10 @@ import {
 
 const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   ({
-    prepareWorktreeAliasRemoval: () => Effect.dieMessage("Unexpected alias removal"),
-    resolveWorktreeRemovalPath: () => Effect.dieMessage("Unexpected removal path resolution"),
+    prepareWorktreeAliasRemoval: () => Effect.die(new Error("Unexpected alias removal")),
+    resolveWorktreeRemovalPath: () => Effect.die(new Error("Unexpected removal path resolution")),
     ensureDirectory() {
-      return Effect.dieMessage("unexpected ensure directory");
+      return Effect.die(new Error("unexpected ensure directory"));
     },
     copyConfiguredPaths() {
       return Effect.tryPromise({
@@ -282,7 +282,7 @@ describe("createTaskService task mutations and reset", () => {
     const createdTask = task({ id: "task-2", status: "open" });
     const taskStore: TaskStorePort = {
       listTasks() {
-        return Effect.dieMessage("unexpected list");
+        return Effect.die(new Error("unexpected list"));
       },
       createTask(input) {
         return Effect.sync(() => {
@@ -291,16 +291,16 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
       updateTask() {
-        return Effect.dieMessage("unexpected update");
+        return Effect.die(new Error("unexpected update"));
       },
       getTask() {
-        return Effect.dieMessage("unexpected get");
+        return Effect.die(new Error("unexpected get"));
       },
       transitionTask() {
-        return Effect.dieMessage("unexpected transition");
+        return Effect.die(new Error("unexpected transition"));
       },
       deleteTask() {
-        return Effect.dieMessage("unexpected delete");
+        return Effect.die(new Error("unexpected delete"));
       },
     };
 
@@ -338,7 +338,7 @@ describe("createTaskService task mutations and reset", () => {
     const createdTask = task({ id: "task-2", status: "open" });
     const taskStore: TaskStorePort = {
       listTasks() {
-        return Effect.dieMessage("unexpected list");
+        return Effect.die(new Error("unexpected list"));
       },
       createTask(input) {
         return Effect.sync(() => {
@@ -347,16 +347,16 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
       updateTask() {
-        return Effect.dieMessage("unexpected update");
+        return Effect.die(new Error("unexpected update"));
       },
       getTask() {
-        return Effect.dieMessage("unexpected get");
+        return Effect.die(new Error("unexpected get"));
       },
       transitionTask() {
-        return Effect.dieMessage("unexpected transition");
+        return Effect.die(new Error("unexpected transition"));
       },
       deleteTask() {
-        return Effect.dieMessage("unexpected delete");
+        return Effect.die(new Error("unexpected delete"));
       },
     };
 
@@ -2811,7 +2811,7 @@ describe("createTaskService task mutations and reset", () => {
   test("rejects generic transitions to closed", async () => {
     const taskStore: TaskStorePort = {
       listTasks() {
-        return Effect.dieMessage("should not list tasks");
+        return Effect.die(new Error("should not list tasks"));
       },
     };
 

@@ -198,19 +198,19 @@ export const createTerminalSessionLifecycle = ({
         !confirmTerminate &&
         session.resources.handle
       ) {
-        const inspection = yield* Effect.either(session.resources.handle.hasChildProcesses());
-        if (inspection._tag === "Left") {
+        const inspection = yield* Effect.result(session.resources.handle.hasChildProcesses());
+        if (inspection._tag === "Failure") {
           return yield* Effect.fail(
             terminalFailure(
               "close_failed",
               "close",
               `Failed to determine whether ${session.summary.label} has running commands.`,
               terminalId,
-              inspection.left,
+              inspection.failure,
             ),
           );
         }
-        if (inspection.right) {
+        if (inspection.success) {
           return yield* Effect.fail(
             terminalFailure(
               "confirmation_required",
@@ -224,8 +224,8 @@ export const createTerminalSessionLifecycle = ({
       if (handle) {
         beginTerminalClose(session);
         emitLifecycle(session);
-        const result = yield* Effect.either(handle.terminate());
-        if (result._tag === "Left") {
+        const result = yield* Effect.result(handle.terminate());
+        if (result._tag === "Failure") {
           handleFailure(session);
           return yield* Effect.fail(
             terminalFailure(
@@ -233,7 +233,7 @@ export const createTerminalSessionLifecycle = ({
               "close",
               `Failed to terminate terminal ${terminalId}.`,
               terminalId,
-              result.left,
+              result.failure,
             ),
           );
         }
@@ -258,13 +258,13 @@ export const createTerminalSessionLifecycle = ({
       const results = yield* Effect.forEach(
         targets,
         (session) =>
-          Effect.either(closeSession(session, true)).pipe(
+          Effect.result(closeSession(session, true)).pipe(
             Effect.map((result) => ({ terminalId: session.summary.terminalId, result })),
           ),
         { concurrency: TERMINAL_LIMITS.livePerHost },
       );
       const errors = results.flatMap(({ terminalId, result }) =>
-        result._tag === "Left" ? [{ terminalId, message: result.left.message }] : [],
+        result._tag === "Failure" ? [{ terminalId, message: result.failure.message }] : [],
       );
       if (errors.length > 0) {
         const context = operation === "dispose" ? " during shutdown" : "";

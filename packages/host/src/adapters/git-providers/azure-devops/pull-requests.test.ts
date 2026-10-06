@@ -69,16 +69,16 @@ const pullRequestResponse = (number: number) => ({
 const connection: AzureDevOpsConnectionPort = {
   shutdown: () => Effect.void,
   getAuthorization: () => Effect.succeed({ headerValue: "Bearer secret", account: null }),
-  getState: () => Effect.dieMessage("unexpected connection state"),
-  replacePat: () => Effect.dieMessage("unexpected PAT replacement"),
-  startCloudSignIn: () => Effect.dieMessage("unexpected sign-in"),
-  cancelCloudSignIn: () => Effect.dieMessage("unexpected sign-in cancellation"),
-  disconnect: () => Effect.dieMessage("unexpected disconnect"),
-  removeWorkspaceCredentials: () => Effect.dieMessage("unexpected workspace cleanup"),
+  getState: () => Effect.die(new Error("unexpected connection state")),
+  replacePat: () => Effect.die(new Error("unexpected PAT replacement")),
+  startCloudSignIn: () => Effect.die(new Error("unexpected sign-in")),
+  cancelCloudSignIn: () => Effect.die(new Error("unexpected sign-in cancellation")),
+  disconnect: () => Effect.die(new Error("unexpected disconnect")),
+  removeWorkspaceCredentials: () => Effect.die(new Error("unexpected workspace cleanup")),
 };
 
 const repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository> = {
-  detectRepository: () => Effect.dieMessage("unexpected detection"),
+  detectRepository: () => Effect.die(new Error("unexpected detection")),
   getRepository: () => Effect.succeed(repository),
   getMapping: () => Effect.succeed({ repository, remoteName: "origin" }),
 };

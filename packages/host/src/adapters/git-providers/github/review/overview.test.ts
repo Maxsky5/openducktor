@@ -363,14 +363,14 @@ describe("loadGithubPullRequestReviewOverview", () => {
               }),
           }),
         ),
-      ).pipe(Effect.either),
+      ).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.state");
-      expect(result.left.message).toContain("review state");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("data.repository.pullRequest.reviews.nodes.0.state");
+      expect(result.failure.message).toContain("review state");
     }
   });
 
@@ -386,14 +386,14 @@ describe("loadGithubPullRequestReviewOverview", () => {
               }),
           }),
         ),
-      ).pipe(Effect.either),
+      ).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.body");
-      expect(result.left.message).toContain("review body");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("data.repository.pullRequest.reviews.nodes.0.body");
+      expect(result.failure.message).toContain("review body");
     }
   });
 
@@ -405,13 +405,13 @@ describe("loadGithubPullRequestReviewOverview", () => {
             response: () => responsePage({ comments: [], reviews: [null] }),
           }),
         ),
-      ).pipe(Effect.either),
+      ).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("data.repository.pullRequest.reviews.nodes.0");
     }
   });
 
@@ -438,13 +438,13 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const result = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(createCommands({ response: () => malformed })),
-      ).pipe(Effect.either),
+      ).pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("data.repository.pullRequest.comments.pageInfo");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("data.repository.pullRequest.comments.pageInfo");
     }
   });
 });

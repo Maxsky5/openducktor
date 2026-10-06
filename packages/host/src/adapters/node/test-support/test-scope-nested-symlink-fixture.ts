@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "../filesystem-task-asset-file-port";
 
@@ -76,7 +76,7 @@ const runCase = async ({
             });
   const exit = await Effect.runPromiseExit(effect);
   if (Exit.isFailure(exit)) {
-    const [failure] = Cause.failures(exit.cause);
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
     const source = failure?.cause;
     const parsed = z.object({ message: z.string() }).safeParse(source);
     error = parsed.success ? parsed.data.message : String(source);

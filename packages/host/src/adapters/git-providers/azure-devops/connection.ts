@@ -38,7 +38,7 @@ type SignInAttempt = {
   scope: string;
   cancelled: boolean;
   cancelStart: () => void;
-  fiber?: Fiber.RuntimeFiber<void, never>;
+  fiber?: Fiber.Fiber<void, never>;
 };
 
 export const createAzureDevOpsConnectionAdapter = ({
@@ -82,7 +82,7 @@ export const createAzureDevOpsConnectionAdapter = ({
 
   const cancelScopeAttempts = (scope: string) =>
     Effect.gen(function* () {
-      const fibers: Fiber.RuntimeFiber<void, never>[] = [];
+      const fibers: Fiber.Fiber<void, never>[] = [];
       for (const [attemptId, attempt] of attempts) {
         if (attempt.scope === scope) {
           cancelAttempt(attemptId, attempt);
@@ -271,7 +271,7 @@ export const createAzureDevOpsConnectionAdapter = ({
           deployment: repository.deployment,
         });
         const attemptId = randomUUID();
-        return yield* Effect.async<AzureDevOpsDeviceCode, HostError>((resume) => {
+        return yield* Effect.callback<AzureDevOpsDeviceCode, HostError>((resume) => {
           let codeReturned = false;
           let attempt: SignInAttempt;
           const request: DeviceCodeRequest = {
@@ -354,7 +354,7 @@ export const createAzureDevOpsConnectionAdapter = ({
                   );
                 }),
               ),
-              Effect.catchAll((cause) =>
+              Effect.catch((cause) =>
                 Effect.sync(() => {
                   if (attempt.cancelled || attempts.get(attemptId) !== attempt) return;
                   attempts.delete(attemptId);
@@ -399,7 +399,7 @@ export const createAzureDevOpsConnectionAdapter = ({
     },
     shutdown() {
       return Effect.gen(function* () {
-        const fibers: Fiber.RuntimeFiber<void, never>[] = [];
+        const fibers: Fiber.Fiber<void, never>[] = [];
         for (const [attemptId, attempt] of attempts) {
           cancelAttempt(attemptId, attempt);
           if (attempt.fiber) fibers.push(attempt.fiber);

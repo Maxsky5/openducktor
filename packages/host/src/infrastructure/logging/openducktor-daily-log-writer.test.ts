@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Deferred, Effect, Fiber, Option } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import {
   createOpenDucktorDailyLogWriter,
   OpenDucktorLogPersistenceError,
@@ -193,21 +193,21 @@ describe("createOpenDucktorDailyLogWriter", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const first = yield* Effect.fork(writer.append(recordedAt, "first"));
+        const first = yield* Effect.forkChild(writer.append(recordedAt, "first"));
         yield* Effect.promise(() => firstAppendStarted);
 
         const secondFiberStarted = yield* Deferred.make<void>();
-        const second = yield* Effect.fork(
+        const second = yield* Effect.forkChild(
           Effect.gen(function* () {
             yield* Deferred.succeed(secondFiberStarted, undefined);
             yield* writer.append(recordedAt, "second");
           }),
         );
         yield* Deferred.await(secondFiberStarted);
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
 
         expect(startedRecords).toEqual(["first\n"]);
-        expect(Option.isNone(yield* Fiber.poll(second))).toBeTrue();
+        expect(second.pollUnsafe()).toBeUndefined();
 
         releases.shift()?.();
         yield* Effect.promise(() => secondAppendStarted);

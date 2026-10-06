@@ -83,7 +83,7 @@ describe("untracked file diffs", () => {
                 stderr: "",
               };
             });
-          const fiber = yield* Effect.fork(
+          const fiber = yield* Effect.forkChild(
             buildFileDiffs(
               runner,
               root,

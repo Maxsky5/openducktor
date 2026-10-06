@@ -242,4 +242,6 @@ export type GitPort = {
   ): Effect.Effect<GitConflictAbortResult, GitPortError>;
 };
 
-export class GitPortTag extends Context.Tag("@openducktor/host/GitPort")<GitPortTag, GitPort>() {}
+export class GitPortTag extends Context.Service<GitPortTag, GitPort>()(
+  "@openducktor/host/GitPort",
+) {}

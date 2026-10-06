@@ -5,7 +5,7 @@ import {
   LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
   type LocalAttachmentUnavailableDetails,
 } from "@openducktor/contracts";
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect } from "effect";
 import {
   errorMessage,
   hasNestedNodeErrorCode,
@@ -63,7 +63,7 @@ const makeStagedAttachmentIndexFlight = (
   attachmentDirectory: string,
 ): StagedAttachmentIndexFlight => ({
   attachmentDirectory,
-  deferred: Deferred.unsafeMake(FiberId.none),
+  deferred: Deferred.makeUnsafe(),
   pendingAttachments: [],
 });
 const sanitizeAttachmentFilename = (name: string): string => {
@@ -249,7 +249,7 @@ export const createLocalAttachmentService = (
           return reservation.index;
         }
         if (reservation._tag === "created") {
-          yield* Effect.forkDaemon(
+          yield* Effect.forkDetach(
             completeIndexLoadFlight(
               reservation.flight,
               loadStagedAttachmentIndex(localAttachmentPort, attachmentDirectory),

@@ -254,81 +254,65 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         });
       },
       getSettingsSnapshot() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("getSettingsSnapshot");
-            return {
-              system: {},
-              customAgentRoles: [],
-              theme: "light",
-              git: { defaultMergeMethod: "merge_commit" },
-              general: { openAgentStudioTabOnBackgroundSessionStart: true },
-              appearance: { horizontalScrollbarVisibility: "system" },
-              chat: {
-                showThinkingMessages: false,
-                expandFileDiffsByDefault: false,
-                diffStyle: "split",
-                diffIndicators: "bars",
-                diffHeight: "full",
-                lineOverflow: "wrap",
-                hunkSeparators: "metadata",
-              },
-              reusablePrompts: [],
-              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-              autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-              notifications: DEFAULT_NOTIFICATION_SETTINGS,
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              agentModelFavorites: [],
-              workspaces: {},
-              globalPromptOverrides: {},
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push("getSettingsSnapshot");
+          return {
+            system: {},
+            customAgentRoles: [],
+            theme: "light",
+            git: { defaultMergeMethod: "merge_commit" },
+            general: { openAgentStudioTabOnBackgroundSessionStart: true },
+            appearance: { horizontalScrollbarVisibility: "system" },
+            chat: {
+              showThinkingMessages: false,
+              expandFileDiffsByDefault: false,
+              diffStyle: "split",
+              diffIndicators: "bars",
+              diffHeight: "full",
+              lineOverflow: "wrap",
+              hunkSeparators: "metadata",
+            },
+            reusablePrompts: [],
+            kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
+            autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+            notifications: DEFAULT_NOTIFICATION_SETTINGS,
+            agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+            agentModelFavorites: [],
+            workspaces: {},
+            globalPromptOverrides: {},
+          };
         });
       },
       updateAgentModelFavorites() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("updateAgentModelFavorites");
-            return {
-              system: {},
-              customAgentRoles: [],
-              theme: "light",
-              git: { defaultMergeMethod: "merge_commit" },
-              general: { openAgentStudioTabOnBackgroundSessionStart: true },
-              appearance: { horizontalScrollbarVisibility: "system" },
-              chat: {
-                showThinkingMessages: false,
-                expandFileDiffsByDefault: false,
-                diffStyle: "split",
-                diffIndicators: "bars",
-                diffHeight: "full",
-                lineOverflow: "wrap",
-                hunkSeparators: "metadata",
-              },
-              reusablePrompts: [],
-              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-              autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-              notifications: DEFAULT_NOTIFICATION_SETTINGS,
-              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-              agentModelFavorites: [
-                { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-              ],
-              workspaces: {},
-              globalPromptOverrides: {},
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push("updateAgentModelFavorites");
+          return {
+            system: {},
+            customAgentRoles: [],
+            theme: "light",
+            git: { defaultMergeMethod: "merge_commit" },
+            general: { openAgentStudioTabOnBackgroundSessionStart: true },
+            appearance: { horizontalScrollbarVisibility: "system" },
+            chat: {
+              showThinkingMessages: false,
+              expandFileDiffsByDefault: false,
+              diffStyle: "split",
+              diffIndicators: "bars",
+              diffHeight: "full",
+              lineOverflow: "wrap",
+              hunkSeparators: "metadata",
+            },
+            reusablePrompts: [],
+            kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
+            autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+            notifications: DEFAULT_NOTIFICATION_SETTINGS,
+            agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+            agentModelFavorites: [
+              { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+            ],
+            workspaces: {},
+            globalPromptOverrides: {},
+          };
         });
       },
       updateKanbanTaskCardView(taskCardView) {

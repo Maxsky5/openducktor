@@ -17,7 +17,7 @@ describe("blocker and approval concurrency", () => {
             const entered = yield* Deferred.make<void>();
             const release = yield* Deferred.make<void>();
             const pause = Deferred.succeed(entered, undefined).pipe(
-              Effect.zipRight(Deferred.await(release)),
+              Effect.andThen(Deferred.await(release)),
             );
             let current = task({ status: "human_review" });
             let canonicalizeCalls = 0;
@@ -57,10 +57,10 @@ describe("blocker and approval concurrency", () => {
             const block = service.buildBlocked({ ...input, reason: "Needs clarification" });
             const approve = service.humanApprove(input);
             const first = yield* Effect.forkScoped(
-              Effect.either(scenario === "blocker writing" ? block : approve),
+              Effect.result(scenario === "blocker writing" ? block : approve),
             );
             yield* Deferred.await(entered);
-            const second = yield* Effect.either(scenario === "blocker writing" ? approve : block);
+            const second = yield* Effect.result(scenario === "blocker writing" ? approve : block);
             yield* Deferred.succeed(release, undefined);
             const firstResult = yield* Fiber.join(first);
             return { firstResult, second, current, cleanups, writes };
@@ -68,11 +68,11 @@ describe("blocker and approval concurrency", () => {
         ),
       );
       if (scenario === "approval awaiting lock") {
-        expect(result.firstResult._tag).toBe("Left");
-        expect(result.second._tag).toBe("Right");
+        expect(result.firstResult._tag).toBe("Failure");
+        expect(result.second._tag).toBe("Success");
       } else {
-        expect(result.firstResult._tag).toBe("Right");
-        expect(result.second._tag).toBe("Left");
+        expect(result.firstResult._tag).toBe("Success");
+        expect(result.second._tag).toBe("Failure");
       }
       const approved = scenario === "approval cleaning";
       expect(result.current.status).toBe(approved ? "closed" : "blocked");

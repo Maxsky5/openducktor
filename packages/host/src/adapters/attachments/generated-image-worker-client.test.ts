@@ -5,7 +5,9 @@ import {
   codexImageGenerationPart,
   type CodexImageGenerationPreparation,
 } from "@openducktor/adapters-codex-app-server";
-import { Cause, Effect, Exit, Fiber, Option, Scheduler, TestClock, TestContext } from "effect";
+import { Cause, Effect, Exit, Fiber, Scheduler } from "effect";
+import { TestClock } from "effect/testing";
+import { createControlledScheduler } from "../../effect/test-support/controlled-scheduler";
 import {
   createGeneratedImageWorkers,
   type GeneratedImageWorkers,
@@ -37,8 +39,8 @@ const payload = (itemId = "image") =>
 
 const failureOf = <A, E>(exit: Exit.Exit<A, E>) => {
   if (!Exit.isFailure(exit)) throw new Error("Expected a worker failure");
-  expect([...Cause.defects(exit.cause)]).toEqual([]);
-  return [...Cause.failures(exit.cause)];
+  expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([]);
+  return exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
 };
 
 test("history chunks preserve revisions, Unicode boundaries, and native outcomes", async () => {
@@ -273,7 +275,7 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
       Effect.gen(function* () {
         const timedWorkers = yield* createGeneratedImageWorkers(() => Effect.void);
         return yield* Effect.gen(function* () {
-          const job = yield* Effect.fork(
+          const job = yield* Effect.forkChild(
             timedWorkers.preparePayload(
               Effect.succeed({ kind: "inline", itemId: "deadline", base64: png }),
               "deadline",
@@ -291,7 +293,7 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
             )).base64,
           ).toBe(png);
         }).pipe(Effect.ensuring(timedWorkers.shutdown.pipe(Effect.orDie)));
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   } finally {
     post.mockRestore();
@@ -357,15 +359,16 @@ test("termination failures remain visible at shutdown", async () => {
 
 test("cancellation at scheduler boundaries preserves all admission slots", async () => {
   for (let steps = 0; steps < 24; steps++) {
-    const scheduler = new Scheduler.ControlledScheduler();
+    const controlled = createControlledScheduler();
     const job = Effect.runFork(
-      workers.preparePayload(Effect.never, "cancel").pipe(Effect.withMaxOpsBeforeYield(10)),
-      { scheduler },
+      workers
+        .preparePayload(Effect.never, "cancel")
+        .pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 10)),
+      { scheduler: controlled.scheduler },
     );
-    for (let step = 0; step < steps; step++) scheduler.step();
+    for (let step = 0; step < steps; step++) controlled.step();
     const interrupted = Effect.runPromise(Fiber.interrupt(job));
-    scheduler.deferred = true;
-    scheduler.step();
+    controlled.release();
     await interrupted;
   }
   const started = Promise.withResolvers<void>();
@@ -375,15 +378,14 @@ test("cancellation at scheduler boundaries preserves all admission slots", async
       workers.preparePayload(
         Effect.sync(() => {
           if (++active === 2) started.resolve();
-        }).pipe(Effect.zipRight(Effect.never)),
+        }).pipe(Effect.andThen(Effect.never)),
         `held${index}`,
       ),
     ),
   );
   try {
     await started.promise;
-    for (const job of jobs)
-      expect(Option.isNone(await Effect.runPromise(Fiber.poll(job)))).toBe(true);
+    for (const job of jobs) expect(job.pollUnsafe()).toBeUndefined();
     expect(failureOf(await Effect.runPromiseExit(payload("overflow")))[0]?.details).toMatchObject({
       phase: "capacity",
     });
@@ -442,7 +444,7 @@ test("idle workers expire and later jobs create a new worker", async () => {
           yield* request;
           expect(new Set(seen).size).toBe(2);
         }).pipe(Effect.ensuring(timed.shutdown.pipe(Effect.orDie)));
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   } finally {
     post.mockRestore();

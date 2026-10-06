@@ -193,14 +193,16 @@ export const createOpenCodeExecutableProbe = ({
             yield* Effect.sleep(`${retryDelayMs} millis`);
           }
         }).pipe(
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration: `${startupTimeoutMs} millis`,
-            onTimeout: () =>
-              new HostOperationError({
-                operation: "opencodeExecutableProbe.startServer",
-                message: `Timed out waiting for the OpenCode health endpoint from ${executablePath}.`,
-                details: { executablePath, startupTimeoutMs },
-              }),
+            orElse: () =>
+              Effect.fail(
+                new HostOperationError({
+                  operation: "opencodeExecutableProbe.startServer",
+                  message: `Timed out waiting for the OpenCode health endpoint from ${executablePath}.`,
+                  details: { executablePath, startupTimeoutMs },
+                }),
+              ),
           }),
         ),
       release: (runtime) =>

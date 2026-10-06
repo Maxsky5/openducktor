@@ -26,7 +26,7 @@ describe("AzureDevOpsConnectionService", () => {
     const replacePat = mock(() => Effect.void);
     const connection: AzureDevOpsConnectionPort = {
       shutdown: () => Effect.void,
-      getAuthorization: () => Effect.dieMessage("unexpected authorization"),
+      getAuthorization: () => Effect.die(new Error("unexpected authorization")),
       getState: () => Effect.succeed({ status: "disconnected" }),
       replacePat,
       startCloudSignIn,

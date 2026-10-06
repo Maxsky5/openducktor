@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Option } from "effect";
 import { FilesystemFileOperationError } from "../../ports/filesystem-port";
 import { createFilesystemAdapter } from "./filesystem-adapter";
 
@@ -103,7 +103,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
       expect(failure).toBeInstanceOf(FilesystemFileOperationError);
       expect(failure).toMatchObject({ code: "stale_revision" });
     }
@@ -130,7 +130,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
       expect(failure).toMatchObject({ code: "stale_revision" });
     }
     expect(await readFile(filePath, "utf8")).toBe("same contents");
@@ -259,7 +259,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
       expect(failure).toMatchObject({ code: "too_large" });
     }
     expect(new Uint8Array(await readFile(filePath))).toEqual(bytes);
@@ -283,7 +283,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
       expect(failure).toMatchObject({ code: "unavailable_file" });
     }
   });
@@ -297,7 +297,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
-      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
       expect(failure).toMatchObject({ code: "unavailable_file" });
     }
   });

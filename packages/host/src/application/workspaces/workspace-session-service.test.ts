@@ -14,7 +14,8 @@ import {
   type WorkspaceSession,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import { Cause, Deferred, Effect, Exit, Fiber, Option, TestClock, TestContext } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
 import {
   createTestRuntimeDrivers,
@@ -252,8 +253,8 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       }),
       systemCommands: {
-        resolveCommandPath: () => Effect.dieMessage("Unexpected command lookup"),
-        versionCommand: () => Effect.dieMessage("Unexpected version command"),
+        resolveCommandPath: () => Effect.die(new Error("Unexpected command lookup")),
+        versionCommand: () => Effect.die(new Error("Unexpected version command")),
         runCommandAllowFailure: (command, args, options) =>
           Effect.sync(() => {
             calls.push("hook");
@@ -849,7 +850,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       const h = setup();
       if (mode === "from_branch") h.branches.add("refs/heads/odt/my-feature");
       h.dependencies.git.getStatus = () =>
-        Effect.dieMessage("Creation must not read checkout status");
+        Effect.die(new Error("Creation must not read checkout status"));
       const events: unknown[] = [];
       const router = toPromiseHostCommandRouter(
         createEffectHostCommandRouter({
@@ -1053,8 +1054,8 @@ describe("host-owned Workspace Session lifecycle", () => {
                   if (!first) return h.dependencies.git.createWorktree(...args);
                   first = false;
                   return Deferred.succeed(entered, undefined).pipe(
-                    Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.andThen(
                       Effect.fail(
                         new HostOperationError({
                           operation: "git.worktree.add",
@@ -1156,7 +1157,7 @@ describe("host-owned Workspace Session lifecycle", () => {
               worktreeFiles: {
                 ...h.dependencies.worktreeFiles,
                 copyConfiguredPaths: () =>
-                  Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+                  Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
               },
             });
             const fiber = yield* Effect.forkScoped(
@@ -1165,8 +1166,9 @@ describe("host-owned Workspace Session lifecycle", () => {
                 : service.restore(ref).pipe(Effect.asVoid),
             );
             yield* Deferred.await(entered);
-            const exit = yield* Fiber.interrupt(fiber);
-            expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+            yield* Fiber.interrupt(fiber);
+            const exit = yield* Fiber.await(fiber);
+            expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
             expect(h.paths.size).toBe(0);
             expect(h.registered.size).toBe(0);
             expect(h.branches.size).toBe(0);
@@ -1516,16 +1518,16 @@ describe("host-owned Workspace Session lifecycle", () => {
               runtime: {
                 requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
-                    Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.andThen(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
               worktreeFiles: {
                 ...h.dependencies.worktreeFiles,
                 copyConfiguredPaths: (...args) =>
                   Deferred.succeed(entered, undefined).pipe(
-                    Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.worktreeFiles.copyConfiguredPaths(...args)),
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.andThen(h.dependencies.worktreeFiles.copyConfiguredPaths(...args)),
                   ),
               },
             });
@@ -1544,13 +1546,13 @@ describe("host-owned Workspace Session lifecycle", () => {
             };
             const save = yield* Effect.forkScoped(service.setDraftModel({ ...ref, selectedModel }));
             yield* TestClock.adjust(0);
-            expect(Option.isSome(yield* Fiber.poll(save))).toBe(true);
+            expect(save.pollUnsafe()).toBeDefined();
             expect((yield* service.get(ref)).selectedModel).toEqual(selectedModel);
-            expect(Option.isNone(yield* Fiber.poll(pending))).toBe(true);
+            expect(pending.pollUnsafe()).toBeUndefined();
             yield* Deferred.succeed(release, undefined);
             yield* Fiber.join(pending);
           }),
-        ).pipe(Effect.provide(TestContext.TestContext)),
+        ).pipe(Effect.provide(TestClock.layer())),
       );
     },
   );
@@ -1569,8 +1571,8 @@ describe("host-owned Workspace Session lifecycle", () => {
               runtime: {
                 requireReady: (kind) =>
                   Deferred.succeed(entered, undefined).pipe(
-                    Effect.zipRight(Deferred.await(release)),
-                    Effect.zipRight(h.dependencies.runtime.requireReady(kind)),
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.andThen(h.dependencies.runtime.requireReady(kind)),
                   ),
               },
             });
@@ -1601,7 +1603,7 @@ describe("host-owned Workspace Session lifecycle", () => {
             });
             const next = yield* Effect.forkScoped(Effect.exit(followup));
             yield* TestClock.adjust(0);
-            expect(Option.isNone(yield* Fiber.poll(next))).toBe(true);
+            expect(next.pollUnsafe()).toBeUndefined();
             yield* Deferred.succeed(release, undefined);
             yield* Fiber.join(start);
             const result = yield* Fiber.join(next);
@@ -1614,7 +1616,7 @@ describe("host-owned Workspace Session lifecycle", () => {
             expect(saved.archivedAt !== null).toBe(operation === "archive");
             expect(h.starts).toHaveLength(1);
           }),
-        ).pipe(Effect.provide(TestContext.TestContext)),
+        ).pipe(Effect.provide(TestClock.layer())),
       );
     },
   );
@@ -1632,8 +1634,8 @@ describe("host-owned Workspace Session lifecycle", () => {
               ...h.dependencies.store,
               archive: (request) =>
                 Deferred.succeed(entered, undefined).pipe(
-                  Effect.zipRight(Deferred.await(release)),
-                  Effect.zipRight(h.dependencies.store.archive(request)),
+                  Effect.andThen(Deferred.await(release)),
+                  Effect.andThen(h.dependencies.store.archive(request)),
                 ),
             },
           });
@@ -1648,13 +1650,13 @@ describe("host-owned Workspace Session lifecycle", () => {
           yield* Deferred.await(entered);
           const restore = yield* Effect.forkScoped(service.restore(ref));
           yield* TestClock.adjust(0);
-          expect(Option.isNone(yield* Fiber.poll(restore))).toBe(true);
+          expect(restore.pollUnsafe()).toBeUndefined();
           yield* Deferred.succeed(release, undefined);
           expect((yield* Fiber.join(archive)).archivedAt).not.toBeNull();
           expect((yield* Fiber.join(restore)).archivedAt).toBeNull();
           expect((yield* service.get(ref)).archivedAt).toBeNull();
         }),
-      ).pipe(Effect.provide(TestContext.TestContext)),
+      ).pipe(Effect.provide(TestClock.layer())),
     );
   });
 

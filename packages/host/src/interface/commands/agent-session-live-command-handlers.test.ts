@@ -44,7 +44,7 @@ const createHarness = async (
   resolveAttachment?: LocalAttachmentService["resolve"],
   startWorkflowSession: Parameters<
     typeof createAgentSessionLiveCommandHandlers
-  >[0]["startWorkflowSession"] = () => Effect.dieMessage("unexpected workflow session start"),
+  >[0]["startWorkflowSession"] = () => Effect.die(new Error("unexpected workflow session start")),
 ) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
@@ -58,10 +58,11 @@ const createHarness = async (
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
     supportsSessionControl: true,
-    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
-    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+    beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
+    releaseGeneratedImageBatch: () =>
+      Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+    describeGeneratedImages: () => Effect.die(new Error("Unexpected describeGeneratedImages")),
+    resolveGeneratedImageSource: () => Effect.die(new Error("Unexpected generated image read")),
     binding: new AgentSessionLiveRegistration(
       { runtimeId: "runtime-1", runtimeKind: "opencode" },
       (mutation) => Effect.map(mutation, ({ value }) => value),
@@ -137,10 +138,10 @@ const createHarness = async (
           state: "queued" as const,
         };
       }),
-    updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-    updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
-    stopSession: () => Effect.dieMessage("unexpected stop"),
-    releaseSession: () => Effect.dieMessage("unexpected release"),
+    updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+    updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
+    stopSession: () => Effect.die(new Error("unexpected stop")),
+    releaseSession: () => Effect.die(new Error("unexpected release")),
   };
   const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open("opencode");
@@ -189,7 +190,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     const inputs: unknown[] = [];
     const { router } = await createHarness(undefined, (input) => {
       inputs.push(input);
-      return Effect.dieMessage("unexpected workflow start");
+      return Effect.die(new Error("unexpected workflow start"));
     });
     await expect(
       Effect.runPromise(

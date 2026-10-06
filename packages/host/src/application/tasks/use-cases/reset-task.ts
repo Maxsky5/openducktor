@@ -178,7 +178,7 @@ export const createTaskFullResetUseCase = ({
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
-        Effect.catchAll((error) => {
+        Effect.catch((error) => {
           const decoratedFailure = appendTaskCleanupProgress(error, {
             operation: "task_reset",
             removedWorktrees: cleanupProgress.removedWorktrees,

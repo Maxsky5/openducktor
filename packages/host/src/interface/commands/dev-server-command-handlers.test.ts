@@ -43,7 +43,7 @@ describe("createDevServerCommandHandlers", () => {
         });
       },
       inspectWorkspaceActivity() {
-        return Effect.dieMessage("unexpected dev server activity inspection");
+        return Effect.die(new Error("unexpected dev server activity inspection"));
       },
       restart(input) {
         return Effect.tryPromise({
@@ -88,7 +88,7 @@ describe("createDevServerCommandHandlers", () => {
         });
       },
       stopWorkspaceSession() {
-        return Effect.dieMessage("unexpected internal dev server stop");
+        return Effect.die(new Error("unexpected internal dev server stop"));
       },
     };
     const router = createHostCommandRouter({
@@ -146,7 +146,7 @@ describe("createDevServerCommandHandlers", () => {
         });
       },
       inspectWorkspaceActivity() {
-        return Effect.dieMessage("unexpected dev server activity inspection");
+        return Effect.die(new Error("unexpected dev server activity inspection"));
       },
       restart(input) {
         return Effect.tryPromise({
@@ -191,7 +191,7 @@ describe("createDevServerCommandHandlers", () => {
         });
       },
       stopWorkspaceSession() {
-        return Effect.dieMessage("unexpected internal dev server stop");
+        return Effect.die(new Error("unexpected internal dev server stop"));
       },
     };
     const router = createHostCommandRouter({

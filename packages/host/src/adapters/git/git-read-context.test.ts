@@ -29,8 +29,8 @@ describe("Git logical read context", () => {
     const pending = Effect.runPromise(
       Effect.all(
         [
-          Effect.either(git.getStatus("/repo", { refreshId: "same" })),
-          Effect.either(git.getStatus("/repo/subdir", { refreshId: "same" })),
+          Effect.result(git.getStatus("/repo", { refreshId: "same" })),
+          Effect.result(git.getStatus("/repo/subdir", { refreshId: "same" })),
         ],
         { concurrency: "unbounded" },
       ),
@@ -40,8 +40,8 @@ describe("Git logical read context", () => {
     const outcomes = await pending;
     expect(statusReads).toBe(1);
     for (const outcome of outcomes) {
-      expect(outcome._tag).toBe("Left");
-      if (outcome._tag === "Left") expect(outcome.left).toBe(failure);
+      expect(outcome._tag).toBe("Failure");
+      if (outcome._tag === "Failure") expect(outcome.failure).toBe(failure);
     }
     fail = false;
     await expect(Effect.runPromise(git.getStatus("/repo", { refreshId: "same" }))).rejects.toThrow(

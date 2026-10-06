@@ -7,7 +7,7 @@ describe("createRetryableCleanup", () => {
   test("shares one attempt, retries after a failure, and keeps a success final", async () => {
     let attempts = 0;
     let fail = true;
-    const gate = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const gate = Deferred.makeUnsafe<void>();
     const cleanup = createRetryableCleanup(
       Effect.gen(function* () {
         attempts += 1;
@@ -18,12 +18,12 @@ describe("createRetryableCleanup", () => {
       }),
     );
 
-    const first = Effect.runFork(Effect.either(cleanup));
-    const second = Effect.runFork(Effect.either(cleanup));
-    await Effect.runPromise(Effect.yieldNow());
+    const first = Effect.runFork(Effect.result(cleanup));
+    const second = Effect.runFork(Effect.result(cleanup));
+    await Effect.runPromise(Effect.yieldNow);
     await Effect.runPromise(Deferred.succeed(gate, undefined));
     const results = await Effect.runPromise(Fiber.joinAll([first, second]));
-    expect(results.map((result) => result._tag)).toEqual(["Left", "Left"]);
+    expect(results.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
     expect(attempts).toBe(1);
 
     fail = false;

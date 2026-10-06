@@ -682,7 +682,7 @@ describe("TaskService.closeTask", () => {
     const closing = run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
     await metadataRead;
     const lifecycle = await run(
-      Effect.either(
+      Effect.result(
         Effect.scoped(
           taskSessionLifecycleCoordinator.acquireLifecycle(
             "/repo",
@@ -695,7 +695,7 @@ describe("TaskService.closeTask", () => {
     releaseMetadataRead();
     await closing;
 
-    expect(lifecycle._tag).toBe("Left");
+    expect(lifecycle._tag).toBe("Failure");
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

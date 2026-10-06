@@ -145,8 +145,8 @@ export const toWebOperationError = (
 export const causeToWebBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
 ): Failure | WebOperationError => {
-  const failures = Array.from(Cause.failures(cause));
-  const hasOnlyTypedFailures = !Cause.isDie(cause) && !Cause.isInterrupted(cause);
+  const failures = cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
+  const hasOnlyTypedFailures = !Cause.hasDies(cause) && !Cause.hasInterrupts(cause);
   if (failures.length === 1 && hasOnlyTypedFailures) {
     const firstFailure = failures[0];
     if (firstFailure !== undefined) {
@@ -167,9 +167,9 @@ export const causeToWebBoundaryError = <Failure>(
     message: Cause.pretty(cause),
     cause,
     details: {
-      defect: Cause.isDie(cause),
+      defect: Cause.hasDies(cause),
       failureMessages: failures.map(errorMessage),
-      interrupted: Cause.isInterrupted(cause),
+      interrupted: Cause.hasInterrupts(cause),
     },
   });
 };

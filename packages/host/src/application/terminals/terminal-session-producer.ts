@@ -20,6 +20,7 @@ import {
 import { type createTerminalSessionLifecycle, terminalFailure } from "./terminal-session-lifecycle";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export const createTerminalSessionProducer = ({
   sessions,
@@ -82,13 +83,13 @@ export const createTerminalSessionProducer = ({
           kind: "interactive",
           summary,
           titleTracker,
-          operations: yield* Effect.makeSemaphore(1),
+          operations: createSerialLane(),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
           shell: plan.shell,
           grid: plan.grid,
         });
         sessions.set(summary.terminalId, session);
-        const handleResult = yield* Effect.either(
+        const handleResult = yield* Effect.result(
           ptyPort.start(plan, {
             onOutput: (data) => acceptOutput(session, data),
             onFailure: (failure) => {
@@ -106,29 +107,29 @@ export const createTerminalSessionProducer = ({
             onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
           }),
         );
-        if (handleResult._tag === "Left") {
+        if (handleResult._tag === "Failure") {
           forgetTerminalSession(session);
           sessions.delete(summary.terminalId);
           return yield* Effect.fail(
             terminalFailure(
-              handleResult.left.code === "unsupported_runtime"
+              handleResult.failure.code === "unsupported_runtime"
                 ? "unsupported_runtime"
                 : "spawn_failed",
               "create",
-              handleResult.left.message,
+              handleResult.failure.message,
               summary.terminalId,
-              handleResult.left,
+              handleResult.failure,
             ),
           );
         }
-        activateTerminalSession(session, handleResult.right);
+        activateTerminalSession(session, handleResult.success);
         return { ...session.summary, context: { ...session.summary.context } };
       }),
     openOutputSource: (
       summary: TerminalSummary,
       onForgotten: () => void,
     ): Effect.Effect<TerminalOutputSource> =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         let session: OutputTerminalSession;
         const titleTracker = createTerminalTitleTracker(
           (title) => publishTitle(session, title),
@@ -138,7 +139,7 @@ export const createTerminalSessionProducer = ({
           kind: "output",
           summary,
           titleTracker,
-          operations: yield* Effect.makeSemaphore(1),
+          operations: createSerialLane(),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
           grid: { columns: 80, rows: 24 },
         });

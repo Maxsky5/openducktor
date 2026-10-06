@@ -422,7 +422,7 @@ const startViteServerEffect = (
               }),
           }),
         ).pipe(
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             preserveLauncherFailureAfterStop(
               error,
               closeFrontendServerEffect(startedServer),
@@ -431,7 +431,7 @@ const startViteServerEffect = (
           ),
           Effect.onInterrupt(() =>
             cleanupStartedFrontendServerEffect(startedServer, logger).pipe(
-              Effect.catchAll((cause) =>
+              Effect.catch((cause) =>
                 Effect.sync(() => defaultWebSignalProcessBoundary.reportFailure(cause)),
               ),
             ),

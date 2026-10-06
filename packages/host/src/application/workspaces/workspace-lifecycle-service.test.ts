@@ -456,16 +456,16 @@ describe("workspace lifecycle service", () => {
       });
       const input = { workspaceId: "ws", expectedRepoPath: "/repos/ws" };
       const result = await Effect.runPromise(
-        Effect.either(
+        Effect.result(
           operation === "close"
             ? service.closeWorkspace(input).pipe(Effect.asVoid)
             : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid),
         ),
       );
 
-      expect(result._tag).toBe("Left");
-      if (result._tag === "Left") {
-        expect(result.left).toBe(failure);
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toBe(failure);
       }
       expect(closeWorkspace).not.toHaveBeenCalled();
       expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
@@ -552,16 +552,16 @@ describe("workspace lifecycle service", () => {
                 "direct merge",
               );
               const input = { workspaceId: "ws", expectedRepoPath: configuredRepoPath };
-              const result = yield* Effect.either(
+              const result = yield* Effect.result(
                 operation === "close"
                   ? service.closeWorkspace(input).pipe(Effect.asVoid)
                   : service
                       .removeWorkspace({ ...input, removeTaskWorktrees: false })
                       .pipe(Effect.asVoid),
               );
-              expect(result._tag).toBe("Left");
-              if (result._tag === "Left") {
-                expect(result.left.message).toContain("task lifecycle operation is in progress");
+              expect(result._tag).toBe("Failure");
+              if (result._tag === "Failure") {
+                expect(result.failure.message).toContain("task lifecycle operation is in progress");
               }
             }),
           ),
