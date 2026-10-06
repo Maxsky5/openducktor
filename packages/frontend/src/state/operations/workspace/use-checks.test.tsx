@@ -195,6 +195,32 @@ describe("use-checks", () => {
     }
   }, 5000);
 
+  test("refreshChecks runs a forced host check while an ordinary check is pending", async () => {
+    const ordinaryCheck = createDeferred<RuntimeCheck>();
+    const pathError = "Failed to resolve PATH: login shell timed out.";
+    runtimeCheckHandler = async (force) => (force ? makeRuntimeCheck() : ordinaryCheck.promise);
+    const harness = createHookHarness({
+      activeRepo: null,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => runtimeCheckMock.mock.calls.length === 1);
+      await harness.run(async (value) => {
+        const refresh = value.refreshChecks();
+        ordinaryCheck.resolve(makeRuntimeCheck({ pathOk: false, errors: [pathError] }));
+        await refresh;
+      });
+
+      expect(runtimeCheckMock.mock.calls).toEqual([[false], [true]]);
+      expect(harness.getLatest().runtimeCheck.data?.pathOk).toBe(true);
+      expect(harness.getLatest().runtimeCheck.data?.errors).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  }, 5000);
+
   test("refreshChecks reports each failed probe in its own state without throwing", async () => {
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -391,7 +417,7 @@ describe("use-checks", () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
     const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const scheduleTask = mock<ScheduleTask>((callback, delayMs) => {
-      expect(delayMs).toBe(15_000);
+      expect([15_000, 30_000]).toContain(delayMs);
       let cancelled = false;
       queueMicrotask(() => {
         if (!cancelled) {
@@ -416,7 +442,7 @@ describe("use-checks", () => {
       await harness.mount();
       await harness.waitFor(
         (value) =>
-          value.runtimeCheck.data?.errors[0] === "Timed out after 15000ms" &&
+          value.runtimeCheck.data?.errors[0] === "Timed out after 30000ms" &&
           value.taskStoreCheck.data?.taskStoreError === "Timed out after 15000ms" &&
           value.runtimeCheck.failureKind === "timeout" &&
           value.taskStoreCheck.failureKind === "timeout",

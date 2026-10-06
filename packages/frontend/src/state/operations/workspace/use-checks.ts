@@ -89,6 +89,14 @@ export function useChecks({
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
       if (force) {
+        // fetchQuery reuses a pending request for the same key, and only a forced host check
+        // resolves the user PATH again. Let the pending check settle first. Its query state keeps
+        // its own result or failure.
+        if (queryClient.isFetching({ queryKey: checksQueryKeys.runtime(), exact: true }) > 0) {
+          await Promise.allSettled([
+            loadRuntimeCheckFromQuery(queryClient, runtimeCheck, scheduleTask),
+          ]);
+        }
         await queryClient.invalidateQueries({
           queryKey: checksQueryKeys.runtime(),
           exact: true,
