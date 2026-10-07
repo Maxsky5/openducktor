@@ -7,7 +7,7 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, type AgentSessionSummary } from "@openducktor/core";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, FiberSet, Scope } from "effect";
 import {
   buildWorkspaceSessionTitle,
   planRuntimeTitleRename,
@@ -36,7 +36,6 @@ import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
-import { createBackgroundJobs } from "../../effect/background-jobs";
 import type {
   WorkspaceSessionRenameFailureReporter,
   WorkspaceSessionRuntimeTitleUpdater,
@@ -86,7 +85,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
     /** Stops background renames and title syncs before their runtime and store close. */
     shutdown: () => Effect.Effect<void>;
   } => {
-  const backgroundJobs = createBackgroundJobs();
+  // Owns background renames and title syncs. Closing the scope interrupts them and waits.
+  const jobsScope = Scope.makeUnsafe();
+  const jobs = Effect.runSync(Scope.provide(FiberSet.make<void>(), jobsScope));
+  const startJob = (job: Effect.Effect<void>) => FiberSet.run(jobs, job).pipe(Effect.asVoid);
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
   const codexTitleSync: CodexTitleSyncState = new Map();
@@ -232,43 +234,46 @@ export const createWorkspaceSessionRuntimePersistence = ({
     plan: AcceptedMessagePlan,
     runtimeRef: AgentSessionLiveRef,
   ) =>
-    Effect.gen(function* () {
-      const { input, runtimeRename } = plan;
-      if (runtimeRef.runtimeKind === "codex")
-        return yield* saveCodexMessage(runtimeRef, known, input);
-      // Rename before saving so a failed native rename leaves the saved title alone.
-      if (runtimeRename !== null) {
-        const renamed = yield* Effect.result(renameRuntimeTitle(runtimeRename));
-        if (renamed._tag === "Failure") {
-          const recorded = yield* Effect.result(
-            storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
-          );
-          if (recorded._tag === "Failure") {
-            return yield* Effect.fail(
-              new HostOperationError({
-                operation: "workspaceSession.accepted-message.persist",
-                message: `${renamed.failure.message} Saving the accepted message also failed: ${recorded.failure.message}`,
-                cause: { runtimeFailure: renamed.failure, storeFailure: recorded.failure },
-              }),
+    // After the native rename returns, shutdown waits for the save instead of stopping it.
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const { input, runtimeRename } = plan;
+        if (runtimeRef.runtimeKind === "codex")
+          return yield* restore(saveCodexMessage(runtimeRef, known, input));
+        // Rename before saving so a failed native rename leaves the saved title alone.
+        if (runtimeRename !== null) {
+          const renamed = yield* Effect.result(restore(renameRuntimeTitle(runtimeRename)));
+          if (renamed._tag === "Failure") {
+            const recorded = yield* Effect.result(
+              storeEffect(store.recordAcceptedMessage({ ...input, generatedTitle: null })),
             );
+            if (recorded._tag === "Failure") {
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: "workspaceSession.accepted-message.persist",
+                  message: `${renamed.failure.message} Saving the accepted message also failed: ${recorded.failure.message}`,
+                  cause: { runtimeFailure: renamed.failure, storeFailure: recorded.failure },
+                }),
+              );
+            }
+            yield* publishUpdated(known.ref.workspaceId, recorded.success);
+            return yield* Effect.fail(renamed.failure);
           }
-          yield* publishUpdated(known.ref.workspaceId, recorded.success);
-          return yield* Effect.fail(renamed.failure);
         }
-      }
-      const saved = yield* Effect.result(storeEffect(store.recordAcceptedMessage(input)));
-      if (saved._tag === "Failure") {
-        if (runtimeRename === null) return yield* Effect.fail(saved.failure);
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "workspaceSession.accepted-message.persist",
-            message: `${saved.failure.message} The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.`,
-            cause: { storeFailure: saved.failure },
-          }),
-        );
-      }
-      yield* publishUpdated(known.ref.workspaceId, saved.success);
-    });
+        const saved = yield* Effect.result(storeEffect(store.recordAcceptedMessage(input)));
+        if (saved._tag === "Failure") {
+          if (runtimeRename === null) return yield* Effect.fail(saved.failure);
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "workspaceSession.accepted-message.persist",
+              message: `${saved.failure.message} The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.`,
+              cause: { storeFailure: saved.failure },
+            }),
+          );
+        }
+        yield* publishUpdated(known.ref.workspaceId, saved.success);
+      }),
+    );
   const recordAcceptedMessage = (
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
@@ -310,7 +315,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const published = yield* Effect.result(publishUpdated(known.ref.workspaceId, saved));
       // Start the saved title's rename before a publication failure can stop it.
       if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
-        yield* backgroundJobs.start(
+        yield* startJob(
           recordAcceptedMessage(runtimeRef, message, false).pipe(
             Effect.catch((failure) => reportRenameFailure(runtimeRef, failure.message)),
           ),
@@ -347,7 +352,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       return yield* known ? operationGate.run(known.ref, effect) : effect;
     });
   return {
-    shutdown: backgroundJobs.shutdown,
+    shutdown: () => Scope.close(jobsScope, Exit.void),
     markCodexTitleSyncPending: (ref) => {
       codexTitleSync.set(agentSessionRefKey(ref), "pending");
     },
@@ -485,7 +490,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
               gate: sessionTitleGate,
               updateTitle: updateRuntimeSessionTitle,
               reportFailure: reportRenameFailure,
-              startJob: backgroundJobs.start,
+              startJob,
             });
         }
       }),

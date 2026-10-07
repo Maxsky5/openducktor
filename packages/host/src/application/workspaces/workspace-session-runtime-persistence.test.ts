@@ -117,6 +117,30 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
+  test("shutdown waits for the title save after a background runtime rename", async () => {
+    const h = await setup();
+    const saveStarted = Deferred.makeUnsafe<void>();
+    const releaseSave = Deferred.makeUnsafe<void>();
+    h.state.beforeTitleSave = Deferred.succeed(saveStarted, undefined).pipe(
+      Effect.andThen(Deferred.await(releaseSave)),
+    );
+    await h.emit({ ...h.accepted(), sessionRef: h.ref });
+    await Effect.runPromise(Deferred.await(saveStarted));
+    expect(h.state.nativeTitle).toBe("First accepted prompt");
+
+    let shutdownDone = false;
+    const shutdown = Effect.runPromise(h.persistence.shutdown()).then(() => {
+      shutdownDone = true;
+    });
+    await Bun.sleep(10);
+    expect(shutdownDone).toBe(false);
+    await Effect.runPromise(Deferred.succeed(releaseSave, undefined));
+    await shutdown;
+
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    expect(h.renameFailures).toEqual([]);
+  });
+
   test("keeps the manual runtime title when the generated title arrives", async () => {
     const h = await setup();
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Manual title" }));

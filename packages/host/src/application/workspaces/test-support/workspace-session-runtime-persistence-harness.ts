@@ -108,6 +108,7 @@ export const createPersistenceHarness = async (
     beforeControl: Effect.void,
     beforeModelSave: Effect.void,
     beforeTitle: Effect.void,
+    beforeTitleSave: Effect.void,
     onGateRequest: () => {},
     active: false,
   };
@@ -151,7 +152,9 @@ export const createPersistenceHarness = async (
           ? failure("activity write failed")
           : state.failTitleWrite && input.generatedTitle !== null
             ? failure("title write failed")
-            : store.recordAcceptedMessage(input),
+            : input.generatedTitle === null
+              ? store.recordAcceptedMessage(input)
+              : state.beforeTitleSave.pipe(Effect.andThen(store.recordAcceptedMessage(input))),
       setSelectedModel: (input) =>
         state.beforeModelSave.pipe(
           Effect.andThen(
