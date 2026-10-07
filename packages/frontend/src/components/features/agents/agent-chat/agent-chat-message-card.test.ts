@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import {
   createCodexMessageCardTestProps,
   createMessageCardElement,
@@ -8,6 +9,37 @@ import {
 } from "./agent-chat-message-card-test-harness";
 
 describe("AgentChatMessageCard messages", () => {
+  test("keeps the runtime visible when Codex history omits the turn model", () => {
+    const [message] = historyToChatMessages(
+      [
+        {
+          messageId: "codex-final",
+          role: "assistant",
+          text: "Finished the task.",
+          timestamp: "2026-10-07T10:00:00.000Z",
+          parts: [
+            {
+              kind: "step",
+              messageId: "codex-final",
+              partId: "finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      { role: null },
+    );
+    if (!message) throw new Error("Expected the hydrated assistant message");
+
+    const html = renderToStaticMarkup(
+      createMessageCardElement({ message, ...createCodexMessageCardTestProps() }),
+    );
+
+    expect(html).toContain("Codex");
+    expect(html).toContain("Model unavailable");
+  });
+
   test("renders assistant footer with agent, provider/model, and variant labels", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({

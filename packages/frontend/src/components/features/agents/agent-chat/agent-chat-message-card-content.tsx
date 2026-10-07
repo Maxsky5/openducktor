@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type {
   AgentAttachmentReference,
@@ -133,6 +134,7 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
 type AssistantMessageProps = {
   message: AgentChatMessage;
   modelCatalog: AgentModelCatalog | null;
+  sessionRuntimeKind: RuntimeKind | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
 };
@@ -177,12 +179,13 @@ function AssistantMessageCopyButton({ markdown }: { markdown: string }): ReactEl
 const AssistantMessage = ({
   message,
   modelCatalog,
+  sessionRuntimeKind,
   assistantAccentColor,
   isStreamingAssistantMessage,
 }: AssistantMessageProps): ReactElement => {
   const streaming = isStreamingAssistantMessage;
   const copyable = canCopyAssistantMessage(message, isStreamingAssistantMessage);
-  const footer = getAssistantFooterData(message, modelCatalog);
+  const footer = getAssistantFooterData(message, sessionRuntimeKind, modelCatalog);
   return (
     <div className="group/message relative space-y-2 pr-9">
       {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
@@ -676,6 +679,7 @@ const UserMessage = ({
 type MessageBodyProps = {
   message: AgentChatMessage;
   modelCatalog: AgentModelCatalog | null;
+  sessionRuntimeKind: RuntimeKind | null;
   parentSession: ParentSessionRuntimeContext | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
@@ -740,6 +744,7 @@ const ToolMessageBody = ({
 export const MessageBody = ({
   message,
   modelCatalog,
+  sessionRuntimeKind,
   parentSession,
   assistantAccentColor,
   isStreamingAssistantMessage,
@@ -830,6 +835,7 @@ export const MessageBody = ({
       <AssistantMessage
         message={message}
         modelCatalog={modelCatalog}
+        sessionRuntimeKind={sessionRuntimeKind}
         assistantAccentColor={assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
       />

@@ -23,6 +23,7 @@ const createMessageBody = (content: string) =>
   createElement(MessageBody, {
     message: createAssistantMessage(content),
     modelCatalog: null,
+    sessionRuntimeKind: null,
     parentSession: null,
     assistantAccentColor: undefined,
     isStreamingAssistantMessage: true,
@@ -44,6 +45,7 @@ const createReasoningMessageBody = (content: string) =>
       },
     },
     modelCatalog: null,
+    sessionRuntimeKind: null,
     parentSession: null,
     assistantAccentColor: undefined,
     isStreamingAssistantMessage: false,
@@ -75,6 +77,7 @@ describe("MessageBody streamed markdown", () => {
       createElement(MessageBody, {
         message,
         modelCatalog: null,
+        sessionRuntimeKind: null,
         parentSession: null,
         assistantAccentColor: undefined,
         isStreamingAssistantMessage: false,

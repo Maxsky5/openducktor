@@ -68,6 +68,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       <MessageBody
         message={message}
         modelCatalog={modelCatalog}
+        sessionRuntimeKind={sessionRuntimeKind}
         parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
