@@ -40,7 +40,7 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
-const createHarness = ({ taskSession = false } = {}) => {
+const createHarness = ({ taskSession = false, unbound = false } = {}) => {
   const listeners = new Map<string, (envelope: AgentSessionLiveEnvelope) => void>();
   const workspaces = [alphaWorkspace, betaWorkspace];
   const entries = workspaces.map((workspace) =>
@@ -48,25 +48,30 @@ const createHarness = ({ taskSession = false } = {}) => {
       ? taskSessionEntry("native-alpha")
       : workspaceSessionEntry(`saved-${workspace.workspaceId}`, { workspace }),
   );
-  const snapshots = entries.map((entry): AgentSessionLiveSnapshot => {
+  const snapshots = entries.flatMap((entry): AgentSessionLiveSnapshot[] => {
     let identity;
     if (entry.target.kind === "task_session") identity = entry.target.identity;
     else if (entry.context.kind === "workspace") {
       const record = entry.context.session;
       // Saved workspace IDs and native IDs differ in production.
-      record.externalSessionId = `native-${entry.workspace.workspaceId}`;
+      record.externalSessionId =
+        unbound && entry.workspace.workspaceId === "alpha"
+          ? null
+          : `native-${entry.workspace.workspaceId}`;
       identity = workspaceSessionIdentity(record);
     }
-    if (!identity) throw new Error("Expected a session identity.");
-    return {
-      ref: { repoPath: entry.workspace.repoPath, ...identity },
-      activity: "idle",
-      title: entry.title,
-      startedAt: new Date(NOW - 3600000).toISOString(),
-      pendingApprovals: [],
-      pendingQuestions: [],
-      contextUsage: null,
-    };
+    if (!identity) return [];
+    return [
+      {
+        ref: { repoPath: entry.workspace.repoPath, ...identity },
+        activity: "idle",
+        title: entry.title,
+        startedAt: new Date(NOW - 3600000).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    ];
   });
   const observer = createWorkspaceActivityObserver({
     observe: async ({ repoPath }, listener) => {
@@ -201,6 +206,19 @@ test("reads a task conversation by the full identity published with its visible 
   });
   expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
   fireEvent.click(row());
+  expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+});
+
+test("clears a manual unread mark when an unbound workspace session becomes visible", async () => {
+  const { View } = createHarness({ unbound: true });
+  render(<View />);
+  const row = () => screen.getByRole("button", { name: /Chat saved-alpha/ });
+  fireEvent.contextMenu(row(), { button: 2, clientX: 20, clientY: 20 });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Mark as unread" }));
+  expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
+
+  fireEvent.click(row());
+  expect(row().getAttribute("aria-current")).toBe("true");
   expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
 });
 

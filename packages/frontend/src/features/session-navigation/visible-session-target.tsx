@@ -58,7 +58,9 @@ const visibleReadKey = (
   if (target.kind === "task_session")
     return sessionReadStateKey(target.workspaceId, target.identity);
   if (target.kind === "task") return sessionNavigationTargetKey(target);
-  return workspaceIdentity ? sessionReadStateKey(target.workspaceId, workspaceIdentity) : null;
+  return workspaceIdentity
+    ? sessionReadStateKey(target.workspaceId, workspaceIdentity)
+    : sessionNavigationTargetKey(target);
 };
 
 /**
