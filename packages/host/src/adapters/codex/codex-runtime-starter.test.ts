@@ -260,9 +260,12 @@ describe("createCodexRuntimeStarter", () => {
       expect(exits).toHaveLength(1);
       // Windows has no signals: a killed process exits with code 1.
       const exitDescription = process.platform === "win32" ? "with code 1" : "from signal SIGKILL";
-      expect(exits[0]).toStartWith(
+      // stdout can close before the process reports its exit.
+      const messages = [
         `Codex app-server closed: process exited ${exitDescription} for runtime runtime-crash`,
-      );
+        "Codex app-server stdout closed unexpectedly for runtime runtime-crash",
+      ];
+      expect(messages.some((message) => exits[0]?.startsWith(message))).toBe(true);
       await expect(
         Effect.runPromise(
           codexAppServer.request({
