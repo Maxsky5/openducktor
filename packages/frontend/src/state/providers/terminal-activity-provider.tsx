@@ -1,20 +1,12 @@
-import {
-  createContext,
-  type PropsWithChildren,
-  type ReactElement,
-  useContext,
-  useSyncExternalStore,
-} from "react";
+import { type PropsWithChildren, type ReactElement, useContext, useSyncExternalStore } from "react";
 import type { TerminalContext } from "@openducktor/contracts";
 import {
   EMPTY_TERMINAL_ACTIVITY,
   terminalActivityOwnerKey,
 } from "@/features/terminals/terminal-activity-store";
-import type { TerminalTransportController } from "@/features/terminals/terminal-transport-controller";
 import { useTerminalTransport } from "@/features/terminals/use-terminal-transport";
 import { getShellBridge } from "@/lib/shell-bridge";
-
-export const TerminalActivityContext = createContext<TerminalTransportController | null>(null);
+import { TerminalActivityContext } from "../terminal-activity-context";
 
 /** Share the terminal connection with the panels without attaching to their output. */
 export function TerminalActivityProvider({ children }: PropsWithChildren): ReactElement {

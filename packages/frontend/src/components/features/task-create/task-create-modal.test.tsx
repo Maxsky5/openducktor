@@ -137,9 +137,14 @@ describe("TaskCreateModal", () => {
     const props = { open: true, onOpenChange: () => {}, tasks: [] };
     const rendered = render(createElement(TaskCreateModal, props));
     try {
-      await screen.findByRole("dialog", { name: "Create Task" });
-      rendered.rerender(createElement(TaskCreateModal, { ...props, open: false }));
-      await waitFor(() => expect(document.activeElement).toBe(trigger));
+      const dialog = screen.getByRole("dialog", { name: "Create Task" });
+      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true), {
+        timeout: 250,
+      });
+      await act(async () => {
+        rendered.rerender(createElement(TaskCreateModal, { ...props, open: false }));
+      });
+      await waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 250 });
     } finally {
       await act(async () => rendered.unmount());
       trigger.remove();

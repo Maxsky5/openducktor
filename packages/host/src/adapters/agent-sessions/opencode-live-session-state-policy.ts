@@ -188,7 +188,7 @@ export const openCodeActivityFromEvent = (event: AgentEvent): AgentSessionActivi
   return event.status.type === "retry" ? "retrying" : "idle";
 };
 
-export const openCodeEventChildId = (event: AgentEvent): string | null => {
+const openCodeEventChildId = (event: AgentEvent): string | null => {
   if (event.type === "assistant_part" && event.part.kind === "subagent") {
     return event.part.externalSessionId ?? null;
   }
@@ -198,7 +198,7 @@ export const openCodeEventChildId = (event: AgentEvent): string | null => {
   return null;
 };
 
-export const openCodeEventParentId = (event: AgentEvent): string | null => {
+const openCodeEventParentId = (event: AgentEvent): string | null => {
   if ("parentExternalSessionId" in event) {
     return event.parentExternalSessionId ?? null;
   }

@@ -8,7 +8,7 @@ import {
   type TerminalContext,
 } from "@openducktor/contracts";
 import { createTerminalTransportController } from "@/features/terminals/terminal-transport-controller";
-import { TerminalActivityContext } from "@/state/providers/terminal-activity-provider";
+import { TerminalActivityContext } from "@/state/terminal-activity-context";
 import { SessionPreviewCommands } from "./session-command-activity";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationTestProvider } from "./session-navigation-test-provider";
