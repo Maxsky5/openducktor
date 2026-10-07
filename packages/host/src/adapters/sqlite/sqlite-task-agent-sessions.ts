@@ -80,33 +80,37 @@ export const recordAgentSessionActivity = (
         message: "Session activity requires an epoch timestamp in milliseconds.",
       });
     }
-    // Filter in SQLite so unrelated tasks and their metadata stay out of this read.
+    // Live events can spell the same path differently; the shared identity check owns path matching.
     const rows = yield* session.execute(
       (database) =>
-        database
-          .select({ id: tasks.id, agentSessionsJson: tasks.agentSessionsJson })
-          .from(tasks)
+        database.select({ id: tasks.id, agentSessionsJson: tasks.agentSessionsJson }).from(tasks)
           .where(sql`exists (
           select 1 from json_each(${tasks.agentSessionsJson}) as saved
           where json_extract(saved.value, '$.runtimeKind') = ${input.identity.runtimeKind}
             and json_extract(saved.value, '$.externalSessionId') = ${input.identity.externalSessionId}
-            and json_extract(saved.value, '$.workingDirectory') = ${input.identity.workingDirectory}
-        )`)
-          .limit(2),
+        )`),
       "sqliteTaskRepository.recordAgentSessionActivity.findOwner",
     );
-    if (rows.length > 1) {
-      return yield* new SqliteTaskStoreDataError({
-        field: "agentSessionsJson",
-        message: `More than one task owns session '${input.identity.externalSessionId}'.`,
-      });
+    let owner: {
+      taskId: string;
+      sessions: AgentSessionRecord[];
+      stored: AgentSessionRecord;
+    } | null = null;
+    for (const row of rows) {
+      const sessions = yield* agentSessionsFromRow(row);
+      const stored = sessions.find((record) => hasSameAgentSessionIdentity(record, input.identity));
+      if (!stored) continue;
+      if (owner) {
+        return yield* new SqliteTaskStoreDataError({
+          field: "agentSessionsJson",
+          message: `More than one task owns session '${input.identity.externalSessionId}'.`,
+        });
+      }
+      owner = { taskId: row.id, sessions, stored };
     }
-    const row = rows[0];
-    if (!row) return null;
-    const sessions = yield* agentSessionsFromRow(row);
-    const stored = sessions.find((record) => hasSameAgentSessionIdentity(record, input.identity));
-    if (!stored || input.occurredAt <= (stored.lastActivityAt ?? Date.parse(stored.startedAt)))
-      return null;
+    if (!owner) return null;
+    const { taskId, sessions, stored } = owner;
+    if (input.occurredAt <= (stored.lastActivityAt ?? Date.parse(stored.startedAt))) return null;
     const next = sessions.map((record) =>
       record === stored ? { ...record, lastActivityAt: input.occurredAt } : record,
     );
@@ -115,10 +119,10 @@ export const recordAgentSessionActivity = (
         database
           .update(tasks)
           .set({ agentSessionsJson: encodeAgentSessionBatch(next) })
-          .where(eq(tasks.id, row.id)),
+          .where(eq(tasks.id, taskId)),
       "sqliteTaskRepository.recordAgentSessionActivity.updateSession",
     );
-    return { taskId: row.id, agentSessions: next };
+    return { taskId, agentSessions: next };
   });
 
 export const clearAgentSessionsByRoles = (
