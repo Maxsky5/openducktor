@@ -115,7 +115,9 @@ describe("runtime config initializer", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      expect(Array.from(Cause.failures(exit.cause))).toEqual([failure]);
+      expect(exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)).toEqual([
+        failure,
+      ]);
     }
   });
 
@@ -132,7 +134,7 @@ describe("runtime config initializer", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      expect(Array.from(Cause.failures(exit.cause))).toEqual([
+      expect(exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)).toEqual([
         expect.objectContaining({
           _tag: "HostOperationError",
           operation: "runtimeConfig.initialize",

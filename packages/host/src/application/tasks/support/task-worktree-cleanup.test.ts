@@ -40,14 +40,14 @@ const taskStoreWithTasks = (
   sessionsByTaskId: Record<string, ReturnType<typeof createAgentSessionRecord>[]> = {},
 ): RealTaskStorePort =>
   ({
-    clearAgentSessionsByRoles: () => Effect.dieMessage("unexpected clearAgentSessionsByRoles"),
-    clearQaReports: () => Effect.dieMessage("unexpected clearQaReports"),
-    clearWorkflowDocuments: () => Effect.dieMessage("unexpected clearWorkflowDocuments"),
-    createTask: () => Effect.dieMessage("unexpected createTask"),
-    deleteAgentSession: () => Effect.dieMessage("unexpected deleteAgentSession"),
-    deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
-    diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
-    getTask: () => Effect.dieMessage("unexpected getTask"),
+    clearAgentSessionsByRoles: () => Effect.die(new Error("unexpected clearAgentSessionsByRoles")),
+    clearQaReports: () => Effect.die(new Error("unexpected clearQaReports")),
+    clearWorkflowDocuments: () => Effect.die(new Error("unexpected clearWorkflowDocuments")),
+    createTask: () => Effect.die(new Error("unexpected createTask")),
+    deleteAgentSession: () => Effect.die(new Error("unexpected deleteAgentSession")),
+    deleteTask: () => Effect.die(new Error("unexpected deleteTask")),
+    diagnoseRepoStore: () => Effect.die(new Error("unexpected diagnoseRepoStore")),
+    getTask: () => Effect.die(new Error("unexpected getTask")),
     getTaskMetadata: ({ taskId }) =>
       Effect.succeed({
         spec: { markdown: "" },
@@ -55,18 +55,18 @@ const taskStoreWithTasks = (
         agentSessions: sessionsByTaskId[taskId] ?? [],
       }),
     listPullRequestSyncCandidates: () =>
-      Effect.dieMessage("unexpected listPullRequestSyncCandidates"),
-    listAgentSessionsForTasks: () => Effect.dieMessage("unexpected listAgentSessionsForTasks"),
+      Effect.die(new Error("unexpected listPullRequestSyncCandidates")),
+    listAgentSessionsForTasks: () => Effect.die(new Error("unexpected listAgentSessionsForTasks")),
     listTasks: () => Effect.succeed(tasks),
-    recordQaOutcome: () => Effect.dieMessage("unexpected recordQaOutcome"),
-    setDirectMerge: () => Effect.dieMessage("unexpected setDirectMerge"),
-    setPlanDocument: () => Effect.dieMessage("unexpected setPlanDocument"),
-    setPullRequest: () => Effect.dieMessage("unexpected setPullRequest"),
-    setSpecDocument: () => Effect.dieMessage("unexpected setSpecDocument"),
-    transitionTask: () => Effect.dieMessage("unexpected transitionTask"),
-    updateTask: () => Effect.dieMessage("unexpected updateTask"),
-    updateAgentSessionModel: () => Effect.dieMessage("unexpected updateAgentSessionModel"),
-    upsertAgentSession: () => Effect.dieMessage("unexpected upsertAgentSession"),
+    recordQaOutcome: () => Effect.die(new Error("unexpected recordQaOutcome")),
+    setDirectMerge: () => Effect.die(new Error("unexpected setDirectMerge")),
+    setPlanDocument: () => Effect.die(new Error("unexpected setPlanDocument")),
+    setPullRequest: () => Effect.die(new Error("unexpected setPullRequest")),
+    setSpecDocument: () => Effect.die(new Error("unexpected setSpecDocument")),
+    transitionTask: () => Effect.die(new Error("unexpected transitionTask")),
+    updateTask: () => Effect.die(new Error("unexpected updateTask")),
+    updateAgentSessionModel: () => Effect.die(new Error("unexpected updateAgentSessionModel")),
+    upsertAgentSession: () => Effect.die(new Error("unexpected upsertAgentSession")),
   }) satisfies RealTaskStorePort;
 
 const emptyHooks = {

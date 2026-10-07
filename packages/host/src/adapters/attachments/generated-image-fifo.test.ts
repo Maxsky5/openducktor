@@ -64,7 +64,11 @@ for (const cancel of [false, true]) {
       );
       try {
         await opening;
-        const completion = Effect.runPromise(cancel ? Fiber.interrupt(fiber) : Fiber.await(fiber));
+        const completion = Effect.runPromise(
+          cancel
+            ? Fiber.interrupt(fiber).pipe(Effect.andThen(Fiber.await(fiber)))
+            : Fiber.await(fiber),
+        );
         const result = await Promise.race([
           completion.then((exit) => ({ timedOut: false as const, exit })),
           new Promise<{ timedOut: true }>((resolve) => {
@@ -81,9 +85,9 @@ for (const cancel of [false, true]) {
         if (!result.timedOut) {
           expect(Exit.isFailure(result.exit)).toBe(true);
           if (cancel && Exit.isFailure(result.exit))
-            expect(Cause.isInterrupted(result.exit.cause)).toBe(true);
+            expect(Cause.hasInterrupts(result.exit.cause)).toBe(true);
           if (!cancel && Exit.isFailure(result.exit)) {
-            const error = Cause.failureOption(result.exit.cause);
+            const error = Cause.findErrorOption(result.exit.cause);
             expect(error).toMatchObject({
               _tag: "Some",
               value: { _tag: "HostValidationError", field: "image" },

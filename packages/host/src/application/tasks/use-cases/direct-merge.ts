@@ -146,7 +146,7 @@ export const createTaskDirectMergeUseCase = ({
         directMerge,
       });
 
-      const postRecord = yield* Effect.either(
+      const postRecord = yield* Effect.result(
         Effect.gen(function* () {
           if (approval.publishTarget !== undefined) {
             if (current.status === "ai_review") {
@@ -186,12 +186,12 @@ export const createTaskDirectMergeUseCase = ({
           return { outcome: "completed" as const, task: enrichTask(task, nextTasks) };
         }),
       );
-      if (postRecord._tag === "Left") {
+      if (postRecord._tag === "Failure") {
         return yield* Effect.fail(
-          createTaskMutationProgressFailure("direct-merge", taskId, postRecord.left),
+          createTaskMutationProgressFailure("direct-merge", taskId, postRecord.failure),
         );
       }
-      return postRecord.right;
+      return postRecord.success;
     }).pipe(Effect.scoped);
   },
 });

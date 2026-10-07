@@ -243,7 +243,7 @@ export const stubTools = (paths: Partial<Record<ToolDiscoveryId, string>>): Tool
   resolveTool(toolId) {
     const path = paths[toolId];
     return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      ? Effect.die(new Error(`Missing fake tool path for ${toolId}`))
       : Effect.succeed({
           displayLabel: "Test tool",
           path,
@@ -253,7 +253,7 @@ export const stubTools = (paths: Partial<Record<ToolDiscoveryId, string>>): Tool
   resolveToolPath(toolId) {
     const path = paths[toolId];
     return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      ? Effect.die(new Error(`Missing fake tool path for ${toolId}`))
       : Effect.succeed(path);
   },
   validateToolPath(toolId, executablePath) {
@@ -264,7 +264,7 @@ export const stubTools = (paths: Partial<Record<ToolDiscoveryId, string>>): Tool
           path: executablePath,
           sourceCategory: "provided_path",
         })
-      : Effect.dieMessage(`Unexpected fake tool path for ${toolId}: ${executablePath}`);
+      : Effect.die(new Error(`Unexpected fake tool path for ${toolId}: ${executablePath}`));
   },
 });
 

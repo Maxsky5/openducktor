@@ -297,7 +297,7 @@ export const createNodeTaskAssetFilePort = (
               taskId: input.taskId,
             },
           ).pipe(
-            Effect.catchAll((quarantineError) =>
+            Effect.catch((quarantineError) =>
               Effect.gen(function* () {
                 const restoreExit = yield* Effect.exit(
                   tryPromise(

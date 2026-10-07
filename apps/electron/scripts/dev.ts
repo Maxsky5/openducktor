@@ -124,7 +124,7 @@ const readFileIfExistsEffect = (
         details: { code: nodeErrorCode(cause) },
       }),
   }).pipe(
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       error.details?.code === "ENOENT" ? Effect.succeed(null) : Effect.fail(error),
     ),
   );
@@ -146,7 +146,7 @@ const fileExistsEffect = (
         details: { code: nodeErrorCode(cause) },
       }),
   }).pipe(
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       error.details?.code === "ENOENT" ? Effect.succeed(false) : Effect.fail(error),
     ),
   );
@@ -618,7 +618,7 @@ export const runElectronDevLifecycleEffect = ({
   renderer,
   startElectronProcess = startElectron,
 }: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationErrorAggregate> =>
-  Effect.async<number, ElectronOperationErrorAggregate>((resume) => {
+  Effect.callback<number, ElectronOperationErrorAggregate>((resume) => {
     let devToolsPortWait: DevToolsPortWait | null = null;
     let pendingElectronExitCode: number | null = null;
     let electron: ManagedElectronProcess | null = null;

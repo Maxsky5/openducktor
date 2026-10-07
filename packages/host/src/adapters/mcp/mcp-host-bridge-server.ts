@@ -8,7 +8,7 @@ import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
-import { Deferred, Effect, Exit, FiberId } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type {
   OdtMcpBridgeError,
@@ -124,7 +124,7 @@ const toMcpHostBridgeError = (cause: unknown, operation: string): HostOperationE
       });
 
 const listen = (server: Server): Effect.Effect<number, HostOperationErrorAggregate> =>
-  Effect.async<number, HostOperationErrorAggregate>((resume, signal) => {
+  Effect.callback<number, HostOperationErrorAggregate>((resume, signal) => {
     let settled = false;
     const finish = (effect: Effect.Effect<number, HostOperationErrorAggregate>): void => {
       if (settled) {
@@ -187,7 +187,7 @@ const listen = (server: Server): Effect.Effect<number, HostOperationErrorAggrega
   });
 
 const closeServer = (server: Server): Effect.Effect<void, HostOperationErrorAggregate> =>
-  Effect.async<void, HostOperationErrorAggregate>((resume, signal) => {
+  Effect.callback<void, HostOperationErrorAggregate>((resume, signal) => {
     let settled = false;
     const finish = (effect: Effect.Effect<void, HostOperationErrorAggregate>): void => {
       if (settled) {
@@ -253,11 +253,11 @@ const createBridgeRequestHandler =
 
       return bridgeHttpResponse(200, yield* bridgeService.invoke(command, body));
     });
-    Effect.runPromise(Effect.either(handle))
+    Effect.runPromise(Effect.result(handle))
       .then((result) => {
         sendJson(
           response,
-          result._tag === "Right" ? result.right : bridgeErrorResponse(result.left),
+          result._tag === "Success" ? result.success : bridgeErrorResponse(result.failure),
         );
       })
       .catch((error) => {
@@ -310,32 +310,32 @@ export const createMcpHostBridgeServer = ({
         pid: process.pid,
       };
 
-      const publishResult = yield* Effect.either(
+      const publishResult = yield* Effect.result(
         writeMcpBridgeDiscoveryFile(discoveryPath, discovery).pipe(
           Effect.mapError((cause) =>
             toMcpHostBridgeError(cause, "mcpHostBridge.writeDiscoveryFile"),
           ),
         ),
       );
-      if (publishResult._tag === "Left") {
-        const closeResult = yield* Effect.either(
+      if (publishResult._tag === "Failure") {
+        const closeResult = yield* Effect.result(
           closeServer(nextServer).pipe(
             Effect.mapError((cause) =>
               toMcpHostBridgeError(cause, "mcpHostBridge.closeUnpublishedServer"),
             ),
           ),
         );
-        if (closeResult._tag === "Left") {
+        if (closeResult._tag === "Failure") {
           return yield* Effect.fail(
             new HostOperationError({
               operation: "mcpHostBridgeServer.ensureStarted",
-              message: `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${closeResult.left.message}`,
-              cause: publishResult.left,
+              message: `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${closeResult.failure.message}`,
+              cause: publishResult.failure,
               details: { discoveryPath },
             }),
           );
         }
-        return yield* Effect.fail(publishResult.left);
+        return yield* Effect.fail(publishResult.failure);
       }
 
       return {
@@ -366,7 +366,7 @@ export const createMcpHostBridgeServer = ({
             return { _tag: "failed" as const, cause: startupFailure };
           }
           const flight: McpHostBridgeStartup = {
-            deferred: Deferred.unsafeMake(FiberId.none),
+            deferred: Deferred.makeUnsafe(),
           };
           startupFlight = flight;
           return { _tag: "created" as const, flight };
@@ -386,7 +386,7 @@ export const createMcpHostBridgeServer = ({
         }
 
         const { flight } = reservation;
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           Effect.gen(function* () {
             const exit = yield* Effect.exit(
               Effect.gen(function* () {
@@ -447,7 +447,7 @@ export const createMcpHostBridgeServer = ({
     close() {
       return Effect.gen(function* () {
         if (startupFlight) {
-          yield* Effect.either(
+          yield* Effect.result(
             Deferred.await(startupFlight.deferred).pipe(
               Effect.mapError((cause) =>
                 toMcpHostBridgeError(cause, "mcpHostBridge.awaitStartupBeforeClose"),

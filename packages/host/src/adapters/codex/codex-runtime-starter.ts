@@ -70,7 +70,7 @@ export const createCodexRuntimeStarter = ({
 }: CreateCodexRuntimeStarterInput): RuntimeStarterPort => ({
   startRuntime(input) {
     let fatalError: Error | null = null;
-    let reporting: Fiber.RuntimeFiber<void, never> | null = null;
+    let reporting: Fiber.Fiber<void, never> | null = null;
     return Effect.gen(function* () {
       const { path: binary } = yield* validateExactToolPath(
         toolDiscovery,
@@ -136,22 +136,22 @@ export const createCodexRuntimeStarter = ({
       // start leaves their cleanup to the host.
       input.ownCleanup(sharedCleanup);
       const closeRuntime = Effect.gen(function* () {
-        const result = yield* Effect.either(sharedCleanup);
-        if (result._tag === "Right") return;
+        const result = yield* Effect.result(sharedCleanup);
+        if (result._tag === "Success") return;
         if (fatalError) {
           return yield* Effect.fail(
             new HostOperationError({
               operation: "codexRuntime.transportFailed",
-              message: `${fatalError.message}\nCleanup failed:\n${result.left.message}`,
+              message: `${fatalError.message}\nCleanup failed:\n${result.failure.message}`,
               cause: fatalError,
               details: {
                 runtimeId: nextRuntimeId,
-                cleanupFailure: result.left,
+                cleanupFailure: result.failure,
               },
             }),
           );
         }
-        return yield* Effect.fail(result.left);
+        return yield* Effect.fail(result.failure);
       });
       const child = yield* Effect.try({
         try: (): CodexChildProcess =>
@@ -193,10 +193,10 @@ export const createCodexRuntimeStarter = ({
           }
           reporting = Effect.runFork(
             Effect.gen(function* () {
-              const result = yield* Effect.either(sharedCleanup);
+              const result = yield* Effect.result(sharedCleanup);
               // A failed cleanup stays unfinished, so an explicit stop can retry it.
-              if (result._tag === "Left" && unexpectedExit)
-                yield* Effect.sync(() => input.onRuntimeCleanupFailed(result.left.message));
+              if (result._tag === "Failure" && unexpectedExit)
+                yield* Effect.sync(() => input.onRuntimeCleanupFailed(result.failure.message));
             }),
           );
         },

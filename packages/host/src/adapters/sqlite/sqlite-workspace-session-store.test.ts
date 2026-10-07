@@ -475,7 +475,7 @@ describe("SQLite Workspace Session store", () => {
       return Effect.promise(async () => {
         entered.resolve();
         await release.promise;
-      }).pipe(Effect.zipRight(run));
+      }).pipe(Effect.andThen(run));
     });
     const first = Effect.runPromise(
       paused.recordAcceptedMessage({ ...ref(), generatedTitle: "Delayed", occurredAt: 30 }),

@@ -1,8 +1,8 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { Deferred, Effect, Exit, Fiber, FiberId, Runtime } from "effect";
+import { Deferred, Effect, Exit, Fiber } from "effect";
 import { RuntimeUnavailableError } from "../errors";
 
-type Control = Fiber.RuntimeFiber<unknown, unknown>;
+type Control = Fiber.Fiber<unknown, unknown>;
 
 /** Why a closed kind admits nothing, and what the caller can do next. */
 export type RuntimeUnavailability = { state: string; message: string; nextAction: string };
@@ -82,13 +82,15 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
     admit: <A, E, R>(runtimeKind: RuntimeKind, effect: Effect.Effect<A, E, R>) =>
       Effect.uninterruptibleMask((restore): Effect.Effect<A, E | RuntimeUnavailableError, R> =>
         Effect.gen(function* () {
-          const runtime = yield* Effect.runtime<R>();
+          const context = yield* Effect.context<R>();
           const entry = entryFor(runtimeKind);
           // Check the gate and register the control in one synchronous step. A fiber can yield
           // between operations, and a lifecycle action must never drain without this control.
           const control = yield* Effect.sync(() => {
             if (!entry.open) return null;
-            const started = Runtime.runFork(runtime)(restore(effect));
+            // The control keeps the caller's services, references, and interruptibility: `restore`
+            // makes the fiber interruptible only when the caller was.
+            const started = Effect.runForkWith(context)(restore(effect), { uninterruptible: true });
             entry.controls.add(started);
             return started;
           });
@@ -99,7 +101,7 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
             Effect.ensuring(leave(entry, control)),
           );
           const reason = entry.cancelled.get(control);
-          if (Exit.isInterrupted(exit) && reason !== undefined) {
+          if (Exit.hasInterrupts(exit) && reason !== undefined) {
             return yield* unavailableError(entry, reason);
           }
           return yield* exit;
@@ -117,7 +119,7 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
       return Effect.suspend(() => {
         const entry = entryFor(runtimeKind);
         if (entry.controls.size === 0) return Effect.void;
-        entry.drained ??= Deferred.unsafeMake<void>(FiberId.none);
+        entry.drained ??= Deferred.makeUnsafe<void>();
         return Deferred.await(entry.drained);
       });
     },
@@ -126,10 +128,7 @@ export const createRuntimeAdmissionGate = (): RuntimeAdmissionGate => {
         const entry = entryFor(runtimeKind);
         const controls = [...entry.controls];
         for (const control of controls) entry.cancelled.set(control, reason);
-        return Effect.forEach(controls, Fiber.interrupt, {
-          concurrency: "unbounded",
-          discard: true,
-        });
+        return Fiber.interruptAll(controls);
       });
     },
   };

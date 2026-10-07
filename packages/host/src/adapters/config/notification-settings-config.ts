@@ -9,6 +9,6 @@ export const withNotificationConfigCommit = (
   ...port,
   writeConfig: (config) =>
     Effect.uninterruptible(
-      port.writeConfig(config).pipe(Effect.zipRight(Effect.suspend(() => committed(config)))),
+      port.writeConfig(config).pipe(Effect.andThen(Effect.suspend(() => committed(config)))),
     ),
 });

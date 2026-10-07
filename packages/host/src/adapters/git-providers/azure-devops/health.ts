@@ -38,11 +38,11 @@ export const createAzureDevOpsHealthPort = ({
         );
       }
       const repository = provider.repository;
-      const stateResult = yield* Effect.either(connection.getState(repoConfig, repository));
-      if (stateResult._tag === "Left") {
-        return unhealthy(errorMessage(stateResult.left));
+      const stateResult = yield* Effect.result(connection.getState(repoConfig, repository));
+      if (stateResult._tag === "Failure") {
+        return unhealthy(errorMessage(stateResult.failure));
       }
-      const state = stateResult.right;
+      const state = stateResult.success;
       if (state.status === "disconnected") {
         return unhealthy(
           repository.deployment === "services"
@@ -56,33 +56,33 @@ export const createAzureDevOpsHealthPort = ({
       if (state.status === "error") {
         return unhealthy(state.reason);
       }
-      const resolved = yield* Effect.either(
+      const resolved = yield* Effect.result(
         client.request(repoConfig, repository, {
           operation: "check repository access",
           path: `git/repositories/${encodeURIComponent(repository.name)}`,
         }),
       );
-      if (resolved._tag === "Left") {
-        const reason = errorMessage(resolved.left);
+      if (resolved._tag === "Failure") {
+        const reason = errorMessage(resolved.failure);
         const credentialRejected =
-          resolved.left._tag === "HostOperationError" &&
-          resolved.left.details !== undefined &&
-          "status" in resolved.left.details &&
-          resolved.left.details.status === 401;
+          resolved.failure._tag === "HostOperationError" &&
+          resolved.failure.details !== undefined &&
+          "status" in resolved.failure.details &&
+          resolved.failure.details.status === 401;
         return unhealthy(reason, true, !credentialRejected, state.account);
       }
-      const parsedRepository = yield* Effect.either(
+      const parsedRepository = yield* Effect.result(
         Effect.try({
-          try: () => parseAzureRepository(resolved.right.body, repository),
+          try: () => parseAzureRepository(resolved.success.body, repository),
           catch: (cause) => cause,
         }),
       );
-      if (parsedRepository._tag === "Left") {
-        return unhealthy(errorMessage(parsedRepository.left), true, true, state.account);
+      if (parsedRepository._tag === "Failure") {
+        return unhealthy(errorMessage(parsedRepository.failure), true, true, state.account);
       }
-      const mapping = yield* Effect.either(repositoryPort.getMapping(repoConfig));
-      if (mapping._tag === "Left") {
-        return unhealthy(errorMessage(mapping.left), true, true, state.account, false);
+      const mapping = yield* Effect.result(repositoryPort.getMapping(repoConfig));
+      if (mapping._tag === "Failure") {
+        return unhealthy(errorMessage(mapping.failure), true, true, state.account, false);
       }
       return {
         providerId: PROVIDER_ID,

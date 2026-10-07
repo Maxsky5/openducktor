@@ -114,12 +114,12 @@ const unexpectedRuntimeRegistryCall = (operation: string) =>
 const createRuntimeRegistryPort = <Overrides extends Partial<RuntimeRegistryPort>>(
   port: Overrides,
 ): RuntimeRegistryPort => ({
-  status: () => Effect.dieMessage("Unexpected runtime registry call: status"),
+  status: () => Effect.die(new Error("Unexpected runtime registry call: status")),
   statuses: () => Effect.succeed([]),
-  configure: () => Effect.dieMessage("Unexpected runtime registry call: configure"),
+  configure: () => Effect.die(new Error("Unexpected runtime registry call: configure")),
   recordConfigurationFailure: () =>
-    Effect.dieMessage("Unexpected runtime registry call: recordConfigurationFailure"),
-  reserve: () => Effect.dieMessage("Unexpected runtime registry call: reserve"),
+    Effect.die(new Error("Unexpected runtime registry call: recordConfigurationFailure")),
+  reserve: () => Effect.die(new Error("Unexpected runtime registry call: reserve")),
   requireReady: () => unexpectedRuntimeRegistryCall("runtimeRegistry.requireReady"),
   stopAllRuntimes: () => Effect.succeed([]),
   stopSession: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopSession"),
@@ -195,10 +195,10 @@ const createAgentSessionTaskStore = (calls: unknown[]): TaskStorePort => ({
 const createAgentSessionSettingsConfig = (existingPaths: Set<string>): SettingsConfigPort =>
   createSettingsConfigPort({
     readConfig() {
-      return Effect.dieMessage("unexpected read config");
+      return Effect.die(new Error("unexpected read config"));
     },
     writeConfig() {
-      return Effect.dieMessage("unexpected write config");
+      return Effect.die(new Error("unexpected write config"));
     },
     defaultWorktreeBasePath(workspaceId) {
       return `/worktrees/${workspaceId}`;
@@ -272,7 +272,7 @@ const createBuildSettingsConfig = (
       );
     },
     writeConfig() {
-      return Effect.dieMessage("unexpected write config");
+      return Effect.die(new Error("unexpected write config"));
     },
     defaultWorktreeBasePath(workspaceId) {
       return `/worktrees/${workspaceId}`;
@@ -325,7 +325,7 @@ const createBuildWorkspaceSettingsService = (
 const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPort =>
   createSystemCommandPort({
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.die(new Error("unexpected version command"));
     },
     runCommandAllowFailure(command, args, options) {
       return Effect.sync(() => {
@@ -391,7 +391,7 @@ const createBuildStartRuntimeRegistry = (calls: unknown[]): RuntimeRegistryPort 
       });
     },
     stopSession() {
-      return Effect.dieMessage("unexpected stop session");
+      return Effect.die(new Error("unexpected stop session"));
     },
   });
 const createBuildStartGitPort = ({
@@ -427,7 +427,7 @@ const createBuildStartGitPort = ({
       });
     },
     listWorktrees() {
-      return Effect.dieMessage("unexpected list worktrees");
+      return Effect.die(new Error("unexpected list worktrees"));
     },
     referenceExists(workingDir, reference) {
       return Effect.sync(() => {
@@ -462,10 +462,10 @@ const createBuildStartGitPort = ({
       });
     },
     getWorktreeStatusData() {
-      return Effect.dieMessage("unexpected worktree status");
+      return Effect.die(new Error("unexpected worktree status"));
     },
     getWorktreeStatusSummaryData() {
-      return Effect.dieMessage("unexpected worktree status summary");
+      return Effect.die(new Error("unexpected worktree status summary"));
     },
     createWorktree(repoPath, worktreePath, branch, createBranch, startPoint) {
       return Effect.sync(() => {
@@ -512,16 +512,16 @@ const createBuildStartGitPort = ({
       });
     },
     suggestedSquashCommitMessage() {
-      return Effect.dieMessage("unexpected suggested squash commit message");
+      return Effect.die(new Error("unexpected suggested squash commit message"));
     },
     mergeBranch() {
-      return Effect.dieMessage("unexpected merge branch");
+      return Effect.die(new Error("unexpected merge branch"));
     },
     switchBranch() {
-      return Effect.dieMessage("unexpected switch branch");
+      return Effect.die(new Error("unexpected switch branch"));
     },
     resetWorktreeSelection() {
-      return Effect.dieMessage("unexpected reset");
+      return Effect.die(new Error("unexpected reset"));
     },
     commitsAheadBehind() {
       return Effect.sync(() => {
@@ -529,25 +529,25 @@ const createBuildStartGitPort = ({
       });
     },
     fetchRemote() {
-      return Effect.dieMessage("unexpected fetch");
+      return Effect.die(new Error("unexpected fetch"));
     },
     pullBranch() {
-      return Effect.dieMessage("unexpected pull");
+      return Effect.die(new Error("unexpected pull"));
     },
     commitAll() {
-      return Effect.dieMessage("unexpected commit");
+      return Effect.die(new Error("unexpected commit"));
     },
     pushBranch() {
-      return Effect.dieMessage("unexpected push");
+      return Effect.die(new Error("unexpected push"));
     },
     rebaseBranch() {
-      return Effect.dieMessage("unexpected rebase");
+      return Effect.die(new Error("unexpected rebase"));
     },
     rebaseAbort() {
-      return Effect.dieMessage("unexpected rebase abort");
+      return Effect.die(new Error("unexpected rebase abort"));
     },
     abortConflict() {
-      return Effect.dieMessage("unexpected conflict abort");
+      return Effect.die(new Error("unexpected conflict abort"));
     },
   });
 const createDirectMergeGitPort = ({
@@ -587,7 +587,7 @@ const createDirectMergeGitPort = ({
       return Effect.succeed(true);
     },
     listWorktrees() {
-      return Effect.dieMessage("unexpected list worktrees");
+      return Effect.die(new Error("unexpected list worktrees"));
     },
     referenceExists() {
       return Effect.succeed(true);
@@ -620,13 +620,13 @@ const createDirectMergeGitPort = ({
       });
     },
     getWorktreeStatusData() {
-      return Effect.dieMessage("unexpected worktree status");
+      return Effect.die(new Error("unexpected worktree status"));
     },
     getWorktreeStatusSummaryData() {
-      return Effect.dieMessage("unexpected worktree status summary");
+      return Effect.die(new Error("unexpected worktree status summary"));
     },
     createWorktree() {
-      return Effect.dieMessage("unexpected create worktree");
+      return Effect.die(new Error("unexpected create worktree"));
     },
     removeWorktree(repoPath, worktreePath, force) {
       calls.push({ type: "removeWorktree", repoPath, worktreePath, force });
@@ -653,16 +653,16 @@ const createDirectMergeGitPort = ({
       });
     },
     suggestedSquashCommitMessage() {
-      return Effect.dieMessage("unexpected suggested squash commit message");
+      return Effect.die(new Error("unexpected suggested squash commit message"));
     },
     mergeBranch() {
-      return Effect.dieMessage("unexpected merge branch");
+      return Effect.die(new Error("unexpected merge branch"));
     },
     switchBranch() {
-      return Effect.dieMessage("unexpected switch branch");
+      return Effect.die(new Error("unexpected switch branch"));
     },
     resetWorktreeSelection() {
-      return Effect.dieMessage("unexpected reset");
+      return Effect.die(new Error("unexpected reset"));
     },
     restoreWorktreeToReference(workingDirectory, reference) {
       return Effect.sync(() => {
@@ -676,40 +676,40 @@ const createDirectMergeGitPort = ({
       });
     },
     fetchRemote() {
-      return Effect.dieMessage("unexpected fetch");
+      return Effect.die(new Error("unexpected fetch"));
     },
     pullBranch() {
-      return Effect.dieMessage("unexpected pull");
+      return Effect.die(new Error("unexpected pull"));
     },
     commitAll() {
-      return Effect.dieMessage("unexpected commit");
+      return Effect.die(new Error("unexpected commit"));
     },
     pushBranch() {
-      return Effect.dieMessage("unexpected push");
+      return Effect.die(new Error("unexpected push"));
     },
     rebaseBranch() {
-      return Effect.dieMessage("unexpected rebase");
+      return Effect.die(new Error("unexpected rebase"));
     },
     rebaseAbort() {
-      return Effect.dieMessage("unexpected rebase abort");
+      return Effect.die(new Error("unexpected rebase abort"));
     },
     abortConflict() {
-      return Effect.dieMessage("unexpected conflict abort");
+      return Effect.die(new Error("unexpected conflict abort"));
     },
   });
 const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =>
   ({
     getState() {
-      return Effect.dieMessage("unexpected dev server get state");
+      return Effect.die(new Error("unexpected dev server get state"));
     },
     inspectWorkspaceActivity() {
-      return Effect.dieMessage("unexpected dev server activity inspection");
+      return Effect.die(new Error("unexpected dev server activity inspection"));
     },
     restart() {
-      return Effect.dieMessage("unexpected dev server restart");
+      return Effect.die(new Error("unexpected dev server restart"));
     },
     start() {
-      return Effect.dieMessage("unexpected dev server start");
+      return Effect.die(new Error("unexpected dev server start"));
     },
     stop(input: DevServerCommandInput) {
       return Effect.sync(() => {
@@ -725,7 +725,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
       });
     },
     stopWorkspaceSession() {
-      return Effect.dieMessage("unexpected Workspace Session dev server stop");
+      return Effect.die(new Error("unexpected Workspace Session dev server stop"));
     },
   }) satisfies DevServerService;
 const createDirectMergeTaskWorktreeService = (
@@ -739,7 +739,7 @@ const createApprovalSystemCommands = (available = true): SystemCommandPort =>
       return Effect.succeed(command === "gh" && available ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.die(new Error("unexpected version command"));
     },
     runCommandAllowFailure(command, args, options) {
       return Effect.sync(() => {
@@ -815,7 +815,7 @@ const createPullRequestDetectSystemCommands = ({
       return Effect.succeed(command === "gh" ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.die(new Error("unexpected version command"));
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });

@@ -66,7 +66,7 @@ describe("claimElectronDevelopmentInstanceEffect", () => {
     const lockFailure = new Error("lock failed");
 
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         claimElectronDevelopmentInstanceEffect({
           logger: { info: () => Effect.void },
           profileKind: "development",
@@ -77,10 +77,10 @@ describe("claimElectronDevelopmentInstanceEffect", () => {
       ),
     );
 
-    if (!("left" in result)) {
+    if (!("failure" in result)) {
       throw new Error("Expected development instance claim to fail");
     }
-    expect(result.left).toEqual(
+    expect(result.failure).toEqual(
       new ElectronLifecycleError({
         operation: "electron.main.claim-development-instance",
         message: "lock failed",

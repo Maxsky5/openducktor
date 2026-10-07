@@ -91,68 +91,52 @@ const createRecordingGitService = () => {
       });
     },
     getWorktreeStatus(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "getWorktreeStatus", input });
-          return {
-            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-            fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-            fileDiffs: [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 2,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
-            targetAheadBehind: { ahead: 2, behind: 1 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-            snapshot: {
-              effectiveWorkingDir: "/repo",
-              targetBranch: "origin/main",
-              diffScope: "target",
-              observedAtMs: 1,
-              hashVersion: 1,
-              statusHash: "0000000000000001",
-              diffHash: "0000000000000002",
+      return Effect.sync(() => {
+        calls.push({ method: "getWorktreeStatus", input });
+        return {
+          currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
+          fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 2,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
             },
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+          ],
+          targetAheadBehind: { ahead: 2, behind: 1 },
+          upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1,
+            hashVersion: 1,
+            statusHash: "0000000000000001",
+            diffHash: "0000000000000002",
+          },
+        };
       });
     },
     getWorktreeStatusSummary(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "getWorktreeStatusSummary", input });
-          return {
-            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-            fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-            targetAheadBehind: { ahead: 2, behind: 1 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-            snapshot: {
-              effectiveWorkingDir: "/repo",
-              targetBranch: "origin/main",
-              diffScope: "target",
-              observedAtMs: 1,
-              hashVersion: 1,
-              statusHash: "0000000000000001",
-              diffHash: "0000000000000002",
-            },
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "getWorktreeStatusSummary", input });
+        return {
+          currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
+          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+          targetAheadBehind: { ahead: 2, behind: 1 },
+          upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1,
+            hashVersion: 1,
+            statusHash: "0000000000000001",
+            diffHash: "0000000000000002",
+          },
+        };
       });
     },
     switchBranch(input) {
@@ -226,102 +210,54 @@ const createRecordingGitService = () => {
       });
     },
     fetchRemote(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "fetchRemote", input });
-          return { outcome: "fetched", output: "Fetched origin" };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "fetchRemote", input });
+        return { outcome: "fetched", output: "Fetched origin" };
       });
     },
     pullBranch(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "pullBranch", input });
-          return { outcome: "pulled", output: "Fast-forward" };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "pullBranch", input });
+        return { outcome: "pulled", output: "Fast-forward" };
       });
     },
     commitAll(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "commitAll", input });
-          return {
-            outcome: "committed",
-            commitHash: "abc123",
-            output: "[feature abc123] Ship Electron host",
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "commitAll", input });
+        return {
+          outcome: "committed",
+          commitHash: "abc123",
+          output: "[feature abc123] Ship Electron host",
+        };
       });
     },
     pushBranch(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "pushBranch", input });
-          return {
-            outcome: "pushed",
-            remote: "origin",
-            branch: "feature/electron",
-            output: "Pushed",
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "pushBranch", input });
+        return {
+          outcome: "pushed",
+          remote: "origin",
+          branch: "feature/electron",
+          output: "Pushed",
+        };
       });
     },
     rebaseBranch(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "rebaseBranch", input });
-          return {
-            outcome: "rebased",
-            output: "Successfully rebased",
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "rebaseBranch", input });
+        return {
+          outcome: "rebased",
+          output: "Successfully rebased",
+        };
       });
     },
     rebaseAbort(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "rebaseAbort", input });
-          return {
-            outcome: "aborted",
-            output: "Successfully aborted rebase",
-          };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "rebaseAbort", input });
+        return {
+          outcome: "aborted",
+          output: "Successfully aborted rebase",
+        };
       });
     },
     abortConflict(input) {

@@ -121,11 +121,11 @@ export const removeWorktreeAndFilesystemPath = (
       initialCleanup.kind === "outside" && initialCleanup.targetExists
         ? initialCleanup.canonicalPath
         : worktreePath;
-    const removalResult = yield* Effect.either(
+    const removalResult = yield* Effect.result(
       gitPort.removeWorktree(repoPath, gitWorktreePath, force),
     );
-    if (removalResult._tag === "Left" && !force) {
-      return yield* Effect.fail(removalResult.left);
+    if (removalResult._tag === "Failure" && !force) {
+      return yield* Effect.fail(removalResult.failure);
     }
     const currentCleanup = yield* inspectFilesystemCleanup(
       dependencies,
@@ -137,19 +137,19 @@ export const removeWorktreeAndFilesystemPath = (
       !currentCleanup.targetExists &&
       (initialCleanup.kind === "outside" || currentCleanup.kind === "outside");
     if (
-      removalResult._tag === "Right" &&
+      removalResult._tag === "Success" &&
       initialCleanup.kind === "outside" &&
       !currentCleanup.targetExists
     ) {
       return;
     }
-    if (removalResult._tag === "Left") {
+    if (removalResult._tag === "Failure") {
       const registered = yield* gitPort.isRegisteredWorktree(
         repoPath,
         initialCleanup.canonicalPath,
       );
       if (registered) {
-        return yield* Effect.fail(removalResult.left);
+        return yield* Effect.fail(removalResult.failure);
       }
       if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
         return;
@@ -157,12 +157,12 @@ export const removeWorktreeAndFilesystemPath = (
       if (initialCleanup.kind === "outside") {
         return yield* Effect.fail(
           initialCleanup.targetExists
-            ? cleanupRefused(effectiveWorktreePath, removalResult.left)
-            : removalResult.left,
+            ? cleanupRefused(effectiveWorktreePath, removalResult.failure)
+            : removalResult.failure,
         );
       }
       if (!cleanupIdentityIsStable) {
-        return yield* Effect.fail(removalResult.left);
+        return yield* Effect.fail(removalResult.failure);
       }
     }
     if (!cleanupIdentityIsStable) {

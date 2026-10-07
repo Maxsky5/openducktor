@@ -114,7 +114,7 @@ export const createClaudeLiveSessionAdapterPreparer =
           value: undefined,
           changes: state.applyEvent(session, event),
         })).pipe(
-          Effect.catchAll((cause) => {
+          Effect.catch((cause) => {
             const failure = toHostOperationError(cause, "claude-live-session.process-event", {
               runtimeId: runtime.runtimeId,
               eventType: event.type,
@@ -129,7 +129,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                   message: failure.message,
                 },
               ],
-            })).pipe(Effect.zipRight(Effect.fail(failure)));
+            })).pipe(Effect.andThen(Effect.fail(failure)));
           }),
         );
 
@@ -247,8 +247,8 @@ export const createClaudeLiveSessionAdapterPreparer =
         readSnapshot: (ref) => Effect.succeed(state.readSnapshot(ref)),
         loadContext: (input) =>
           requireSessionWorkingDirectory(input, "load-context").pipe(
-            Effect.zipRight(eventCoordinator.flush()),
-            Effect.zipRight(Effect.sync(() => state.contextRevision(input))),
+            Effect.andThen(eventCoordinator.flush()),
+            Effect.andThen(Effect.sync(() => state.contextRevision(input))),
             Effect.flatMap((contextRevision) =>
               service
                 .loadSessionContextUsage(toClaudeLoadContextInput(input))

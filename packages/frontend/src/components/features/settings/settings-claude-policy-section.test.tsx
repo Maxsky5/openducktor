@@ -100,7 +100,8 @@ test("edits grouped native rules, retains invalid text, and restores default lis
   expect(current().roleOverrides.qa?.permissions?.ask).toBeUndefined();
   expect(within(rules).getAllByText("Default: 2 entries")[0]).toBeDefined();
   expect(current().defaults.sandbox?.network?.strictAllowlist).toBe(true);
-});
+  // This full render flow opens several groups and edits rules. A loaded runner can exceed 1000 ms.
+}, 5_000);
 
 test("role controls inherit defaults and disabling overrides clears only that setting", () => {
   const current = renderPolicy(

@@ -1,6 +1,7 @@
 import { type AgentModelFavorite, isSameAgentModelFavorite } from "@openducktor/contracts";
-import { Effect } from "effect";
+
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export const areAgentModelFavoritesEqual = (
   left: readonly AgentModelFavorite[],
@@ -12,8 +13,7 @@ export const areAgentModelFavoritesEqual = (
 export const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
 ): WorkspaceSettingsService => {
-  const semaphore = Effect.unsafeMakeSemaphore(1);
-  const serialize = semaphore.withPermits(1);
+  const serialize = createSerialLane().run;
 
   return {
     ...service,

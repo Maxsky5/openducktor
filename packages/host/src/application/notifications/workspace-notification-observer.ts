@@ -23,7 +23,7 @@ type WorkspaceState = {
   record: WorkspaceRecord;
   active: boolean;
   queue: Queue.Queue<WorkspaceNotificationInput>;
-  fiber: Fiber.RuntimeFiber<void, never> | null;
+  fiber: Fiber.Fiber<void, never> | null;
   liveKeys: Set<string>;
   initialized: boolean;
   tasks: Map<string, TaskEventTaskSnapshot>;
@@ -183,7 +183,7 @@ export const createWorkspaceNotificationObserver = ({
       });
     const consume = (input: WorkspaceNotificationInput) =>
       process(input).pipe(
-        Effect.catchAll((cause) =>
+        Effect.catch((cause) =>
           Effect.sync(() =>
             failure(state.record.repoPath, input.type === "task" ? "task" : "session", cause),
           ),
@@ -211,7 +211,7 @@ export const createWorkspaceNotificationObserver = ({
         }
         // Drain captured changes without ownership so resolved requests cannot alert.
         while (state.active) {
-          const pending = yield* Queue.takeAll(state.queue);
+          const pending = yield* Queue.clear(state.queue);
           if (pending.length === 0) break;
           for (const input of pending) yield* consume(input);
         }
@@ -223,7 +223,7 @@ export const createWorkspaceNotificationObserver = ({
       });
     const enqueue = (input: WorkspaceNotificationInput) => {
       if (!state.active) return;
-      if (!Effect.runSync(Queue.offer(state.queue, input))) {
+      if (!Queue.offerUnsafe(state.queue, input)) {
         state.active = false;
         failure(
           state.record.repoPath,
@@ -253,16 +253,16 @@ export const createWorkspaceNotificationObserver = ({
       start: () =>
         Effect.gen(function* () {
           // Config writes cannot be interrupted, but the worker must stop when its workspace closes.
-          state.fiber = yield* Effect.forkDaemon(
+          state.fiber = yield* Effect.forkDetach(
             initialize().pipe(
-              Effect.catchAll((cause) =>
+              Effect.catch((cause) =>
                 Effect.sync(() => {
                   // A failed baseline cannot observe changes. A config commit can create a fresh observer.
                   state.active = false;
                   failure(state.record.repoPath, "initialization", cause);
                 }),
               ),
-              Effect.zipRight(
+              Effect.andThen(
                 Effect.suspend(() =>
                   state.active
                     ? Effect.forever(
@@ -286,6 +286,6 @@ export const createWorkspaceNotificationObserver = ({
         }),
     };
   });
-export type WorkspaceNotificationObserver = Effect.Effect.Success<
+export type WorkspaceNotificationObserver = Effect.Success<
   ReturnType<typeof createWorkspaceNotificationObserver>
 >;

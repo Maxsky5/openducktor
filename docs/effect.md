@@ -18,6 +18,15 @@ A JavaScript defect is not an expected failure. Keep expected failures in the Ef
 
 `packages/host` is the current reference. Use the same rules in another package only when its I/O and lifecycle need them.
 
+## Version
+
+OpenDucktor uses `effect` 4. Every workspace that depends on Effect pins the same exact version.
+
+- Import core modules from the `effect` root export.
+- Import test services such as `TestClock` from `effect/testing`.
+- Pin each `@effect/*` package to the same version as `effect`.
+- Treat modules marked `@stability unstable` or `@stability experimental` as a separate design decision.
+
 ## Where Effect fits
 
 Use Effect for:
@@ -53,7 +62,7 @@ Before a package migration, check that the package owns expected failures, I/O, 
 
 Use a service for a replaceable port, adapter dependency, runtime, config source, process service, or resource owner.
 
-Define the tag with `Context.Tag`:
+Define the service with `Context.Service`:
 
 ```ts
 import type { GlobalConfig } from "@openducktor/contracts";
@@ -73,10 +82,10 @@ export type SettingsConfigPort = {
   join(...paths: Array<string>): string;
 };
 
-export class SettingsConfigPortTag extends Context.Tag("@openducktor/host/SettingsConfigPort")<
+export class SettingsConfigPortTag extends Context.Service<
   SettingsConfigPortTag,
   SettingsConfigPort
->() {}
+>()("@openducktor/host/SettingsConfigPort") {}
 ```
 
 Provide the implementation at the composition root:
@@ -127,7 +136,9 @@ return yield* new HostOperationError({
 });
 ```
 
-Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. Use `Effect.either` when the caller needs success or failure as a value. Use `Effect.exit` when the caller also needs defect or interruption data. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
+Use `Effect.catchTag` when the product handles one known error. Use `Effect.catch` only when the product handles every error in the channel. Use `Effect.result` when the caller needs success or failure as a value. A `Result` is a `Success` with a `success` field or a `Failure` with a `failure` field. Use `Effect.exit` when the caller also needs defect or interruption data. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
+
+A `Cause` holds a flat `reasons` array of `Fail`, `Die`, and `Interrupt` reasons. Use `Cause.findErrorOption` for the first typed failure. Map `cause.reasons` when a boundary must report every failure and defect. `Cause.squash` keeps only one value.
 
 | Category | Example | Treatment |
 |---|---|---|
@@ -218,15 +229,19 @@ Add a named helper when a repeated pattern hides what the code does. Keep one cl
 
 - Use `Effect.acquireUseRelease` or a scoped layer for acquire and release.
 - Use `Effect.addFinalizer` for cleanup tied to a scope.
-- Use `Effect.fork` for a background fiber.
-- Join or interrupt each owned fiber during shutdown.
+- Use `Effect.forkChild` for a fiber that ends with its parent. Use `Effect.forkScoped` for a fiber that a scope owns. Use `Effect.forkDetach` only when another owner keeps the fiber handle, interrupts it, and reports its failure.
+- Join or interrupt each owned fiber during shutdown. `Fiber.interrupt` waits for the fiber to finish. `fiber.interruptUnsafe()` does not wait.
 - Use `Deferred` for one-time coordination and single-flight work.
 - Use `Ref` for mutable Effect state.
+- Use `Context.Reference` for a value that one effect and its child fibers read. Supply it with `Effect.provideService` or `Effect.updateService`. Two references with the same key share a value, so give each service instance its own key when it needs its own value.
+- Use `Effect.context` and `Effect.runForkWith` when a callback must start a fiber with the services and references of its caller.
 - Use `Schedule` with `Effect.retry` or `Effect.repeat` for a product retry or polling rule.
+
+An Effect `Semaphore` does not keep the arrival order of its waiters: a new caller can take a released permit before a waiting caller resumes. Do not use a `Semaphore` as a lock for ordered operations. Use `createSerialLane` from `packages/host/src/effect/serial-gate.ts` for one queue, or `createSerialGate` for one queue per key.
 
 For single-flight startup, reserve the in-flight slot synchronously before the first yield. Then fork the work and complete a `Deferred` with the full `Exit`. Every caller then gets the same success or failure.
 
-`Deferred.make` and `Effect.fork` can yield. If code sets shared state after either call, two callers can both start the resource.
+`Deferred.make` and `Effect.forkChild` can yield. If code sets shared state after either call, two callers can both start the resource. `Deferred.makeUnsafe` creates the `Deferred` without a yield.
 
 References: `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts` and `packages/runtime-orchestration/src/application/runtime-registry.ts`.
 
@@ -261,18 +276,23 @@ const TestSettingsConfig = Layer.succeed(SettingsConfigPortTag, fakeSettingsConf
 await Effect.runPromise(program.pipe(Effect.provide(TestSettingsConfig)));
 ```
 
-- Use `TestClock.adjust(...)` for controlled time.
+- Use `TestClock.adjust(...)` for controlled time. Provide `TestClock.layer()` from `effect/testing`.
 - Use a live clock only when wall time is the subject of the test.
 - Use scoped tests for resources with finalizers.
 - Interrupt forked fibers during cleanup.
 - Use a started latch and a gate for a concurrency test.
 - Inside an Effect test program, `yield*` a child Effect. Do not call `Effect.runPromise` again.
+- Effect runs scheduled fiber work in `setImmediate` callbacks, not in microtasks. Wait for a condition or a latch. Do not expect one `setTimeout(0)` to drain every fiber.
 
 ## Public boundaries
 
 Convert an Effect result at the edge that owns the caller contract. An IPC handler returns a Promise. An HTTP handler returns a status and body. An SSE handler writes frames. A CLI prints an error and exits with a code.
 
 Do not make an internal service throw only because its outer boundary needs a rejected Promise.
+
+`Effect.runPromise` and `Effect.runSync` reject or throw with the squashed cause: the first typed failure, or else the first defect. Use `Effect.runPromiseExit` at a boundary that must keep every failure, defect, or interruption.
+
+Name a command, lifecycle action, or resource entry point with `Effect.withSpan` or `Effect.fn`. Use only safe identifiers as span attributes. Do not put prompts, credentials, or file contents in a span.
 
 ## Migrate a package
 

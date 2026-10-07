@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import type { TerminalPtyError, TerminalProducerHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenBusyError, type TerminalScreenSnapshot } from "./terminal-screen-state";
+import { createSerialLane } from "../../effect/serial-gate";
 
 const OUTPUT_CHUNK_BYTES = 64 * 1024;
 const EMPTY_PAYLOAD = new Uint8Array(0);
@@ -80,7 +81,7 @@ export class TerminalSessionOutput {
   private parserPendingBytes = 0;
   private screenFlushPending = false;
   private snapshotHolds = 0;
-  private readonly flowOperations = Effect.unsafeMakeSemaphore(1);
+  private readonly flowOperations = createSerialLane();
 
   constructor(
     private readonly terminalId: string,
@@ -234,14 +235,14 @@ export class TerminalSessionOutput {
   resumeIfUnblocked(
     handle: TerminalProducerHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
-    return this.flowOperations.withPermits(1)(this.resumeUnblocked(handle));
+    return this.flowOperations.run(this.resumeUnblocked(handle));
   }
 
   pauseIfRequested(
     handle: TerminalProducerHandle,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
-    return this.flowOperations.withPermits(1)(
-      Effect.gen(this, function* () {
+    return this.flowOperations.run(
+      Effect.gen({ self: this }, function* () {
         if (!this.paused || this.overflowed) return [];
         if (!this.producerPaused) {
           yield* handle.pauseOutput();
@@ -255,7 +256,7 @@ export class TerminalSessionOutput {
   private resumeUnblocked(
     handle: TerminalProducerHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.snapshotHolds > 0) return [];
       if (this.paused) {
         if (

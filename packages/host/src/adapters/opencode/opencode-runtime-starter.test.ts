@@ -6,7 +6,8 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeInstanceSummary } from "@openducktor/contracts";
-import { Effect, Fiber, TestClock, TestContext } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../effect/host-errors";
 import { terminateProcessTree } from "../../infrastructure/process/process-tree";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -96,11 +97,14 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
           queries: unexpectedRuntimeQueries,
           sessionImport: unexpectedSessionImport,
           supportsSessionControl: false,
-          beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
+          beginGeneratedImageBatch: () =>
+            Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
           releaseGeneratedImageBatch: () =>
-            Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-          describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-          resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+            Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+          describeGeneratedImages: () =>
+            Effect.die(new Error("Unexpected describeGeneratedImages")),
+          resolveGeneratedImageSource: () =>
+            Effect.die(new Error("Unexpected generated image read")),
           binding: new AgentSessionLiveRegistration(
             { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
             (mutation) => Effect.map(mutation, ({ value }) => value),
@@ -146,7 +150,7 @@ const createFakeToolDiscovery = (
   resolveTool(toolId) {
     const path = paths[toolId];
     return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      ? Effect.die(new Error(`Missing fake tool path for ${toolId}`))
       : Effect.succeed({
           displayLabel: "Test tool",
           path,
@@ -156,7 +160,7 @@ const createFakeToolDiscovery = (
   resolveToolPath(toolId) {
     const path = paths[toolId];
     return path === undefined
-      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      ? Effect.die(new Error(`Missing fake tool path for ${toolId}`))
       : Effect.succeed(path);
   },
   validateToolPath(toolId, executablePath) {
@@ -167,7 +171,7 @@ const createFakeToolDiscovery = (
           path: executablePath,
           sourceCategory: "provided_path",
         })
-      : Effect.dieMessage(`Unexpected fake tool path for ${toolId}: ${executablePath}`);
+      : Effect.die(new Error(`Unexpected fake tool path for ${toolId}: ${executablePath}`));
   },
 });
 
@@ -308,10 +312,10 @@ const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAda
   queries: unexpectedRuntimeQueries,
   sessionImport: unexpectedSessionImport,
   supportsSessionControl: false,
-  beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
-  releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-  describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-  resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+  beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
+  releaseGeneratedImageBatch: () => Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+  describeGeneratedImages: () => Effect.die(new Error("Unexpected describeGeneratedImages")),
+  resolveGeneratedImageSource: () => Effect.die(new Error("Unexpected generated image read")),
   binding: new AgentSessionLiveRegistration(
     { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
     (mutation) => Effect.map(mutation, ({ value }) => value),
@@ -509,15 +513,15 @@ describe("createOpenCodeRuntimeStarter", () => {
       });
 
       const result = await Effect.runPromise(
-        Effect.either(starter.startRuntime(startInput(opencodeBinary))),
+        Effect.result(starter.startRuntime(startInput(opencodeBinary))),
       );
-      if (result._tag === "Right") {
-        await Effect.runPromise(result.right.stop());
+      if (result._tag === "Success") {
+        await Effect.runPromise(result.success.stop());
       }
 
-      expect(result._tag).toBe("Left");
-      if (result._tag === "Left") {
-        expect(result.left.message).toBe(
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toBe(
           "Timed out starting OpenCode runtime on 127.0.0.1:43123 after 20ms.",
         );
       }
@@ -939,8 +943,8 @@ describe("createOpenCodeRuntimeStarter", () => {
       const ownedCleanups: OwnedCleanup[] = [];
       await Effect.runPromise(
         Effect.gen(function* () {
-          const startup = yield* Effect.fork(
-            Effect.either(
+          const startup = yield* Effect.forkChild(
+            Effect.result(
               starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
             ),
           );
@@ -954,14 +958,14 @@ describe("createOpenCodeRuntimeStarter", () => {
 
             yield* TestClock.adjust(`${startupTimeoutMs} millis`);
             const result = yield* Fiber.join(startup);
-            expect(result._tag).toBe("Left");
-            if (result._tag === "Left") {
-              expect(result.left.message).toBe(
+            expect(result._tag).toBe("Failure");
+            if (result._tag === "Failure") {
+              expect(result.failure.message).toBe(
                 "Timed out waiting for OpenCode runtime on 127.0.0.1:43123.",
               );
             }
           }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
-        }).pipe(Effect.provide(TestContext.TestContext)),
+        }).pipe(Effect.provide(TestClock.layer())),
       );
       // The host runs the owned cleanup, which stops the timed-out process tree.
       await Effect.runPromise(runOwnedCleanup(ownedCleanups));

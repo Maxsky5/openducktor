@@ -14,6 +14,7 @@ import {
 } from "../../ports/terminal-pty-port";
 import { Effect } from "effect";
 import { spawn } from "node-pty";
+import { createSerialLane } from "../../effect/serial-gate";
 
 type NodePtyProcess = Pick<
   ReturnType<typeof spawn>,
@@ -65,7 +66,7 @@ export const createNodePtyPort = ({
         let terminating = false;
         let terminated = false;
         let outputPaused = false;
-        const terminationPermit = Effect.unsafeMakeSemaphore(1);
+        const terminationPermit = createSerialLane();
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
           cwd: plan.cwd,
@@ -215,40 +216,40 @@ export const createNodePtyPort = ({
                   }),
             ),
           terminate: () =>
-            terminationPermit.withPermits(1)(
+            terminationPermit.run(
               Effect.gen(function* () {
                 if (exitPublished || terminated) return;
                 terminating = true;
-                const result = yield* Effect.either(
+                const result = yield* Effect.result(
                   Effect.gen(function* () {
                     // node-pty delays onExit until its output stream closes.
                     if (!closed) yield* operation("terminate", () => pty.resume());
                     yield* finalizeExit();
                   }),
                 );
-                if (result._tag === "Right") {
+                if (result._tag === "Success") {
                   terminating = false;
                   terminated = true;
                   return;
                 }
 
-                const restore = yield* Effect.either(
+                const restore = yield* Effect.result(
                   operation("terminate", () => {
                     if (!closed && outputPaused) pty.pause();
                   }),
                 );
                 terminating = false;
-                if (restore._tag === "Left") {
+                if (restore._tag === "Failure") {
                   return yield* Effect.fail(
                     new TerminalPtyError({
                       code: "operation_failed",
                       operation: "terminate",
                       message: "node-pty could not restore output pause after termination failed.",
-                      cause: new AggregateError([result.left, restore.left]),
+                      cause: new AggregateError([result.failure, restore.failure]),
                     }),
                   );
                 }
-                return yield* Effect.fail(result.left);
+                return yield* Effect.fail(result.failure);
               }),
             ),
         };

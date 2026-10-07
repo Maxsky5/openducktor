@@ -183,13 +183,13 @@ export const createNotificationService = ({
         startupInputs.length = 0;
         startup = "ready";
       }).pipe(
-        Effect.catchAll((cause) => Effect.sync(() => failure("application", "settings", cause))),
+        Effect.catch((cause) => Effect.sync(() => failure("application", "settings", cause))),
       ),
     configCommitted: (config: GlobalConfig): Effect.Effect<void> =>
       Effect.gen(function* () {
         committedConfig = structuredClone(config);
         yield* acceptConfig(config).pipe(
-          Effect.catchAll((cause) => Effect.sync(() => failure("application", "settings", cause))),
+          Effect.catch((cause) => Effect.sync(() => failure("application", "settings", cause))),
         );
       }),
     acceptTask(event: ExternalTaskSyncEvent) {

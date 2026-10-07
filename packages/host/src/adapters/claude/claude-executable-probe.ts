@@ -116,14 +116,16 @@ export const createClaudeExecutableProbe = ({
                 message: `The executable at ${executablePath} returned an invalid Claude Agent SDK initialization response.`,
               }),
           ),
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration: `${initializationTimeoutMs} millis`,
-            onTimeout: () =>
-              new HostOperationError({
-                operation: "claudeExecutableProbe.initialize",
-                message: `Timed out initializing Claude Agent SDK with ${executablePath}.`,
-                details: { executablePath, initializationTimeoutMs },
-              }),
+            orElse: () =>
+              Effect.fail(
+                new HostOperationError({
+                  operation: "claudeExecutableProbe.initialize",
+                  message: `Timed out initializing Claude Agent SDK with ${executablePath}.`,
+                  details: { executablePath, initializationTimeoutMs },
+                }),
+              ),
           }),
           Effect.asVoid,
         ),

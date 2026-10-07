@@ -120,18 +120,18 @@ const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
   });
 
 const resolveEither = (resolver: GitProviderResolver, config: ReturnType<typeof repoConfig>) =>
-  Effect.runPromise(resolver.resolve(config).pipe(Effect.either));
+  Effect.runPromise(resolver.resolve(config).pipe(Effect.result));
 
 const resolveConfiguredEither = (
   resolver: GitProviderResolver,
   config: ReturnType<typeof repoConfig>,
-) => Effect.runPromise(resolver.resolveConfigured(config).pipe(Effect.either));
+) => Effect.runPromise(resolver.resolveConfigured(config).pipe(Effect.result));
 
 const createResolverSync = (providers: readonly GitProviderPort[]) =>
   Effect.runSync(createGitProviderResolver(providers));
 
 const registrationEither = (providers: readonly GitProviderPort[]) =>
-  Effect.runPromise(createGitProviderResolver(providers).pipe(Effect.either));
+  Effect.runPromise(createGitProviderResolver(providers).pipe(Effect.result));
 
 describe("createGitProviderResolver", () => {
   test("fails with a typed error when no provider is configured", async () => {
@@ -139,11 +139,11 @@ describe("createGitProviderResolver", () => {
 
     const result = await resolveEither(resolver, repoConfig());
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(GitProviderResolutionError);
-      expect(result.left.reason).toBe("not_configured");
-      expect(result.left.providerId).toBeUndefined();
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(GitProviderResolutionError);
+      expect(result.failure.reason).toBe("not_configured");
+      expect(result.failure.providerId).toBeUndefined();
     }
   });
 
@@ -153,11 +153,11 @@ describe("createGitProviderResolver", () => {
 
     const result = await resolveEither(resolver, repoConfig({ id: "github", enabled: false }));
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(GitProviderResolutionError);
-      expect(result.left.reason).toBe("disabled");
-      expect(result.left.providerId).toBe("github");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(GitProviderResolutionError);
+      expect(result.failure.reason).toBe("disabled");
+      expect(result.failure.providerId).toBe("github");
     }
   });
 
@@ -170,9 +170,9 @@ describe("createGitProviderResolver", () => {
       repoConfig({ id: "github", enabled: false }),
     );
 
-    expect(result._tag).toBe("Right");
-    if (result._tag === "Right") {
-      expect(result.right).toBe(github);
+    expect(result._tag).toBe("Success");
+    if (result._tag === "Success") {
+      expect(result.success).toBe(github);
     }
   });
 
@@ -182,11 +182,11 @@ describe("createGitProviderResolver", () => {
 
     const result = await resolveEither(resolver, repoConfig({ id: "gitlab", enabled: true }));
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(GitProviderResolutionError);
-      expect(result.left.reason).toBe("not_registered");
-      expect(result.left.providerId).toBe("gitlab");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(GitProviderResolutionError);
+      expect(result.failure.reason).toBe("not_registered");
+      expect(result.failure.providerId).toBe("gitlab");
     }
   });
 
@@ -210,9 +210,9 @@ describe("createGitProviderResolver", () => {
 
     const result = await resolveEither(resolver, repoConfig({ id: "gitlab", enabled: true }));
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left.reason).toBe("not_registered");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure.reason).toBe("not_registered");
     }
   });
 
@@ -222,10 +222,10 @@ describe("createGitProviderResolver", () => {
 
     const result = await registrationEither([first, second]);
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(GitProviderRegistrationError);
-      expect(result.left.reason).toBe("duplicate_provider_id");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(GitProviderRegistrationError);
+      expect(result.failure.reason).toBe("duplicate_provider_id");
     }
   });
 
@@ -246,9 +246,9 @@ describe("createGitProviderResolver", () => {
 
     const result = await registrationEither([github]);
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toEqual(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toEqual(
         expect.objectContaining({
           _tag: "GitProviderRegistrationError",
           reason: "capability_provider_id_mismatch",
@@ -274,9 +274,9 @@ describe("createGitProviderResolver", () => {
 
     const result = await registrationEither([github]);
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toEqual(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toEqual(
         expect.objectContaining({
           _tag: "GitProviderRegistrationError",
           reason: "capability_provider_id_mismatch",
@@ -358,9 +358,9 @@ describe("createGitProviderResolver", () => {
 
       const result = await registrationEither([invalidProvider]);
 
-      expect(result._tag).toBe("Left");
-      if (result._tag === "Left") {
-        expect(result.left).toEqual(
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toEqual(
           expect.objectContaining({
             _tag: "GitProviderRegistrationError",
             reason,
@@ -379,14 +379,14 @@ describe("createGitProviderResolver", () => {
       resolver.resolve(repoConfig({ id: "basic", enabled: true })),
     );
 
-    const pullRequests = await Effect.runPromise(resolved.pullRequests().pipe(Effect.either));
-    const review = await Effect.runPromise(resolved.pullRequestReview().pipe(Effect.either));
+    const pullRequests = await Effect.runPromise(resolved.pullRequests().pipe(Effect.result));
+    const review = await Effect.runPromise(resolved.pullRequestReview().pipe(Effect.result));
 
-    expect(pullRequests._tag).toBe("Left");
-    expect(review._tag).toBe("Left");
-    if (pullRequests._tag === "Left" && review._tag === "Left") {
-      expect(pullRequests.left).toBeInstanceOf(GitProviderCapabilityError);
-      expect(review.left).toBeInstanceOf(GitProviderCapabilityError);
+    expect(pullRequests._tag).toBe("Failure");
+    expect(review._tag).toBe("Failure");
+    if (pullRequests._tag === "Failure" && review._tag === "Failure") {
+      expect(pullRequests.failure).toBeInstanceOf(GitProviderCapabilityError);
+      expect(review.failure).toBeInstanceOf(GitProviderCapabilityError);
     }
   });
 

@@ -16,13 +16,10 @@ describe("createKeyedSharedFlight", () => {
         return runs;
       });
 
-      const first = yield* Effect.fork(flight.run("bun", work));
+      const first = yield* Effect.forkChild(flight.run("bun", work));
       yield* Deferred.await(started);
-      const second = yield* Effect.fork(flight.run("bun", work));
-      // The second caller waits on the shared run before the gate opens.
-      while ((yield* Fiber.status(second))._tag !== "Suspended") {
-        yield* Effect.yieldNow();
-      }
+      // The second caller starts at once and waits on the shared run.
+      const second = yield* Effect.forkChild(flight.run("bun", work), { startImmediately: true });
       const otherKey = yield* flight.run("git", Effect.succeed(0));
       yield* Deferred.succeed(gate, undefined);
       return [yield* Fiber.join(first), yield* Fiber.join(second), otherKey];
@@ -48,12 +45,12 @@ describe("createKeyedSharedFlight", () => {
     const flight = createSharedFlight<string, string>();
     const program = Effect.gen(function* () {
       const gate = yield* Deferred.make<void>();
-      const failing = Deferred.await(gate).pipe(Effect.zipRight(Effect.fail("discovery failed")));
-      const first = yield* Effect.fork(Effect.either(flight.run(failing)));
-      const second = yield* Effect.fork(Effect.either(flight.run(failing)));
-      while ((yield* Fiber.status(second))._tag !== "Suspended") {
-        yield* Effect.yieldNow();
-      }
+      const failing = Deferred.await(gate).pipe(Effect.andThen(Effect.fail("discovery failed")));
+      const first = yield* Effect.forkChild(Effect.result(flight.run(failing)));
+      // The second caller starts at once and waits on the shared run.
+      const second = yield* Effect.forkChild(Effect.result(flight.run(failing)), {
+        startImmediately: true,
+      });
       yield* Deferred.succeed(gate, undefined);
       const failures = [yield* Fiber.join(first), yield* Fiber.join(second)];
       const next = yield* flight.run(Effect.succeed("found"));
@@ -62,25 +59,26 @@ describe("createKeyedSharedFlight", () => {
 
     const { failures, next } = await Effect.runPromise(program);
 
-    expect(failures.map((result) => result._tag)).toEqual(["Left", "Left"]);
+    expect(failures.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
     expect(next).toBe("found");
   });
 
   test("lets a time limit inside the work stop the run", async () => {
     const flight = createSharedFlight<string, string>();
     const hung = Effect.never.pipe(
-      Effect.timeoutFail({ duration: "50 millis", onTimeout: () => "timed out" }),
+      Effect.timeoutOrElse({ duration: "50 millis", orElse: () => Effect.fail("timed out") }),
     );
 
     const result = await Effect.runPromise(
-      flight
-        .run(hung)
-        .pipe(
-          Effect.timeoutFail({ duration: "1 second", onTimeout: () => "the run did not end" }),
-          Effect.either,
-        ),
+      flight.run(hung).pipe(
+        Effect.timeoutOrElse({
+          duration: "1 second",
+          orElse: () => Effect.fail("the run did not end"),
+        }),
+        Effect.result,
+      ),
     );
 
-    expect(result._tag === "Left" && result.left).toBe("timed out");
+    expect(result._tag === "Failure" && result.failure).toBe("timed out");
   });
 });

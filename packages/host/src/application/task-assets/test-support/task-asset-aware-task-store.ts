@@ -1,6 +1,6 @@
 import { afterEach } from "bun:test";
 import type { TaskAssetFailure } from "@openducktor/contracts";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { createNodeTaskAssetFilePort } from "../../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskStoreHarness } from "../../../adapters/sqlite/sqlite-task-store-test-support";
@@ -99,7 +99,7 @@ export const captureTaskAssetError = async <A>(effect: Effect.Effect<A, unknown>
   if (Exit.isSuccess(exit)) {
     throw new Error("Expected a task asset failure.");
   }
-  const failure = Array.from(Cause.failures(exit.cause))[0];
+  const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
   if (failure instanceof TaskAssetError) {
     return failure;
   }

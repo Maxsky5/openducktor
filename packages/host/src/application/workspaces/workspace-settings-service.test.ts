@@ -292,10 +292,10 @@ describe("createWorkspaceSettingsService", () => {
     const invalid = { preferredOpenInToolId: "unknown" };
     const result = await Effect.runPromise(
       // @ts-expect-error Verify validation for an untyped caller.
-      Effect.either(saveSettingsSnapshot(service, { ...snapshot, system: invalid })),
+      Effect.result(saveSettingsSnapshot(service, { ...snapshot, system: invalid })),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left._tag).toBe("HostValidationError");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure._tag).toBe("HostValidationError");
     expect(settingsConfig.writtenConfigs).toHaveLength(0);
     const failure = new HostOperationError({
       operation: "config.write",
@@ -306,15 +306,15 @@ describe("createWorkspaceSettingsService", () => {
       writeConfig: () => Effect.fail(failure),
     });
     const failedWrite = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         saveSettingsSnapshot(failingService, {
           ...snapshot,
           system: { preferredOpenInToolId: "zed" },
         }),
       ),
     );
-    expect(failedWrite._tag).toBe("Left");
-    if (failedWrite._tag === "Left") expect(failedWrite.left).toBe(failure);
+    expect(failedWrite._tag).toBe("Failure");
+    if (failedWrite._tag === "Failure") expect(failedWrite.failure).toBe(failure);
     expect((await Effect.runPromise(failingService.getSettingsSnapshot())).system).toEqual({});
   });
 
@@ -454,11 +454,11 @@ describe("createWorkspaceSettingsService", () => {
     });
 
     const result = await Effect.runPromise(
-      Effect.either(service.updateKanbanTaskCardView("compact")),
+      Effect.result(service.updateKanbanTaskCardView("compact")),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure).toBe(failure);
     expect((await Effect.runPromise(service.getSettingsSnapshot())).kanban.taskCardView).toBe(
       "normal",
     );
@@ -644,7 +644,7 @@ describe("createWorkspaceSettingsService", () => {
     const service = createWorkspaceSettingsService(settingsConfig);
 
     const failure = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         service.addWorkspace({
           workspaceId: "repo-b",
           workspaceName: "Repo B",
@@ -654,9 +654,9 @@ describe("createWorkspaceSettingsService", () => {
       ),
     );
 
-    expect(failure._tag).toBe("Left");
-    if (failure._tag === "Left") {
-      expect(String(failure.left.message)).toContain(
+    expect(failure._tag).toBe("Failure");
+    if (failure._tag === "Failure") {
+      expect(String(failure.failure.message)).toContain(
         "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
       );
     }
@@ -1286,7 +1286,7 @@ describe("createWorkspaceSettingsService", () => {
     }
 
     const failure = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         saveSettingsSnapshot(service, {
           ...snapshot,
           workspaces: { repo: { ...repoSnapshot, tileColor: "blue" } },
@@ -1294,9 +1294,9 @@ describe("createWorkspaceSettingsService", () => {
       ),
     );
 
-    expect(failure._tag).toBe("Left");
-    if (failure._tag === "Left") {
-      expect(String(failure.left.message)).toContain(
+    expect(failure._tag).toBe("Failure");
+    if (failure._tag === "Failure") {
+      expect(String(failure.failure.message)).toContain(
         "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
       );
     }

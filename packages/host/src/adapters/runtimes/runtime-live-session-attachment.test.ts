@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Fiber, FiberId } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { createLiveSessionAttachment } from "./runtime-live-session-attachment";
@@ -64,14 +64,14 @@ describe("createLiveSessionAttachment", () => {
   });
 
   test("a release waits for a registration in progress, then releases", async () => {
-    const registration = Deferred.unsafeMake<void>(FiberId.none);
+    const registration = Deferred.makeUnsafe<void>();
     const { attachment, prepared, events } = createHarness({ registration });
     attachment.adopt(prepared);
     const attaching = Effect.runFork(attachment.attach);
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     const releasing = Effect.runFork(attachment.release);
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     expect(events).toEqual([]);
     await Effect.runPromise(Deferred.succeed(registration, undefined));
     await Effect.runPromise(Fiber.join(attaching));
@@ -81,11 +81,11 @@ describe("createLiveSessionAttachment", () => {
   });
 
   test("a release after an interrupted registration discards the adapter", async () => {
-    const registration = Deferred.unsafeMake<void>(FiberId.none);
+    const registration = Deferred.makeUnsafe<void>();
     const { attachment, prepared, events } = createHarness({ registration });
     attachment.adopt(prepared);
     const attaching = Effect.runFork(attachment.attach);
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     await Effect.runPromise(Fiber.interrupt(attaching));
     await Effect.runPromise(attachment.release);

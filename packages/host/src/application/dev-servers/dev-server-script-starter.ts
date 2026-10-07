@@ -186,7 +186,7 @@ export const createDevServerScriptStarter = ({
             onOutput: ({ data }) => output.write(outputEncoder.encode(data)),
           })
           .pipe(
-            Effect.catchAll((error) =>
+            Effect.catch((error) =>
               Effect.gen(function* () {
                 const script = runtime.state.scripts.find(
                   (candidate) => candidate.scriptId === scriptConfig.id,

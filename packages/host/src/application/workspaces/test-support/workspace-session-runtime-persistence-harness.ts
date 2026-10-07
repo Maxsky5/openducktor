@@ -108,6 +108,7 @@ export const createPersistenceHarness = async (
     beforeControl: Effect.void,
     beforeModelSave: Effect.void,
     beforeTitle: Effect.void,
+    beforeTitleSave: Effect.void,
     onGateRequest: () => {},
     active: false,
   };
@@ -131,7 +132,7 @@ export const createPersistenceHarness = async (
   const operationGate: ReturnType<typeof createWorkspaceSessionOperationGate> = {
     ...baseGate,
     run: (ref, effect) =>
-      Effect.sync(() => state.onGateRequest()).pipe(Effect.zipRight(baseGate.run(ref, effect))),
+      Effect.sync(() => state.onGateRequest()).pipe(Effect.andThen(baseGate.run(ref, effect))),
   };
   const sessionTitleGate = createWorkspaceSessionOperationGate();
   let updateLiveRuntimeTitle:
@@ -141,7 +142,7 @@ export const createPersistenceHarness = async (
     updateRuntimeSessionTitle: ({ title }) =>
       updateLiveRuntimeTitle
         ? updateLiveRuntimeTitle(title)
-        : Effect.dieMessage("live title update is not wired"),
+        : Effect.die(new Error("live title update is not wired")),
     operationGate,
     sessionTitleGate,
     store: {
@@ -151,10 +152,12 @@ export const createPersistenceHarness = async (
           ? failure("activity write failed")
           : state.failTitleWrite && input.generatedTitle !== null
             ? failure("title write failed")
-            : store.recordAcceptedMessage(input),
+            : input.generatedTitle === null
+              ? store.recordAcceptedMessage(input)
+              : state.beforeTitleSave.pipe(Effect.andThen(store.recordAcceptedMessage(input))),
       setSelectedModel: (input) =>
         state.beforeModelSave.pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.suspend(() =>
               state.failModelSave ? failure("model save failed") : store.setSelectedModel(input),
             ),
@@ -214,7 +217,7 @@ export const createPersistenceHarness = async (
         listSnapshots: () => Effect.succeed([]),
         resumeSession: (input) =>
           state.beforeControl.pipe(
-            Effect.zipRight(
+            Effect.andThen(
               Effect.sync(() => {
                 inputs.push(input);
                 return {
@@ -222,7 +225,7 @@ export const createPersistenceHarness = async (
                   runtimeKind: input.runtimeKind,
                   workingDirectory: input.workingDirectory,
                   startedAt: "2026-09-07T10:00:00Z",
-                  status: "idle",
+                  status: "idle" as const,
                   firstTurnCompleted: state.firstTurnCompleted,
                 };
               }),
@@ -230,7 +233,7 @@ export const createPersistenceHarness = async (
           ),
         sendUserMessage: (input) =>
           state.beforeControl.pipe(
-            Effect.zipRight(
+            Effect.andThen(
               Effect.suspend(() => {
                 inputs.push(input);
                 if (state.failSend) return failure("runtime rejected message");
@@ -261,7 +264,7 @@ export const createPersistenceHarness = async (
           }),
         updateSessionTitle: (input) =>
           state.beforeTitle.pipe(
-            Effect.zipRight(
+            Effect.andThen(
               Effect.suspend((): Effect.Effect<AgentSessionTitleUpdateOutcome, HostError> => {
                 titleAttempts.push(input.title);
                 if (state.failTitle) return failure("runtime title update failed");
@@ -280,19 +283,19 @@ export const createPersistenceHarness = async (
     runtime: live,
     repositoryPolicy: persistence,
     canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-    taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
+    taskReader: { getTask: () => Effect.die(new Error("unexpected task read")) },
     tasks: {
-      agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
-      agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
-      agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
-      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
+      agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
+      agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
+      transitionTask: () => Effect.die(new Error("unexpected task transition")),
     },
-    taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
+    taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
     taskSessionStart: {
-      prepare: () => Effect.dieMessage("unexpected task start"),
-      complete: () => Effect.dieMessage("unexpected task completion"),
+      prepare: () => Effect.die(new Error("unexpected task start")),
+      complete: () => Effect.die(new Error("unexpected task completion")),
     },
-    persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
+    persistTaskModel: () => Effect.die(new Error("unexpected task model write")),
   });
   const emitEffect = (event: AgentSessionTranscriptEvent) =>
     registration.runMutation(
@@ -339,15 +342,15 @@ export const createPersistenceHarness = async (
         getRepoConfig: () => Effect.succeed(config),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
-      runtime: { requireReady: () => Effect.dieMessage("unexpected runtime readiness check") },
+      runtime: { requireReady: () => Effect.die(new Error("unexpected runtime readiness check")) },
       live: { ...live, ...commands },
       git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
       settingsConfig: createSettingsConfigTestDouble({}),
       worktreeFiles: createWorktreeFilePortTestDouble({}),
       systemCommands: {
-        resolveCommandPath: () => Effect.dieMessage("unused"),
-        versionCommand: () => Effect.dieMessage("unused"),
-        runCommandAllowFailure: () => Effect.dieMessage("unused"),
+        resolveCommandPath: () => Effect.die(new Error("unused")),
+        versionCommand: () => Effect.die(new Error("unused")),
+        runCommandAllowFailure: () => Effect.die(new Error("unused")),
       },
     });
   return {

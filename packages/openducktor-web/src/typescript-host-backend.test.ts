@@ -132,7 +132,7 @@ const missingTaskAssetReadService: TaskAssetReadService = {
 };
 
 const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
-  Effect.dieMessage(`Unexpected terminal service operation: ${operation}`);
+  Effect.die(new Error(`Unexpected terminal service operation: ${operation}`));
 
 const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   ...createTestHostCommandRouter(),
@@ -1825,7 +1825,7 @@ test("unauthenticated generated image invokes never reach the reader or return b
   let calls = 0;
   const hostCommandRouter = createTestHostCommandRouter(() => {
     calls++;
-    return Effect.dieMessage("unauthorized image read");
+    return Effect.die(new Error("unauthorized image read"));
   });
   for (const token of [undefined, "invalid"]) {
     const headers = new Headers({ "content-type": "application/json" });

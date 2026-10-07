@@ -333,7 +333,7 @@ describe("discoverToolPath", () => {
     ]);
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      const failures = Array.from(Cause.failures(exit.cause));
+      const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
       expect(failures).toEqual([
         expect.objectContaining({
           _tag: "HostDependencyError",

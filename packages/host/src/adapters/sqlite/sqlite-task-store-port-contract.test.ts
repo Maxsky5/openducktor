@@ -18,7 +18,7 @@ describe("SQLite task agent session batches", () => {
       contextProvider: () =>
         Effect.sync(() => {
           contextCalls += 1;
-        }).pipe(Effect.zipRight(Effect.die("The empty batch must not acquire SQLite."))),
+        }).pipe(Effect.andThen(Effect.die("The empty batch must not acquire SQLite."))),
     });
 
     await expect(

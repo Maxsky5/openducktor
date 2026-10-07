@@ -39,10 +39,10 @@ const registry = ({
   stopError?: string | null;
   stopErrorSessionId?: string | null;
 } = {}): RuntimeRegistryPort => ({
-  status: () => Effect.dieMessage("unexpected runtime status"),
-  statuses: () => Effect.dieMessage("unexpected runtime statuses"),
-  requireReady: () => Effect.dieMessage("unexpected runtime readiness check"),
-  stopAllRuntimes: () => Effect.dieMessage("unexpected runtime shutdown"),
+  status: () => Effect.die(new Error("unexpected runtime status")),
+  statuses: () => Effect.die(new Error("unexpected runtime statuses")),
+  requireReady: () => Effect.die(new Error("unexpected runtime readiness check")),
+  stopAllRuntimes: () => Effect.die(new Error("unexpected runtime shutdown")),
   stopSession(input) {
     return Effect.tryPromise({
       try: async () => {

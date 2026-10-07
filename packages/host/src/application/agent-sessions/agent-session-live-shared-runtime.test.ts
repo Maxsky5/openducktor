@@ -7,7 +7,7 @@ import type {
   AgentSessionLiveSnapshot,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
@@ -66,9 +66,9 @@ const createHarness = (
 };
 
 const expectHostFailure = async <A>(effect: Effect.Effect<A, HostError>): Promise<HostError> => {
-  const result = await Effect.runPromise(Effect.either(effect));
-  if (result._tag === "Right") throw new Error("Expected effect to fail.");
-  return result.left;
+  const result = await Effect.runPromise(Effect.result(effect));
+  if (result._tag === "Success") throw new Error("Expected effect to fail.");
+  return result.failure;
 };
 
 const startInput: AgentSessionControlStartInput = {
@@ -398,7 +398,7 @@ describe("shared live runtime across repositories", () => {
   test("a concurrent release waits for the release in progress and gets its failure", async () => {
     const { service } = createHarness();
     const detached = snapshot(ref("/repo-a", "session-a"));
-    const firstRelease = Deferred.unsafeMake<void>(FiberId.none);
+    const firstRelease = Deferred.makeUnsafe<void>();
     let nativeReleases = 0;
     await Effect.runPromise(
       service.registerRuntimeAdapter(
@@ -409,7 +409,7 @@ describe("shared live runtime across repositories", () => {
               nativeReleases += 1;
               return nativeReleases === 1
                 ? Deferred.await(firstRelease).pipe(
-                    Effect.zipRight(
+                    Effect.andThen(
                       Effect.fail(
                         new HostOperationError({
                           operation: "test.release",

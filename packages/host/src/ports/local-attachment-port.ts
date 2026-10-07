@@ -21,7 +21,7 @@ export type LocalAttachmentPort = {
   exists(path: string): Effect.Effect<boolean, HostPathAccessErrorAggregate>;
 };
 
-export class LocalAttachmentPortTag extends Context.Tag("@openducktor/host/LocalAttachmentPort")<
+export class LocalAttachmentPortTag extends Context.Service<
   LocalAttachmentPortTag,
   LocalAttachmentPort
->() {}
+>()("@openducktor/host/LocalAttachmentPort") {}

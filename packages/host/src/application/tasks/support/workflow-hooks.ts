@@ -86,21 +86,21 @@ export const runHookCommandsAllowFailure = (
       if (command === undefined) {
         return { hook, stderr: "Hook command is empty. Provide an executable name." };
       }
-      const commandResult = yield* Effect.either(
+      const commandResult = yield* Effect.result(
         systemCommands.runCommandAllowFailure(command, args, {
           cwd,
           timeoutMs: WORKFLOW_HOOK_TIMEOUT_MS,
         }),
       );
-      if (commandResult._tag === "Right") {
-        const result = commandResult.right;
+      if (commandResult._tag === "Success") {
+        const result = commandResult.success;
         if (!result.ok) {
           return { hook, stderr: result.stderr };
         }
       } else {
         return {
           hook,
-          stderr: `Failed to execute hook command: ${errorMessage(commandResult.left)}`,
+          stderr: `Failed to execute hook command: ${errorMessage(commandResult.failure)}`,
         };
       }
     }

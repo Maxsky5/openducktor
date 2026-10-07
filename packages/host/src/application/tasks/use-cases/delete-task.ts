@@ -173,7 +173,7 @@ export const createTaskDeleteUseCase = ({
           changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
         };
       }).pipe(
-        Effect.catchAll((error) => {
+        Effect.catch((error) => {
           const failure = appendTaskCleanupProgress(error, {
             operation: "task_delete",
             removedWorktrees: cleanupProgress.removedWorktrees,

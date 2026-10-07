@@ -60,7 +60,7 @@ const repoConfig = repoConfigSchema.parse({
 });
 
 const repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository> = {
-  detectRepository: () => Effect.dieMessage("unexpected repository detection"),
+  detectRepository: () => Effect.die(new Error("unexpected repository detection")),
   getRepository: () => Effect.succeed({ host: "github.com", owner: "openai", name: "openducktor" }),
   getMapping: () =>
     Effect.succeed({

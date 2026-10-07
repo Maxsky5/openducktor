@@ -257,14 +257,16 @@ describe("node task asset file port", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      expect(Array.from(Cause.failures(exit.cause))).toEqual([
+      expect(exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)).toEqual([
         expect.objectContaining({
           _tag: "TaskAssetError",
           code: "validation",
           failedPhase: "validate_identifiers",
         }),
       ]);
-      expect(Array.from(Cause.defects(exit.cause))).toEqual([]);
+      expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual(
+        [],
+      );
     }
   });
 
@@ -291,7 +293,9 @@ describe("node task asset file port", () => {
     );
     expect(Exit.isFailure(promoteExit)).toBe(true);
     if (Exit.isFailure(promoteExit)) {
-      expect(Array.from(Cause.failures(promoteExit.cause))).toEqual([
+      expect(
+        promoteExit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
+      ).toEqual([
         expect.objectContaining({
           _tag: "TaskAssetError",
           operation: "create",
@@ -305,7 +309,9 @@ describe("node task asset file port", () => {
     );
     expect(Exit.isFailure(deleteExit)).toBe(true);
     if (Exit.isFailure(deleteExit)) {
-      expect(Array.from(Cause.failures(deleteExit.cause))).toEqual([
+      expect(
+        deleteExit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
+      ).toEqual([
         expect.objectContaining({
           _tag: "TaskAssetError",
           operation: "delete",

@@ -10,7 +10,9 @@ import {
   type TerminalServerMessage,
 } from "@openducktor/contracts";
 import {
+  type SerialGate,
   createTerminalClientSession,
+  type SerialLane,
   type TerminalClientSession,
   type TerminalService,
 } from "@openducktor/host";
@@ -37,11 +39,9 @@ export type TerminalWebSocketData = {
   pendingBytes: number;
   pendingFrames: Uint8Array[];
   drainWaiters: Set<(writable: boolean) => void>;
-  attachPermit: ReturnType<typeof Effect.unsafeMakeSemaphore>;
-  messagePermits: Map<
-    string,
-    { permit: ReturnType<typeof Effect.unsafeMakeSemaphore>; pending: number }
-  >;
+  attachPermit: SerialLane;
+  /** Runs the messages of each terminal in arrival order. */
+  messageGate: SerialGate;
   closed: boolean;
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;
@@ -92,7 +92,7 @@ const sendMessage = (
 ): boolean => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
 
 const waitForWritable = (socket: TerminalServerSocket): Effect.Effect<void> =>
-  Effect.async<void>((resume, signal) => {
+  Effect.callback<void>((resume, signal) => {
     const data = socket.data;
     if (data.closed) {
       resume(Effect.interrupt);
@@ -185,34 +185,14 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
     return;
   }
   const message = decoded.message;
-  let entry = socket.data.messagePermits.get(message.terminalId);
-  if (!entry) {
-    entry = { permit: Effect.unsafeMakeSemaphore(1), pending: 0 };
-    socket.data.messagePermits.set(message.terminalId, entry);
-  }
-  entry.pending += 1;
-  const messageEntry = entry;
   const handle = Effect.suspend(() =>
     socket.data.closed ? Effect.void : getClientSession(socket).handle(message, decoded.payload),
   );
   const operation =
     message.type === "attach"
-      ? socket.data.attachPermit.withPermits(1)(
-          waitForWritable(socket).pipe(Effect.flatMap(() => handle)),
-        )
+      ? socket.data.attachPermit.run(waitForWritable(socket).pipe(Effect.flatMap(() => handle)))
       : handle;
-  Effect.runFork(
-    messageEntry.permit
-      .withPermits(1)(operation)
-      .pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            messageEntry.pending -= 1;
-            if (messageEntry.pending === 0) socket.data.messagePermits.delete(message.terminalId);
-          }),
-        ),
-      ),
-  );
+  Effect.runFork(socket.data.messageGate.run(message.terminalId, operation));
 };
 
 export const terminalWebSocketHandler = {
@@ -240,7 +220,6 @@ export const terminalWebSocketHandler = {
     for (const finish of drainWaiters) finish(false);
     socket.data.pendingFrames.length = 0;
     socket.data.pendingBytes = 0;
-    socket.data.messagePermits.clear();
     socket.data.clientSession = null;
     if (!clientSession) return;
     void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {

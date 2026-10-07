@@ -78,13 +78,15 @@ export const createAzureDevOpsRestClient = ({
             cause,
           }),
       }).pipe(
-        Effect.timeoutFail({
+        Effect.timeoutOrElse({
           duration: REQUEST_TIMEOUT,
-          onTimeout: () =>
-            new HostOperationError({
-              operation: input.operation,
-              message: `Azure DevOps ${input.operation} timed out after ${REQUEST_TIMEOUT}. Check the server address and network.`,
-            }),
+          orElse: () =>
+            Effect.fail(
+              new HostOperationError({
+                operation: input.operation,
+                message: `Azure DevOps ${input.operation} timed out after ${REQUEST_TIMEOUT}. Check the server address and network.`,
+              }),
+            ),
         }),
       );
       if (response.status >= 300 && response.status < 400) {
@@ -200,7 +202,7 @@ const readErrorDetail = (response: Response) =>
   Effect.tryPromise({
     try: () => response.text(),
     catch: () => new HostOperationError({ operation: "azureDevOps.readError", message: "" }),
-  }).pipe(Effect.catchAll(() => Effect.succeed("")));
+  }).pipe(Effect.catch(() => Effect.succeed("")));
 
 const failureGuidance = (status: number): string => {
   if (status === 401) {

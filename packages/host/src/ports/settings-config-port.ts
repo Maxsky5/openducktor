@@ -28,7 +28,7 @@ export type SettingsConfigPort = {
   join(...paths: string[]): string;
 };
 
-export class SettingsConfigPortTag extends Context.Tag("@openducktor/host/SettingsConfigPort")<
+export class SettingsConfigPortTag extends Context.Service<
   SettingsConfigPortTag,
   SettingsConfigPort
->() {}
+>()("@openducktor/host/SettingsConfigPort") {}

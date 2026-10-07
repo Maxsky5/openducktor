@@ -125,15 +125,15 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           "Pull request linking",
         );
       } else {
-        const cleanupResult = yield* Effect.either(
+        const cleanupResult = yield* Effect.result(
           loadTaskBranchCleanup(dependencies, current, repoPath, taskId, "Pull request linking"),
         );
-        if (cleanupResult._tag === "Right") {
-          cleanup = cleanupResult.right;
+        if (cleanupResult._tag === "Success") {
+          cleanup = cleanupResult.success;
         } else {
-          const message = errorMessage(cleanupResult.left);
+          const message = errorMessage(cleanupResult.failure);
           if (!canSkipRelinkedPullRequestCleanup(message)) {
-            return yield* Effect.fail(cleanupResult.left);
+            return yield* Effect.fail(cleanupResult.failure);
           }
         }
       }
@@ -142,7 +142,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
-      const postLink = yield* Effect.either(
+      const postLink = yield* Effect.result(
         Effect.gen(function* () {
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
           const cleanupEffect = cleanup
@@ -172,12 +172,12 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           });
         }),
       );
-      if (postLink._tag === "Left") {
+      if (postLink._tag === "Failure") {
         return yield* Effect.fail(
-          createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.left),
+          createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.failure),
         );
       }
-      const task = postLink.right;
+      const task = postLink.success;
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return enrichTask(task, nextTasks);

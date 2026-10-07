@@ -86,7 +86,7 @@ export const registerElectronNotificationStreamIpc = (
           ),
           // Host shutdown ends every stream. The renderer closes with the host, so this end is
           // not a delivery failure.
-          Effect.catchAll((cause) =>
+          Effect.catch((cause) =>
             Effect.sync(() => (isHostShutdownStarted() ? release() : failDelivery(cause))),
           ),
         ),

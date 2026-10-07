@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { useRuntimeProbeResource } from "./runtime-executable-probe-lifecycle";
 
@@ -8,7 +8,7 @@ const firstFailureMessage = async (effect: Effect.Effect<void, HostOperationErro
   if (!Exit.isFailure(exit)) {
     return null;
   }
-  const failure = Chunk.head(Cause.failures(exit.cause));
+  const failure = Cause.findErrorOption(exit.cause);
   return failure._tag === "Some" ? failure.value.message : null;
 };
 

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { TaskStorePort } from "../ports/task-repository-ports";
 
 const unexpectedTaskStoreCall = (methodName: keyof TaskStorePort) => () =>
-  Effect.dieMessage(`Unexpected task store call: ${methodName}`);
+  Effect.die(new Error(`Unexpected task store call: ${methodName}`));
 
 export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePort>>(
   overrides: Overrides,

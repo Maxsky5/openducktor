@@ -217,9 +217,9 @@ export const createSqliteTaskRepositoryContextManager = ({
       );
       const failures: HostOperationErrorAggregate[] = [];
       for (const [databasePath, slot] of matches) {
-        const result = yield* Effect.either(slot.shutdown());
-        if (result._tag === "Left") {
-          failures.push(result.left);
+        const result = yield* Effect.result(slot.shutdown());
+        if (result._tag === "Failure") {
+          failures.push(result.failure);
           continue;
         }
         slots.delete(databasePath);
@@ -240,10 +240,12 @@ export const createSqliteTaskRepositoryContextManager = ({
       yield* admission.stop();
       const results = yield* Effect.forEach(
         Array.from(slots.values()),
-        (slot) => Effect.either(slot.shutdown()),
+        (slot) => Effect.result(slot.shutdown()),
         { concurrency: "unbounded" },
       );
-      const failures = results.flatMap((result) => (result._tag === "Left" ? [result.left] : []));
+      const failures = results.flatMap((result) =>
+        result._tag === "Failure" ? [result.failure] : [],
+      );
       if (failures.length > 0) {
         return yield* new HostOperationError({
           operation: "sqliteTaskRepository.disposeConnections",

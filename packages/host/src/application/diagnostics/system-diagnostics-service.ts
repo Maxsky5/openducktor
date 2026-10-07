@@ -71,18 +71,18 @@ const resolveToolAvailability = (
   toolDiscovery: ToolDiscoveryPort,
   toolId: ToolDiscoveryId,
 ): Effect.Effect<ToolAvailability, never> =>
-  Effect.either(toolDiscovery.resolveTool(toolId)).pipe(
+  Effect.result(toolDiscovery.resolveTool(toolId)).pipe(
     Effect.map((result) =>
-      result._tag === "Right"
+      result._tag === "Success"
         ? {
-            displayLabel: result.right.displayLabel,
+            displayLabel: result.success.displayLabel,
             error: null,
-            path: result.right.path,
-            sourceCategory: result.right.sourceCategory,
+            path: result.success.path,
+            sourceCategory: result.success.sourceCategory,
           }
         : {
             displayLabel: "Unavailable",
-            error: errorMessage(result.left),
+            error: errorMessage(result.failure),
             path: null,
             sourceCategory: "unavailable",
           },
@@ -95,21 +95,21 @@ const versionForResolvedTool = (
 ) =>
   toolPath === null
     ? Effect.succeed({ error: null, version: null } satisfies ToolVersionAvailability)
-    : Effect.either(readVersion(toolPath)).pipe(
+    : Effect.result(readVersion(toolPath)).pipe(
         Effect.map((result) => {
-          if (result._tag === "Left") {
+          if (result._tag === "Failure") {
             return {
-              error: `Failed reading ${toolName} --version from ${toolPath}: ${errorMessage(result.left)}`,
+              error: `Failed reading ${toolName} --version from ${toolPath}: ${errorMessage(result.failure)}`,
               version: null,
             } satisfies ToolVersionAvailability;
           }
-          if (result.right === null) {
+          if (result.success === null) {
             return {
               error: `Failed reading ${toolName} --version from ${toolPath}.`,
               version: null,
             } satisfies ToolVersionAvailability;
           }
-          return { error: null, version: result.right } satisfies ToolVersionAvailability;
+          return { error: null, version: result.success } satisfies ToolVersionAvailability;
         }),
       );
 export const createSystemDiagnosticsService = ({

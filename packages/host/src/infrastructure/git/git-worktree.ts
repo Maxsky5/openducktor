@@ -171,9 +171,9 @@ export const configureBranchUpstream = (
       "config",
       branchMergeKey,
       localBranchRef,
-    ]).pipe(Effect.either);
-    if (mergeConfigResult._tag === "Left") {
-      const error = mergeConfigResult.left;
+    ]).pipe(Effect.result);
+    if (mergeConfigResult._tag === "Failure") {
+      const error = mergeConfigResult.failure;
       const cleanupError = yield* cleanupFailedUpstreamSetup(
         runner,
         repoPath,
@@ -207,9 +207,9 @@ export const configureBranchUpstream = (
         }
         yield* runGit(runner, repoPath, ["update-ref", trackingRef, localBranchOid]);
         createdTrackingRef = trackingRef;
-      }).pipe(Effect.either);
-      if (trackingResult._tag === "Left") {
-        const error = trackingResult.left;
+      }).pipe(Effect.result);
+      if (trackingResult._tag === "Failure") {
+        const error = trackingResult.failure;
         const cleanupError = yield* cleanupFailedUpstreamSetup(
           runner,
           repoPath,
@@ -248,9 +248,9 @@ export const configureBranchUpstream = (
           ),
         );
       }
-    }).pipe(Effect.either);
-    if (verifyResult._tag === "Left") {
-      const error = verifyResult.left;
+    }).pipe(Effect.result);
+    if (verifyResult._tag === "Failure") {
+      const error = verifyResult.failure;
       if (error instanceof Error && error.message.startsWith("configured upstream resolved to ")) {
         return yield* Effect.fail(error);
       }

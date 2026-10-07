@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Option } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { HostOperationError } from "../../effect/host-errors";
 import { FilesystemFileOperationError } from "../../ports/filesystem-port";
@@ -47,10 +47,11 @@ const writeError = async (
 ) => {
   const exit = await Effect.runPromiseExit(effect);
   expect(exit._tag).toBe("Failure");
-  if (exit._tag !== "Failure" || exit.cause._tag !== "Fail") {
+  const failure = exit._tag === "Failure" ? Cause.findErrorOption(exit.cause) : Option.none();
+  if (Option.isNone(failure)) {
     throw new Error("Expected a typed workspace text file write failure.");
   }
-  return exit.cause.error;
+  return failure.value;
 };
 
 const writeFailure = async (

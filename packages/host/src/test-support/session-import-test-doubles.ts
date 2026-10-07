@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 export const unexpectedSessionImport = {
-  scanSessions: () => ({ next: () => Effect.dieMessage("Unexpected session listing") }),
-  inspectSession: () => Effect.dieMessage("Unexpected session import inspection"),
+  scanSessions: () => ({ next: () => Effect.die(new Error("Unexpected session listing")) }),
+  inspectSession: () => Effect.die(new Error("Unexpected session import inspection")),
 };
 export const unexpectedNativeSessionImport = {
   scanSessions: () => ({

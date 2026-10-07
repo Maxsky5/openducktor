@@ -41,7 +41,7 @@ export type SystemCommandPort = {
   ): Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>;
 };
 
-export class SystemCommandPortTag extends Context.Tag("@openducktor/host/SystemCommandPort")<
+export class SystemCommandPortTag extends Context.Service<
   SystemCommandPortTag,
   SystemCommandPort
->() {}
+>()("@openducktor/host/SystemCommandPort") {}

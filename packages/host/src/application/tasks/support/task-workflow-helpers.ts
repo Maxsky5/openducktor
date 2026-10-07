@@ -40,8 +40,8 @@ const tryCanonicalizePath = (
     if (!trimmed) {
       return undefined;
     }
-    const result = yield* Effect.either(settingsConfig.canonicalizePath(trimmed));
-    return result._tag === "Right" ? result.right : undefined;
+    const result = yield* Effect.result(settingsConfig.canonicalizePath(trimmed));
+    return result._tag === "Success" ? result.success : undefined;
   });
 const canonicalizeRequiredPath = (
   settingsConfig: SettingsConfigPort,

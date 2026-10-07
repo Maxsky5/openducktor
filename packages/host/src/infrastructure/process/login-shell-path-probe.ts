@@ -51,7 +51,7 @@ export const probeLoginShellPath = (
   shell: string,
   timeoutMs: number,
 ): Effect.Effect<string, ProcessEnvironmentError> =>
-  Effect.async<string, ProcessEnvironmentError>((resume, signal) => {
+  Effect.callback<string, ProcessEnvironmentError>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(shell, probeArgs(shell), {
@@ -244,13 +244,15 @@ export const probeLoginShellPath = (
       finishWithoutMarkers();
     });
   }).pipe(
-    Effect.timeoutFail({
+    Effect.timeoutOrElse({
       duration: `${timeoutMs} millis`,
-      onTimeout: () =>
-        processEnvironmentError(
-          shell,
-          "timed_out",
-          `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for slow commands or commands that wait for input, then select Refresh in Diagnostics.`,
+      orElse: () =>
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "timed_out",
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for slow commands or commands that wait for input, then select Refresh in Diagnostics.`,
+          ),
         ),
     }),
   );

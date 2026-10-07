@@ -231,15 +231,15 @@ describe("workspace admission service", () => {
         Effect.gen(function* () {
           const started = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
-          const fiber = yield* Effect.fork(
+          const fiber = yield* Effect.forkChild(
             admission.withProcessStartAdmission(
               "/repos/ws",
-              Deferred.succeed(started, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
             ),
           );
           yield* Deferred.await(started);
 
-          const reservation = yield* Effect.either(
+          const reservation = yield* Effect.result(
             admission.reserveWorkspace({
               operation: "close",
               repoPath: "/repos/ws",
@@ -247,8 +247,8 @@ describe("workspace admission service", () => {
             }),
           );
           expect(reservation).toMatchObject({
-            _tag: "Left",
-            left: { message: "A process is starting for ws. Wait for it to finish and retry." },
+            _tag: "Failure",
+            failure: { message: "A process is starting for ws. Wait for it to finish and retry." },
           });
 
           yield* Deferred.succeed(release, undefined);
@@ -278,12 +278,12 @@ describe("workspace admission service", () => {
         Effect.gen(function* () {
           const started = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
-          const fiber = yield* Effect.fork(
+          const fiber = yield* Effect.forkChild(
             admission.withAdministrativeAccess(
               "closed-ws",
               Deferred.succeed(started, undefined).pipe(
-                Effect.zipRight(Deferred.await(release)),
-                Effect.zipRight(
+                Effect.andThen(Deferred.await(release)),
+                Effect.andThen(
                   admission.assertTaskStoreAccess({
                     operation: "sqliteTaskRepository.listTasks",
                     repoPath: "/repos/closed",
@@ -295,20 +295,44 @@ describe("workspace admission service", () => {
           );
           yield* Deferred.await(started);
 
-          const ordinaryAccess = yield* Effect.either(
+          const ordinaryAccess = yield* Effect.result(
             admission.assertTaskStoreAccess({
               operation: "sqliteTaskRepository.listTasks",
               repoPath: "/repos/closed",
               workspaceId: "closed-ws",
             }),
           );
-          expect(ordinaryAccess._tag).toBe("Left");
+          expect(ordinaryAccess._tag).toBe("Failure");
 
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(fiber);
         }),
       ),
     );
+  });
+
+  test("keeps administrative access local to its service instance", async () => {
+    const closed = catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] });
+    const admission = createAdmission(closed);
+    const otherAdmission = createAdmission(closed);
+    const access = {
+      operation: "sqliteTaskRepository.listTasks",
+      repoPath: "/repos/closed",
+      workspaceId: "closed-ws",
+    };
+
+    const [own, other] = await Effect.runPromise(
+      admission.withAdministrativeAccess(
+        "closed-ws",
+        Effect.all([
+          Effect.result(admission.assertTaskStoreAccess(access)),
+          Effect.result(otherAdmission.assertTaskStoreAccess(access)),
+        ]),
+      ),
+    );
+
+    expect(own._tag).toBe("Success");
+    expect(other._tag).toBe("Failure");
   });
 
   test("tracks block and unblock changes after initialization", async () => {

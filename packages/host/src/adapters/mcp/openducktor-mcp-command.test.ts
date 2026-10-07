@@ -239,7 +239,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
   test("preserves validation errors from Bun discovery", async () => {
     const root = await createWorkspaceRoot();
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createSourceRuntimeDistribution(root),
           toolDiscovery: {
@@ -276,11 +276,11 @@ describe("resolveOpenDucktorMcpCommand", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") {
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") {
       return;
     }
-    expect(result.left).toBeInstanceOf(HostValidationError);
-    expect(result.left.message).toBe("Configured bun override is invalid.");
+    expect(result.failure).toBeInstanceOf(HostValidationError);
+    expect(result.failure.message).toBe("Configured bun override is invalid.");
   });
 });

@@ -58,7 +58,7 @@ export const acquireGeneratedImageWorker = (
       Effect.tryPromise({
         try: () => worker.terminate(),
         catch: (cause) => imageWorkerFailure("worker", "terminate", cause),
-      }).pipe(Effect.catchAll(onTerminationFailure)),
+      }).pipe(Effect.catch(onTerminationFailure)),
   );
 
 export const exchangeImageWorkerMessage = (
@@ -67,7 +67,7 @@ export const exchangeImageWorkerMessage = (
   itemId: string,
   expectedKind: Exclude<GeneratedImageWorkerResponse["kind"], "invalid">,
 ): Effect.Effect<GeneratedImageWorkerResponse, HostError> =>
-  Effect.async((resume) => {
+  Effect.callback((resume) => {
     if (channel.failure) {
       const { phase, cause, exitCode } = channel.failure;
       resume(Effect.fail(imageWorkerFailure(itemId, phase, cause, exitCode)));

@@ -229,7 +229,7 @@ export const createWorkspaceLifecycleService = ({
         );
         for (const worktreePath of worktreePaths) {
           yield* persistProgress(input.workspaceId, "worktrees", worktreePath);
-          const result = yield* Effect.either(
+          const result = yield* Effect.result(
             removeWorktreeAndFilesystemPath(
               { gitPort, settingsConfig, worktreeFiles },
               {
@@ -241,14 +241,14 @@ export const createWorkspaceLifecycleService = ({
               },
             ),
           );
-          if (result._tag === "Left") {
+          if (result._tag === "Failure") {
             return yield* failRemovalPhase(
               input.workspaceId,
               "worktrees",
               removedWorktrees,
               worktreePath,
-              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${result.left.message}. Retry removal to continue. Local branches and committed history stay.`,
-              result.left,
+              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${result.failure.message}. Retry removal to continue. Local branches and committed history stay.`,
+              result.failure,
             );
           }
           removedWorktrees.push(worktreePath);
@@ -259,17 +259,17 @@ export const createWorkspaceLifecycleService = ({
       }
 
       if (phase === "attachments") {
-        const assetsResult = yield* Effect.either(
+        const assetsResult = yield* Effect.result(
           storage.removeWorkspaceTaskAssets(input.workspaceId),
         );
-        if (assetsResult._tag === "Left") {
+        if (assetsResult._tag === "Failure") {
           return yield* failRemovalPhase(
             input.workspaceId,
             "attachments",
             removedWorktrees,
             undefined,
-            `Failed to remove workspace task attachments: ${assetsResult.left.message}. Retry removal to continue.`,
-            assetsResult.left,
+            `Failed to remove workspace task attachments: ${assetsResult.failure.message}. Retry removal to continue.`,
+            assetsResult.failure,
           );
         }
         phase = "task_store";
@@ -277,17 +277,17 @@ export const createWorkspaceLifecycleService = ({
       }
 
       if (phase === "task_store") {
-        const storeResult = yield* Effect.either(
+        const storeResult = yield* Effect.result(
           storage.removeWorkspaceTaskStore(input.workspaceId),
         );
-        if (storeResult._tag === "Left") {
+        if (storeResult._tag === "Failure") {
           return yield* failRemovalPhase(
             input.workspaceId,
             "task_store",
             removedWorktrees,
             undefined,
-            `Failed to remove the workspace task store: ${storeResult.left.message}. The workspace stays frozen. Retry removal to continue.`,
-            storeResult.left,
+            `Failed to remove the workspace task store: ${storeResult.failure.message}. The workspace stays frozen. Retry removal to continue.`,
+            storeResult.failure,
           );
         }
       }

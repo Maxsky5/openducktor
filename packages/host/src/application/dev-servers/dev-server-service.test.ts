@@ -260,15 +260,15 @@ const expectStartFailure = async (
   service: TestDevServerService,
 ): Promise<z.output<typeof devServerStartFailureSchema>> => {
   const startResult = await Effect.runPromise(
-    Effect.either(service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } })),
+    Effect.result(service.start({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } })),
   );
-  if (startResult._tag === "Right") {
+  if (startResult._tag === "Success") {
     throw new Error("Expected dev server start to fail.");
   }
-  if (!(startResult.left instanceof HostOperationError)) {
+  if (!(startResult.failure instanceof HostOperationError)) {
     throw new Error("Expected dev server start to fail with HostOperationError.");
   }
-  return devServerStartFailureSchema.parse(startResult.left);
+  return devServerStartFailureSchema.parse(startResult.failure);
 };
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {

@@ -256,7 +256,7 @@ const expandUntrackedStatusPaths = (
           statusPath,
           workingDirectory,
         }),
-    }).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+    }).pipe(Effect.catch(() => Effect.succeed(undefined)));
     if (!pathStats?.isDirectory()) {
       return [statusPath];
     }

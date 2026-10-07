@@ -778,7 +778,7 @@ describe("createElectronHostCommandRouter", () => {
       await router.initialize();
       await waitForRuntimeState(router, ["opencode", "codex"], "ready");
 
-      await expect(router.dispose()).resolves.toBeUndefined();
+      expect(await router.dispose()).toBeUndefined();
 
       expect(runtimeStarter.stops.toSorted()).toEqual(["codex-1", "opencode-1"]);
       expect(lifecycleLogs).toEqual(
@@ -806,9 +806,7 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
     });
 
-    await expect(
-      router.invoke("filesystem_list_directory", { path: "/workspace" }),
-    ).resolves.toMatchObject({
+    expect(await router.invoke("filesystem_list_directory", { path: "/workspace" })).toMatchObject({
       currentPath: "/workspace",
       entries: [
         {
@@ -827,8 +825,8 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
     });
 
-    await expect(router.invoke("workspace_list")).resolves.toEqual([]);
-    await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+    expect(await router.invoke("workspace_list")).toEqual([]);
+    expect(await router.invoke("workspace_get_settings_snapshot")).toMatchObject({
       theme: "system",
       workspaces: {},
     });
@@ -871,7 +869,7 @@ describe("createElectronHostCommandRouter", () => {
       expect(await readFile(configPath, "utf8")).toBe(legacyConfig);
 
       await writeFile(configPath, JSON.stringify({ version: 3 }));
-      await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+      expect(await router.invoke("workspace_get_settings_snapshot")).toMatchObject({
         theme: "system",
       });
     } finally {
@@ -888,19 +886,19 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
     });
 
-    await expect(
-      router.invoke("workspace_stage_local_attachment", {
+    expect(
+      await router.invoke("workspace_stage_local_attachment", {
         name: "brief.pdf",
         base64Data: "YnJpZWY=",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       path: expect.stringContaining("/tmp/openducktor-local-attachments/"),
     });
-    await expect(
-      router.invoke("workspace_resolve_local_attachment_path", {
+    expect(
+      await router.invoke("workspace_resolve_local_attachment_path", {
         path: "brief.pdf",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       path: "/tmp/openducktor-local-attachments/00000000-0000-0000-0000-000000000000-brief.pdf",
     });
   });
@@ -923,7 +921,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     try {
-      await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
+      expect(await router.invoke("runtime_definitions_list", {})).toMatchObject([
         { kind: "opencode" },
         { kind: "codex" },
         { kind: "claude" },
@@ -938,7 +936,7 @@ describe("createElectronHostCommandRouter", () => {
         trigger: "host_startup",
         failure: null,
       });
-      await expect(router.invoke("runtime_require", { runtimeKind: "opencode" })).resolves.toEqual({
+      expect(await router.invoke("runtime_require", { runtimeKind: "opencode" })).toEqual({
         kind: "opencode",
         runtimeId: "opencode-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
@@ -954,12 +952,12 @@ describe("createElectronHostCommandRouter", () => {
         expect.objectContaining({ kind: "opencode", runtimeId: "opencode-1", effect: "restart" }),
       ]);
       expect(impact.workspaces).toEqual([]);
-      await expect(
-        router.invoke("runtime_restart", {
+      expect(
+        await router.invoke("runtime_restart", {
           runtimeKind: "opencode",
           confirmation: impact.confirmation,
         }),
-      ).resolves.toMatchObject({
+      ).toMatchObject({
         type: "completed",
         status: { kind: "opencode", state: "ready", runtimeId: "opencode-2", failure: null },
       });
@@ -1001,12 +999,12 @@ describe("createElectronHostCommandRouter", () => {
       ),
     });
 
-    await expect(
-      router.invoke("dev_server_get_state", {
+    expect(
+      await router.invoke("dev_server_get_state", {
         repoPath: "/repo",
         owner: { kind: "task", taskId: "task-1" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       repoPath: "/repo",
       owner: { kind: "task", taskId: "task-1" },
       workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
@@ -1019,20 +1017,20 @@ describe("createElectronHostCommandRouter", () => {
         },
       ],
     });
-    await expect(
-      router.invoke("task_worktree_get", {
+    expect(
+      await router.invoke("task_worktree_get", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
     });
-    await expect(
-      router.invoke("dev_server_start", {
+    expect(
+      await router.invoke("dev_server_start", {
         repoPath: "/repo",
         owner: { kind: "task", taskId: "task-1" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       scripts: [
         {
           scriptId: "web",
@@ -1042,12 +1040,12 @@ describe("createElectronHostCommandRouter", () => {
         },
       ],
     });
-    await expect(
-      router.invoke("dev_server_stop", {
+    expect(
+      await router.invoke("dev_server_stop", {
         repoPath: "/repo",
         owner: { kind: "task", taskId: "task-1" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       scripts: [
         {
           scriptId: "web",
@@ -1301,18 +1299,18 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
     });
 
-    await expect(router.invoke("git_get_branches", { repoPath: "/repo" })).resolves.toEqual([
+    expect(await router.invoke("git_get_branches", { repoPath: "/repo" })).toEqual([
       { name: "main", isCurrent: true, isRemote: false },
     ]);
-    await expect(router.invoke("git_get_current_branch", { repoPath: "/repo" })).resolves.toEqual({
+    expect(await router.invoke("git_get_current_branch", { repoPath: "/repo" })).toEqual({
       name: "main",
       detached: false,
       revision: "abc123",
     });
-    await expect(router.invoke("git_get_status", { repoPath: "/repo" })).resolves.toEqual([
+    expect(await router.invoke("git_get_status", { repoPath: "/repo" })).toEqual([
       { path: "src/main.ts", status: "modified", staged: false },
     ]);
-    await expect(router.invoke("git_get_diff", { repoPath: "/repo" })).resolves.toEqual([
+    expect(await router.invoke("git_get_diff", { repoPath: "/repo" })).toEqual([
       {
         file: "src/main.ts",
         type: "modified",
@@ -1334,34 +1332,34 @@ describe("createElectronHostCommandRouter", () => {
     if (!("snapshot" in worktreeStatus)) {
       throw new Error("Expected git worktree status to include a reset snapshot.");
     }
-    await expect(
-      router.invoke("git_get_worktree_status_summary", {
+    expect(
+      await router.invoke("git_get_worktree_status_summary", {
         repoPath: "/repo",
         targetBranch: "origin/main",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       currentBranch: { name: "main" },
       fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
       snapshot: { targetBranch: "origin/main", diffScope: "target" },
     });
-    await expect(
-      router.invoke("git_commits_ahead_behind", {
+    expect(
+      await router.invoke("git_commits_ahead_behind", {
         repoPath: "/repo",
         targetBranch: "origin/main",
       }),
-    ).resolves.toEqual({ ahead: 3, behind: 2 });
-    await expect(
-      router.invoke("git_switch_branch", {
+    ).toEqual({ ahead: 3, behind: 2 });
+    expect(
+      await router.invoke("git_switch_branch", {
         repoPath: "/repo",
         branch: "feature/electron",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       name: "feature/electron",
       detached: false,
       revision: "def456",
     });
-    await expect(
-      router.invoke("git_reset_worktree_selection", {
+    expect(
+      await router.invoke("git_reset_worktree_selection", {
         repoPath: "/repo",
         targetBranch: "origin/main",
         snapshot: worktreeStatus.snapshot,
@@ -1370,58 +1368,58 @@ describe("createElectronHostCommandRouter", () => {
           filePath: "src/main.ts",
         },
       }),
-    ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
-    await expect(
-      router.invoke("git_fetch_remote", {
+    ).toEqual({ affectedPaths: ["src/main.ts"] });
+    expect(
+      await router.invoke("git_fetch_remote", {
         repoPath: "/repo",
         targetBranch: "origin/main",
       }),
-    ).resolves.toEqual({ outcome: "fetched", output: "Fetched origin" });
-    await expect(
-      router.invoke("git_pull_branch", {
+    ).toEqual({ outcome: "fetched", output: "Fetched origin" });
+    expect(
+      await router.invoke("git_pull_branch", {
         repoPath: "/repo",
       }),
-    ).resolves.toEqual({ outcome: "pulled", output: "Fast-forward" });
-    await expect(
-      router.invoke("git_commit_all", {
+    ).toEqual({ outcome: "pulled", output: "Fast-forward" });
+    expect(
+      await router.invoke("git_commit_all", {
         repoPath: "/repo",
         message: "Ship Electron host",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       outcome: "committed",
       commitHash: "abc123",
       output: "[feature abc123] Ship Electron host",
     });
-    await expect(
-      router.invoke("git_push_branch", {
+    expect(
+      await router.invoke("git_push_branch", {
         repoPath: "/repo",
         branch: "feature/electron",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       outcome: "pushed",
       remote: "origin",
       branch: "feature/electron",
       output: "Pushed",
     });
-    await expect(
-      router.invoke("git_rebase_branch", {
+    expect(
+      await router.invoke("git_rebase_branch", {
         repoPath: "/repo",
         targetBranch: "origin/main",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       outcome: "rebased",
       output: "Successfully rebased",
     });
-    await expect(router.invoke("git_rebase_abort", { repoPath: "/repo" })).resolves.toEqual({
+    expect(await router.invoke("git_rebase_abort", { repoPath: "/repo" })).toEqual({
       outcome: "aborted",
       output: "Successfully aborted rebase",
     });
-    await expect(
-      router.invoke("git_abort_conflict", {
+    expect(
+      await router.invoke("git_abort_conflict", {
         repoPath: "/repo",
         operation: "direct_merge_merge_commit",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       output: "Conflict operation aborted",
     });
   });
@@ -1434,20 +1432,20 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
     });
 
-    await expect(router.invoke("system_list_open_in_tools", {})).resolves.toEqual([
+    expect(await router.invoke("system_list_open_in_tools", {})).toEqual([
       { toolId: "finder", iconDataUrl: null },
     ]);
-    await expect(
-      router.invoke("system_open_directory_in_tool", {
+    expect(
+      await router.invoke("system_open_directory_in_tool", {
         directoryPath: "/repo",
         toolId: "finder",
       }),
-    ).resolves.toEqual({ ok: true });
-    await expect(
-      router.invoke("open_external_url", {
+    ).toEqual({ ok: true });
+    expect(
+      await router.invoke("open_external_url", {
         url: "https://example.com",
       }),
-    ).resolves.toEqual({ ok: true });
+    ).toEqual({ ok: true });
   });
 
   test("registers migrated Git provider commands", async () => {
@@ -1475,18 +1473,18 @@ describe("createElectronHostCommandRouter", () => {
       systemCommands: createSystemCommands(),
     });
 
-    await expect(
-      router.invoke("workspace_detect_github_repository", {
+    expect(
+      await router.invoke("workspace_detect_github_repository", {
         repoPath: "/repo",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       host: "github.com",
       owner: "openai",
       name: "openducktor",
     });
-    await expect(
-      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
-    ).resolves.toMatchObject({
+    expect(
+      await router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
+    ).toMatchObject({
       descriptor: {
         id: "github",
         capabilities: {
@@ -1526,7 +1524,7 @@ describe("createElectronHostCommandRouter", () => {
       systemCommands: createSystemCommands(),
     });
 
-    await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
+    expect(await router.invoke("runtime_check", { force: true })).toMatchObject({
       pathOk: false,
       gitOk: true,
       runtimes: [
@@ -1536,7 +1534,7 @@ describe("createElectronHostCommandRouter", () => {
       ],
       errors: [processEnvironmentError.message],
     });
-    await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({
+    expect(await router.invoke("task_store_check", { repoPath: "/repo" })).toMatchObject({
       taskStoreOk: false,
       taskStoreError: "Workspace is not configured for repository: /repo",
       repoStoreHealth: { status: "blocking" },
@@ -1583,7 +1581,7 @@ describe("createElectronHostCommandRouter", () => {
           systemCommands: createSystemCommands(),
         });
 
-        await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
+        expect(await router.invoke("runtime_check", { force: true })).toMatchObject({
           errors: expect.arrayContaining([processEnvironmentError.message]),
         });
         if (fixture.config) {
@@ -1606,7 +1604,7 @@ describe("createElectronHostCommandRouter", () => {
       taskStore: createTaskStore(),
     });
 
-    await expect(router.invoke("tasks_list", { repoPath: "/repo" })).resolves.toEqual([
+    expect(await router.invoke("tasks_list", { repoPath: "/repo" })).toEqual([
       expect.objectContaining({
         id: "task-1",
         availableActions: [
@@ -1619,12 +1617,12 @@ describe("createElectronHostCommandRouter", () => {
         ],
       }),
     ]);
-    await expect(
-      router.invoke("task_create", {
+    expect(
+      await router.invoke("task_create", {
         repoPath: "/repo",
         input: { title: "Task 2", issueType: "task", priority: 2 },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-2",
       availableActions: [
         "view_details",
@@ -1635,23 +1633,23 @@ describe("createElectronHostCommandRouter", () => {
         "close_task",
       ],
     });
-    await expect(
-      router.invoke("task_transition", {
+    expect(
+      await router.invoke("task_transition", {
         repoPath: "/repo",
         taskId: "task-1",
         status: "in_progress",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "in_progress",
       availableActions: expect.arrayContaining(["open_builder"]),
     });
-    await expect(
-      router.invoke("task_metadata_get", {
+    expect(
+      await router.invoke("task_metadata_get", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       spec: {
         markdown: "# Spec",
         updatedAt: "2026-01-02T00:00:00Z",
@@ -1664,29 +1662,25 @@ describe("createElectronHostCommandRouter", () => {
       },
       agentSessions: [],
     });
-    await expect(
-      router.invoke("spec_get", { repoPath: "/repo", taskId: "task-1" }),
-    ).resolves.toEqual({
+    expect(await router.invoke("spec_get", { repoPath: "/repo", taskId: "task-1" })).toEqual({
       markdown: "# Spec",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    await expect(
-      router.invoke("plan_get", { repoPath: "/repo", taskId: "task-1" }),
-    ).resolves.toEqual({
+    expect(await router.invoke("plan_get", { repoPath: "/repo", taskId: "task-1" })).toEqual({
       markdown: "# Plan",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    await expect(
-      router.invoke("qa_get_report", { repoPath: "/repo", taskId: "task-1" }),
-    ).resolves.toEqual({ markdown: "" });
-    await expect(
-      router.invoke("agent_sessions_list", {
+    expect(await router.invoke("qa_get_report", { repoPath: "/repo", taskId: "task-1" })).toEqual({
+      markdown: "",
+    });
+    expect(
+      await router.invoke("agent_sessions_list", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toEqual([]);
+    ).toEqual([]);
 
     const sessionAborts: string[] = [];
     const opencodeServer = Bun.serve({
@@ -1739,8 +1733,8 @@ describe("createElectronHostCommandRouter", () => {
     try {
       await sessionStopRouter.initialize();
       await waitForRuntimeState(sessionStopRouter, ["opencode"], "ready");
-      await expect(
-        sessionStopRouter.invoke("agent_session_stop", {
+      expect(
+        await sessionStopRouter.invoke("agent_session_stop", {
           request: {
             repoPath: "/repo",
             taskId: "task-1",
@@ -1749,7 +1743,7 @@ describe("createElectronHostCommandRouter", () => {
             workingDirectory: "/repo/worktree",
           },
         }),
-      ).resolves.toEqual({ ok: true });
+      ).toEqual({ ok: true });
       expect(sessionAborts).toEqual([
         "POST /session/external-session-1/abort?directory=%2Frepo%2Fworktree",
       ]);
@@ -1758,46 +1752,46 @@ describe("createElectronHostCommandRouter", () => {
       await opencodeServer.stop(true);
     }
 
-    await expect(
-      router.invoke("set_spec", {
+    expect(
+      await router.invoke("set_spec", {
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Spec",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       markdown: "# Spec",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    await expect(
-      router.invoke("spec_save_document", {
+    expect(
+      await router.invoke("spec_save_document", {
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Spec v2",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       markdown: "# Spec v2",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    await expect(
-      router.invoke("set_plan", {
+    expect(
+      await router.invoke("set_plan", {
         repoPath: "/repo",
         taskId: "task-1",
         input: { markdown: "# Plan" },
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       markdown: "# Plan",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    await expect(
-      router.invoke("plan_save_document", {
+    expect(
+      await router.invoke("plan_save_document", {
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Plan v2",
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       markdown: "# Plan v2",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
@@ -1817,18 +1811,18 @@ describe("createElectronHostCommandRouter", () => {
       },
       taskStore: createTaskStore(),
     });
-    await expect(
-      deleteRouter.invoke("task_delete", {
+    expect(
+      await deleteRouter.invoke("task_delete", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toEqual({ ok: true });
-    await expect(
-      deleteRouter.invoke("task_reset", {
+    ).toEqual({ ok: true });
+    expect(
+      await deleteRouter.invoke("task_reset", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({ id: "task-1", status: "open" });
+    ).toMatchObject({ id: "task-1", status: "open" });
     const resetImplementationTaskStore = createTaskStore();
     const resetImplementationRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1860,12 +1854,12 @@ describe("createElectronHostCommandRouter", () => {
           ),
       },
     });
-    await expect(
-      resetImplementationRouter.invoke("task_reset_implementation", {
+    expect(
+      await resetImplementationRouter.invoke("task_reset_implementation", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
+    ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
     const pullRequestTaskStore = createTaskStore();
     const pullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1894,12 +1888,12 @@ describe("createElectronHostCommandRouter", () => {
           } satisfies TaskMetadataPayload),
       },
     });
-    await expect(
-      pullRequestRouter.invoke("task_pull_request_unlink", {
+    expect(
+      await pullRequestRouter.invoke("task_pull_request_unlink", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toBe(true);
+    ).toBe(true);
 
     const approvalRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -2014,12 +2008,12 @@ describe("createElectronHostCommandRouter", () => {
             .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
-    await expect(
-      detectPullRequestRouter.invoke("task_pull_request_detect", {
+    expect(
+      await detectPullRequestRouter.invoke("task_pull_request_detect", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       outcome: "linked",
       pullRequest: {
         providerId: "github",
@@ -2103,13 +2097,13 @@ describe("createElectronHostCommandRouter", () => {
             .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
-    await expect(
-      upsertPullRequestRouter.invoke("task_pull_request_upsert", {
+    expect(
+      await upsertPullRequestRouter.invoke("task_pull_request_upsert", {
         repoPath: "/repo",
         taskId: "task-1",
         input: { title: "Create PR", body: "Body" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       providerId: "github",
       number: 77,
       state: "open",
@@ -2220,11 +2214,11 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      pullRequestSyncRouter.invoke("repo_pull_request_sync", {
+    expect(
+      await pullRequestSyncRouter.invoke("repo_pull_request_sync", {
         repoPath: "/repo",
       }),
-    ).resolves.toEqual({ ok: true });
+    ).toEqual({ ok: true });
 
     const reviewRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -2340,43 +2334,43 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      reviewRouter.invoke("qa_approved", {
+    expect(
+      await reviewRouter.invoke("qa_approved", {
         repoPath: "/repo",
         taskId: "task-1",
         reportMarkdown: "Looks good",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "human_review",
       agentWorkflows: { qa: { completed: true } },
     });
-    await expect(
-      reviewRouter.invoke("qa_rejected", {
+    expect(
+      await reviewRouter.invoke("qa_rejected", {
         repoPath: "/repo",
         taskId: "task-1",
         reportMarkdown: "Needs work",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "in_progress",
     });
-    await expect(
-      reviewRouter.invoke("human_request_changes", {
+    expect(
+      await reviewRouter.invoke("human_request_changes", {
         repoPath: "/repo",
         taskId: "task-1",
         note: "Please adjust",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "in_progress",
     });
-    await expect(
-      reviewRouter.invoke("human_approve", {
+    expect(
+      await reviewRouter.invoke("human_approve", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "closed",
     });
@@ -2457,23 +2451,23 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      directMergeStartRouter.invoke("task_direct_merge", {
+    expect(
+      await directMergeStartRouter.invoke("task_direct_merge", {
         repoPath: "/repo",
         taskId: "task-1",
         input: { mergeMethod: "merge_commit" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       outcome: "completed",
       task: { id: "task-1", status: "human_review" },
     });
 
-    await expect(
-      router.invoke("build_resumed", {
+    expect(
+      await router.invoke("build_resumed", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "in_progress",
       availableActions: expect.arrayContaining(["open_builder"]),
@@ -2546,13 +2540,13 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      completionRouter.invoke("build_completed", {
+    expect(
+      await completionRouter.invoke("build_completed", {
         repoPath: "/repo",
         taskId: "task-1",
         input: { summary: "Done" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "ai_review",
       availableActions: expect.arrayContaining(["qa_start"]),
@@ -2634,12 +2628,12 @@ describe("createElectronHostCommandRouter", () => {
           } satisfies TaskMetadataPayload),
       },
     });
-    await expect(
-      directMergeRouter.invoke("task_direct_merge_complete", {
+    expect(
+      await directMergeRouter.invoke("task_direct_merge_complete", {
         repoPath: "/repo",
         taskId: "task-1",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "closed",
     });
@@ -2740,8 +2734,8 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      mergedPullRequestRouter.invoke("task_pull_request_link_merged", {
+    expect(
+      await mergedPullRequestRouter.invoke("task_pull_request_link_merged", {
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: {
@@ -2754,7 +2748,7 @@ describe("createElectronHostCommandRouter", () => {
           mergedAt: "2026-05-10T11:00:00.000Z",
         },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "closed",
     });
@@ -2817,24 +2811,24 @@ describe("createElectronHostCommandRouter", () => {
           ]),
       },
     });
-    await expect(
-      blockRouter.invoke("build_blocked", {
+    expect(
+      await blockRouter.invoke("build_blocked", {
         repoPath: "/repo",
         taskId: "task-1",
         reason: "Blocked by dependency",
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       status: "blocked",
       availableActions: expect.arrayContaining(["open_builder"]),
     });
-    await expect(
-      router.invoke("task_update", {
+    expect(
+      await router.invoke("task_update", {
         repoPath: "/repo",
         taskId: "task-1",
         patch: { title: "Updated task" },
       }),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       id: "task-1",
       title: "Updated task",
       availableActions: [
@@ -2881,13 +2875,13 @@ describe("createElectronHostCommandRouter", () => {
     try {
       await router.initialize();
       await waitForRuntimeState(router, ["opencode"], "ready");
-      await expect(
-        router.invoke("build_start", {
+      expect(
+        await router.invoke("build_start", {
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
         }),
-      ).resolves.toEqual({
+      ).toEqual({
         runtimeKind: "opencode",
         workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
       });

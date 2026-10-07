@@ -20,9 +20,9 @@ export const commitTitleUpdate = (
     ? Effect.succeed({ status: "not_attached" })
     : commitRenamed(result.summary).pipe(
         Effect.as({ status: "renamed" as const }),
-        Effect.catchAll((projectionFailure) =>
+        Effect.catch((projectionFailure) =>
           reportProjectionFailure(projectionFailure).pipe(
-            Effect.catchAll(() => Effect.void),
+            Effect.catch(() => Effect.void),
             Effect.as({ status: "renamed" as const }),
           ),
         ),

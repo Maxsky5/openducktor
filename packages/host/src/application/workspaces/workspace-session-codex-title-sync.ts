@@ -8,7 +8,7 @@ import type { createWorkspaceSessionOperationGate } from "./workspace-session-op
 import type {
   WorkspaceSessionRenameFailureReporter,
   WorkspaceSessionRuntimeTitleUpdater,
-} from "./workspace-session-runtime-persistence";
+} from "./workspace-session-persistence-callbacks";
 
 export type CodexTitleSyncState = Map<string, "pending" | "queued" | "handled">;
 
@@ -23,6 +23,7 @@ export const syncCodexTitleAfterTurn = (
     gate,
     updateTitle,
     reportFailure,
+    startJob,
   }: {
     state: CodexTitleSyncState;
     find: (ref: AgentSessionLiveRef) => Effect.Effect<LocatedSession | null, HostError>;
@@ -30,13 +31,15 @@ export const syncCodexTitleAfterTurn = (
     gate: ReturnType<typeof createWorkspaceSessionOperationGate>;
     updateTitle: WorkspaceSessionRuntimeTitleUpdater;
     reportFailure: WorkspaceSessionRenameFailureReporter;
+    /** Owns the sync after this call returns. */
+    startJob: (job: Effect.Effect<void>) => Effect.Effect<void>;
   },
 ) =>
   Effect.gen(function* () {
     const key = agentSessionRefKey(runtimeRef);
     if (state.get(key) !== "pending") return;
     state.set(key, "queued");
-    yield* Effect.forkDaemon(
+    yield* startJob(
       Effect.gen(function* () {
         const known = yield* find(runtimeRef);
         if (!known) return;
@@ -60,7 +63,7 @@ export const syncCodexTitleAfterTurn = (
           }),
         );
       }).pipe(
-        Effect.catchAll((failure) =>
+        Effect.catch((failure) =>
           reportFailure(
             runtimeRef,
             `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,

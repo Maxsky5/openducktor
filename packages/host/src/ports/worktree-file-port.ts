@@ -35,7 +35,6 @@ export type WorktreeFilePort = {
   pathIsWithinRoot(root: string, candidate: string): Effect.Effect<boolean, WorktreeFileError>;
 };
 
-export class WorktreeFilePortTag extends Context.Tag("@openducktor/host/WorktreeFilePort")<
-  WorktreeFilePortTag,
-  WorktreeFilePort
->() {}
+export class WorktreeFilePortTag extends Context.Service<WorktreeFilePortTag, WorktreeFilePort>()(
+  "@openducktor/host/WorktreeFilePort",
+) {}

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Semaphore } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostOperationError } from "../../../effect/host-errors";
 
@@ -9,19 +9,19 @@ export type TaskSessionLifecycleCoordinator = ReturnType<
 export const createTaskSessionLifecycleCoordinator = () => {
   const lifecycleLocks = new Set<string>();
   const workspaceLifecycleLocks = new Set<string>();
-  const worktreeGates = new Map<string, Effect.Semaphore>();
+  const worktreeGates = new Map<string, Semaphore.Semaphore>();
   const taskKey = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
   const hasTaskLifecycle = (repoPath: string): boolean => {
     const prefix = `${repoPath}\0`;
     return [...lifecycleLocks].some((key) => key.startsWith(prefix));
   };
-  const worktreeGate = (path: string): Effect.Semaphore => {
+  const worktreeGate = (path: string): Semaphore.Semaphore => {
     const pathKey = normalizePathForComparison(path);
     const current = worktreeGates.get(pathKey);
     if (current) {
       return current;
     }
-    const gate = Effect.runSync(Effect.makeSemaphore(1));
+    const gate = Semaphore.makeUnsafe(1);
     worktreeGates.set(pathKey, gate);
     return gate;
   };
@@ -85,7 +85,7 @@ export const createTaskSessionLifecycleCoordinator = () => {
       effect: Effect.Effect<Value, Error, Requirements>,
     ) {
       return Effect.scoped(
-        acquireWorkspaceLifecycle(repoPath, operation).pipe(Effect.zipRight(effect)),
+        acquireWorkspaceLifecycle(repoPath, operation).pipe(Effect.andThen(effect)),
       );
     },
     acquireWorktreeLifecycle(paths: readonly string[]) {

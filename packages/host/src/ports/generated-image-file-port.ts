@@ -13,6 +13,7 @@ export type GeneratedImageFilePort = {
     itemId: string,
   ): Effect.Effect<GeneratedImagePayload, HostError>;
 };
-export class GeneratedImageFilePortTag extends Context.Tag(
-  "@openducktor/host/GeneratedImageFilePort",
-)<GeneratedImageFilePortTag, GeneratedImageFilePort>() {}
+export class GeneratedImageFilePortTag extends Context.Service<
+  GeneratedImageFilePortTag,
+  GeneratedImageFilePort
+>()("@openducktor/host/GeneratedImageFilePort") {}

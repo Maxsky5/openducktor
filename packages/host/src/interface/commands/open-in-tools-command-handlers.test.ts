@@ -19,17 +19,9 @@ const createRecordingService = () => {
   }> = [];
   const promiseService: OpenInToolsService = {
     listOpenInTools(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "listOpenInTools", input });
-          return [{ toolId: "finder", iconDataUrl: null }];
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
+      return Effect.sync(() => {
+        calls.push({ method: "listOpenInTools", input });
+        return [{ toolId: "finder", iconDataUrl: null }];
       });
     },
     openDirectoryInTool(input) {

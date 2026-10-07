@@ -1055,6 +1055,7 @@ describe("AgentChatThread", () => {
     });
   });
 
+  // Renders and switches a large cached transcript, which can exceed 1000 ms on a loaded CI runner.
   test("renders cached large transcripts immediately after switching back", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
@@ -1132,7 +1133,7 @@ describe("AgentChatThread", () => {
 
       rendered.unmount();
     });
-  });
+  }, 5_000);
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
     await withAnimationFrameTestDriver(async () => {

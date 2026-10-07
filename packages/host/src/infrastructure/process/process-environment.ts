@@ -225,16 +225,16 @@ export const createProcessEnvironment = (
   const loginShellPath = readLoginShellPath
     ? readLoginShellPath(probeEnv, shell)
     : probeLoginShellPath(probeEnv, shell, loginShellTimeoutMs);
-  return Effect.either(loginShellPath).pipe(
+  return Effect.result(loginShellPath).pipe(
     Effect.map((result): UserEnvironmentResolution => {
-      if (result._tag === "Left") {
+      if (result._tag === "Failure") {
         deletePathEnvironmentValue(env, platform);
-        return { environment: env, error: result.left };
+        return { environment: env, error: result.failure };
       }
 
       setPathEnvironmentValue(
         env,
-        mergePathValues(result.right, inheritedPath, pathDelimiterForPlatform(platform)),
+        mergePathValues(result.success, inheritedPath, pathDelimiterForPlatform(platform)),
         platform,
       );
       return { environment: env, error: null };

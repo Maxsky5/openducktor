@@ -124,16 +124,20 @@ export const createTaskBuildStateUseCases = ({
         .map((hook) => hook.trim())
         .filter(Boolean);
       if (postCompleteHooks.length > 0) {
-        const worktreePathResult = yield* Effect.either(
+        const worktreePathResult = yield* Effect.result(
           buildCompletionWorktreePath(dependencies.settingsConfig, repoConfig, taskId),
         );
-        if (worktreePathResult._tag === "Left") {
+        if (worktreePathResult._tag === "Failure") {
           yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
           return yield* Effect.fail(
-            createTaskMutationProgressFailure("build-completed", taskId, worktreePathResult.left),
+            createTaskMutationProgressFailure(
+              "build-completed",
+              taskId,
+              worktreePathResult.failure,
+            ),
           );
         }
-        const worktreePath = worktreePathResult.right;
+        const worktreePath = worktreePathResult.success;
 
         const failure = yield* runHookCommandsAllowFailure(
           dependencies.systemCommands,

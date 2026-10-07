@@ -17,7 +17,7 @@ const tcpAddressSchema = z.object({ port: z.number() }).passthrough();
 type PickFreePortError = HostOperationErrorAggregate | HostResourceErrorAggregate;
 
 export const pickFreePort = (): Effect.Effect<number, PickFreePortError> =>
-  Effect.async<number, PickFreePortError>((resume, signal) => {
+  Effect.callback<number, PickFreePortError>((resume, signal) => {
     const server = createServer();
     let settled = false;
     const finish = (effect: Effect.Effect<number, PickFreePortError>) => {
@@ -82,7 +82,7 @@ export const pickFreePort = (): Effect.Effect<number, PickFreePortError> =>
   });
 
 export const isOpenCodeHealthy = (port: number, timeoutMs: number): Effect.Effect<boolean> =>
-  Effect.async<boolean>((resume, signal) => {
+  Effect.callback<boolean>((resume, signal) => {
     let settled = false;
     let response: IncomingMessage | null = null;
     const finish = (healthy: boolean): void => {

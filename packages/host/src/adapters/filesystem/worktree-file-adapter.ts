@@ -88,7 +88,7 @@ const normalizeForComparison = (inputPath: string) =>
         path: inputPath,
       }),
   }).pipe(
-    Effect.catchAll((error) => {
+    Effect.catch((error) => {
       if (hasErrorCode(error.cause, "ENOENT")) {
         return Effect.succeed(normalizeMissingPath(inputPath));
       }
@@ -170,7 +170,7 @@ const ensureNoSymlinkedDestinationComponents = (
         catch: (cause) =>
           toHostOperationError(cause, "worktreeFile.lstatDestinationComponent", { path: current }),
       }).pipe(
-        Effect.catchAll((error) =>
+        Effect.catch((error) =>
           hasErrorCode(error.cause, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
         ),
       );

@@ -728,25 +728,17 @@ describe("createOdtMcpBridgeService", () => {
         });
       },
       linkPullRequest(input: Parameters<OdtTaskService["linkPullRequest"]>[0]) {
-        return Effect.tryPromise({
-          try: async () => {
-            linkPullRequestCalls.push(input);
-            currentTask = taskCard({ status: "human_review" });
-            return {
-              providerId: "github",
-              number: 42,
-              url: "https://github.com/open/ducktor/pull/42",
-              state: "open",
-              createdAt: "2026-05-10T10:02:00.000Z",
-              updatedAt: "2026-05-10T10:02:00.000Z",
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          linkPullRequestCalls.push(input);
+          currentTask = taskCard({ status: "human_review" });
+          return {
+            providerId: "github",
+            number: 42,
+            url: "https://github.com/open/ducktor/pull/42",
+            state: "open",
+            createdAt: "2026-05-10T10:02:00.000Z",
+            updatedAt: "2026-05-10T10:02:00.000Z",
+          };
         });
       },
     });

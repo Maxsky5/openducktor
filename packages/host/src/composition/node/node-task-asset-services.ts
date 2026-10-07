@@ -153,7 +153,7 @@ export const createNodeTaskAssetServices = ({
     startupSweep: () =>
       taskAssetRecoveryService
         .startupSweep()
-        .pipe(Effect.zipRight(taskAssetStagingService.startupSweep()), Effect.asVoid),
+        .pipe(Effect.andThen(taskAssetStagingService.startupSweep()), Effect.asVoid),
     taskAssetReadService,
     taskAssetStagingService,
     taskAssetStagingShutdownStep: {

@@ -190,26 +190,18 @@ describe("createTaskService approval context", () => {
             });
           },
           getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "summary", workingDir, targetBranch, diffScope });
-                return {
-                  currentBranch: { name: "odt/task-1", detached: false },
-                  fileStatuses: [
-                    { path: "src/main.ts", status: "modified", staged: false },
-                    { path: "src/app.ts", status: "added", staged: true },
-                  ],
-                  fileStatusCounts: { total: 2, staged: 1, unstaged: 1 },
-                  targetAheadBehind: { ahead: 3, behind: 0 },
-                  upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "summary", workingDir, targetBranch, diffScope });
+              return {
+                currentBranch: { name: "odt/task-1", detached: false },
+                fileStatuses: [
+                  { path: "src/main.ts", status: "modified", staged: false },
+                  { path: "src/app.ts", status: "added", staged: true },
+                ],
+                fileStatusCounts: { total: 2, staged: 1, unstaged: 1 },
+                targetAheadBehind: { ahead: 3, behind: 0 },
+                upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
+              };
             });
           },
           suggestedSquashCommitMessage(workingDir, sourceBranch, targetBranch) {
@@ -232,19 +224,11 @@ describe("createTaskService approval context", () => {
         createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         {
           readConfig() {
-            return Effect.tryPromise({
-              try: async () => {
-                return {
-                  ...createDefaultGlobalConfig(),
-                  git: { defaultMergeMethod: "squash" },
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              return {
+                ...createDefaultGlobalConfig(),
+                git: { defaultMergeMethod: "squash" },
+              };
             });
           },
         },

@@ -8,6 +8,7 @@ import {
   resolveOpenDucktorBaseDir,
 } from "../../config/openducktor-config-dir";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
+import { createSerialLane } from "../../effect/serial-gate";
 
 export type OpenDucktorLogSurface = "electron" | "web";
 
@@ -172,11 +173,11 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
     const initializedAt = clock();
     yield* cleanupExpiredLogs(initializedAt);
     let lastCleanedDateKey = localDateKey(initializedAt);
-    const semaphore = yield* Effect.makeSemaphore(1);
+    const lane = createSerialLane();
 
     return {
       append(recordedAt, record) {
-        return semaphore.withPermits(1)(
+        return lane.run(
           Effect.gen(function* () {
             const recordedDateKey = localDateKey(recordedAt);
             if (recordedDateKey !== lastCleanedDateKey) {

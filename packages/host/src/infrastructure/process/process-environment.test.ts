@@ -508,9 +508,9 @@ describe("createProcessEnvironment", () => {
             readUserShell: () => shellPath,
           }).pipe(
             // Stay below the 5 s shell timeout, but allow for a slow process start under load.
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: "3 seconds",
-              onTimeout: () => new Error("Marker-less shell exit did not finish."),
+              orElse: () => Effect.fail(new Error("Marker-less shell exit did not finish.")),
             }),
           ),
         );
@@ -549,9 +549,9 @@ describe("createProcessEnvironment", () => {
             readUserShell: () => shellPath,
           }).pipe(
             // Stay below the 5 s shell timeout, but allow for a slow process start under load.
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: "3 seconds",
-              onTimeout: () => new Error("Marker-less shell exit did not finish."),
+              orElse: () => Effect.fail(new Error("Marker-less shell exit did not finish.")),
             }),
           ),
         );

@@ -597,8 +597,8 @@ describe("TerminalService", () => {
       ),
     );
     await Bun.sleep(0);
-    const blocked = await Effect.runPromise(Effect.either(create("first")));
-    expect(blocked._tag).toBe("Left");
+    const blocked = await Effect.runPromise(Effect.result(create("first")));
+    expect(blocked._tag).toBe("Failure");
     const other = await Effect.runPromise(create("second"));
     expect(other.summary.context).toMatchObject({ sessionId: "second" });
     releaseResolve();
@@ -1009,7 +1009,15 @@ describe("TerminalService", () => {
         await waitForPtyOperation(pty.operations, "pause");
         expect(events).toEqual([]);
         drainGate.resolve();
-        if (result === "sink failure") await expect(attaching).rejects.toThrow("socket closed");
+        // Await the promise directly: on Windows, Bun can stall timers while `expect(...).rejects`
+        // waits, and this attach waits for a timer-driven screen parse.
+        if (result === "sink failure")
+          expect(
+            await attaching.then(
+              () => null,
+              (cause: unknown) => String(cause),
+            ),
+          ).toContain("socket closed");
         else {
           await attaching;
           expect(events).toEqual(["snapshot", "screen_restore"]);
@@ -1442,13 +1450,13 @@ describe("TerminalService", () => {
             workingDir: "/repo",
             context: { repoPath: "/repo", taskId: taskIdFor(limit) },
           });
-        const rejected = await Effect.runPromise(Effect.either(create()));
-        expect(rejected._tag).toBe("Left");
-        if (rejected._tag !== "Left") throw new Error("Expected the shared terminal limit.");
-        expect(rejected.left.code).toBe(`${limitKind}_terminal_limit`);
-        expect(rejected.left.message).toContain(`${limit}/${limit}`);
-        expect(rejected.left.message).toContain("Shell terminals and dev server output");
-        expect(rejected.left.message).toContain("Close a terminal or stop a dev server");
+        const rejected = await Effect.runPromise(Effect.result(create()));
+        expect(rejected._tag).toBe("Failure");
+        if (rejected._tag !== "Failure") throw new Error("Expected the shared terminal limit.");
+        expect(rejected.failure.code).toBe(`${limitKind}_terminal_limit`);
+        expect(rejected.failure.message).toContain(`${limit}/${limit}`);
+        expect(rejected.failure.message).toContain("Shell terminals and dev server output");
+        expect(rejected.failure.message).toContain("Close a terminal or stop a dev server");
         await Effect.runPromise(
           service.close({ terminalId: "terminal-1", confirmTerminate: true }),
         );
@@ -1718,7 +1726,7 @@ describe("TerminalService", () => {
 
     const creations = Array.from({ length: TERMINAL_LIMITS.livePerTask + 1 }, () =>
       Effect.runPromise(
-        Effect.either(
+        Effect.result(
           service.create({
             workingDir: "/repo",
             context: { repoPath: "/repo", taskId: "task-1" },
@@ -1730,11 +1738,11 @@ describe("TerminalService", () => {
     releaseCanonicalize();
     const results = await Promise.all(creations);
 
-    expect(results.filter((result) => result._tag === "Right")).toHaveLength(
+    expect(results.filter((result) => result._tag === "Success")).toHaveLength(
       TERMINAL_LIMITS.livePerTask,
     );
-    expect(results.filter((result) => result._tag === "Left")).toHaveLength(1);
-    expect(results.find((result) => result._tag === "Left")?.left.code).toBe(
+    expect(results.filter((result) => result._tag === "Failure")).toHaveLength(1);
+    expect(results.find((result) => result._tag === "Failure")?.failure.code).toBe(
       "context_terminal_limit",
     );
   });
@@ -1796,15 +1804,15 @@ describe("TerminalService", () => {
 
     await Bun.sleep(0);
     const blocked = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         service.create({
           workingDir: "/repo",
           context: { repoPath: "/repo", taskId: "task-1" },
         }),
       ),
     );
-    expect(blocked._tag).toBe("Left");
-    if (blocked._tag === "Left") expect(blocked.left.code).toBe("close_failed");
+    expect(blocked._tag).toBe("Failure");
+    if (blocked._tag === "Failure") expect(blocked.failure.code).toBe("close_failed");
 
     releaseCanonicalize();
     await creating;

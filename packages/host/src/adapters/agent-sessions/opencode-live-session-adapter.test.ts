@@ -685,10 +685,11 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: false,
-      beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
-      releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-      describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-      resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+      beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
+      releaseGeneratedImageBatch: () =>
+        Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+      describeGeneratedImages: () => Effect.die(new Error("Unexpected describeGeneratedImages")),
+      resolveGeneratedImageSource: () => Effect.die(new Error("Unexpected generated image read")),
       binding: new AgentSessionLiveRegistration(
         { runtimeId: "runtime-2", runtimeKind: "codex" },
         (mutation) => Effect.map(mutation, ({ value }) => value),

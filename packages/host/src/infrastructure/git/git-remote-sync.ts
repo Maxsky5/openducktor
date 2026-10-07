@@ -335,9 +335,9 @@ export const pushBranch = (
       workingDirectory,
       remote,
       targetBranch,
-    ).pipe(Effect.either);
-    if (syncResult._tag === "Left") {
-      const error = syncResult.left;
+    ).pipe(Effect.result);
+    if (syncResult._tag === "Failure") {
+      const error = syncResult.failure;
       const warning = `Push succeeded, but local upstream tracking status may remain stale until the next fetch: ${error instanceof Error ? error.message : String(error)}`;
       pushedOutput = pushedOutput.trim().length > 0 ? `${pushedOutput}\n${warning}` : warning;
     }

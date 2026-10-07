@@ -6,7 +6,8 @@ import {
   type TaskEventTaskSnapshot,
   type TaskEventStatusChange,
 } from "@openducktor/contracts";
-import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
+import { type Cause, Deferred, Effect, Exit, Ref } from "effect";
+import { createSerialGate } from "../../../effect/serial-gate";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
 import type {
@@ -140,16 +141,10 @@ export const createTaskSyncService = ({
   taskService,
   workspaceSettingsService,
 }: CreateTaskSyncServiceInput): TaskSyncService => {
-  const mutationGates = new Map<string, Effect.Semaphore>();
+  // Mutations of one repository run in arrival order.
+  const mutationGate = createSerialGate();
   const runMutation: TaskSyncService["runMutation"] = (repoPath, mutation) =>
-    Effect.suspend(() => {
-      let gate = mutationGates.get(repoPath);
-      if (!gate) {
-        gate = Effect.runSync(Effect.makeSemaphore(1));
-        mutationGates.set(repoPath, gate);
-      }
-      return gate.withPermits(1)(mutation);
-    });
+    mutationGate.run(repoPath, mutation);
   const publish = (
     event: ExternalTaskSyncEvent,
     operation: string,
@@ -169,20 +164,20 @@ export const createTaskSyncService = ({
         });
         return;
       }
-      const result = yield* Effect.either(
+      const result = yield* Effect.result(
         Effect.try({
           try: () => taskEventStream.publish(event),
           catch: (cause) => cause,
         }),
       );
-      if (result._tag === "Left") {
+      if (result._tag === "Failure") {
         yield* publicationReporter.report({
           operation,
           repoPath,
           changes,
           event,
           stage: "acceptance",
-          cause: result.left,
+          cause: result.failure,
         });
       }
     });
@@ -212,14 +207,14 @@ export const createTaskSyncService = ({
         operation,
       );
       acceptNotificationInput?.(event);
-      const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
-      if (tasks._tag === "Left") {
+      const tasks = yield* Effect.result(taskService.listTasks({ repoPath }));
+      if (tasks._tag === "Failure") {
         yield* publicationReporter.report({
           operation,
           repoPath,
           changes,
           stage: "snapshot",
-          cause: tasks.left,
+          cause: tasks.failure,
         });
         const recoveryMessage =
           "Task changes were saved, but their update event could not be sent. Reload the workspace before continuing. Do not repeat the change.";
@@ -228,11 +223,13 @@ export const createTaskSyncService = ({
           message: mutationFailure
             ? `${mutationFailure.message} ${recoveryMessage}`
             : recoveryMessage,
-          cause: mutationFailure ? { mutationFailure, snapshotFailure: tasks.left } : tasks.left,
+          cause: mutationFailure
+            ? { mutationFailure, snapshotFailure: tasks.failure }
+            : tasks.failure,
           details: { durableState: "committed", stage: "snapshot", repoPath, changes },
         });
       }
-      const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
+      const taskSnapshots = taskSnapshotsForChanges(tasks.success, changes);
       acceptNotificationInput?.({ ...event, taskSnapshots });
       yield* publish({ ...event, taskSnapshots }, operation, repoPath, changes);
     });
@@ -243,24 +240,24 @@ export const createTaskSyncService = ({
       const { result: syncResult, statusChanges } = yield* collectTaskStatusChanges(
         taskService.repoPullRequestSyncDetailed({ repoPath }),
       );
-      if (syncResult._tag === "Right") {
-        const changes = { taskIds: syncResult.right.changedTaskIds, removedTaskIds: [] };
+      if (syncResult._tag === "Success") {
+        const changes = { taskIds: syncResult.success.changedTaskIds, removedTaskIds: [] };
         if (changes.taskIds.length > 0) {
           yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync", statusChanges);
         }
-        return syncResult.right;
+        return syncResult.success;
       }
-      if (syncResult.left instanceof TaskMutationProgressFailure) {
+      if (syncResult.failure instanceof TaskMutationProgressFailure) {
         yield* publishTasksUpdated(
           repoPath,
-          syncResult.left.changes,
-          syncResult.left.operation,
+          syncResult.failure.changes,
+          syncResult.failure.operation,
           statusChanges,
-          syncResult.left.failure,
+          syncResult.failure.failure,
         );
-        return yield* Effect.fail(syncResult.left.failure);
+        return yield* Effect.fail(syncResult.failure.failure);
       }
-      return yield* Effect.fail(syncResult.left);
+      return yield* Effect.fail(syncResult.failure);
     }).pipe((mutation) => runMutation(repoPath, mutation));
   const syncActiveWorkspacePullRequests = (): Effect.Effect<void, TaskSyncError> =>
     Effect.gen(function* () {
@@ -319,12 +316,12 @@ export const createTaskSyncService = ({
     );
   const runPullRequestSyncLoopIteration = (state: Ref.Ref<TaskSyncLoopState>) =>
     syncActiveWorkspacePullRequests().pipe(
-      Effect.catchAll((error) => writePullRequestSyncIterationFailure(state, error)),
+      Effect.catch((error) => writePullRequestSyncIterationFailure(state, error)),
     );
   const runPullRequestSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
     Effect.forever(
       Effect.sleep(`${intervalMs} millis`).pipe(
-        Effect.zipRight(runPullRequestSyncLoopIteration(state)),
+        Effect.andThen(runPullRequestSyncLoopIteration(state)),
       ),
     );
   return {
@@ -340,7 +337,7 @@ export const createTaskSyncService = ({
           stopped: false,
           terminalLogCause: null,
         });
-        const fiber = yield* Effect.forkDaemon(runPullRequestSyncLoop(state));
+        const fiber = yield* Effect.forkDetach(runPullRequestSyncLoop(state));
         return {
           stop: () =>
             Effect.gen(function* () {
@@ -351,7 +348,8 @@ export const createTaskSyncService = ({
                 },
                 { ...current, stopped: true },
               ]);
-              yield* Fiber.interruptFork(fiber);
+              // Do not wait for an in-flight sync iteration. Only its failure log must finish.
+              yield* Effect.sync(() => fiber.interruptUnsafe());
               if (shutdown.activeLog) {
                 return yield* Deferred.await(shutdown.activeLog);
               }

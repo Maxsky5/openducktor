@@ -29,7 +29,7 @@ const createHarness = (
   ) => Effect.Effect<RuntimeHandle, HostOperationError>,
   probeVersion: (kind: RuntimeKind) => Effect.Effect<string | null> = (kind) =>
     Effect.succeed(`${kind} 1.0.0`),
-  controlGrace: Duration.DurationInput = "10 seconds",
+  controlGrace: Duration.Input = "10 seconds",
 ) => {
   const statuses: HostRuntimeStatus[] = [];
   const events: string[] = [];
@@ -276,13 +276,13 @@ describe("runtime registry lifecycle", () => {
   test("waits for admitted controls before a lifecycle action owns the kind", async () => {
     const { registry, admission } = createHarness();
     await Effect.runPromise(apply(registry, "claude", request("start")));
-    const release = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const release = Deferred.makeUnsafe<void>();
     const control = Effect.runFork(admission.admit("claude", Deferred.await(release)));
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     const reserving = Effect.runFork(registry.reserve(["claude"]));
-    await Effect.runPromise(Effect.yieldNow());
-    expect(reserving.unsafePoll()).toBeNull();
+    await Effect.runPromise(Effect.yieldNow);
+    expect(reserving.pollUnsafe()).toBeUndefined();
     await expect(Effect.runPromise(admission.admit("claude", Effect.void))).rejects.toThrow(
       "applying a lifecycle action",
     );
@@ -295,10 +295,10 @@ describe("runtime registry lifecycle", () => {
   });
 
   test("shutdown interrupts a pending start and stops ready runtimes", async () => {
-    const started = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const started = Deferred.makeUnsafe<void>();
     const harness = createHarness((input, call) =>
       input.runtimeKind === "codex"
-        ? Deferred.succeed(started, undefined).pipe(Effect.zipRight(Effect.never))
+        ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))
         : harness.defaultStart(input, call),
     );
     const { registry, events } = harness;
@@ -320,6 +320,36 @@ describe("runtime registry lifecycle", () => {
     );
   });
 
+  test("shutdown never misses a start that registers while shutdown begins", async () => {
+    // A fiber yields after a fixed number of operations. Each run starts the action after one more
+    // step, so the sweep crosses every yield between the shutdown check and the start
+    // registration. A driver that never returns must still be interrupted by shutdown.
+    const steps = (count: number) => {
+      let effect: Effect.Effect<void> = Effect.void;
+      for (let step = 0; step < count; step += 1) effect = effect.pipe(Effect.andThen(Effect.void));
+      return effect;
+    };
+    let entered = 0;
+    for (let count = 0; count < 2100; count += 1) {
+      const { registry } = createHarness(() =>
+        Effect.sync(() => {
+          entered += 1;
+        }).pipe(Effect.andThen(Effect.never)),
+      );
+      const caller = Effect.runFork(
+        steps(count).pipe(Effect.andThen(apply(registry, "codex", request("start")))),
+      );
+      await Effect.runPromise(Effect.yieldNow);
+      const shutdown = await Effect.runPromise(
+        registry.stopAll().pipe(Effect.timeoutOption("1 second")),
+      );
+      expect(shutdown._tag).toBe("Some");
+      await Effect.runPromise(Fiber.await(caller));
+    }
+    // The sweep reached the driver at least once, so shutdown interrupted a running start.
+    expect(entered).toBeGreaterThan(0);
+  });
+
   test("records a configuration failure for a kind without starting it", async () => {
     const { registry, calls } = createHarness();
     await Effect.runPromise(registry.recordConfigurationFailure("claude", "invalid JSON"));
@@ -330,16 +360,16 @@ describe("runtime registry lifecycle", () => {
     expect(calls).toEqual([]);
   });
   test("a restart that is stopping when shutdown begins never starts a replacement", async () => {
-    const stopEntered = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
-    const stopRelease = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const stopEntered = Deferred.makeUnsafe<void>();
+    const stopRelease = Deferred.makeUnsafe<void>();
     const harness = createHarness((input, call) =>
       harness.defaultStart(input, call).pipe(
         Effect.map((handle) => ({
           ...handle,
           stop: () =>
             Deferred.succeed(stopEntered, undefined).pipe(
-              Effect.zipRight(Deferred.await(stopRelease)),
-              Effect.zipRight(handle.stop()),
+              Effect.andThen(Deferred.await(stopRelease)),
+              Effect.andThen(handle.stop()),
             ),
         })),
       ),
@@ -365,8 +395,8 @@ describe("runtime registry lifecycle", () => {
     });
 
     const shutdown = Effect.runFork(registry.stopAll());
-    await Effect.runPromise(Effect.yieldNow());
-    expect(shutdown.unsafePoll()).toBeNull();
+    await Effect.runPromise(Effect.yieldNow);
+    expect(shutdown.pollUnsafe()).toBeUndefined();
     await Effect.runPromise(Deferred.succeed(stopRelease, undefined));
 
     await Effect.runPromise(Fiber.join(shutdown));
@@ -438,18 +468,18 @@ describe("runtime registry lifecycle", () => {
   });
 
   test("a runtime cannot become ready after shutdown begins during the version read", async () => {
-    const versionRead = Deferred.unsafeMake<string | null>(Effect.runSync(Effect.fiberId));
+    const versionRead = Deferred.makeUnsafe<string | null>();
     const { registry, statuses, events } = createHarness(undefined, () =>
       Deferred.await(versionRead),
     );
     const start = Effect.runPromise(apply(registry, "opencode", request("start")));
     for (let attempt = 0; attempt < 50 && events.length === 0; attempt += 1) {
-      await Effect.runPromise(Effect.yieldNow());
+      await Effect.runPromise(Effect.yieldNow);
     }
     expect(events).toEqual(["start:opencode-1"]);
 
     const shutdown = Effect.runPromise(registry.stopAll());
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     await Effect.runPromise(Deferred.succeed(versionRead, "opencode 1.0.0"));
 
     await expect(start).resolves.toMatchObject({ type: "failed" });
@@ -464,12 +494,12 @@ describe("runtime registry lifecycle", () => {
   test("an interrupted reservation releases its kinds", async () => {
     const { registry, admission } = createHarness();
     await Effect.runPromise(apply(registry, "claude", request("start")));
-    const release = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const release = Deferred.makeUnsafe<void>();
     const control = Effect.runFork(admission.admit("claude", Deferred.await(release)));
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     const reserving = Effect.runFork(registry.reserve(["claude"]));
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     await Effect.runPromise(Fiber.interrupt(reserving));
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await Effect.runPromise(Fiber.join(control));
@@ -484,17 +514,17 @@ describe("runtime registry lifecycle", () => {
   test("shutdown waits for an admitted control before it stops the runtime", async () => {
     const { registry, admission, events } = createHarness();
     await Effect.runPromise(apply(registry, "claude", request("start")));
-    const release = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    const release = Deferred.makeUnsafe<void>();
     const control = Effect.runFork(
       admission.admit(
         "claude",
         Deferred.await(release).pipe(Effect.tap(() => Effect.sync(() => events.push("control")))),
       ),
     );
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     const shutdown = Effect.runPromise(registry.stopAll());
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     expect(events).toEqual(["start:claude-1"]);
     await expect(Effect.runPromise(admission.admit("claude", Effect.void))).rejects.toThrow();
 
@@ -508,25 +538,25 @@ describe("runtime registry lifecycle", () => {
     const { registry, admission, events } = createHarness(undefined, undefined, "20 millis");
     await Effect.runPromise(apply(registry, "claude", request("start")));
     const control = Effect.runFork(admission.admit("claude", Effect.never));
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     await Effect.runPromise(registry.stopAll());
 
     expect(events).toEqual(["start:claude-1", "stop:claude-1"]);
     const result = await Effect.runPromise(Fiber.await(control));
     if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
-    expect(Exit.isInterrupted(result)).toBe(false);
+    expect(Exit.hasInterrupts(result)).toBe(false);
     expect(Cause.pretty(result.cause)).toContain(
       "OpenDucktor stopped the Claude runtime before this action finished.",
     );
   });
 
   test("a crash and a cleanup failure before ready both reach the runtime error", async () => {
-    const versionRead = Deferred.unsafeMake<string | null>(Effect.runSync(Effect.fiberId));
+    const versionRead = Deferred.makeUnsafe<string | null>();
     const { registry, calls, events } = createHarness(undefined, () => Deferred.await(versionRead));
     const start = Effect.runPromise(apply(registry, "opencode", request("start")));
     for (let attempt = 0; attempt < 50 && events.length === 0; attempt += 1) {
-      await Effect.runPromise(Effect.yieldNow());
+      await Effect.runPromise(Effect.yieldNow);
     }
 
     calls[0]?.input.onRuntimeExit("process exited with code 1");
@@ -548,13 +578,13 @@ describe("runtime registry lifecycle", () => {
     const { registry, admission } = createHarness(undefined, undefined, "20 millis");
     await Effect.runPromise(apply(registry, "opencode", request("start")));
     const control = Effect.runFork(admission.admit("opencode", Effect.never));
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
 
     const reservation = await Effect.runPromise(registry.reserve(["opencode"]));
 
     const result = await Effect.runPromise(Fiber.await(control));
     if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
-    expect(Exit.isInterrupted(result)).toBe(false);
+    expect(Exit.hasInterrupts(result)).toBe(false);
     expect(Cause.pretty(result.cause)).toContain(
       "OpenDucktor stopped this action to apply a lifecycle action on the OpenCode runtime.",
     );

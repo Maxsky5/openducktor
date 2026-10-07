@@ -1,5 +1,5 @@
 import type { TaskAssetReadService } from "@openducktor/host";
-import { Cause, Chunk, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import {
   ELECTRON_TASK_ASSET_PROTOCOL,
   parseElectronTaskAssetUrl,
@@ -37,7 +37,7 @@ export const registerElectronTaskAssetProtocol = (input: {
       const body = Uint8Array.from(exit.value.bytes);
       return new Response(body, { headers: exit.value.headers });
     }
-    const firstFailure = Chunk.head(Cause.failures(exit.cause));
+    const firstFailure = Cause.findErrorOption(exit.cause);
     if (Option.isSome(firstFailure) && firstFailure.value.code === "validation") {
       return errorResponse(404);
     }

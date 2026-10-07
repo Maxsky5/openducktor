@@ -74,8 +74,8 @@ describe("task asset read service", () => {
 
   test("keeps missing workspaces distinct from operational settings failures", async () => {
     const dependencies = {
-      registry: { getAsset: () => Effect.dieMessage("unexpected registry read") },
-      filePort: { readDurable: () => Effect.dieMessage("unexpected durable read") },
+      registry: { getAsset: () => Effect.die(new Error("unexpected registry read")) },
+      filePort: { readDurable: () => Effect.die(new Error("unexpected durable read")) },
     };
     const missing = createTaskAssetReadService({
       ...dependencies,
@@ -143,11 +143,11 @@ describe("task asset read service", () => {
       },
     });
 
-    const result = await Effect.runPromise(Effect.either(service.read(context)));
+    const result = await Effect.runPromise(Effect.result(service.read(context)));
 
     expect(result).toMatchObject({
-      _tag: "Left",
-      left: { failedPhase: "validate_registered_byte_size" },
+      _tag: "Failure",
+      failure: { failedPhase: "validate_registered_byte_size" },
     });
     expect(readDisk).toBe(false);
   });

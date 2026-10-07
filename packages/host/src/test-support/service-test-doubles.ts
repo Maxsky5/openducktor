@@ -13,7 +13,7 @@ import type {
 } from "../ports/agent-session-live-adapter-port";
 
 const unexpectedEffectCall = (service: string, method: string) => () =>
-  Effect.dieMessage(`Unexpected ${service} call: ${method}`);
+  Effect.die(new Error(`Unexpected ${service} call: ${method}`));
 
 const unexpectedSyncCall = (service: string, method: string): never => {
   throw new Error(`Unexpected ${service} call: ${method}`);

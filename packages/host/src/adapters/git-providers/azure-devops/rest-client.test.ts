@@ -1,7 +1,8 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Bun mock functions do not retain the full fetch signature. */
 import { describe, expect, mock, test } from "bun:test";
 import { azureDevOpsRepositorySchema, repoConfigSchema } from "@openducktor/contracts";
-import { Effect, Fiber, TestClock, TestContext } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import type { GitPort } from "../../../ports/git-port";
 import { AzureDevOpsProviderAdapter } from "./provider-adapter";
@@ -118,8 +119,8 @@ describe("Azure DevOps REST client", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const request = yield* Effect.fork(
-          Effect.either(
+        const request = yield* Effect.forkChild(
+          Effect.result(
             client.request(repoConfig, repository, {
               operation: "read repository",
               path: "git/repositories/app",
@@ -130,12 +131,12 @@ describe("Azure DevOps REST client", () => {
         expect(signal).toBeInstanceOf(AbortSignal);
         yield* TestClock.adjust("30 seconds");
         const result = yield* Fiber.join(request);
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left.message).toContain("timed out after 30 seconds");
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("timed out after 30 seconds");
         }
         expect(signal?.aborted).toBe(true);
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   });
 });

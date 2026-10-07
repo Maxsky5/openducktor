@@ -1,4 +1,4 @@
-import { Cause, Chunk, Data, Option } from "effect";
+import { Cause, Data, Option } from "effect";
 import { z } from "zod";
 
 export type HostErrorDetails<Details extends object> = Readonly<Details>;
@@ -109,11 +109,17 @@ export const isHostError = (cause: unknown): cause is HostError =>
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-/** Describes a cause for users: the message of each failure and defect, without tags or stacks. */
-export const causeMessage = (cause: Cause.Cause<unknown>): string => {
-  const messages = [...Cause.failures(cause), ...Cause.defects(cause)].map(errorMessage);
-  return messages.length > 0 ? messages.join("\n") : "The operation was interrupted.";
+/** Lists the message of each failure, then of each defect, without tags or stacks. */
+export const causeMessages = (cause: Cause.Cause<unknown>): string[] => {
+  const failures = cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
+  const defects = cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect);
+  const messages = [...failures, ...defects].map(errorMessage);
+  return messages.length > 0 ? messages : ["The operation was interrupted."];
 };
+
+/** Describes a cause for users: the message of each failure and defect, without tags or stacks. */
+export const causeMessage = (cause: Cause.Cause<unknown>): string =>
+  causeMessages(cause).join("\n");
 
 const nodeErrorCodeSchema = z.object({ code: z.string() });
 
@@ -220,7 +226,7 @@ export function toHostOperationError<Details extends object>(
 export const causeToHostBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
 ): Failure | HostOperationError<{ defect: true }> => {
-  const firstFailure = Chunk.head(Cause.failures(cause));
+  const firstFailure = Cause.findErrorOption(cause);
   if (Option.isSome(firstFailure)) {
     return firstFailure.value;
   }

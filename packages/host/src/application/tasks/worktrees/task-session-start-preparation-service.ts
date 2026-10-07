@@ -166,7 +166,7 @@ export const createTaskSessionStartPreparationService = ({
 
         let cleanup: PreparedTaskWorktree["cleanup"] = () => Effect.succeed("");
         const cleanupFailedPreparation = () => cleanup();
-        const prepared = yield* Effect.either(
+        const prepared = yield* Effect.result(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
             yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
@@ -209,7 +209,7 @@ export const createTaskSessionStartPreparationService = ({
                     Effect.scoped(
                       taskSessionLifecycleCoordinator
                         .acquireWorktreeLifecycle([worktreePath])
-                        .pipe(Effect.zipRight(newWorktree.cleanup())),
+                        .pipe(Effect.andThen(newWorktree.cleanup())),
                     );
                 }
               }),
@@ -227,15 +227,15 @@ export const createTaskSessionStartPreparationService = ({
             Effect.onInterrupt(() => cleanupFailedPreparation().pipe(Effect.orDie, Effect.asVoid)),
           ),
         );
-        if (prepared._tag === "Right") {
-          return prepared.right;
+        if (prepared._tag === "Success") {
+          return prepared.success;
         }
         const cleanupError = yield* cleanupFailedPreparation();
         return yield* Effect.fail(
           new HostOperationError({
             operation: "task.session_start.prepare",
-            message: `${errorMessage(prepared.left)}${cleanupError}`,
-            cause: prepared.left,
+            message: `${errorMessage(prepared.failure)}${cleanupError}`,
+            cause: prepared.failure,
             details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
           }),
         );

@@ -117,7 +117,7 @@ export type CreateRuntimeOrchestratorInput<E> = {
   admission?: RuntimeAdmissionGate;
   now?: () => Date;
   /** How long a lifecycle action or shutdown waits for admitted controls before it cancels them. */
-  controlGrace?: Duration.DurationInput;
+  controlGrace?: Duration.Input;
 };
 
 const SETTINGS_CHANGED_MESSAGE =
@@ -201,7 +201,7 @@ export const createRuntimeOrchestrator = <E>({
         configuredExecutablePath: executablePath,
       }),
     ).pipe(
-      Effect.catchAll((cause) =>
+      Effect.catch((cause) =>
         Effect.sync(() =>
           observer.backgroundFailure(
             `Cannot start the ${kind} runtime at host startup: ${cause.message}`,
@@ -277,16 +277,16 @@ export const createRuntimeOrchestrator = <E>({
   return {
     initialize: () =>
       Effect.gen(function* () {
-        const saved = yield* Effect.either(settings.readRuntimeSettings());
-        if (saved._tag === "Left") {
-          const message = errorMessage(saved.left);
+        const saved = yield* Effect.result(settings.readRuntimeSettings());
+        if (saved._tag === "Failure") {
+          const message = errorMessage(saved.failure);
           yield* Effect.forEach(knownRuntimeKindValues, (kind) =>
             registry.recordConfigurationFailure(kind, message),
           );
           return;
         }
         for (const kind of knownRuntimeKindValues) {
-          const setting = saved.right[kind];
+          const setting = saved.success[kind];
           if (!setting.enabled) {
             yield* registry.configure(kind, {
               enabled: false,
@@ -294,7 +294,7 @@ export const createRuntimeOrchestrator = <E>({
             });
             continue;
           }
-          yield* Effect.forkDaemon(startKind(kind, setting.enabled, setting.executablePath));
+          yield* Effect.forkDetach(startKind(kind, setting.enabled, setting.executablePath));
         }
       }),
     status: (kind) => registry.status(kind),

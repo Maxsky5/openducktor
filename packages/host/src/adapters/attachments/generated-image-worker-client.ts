@@ -3,7 +3,7 @@ import {
   type CodexImageGenerationPreparer,
   type CodexImageGenerationPreparation,
 } from "@openducktor/adapters-codex-app-server";
-import { Deferred, Effect, Either, Exit, Pool, Scope } from "effect";
+import { Deferred, Effect, Exit, Pool, Result, Scope } from "effect";
 import { readSavedImage } from "./generated-image-saved-file";
 import {
   causeToHostBoundaryError,
@@ -40,17 +40,17 @@ const prepareHistoryImage = (
   Effect.gen(function* () {
     const { item, context } = image;
     if (item.status === "completed" && item.savedPath !== undefined) {
-      const read = yield* Effect.either(readSavedImage(item.savedPath, item.id));
-      if (Either.isLeft(read))
+      const read = yield* Effect.result(readSavedImage(item.savedPath, item.id));
+      if (Result.isFailure(read))
         return {
           ...codexImageGenerationPart(item, context),
-          previewUnavailableReason: read.left.message,
+          previewUnavailableReason: read.failure.message,
         };
       const result = yield* exchangeImageWorkerMessage(
         channel,
         {
           kind: "file-revision",
-          bytes: read.right,
+          bytes: read.success,
           itemId: item.id,
         },
         item.id,
@@ -119,7 +119,7 @@ export const createGeneratedImageWorkers = (
       timeToLive: "30 seconds",
     }).pipe(
       Effect.interruptible,
-      Scope.extend(scope),
+      Scope.provide(scope),
       Effect.onError(() => Scope.close(scope, Exit.void)),
     );
     yield* Scope.addFinalizer(
@@ -155,11 +155,11 @@ export const createGeneratedImageWorkers = (
             }),
           );
           return Effect.raceFirst(job, Deferred.await(closing)).pipe(
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: JOB_DEADLINE,
-              onTimeout: () => imageWorkerFailure(itemId, "deadline"),
+              orElse: () => Effect.fail(imageWorkerFailure(itemId, "deadline")),
             }),
-            Effect.catchAllDefect((cause) =>
+            Effect.catchDefect((cause) =>
               Effect.fail(toHostOperationError(cause, "generated-image.read")),
             ),
             Effect.withSpan("generated-image.prepare", { attributes: { itemId } }),
@@ -220,7 +220,7 @@ export const createGeneratedImageWorkers = (
         yield* Scope.close(scope, Exit.void);
         if (terminationFailure) return yield* terminationFailure;
       }).pipe(
-        Effect.catchAllDefect((cause) =>
+        Effect.catchDefect((cause) =>
           Effect.fail(toHostOperationError(cause, "generated-image.shutdown")),
         ),
       ),

@@ -346,13 +346,15 @@ describe("createSystemDiagnosticsService", () => {
 
     const check = await Effect.runPromise(
       service.runtimeCheck(true).pipe(
-        Effect.timeoutFail({
+        Effect.timeoutOrElse({
           duration: "250 millis",
-          onTimeout: () =>
-            new HostOperationError({
-              operation: "test.runtimeHealth",
-              message: "Runtime probes did not start concurrently.",
-            }),
+          orElse: () =>
+            Effect.fail(
+              new HostOperationError({
+                operation: "test.runtimeHealth",
+                message: "Runtime probes did not start concurrently.",
+              }),
+            ),
         }),
       ),
     );
@@ -448,12 +450,12 @@ describe("createSystemDiagnosticsService", () => {
 
     const healthyCheck = await Effect.runPromise(service.runtimeCheck(false));
     failHealth = true;
-    const forcedResult = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.either));
+    const forcedResult = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.result));
     failHealth = false;
     const nextCheck = await Effect.runPromise(service.runtimeCheck(false));
 
     expect(healthyCheck.pathOk).toBe(true);
-    expect(forcedResult._tag).toBe("Left");
+    expect(forcedResult._tag).toBe("Failure");
     expect(nextCheck.pathOk).toBe(false);
     expect(nextCheck.errors).toContain(pathError);
   });
@@ -485,7 +487,7 @@ describe("createSystemDiagnosticsService", () => {
         userEnvironment,
       });
 
-      const olderCheck = yield* Effect.fork(service.runtimeCheck(false));
+      const olderCheck = yield* Effect.forkChild(service.runtimeCheck(false));
       yield* Deferred.await(olderCheckStarted);
       const forcedCheck = yield* service.runtimeCheck(true);
       yield* Deferred.succeed(releaseOlderCheck, undefined);
@@ -553,11 +555,11 @@ describe("createSystemDiagnosticsService", () => {
       repoStoreDiagnostics: createTaskStore(),
     });
 
-    const result = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.either));
+    const result = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.result));
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBe(settingsError);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBe(settingsError);
     }
   });
   test("taskStoreCheck delegates active repo store readiness through the task store", async () => {

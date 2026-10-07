@@ -220,7 +220,7 @@ export const createOpenCodeRuntimeStarter = ({
         reportRuntimeExit(output ? `${description}. Last output: ${output}` : `${description}.`);
         Effect.runFork(
           liveSession.release.pipe(
-            Effect.catchAll((cause) => Effect.sync(() => reportCleanupFailure(cause.message))),
+            Effect.catch((cause) => Effect.sync(() => reportCleanupFailure(cause.message))),
           ),
         );
       });
@@ -319,14 +319,16 @@ export const createOpenCodeRuntimeStarter = ({
             liveSession.adopt(prepared);
             yield* liveSession.attach;
           }).pipe(
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: `${remainingStartupMs} millis`,
-              onTimeout: () =>
-                new HostOperationError({
-                  operation: "opencodeRuntime.startRuntime",
-                  message: `Timed out starting OpenCode runtime on 127.0.0.1:${port} after ${startupTimeoutMs}ms.`,
-                  details: { port, startupTimeoutMs },
-                }),
+              orElse: () =>
+                Effect.fail(
+                  new HostOperationError({
+                    operation: "opencodeRuntime.startRuntime",
+                    message: `Timed out starting OpenCode runtime on 127.0.0.1:${port} after ${startupTimeoutMs}ms.`,
+                    details: { port, startupTimeoutMs },
+                  }),
+                ),
             }),
           );
 

@@ -13,7 +13,7 @@ describe("createNodePtyPort", () => {
       },
     });
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         port.start(
           {
             shell: "C:\\Windows\\System32\\cmd.exe",
@@ -26,13 +26,13 @@ describe("createNodePtyPort", () => {
         ),
       ),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left.code).toBe("spawn_failed");
-      expect(result.left.message).toContain("Access is denied");
-      expect(result.left.message).toContain("C:\\Windows\\System32\\cmd.exe");
-      expect(result.left.message).toContain("C:\\repo");
-      expect(result.left.message).toContain("Check that");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure.code).toBe("spawn_failed");
+      expect(result.failure.message).toContain("Access is denied");
+      expect(result.failure.message).toContain("C:\\Windows\\System32\\cmd.exe");
+      expect(result.failure.message).toContain("C:\\repo");
+      expect(result.failure.message).toContain("Check that");
     }
   });
 
@@ -301,15 +301,17 @@ describe("createNodePtyPort", () => {
         { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
       ),
     );
-    const write = () => Effect.runPromise(Effect.either(handle.write(new Uint8Array([65]))));
+    const write = () => Effect.runPromise(Effect.result(handle.write(new Uint8Array([65]))));
     const resize = () =>
-      Effect.runPromise(Effect.either(handle.resize({ columns: 120, rows: 40 })));
+      Effect.runPromise(Effect.result(handle.resize({ columns: 120, rows: 40 })));
 
     const termination = Effect.runPromise(handle.terminate());
     await terminationStarted.promise;
     const duringClose = await Promise.all([write(), resize()]);
-    expect(duringClose.map((result) => result._tag)).toEqual(["Left", "Left"]);
-    expect(duringClose.map((result) => result._tag === "Left" && result.left.message)).toEqual([
+    expect(duringClose.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
+    expect(
+      duringClose.map((result) => result._tag === "Failure" && result.failure.message),
+    ).toEqual([
       "Terminal is closing. Wait for close to finish or retry if it fails.",
       "Terminal is closing. Wait for close to finish or retry if it fails.",
     ]);
@@ -318,15 +320,15 @@ describe("createNodePtyPort", () => {
     finishTermination.resolve();
     await expect(termination).rejects.toThrow("node-pty process-tree termination failed");
     expect((await Promise.all([write(), resize()])).map((result) => result._tag)).toEqual([
-      "Right",
-      "Right",
+      "Success",
+      "Success",
     ]);
     expect(ioCalls).toEqual(["write", "resize"]);
 
     await Effect.runPromise(handle.terminate());
     expect((await Promise.all([write(), resize()])).map((result) => result._tag)).toEqual([
-      "Left",
-      "Left",
+      "Failure",
+      "Failure",
     ]);
     expect(ioCalls).toEqual(["write", "resize"]);
   });

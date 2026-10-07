@@ -77,7 +77,10 @@ export const readSavedImage = (
             }),
         }),
       );
-      return yield* Exit.zipLeft(readExit, closeExit);
+      // Report every failure from the read and the close.
+      const failures = Exit.asVoidAll([readExit, closeExit]);
+      if (Exit.isFailure(failures)) return yield* Effect.failCause(failures.cause);
+      return yield* readExit;
     }),
   );
 };

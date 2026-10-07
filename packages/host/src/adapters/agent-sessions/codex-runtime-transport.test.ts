@@ -16,10 +16,10 @@ const createTransportWithRequest = (
   createCodexRuntimeTransport(
     {
       request,
-      listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
-      listThreads: () => Effect.dieMessage("Unexpected listThreads"),
-      respond: () => Effect.dieMessage("Unexpected respond"),
-      listThreadTurns: () => Effect.dieMessage("Unexpected listThreadTurns"),
+      listLoadedThreads: () => Effect.die(new Error("Unexpected listLoadedThreads")),
+      listThreads: () => Effect.die(new Error("Unexpected listThreads")),
+      respond: () => Effect.die(new Error("Unexpected respond")),
+      listThreadTurns: () => Effect.die(new Error("Unexpected listThreadTurns")),
     },
     "private-runtime",
   );
@@ -73,10 +73,10 @@ test("host-native Codex queries preserve paged history diagnostics", async () =>
   const listThreadTurns = mock(() => Effect.fail(error));
   const transport = createCodexRuntimeTransport(
     {
-      request: () => Effect.dieMessage("Unexpected raw request"),
-      listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
-      listThreads: () => Effect.dieMessage("Unexpected listThreads"),
-      respond: () => Effect.dieMessage("Unexpected respond"),
+      request: () => Effect.die(new Error("Unexpected raw request")),
+      listLoadedThreads: () => Effect.die(new Error("Unexpected listLoadedThreads")),
+      listThreads: () => Effect.die(new Error("Unexpected listThreads")),
+      respond: () => Effect.die(new Error("Unexpected respond")),
       listThreadTurns,
     },
     "private-runtime",
@@ -268,7 +268,7 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
       if (input.method === "thread/turns/list") {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       }
-      return Effect.dieMessage(`Unexpected native request ${input.method}`);
+      return Effect.die(new Error(`Unexpected native request ${input.method}`));
     },
     respond: () => Effect.succeed(undefined),
   });

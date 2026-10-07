@@ -347,6 +347,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     initializeAdmission: workspaceAdmissionService.initialize,
     shutdownWorkspaceImports: workspaceSessionImports.shutdown,
+    shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
     unsubscribeImportCatalogs,
     notifications: notificationService,
     assets,

@@ -110,16 +110,8 @@ describe("createMcpHostBridgeServer", () => {
       onStatusChanged: () => {},
       bridgeService: {
         ready() {
-          return Effect.tryPromise({
-            try: async () => {
-              return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -178,16 +170,8 @@ describe("createMcpHostBridgeServer", () => {
       onStatusChanged: () => {},
       bridgeService: {
         ready() {
-          return Effect.tryPromise({
-            try: async () => {
-              return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -279,7 +263,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({ workspaces: [] });
         },
         invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
+          return Effect.die(new Error("unexpected scoped tool invocation"));
         },
       } satisfies OdtMcpBridgeService,
     });
@@ -325,7 +309,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({ workspaces: [] });
         },
         invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
+          return Effect.die(new Error("unexpected scoped tool invocation"));
         },
       } satisfies OdtMcpBridgeService,
     });
@@ -366,7 +350,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({ workspaces: [] });
         },
         invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
+          return Effect.die(new Error("unexpected scoped tool invocation"));
         },
       },
     });
@@ -409,7 +393,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({ workspaces: [] });
         },
         invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
+          return Effect.die(new Error("unexpected scoped tool invocation"));
         },
       },
     });
@@ -461,16 +445,8 @@ describe("createMcpHostBridgeServer", () => {
       onStatusChanged: () => {},
       bridgeService: {
         ready() {
-          return Effect.tryPromise({
-            try: async () => {
-              return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -487,30 +463,22 @@ describe("createMcpHostBridgeServer", () => {
           });
         },
         invoke(toolName, input) {
-          return Effect.tryPromise({
-            try: async () => {
-              calls.push({ toolName, input });
-              return {
-                task: {
-                  id: "task-1",
-                  title: "Task",
-                  description: "",
-                  status: "in_progress",
-                  priority: 2,
-                  issueType: "feature",
-                  aiReviewEnabled: true,
-                  labels: [],
-                  createdAt: "2026-05-10T10:00:00.000Z",
-                  updatedAt: "2026-05-10T10:01:00.000Z",
-                },
-              };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            calls.push({ toolName, input });
+            return {
+              task: {
+                id: "task-1",
+                title: "Task",
+                description: "",
+                status: "in_progress",
+                priority: 2,
+                issueType: "feature",
+                aiReviewEnabled: true,
+                labels: [],
+                createdAt: "2026-05-10T10:00:00.000Z",
+                updatedAt: "2026-05-10T10:01:00.000Z",
+              },
+            };
           });
         },
       } satisfies OdtMcpBridgeService,

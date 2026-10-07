@@ -197,7 +197,7 @@ const createHarness = async (
     Effect.void;
   let disposeImpl: ClaudeAgentSdkService["dispose"] = () => {};
   let inspectSessionForImportImpl: ClaudeAgentSdkService["inspectSessionForImport"] = () =>
-    Effect.dieMessage("Unexpected import");
+    Effect.die(new Error("Unexpected import"));
   let failNextMutationAfterApply = false;
   let failMutationEventType: string | undefined;
   let mutationBarrier: MutationBarrier | undefined;
@@ -269,7 +269,7 @@ const createHarness = async (
             })
           : Effect.void;
         return waitForBarrier.pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.flatMap(mutation, ({ value, changes: mutationChanges }) => {
               if (
                 failNextMutationAfterApply &&
@@ -543,7 +543,7 @@ describe("Claude host live-session adapter", () => {
     const harness = await createHarness(workingDirectoryDependencies);
     harness.setContinueInterruptedTurn((_input, _runtimeId, onContinuationAdmission) =>
       Effect.sync(() => onContinuationAdmission?.()).pipe(
-        Effect.zipRight(
+        Effect.andThen(
           Effect.fail(
             new HostOperationError({
               operation: "claudeRuntime.createSession",
@@ -609,7 +609,7 @@ describe("Claude host live-session adapter", () => {
       );
       harness.failNextMutationAfterStateApply(eventType);
       const result = await Effect.runPromise(
-        Effect.either(
+        Effect.result(
           harness.adapter.sendUserMessage({
             ...startInput,
             externalSessionId: "session-1",
@@ -618,10 +618,10 @@ describe("Claude host live-session adapter", () => {
         ),
       );
       expect(sends).toBe(1);
-      expect(result._tag).toBe("Left");
-      if (result._tag !== "Left") throw new Error("Expected publication failure");
-      expect(result.left).toBeInstanceOf(AgentSessionMessageAcceptedError);
-      expect(result.left).toMatchObject({
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected publication failure");
+      expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
+      expect(result.failure).toMatchObject({
         failure: { stage: "live_update", acceptedMessage: { messageId: "accepted-1" } },
       });
     },
@@ -763,9 +763,9 @@ describe("Claude host live-session adapter", () => {
     ];
 
     for (const attempt of attempts) {
-      expect(await Effect.runPromise(Effect.either(attempt))).toMatchObject({
-        _tag: "Left",
-        left: {
+      expect(await Effect.runPromise(Effect.result(attempt))).toMatchObject({
+        _tag: "Failure",
+        failure: {
           _tag: "HostValidationError",
           field: "workingDirectory",
         },

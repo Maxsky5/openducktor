@@ -70,6 +70,12 @@ export {
 export type { HostValidationErrorAggregate } from "./effect/host-errors";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {
+  createSerialGate,
+  createSerialLane,
+  type SerialGate,
+  type SerialLane,
+} from "./effect/serial-gate";
+export {
   createHostEventBus,
   type HostEventBusPort,
   type HostEventListener,

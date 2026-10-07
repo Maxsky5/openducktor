@@ -22,7 +22,7 @@ import {
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
 } from "@openducktor/host";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import type {
   BrowserWindow as ElectronBrowserWindow,
   NativeImage as ElectronNativeImage,
@@ -831,7 +831,7 @@ const disposeActiveElectronRuntimeEffect = (
 ): Effect.Effect<void, ElectronLifecycleError> =>
   Effect.gen(function* () {
     yield* Effect.sync(disposeActiveNotificationRuntime);
-    const updaterResult = yield* Effect.either(
+    const updaterResult = yield* Effect.result(
       Effect.tryPromise({
         try: disposeActiveAppUpdateService,
         catch: (cause) =>
@@ -843,12 +843,12 @@ const disposeActiveElectronRuntimeEffect = (
           }),
       }),
     );
-    const hostResult = yield* Effect.either(disposeActiveHostEffect(reason));
-    if (Either.isLeft(updaterResult)) {
-      return yield* Effect.fail(updaterResult.left);
+    const hostResult = yield* Effect.result(disposeActiveHostEffect(reason));
+    if (Result.isFailure(updaterResult)) {
+      return yield* Effect.fail(updaterResult.failure);
     }
-    if (Either.isLeft(hostResult)) {
-      return yield* Effect.fail(hostResult.left);
+    if (Result.isFailure(hostResult)) {
+      return yield* Effect.fail(hostResult.failure);
     }
   });
 

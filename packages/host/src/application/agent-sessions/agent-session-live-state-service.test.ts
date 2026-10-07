@@ -63,10 +63,11 @@ const fakeAdapter = (input: {
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
     supportsSessionControl: false,
-    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
-    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
-    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
-    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
+    beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
+    releaseGeneratedImageBatch: () =>
+      Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
+    describeGeneratedImages: () => Effect.die(new Error("Unexpected describeGeneratedImages")),
+    resolveGeneratedImageSource: () => Effect.die(new Error("Unexpected generated image read")),
     binding: new AgentSessionLiveRegistration(
       { runtimeId: input.runtimeId, runtimeKind },
       (mutation) => Effect.map(mutation, ({ value }) => value),
@@ -98,15 +99,15 @@ const titleControlAdapter = (
   ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [liveSnapshot("session-1")] }),
   queries: unexpectedRuntimeQueries,
   supportsSessionControl: true,
-  startSession: () => Effect.dieMessage("unexpected start"),
-  resumeSession: () => Effect.dieMessage("unexpected resume"),
-  continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
-  forkSession: () => Effect.dieMessage("unexpected fork"),
-  sendUserMessage: () => Effect.dieMessage("unexpected send"),
-  updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+  startSession: () => Effect.die(new Error("unexpected start")),
+  resumeSession: () => Effect.die(new Error("unexpected resume")),
+  continueInterruptedTurn: () => Effect.die(new Error("unexpected continue")),
+  forkSession: () => Effect.die(new Error("unexpected fork")),
+  sendUserMessage: () => Effect.die(new Error("unexpected send")),
+  updateSessionModel: () => Effect.die(new Error("unexpected model update")),
   updateSessionTitle: updateTitle,
-  stopSession: () => Effect.dieMessage("unexpected stop"),
-  releaseSession: () => Effect.dieMessage("unexpected release"),
+  stopSession: () => Effect.die(new Error("unexpected stop")),
+  releaseSession: () => Effect.die(new Error("unexpected release")),
 });
 
 const mutationRegistrations = new WeakMap<
@@ -150,11 +151,11 @@ const createHarness = (withProcessStartAdmission?: WithProcessStartAdmission) =>
 const expectHostFailure = async <Success>(
   effect: Effect.Effect<Success, HostError>,
 ): Promise<HostError> => {
-  const result = await Effect.runPromise(Effect.either(effect));
-  if (result._tag === "Right") {
+  const result = await Effect.runPromise(Effect.result(effect));
+  if (result._tag === "Success") {
     throw new Error("Expected effect to fail.");
   }
-  return result.left;
+  return result.failure;
 };
 
 describe("createAgentSessionLiveStateService", () => {
@@ -163,7 +164,7 @@ describe("createAgentSessionLiveStateService", () => {
     const service = createAgentSessionLiveStateService({
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readSessionRootRefs: () => Effect.dieMessage("Unexpected saved root read."),
+      readSessionRootRefs: () => Effect.die(new Error("Unexpected saved root read.")),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
@@ -530,7 +531,7 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     );
 
-    await Effect.runPromise(Effect.yieldNow());
+    await Effect.runPromise(Effect.yieldNow);
     expect(events).toEqual([]);
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await Effect.runPromise(Fiber.join(refreshFiber));
@@ -842,7 +843,7 @@ describe("createAgentSessionLiveStateService", () => {
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
-        }).pipe(Effect.zipRight(Effect.fail(logFailure))),
+        }).pipe(Effect.andThen(Effect.fail(logFailure))),
       publish: (event) => events.push(event),
     });
 
@@ -1019,7 +1020,7 @@ describe("createAgentSessionLiveStateService", () => {
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
-        }).pipe(Effect.zipRight(Effect.fail(logFailure))),
+        }).pipe(Effect.andThen(Effect.fail(logFailure))),
       publish: () => {
         publishAttempts += 1;
         throw publishFailure;
@@ -1340,19 +1341,19 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
-      startSession: () => Effect.dieMessage("unexpected start"),
+      startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: (input) =>
         Effect.sync(() => {
           resumeInput = input;
           return summary;
         }),
-      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
-      forkSession: () => Effect.dieMessage("unexpected fork"),
-      sendUserMessage: () => Effect.dieMessage("unexpected send"),
-      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
-      stopSession: () => Effect.dieMessage("unexpected stop"),
-      releaseSession: () => Effect.dieMessage("unexpected release"),
+      continueInterruptedTurn: () => Effect.die(new Error("unexpected continue")),
+      forkSession: () => Effect.die(new Error("unexpected fork")),
+      sendUserMessage: () => Effect.die(new Error("unexpected send")),
+      updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
+      stopSession: () => Effect.die(new Error("unexpected stop")),
+      releaseSession: () => Effect.die(new Error("unexpected release")),
     } satisfies AgentSessionRuntimeAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
 
@@ -1387,8 +1388,8 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
-      startSession: () => Effect.dieMessage("unexpected start"),
-      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      startSession: () => Effect.die(new Error("unexpected start")),
+      resumeSession: () => Effect.die(new Error("unexpected resume")),
       continueInterruptedTurn: (input: { externalSessionId: string; workingDirectory: string }) => {
         continuationInputs.push(input);
         return Effect.gen(function* () {
@@ -1397,12 +1398,12 @@ describe("createAgentSessionLiveStateService", () => {
           return summary;
         });
       },
-      forkSession: () => Effect.dieMessage("unexpected fork"),
-      sendUserMessage: () => Effect.dieMessage("unexpected send"),
-      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-      updateSessionTitle: () => Effect.dieMessage("unexpected title update"),
-      stopSession: () => Effect.dieMessage("unexpected stop"),
-      releaseSession: () => Effect.dieMessage("unexpected release"),
+      forkSession: () => Effect.die(new Error("unexpected fork")),
+      sendUserMessage: () => Effect.die(new Error("unexpected send")),
+      updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
+      stopSession: () => Effect.die(new Error("unexpected stop")),
+      releaseSession: () => Effect.die(new Error("unexpected release")),
     } satisfies AgentSessionRuntimeAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
 
@@ -1507,10 +1508,10 @@ describe("createAgentSessionLiveStateService", () => {
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
       supportsSessionControl: true,
-      startSession: () => Effect.dieMessage("unexpected start"),
-      resumeSession: () => Effect.dieMessage("unexpected resume"),
-      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
-      forkSession: () => Effect.dieMessage("unexpected fork"),
+      startSession: () => Effect.die(new Error("unexpected start")),
+      resumeSession: () => Effect.die(new Error("unexpected resume")),
+      continueInterruptedTurn: () => Effect.die(new Error("unexpected continue")),
+      forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "send", input });

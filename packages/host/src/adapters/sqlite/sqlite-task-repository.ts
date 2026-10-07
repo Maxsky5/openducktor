@@ -152,7 +152,7 @@ export const createSqliteTaskRepository = ({
         "sqliteTaskRepository.diagnoseRepoStore",
         ({ databasePath }) => Effect.succeed(readyTaskStoreHealth(databasePath)),
       );
-      return Effect.catchAll(diagnose, (cause) =>
+      return Effect.catch(diagnose, (cause) =>
         Effect.succeed(blockingTaskStoreHealth(errorMessage(cause))),
       );
     },

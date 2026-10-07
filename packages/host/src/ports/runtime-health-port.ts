@@ -15,7 +15,7 @@ export type RuntimeHealthPort = {
   ): Effect.Effect<RuntimeHealth, HostOperationErrorAggregate>;
 };
 
-export class RuntimeHealthPortTag extends Context.Tag("@openducktor/host/RuntimeHealthPort")<
+export class RuntimeHealthPortTag extends Context.Service<
   RuntimeHealthPortTag,
   RuntimeHealthPort
->() {}
+>()("@openducktor/host/RuntimeHealthPort") {}

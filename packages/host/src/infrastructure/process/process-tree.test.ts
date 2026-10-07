@@ -208,7 +208,7 @@ describe("process-tree", () => {
         pid: 1234,
         label: "already closed",
         isClosed: () => true,
-        waitForExit: () => Effect.dieMessage("wait should not be called"),
+        waitForExit: () => Effect.die(new Error("wait should not be called")),
         stopTimeoutMs: 10,
         signalDependencies: {
           platform: "linux",

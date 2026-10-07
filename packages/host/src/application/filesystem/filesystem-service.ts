@@ -4,7 +4,7 @@ import {
   type FilesystemListDirectoryInput,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Result } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 export type FilesystemListDirectoryErrorKind =
@@ -131,20 +131,20 @@ const readDirectoryEntriesEffect = (
       );
     const visibleEntries = [];
     for (const entry of entries) {
-      const metadataResult = yield* Effect.either(filesystem.stat(entry.path));
-      if (Either.isLeft(metadataResult)) {
-        if (hasNestedNodeErrorCode(metadataResult.left, "ENOENT")) {
+      const metadataResult = yield* Effect.result(filesystem.stat(entry.path));
+      if (Result.isFailure(metadataResult)) {
+        if (hasNestedNodeErrorCode(metadataResult.failure, "ENOENT")) {
           continue;
         }
         return yield* Effect.fail(
           new FilesystemListDirectoryError(
             "read_failed",
-            `Failed to read directory '${currentPath}': ${String(metadataResult.left)}`,
-            { cause: metadataResult.left },
+            `Failed to read directory '${currentPath}': ${String(metadataResult.failure)}`,
+            { cause: metadataResult.failure },
           ),
         );
       }
-      const metadata = metadataResult.right;
+      const metadata = metadataResult.success;
       if (!metadata.isDirectory && !includeFiles) {
         continue;
       }

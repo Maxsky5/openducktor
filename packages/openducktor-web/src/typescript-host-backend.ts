@@ -12,6 +12,8 @@ import {
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
+  createSerialGate,
+  createSerialLane,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
@@ -194,8 +196,8 @@ const tryUpgradeTerminalWebSocket = ({
       pendingBytes: 0,
       pendingFrames: [],
       drainWaiters: new Set(),
-      attachPermit: Effect.unsafeMakeSemaphore(1),
-      messagePermits: new Map(),
+      attachPermit: createSerialLane(),
+      messageGate: createSerialGate(),
       closed: false,
       logger,
       onBackgroundFailure,
@@ -901,7 +903,7 @@ export const handleTypescriptHostBackendRequest = ({
       routeInput.taskEventLeaseManager = taskEventLeaseManager;
     }
     return yield* routeCorsRequest(routeInput).pipe(
-      Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
+      Effect.catch((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
     );
   });
 
@@ -1138,7 +1140,7 @@ export const startTypescriptHostBackendEffect = ({
         });
 
         yield* restore(hostCommandRouter.initialize()).pipe(
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             Effect.gen(function* () {
               yield* cleanupStartedServerEffect();
               return yield* new WebOperationError({

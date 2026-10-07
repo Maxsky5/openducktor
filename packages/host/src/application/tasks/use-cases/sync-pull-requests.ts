@@ -42,19 +42,19 @@ export const createTaskPullRequestSyncUseCases = ({
         const repoConfig =
           yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
         const effectiveRepoPath = repoConfig.repoPath;
-        const providerResult = yield* Effect.either(
+        const providerResult = yield* Effect.result(
           dependencies.gitProviderResolver.resolve(repoConfig),
         );
-        if (providerResult._tag === "Left") {
+        if (providerResult._tag === "Failure") {
           if (
-            providerResult.left.reason === "not_configured" ||
-            providerResult.left.reason === "disabled"
+            providerResult.failure.reason === "not_configured" ||
+            providerResult.failure.reason === "disabled"
           ) {
             return { ran: false, changedTaskIds: [] };
           }
-          return yield* Effect.fail(providerResult.left);
+          return yield* Effect.fail(providerResult.failure);
         }
-        const provider = providerResult.right;
+        const provider = providerResult.success;
         const pullRequests = yield* provider.pullRequests();
         const providerId = provider.getDescriptor().id;
 
@@ -135,11 +135,11 @@ export const createTaskPullRequestSyncUseCases = ({
         return { ran: true, changedTaskIds: [...changedTaskIds] };
       });
     return Effect.gen(function* () {
-      const result = yield* Effect.either(sync);
-      if (result._tag === "Right") {
-        return result.right;
+      const result = yield* Effect.result(sync);
+      if (result._tag === "Success") {
+        return result.success;
       }
-      const failure = result.left;
+      const failure = result.failure;
       if (changedTaskIds.size === 0) {
         return yield* Effect.fail(failure);
       }

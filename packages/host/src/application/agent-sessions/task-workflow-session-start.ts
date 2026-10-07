@@ -79,22 +79,22 @@ export const createStartTaskWorkflowSession =
           const launched = yield* Effect.gen(function* () {
             summary = yield* runtime.startSession(runtimeInput);
             return summary;
-          }).pipe(Effect.uninterruptible, Effect.either);
-          if (launched._tag === "Left") {
+          }).pipe(Effect.uninterruptible, Effect.result);
+          if (launched._tag === "Failure") {
             const cleanupError = yield* prepared.cleanup();
             if (!cleanupError) {
-              return yield* Effect.fail(launched.left);
+              return yield* Effect.fail(launched.failure);
             }
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "task-workflow-session.start",
-                message: `${launched.left.message}${cleanupError}`,
-                cause: launched.left,
+                message: `${launched.failure.message}${cleanupError}`,
+                cause: launched.failure,
                 details: { repoPath, taskId: scope.taskId },
               }),
             );
           }
-          summary = launched.right;
+          summary = launched.success;
 
           const persisted = yield* Effect.gen(function* () {
             yield* storeWorkflowSession(tasks, {
@@ -102,29 +102,29 @@ export const createStartTaskWorkflowSession =
               sessionScope: input.sessionScope,
               model: input.model,
               selectedModel: undefined,
-              summary: launched.right,
+              summary: launched.success,
             });
             stored = true;
-          }).pipe(Effect.uninterruptible, Effect.either);
-          if (persisted._tag === "Left") {
-            const stopped = yield* Effect.either(
+          }).pipe(Effect.uninterruptible, Effect.result);
+          if (persisted._tag === "Failure") {
+            const stopped = yield* Effect.result(
               runtime.stopSession(toControlSessionRef(repoPath, summary)),
             );
-            const cleanupError = stopped._tag === "Right" ? yield* prepared.cleanup() : "";
-            if (stopped._tag === "Right" && !cleanupError) {
-              return yield* Effect.fail(persisted.left);
+            const cleanupError = stopped._tag === "Success" ? yield* prepared.cleanup() : "";
+            if (stopped._tag === "Success" && !cleanupError) {
+              return yield* Effect.fail(persisted.failure);
             }
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "task-workflow-session.store-control-result",
-                message: `${errorMessage(persisted.left)}${
-                  stopped._tag === "Left"
-                    ? ` Cleanup failed: ${stopped.left.message}`
+                message: `${errorMessage(persisted.failure)}${
+                  stopped._tag === "Failure"
+                    ? ` Cleanup failed: ${stopped.failure.message}`
                     : cleanupError
                 }`,
                 cause: {
-                  storeFailure: persisted.left,
-                  stopFailure: stopped._tag === "Left" ? stopped.left : undefined,
+                  storeFailure: persisted.failure,
+                  stopFailure: stopped._tag === "Failure" ? stopped.failure : undefined,
                 },
                 details: {
                   repoPath,
@@ -134,23 +134,23 @@ export const createStartTaskWorkflowSession =
               }),
             );
           }
-          const completed = yield* Effect.either(
+          const completed = yield* Effect.result(
             taskSessionStart.complete(prepared, (transitionInput) =>
               tasks.transitionTask(transitionInput),
             ),
           );
-          if (completed._tag === "Left") {
-            const stopped = yield* Effect.either(
+          if (completed._tag === "Failure") {
+            const stopped = yield* Effect.result(
               runtime.stopSession(toControlSessionRef(repoPath, summary)),
             );
-            if (stopped._tag === "Right") {
-              return yield* Effect.fail(completed.left);
+            if (stopped._tag === "Success") {
+              return yield* Effect.fail(completed.failure);
             }
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "task-workflow-session.complete-start",
-                message: `${errorMessage(completed.left)} Cleanup failed: ${stopped.left.message}`,
-                cause: { completionFailure: completed.left, stopFailure: stopped.left },
+                message: `${errorMessage(completed.failure)} Cleanup failed: ${stopped.failure.message}`,
+                cause: { completionFailure: completed.failure, stopFailure: stopped.failure },
                 details: {
                   repoPath,
                   taskId: scope.taskId,

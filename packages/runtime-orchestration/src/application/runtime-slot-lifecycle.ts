@@ -5,7 +5,7 @@ import {
   type RuntimeKind,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import { Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { causeMessage } from "../domain/failure-message";
 import { type Generation, type Slot, type SlotStatus, toStatus } from "../domain/runtime-slot";
 import type { RuntimeDrivers } from "../ports/runtime-driver";
@@ -148,43 +148,51 @@ export const createRuntimeSlotLifecycle = <E>({
     settings: Partial<SlotStatus>,
   ) =>
     Effect.gen(function* () {
-      // A runtime cannot start or become ready after shutdown began.
-      if (isShuttingDown()) {
-        update(slot, { ...settings, state: "disabled", failure: null });
-        return false;
-      }
-      const generation: Generation = { exitMessage: null, cleanupFailure: null };
-      slot.generation = generation;
-      update(slot, {
-        ...settings,
-        state: replacing ? "restarting" : "starting",
-        trigger: request.trigger,
-        failure: null,
-      });
-      // Shutdown interrupts this fiber. The tap records a returned handle before an interrupt
-      // can act, so shutdown always finds and stops it.
-      const start = Effect.uninterruptibleMask((restore) =>
-        restore(
-          drivers[slot.kind].start({
-            configuredExecutablePath: request.configuredExecutablePath,
-            ownCleanup: (cleanup) => {
-              if (slot.generation === generation) slot.orphanCleanup = cleanup;
-            },
-            onRuntimeExit: (message) => reportExit(slot, generation, message),
-            onRuntimeCleanupFailed: (cause) => reportCleanupFailure(slot, generation, cause),
-          }),
-        ).pipe(
-          Effect.tap((handle) =>
-            Effect.sync(() => {
-              // From here the handle owns the resources.
-              slot.orphanCleanup = null;
-              slot.handle = handle;
+      const context = yield* Effect.context<never>();
+      // A runtime cannot start or become ready after shutdown began. Check shutdown, start the
+      // fiber, and register it in one synchronous step. A fiber can yield between operations,
+      // and shutdown must never miss a start that it did not stop.
+      const started = yield* Effect.sync(() => {
+        if (isShuttingDown()) {
+          update(slot, { ...settings, state: "disabled", failure: null });
+          return null;
+        }
+        const generation: Generation = { exitMessage: null, cleanupFailure: null };
+        slot.generation = generation;
+        update(slot, {
+          ...settings,
+          state: replacing ? "restarting" : "starting",
+          trigger: request.trigger,
+          failure: null,
+        });
+        // Shutdown interrupts this fiber. The tap records a returned handle before an interrupt
+        // can act, so shutdown always finds and stops it.
+        const start = Effect.uninterruptibleMask((restore) =>
+          restore(
+            drivers[slot.kind].start({
+              configuredExecutablePath: request.configuredExecutablePath,
+              ownCleanup: (cleanup) => {
+                if (slot.generation === generation) slot.orphanCleanup = cleanup;
+              },
+              onRuntimeExit: (message) => reportExit(slot, generation, message),
+              onRuntimeCleanupFailed: (cause) => reportCleanupFailure(slot, generation, cause),
             }),
+          ).pipe(
+            Effect.tap((handle) =>
+              Effect.sync(() => {
+                // From here the handle owns the resources.
+                slot.orphanCleanup = null;
+                slot.handle = handle;
+              }),
+            ),
           ),
-        ),
-      );
-      const fiber = yield* Effect.forkDaemon(start);
-      slot.startFiber = fiber;
+        );
+        const fiber = Effect.runForkWith(context)(start);
+        slot.startFiber = fiber;
+        return { fiber, generation };
+      });
+      if (started === null) return false;
+      const { fiber, generation } = started;
       const exit = yield* Fiber.await(fiber);
       slot.startFiber = null;
       if (Exit.isFailure(exit)) {
@@ -192,11 +200,12 @@ export const createRuntimeSlotLifecycle = <E>({
         // Release what the failed or interrupted start acquired. A failed cleanup stays owned,
         // and the next stop, restart, or shutdown retries it before anything else.
         const cleanupFailure = yield* runOrphanCleanup(slot);
-        if (Exit.isInterrupted(exit) && cleanupFailure === null) {
+        const interrupted = Cause.hasInterrupts(exit.cause);
+        if (interrupted && cleanupFailure === null) {
           update(slot, { state: "disabled", failure: null });
           return false;
         }
-        const startFailure = Exit.isInterrupted(exit)
+        const startFailure = interrupted
           ? "The start was interrupted by shutdown."
           : causeMessage(exit.cause);
         update(slot, {

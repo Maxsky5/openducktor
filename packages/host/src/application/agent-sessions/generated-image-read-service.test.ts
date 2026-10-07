@@ -125,7 +125,7 @@ for (const stage of ["source", "file"] as const) {
       definitions,
       requireRepoScope,
     );
-    const fiber = Effect.runFork(service.read(input).pipe(Effect.either));
+    const fiber = Effect.runFork(service.read(input).pipe(Effect.result));
     await Effect.runPromise(Deferred.await(entered));
     await Effect.runPromise(registry.remove(binding.runtimeId));
     await Effect.runPromise(
@@ -133,8 +133,8 @@ for (const stage of ["source", "file"] as const) {
     );
     await Effect.runPromise(Deferred.succeed(release, undefined));
     const result = await Effect.runPromise(Fiber.join(fiber));
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left.message).toContain("runtime changed");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure.message).toContain("runtime changed");
     expect(fileReads).toBe(stage === "file" ? 1 : 0);
   });
 }
@@ -142,7 +142,7 @@ for (const stage of ["source", "file"] as const) {
 test("unsupported capability prevents source and file reads", async () => {
   const service = createGeneratedImageReadService(
     createLiveSessionAdapterRegistry(),
-    { read: () => Effect.dieMessage("unexpected file read") },
+    { read: () => Effect.die(new Error("unexpected file read")) },
     {
       listRuntimeDefinitions: () => [],
     },
@@ -178,9 +178,9 @@ test("a rejected output revision prevents file reads", async () => {
     definitions,
     requireRepoScope,
   );
-  const result = await Effect.runPromise(Effect.either(service.read(input)));
-  expect(result._tag).toBe("Left");
-  if (result._tag === "Left") expect(result.left).toBe(rejected);
+  const result = await Effect.runPromise(Effect.result(service.read(input)));
+  expect(result._tag).toBe("Failure");
+  if (result._tag === "Failure") expect(result.failure).toBe(rejected);
   expect(requests).toEqual([input]);
   expect(fileReads).toBe(0);
 });
@@ -189,7 +189,7 @@ test("batch and metadata commands reject file paths, oversized batches, and inva
   const service = createGeneratedImageReadService(
     createLiveSessionAdapterRegistry(),
     {
-      read: () => Effect.dieMessage("Unexpected file read"),
+      read: () => Effect.die(new Error("Unexpected file read")),
     },
     definitions,
     requireRepoScope,

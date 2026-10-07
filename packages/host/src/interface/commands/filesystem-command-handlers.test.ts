@@ -43,7 +43,7 @@ describe("createFilesystemCommandHandlers", () => {
   test("rejects malformed filesystem_list_directory args", async () => {
     const filesystemService: FilesystemService = {
       listDirectory() {
-        return Effect.dieMessage("should not call filesystem service");
+        return Effect.die(new Error("should not call filesystem service"));
       },
     };
     const router = createHostCommandRouter({

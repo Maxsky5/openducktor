@@ -494,7 +494,7 @@ describe("createTaskService pull requests", () => {
         return Effect.succeed(command);
       },
       versionCommand() {
-        return Effect.dieMessage("unexpected version command");
+        return Effect.die(new Error("unexpected version command"));
       },
       runCommandAllowFailure(command, args, options) {
         return Effect.tryPromise({
@@ -1179,23 +1179,15 @@ describe("createTaskService pull requests", () => {
             });
           },
           getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "summary", workingDir, targetBranch, diffScope });
-                return {
-                  currentBranch: { name: "odt/task-1", detached: false },
-                  fileStatuses: [],
-                  fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-                  targetAheadBehind: { ahead: 1, behind: 0 },
-                  upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "summary", workingDir, targetBranch, diffScope });
+              return {
+                currentBranch: { name: "odt/task-1", detached: false },
+                fileStatuses: [],
+                fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                targetAheadBehind: { ahead: 1, behind: 0 },
+                upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+              };
             });
           },
           suggestedSquashCommitMessage() {
@@ -1212,22 +1204,14 @@ describe("createTaskService pull requests", () => {
             });
           },
           pushBranch(workingDir, branch, options) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "push", workingDir, branch, options });
-                return {
-                  outcome: "pushed",
-                  remote: options?.remote ?? "origin",
-                  branch,
-                  output: "",
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "push", workingDir, branch, options });
+              return {
+                outcome: "pushed",
+                remote: options?.remote ?? "origin",
+                branch,
+                output: "",
+              };
             });
           },
         },
@@ -1525,22 +1509,14 @@ describe("createTaskService pull requests", () => {
                 });
               },
               getWorktreeStatusSummaryData() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return {
-                      currentBranch: { name: "odt/task-1", detached: false },
-                      fileStatuses: [],
-                      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-                      targetAheadBehind: { ahead: 1, behind: 0 },
-                      upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  return {
+                    currentBranch: { name: "odt/task-1", detached: false },
+                    fileStatuses: [],
+                    fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                    targetAheadBehind: { ahead: 1, behind: 0 },
+                    upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                  };
                 });
               },
               suggestedSquashCommitMessage() {
@@ -1557,22 +1533,14 @@ describe("createTaskService pull requests", () => {
                 });
               },
               pushBranch(workingDir, branch, options) {
-                return Effect.tryPromise({
-                  try: async () => {
-                    calls.push({ type: "push", workingDir, branch, options });
-                    return {
-                      outcome: "pushed",
-                      remote: options?.remote ?? "origin",
-                      branch,
-                      output: "",
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  calls.push({ type: "push", workingDir, branch, options });
+                  return {
+                    outcome: "pushed",
+                    remote: options?.remote ?? "origin",
+                    branch,
+                    output: "",
+                  };
                 });
               },
             },
@@ -1813,22 +1781,14 @@ describe("createTaskService pull requests", () => {
                 });
               },
               getWorktreeStatusSummaryData() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return {
-                      currentBranch: { name: "odt/task-1", detached: false },
-                      fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-                      fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-                      targetAheadBehind: { ahead: 1, behind: 0 },
-                      upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  return {
+                    currentBranch: { name: "odt/task-1", detached: false },
+                    fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+                    fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+                    targetAheadBehind: { ahead: 1, behind: 0 },
+                    upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                  };
                 });
               },
               suggestedSquashCommitMessage() {
@@ -1911,26 +1871,18 @@ describe("createTaskService pull requests", () => {
         });
       },
       getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
-              directMerge: {
-                method: "squash",
-                sourceBranch: "odt/task-1",
-                targetBranch: { branch: "main" },
-                mergedAt: "2026-05-10T11:00:00.000Z",
-              },
-              agentSessions: [],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          return {
+            spec: { markdown: "# Spec" },
+            plan: { markdown: "# Plan" },
+            directMerge: {
+              method: "squash",
+              sourceBranch: "odt/task-1",
+              targetBranch: { branch: "main" },
+              mergedAt: "2026-05-10T11:00:00.000Z",
+            },
+            agentSessions: [],
+          };
         });
       },
       setPullRequest() {
@@ -2106,17 +2058,9 @@ describe("createTaskService pull requests", () => {
     };
     const taskStore: TaskStorePort = {
       listPullRequestSyncCandidates(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "syncCandidates", input });
-            return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push({ type: "syncCandidates", input });
+          return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
         });
       },
       listTasks(input) {
@@ -2353,16 +2297,8 @@ describe("createTaskService pull requests", () => {
     };
     const taskStore: TaskStorePort = {
       listPullRequestSyncCandidates() {
-        return Effect.tryPromise({
-          try: async () => {
-            return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
         });
       },
       setPullRequest(input) {
@@ -2928,29 +2864,21 @@ describe("createTaskService pull requests", () => {
         });
       },
       getTaskMetadata(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "metadata", input });
-            return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
-              pullRequest: {
-                providerId: "github",
-                number: 42,
-                url: "https://github.com/openai/openducktor/pull/42",
-                state: "open",
-                createdAt: "2026-05-01T00:00:00.000Z",
-                updatedAt: "2026-05-02T00:00:00.000Z",
-              },
-              agentSessions: [],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push({ type: "metadata", input });
+          return {
+            spec: { markdown: "# Spec" },
+            plan: { markdown: "# Plan" },
+            pullRequest: {
+              providerId: "github",
+              number: 42,
+              url: "https://github.com/openai/openducktor/pull/42",
+              state: "open",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              updatedAt: "2026-05-02T00:00:00.000Z",
+            },
+            agentSessions: [],
+          };
         });
       },
       setPullRequest(input) {

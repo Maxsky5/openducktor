@@ -379,19 +379,19 @@ const createTaskServiceImplementation = (
               workingDirectory: prepared.workingDirectory,
             });
           }).pipe(
-            Effect.either,
+            Effect.result,
             Effect.uninterruptible,
             Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
           );
-          if (completion._tag === "Right") {
-            return completion.right;
+          if (completion._tag === "Success") {
+            return completion.success;
           }
           const cleanupError = yield* cleanup();
           return yield* Effect.fail(
             new HostOperationErrorValue({
               operation: "task.build_start.finalize",
-              message: `${errorMessage(completion.left)}${cleanupError}`,
-              cause: completion.left,
+              message: `${errorMessage(completion.failure)}${cleanupError}`,
+              cause: completion.failure,
               details: { repoPath: canonicalRepoPath, taskId: startInput.taskId },
             }),
           );

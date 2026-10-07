@@ -158,16 +158,18 @@ export const createEffectHostCommandRouter = ({
         try: () => handler(args),
         catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
       });
-      return yield* handlerEffect;
+      return yield* handlerEffect.pipe(
+        Effect.withSpan("host.command", { attributes: { command: hostCommand } }),
+      );
     });
   }
 
   return {
     dispose() {
-      return dispose ? dispose() : Effect.void;
+      return (dispose ? dispose() : Effect.void).pipe(Effect.withSpan("host.dispose"));
     },
     initialize() {
-      return initialize ? initialize() : Effect.void;
+      return (initialize ? initialize() : Effect.void).pipe(Effect.withSpan("host.initialize"));
     },
     invoke,
   };

@@ -37,7 +37,7 @@ const createHarness = (
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
-      cleanupTaskSessions: () => Effect.dieMessage("must not stop sessions"),
+      cleanupTaskSessions: () => Effect.die(new Error("must not stop sessions")),
     },
     devServerService: createDirectMergeDevServerService(calls),
     gitPort: extendGitPort(
@@ -55,8 +55,7 @@ const createHarness = (
             targetAheadBehind: { ahead: 1, behind: 0 },
             upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
           }),
-        mergeBranch: () =>
-          Effect.sync(() => calls.push("merge")).pipe(Effect.zipRight(mergeBranch)),
+        mergeBranch: () => Effect.sync(() => calls.push("merge")).pipe(Effect.andThen(mergeBranch)),
       },
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
@@ -101,10 +100,10 @@ describe("direct merge session guard", () => {
         return { liveSessionCount: 1 };
       }),
     );
-    const result = await Effect.runPromise(Effect.either(service.directMerge(mergeInput)));
+    const result = await Effect.runPromise(Effect.result(service.directMerge(mergeInput)));
     expect(result).toMatchObject({
-      _tag: "Left",
-      left: {
+      _tag: "Failure",
+      failure: {
         message: "Stop all running sessions for task task-1 before direct merge.",
       },
     });
@@ -171,8 +170,8 @@ describe("direct merge session guard", () => {
         () => Effect.succeed({ liveSessionCount: 0 }),
         merge,
       );
-      const result = await Effect.runPromise(Effect.either(service.directMerge(mergeInput)));
-      expect(result._tag).toBe(outcome === "failure" ? "Left" : "Right");
+      const result = await Effect.runPromise(Effect.result(service.directMerge(mergeInput)));
+      expect(result._tag).toBe(outcome === "failure" ? "Failure" : "Success");
       expect(calls).not.toContain("record");
       await Effect.runPromise(
         Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "start session")),
@@ -188,8 +187,8 @@ describe("direct merge session guard", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* coordinator.acquireLifecycle("/repo", ["task-1"], "start session");
-          const result = yield* Effect.either(service.directMerge(mergeInput));
-          expect(result._tag).toBe("Left");
+          const result = yield* Effect.result(service.directMerge(mergeInput));
+          expect(result._tag).toBe("Failure");
           expect(calls).not.toContain("merge");
         }),
       ),
@@ -205,20 +204,20 @@ describe("direct merge session guard", () => {
           const { service, coordinator } = createHarness(
             () => Effect.succeed({ liveSessionCount: 0 }),
             Deferred.succeed(entered, undefined).pipe(
-              Effect.zipRight(Deferred.await(release)),
+              Effect.andThen(Deferred.await(release)),
               Effect.as({ outcome: "merged" as const, output: "merged" }),
             ),
           );
           const merge = yield* Effect.forkScoped(service.directMerge(mergeInput));
           yield* Deferred.await(entered);
-          const bootstrap = yield* Effect.either(
+          const bootstrap = yield* Effect.result(
             coordinator.acquireLifecycle("/repo", ["task-1"], "start session"),
           );
-          const resume = yield* Effect.either(
+          const resume = yield* Effect.result(
             Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "resume session")),
           );
-          expect(bootstrap._tag).toBe("Left");
-          expect(resume._tag).toBe("Left");
+          expect(bootstrap._tag).toBe("Failure");
+          expect(resume._tag).toBe("Failure");
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(merge);
           yield* coordinator.acquireLifecycle("/repo", ["task-1"], "start session");

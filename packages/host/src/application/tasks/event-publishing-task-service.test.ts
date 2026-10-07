@@ -374,7 +374,7 @@ describe("createEventPublishingTaskService", () => {
           Effect.sync(() => {
             publishedTaskIds.push(taskSnapshot.id);
           }),
-        publishTasksUpdated: () => Effect.dieMessage("unexpected task update publication"),
+        publishTasksUpdated: () => Effect.die(new Error("unexpected task update publication")),
         syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },
     });

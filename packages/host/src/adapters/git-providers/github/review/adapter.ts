@@ -45,15 +45,15 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         const repoPath = input.repoConfig.repoPath;
-        const repositoryResult = yield* Effect.either(getRepository(input.repoConfig));
-        if (repositoryResult._tag === "Left") {
-          return unavailable(errorMessage(repositoryResult.left));
+        const repositoryResult = yield* Effect.result(getRepository(input.repoConfig));
+        if (repositoryResult._tag === "Failure") {
+          return unavailable(errorMessage(repositoryResult.failure));
         }
 
         return yield* reviewReader.read({
           githubCli,
           repoPath,
-          repository: repositoryResult.right,
+          repository: repositoryResult.success,
           pullRequestNumber: input.linkedPullRequest.number,
         });
       }).pipe(

@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import type { AgentSessionLiveFaultLogger } from "../../application/agent-sessions/agent-session-live-state-service";
-import {
-  createWorkspaceSessionRuntimePersistence,
-  type WorkspaceSessionRenameFailureReporter,
-  type WorkspaceSessionUpdatedPublisher,
-} from "../../application/workspaces/workspace-session-runtime-persistence";
+import { createWorkspaceSessionRuntimePersistence } from "../../application/workspaces/workspace-session-runtime-persistence";
+import type {
+  WorkspaceSessionRenameFailureReporter,
+  WorkspaceSessionUpdatedPublisher,
+} from "../../application/workspaces/workspace-session-persistence-callbacks";
 import {
   HostOperationError,
   HostResourceError,
@@ -65,7 +65,7 @@ export const createNodeWorkspaceSessionPersistence = ({
       },
       catch: (cause) => toHostOperationError(cause, "workspaceSession.rename.report-publish"),
     }).pipe(
-      Effect.catchAll((failure) =>
+      Effect.catch((failure) =>
         faultLog(`Failed to report a Workspace Session rename failure: ${failure.message}`),
       ),
       Effect.ignore,

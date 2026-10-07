@@ -287,7 +287,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         yield* files
           .copyConfiguredPaths(canonicalRepoPath, worktreePath, repoConfig.worktreeCopyPaths)
           .pipe(
-            Effect.catchAll((error) =>
+            Effect.catch((error) =>
               Effect.gen(function* () {
                 const cleanupError = yield* cleanupFailedCreatedWorktree(
                   gitPort,

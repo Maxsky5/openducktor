@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../config/global-config";
 import { HostValidationError } from "../effect/host-errors";
 import type { SettingsConfigPort } from "../ports/settings-config-port";
-import type { ToolDiscoveryPort } from "../ports/tool-discovery-port";
 
 const createSettingsConfig = (
   resolveExecutablePath: () => Effect.Effect<string, HostValidationError>,
@@ -39,22 +38,3 @@ export const createFixedRuntimeSettingsConfig = (
   kind: RuntimeKind,
   executablePath: string,
 ): SettingsConfigPort => createSettingsConfig(() => Effect.succeed(executablePath), kind);
-
-export const createDiscoveredRuntimeSettingsConfig = (
-  kind: RuntimeKind,
-  toolDiscovery: ToolDiscoveryPort,
-): SettingsConfigPort =>
-  createSettingsConfig(
-    () =>
-      toolDiscovery.resolveToolPath(kind).pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              field: `agentRuntimes.${kind}.executablePath`,
-              message: cause.message,
-              cause,
-            }),
-        ),
-      ),
-    kind,
-  );

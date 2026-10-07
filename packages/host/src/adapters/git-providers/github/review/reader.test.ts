@@ -1213,13 +1213,13 @@ describe("createGithubPullRequestReviewReader", () => {
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
         })
-        .pipe(Effect.either),
+        .pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("github.review_context");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("github.review_context");
     }
   });
 
@@ -1233,13 +1233,13 @@ describe("createGithubPullRequestReviewReader", () => {
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
         })
-        .pipe(Effect.either),
+        .pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("data.repository.pullRequest.reviewThreads.nodes.0");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("data.repository.pullRequest.reviewThreads.nodes.0");
     }
   });
 
@@ -1255,13 +1255,13 @@ describe("createGithubPullRequestReviewReader", () => {
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
         })
-        .pipe(Effect.either),
+        .pipe(Effect.result),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("checks.0");
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("HostValidationError");
+      expect(result.failure.field).toBe("checks.0");
     }
   });
 

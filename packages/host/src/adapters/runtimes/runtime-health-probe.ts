@@ -53,29 +53,29 @@ export const createRuntimeHealthProbe = (
     readVersion,
     getRuntimeHealth(kind, executablePath) {
       return Effect.gen(function* () {
-        const validatedPath = yield* Effect.either(
+        const validatedPath = yield* Effect.result(
           validateExactToolPath(toolDiscovery, kind, executablePath),
         );
-        if (validatedPath._tag === "Left") {
-          return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.left));
+        if (validatedPath._tag === "Failure") {
+          return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.failure));
         }
-        const binary = validatedPath.right.path;
+        const binary = validatedPath.success.path;
         const [probeResult, version] = yield* Effect.all(
           [
-            Effect.either(executableProbes[kind].probeExecutable(binary)),
+            Effect.result(executableProbes[kind].probeExecutable(binary)),
             readVersion(kind, binary),
           ] as const,
           { concurrency: 2 },
         );
-        if (probeResult._tag === "Left") {
-          if (probeResult.left instanceof RuntimeExecutableIncompatibleError) {
+        if (probeResult._tag === "Failure") {
+          if (probeResult.failure instanceof RuntimeExecutableIncompatibleError) {
             return runtimeHealthFailure(
               kind,
               binary,
               `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
             );
           }
-          return yield* Effect.fail(probeResult.left);
+          return yield* Effect.fail(probeResult.failure);
         }
         return {
           kind,

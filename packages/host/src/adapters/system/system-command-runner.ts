@@ -86,7 +86,7 @@ export const createSystemCommandRunner = ({
           }),
       });
 
-      return yield* Effect.async<SystemCommandRunResult, HostOperationErrorAggregate>(
+      return yield* Effect.callback<SystemCommandRunResult, HostOperationErrorAggregate>(
         (resume, signal) => {
           let child: ReturnType<typeof spawn>;
           try {
@@ -221,7 +221,7 @@ export const createSystemCommandRunner = ({
     versionCommand(command, args, options) {
       return Effect.gen(function* () {
         const result = yield* runCommandAllowFailure(command, args, options).pipe(
-          Effect.catchAll(() => Effect.succeed(null)),
+          Effect.catch(() => Effect.succeed(null)),
         );
         return result?.ok ? firstNonEmptyLine(result.stdout) : null;
       });

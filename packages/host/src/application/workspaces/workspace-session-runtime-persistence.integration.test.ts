@@ -99,7 +99,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       updateRuntimeSessionTitle: (input) =>
         updateSessionTitle
           ? updateSessionTitle(input)
-          : Effect.dieMessage("live title update is not wired"),
+          : Effect.die(new Error("live title update is not wired")),
       reportRenameFailure: () => Effect.void,
     });
     const live = createAgentSessionLiveStateService({
@@ -138,19 +138,19 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       runtime: live,
       repositoryPolicy: persistence,
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-      taskReader: { getTask: () => Effect.dieMessage("unexpected task read") },
+      taskReader: { getTask: () => Effect.die(new Error("unexpected task read")) },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected task session read"),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected task session write"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected task model write"),
-        transitionTask: () => Effect.dieMessage("unexpected task transition"),
+        agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
+        transitionTask: () => Effect.die(new Error("unexpected task transition")),
       },
-      taskLifecycle: { acquireLifecycle: () => Effect.dieMessage("unexpected task lifecycle") },
+      taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
       taskSessionStart: {
-        prepare: () => Effect.dieMessage("unexpected task start"),
-        complete: () => Effect.dieMessage("unexpected task completion"),
+        prepare: () => Effect.die(new Error("unexpected task start")),
+        complete: () => Effect.die(new Error("unexpected task completion")),
       },
-      persistTaskModel: () => Effect.dieMessage("unexpected task model write"),
+      persistTaskModel: () => Effect.die(new Error("unexpected task model write")),
     });
     await Effect.runPromise(
       commands.sendUserMessage({

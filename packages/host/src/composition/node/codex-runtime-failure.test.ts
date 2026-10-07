@@ -161,7 +161,7 @@ describe("Codex runtime failure reporting", () => {
             error: (text) =>
               Effect.sync(() => {
                 errors.push(text);
-              }).pipe(Effect.zipRight(Effect.fail(failure))),
+              }).pipe(Effect.andThen(Effect.fail(failure))),
             info: () => Effect.void,
           },
           (error) =>

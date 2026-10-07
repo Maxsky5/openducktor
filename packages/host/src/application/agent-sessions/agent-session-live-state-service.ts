@@ -270,7 +270,7 @@ export const createAgentSessionLiveStateService = ({
         ? refreshGate.run(
             Effect.forEach([...observedRepoPaths], (repoPath) =>
               refreshAdapters(repoPath, [adapter]).pipe(
-                Effect.catchAll((cause) =>
+                Effect.catch((cause) =>
                   publishEnvelope({
                     type: "fault",
                     repoPath,

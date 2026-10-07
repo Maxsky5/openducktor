@@ -4,7 +4,7 @@ import {
   type TerminalClientMessage,
   type TerminalServerMessage,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { createTerminalClientSession } from "./terminal-client-session";
 import type { TerminalService } from "./terminal-service";
 import { TerminalServiceError } from "./terminal-service-error";
@@ -23,6 +23,44 @@ const createTerminalClientService = <Overrides extends Partial<TerminalClientSer
 });
 
 describe("TerminalClientSession", () => {
+  test("writes input frames in arrival order when one arrives right after a release", async () => {
+    const writes: number[] = [];
+    const firstEntered = Deferred.makeUnsafe<void>();
+    const releaseFirst = Deferred.makeUnsafe<void>();
+    const session = createTerminalClientSession({
+      clientId: "test-client",
+      terminalService: createTerminalClientService({
+        write: (_terminalId, payload) =>
+          Effect.gen(function* () {
+            if (payload[0] === 1) {
+              yield* Deferred.succeed(firstEntered, undefined);
+              yield* Deferred.await(releaseFirst);
+            }
+            writes.push(payload[0] ?? -1);
+          }),
+      }),
+      send: () => undefined,
+    });
+    const input = (byte: number) =>
+      Effect.runFork(
+        session.handle(
+          { version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId: "terminal-1" },
+          new Uint8Array([byte]),
+        ),
+      );
+
+    const first = input(1);
+    await Effect.runPromise(Deferred.await(firstEntered));
+    const second = input(2);
+    await Effect.runPromise(Deferred.succeed(releaseFirst, undefined));
+    await Effect.runPromise(Fiber.join(first));
+    const third = input(3);
+
+    await Effect.runPromise(Fiber.join(second));
+    await Effect.runPromise(Fiber.join(third));
+    expect(writes).toEqual([1, 2, 3]);
+  });
+
   test("serializes client frames behind an asynchronous attach", async () => {
     const operations: string[] = [];
     let releaseAttach = (): void => undefined;

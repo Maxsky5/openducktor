@@ -122,7 +122,7 @@ describe("Codex model catalog preview lifecycle", () => {
       Effect.sync(() => {
         children[0]?.kill();
       }).pipe(
-        Effect.zipRight(
+        Effect.andThen(
           Effect.fail(
             new HostOperationError({
               operation: "test.cleanup",

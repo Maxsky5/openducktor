@@ -96,7 +96,7 @@ const runSpawnedGit = (
   },
   HostOperationErrorAggregate
 > =>
-  Effect.async<
+  Effect.callback<
     GitCommandResult & {
       ok: boolean;
     },
@@ -222,7 +222,7 @@ export const createDefaultGitRunner = (
         );
       }
       const launch = createProcessCommandLaunch(command, args, commandEnv, platform);
-      const exit = yield* Effect.either(
+      const exit = yield* Effect.result(
         Effect.tryPromise({
           try: (signal) =>
             execFileAsync(launch.command, launch.args, {
@@ -236,11 +236,11 @@ export const createDefaultGitRunner = (
           catch: (cause) => cause,
         }),
       );
-      if (exit._tag === "Right") {
-        return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr, exitCode: 0 };
+      if (exit._tag === "Success") {
+        return { ok: true, stdout: exit.success.stdout, stderr: exit.success.stderr, exitCode: 0 };
       }
       if (options?.allowFailure) {
-        const failed = exit.left;
+        const failed = exit.failure;
         const parsedFailure = failedGitCommandSchema.safeParse(failed);
         const stdout = parsedFailure.success ? (parsedFailure.data.stdout ?? "") : "";
         const stderr = parsedFailure.success
@@ -254,7 +254,7 @@ export const createDefaultGitRunner = (
         };
       }
       return yield* Effect.fail(
-        toHostOperationError(exit.left, "git.execFile", { args, workingDirectory }),
+        toHostOperationError(exit.failure, "git.execFile", { args, workingDirectory }),
       );
     });
 };

@@ -22,6 +22,35 @@ const transcriptRetractionEvent = (timestamp: string): ClaudeAgentSdkEvent => ({
 });
 
 describe("Claude live-session event coordinator", () => {
+  test("runs control mutations in call order when one arrives right after a release", async () => {
+    const coordinator = createClaudeLiveSessionEventCoordinator({
+      runtimeId: "runtime-1",
+      processEvent: () => Effect.void,
+    });
+    const applied: string[] = [];
+    const firstEntered = Deferred.makeUnsafe<void>();
+    const releaseFirst = Deferred.makeUnsafe<void>();
+    const select = (model: string) =>
+      Effect.runFork(coordinator.runControlMutation(Effect.sync(() => void applied.push(model))));
+    const first = Effect.runFork(
+      coordinator.runControlMutation(
+        Deferred.succeed(firstEntered, undefined).pipe(
+          Effect.andThen(Deferred.await(releaseFirst)),
+          Effect.andThen(Effect.sync(() => void applied.push("a"))),
+        ),
+      ),
+    );
+    await Effect.runPromise(Deferred.await(firstEntered));
+    const second = select("b");
+    await Effect.runPromise(Deferred.succeed(releaseFirst, undefined));
+    await Effect.runPromise(Fiber.join(first));
+    const third = select("c");
+
+    await Effect.runPromise(Fiber.join(second));
+    await Effect.runPromise(Fiber.join(third));
+    expect(applied).toEqual(["a", "b", "c"]);
+  });
+
   test("surfaces a processing failure once without stranding later events", async () => {
     const processedTimestamps: string[] = [];
     const failure = new HostOperationError({

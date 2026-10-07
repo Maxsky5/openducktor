@@ -108,7 +108,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   let lifecycleWasBlocked = false;
   const cleanup = Effect.gen(function* () {
-    const lifecycle = yield* Effect.either(
+    const lifecycle = yield* Effect.result(
       Effect.scoped(
         taskSessionLifecycleCoordinator.acquireLifecycle(
           "/canonical/repo",
@@ -117,7 +117,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
         ),
       ),
     );
-    lifecycleWasBlocked = lifecycle._tag === "Left";
+    lifecycleWasBlocked = lifecycle._tag === "Failure";
   });
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
     transitionTask: () => Effect.succeed(closedTask()),

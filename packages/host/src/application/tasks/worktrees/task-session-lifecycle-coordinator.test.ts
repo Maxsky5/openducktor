@@ -77,8 +77,8 @@ test("task lifecycle guard rejects overlap and releases at scope exit", async ()
         yield* coordinator.acquireLifecycle("/repo", ["task-1"], "start workflow session");
         overlapFailed = yield* coordinator.acquireLifecycle("/repo", ["task-1"], "close task").pipe(
           Effect.scoped,
-          Effect.either,
-          Effect.map((result) => result._tag === "Left"),
+          Effect.result,
+          Effect.map((result) => result._tag === "Failure"),
         );
       }),
     ),
@@ -99,10 +99,10 @@ test("workspace lifecycle and task lifecycle operations reject overlap", async (
     Effect.scoped(
       Effect.gen(function* () {
         yield* coordinator.acquireLifecycle("/repo", ["task-1"], "direct merge");
-        const workspaceLifecycle = yield* Effect.either(
+        const workspaceLifecycle = yield* Effect.result(
           coordinator.runWorkspaceLifecycle("/repo", "close", Effect.void),
         );
-        expect(workspaceLifecycle._tag).toBe("Left");
+        expect(workspaceLifecycle._tag).toBe("Failure");
       }),
     ),
   );
@@ -112,10 +112,10 @@ test("workspace lifecycle and task lifecycle operations reject overlap", async (
       "/repo",
       "remove",
       Effect.gen(function* () {
-        const taskLifecycle = yield* Effect.either(
+        const taskLifecycle = yield* Effect.result(
           Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "direct merge")),
         );
-        expect(taskLifecycle._tag).toBe("Left");
+        expect(taskLifecycle._tag).toBe("Failure");
       }),
     ),
   );
@@ -148,8 +148,8 @@ test("each execution of a task lifecycle Effect checks and reserves the task", a
     Effect.scoped(
       Effect.gen(function* () {
         yield* coordinator.acquireLifecycle("/repo", ["task-1"], "close task");
-        const overlap = yield* Effect.either(Effect.scoped(start));
-        expect(overlap._tag).toBe("Left");
+        const overlap = yield* Effect.result(Effect.scoped(start));
+        expect(overlap._tag).toBe("Failure");
       }),
     ),
   );
@@ -158,10 +158,10 @@ test("each execution of a task lifecycle Effect checks and reserves the task", a
     Effect.scoped(
       Effect.gen(function* () {
         yield* start;
-        const overlap = yield* Effect.either(
+        const overlap = yield* Effect.result(
           Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
         );
-        expect(overlap._tag).toBe("Left");
+        expect(overlap._tag).toBe("Failure");
       }),
     ),
   );

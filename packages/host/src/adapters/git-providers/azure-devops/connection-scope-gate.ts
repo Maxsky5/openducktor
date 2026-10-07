@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
+import { createSerialLane, type SerialLane } from "../../../effect/serial-gate";
 
 type ConnectionScopeEntry = {
   generation: number;
-  semaphore: Effect.Semaphore;
+  lane: SerialLane;
 };
 
 export const createAzureDevOpsConnectionScopeGate = () => {
@@ -12,7 +13,7 @@ export const createAzureDevOpsConnectionScopeGate = () => {
   const entryFor = (scope: string): ConnectionScopeEntry => {
     let entry = entries.get(scope);
     if (!entry) {
-      entry = { generation: 0, semaphore: Effect.unsafeMakeSemaphore(1) };
+      entry = { generation: 0, lane: createSerialLane() };
       entries.set(scope, entry);
     }
     return entry;
@@ -39,7 +40,7 @@ export const createAzureDevOpsConnectionScopeGate = () => {
           );
     },
     run<A, E, R>(scope: string, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-      return entryFor(scope).semaphore.withPermits(1)(operation);
+      return entryFor(scope).lane.run(operation);
     },
   };
 };

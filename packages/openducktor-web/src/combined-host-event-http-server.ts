@@ -91,7 +91,7 @@ export const createCombinedHostSseResponse = (
                     write("notification-frame", JSON.stringify(frame));
                   }),
                 ),
-                Effect.catchAll((cause) => Effect.sync(() => fail(cause))),
+                Effect.catch((cause) => Effect.sync(() => fail(cause))),
               ),
             );
             stopNotifications = () => {

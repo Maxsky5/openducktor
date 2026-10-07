@@ -25,6 +25,7 @@ import type {
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
+import { createSerialGate } from "../../effect/serial-gate";
 
 type OpenCodeLiveSessionState = ReturnType<typeof createOpenCodeLiveSessionState>;
 
@@ -70,19 +71,7 @@ export const createOpenCodeSessionControlAdapter = ({
   serializeRuntime,
   commit,
 }: CreateOpenCodeSessionControlAdapterInput): AgentSessionControlAdapterPort => {
-  const serializeSendBySession = new Map<string, SerializeRuntime>();
-
-  const serializeSessionSend = <Success>(
-    sessionKey: string,
-    effect: Effect.Effect<Success, HostError>,
-  ): Effect.Effect<Success, HostError> => {
-    let serializeSend = serializeSendBySession.get(sessionKey);
-    if (!serializeSend) {
-      serializeSend = Effect.unsafeMakeSemaphore(1).withPermits(1);
-      serializeSendBySession.set(sessionKey, serializeSend);
-    }
-    return serializeSend(effect);
-  };
+  const sendGate = createSerialGate();
 
   const runSummary = (
     operation: string,
@@ -194,20 +183,22 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return serializeSessionSend(
-        refKey(sessionRef),
-        runSummary("opencode-live-session.continue-interrupted-turn", input.repoPath, () =>
-          connection.continueInterruptedTurn(request),
-        ),
-      ).pipe(
-        Effect.mapError((cause) =>
-          toAgentSessionResumeError(
-            cause,
-            sessionRef,
-            "opencode-live-session.continue-interrupted-turn",
+      return sendGate
+        .run(
+          refKey(sessionRef),
+          runSummary("opencode-live-session.continue-interrupted-turn", input.repoPath, () =>
+            connection.continueInterruptedTurn(request),
           ),
-        ),
-      );
+        )
+        .pipe(
+          Effect.mapError((cause) =>
+            toAgentSessionResumeError(
+              cause,
+              sessionRef,
+              "opencode-live-session.continue-interrupted-turn",
+            ),
+          ),
+        );
     },
     forkSession: (input) => {
       const request: Parameters<typeof connection.forkSession>[0] = {
@@ -244,7 +235,7 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return serializeSessionSend(
+      return sendGate.run(
         refKey(sessionRef),
         Effect.tryPromise({
           try: () => connection.sendUserMessage(request),

@@ -128,7 +128,7 @@ const setup = async () => {
           if (state.failSave) return Effect.fail(failure("save failed"));
           const gate = state.saveGate;
           return gate
-            ? Deferred.await(gate).pipe(Effect.zipRight(store.importSession(input)))
+            ? Deferred.await(gate).pipe(Effect.andThen(store.importSession(input)))
             : store.importSession(input);
         }),
     },
@@ -381,9 +381,9 @@ describe("external workspace session import", () => {
   test("a restart waits for an import in progress, which attaches before the drain ends", async () => {
     const h = await setup();
     await h.discover();
-    h.state.saveGate = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    h.state.saveGate = Deferred.makeUnsafe<void>();
     const importing = Effect.runPromise(h.service.importSession(h.input));
-    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow());
+    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow);
 
     // A restart closes admission and drains admitted controls while the save is still open.
     h.admission.close("opencode", {
@@ -392,8 +392,8 @@ describe("external workspace session import", () => {
       nextAction: "Wait for the restart to finish.",
     });
     const draining = Effect.runFork(h.admission.drain("opencode"));
-    await Effect.runPromise(Effect.yieldNow());
-    expect(draining.unsafePoll()).toBeNull();
+    await Effect.runPromise(Effect.yieldNow);
+    expect(draining.pollUnsafe()).toBeUndefined();
     await Effect.runPromise(Deferred.succeed(h.state.saveGate, undefined));
     await Effect.runPromise(Fiber.join(draining));
 
@@ -406,9 +406,9 @@ describe("external workspace session import", () => {
   test("a cancelled import fails with the reason of the lifecycle action", async () => {
     const h = await setup();
     await h.discover();
-    h.state.saveGate = Deferred.unsafeMake<void>(Effect.runSync(Effect.fiberId));
+    h.state.saveGate = Deferred.makeUnsafe<void>();
     const importing = Effect.runPromise(h.service.importSession(h.input));
-    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow());
+    while (!h.calls.includes("save")) await Effect.runPromise(Effect.yieldNow);
 
     await Effect.runPromise(h.admission.cancel("opencode", "The OpenCode runtime restarted."));
 
@@ -437,7 +437,7 @@ describe("external workspace session import", () => {
     h.adapter.sessionImport.scanSessions = ({ signal }) => {
       h.state.signal = signal;
       return {
-        next: () => Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+        next: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
       };
     };
     const fiber = Effect.runFork(h.service.list(h.list));
@@ -457,9 +457,10 @@ test("import releases the directory guard before runtime admission reads the sam
       Effect.map((source) => ({
         ...source,
         attach: h.lifecycle.runWorktreeRead(ref.workingDirectory, source.attach).pipe(
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration: "1 second",
-            onTimeout: () => failure("Admission deadlocked on the import directory guard"),
+            orElse: () =>
+              Effect.fail(failure("Admission deadlocked on the import directory guard")),
           }),
         ),
       })),

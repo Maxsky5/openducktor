@@ -31,8 +31,8 @@ export const createNotificationStream = (): NotificationStream => {
     if (retained.length > RETENTION) retained.shift();
     for (const subscriber of subscribers) {
       // Native event callbacks publish without yielding, so replay and live frames stay ordered.
-      if (!subscriber.queue.unsafeOffer(validated)) {
-        Deferred.unsafeDone(
+      if (!Queue.offerUnsafe(subscriber.queue, validated)) {
+        Deferred.doneUnsafe(
           subscriber.failure,
           Effect.fail(
             streamError("Notification stream consumer cannot keep up. Reload to reconnect."),
@@ -54,7 +54,7 @@ export const createNotificationStream = (): NotificationStream => {
       publish({ type: "health", cursor: cursor(), health: update });
     },
     subscribe(input) {
-      return Stream.unwrapScoped(
+      return Stream.unwrap(
         Effect.gen(function* () {
           const requested = yield* Effect.try({
             try: () => notificationStreamSubscribeSchema.parse(input).cursor,
@@ -92,13 +92,13 @@ export const createNotificationStream = (): NotificationStream => {
               if (frame.cursor.sequence > requested.sequence) initial.push(frame);
           }
           // Let the transport install its cleanup before the first frame reaches its listener.
-          return Stream.fromEffect(Effect.yieldNow()).pipe(
+          return Stream.fromEffect(Effect.yieldNow).pipe(
             Stream.drain,
             // Replay must not use the queue space reserved for live events during delivery.
             Stream.concat(Stream.fromIterable(initial)),
             Stream.concat(Stream.fromQueue(subscriber.queue)),
             Stream.map((frame) => structuredClone(frame)),
-            Stream.interruptWhenDeferred(subscriber.failure),
+            Stream.interruptWhen(Deferred.await(subscriber.failure)),
           );
         }),
       );

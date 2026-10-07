@@ -75,7 +75,7 @@ export const respondToAutomaticServerRequest = (
   };
   Effect.runFork(
     sendResponse({ jsonrpc: "2.0", id: request.id, result }).pipe(
-      Effect.catchAll((error) => Effect.sync(() => failFast(error))),
+      Effect.catch((error) => Effect.sync(() => failFast(error))),
     ),
   );
   return true;

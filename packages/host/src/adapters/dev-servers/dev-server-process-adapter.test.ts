@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { createDevServerProcessAdapter as createEffectDevServerProcessAdapter } from "./dev-server-process-adapter";
@@ -72,7 +72,7 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null
   if (!Exit.isFailure(exit)) {
     return null;
   }
-  const failureOption = Chunk.head(Cause.failures(exit.cause));
+  const failureOption = Cause.findErrorOption(exit.cause);
   return failureOption._tag === "Some" ? failureOption.value : null;
 };
 

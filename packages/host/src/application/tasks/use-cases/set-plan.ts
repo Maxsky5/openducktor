@@ -74,7 +74,7 @@ export const createSetPlanUseCase =
 
       const document = yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
       let changes: TaskChangeSet = { taskIds: [taskId], removedTaskIds: [] };
-      const postDocument = yield* Effect.either(
+      const postDocument = yield* Effect.result(
         Effect.gen(function* () {
           if (shouldReplaceEpicSubtasks) {
             const removedTaskIds = yield* replaceEpicPlanSubtasks(
@@ -92,15 +92,15 @@ export const createSetPlanUseCase =
           }
         }),
       );
-      if (postDocument._tag === "Left") {
-        if (postDocument.left instanceof TaskMutationProgressFailure) {
-          return yield* Effect.fail(postDocument.left);
+      if (postDocument._tag === "Failure") {
+        if (postDocument.failure instanceof TaskMutationProgressFailure) {
+          return yield* Effect.fail(postDocument.failure);
         }
         return yield* Effect.fail(
           new TaskMutationProgressFailure({
             operation: "set-plan",
             changes,
-            failure: postDocument.left,
+            failure: postDocument.failure,
           }),
         );
       }

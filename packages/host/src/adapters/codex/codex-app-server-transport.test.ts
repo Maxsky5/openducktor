@@ -20,7 +20,13 @@ type PendingWriteState = {
 const createChild = (stdin: Writable = new PassThrough()): TestCodexChildProcess => {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
-  return Object.assign(new EventEmitter(), { stdin, stdout, stderr });
+  return Object.assign(new EventEmitter(), {
+    stdin,
+    stdout,
+    stderr,
+    exitCode: null,
+    signalCode: null,
+  });
 };
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -696,6 +702,39 @@ describe("createCodexAppServerTransport", () => {
             }),
           ),
         ).rejects.toThrow(message);
+      } finally {
+        await Effect.runPromise(transport.close());
+      }
+    },
+  );
+
+  test.each([
+    { exitCode: 1, signalCode: null, reason: "closed: process exited with code 1" },
+    {
+      exitCode: null,
+      signalCode: "SIGKILL" as const,
+      reason: "process exited from signal SIGKILL",
+    },
+    { exitCode: null, signalCode: null, reason: "stdout closed unexpectedly" },
+  ])(
+    "reports $reason when stdout closes and the close event is late",
+    async ({ exitCode, signalCode, reason }) => {
+      // The process already exited, or still runs, while the close event waits for stderr.
+      const child = Object.assign(createChild(), { exitCode, signalCode });
+      const failures: Error[] = [];
+      const transport = createCodexAppServerTransport(
+        "runtime-1",
+        child,
+        1_000,
+        () => {},
+        (error) => failures.push(error),
+      );
+      try {
+        child.stdout.end();
+        await Bun.sleep(60);
+        expect(failures.map((failure) => failure.message)).toEqual([
+          expect.stringContaining(reason),
+        ]);
       } finally {
         await Effect.runPromise(transport.close());
       }

@@ -30,15 +30,15 @@ type TestControlServiceInput = Omit<
 const createAgentSessionCommandService = (input: TestControlServiceInput) =>
   createControlService({
     taskSessionStart: {
-      prepare: () => Effect.dieMessage("unexpected task session preparation"),
-      complete: () => Effect.dieMessage("unexpected task session completion"),
+      prepare: () => Effect.die(new Error("unexpected task session preparation")),
+      complete: () => Effect.die(new Error("unexpected task session completion")),
     },
     ...input,
     runtime: {
-      loadContext: () => Effect.dieMessage("unexpected context read"),
-      loadSessionDiff: () => Effect.dieMessage("unexpected diff read"),
-      replyApproval: () => Effect.dieMessage("unexpected approval reply"),
-      replyQuestion: () => Effect.dieMessage("unexpected question reply"),
+      loadContext: () => Effect.die(new Error("unexpected context read")),
+      loadSessionDiff: () => Effect.die(new Error("unexpected diff read")),
+      replyApproval: () => Effect.die(new Error("unexpected approval reply")),
+      replyQuestion: () => Effect.die(new Error("unexpected question reply")),
       ...input.runtime,
     },
     repositoryPolicy: {
@@ -65,7 +65,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
         Effect.map((updated) => ({ updated, publish: Effect.void })),
       ),
     tasks: {
-      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      transitionTask: () => Effect.die(new Error("unexpected task transition")),
       ...input.tasks,
     },
   });
@@ -182,7 +182,7 @@ const acceptedUserMessage: AcceptedAgentUserMessage = {
   state: "queued",
 };
 
-const unexpectedSend = () => Effect.dieMessage("unexpected send");
+const unexpectedSend = () => Effect.die(new Error("unexpected send"));
 
 type ControlDeps = Parameters<typeof createAgentSessionCommandService>[0];
 
@@ -200,19 +200,19 @@ const createModelUpdateService = ({
   createAgentSessionCommandService({
     ...createControlDeps(),
     runtime: {
-      startSession: () => Effect.dieMessage("unexpected start"),
-      resumeSession: () => Effect.dieMessage("unexpected resume"),
-      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-      forkSession: () => Effect.dieMessage("unexpected fork"),
+      startSession: () => Effect.die(new Error("unexpected start")),
+      resumeSession: () => Effect.die(new Error("unexpected resume")),
+      continueInterruptedTurn: () => Effect.die(new Error("unexpected continue interrupted turn")),
+      forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: unexpectedSend,
       updateSessionModel: updateRuntimeModel,
-      stopSession: () => Effect.dieMessage("unexpected stop"),
-      releaseSession: () => Effect.dieMessage("unexpected release"),
+      stopSession: () => Effect.die(new Error("unexpected stop")),
+      releaseSession: () => Effect.die(new Error("unexpected release")),
     },
     tasks: {
       agentSessionsList: () =>
         Effect.succeed([{ ...summary, runtimeKind, role: "build", selectedModel }]),
-      agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+      agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
       agentSessionUpdateModel: updateStoredModel,
     },
   });
@@ -223,29 +223,30 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...deps,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           yield* deps.taskLifecycle.acquireLifecycle("/repo", ["task-1"], "direct merge");
-          const result = yield* Effect.either(service.startWorkflowSession(workflowStart));
+          const result = yield* Effect.result(service.startWorkflowSession(workflowStart));
           expect(result).toMatchObject({
-            _tag: "Left",
-            left: { operation: "task.start session.lifecycle_guard" },
+            _tag: "Failure",
+            failure: { operation: "task.start session.lifecycle_guard" },
           });
         }),
       ),
@@ -283,7 +284,7 @@ describe("createAgentSessionCommandService", () => {
               task: preparedTask,
               workingDirectory: "/repo/worktree",
             }),
-          complete: () => Effect.dieMessage("unexpected completion"),
+          complete: () => Effect.die(new Error("unexpected completion")),
         },
         runtime: {
           startSession: () =>
@@ -309,15 +310,16 @@ describe("createAgentSessionCommandService", () => {
                 );
               }
             }),
-          resumeSession: () => Effect.dieMessage("unexpected resume"),
-          continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-          forkSession: () => Effect.dieMessage("unexpected fork"),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () =>
+            Effect.die(new Error("unexpected continue interrupted turn")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
           sendUserMessage: unexpectedSend,
-          updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-          releaseSession: () => Effect.dieMessage("unexpected release"),
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
         },
         tasks: {
-          agentSessionsList: () => Effect.dieMessage("unexpected list"),
+          agentSessionsList: () => Effect.die(new Error("unexpected list")),
           agentSessionUpsert: () =>
             Effect.gen(function* () {
               yield* Deferred.succeed(created, undefined);
@@ -331,13 +333,13 @@ describe("createAgentSessionCommandService", () => {
               calls.push("store-committed");
               return true;
             }),
-          agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
         },
       });
       const fiber = Effect.runFork(service.startWorkflowSession(workflowStart));
       try {
         await Effect.runPromise(Deferred.await(created));
-        await Effect.runPromise(Fiber.interruptFork(fiber));
+        fiber.interruptUnsafe();
         await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
         expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
         const expected = ["runtime-created", "runtime-returned"];
@@ -400,26 +402,27 @@ describe("createAgentSessionCommandService", () => {
             calls.push("runtime");
             return summary;
           }),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.gen(function* () {
             calls.push("store");
-            const overlap = yield* Effect.either(
+            const overlap = yield* Effect.result(
               Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),
             );
-            expect(overlap._tag).toBe("Left");
+            expect(overlap._tag).toBe("Failure");
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
         transitionTask: () =>
           Effect.sync(() => {
             calls.push("transition");
@@ -467,23 +470,24 @@ describe("createAgentSessionCommandService", () => {
             task: preparedTask,
             workingDirectory: "/repo/worktree",
           }),
-        complete: () => Effect.dieMessage("unexpected completion"),
+        complete: () => Effect.die(new Error("unexpected completion")),
       },
       runtime: {
         startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
         stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -521,18 +525,19 @@ describe("createAgentSessionCommandService", () => {
             task: preparedTask,
             workingDirectory: "/repo/worktree",
           }),
-        complete: () => Effect.dieMessage("unexpected completion"),
+        complete: () => Effect.die(new Error("unexpected completion")),
       },
       runtime: {
         startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
         stopSession: () =>
           Effect.sync(() => calls.push("stop-runtime")).pipe(
-            Effect.zipRight(
+            Effect.andThen(
               Effect.fail(
                 new HostOperationError({
                   operation: "test.stop",
@@ -541,13 +546,13 @@ describe("createAgentSessionCommandService", () => {
               ),
             ),
           ),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -592,18 +597,19 @@ describe("createAgentSessionCommandService", () => {
       },
       runtime: {
         startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
         stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () => Effect.succeed(true),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -627,22 +633,23 @@ describe("createAgentSessionCommandService", () => {
       ...createControlDeps(),
       runtime: {
         startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.sync(() => {
             storeCount += 1;
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -665,18 +672,19 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
+        startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: (input) =>
           Effect.succeed({
             ...summary,
             externalSessionId: input.externalSessionId,
           }),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
@@ -692,7 +700,7 @@ describe("createAgentSessionCommandService", () => {
             stored.push(session);
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -730,24 +738,24 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected reattach resume"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected reattach resume")),
         continueInterruptedTurn: (input) =>
           Effect.sync(() => {
             continuations.push(input);
             return { ...summary, externalSessionId: input.externalSessionId };
           }),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build" as const, selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -781,18 +789,19 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
+        startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return summary;
           }),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
@@ -803,8 +812,8 @@ describe("createAgentSessionCommandService", () => {
               selectedModel: storedModel,
             },
           ]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -828,23 +837,24 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return { ...summary, externalSessionId: "fork-1" };
           }),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -870,24 +880,25 @@ describe("createAgentSessionCommandService", () => {
       ...createControlDeps(),
       taskReader: { getTask: () => Effect.succeed(task("closed")) },
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return { ...summary, externalSessionId: "fork-1" };
           }),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -913,24 +924,25 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: () => Effect.succeed("/repo"),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: (input) =>
           Effect.sync(() => {
             runtimeInputs.push(input);
             return acceptedUserMessage;
           }),
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle: createTaskSessionLifecycleCoordinator(),
     });
@@ -952,23 +964,24 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return acceptedUserMessage;
           }),
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -985,24 +998,25 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return acceptedUserMessage;
           }),
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1011,12 +1025,12 @@ describe("createAgentSessionCommandService", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
-          return yield* Effect.either(service.sendUserMessage(workflowSend));
+          return yield* Effect.result(service.sendUserMessage(workflowSend));
         }),
       ),
     );
 
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -1029,23 +1043,24 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: (input) =>
           Effect.sync(() => {
             calls.push("runtime");
             runtimeInputs.push(input);
           }),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
         agentSessionUpdateModel: (input) =>
           Effect.sync(() => {
             calls.push("store");
@@ -1251,16 +1266,16 @@ describe("createAgentSessionCommandService", () => {
     });
 
     const result = await Effect.runPromise(
-      Effect.either(service.updateSessionModel(workflowModelUpdate)),
+      Effect.result(service.updateSessionModel(workflowModelUpdate)),
     );
 
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") {
-      expect(result.left).toBeInstanceOf(HostOperationError);
-      expect(result.left.message).toBe(
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure).toBeInstanceOf(HostOperationError);
+      expect(result.failure.message).toBe(
         "task store unavailable Runtime model restore failed: runtime restore unavailable",
       );
-      expect(result.left.cause).toEqual({ storeFailure, restoreFailure });
+      expect(result.failure.cause).toEqual({ storeFailure, restoreFailure });
     }
   });
 
@@ -1271,22 +1286,23 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
           }),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1313,23 +1329,24 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
           }),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1338,7 +1355,7 @@ describe("createAgentSessionCommandService", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
-          return yield* Effect.either(
+          return yield* Effect.result(
             service.updateSessionModel({
               repoPath: "/repo",
               runtimeKind: "opencode",
@@ -1352,7 +1369,7 @@ describe("createAgentSessionCommandService", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -1363,24 +1380,25 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
+        startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return summary;
           }),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1389,7 +1407,7 @@ describe("createAgentSessionCommandService", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
-          return yield* Effect.either(
+          return yield* Effect.result(
             service.resumeSession({
               resumeMode: "reattach",
               repoPath: "/repo",
@@ -1403,7 +1421,7 @@ describe("createAgentSessionCommandService", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -1414,24 +1432,25 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
             return { ...summary, externalSessionId: "fork-1" };
           }),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1440,7 +1459,7 @@ describe("createAgentSessionCommandService", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
-          return yield* Effect.either(
+          return yield* Effect.result(
             service.forkSession({
               repoPath: "/repo",
               runtimeKind: "opencode",
@@ -1455,7 +1474,7 @@ describe("createAgentSessionCommandService", () => {
       ),
     );
 
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -1465,29 +1484,30 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () =>
           Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task")).pipe(
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                resetWasBlocked = result._tag === "Left";
+                resetWasBlocked = result._tag === "Failure";
               }),
             ),
             Effect.as(true),
           ),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1514,28 +1534,29 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
-        startSession: () => Effect.dieMessage("unexpected start"),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task")).pipe(
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                resetWasBlocked = result._tag === "Left";
+                resetWasBlocked = result._tag === "Failure";
               }),
             ),
             Effect.asVoid,
           ),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
         agentSessionUpdateModel: () => Effect.succeed(true),
       },
       taskLifecycle,

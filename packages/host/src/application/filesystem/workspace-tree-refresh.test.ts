@@ -204,7 +204,7 @@ describe("workspace tree refresh", () => {
       batches = 0;
       failSecondBatch = true;
       const failed = await Effect.runPromise(
-        Effect.either(
+        Effect.result(
           service.refreshTree({
             rootPath: root,
             mode: "incremental",
@@ -213,12 +213,12 @@ describe("workspace tree refresh", () => {
           }),
         ),
       );
-      if (failed._tag !== "Left") throw new Error("expected failed refresh");
-      expect(failed.left._tag).toBe("HostValidationError");
-      expect(failed.left.message).toBe(
+      if (failed._tag !== "Failure") throw new Error("expected failed refresh");
+      expect(failed.failure._tag).toBe("HostValidationError");
+      expect(failed.failure.message).toBe(
         "Unable to refresh workspace files: scoped inventory read failed",
       );
-      expect(failed.left.cause).toBe(failure);
+      expect(failed.failure.cause).toBe(failure);
       expect(batches).toBe(2);
       failSecondBatch = false;
       const recovered = await Effect.runPromise(
@@ -589,10 +589,10 @@ describe("workspace tree refresh", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const input = { rootPath: root, mode: "full" as const, refreshId: "initial" };
-          const a = yield* Effect.fork(service.refreshTree(input));
+          const a = yield* Effect.forkChild(service.refreshTree(input));
           yield* Deferred.await(start);
-          const b = yield* Effect.fork(service.refreshTree(input));
-          const c = yield* Effect.fork(service.refreshTree({ ...input, refreshId: "later" }));
+          const b = yield* Effect.forkChild(service.refreshTree(input));
+          const c = yield* Effect.forkChild(service.refreshTree({ ...input, refreshId: "later" }));
           yield* Effect.promise(() => writeFile(path.join(root, "late.txt"), "late\n"));
           yield* Deferred.succeed(release, undefined);
           const results = yield* Effect.all([Fiber.join(a), Fiber.join(b), Fiber.join(c)]);
@@ -602,7 +602,7 @@ describe("workspace tree refresh", () => {
           if (latest?.kind !== "snapshot") throw new Error("expected later snapshot");
           expect(latest.entries.some((entry) => entry.path === "late.txt")).toBe(true);
           shouldFail = true;
-          const failed = yield* Effect.either(
+          const failed = yield* Effect.result(
             service.refreshTree({
               rootPath: root,
               mode: "incremental",
@@ -610,7 +610,7 @@ describe("workspace tree refresh", () => {
               refreshId: "failure",
             }),
           );
-          expect(failed._tag).toBe("Left");
+          expect(failed._tag).toBe("Failure");
           shouldFail = false;
           const recovered = yield* service.refreshTree({
             rootPath: root,

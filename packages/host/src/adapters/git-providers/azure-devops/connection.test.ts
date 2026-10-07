@@ -3,7 +3,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { repoConfigSchema, type AzureDevOpsRepository } from "@openducktor/contracts";
 import type { IPersistence } from "@azure/msal-node-extensions";
 import type { AuthenticationResult, DeviceCodeRequest } from "@azure/msal-node";
-import { Effect, Fiber, TestClock, TestContext } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { createAzureDevOpsConnectionAdapter } from "./connection";
@@ -339,19 +340,19 @@ describe("Azure DevOps connection", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const replacement = yield* Effect.fork(
-          Effect.either(connection.replacePat(repoConfig, repository, "secret")),
+        const replacement = yield* Effect.forkChild(
+          Effect.result(connection.replacePat(repoConfig, repository, "secret")),
         );
         const signal = yield* Effect.promise(() => started.promise);
         expect(signal).toBeInstanceOf(AbortSignal);
         yield* TestClock.adjust("30 seconds");
         const result = yield* Fiber.join(replacement);
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left.message).toContain("timed out after 30 seconds");
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("timed out after 30 seconds");
         }
         expect(signal?.aborted).toBe(true);
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   });
 

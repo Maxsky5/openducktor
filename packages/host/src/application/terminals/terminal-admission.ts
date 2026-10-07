@@ -47,7 +47,7 @@ export const createTerminalAdmission = ({
   };
 
   const waitUntil = (isReady: () => boolean): Effect.Effect<void> =>
-    Effect.async<void>((resume) => {
+    Effect.callback<void>((resume) => {
       if (isReady()) {
         resume(Effect.void);
         return;
@@ -188,7 +188,7 @@ export const createTerminalAdmission = ({
         (reservationId) => reservationId > lastPreexistingReservationId,
       ),
     ).pipe(
-      Effect.zipRight(
+      Effect.andThen(
         Effect.sync(() => {
           const keys = [
             ...new Set(taskIds.map((taskId) => terminalContextKey({ repoPath, taskId }))),
@@ -221,6 +221,6 @@ export const createTerminalAdmission = ({
     stopAccepting: (): Effect.Effect<void> =>
       Effect.sync(() => {
         accepting = false;
-      }).pipe(Effect.zipRight(waitUntil(() => pendingTotal === 0))),
+      }).pipe(Effect.andThen(waitUntil(() => pendingTotal === 0))),
   };
 };

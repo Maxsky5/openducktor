@@ -204,7 +204,7 @@ export const cleanupFailedCreatedWorktree = (
   Effect.gen(function* () {
     const cleanupErrors: string[] = [];
     yield* gitPort.removeWorktree(repoPath, worktreePath, true).pipe(
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.sync(() => {
           cleanupErrors.push(`Also failed to remove worktree: ${String(error)}`);
         }),
@@ -212,7 +212,7 @@ export const cleanupFailedCreatedWorktree = (
     );
     if (deleteBranch) {
       yield* gitPort.deleteLocalBranch(repoPath, branch, true).pipe(
-        Effect.catchAll((error) =>
+        Effect.catch((error) =>
           Effect.sync(() => {
             cleanupErrors.push(`Also failed to delete created branch ${branch}: ${String(error)}`);
           }),

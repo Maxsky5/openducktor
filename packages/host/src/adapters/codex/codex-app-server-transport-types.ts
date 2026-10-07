@@ -17,6 +17,9 @@ export type CodexChildProcess = {
   readonly stdin: Writable;
   readonly stdout: Readable;
   readonly stderr: Readable;
+  /** Set when the process exits, which can precede the `close` event. */
+  readonly exitCode: number | null;
+  readonly signalCode: NodeJS.Signals | null;
   once(event: "error", listener: (error: Error) => void): void;
   once(
     event: "close",

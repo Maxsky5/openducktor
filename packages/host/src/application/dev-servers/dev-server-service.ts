@@ -217,11 +217,11 @@ export const createDevServerService = ({
         publishSnapshot(runtime);
         let failedScript: FailedDevServerScriptStart | null = null;
         for (const script of repoConfig.devServers) {
-          const result = yield* Effect.either(startScript(runtime, workingDirectory, script));
-          if (result._tag === "Left") {
+          const result = yield* Effect.result(startScript(runtime, workingDirectory, script));
+          if (result._tag === "Failure") {
             failedScript = {
               command: script.command,
-              message: errorMessage(result.left),
+              message: errorMessage(result.failure),
               name: script.name,
               scriptId: script.id,
             };

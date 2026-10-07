@@ -212,9 +212,9 @@ describe("createTaskService direct merge", () => {
     const service = createTaskService({
       devServerService: createDirectMergeDevServerService(calls),
       gitProviderResolver: {
-        resolve: () => Effect.dieMessage("direct merge must not resolve a Git provider"),
+        resolve: () => Effect.die(new Error("direct merge must not resolve a Git provider")),
         resolveConfigured: () =>
-          Effect.dieMessage("direct merge must not resolve a configured Git provider"),
+          Effect.die(new Error("direct merge must not resolve a configured Git provider")),
       },
       gitPort: extendGitPort(
         createDirectMergeGitPort({
@@ -225,23 +225,15 @@ describe("createTaskService direct merge", () => {
         }),
         {
           getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "summary", workingDir, targetBranch, diffScope });
-                return {
-                  currentBranch: { name: "odt/task-1", detached: false },
-                  fileStatuses: [],
-                  fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-                  targetAheadBehind: { ahead: 1, behind: 0 },
-                  upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "summary", workingDir, targetBranch, diffScope });
+              return {
+                currentBranch: { name: "odt/task-1", detached: false },
+                fileStatuses: [],
+                fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                targetAheadBehind: { ahead: 1, behind: 0 },
+                upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+              };
             });
           },
           suggestedSquashCommitMessage(workingDir, sourceBranch, targetBranch) {
@@ -259,17 +251,9 @@ describe("createTaskService direct merge", () => {
             });
           },
           mergeBranch(workingDir, request) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "mergeBranch", workingDir, request });
-                return { outcome: "merged", output: "merged" };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "mergeBranch", workingDir, request });
+              return { outcome: "merged", output: "merged" };
             });
           },
         },
@@ -278,20 +262,12 @@ describe("createTaskService direct merge", () => {
         createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         {
           readConfig() {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "readConfig" });
-                return {
-                  ...createDefaultGlobalConfig(),
-                  git: { defaultMergeMethod: "merge_commit" },
-                };
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
+            return Effect.sync(() => {
+              calls.push({ type: "readConfig" });
+              return {
+                ...createDefaultGlobalConfig(),
+                git: { defaultMergeMethod: "merge_commit" },
+              };
             });
           },
         },
@@ -612,22 +588,14 @@ describe("createTaskService direct merge", () => {
             }),
             {
               getWorktreeStatusSummaryData() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return {
-                      currentBranch: { name: "odt/task-1", detached: false },
-                      fileStatuses: [],
-                      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-                      targetAheadBehind: { ahead: 1, behind: 0 },
-                      upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  return {
+                    currentBranch: { name: "odt/task-1", detached: false },
+                    fileStatuses: [],
+                    fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                    targetAheadBehind: { ahead: 1, behind: 0 },
+                    upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                  };
                 });
               },
               suggestedSquashCommitMessage() {
@@ -644,20 +612,12 @@ describe("createTaskService direct merge", () => {
                 });
               },
               mergeBranch() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return {
-                      outcome: "conflicts",
-                      conflictedFiles: ["src/main.ts"],
-                      output: "conflict",
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  return {
+                    outcome: "conflicts",
+                    conflictedFiles: ["src/main.ts"],
+                    output: "conflict",
+                  };
                 });
               },
             },
@@ -666,19 +626,11 @@ describe("createTaskService direct merge", () => {
             createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
             {
               readConfig() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return {
-                      ...createDefaultGlobalConfig(),
-                      git: { defaultMergeMethod: "merge_commit" },
-                    };
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
+                return Effect.sync(() => {
+                  return {
+                    ...createDefaultGlobalConfig(),
+                    git: { defaultMergeMethod: "merge_commit" },
+                  };
                 });
               },
             },
@@ -735,27 +687,19 @@ describe("createTaskService direct merge", () => {
         });
       },
       getTaskMetadata(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "metadata", input });
-            return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
-              directMerge: {
-                method: "merge_commit",
-                sourceBranch: "odt/task-1",
-                targetBranch: { remote: "origin", branch: "main" },
-                mergedAt: "2026-05-10T11:00:00.000Z",
-              },
-              agentSessions: [buildSession],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push({ type: "metadata", input });
+          return {
+            spec: { markdown: "# Spec" },
+            plan: { markdown: "# Plan" },
+            directMerge: {
+              method: "merge_commit",
+              sourceBranch: "odt/task-1",
+              targetBranch: { remote: "origin", branch: "main" },
+              mergedAt: "2026-05-10T11:00:00.000Z",
+            },
+            agentSessions: [buildSession],
+          };
         });
       },
       transitionTask(input) {
@@ -828,7 +772,7 @@ describe("createTaskService direct merge", () => {
     const service = createTaskService({
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-        cleanupTaskSessions: () => Effect.dieMessage("unexpected session cleanup"),
+        cleanupTaskSessions: () => Effect.die(new Error("unexpected session cleanup")),
       },
       devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
@@ -898,26 +842,18 @@ describe("createTaskService direct merge", () => {
         });
       },
       getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
-              directMerge: {
-                method: "merge_commit",
-                sourceBranch: "odt/task-1",
-                targetBranch: { remote: "origin", branch: "main" },
-                mergedAt: "2026-05-10T11:00:00.000Z",
-              },
-              agentSessions: [],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          return {
+            spec: { markdown: "# Spec" },
+            plan: { markdown: "# Plan" },
+            directMerge: {
+              method: "merge_commit",
+              sourceBranch: "odt/task-1",
+              targetBranch: { remote: "origin", branch: "main" },
+              mergedAt: "2026-05-10T11:00:00.000Z",
+            },
+            agentSessions: [],
+          };
         });
       },
       transitionTask() {

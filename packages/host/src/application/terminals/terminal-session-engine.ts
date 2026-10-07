@@ -215,7 +215,7 @@ export const createTerminalSessionEngine = ({
                   cause,
                 ),
               ),
-              Effect.zipRight(attachAfterDrain),
+              Effect.andThen(attachAfterDrain),
             ),
           () => Effect.sync(() => applyStreamEvents(session, session.output.endSnapshotHold())),
         );
@@ -252,7 +252,7 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
-        return yield* session.operations.withPermits(1)(
+        return yield* session.operations.run(
           handle
             .write(data)
             .pipe(
@@ -298,7 +298,7 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
-        yield* session.operations.withPermits(1)(
+        yield* session.operations.run(
           (session.kind === "interactive" && session.resources.handle
             ? session.resources.handle.resize(grid)
             : Effect.void

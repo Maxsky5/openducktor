@@ -175,7 +175,7 @@ describe("runtime executable check service", () => {
             },
           },
         });
-        const checkFiber = yield* Effect.fork(concurrentService.check({ mode: "discover" }));
+        const checkFiber = yield* Effect.forkChild(concurrentService.check({ mode: "discover" }));
         const startedTogether = yield* Deferred.await(allStarted).pipe(
           Effect.timeoutOption("250 millis"),
         );

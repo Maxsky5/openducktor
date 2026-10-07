@@ -71,10 +71,10 @@ test("closes a retained connection exactly once", async () => {
         config: {},
         configureWal: true,
         databasePath,
-      }).pipe(Scope.extend(scope));
+      }).pipe(Scope.provide(scope));
       yield* Effect.all([connection.close, connection.close], { discard: true });
       yield* Scope.close(scope, Exit.void);
-      return yield* Effect.either(
+      return yield* Effect.result(
         connection.session.execute(
           (database) => database.run(sql.raw("SELECT 1;")),
           "test.query-after-close",
@@ -83,5 +83,5 @@ test("closes a retained connection exactly once", async () => {
     }),
   );
 
-  expect(queryAfterClose._tag).toBe("Left");
+  expect(queryAfterClose._tag).toBe("Failure");
 });

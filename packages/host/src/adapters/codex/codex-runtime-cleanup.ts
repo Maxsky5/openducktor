@@ -48,7 +48,7 @@ export const cleanupCodexRuntime = ({
     }
 
     // A closed parent can leave its process group running.
-    const processExit = yield* Effect.either(
+    const processExit = yield* Effect.result(
       processTreeTerminator({
         pid,
         label: `Codex app-server runtime ${nextRuntimeId}`,
@@ -57,8 +57,8 @@ export const cleanupCodexRuntime = ({
         stopTimeoutMs,
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "codexRuntime.stopProcess"))),
     );
-    if (processExit._tag === "Left") {
-      errors.push(`process tree: ${processExit.left.message}`);
+    if (processExit._tag === "Failure") {
+      errors.push(`process tree: ${processExit.failure.message}`);
     }
 
     const transportExit = yield* Effect.exit(transport.close());

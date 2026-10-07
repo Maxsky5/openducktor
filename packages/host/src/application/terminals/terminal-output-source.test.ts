@@ -181,9 +181,9 @@ describe("shared terminal output sources", () => {
         service.preparePathInput({ terminalId: source.terminalId, paths: ["/image.png"] }),
         service.close({ terminalId: source.terminalId, confirmTerminate: true }),
       ]) {
-        const result = await Effect.runPromise(Effect.either(effect));
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") expect(result.left.code).toBe("invalid_input");
+        const result = await Effect.runPromise(Effect.result(effect));
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") expect(result.failure.code).toBe("invalid_input");
       }
     } finally {
       await Effect.runPromise(service.dispose());
@@ -209,7 +209,7 @@ describe("shared terminal output sources", () => {
         ),
       );
     const rejected = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         service.openOutputSource({
           context,
           workingDir: "/repo",
@@ -218,12 +218,13 @@ describe("shared terminal output sources", () => {
         }),
       ),
     );
-    expect(rejected._tag).toBe("Left");
-    if (rejected._tag !== "Left") throw new Error("Expected pending sources to reach the limit.");
-    expect(rejected.left.message).toContain(
+    expect(rejected._tag).toBe("Failure");
+    if (rejected._tag !== "Failure")
+      throw new Error("Expected pending sources to reach the limit.");
+    expect(rejected.failure.message).toContain(
       `${TERMINAL_LIMITS.livePerTask}/${TERMINAL_LIMITS.livePerTask}`,
     );
-    expect(rejected.left.message).toContain("Close a terminal or stop a dev server");
+    expect(rejected.failure.message).toContain("Close a terminal or stop a dev server");
     let cleaned = false;
     const cleanup = Effect.runPromise(
       Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task"] })),
@@ -287,7 +288,7 @@ describe("dev server terminal ownership", () => {
       },
     });
     try {
-      expect((await Effect.runPromise(Effect.either(service.start(command))))._tag).toBe("Left");
+      expect((await Effect.runPromise(Effect.result(service.start(command))))._tag).toBe("Failure");
       expect((await Effect.runPromise(service.getState(command))).scripts[0]).toMatchObject({
         status: "failed",
         pid: 777,

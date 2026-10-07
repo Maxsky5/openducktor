@@ -210,7 +210,7 @@ export const resolveUpstreamAheadBehind = (
       upstreamTarget,
     ).pipe(
       Effect.map((counts) => ({ outcome: "counts" as const, counts })),
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.succeed({
           outcome: "error" as const,
           message: error instanceof Error ? error.message : String(error),
@@ -314,7 +314,7 @@ export const loadRebaseConflictContext = (
       "--untracked-files=no",
     ]).pipe(
       Effect.map((result) => combineOutput(result.stdout, result.stderr)),
-      Effect.catchAll(() => Effect.succeed(rebaseConflictOutputUnavailable)),
+      Effect.catch(() => Effect.succeed(rebaseConflictOutputUnavailable)),
     );
     return {
       operation: "rebase" as const,

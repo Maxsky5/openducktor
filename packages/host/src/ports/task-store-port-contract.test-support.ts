@@ -6,7 +6,7 @@ import type {
   TaskCard,
   TaskCreateInput,
 } from "@openducktor/contracts";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { TaskStorePort } from "./task-repository-ports";
 
@@ -23,7 +23,7 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
   if (!Exit.isFailure(exit)) {
     throw new Error("Expected Effect failure.");
   }
-  const failureOption = Chunk.head(Cause.failures(exit.cause));
+  const failureOption = Cause.findErrorOption(exit.cause);
   if (failureOption._tag !== "Some") {
     throw new Error("Expected Effect failure cause.");
   }

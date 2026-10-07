@@ -210,7 +210,7 @@ describe("settings config adapter initialization", () => {
           calls += 1;
           if (calls === 1) {
             return Effect.sleep("10 millis").pipe(
-              Effect.zipRight(
+              Effect.andThen(
                 Effect.fail(new HostValidationError({ message: "Runtime discovery failed" })),
               ),
             );
@@ -221,13 +221,13 @@ describe("settings config adapter initialization", () => {
 
       const firstResults = await Effect.runPromise(
         Effect.all(
-          [adapter.readConfig().pipe(Effect.either), adapter.readConfig().pipe(Effect.either)],
+          [adapter.readConfig().pipe(Effect.result), adapter.readConfig().pipe(Effect.result)],
           { concurrency: "unbounded" },
         ),
       );
 
       expect(calls).toBe(1);
-      expect(firstResults.map((result) => result._tag)).toEqual(["Left", "Left"]);
+      expect(firstResults.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
 
       const retried = await Effect.runPromise(adapter.readConfig());
       expect(calls).toBe(2);
@@ -259,20 +259,20 @@ describe("settings config adapter initialization", () => {
       await writeFile(configPath, JSON.stringify({ version: 3, theme: "blue" }));
       const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
-      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
+      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
         throw new Error("Expected a config validation failure");
       }
 
-      expect(result.left.message).toBe(
+      expect(result.failure.message).toBe(
         [
           `Invalid config file ${configPath}:`,
           'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
         ].join("\n\n"),
       );
-      expect(result.left.details).toEqual({ kind: "invalid-settings-file", path: configPath });
-      expect(findInvalidSettingsFileError({ cause: result.left })).toBe(result.left);
+      expect(result.failure.details).toEqual({ kind: "invalid-settings-file", path: configPath });
+      expect(findInvalidSettingsFileError({ cause: result.failure })).toBe(result.failure);
       expect(
         findInvalidSettingsFileError(new HostValidationError({ message: "Other failure" })),
       ).toBeNull();
@@ -284,16 +284,16 @@ describe("settings config adapter initialization", () => {
       await writeFile(configPath, "{ not json");
       const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
-      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
+      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
         throw new Error("Expected an invalid settings failure");
       }
 
       expect(
-        result.left.message.startsWith(`Invalid config file ${configPath}:\n\nInvalid JSON`),
+        result.failure.message.startsWith(`Invalid config file ${configPath}:\n\nInvalid JSON`),
       ).toBe(true);
       expect(
-        result.left.message.endsWith(
+        result.failure.message.endsWith(
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
         ),
       ).toBe(true);
@@ -309,14 +309,17 @@ describe("settings config adapter initialization", () => {
         const adapter = createSettingsConfigAdapter({ configPath });
 
         const result = await Effect.runPromise(
-          adapter.readConfig({ initialize: false }).pipe(Effect.either),
+          adapter.readConfig({ initialize: false }).pipe(Effect.result),
         );
 
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left).toBeInstanceOf(HostValidationError);
-          expect(result.left.message).toContain("extra:");
-          expect(result.left.details).toEqual({ kind: "invalid-settings-file", path: configPath });
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure).toBeInstanceOf(HostValidationError);
+          expect(result.failure.message).toContain("extra:");
+          expect(result.failure.details).toEqual({
+            kind: "invalid-settings-file",
+            path: configPath,
+          });
         }
         expect(await readFile(configPath, "utf8")).toBe(payload);
       });
@@ -328,19 +331,19 @@ describe("settings config adapter initialization", () => {
       await writeFile(configPath, '{"version": 3, "theme": 1e400}');
       const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
-      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
+      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
         throw new Error("Expected a config validation failure");
       }
 
-      expect(result.left.message).toBe(
+      expect(result.failure.message).toBe(
         [
           `Invalid config file ${configPath}:`,
           "config: Invalid input",
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
         ].join("\n\n"),
       );
-      expect(result.left.message).not.toContain('"code"');
+      expect(result.failure.message).not.toContain('"code"');
     });
   });
 

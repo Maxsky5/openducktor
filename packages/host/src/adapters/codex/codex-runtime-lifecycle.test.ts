@@ -176,11 +176,11 @@ describe("Codex runtime lifecycle", () => {
         expect(releaseCount).toBe(1);
         expect(cleanupCount).toBe(1);
         let stopSettled = false;
-        const firstStop = Effect.runPromise(Effect.either(handle.stop())).then((result) => {
+        const firstStop = Effect.runPromise(Effect.result(handle.stop())).then((result) => {
           stopSettled = true;
           return result;
         });
-        const secondStop = Effect.runPromise(Effect.either(handle.stop()));
+        const secondStop = Effect.runPromise(Effect.result(handle.stop()));
         await new Promise<void>((resolve) => setImmediate(resolve));
         expect(stopSettled).toBe(false);
         // The loss is reported at the failure, while cleanup is still pending.
@@ -190,18 +190,18 @@ describe("Codex runtime lifecycle", () => {
         const [firstResult, secondResult] = await Promise.all([firstStop, secondStop]);
         await waitFor(() => !processIsAlive(pid), PROCESS_EXIT_TIMEOUT_MS);
         if (cleanupFails) {
-          if (firstResult._tag !== "Left" || secondResult._tag !== "Left") {
+          if (firstResult._tag !== "Failure" || secondResult._tag !== "Failure") {
             throw new Error("Both stop callers must receive the cleanup failure.");
           }
-          expect(firstResult.left).toEqual(secondResult.left);
-          expect(firstResult.left.message).toContain("cleanup failed after child close");
+          expect(firstResult.failure).toEqual(secondResult.failure);
+          expect(firstResult.failure.message).toContain("cleanup failed after child close");
           // A failed cleanup is reported with its cause.
           await waitFor(() => cleanupFailures.length === 1);
           expect(cleanupFailures[0]).toContain("cleanup failed after child close");
           expect(exits).toHaveLength(1);
         } else {
-          expect(firstResult._tag).toBe("Right");
-          expect(secondResult._tag).toBe("Right");
+          expect(firstResult._tag).toBe("Success");
+          expect(secondResult._tag).toBe("Success");
           await new Promise<void>((resolve) => setImmediate(resolve));
           expect(exits).toHaveLength(1);
         }
@@ -210,7 +210,7 @@ describe("Codex runtime lifecycle", () => {
         if (cleanupFails) {
           // The failed step stays unfinished; an explicit retry runs it again.
           failCleanup = false;
-          expect((await Effect.runPromise(Effect.either(handle.stop())))._tag).toBe("Right");
+          expect((await Effect.runPromise(Effect.result(handle.stop())))._tag).toBe("Success");
           expect(cleanupCount).toBe(2);
           expect(releaseCount).toBe(1);
           expect(exits).toHaveLength(1);

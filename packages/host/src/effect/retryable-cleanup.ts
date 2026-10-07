@@ -1,4 +1,4 @@
-import { Deferred, Effect, Exit, FiberId } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 
 /**
  * Owns one cleanup step of a resource. Concurrent callers share the attempt in progress.
@@ -11,7 +11,7 @@ export const createRetryableCleanup = <A, E>(cleanup: Effect.Effect<A, E>): Effe
   return Effect.suspend(() => {
     if (completed) return Effect.succeed(completed.value);
     if (inFlight) return Deferred.await(inFlight);
-    const attempt = Deferred.unsafeMake<A, E>(FiberId.none);
+    const attempt = Deferred.makeUnsafe<A, E>();
     inFlight = attempt;
     return Effect.uninterruptible(
       cleanup.pipe(

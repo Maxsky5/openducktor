@@ -123,6 +123,7 @@ test.each([
   }
 });
 
+// Each case renders the chat, loads history, and switches sessions, which can exceed 1000 ms on a loaded CI runner.
 test.each([
   [false, true],
   [true, true],
@@ -348,6 +349,7 @@ test.each([
       rendered.unmount();
     }
   },
+  5_000,
 );
 
 test("stops an inactive build when selection evicts its cache entry", () => {

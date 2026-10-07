@@ -35,13 +35,15 @@ export const validatePat = (
           cause,
         }),
     }).pipe(
-      Effect.timeoutFail({
+      Effect.timeoutOrElse({
         duration: REQUEST_TIMEOUT,
-        onTimeout: () =>
-          new HostOperationError({
-            operation: "azureDevOps.connection.validatePat",
-            message: `Azure DevOps PAT validation timed out after ${REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
-          }),
+        orElse: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "azureDevOps.connection.validatePat",
+              message: `Azure DevOps PAT validation timed out after ${REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
+            }),
+          ),
       }),
     );
     if (response.status >= 300 && response.status < 400) {

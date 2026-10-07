@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
-import { Deferred, Effect, Fiber, FiberId, TestClock, TestContext } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
@@ -39,7 +40,7 @@ const createCloseFailureHarness = async (
         Effect.map((connection) => ({
           ...connection,
           release: connection.release.pipe(
-            Effect.zipRight(
+            Effect.andThen(
               Effect.fail(
                 new HostOperationError({
                   operation: "test.closeSqliteTaskStoreConnection",
@@ -113,7 +114,7 @@ test("opens a connection using only the resolved database path", async () => {
   });
 
   await Effect.runPromise(
-    Effect.either(
+    Effect.result(
       manager.withDatabase("/repos/alpha", "test.observe-open-input", () => Effect.void),
     ),
   );
@@ -142,7 +143,7 @@ test("uses the explicit config directory instead of the environment", async () =
   });
 
   await Effect.runPromise(
-    Effect.either(
+    Effect.result(
       manager.withDatabase("/repos/alpha", "test.explicit-config-dir", () => Effect.void),
     ),
   );
@@ -163,14 +164,14 @@ test("closes an idle SQLite connection after five minutes", async () => {
           ({ session }) => Effect.succeed(session.database),
         );
         yield* TestClock.adjust("5 minutes");
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         const second = yield* manager.withDatabase(
           "/repos/alpha",
           "test.after-expiry",
           ({ session }) => Effect.succeed(session.database),
         );
         return [first, second] as const;
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
 
     expect(afterExpiry).not.toBe(beforeExpiry);
@@ -199,7 +200,7 @@ test("restarts the idle timeout after later activity", async () => {
           ({ session }) => Effect.succeed(session.database),
         );
         yield* TestClock.adjust("5 minutes");
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         const reopened = yield* manager.withDatabase(
           "/repos/alpha",
           "test.after-reset-expiry",
@@ -207,7 +208,7 @@ test("restarts the idle timeout after later activity", async () => {
         );
         expect(reused).toBe(initial);
         return [initial, stillOpen, reopened] as const;
-      }).pipe(Effect.provide(TestContext.TestContext)),
+      }).pipe(Effect.provide(TestClock.layer())),
     );
 
     expect(beforeResetExpiry).toBe(first);
@@ -260,7 +261,7 @@ test("serializes complete operations that use the same database path", async () 
         const firstEntered = yield* Deferred.make<void>();
         const releaseFirst = yield* Deferred.make<void>();
         const secondAttempted = yield* Deferred.make<void>();
-        const first = yield* Effect.fork(
+        const first = yield* Effect.forkChild(
           manager.withDatabase("/repos/alpha", "test.first-operation", () =>
             Effect.gen(function* () {
               events.push("first:start");
@@ -271,7 +272,7 @@ test("serializes complete operations that use the same database path", async () 
           ),
         );
         yield* Deferred.await(firstEntered);
-        const second = yield* Effect.fork(
+        const second = yield* Effect.forkChild(
           Effect.gen(function* () {
             yield* Deferred.succeed(secondAttempted, undefined);
             yield* manager.withDatabase("/repos/alpha", "test.second-operation", () =>
@@ -280,7 +281,7 @@ test("serializes complete operations that use the same database path", async () 
           }),
         );
         yield* Deferred.await(secondAttempted);
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         const beforeRelease = [...events];
         yield* Deferred.succeed(releaseFirst, undefined);
         yield* Fiber.join(first);
@@ -299,8 +300,8 @@ test("serializes complete operations that use the same database path", async () 
 test("waits for admitted workspace operations before closing their slot", async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-race-"));
   tempDirectories.add(configDir);
-  const operationAdmitted = Deferred.unsafeMake<void>(FiberId.none);
-  const releaseAdmission = Deferred.unsafeMake<void>(FiberId.none);
+  const operationAdmitted = Deferred.makeUnsafe<void>();
+  const releaseAdmission = Deferred.makeUnsafe<void>();
   const events: string[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
     assertWorkspaceAdmitted: () =>
@@ -317,18 +318,18 @@ test("waits for admitted workspace operations before closing their slot", async 
 
   const result = await Effect.runPromise(
     Effect.gen(function* () {
-      const operation = yield* Effect.fork(
+      const operation = yield* Effect.forkChild(
         manager.withDatabase("/repos/alpha", "test.active-operation", () =>
           Effect.sync(() => events.push("operation")),
         ),
       );
       yield* Deferred.await(operationAdmitted);
-      const close = yield* Effect.fork(
+      const close = yield* Effect.forkChild(
         manager
           .closeWorkspace("alpha")
           .pipe(Effect.tap(() => Effect.sync(() => events.push("closed")))),
       );
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       const beforeRelease = [...events];
       yield* Deferred.succeed(releaseAdmission, undefined);
       yield* Fiber.join(operation);
@@ -350,7 +351,7 @@ test("stops admission and drains an active operation before disposal completes",
       const events: string[] = [];
       const operationEntered = yield* Deferred.make<void>();
       const releaseOperation = yield* Deferred.make<void>();
-      const operation = yield* Effect.fork(
+      const operation = yield* Effect.forkChild(
         manager.withDatabase("/repos/alpha", "test.active-operation", () =>
           Effect.gen(function* () {
             events.push("operation:start");
@@ -361,15 +362,15 @@ test("stops admission and drains an active operation before disposal completes",
         ),
       );
       yield* Deferred.await(operationEntered);
-      const disposal = yield* Effect.fork(
+      const disposal = yield* Effect.forkChild(
         manager.dispose().pipe(Effect.tap(() => Effect.sync(() => events.push("disposed")))),
       );
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       const beforeRelease = [...events];
       yield* Deferred.succeed(releaseOperation, undefined);
       yield* Fiber.join(operation);
       yield* Fiber.join(disposal);
-      const admissionResult = yield* Effect.either(
+      const admissionResult = yield* Effect.result(
         manager.withDatabase("/repos/alpha", "test.after-dispose", () => Effect.void),
       );
       return { admissionResult, afterRelease: [...events], beforeRelease };
@@ -378,9 +379,9 @@ test("stops admission and drains an active operation before disposal completes",
 
   expect(result.beforeRelease).toEqual(["operation:start"]);
   expect(result.afterRelease).toEqual(["operation:start", "operation:end", "disposed"]);
-  expect(result.admissionResult._tag).toBe("Left");
-  if (result.admissionResult._tag === "Left") {
-    expect(result.admissionResult.left).toMatchObject({
+  expect(result.admissionResult._tag).toBe("Failure");
+  if (result.admissionResult._tag === "Failure") {
+    expect(result.admissionResult.failure).toMatchObject({
       _tag: "HostOperationError",
       operation: "sqliteTaskRepository.acquireConnection",
     });
@@ -398,11 +399,11 @@ test("closes retained connections during disposal", async () => {
   await Effect.runPromise(manager.dispose());
 
   const queryResult = await Effect.runPromise(
-    Effect.either(
+    Effect.result(
       session.execute((database) => database.run(sql.raw("SELECT 1;")), "test.query-after-dispose"),
     ),
   );
-  expect(queryResult._tag).toBe("Left");
+  expect(queryResult._tag).toBe("Failure");
 });
 
 test("reports close failures from every retained database during disposal", async () => {
@@ -415,11 +416,11 @@ test("reports close failures from every retained database during disposal", asyn
     ),
   );
 
-  const result = await Effect.runPromise(Effect.either(manager.dispose()));
+  const result = await Effect.runPromise(Effect.result(manager.dispose()));
 
-  expect(result._tag).toBe("Left");
-  if (result._tag === "Left") {
-    expect(result.left.message.split("\n").sort()).toEqual([
+  expect(result._tag).toBe("Failure");
+  if (result._tag === "Failure") {
+    expect(result.failure.message.split("\n").sort()).toEqual([
       "Failed to close alpha.",
       "Failed to close beta.",
     ]);
@@ -430,13 +431,13 @@ test("retains a workspace slot when shutdown fails", async () => {
   const manager = await createCloseFailureHarness();
   await Effect.runPromise(manager.withDatabase("/repos/alpha", "test.open", () => Effect.void));
 
-  const first = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
-  const retry = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+  const first = await Effect.runPromise(Effect.result(manager.closeWorkspace("alpha")));
+  const retry = await Effect.runPromise(Effect.result(manager.closeWorkspace("alpha")));
 
-  expect(first._tag).toBe("Left");
-  expect(retry._tag).toBe("Left");
-  if (retry._tag === "Left") {
-    expect(retry.left.message).toBe("Failed to close alpha.");
+  expect(first._tag).toBe("Failure");
+  expect(retry._tag).toBe("Failure");
+  if (retry._tag === "Failure") {
+    expect(retry.failure.message).toBe("Failed to close alpha.");
   }
 });
 
@@ -452,17 +453,17 @@ test("reports an idle close failure and rejects later operations for that databa
     Effect.gen(function* () {
       yield* manager.withDatabase("/repos/alpha", "test.open", () => Effect.void);
       yield* TestClock.adjust("5 minutes");
-      yield* Effect.yieldNow();
-      return yield* Effect.either(
+      yield* Effect.yieldNow;
+      return yield* Effect.result(
         manager.withDatabase("/repos/alpha", "test.after-close-failure", () => Effect.void),
       );
-    }).pipe(Effect.provide(TestContext.TestContext)),
+    }).pipe(Effect.provide(TestClock.layer())),
   );
 
   expect(backgroundFailures.map((failure) => failure.message)).toEqual(["Failed to close alpha."]);
-  expect(result._tag).toBe("Left");
-  if (result._tag === "Left") {
-    expect(result.left.message).toBe("Failed to close alpha.");
+  expect(result._tag).toBe("Failure");
+  if (result._tag === "Failure") {
+    expect(result.failure.message).toBe("Failed to close alpha.");
   }
   await Effect.runPromise(manager.dispose().pipe(Effect.ignore));
 });
