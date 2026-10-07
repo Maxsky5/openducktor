@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
@@ -115,6 +115,11 @@ test("shows an actionable error without falling back when the shell rejects a li
 });
 
 describe("rich task description rendering", () => {
+  beforeAll(async () => {
+    // Load the real parsers before the tests wait for rendered output.
+    await Promise.all([import("./markdown-renderer-math"), import("./markdown-syntax-block")]);
+  }, 12_000);
+
   afterEach(() => {
     configureShellBridge(createUnavailableShellBridge());
   });
@@ -281,7 +286,6 @@ describe("rich task description rendering", () => {
       },
       { timeout: 10_000 },
     );
-    // A cold combined KaTeX and Prism render exceeded 8 seconds on a loaded Windows runner.
   }, 12_000);
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
