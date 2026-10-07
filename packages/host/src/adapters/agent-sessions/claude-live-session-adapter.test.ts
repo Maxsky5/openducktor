@@ -6,7 +6,10 @@ import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/cont
 import type { AgentSessionSummary } from "@openducktor/core";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type {
   ClaudeAgentSdkService,
@@ -575,6 +578,44 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
+  test("rejects a send when event forwarding fails before native submission", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        externalSessionId: "session-1",
+        resumeMode: "reattach",
+      }),
+    );
+    let sends = 0;
+    harness.setSendUserMessage(() =>
+      Effect.sync(() => {
+        sends += 1;
+        throw new Error("Unexpected native send");
+      }),
+    );
+    harness.failNextMutationAfterStateApply("session_status");
+    harness.eventHub.emit(session, {
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-10-08T18:30:00Z",
+      status: { type: "busy", message: null },
+    });
+    const result = await Effect.runPromise(
+      Effect.result(
+        harness.adapter.sendUserMessage({
+          ...startInput,
+          externalSessionId: "session-1",
+          parts: [{ kind: "text", text: "First" }],
+        }),
+      ),
+    );
+    expect(sends).toBe(0);
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected forwarding failure");
+    expect(result.failure).toBeInstanceOf(AgentSessionMessageRejectedError);
+  });
+
   test.each(["user_message", "session_status"])(
     "retains acceptance when %s publication fails",
     async (eventType) => {
@@ -753,13 +794,6 @@ describe("Claude host live-session adapter", () => {
           externalSessionId: "session-1",
         })
         .pipe(Effect.asVoid),
-      harness.adapter
-        .sendUserMessage({
-          ...outsideWorkspaceInput,
-          externalSessionId: "session-1",
-          parts: [{ kind: "text", text: "Start" }],
-        })
-        .pipe(Effect.asVoid),
     ];
 
     for (const attempt of attempts) {
@@ -771,6 +805,23 @@ describe("Claude host live-session adapter", () => {
         },
       });
     }
+    const rejectedSend = await Effect.runPromise(
+      Effect.result(
+        harness.adapter.sendUserMessage({
+          ...outsideWorkspaceInput,
+          externalSessionId: "session-1",
+          parts: [{ kind: "text", text: "Start" }],
+        }),
+      ),
+    );
+    expect(rejectedSend).toMatchObject({
+      _tag: "Failure",
+      failure: {
+        _tag: "HostOperationError",
+        message: "Working directory '/private' is outside the selected workspace.",
+        cause: { _tag: "HostValidationError", field: "workingDirectory" },
+      },
+    });
     expect(sdkCalls).toEqual({
       start: 0,
       resume: 0,

@@ -3,6 +3,7 @@ import type {
   AgentSessionControlSummary,
   AgentWorkflowSessionStartInput,
 } from "@openducktor/contracts";
+import { TaskSessionOwnershipCommittedError } from "./task-session-ownership-error";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { failAfterRollback, rollbackFailureError } from "../tasks/support/task-worktree-rollback";
@@ -13,30 +14,33 @@ import type {
   TaskSessionStartPreparationService,
 } from "../tasks/worktrees/task-session-start-preparation-service";
 import type {
+  TaskSessionWrites,
+  TaskSessionProgress,
+  PreparedTaskSession,
   CanonicalizeRepoPath,
   RuntimeControl,
   TaskLifecycle,
-  TaskSessions,
-} from "./task-workflow-session-policy";
+} from "./task-session-operations";
 import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 
 export const createStartTaskWorkflowSession =
   ({
     canonicalizeRepoPath,
     runtime,
-    tasks,
+    writes,
     taskLifecycle,
     taskSessionStart,
   }: {
     canonicalizeRepoPath: CanonicalizeRepoPath;
-    runtime: RuntimeControl;
-    tasks: TaskSessions;
+    runtime: Pick<RuntimeControl, "startSession">;
+    writes: TaskSessionWrites;
     taskLifecycle: TaskLifecycle;
-    taskSessionStart: TaskSessionStartPreparationService;
+    taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
   }) =>
   (
     input: AgentWorkflowSessionStartInput,
-  ): Effect.Effect<AgentSessionControlSummary, TaskServiceError> =>
+    progress: TaskSessionProgress,
+  ): Effect.Effect<PreparedTaskSession, TaskServiceError> =>
     Effect.scoped(
       Effect.gen(function* () {
         const scope = input.sessionScope;
@@ -45,6 +49,7 @@ export const createStartTaskWorkflowSession =
         let prepared: PreparedTaskSessionStart | null = null;
         let summary: AgentSessionControlSummary | null = null;
         let stored = false;
+        const publications: Array<Effect.Effect<void, TaskServiceError>> = [];
 
         const cleanupUnstoredStart = () =>
           Effect.gen(function* () {
@@ -52,7 +57,7 @@ export const createStartTaskWorkflowSession =
               return;
             }
             if (summary) {
-              yield* runtime.stopSession(toControlSessionRef(repoPath, summary));
+              yield* progress.stop(toControlSessionRef(repoPath, summary));
             }
             yield* prepared.rollback();
           });
@@ -78,6 +83,7 @@ export const createStartTaskWorkflowSession =
           };
           // Cancellation must retain the returned identity so cleanup can stop the session.
           const launched = yield* Effect.gen(function* () {
+            yield* progress.checkCanceled();
             summary = yield* runtime.startSession(runtimeInput);
             return summary;
           }).pipe(Effect.uninterruptible, Effect.result);
@@ -94,7 +100,9 @@ export const createStartTaskWorkflowSession =
           summary = launched.success;
 
           const persisted = yield* Effect.gen(function* () {
-            yield* storeWorkflowSession(tasks, {
+            yield* progress.created(launched.success);
+            yield* progress.checkCanceled();
+            const saved = yield* storeWorkflowSession(writes.saveSession, {
               repoPath,
               sessionScope: input.sessionScope,
               model: input.model,
@@ -102,8 +110,14 @@ export const createStartTaskWorkflowSession =
               summary: launched.success,
             });
             stored = true;
+            progress.saved();
+            publications.push(saved.publish);
           }).pipe(Effect.uninterruptible, Effect.result);
           if (persisted._tag === "Failure") {
+            if (persisted.failure instanceof TaskSessionOwnershipCommittedError) {
+              stored = true;
+              return yield* Effect.fail(persisted.failure);
+            }
             const storeFailure = persisted.failure;
             const storeError = {
               operation: "task-workflow-session.store-control-result",
@@ -114,7 +128,7 @@ export const createStartTaskWorkflowSession =
               },
             };
             // The worktree rollback runs only after the runtime session stops.
-            return yield* runtime.stopSession(toControlSessionRef(repoPath, summary)).pipe(
+            return yield* progress.stop(toControlSessionRef(repoPath, summary)).pipe(
               Effect.mapError(
                 (stopFailure) =>
                   new HostOperationError({
@@ -139,12 +153,17 @@ export const createStartTaskWorkflowSession =
           }
           const completed = yield* Effect.result(
             taskSessionStart.complete(prepared, (transitionInput) =>
-              tasks.transitionTask(transitionInput),
+              writes.transitionTask(transitionInput).pipe(
+                Effect.map(({ task, publish }) => {
+                  publications.push(publish);
+                  return task;
+                }),
+              ),
             ),
           );
           if (completed._tag === "Failure") {
             const stopped = yield* Effect.result(
-              runtime.stopSession(toControlSessionRef(repoPath, summary)),
+              progress.stop(toControlSessionRef(repoPath, summary)),
             );
             if (stopped._tag === "Success") {
               return yield* Effect.fail(completed.failure);
@@ -162,11 +181,14 @@ export const createStartTaskWorkflowSession =
               }),
             );
           }
-          return summary;
+          return {
+            session: summary,
+            publish: Effect.forEach(publications, (publish) => publish, { discard: true }),
+          };
         }).pipe(
           Effect.onInterrupt(() =>
             (stored && summary
-              ? runtime.stopSession(toControlSessionRef(repoPath, summary))
+              ? progress.stop(toControlSessionRef(repoPath, summary))
               : cleanupUnstoredStart()
             ).pipe(Effect.orDie, Effect.asVoid),
           ),

@@ -1,12 +1,30 @@
 import {
   CodexMessageAcceptedError,
+  CodexMessageRejectedError,
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage } from "@openducktor/core";
 import { Effect } from "effect";
-import type { HostError } from "../../effect/host-errors";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { toHostOperationError, type HostError } from "../../effect/host-errors";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
+
+export const toCodexMessageSendError = (
+  cause: unknown,
+  sessionRef: AgentSessionLiveRef,
+): HostError => {
+  const accepted = toAcceptedCodexMessageError(cause, sessionRef);
+  if (accepted) return accepted;
+  const operation = "codex-live-session.send-user-message";
+  if (cause instanceof CodexMessageRejectedError)
+    return new AgentSessionMessageRejectedError({ operation, message: cause.message, cause });
+  return toHostOperationError(cause, operation, {
+    externalSessionId: sessionRef.externalSessionId,
+  });
+};
 
 type RefreshProjection = (
   transcriptEvents?: CodexLiveSessionMutation["transcriptEvents"],

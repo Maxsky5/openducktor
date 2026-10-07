@@ -7,6 +7,7 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
+  AgentSessionTranscriptEvent,
   RuntimeKind,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
@@ -19,6 +20,7 @@ import type {
   AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
+import { createSessionOccurrenceProjector } from "../notifications/session-occurrence-projector";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 
@@ -157,6 +159,292 @@ const expectHostFailure = async <Success>(
   }
   return result.failure;
 };
+
+test.each(["runtime", "session"] as const)(
+  "clears a starting hold after %s removal even when fault reporting fails",
+  async (removal) => {
+    let failPublication = false;
+    const adapterRegistry = createLiveSessionAdapterRegistry();
+    const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
+      adapterRegistry,
+      publish: () => {
+        if (failPublication) throw new Error("Publication failed");
+      },
+      faultLog: () =>
+        Effect.fail(new HostOperationError({ operation: "log", message: "Log failed" })),
+    });
+    const binding = service.createRuntimeRegistration({
+      runtimeId: "old",
+      runtimeKind: "codex",
+    });
+    const old = {
+      ...fakeAdapter({ runtimeId: "old", snapshots: () => [liveSnapshot("session-1")] }),
+      binding,
+    };
+    await Effect.runPromise(service.registerRuntimeAdapter(old));
+    await Effect.runPromise(service.holdWorkflowLaunch(sessionRef("session-1"), true));
+    failPublication = true;
+    await Effect.runPromise(
+      Effect.result(
+        removal === "runtime"
+          ? service.releaseRuntime("old")
+          : binding.runMutation(
+              Effect.succeed({
+                value: undefined,
+                changes: [
+                  { type: "fault", repoPath: "/repo", message: "Earlier native fault" },
+                  { type: "session_removed", ref: sessionRef("session-1") },
+                ],
+              }),
+            ),
+      ),
+    );
+    failPublication = false;
+    if (removal === "runtime")
+      await Effect.runPromise(
+        service.registerRuntimeAdapter(
+          fakeAdapter({
+            runtimeId: "replacement",
+            snapshots: () => [liveSnapshot("session-1")],
+          }),
+        ),
+      );
+    const observed = await Effect.runPromise(service.read(sessionRef("session-1")));
+    expect(observed.type).toBe("live");
+    if (observed.type === "live") expect(observed.session.activity).toBe("idle");
+  },
+);
+
+test.each(["session_idle", "session_status", "session_finished"] as const)(
+  "defers held %s signals until native idle is confirmed",
+  async (type) => {
+    for (const releaseActivity of ["idle", "running", "waiting_for_permission"] as const) {
+      const occurrences: string[] = [];
+      const envelopes: AgentSessionLiveEnvelope[] = [];
+      const projector = createSessionOccurrenceProjector({
+        repositoryLabel: "Repo",
+        resolveAssociation: () => ({ kind: "workflow", taskId: "task-1", role: "build" }),
+        resolveTask: (id) => ({ id, title: "Task" }),
+      });
+      let current = liveSnapshot("held");
+      const service = createAgentSessionLiveStateService({
+        runtimeAdmission: passThroughAdmission,
+        adapterRegistry: createLiveSessionAdapterRegistry(),
+        faultLog: () => Effect.void,
+        publish: (envelope) => envelopes.push(envelope),
+        observeNotificationInput: (envelope, provenance) => {
+          occurrences.push(...projector.accept(envelope, provenance).map((notice) => notice.kind));
+        },
+      });
+      const binding = service.createRuntimeRegistration({
+        runtimeId: "held-runtime",
+        runtimeKind: "codex",
+      });
+      await Effect.runPromise(
+        service.registerRuntimeAdapter({
+          ...fakeAdapter({ runtimeId: "held-runtime", snapshots: () => [current] }),
+          binding,
+        }),
+      );
+      await Effect.runPromise(service.holdWorkflowLaunch(current.ref, true));
+      const initial = await Effect.runPromise(service.read(current.ref));
+      const base = {
+        sessionRef: current.ref,
+        externalSessionId: current.ref.externalSessionId,
+        timestamp: "2026-10-04T00:00:01.000Z",
+      };
+      const event: AgentSessionTranscriptEvent =
+        type === "session_status"
+          ? { ...base, type, status: { type: "idle" } }
+          : type === "session_finished"
+            ? { ...base, type, message: "Finished" }
+            : { ...base, type, turnCompleted: true };
+      const idleStatus: AgentSessionTranscriptEvent = {
+        ...base,
+        type: "session_status",
+        status: { type: "idle" },
+      };
+      await Effect.runPromise(
+        binding.runMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [
+              { type: "transcript_event" as const, event },
+              { type: "session_upsert" as const, snapshot: current },
+            ],
+          }),
+        ),
+      );
+      if (type === "session_idle") {
+        await Effect.runPromise(
+          binding.runMutation(
+            Effect.succeed({
+              value: undefined,
+              changes: [
+                { type: "transcript_event", event: idleStatus },
+                { type: "transcript_event", event: { ...base, type: "session_idle" } },
+              ],
+            }),
+          ),
+        );
+      }
+      expect(occurrences).toEqual([]);
+      expect(envelopes.some((envelope) => envelope.type === "transcript_event")).toBe(false);
+      const held = await Effect.runPromise(service.read(current.ref));
+      expect(held.type === "live" && held.session.activity).toBe("running");
+      expect(held.type === "live" && held.session.executionEpisodeId).toBe(
+        initial.type === "live" && initial.session.executionEpisodeId,
+      );
+      current = { ...current, activity: releaseActivity };
+      await Effect.runPromise(service.holdWorkflowLaunch(current.ref, false));
+      expect(occurrences).toEqual(releaseActivity === "idle" ? ["agent.session_idle"] : []);
+      const terminal = envelopes.filter((envelope) => envelope.type === "transcript_event");
+      const expectedTerminal: typeof terminal =
+        releaseActivity !== "idle"
+          ? []
+          : [
+              { type: "transcript_event", event },
+              ...(type === "session_idle"
+                ? [{ type: "transcript_event" as const, event: idleStatus }]
+                : []),
+            ];
+      expect(terminal).toEqual(expectedTerminal);
+      // A later native idle still ends a running turn exactly once.
+      await Effect.runPromise(
+        binding.runMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [{ type: "transcript_event" as const, event }],
+          }),
+        ),
+      );
+      expect(occurrences).toEqual(["agent.session_idle"]);
+    }
+  },
+);
+
+test.each(["before", "after"] as const)(
+  "preserves completed-turn metadata without idle notices when stop arrives %s idle",
+  async (order) => {
+    const snapshot = liveSnapshot("stopped");
+    const occurrences: string[] = [];
+    const events: AgentSessionLiveEnvelope[] = [];
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: () => ({ kind: "workflow", taskId: "task-1", role: "build" }),
+      resolveTask: (id) => ({ id, title: "Task" }),
+    });
+    const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (event) => events.push(event),
+      observeNotificationInput: (event, provenance) => {
+        occurrences.push(...projector.accept(event, provenance).map((notice) => notice.kind));
+      },
+    });
+    const binding = service.createRuntimeRegistration({
+      runtimeId: "stopped-runtime",
+      runtimeKind: "codex",
+    });
+    await Effect.runPromise(
+      service.registerRuntimeAdapter({
+        ...fakeAdapter({ runtimeId: "stopped-runtime", snapshots: () => [snapshot] }),
+        binding,
+      }),
+    );
+    await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, true));
+    const base = {
+      sessionRef: snapshot.ref,
+      externalSessionId: snapshot.ref.externalSessionId,
+      timestamp: "2026-10-04T00:00:01.000Z",
+    };
+    const idle: AgentSessionTranscriptEvent = {
+      ...base,
+      type: "session_idle",
+      turnCompleted: true,
+    };
+    const stopped: AgentSessionTranscriptEvent = {
+      ...base,
+      type: "session_finished",
+      message: "Session stopped",
+    };
+    await Effect.runPromise(
+      binding.runMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: (order === "before" ? [stopped, idle] : [idle, stopped]).map((event) => ({
+            type: "transcript_event" as const,
+            event,
+          })),
+        }),
+      ),
+    );
+    expect(occurrences).toEqual([]);
+    await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, false));
+    expect(occurrences).toEqual([]);
+    expect(events.filter((event) => event.type === "transcript_event")).toEqual([
+      { type: "transcript_event", event: stopped },
+      { type: "transcript_event", event: idle },
+    ]);
+  },
+);
+
+test.each(["turn_error", "session_error"] as const)(
+  "publishes native %s during a launch hold and drops earlier idle signals",
+  async (type) => {
+    const { service, events } = createHarness();
+    const snapshot = liveSnapshot("failed");
+    const binding = service.createRuntimeRegistration({
+      runtimeId: "failed-runtime",
+      runtimeKind: "codex",
+    });
+    await Effect.runPromise(
+      service.registerRuntimeAdapter({
+        ...fakeAdapter({ runtimeId: "failed-runtime", snapshots: () => [snapshot] }),
+        binding,
+      }),
+    );
+    await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, true));
+    const event: AgentSessionTranscriptEvent = {
+      type,
+      sessionRef: snapshot.ref,
+      externalSessionId: snapshot.ref.externalSessionId,
+      timestamp: "2026-10-04T00:00:02.000Z",
+      message: "Exact native failure",
+    };
+    await Effect.runPromise(
+      binding.runMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "transcript_event",
+              event: {
+                type: "session_idle",
+                sessionRef: snapshot.ref,
+                externalSessionId: snapshot.ref.externalSessionId,
+                timestamp: "2026-10-04T00:00:01.000Z",
+              },
+            },
+            { type: "transcript_event", event },
+            { type: "session_upsert", snapshot },
+          ],
+        }),
+      ),
+    );
+    expect(events.filter((envelope) => envelope.type === "transcript_event")).toEqual([
+      { type: "transcript_event", event },
+    ]);
+    const failed = await Effect.runPromise(service.read(snapshot.ref));
+    expect(failed.type === "live" && failed.session.activity).toBe("idle");
+    await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, false));
+    expect(events.filter((envelope) => envelope.type === "transcript_event")).toEqual([
+      { type: "transcript_event", event },
+    ]);
+  },
+);
 
 describe("createAgentSessionLiveStateService", () => {
   test("does not read saved roots when the adapter has no snapshot refresh", async () => {

@@ -44,8 +44,36 @@ export function useAgentChatComposerDraftState({
   // Count edits across scopes so a late failure cannot restore text the user has since cleared.
   const editSequenceRef = useRef(0);
   const scopeEditsRef = useRef(new Map<string, number>());
+  const mounted = useRef(true);
   const nextKey = scope.key;
   const nextPersistence = scope.persistence;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const onClear = () => {
+      const current = latestStateRef.current;
+      if (current.key !== nextKey) return;
+      const cleared = { ...current, draft: createEmptyComposerDraft() };
+      latestStateRef.current = cleared;
+      setState(cleared);
+    };
+    // Activity stops subscriptions while hidden. Read the store when the pane resumes.
+    const current = latestStateRef.current;
+    if (
+      nextPersistence &&
+      current.persistence?.targetKey === nextPersistence.targetKey &&
+      draftHasMeaningfulContent(current.draft) &&
+      !draftHasMeaningfulContent(nextPersistence.hydrate())
+    )
+      onClear();
+    return nextPersistence?.subscribeClear?.(onClear);
+  }, [nextKey, nextPersistence]);
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -184,16 +212,37 @@ export function useAgentChatComposerDraftState({
         if (current.key === recovery.recoveryKey && draftHasMeaningfulContent(current.draft)) {
           return;
         }
+        const persistence =
+          current.key === recovery.recoveryKey ? current.persistence : recovery.persistence;
+        if (
+          current.key !== recovery.recoveryKey &&
+          persistence &&
+          draftHasMeaningfulContent(persistence.hydrate())
+        )
+          return;
+        const version = persistence?.set(snapshot.draft) ?? null;
         pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        if (persistence) {
+          pendingRecoveryRef.current.delete(recovery.recoveryKey);
+          void persistence.flush();
+        }
         if (current.key === recovery.recoveryKey) {
-          if (current.persistence) {
-            current.persistence.set(snapshot.draft);
-            pendingRecoveryRef.current.delete(current.key);
-          }
           const restored = { ...current, draft: snapshot.draft };
           latestStateRef.current = restored;
           setState(restored);
         }
+        recovery.onRecovered?.(() => {
+          if ((scopeEditsRef.current.get(recovery.recoveryKey) ?? 0) > snapshot.editSequence)
+            return;
+          if (persistence && persistence.readVersion() !== version) return;
+          pendingRecoveryRef.current.delete(recovery.recoveryKey);
+          persistence?.clear({ onlyIfVersion: version });
+          const latest = latestStateRef.current;
+          if (!mounted.current || latest.key !== recovery.recoveryKey) return;
+          const cleared = { ...latest, draft: createEmptyComposerDraft() };
+          latestStateRef.current = cleared;
+          setState(cleared);
+        });
         return;
       }
       if ((scopeEditsRef.current.get(snapshot.key) ?? 0) > snapshot.editSequence) return;

@@ -1,788 +1,276 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type {
-  AgentSessionRecord,
-  RepositoryGitProviderContext,
-  RepoConfig,
-  TaskCard,
-  WorkspaceRecord,
+import { expect, mock, spyOn, test } from "bun:test";
+import {
+  createDefaultNotificationSettings,
+  type WorkflowLaunchRequest,
+  type WorkflowLaunchSnapshot,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
+import { createHostClient } from "@openducktor/host-client";
 import { QueryClient } from "@tanstack/react-query";
-import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
-import {
-  detectAutopilotEvents,
-  shouldAdvanceAutopilotBaseline,
-} from "@/features/autopilot/autopilot-events";
-import {
-  createSessionStartWorkflowRunner,
-  type RunSessionStartWorkflow,
-} from "@/features/session-start";
-import { createSessionStartGate } from "@/features/session-start/session-start-gate";
-import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
-import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
-import { createStartSessionTestHarness } from "@/state/operations/agent-orchestrator/handlers/start-session.test-helpers";
-import { withTimeout } from "@/state/operations/agent-orchestrator/test-utils";
-import {
-  repoConfigQueryOptions,
-  settingsSnapshotQueryOptions,
-  workspaceQueryKeys,
-} from "@/state/queries/workspace";
-import {
-  createGitProviderContextFixture,
-  createDeferred,
-  createRuntimeCatalogFixture,
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
+import { toast } from "sonner";
+import type { RunEventListener } from "@/lib/shell-bridge";
+import { createNotificationPolicy } from "../notifications/notification-policy";
+import { buildSessionStartErrorOccurrence } from "../notifications/session-start-occurrences";
+import { observeWorkflowLaunches } from "../session-start/workflow-launch-observation";
+import { presentWorkflowLaunchOutcome } from "../session-start/session-start-message-recovery";
+import type { SessionStartNotificationInput } from "../session-start/session-start-orchestration";
+import { executeAutopilotAction } from "./autopilot-actions";
 
-const runSessionStartWorkflowMock = mock(
-  async (_input: Parameters<RunSessionStartWorkflow>[0]): Promise<SessionStartWorkflowResult> => ({
-    externalSessionId: "session-new",
-    runtimeKind: "opencode" as const,
-    workingDirectory: "/repo/worktrees/session-new",
-    postStartActionError: null,
-  }),
-);
-
-const createBuilderSessionRecord = (
-  overrides: Partial<AgentSessionRecord> = {},
-): AgentSessionRecord => ({
-  externalSessionId: "external-builder-session-1",
+const args = {
+  activeWorkspace: { workspaceId: "workspace", repoPath: "/repo", workspaceName: "Repo" },
+  task: { id: "task", title: "Requested task" },
+  actionId: "startBuilder" as const,
+};
+const unexpectedRecovery = async (): Promise<WorkflowLaunchSnapshot> => {
+  throw new Error("Recovery must remain explicit");
+};
+const result = (request: WorkflowLaunchRequest): WorkflowLaunchSnapshot => ({
+  launchAttemptId: request.launchAttemptId,
+  workspaceId: request.workspaceId,
+  repoPath: request.repoPath,
+  taskId: request.taskId,
   role: "build",
-  startedAt: "2026-02-22T10:00:00.000Z",
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  selectedModel: {
-    runtimeKind: "opencode",
-    providerId: "openai",
-    modelId: "gpt-5",
-    variant: "high",
-    profileId: "builder",
-  },
-  ...overrides,
-});
-
-const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
-  createTaskCardFixture({}, overrides);
-
-const createRepoConfig = (): RepoConfig => ({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
-  worktreeBasePath: undefined,
-  branchPrefix: "odt",
-  defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: {},
-  hooks: { postComplete: [] },
-  actions: { items: [], defaultActionId: null },
-  worktreeCopyPaths: [],
-  promptOverrides: {},
-  agentStudioState: { openTaskIds: [] },
-  agentDefaults: {
-    spec: undefined,
-    planner: {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "planner",
-    },
-    build: {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "builder",
-    },
-    qa: {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "qa",
-    },
+  phase: "completed",
+  acceptance: "accepted",
+  ownershipSaved: true,
+  completedPreStartActions: [],
+  session: {
+    externalSessionId: "saved",
+    runtimeKind: "codex",
+    workingDirectory: "/worktree/task",
+    startedAt: "2026-10-03T12:00:00.000Z",
+    status: "running",
   },
 });
 
-const createQueryClient = (): QueryClient => {
-  const queryClient = new QueryClient();
-  const workspace: WorkspaceRecord = {
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    abbreviation: null,
-    tileColor: null,
+test("automatic execution needs only observed identity and action, with no browser reads", async () => {
+  const launch = mock(async (request: WorkflowLaunchRequest) => result(request));
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: {
+      agentSessionWorkflowLaunch: launch,
+      agentSessionWorkflowLaunchRead: async () => [],
+      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+    },
+  });
+  expect(outcome.kind).toBe("started");
+  expect(launch.mock.calls[0]?.[0]).toEqual({
+    launchAttemptId: expect.any(String),
+    workspaceId: "workspace",
     repoPath: "/repo",
-    isActive: true,
-    hasConfig: true,
-    configuredWorktreeBasePath: null,
-    defaultWorktreeBasePath: "/worktrees/repo",
-    effectiveWorktreeBasePath: "/worktrees/repo",
-  };
-  queryClient.setQueryData(workspaceQueryKeys.list(), [workspace]);
-  queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, createRepoConfig());
-  queryClient.setQueryData(
-    repositoryGitProviderContextQueryOptions("/repo").queryKey,
-    createGitProviderContextFixture(),
-  );
-  return queryClient;
-};
-
-const setGitProviderContext = (
-  queryClient: QueryClient,
-  context: RepositoryGitProviderContext,
-): void => {
-  queryClient.setQueryData(repositoryGitProviderContextQueryOptions("/repo").queryKey, context);
-};
-
-const CATALOG: AgentModelCatalog = {
-  models: [
-    {
-      id: "openai",
-      providerId: "openai",
-      providerName: "OpenAI",
-      modelId: "gpt-5",
-      modelName: "GPT-5",
-      variants: ["high"],
-    },
-  ],
-  defaultModelsByProvider: {
-    openai: "gpt-5",
-  },
-  profiles: [
-    { id: "planner", label: "Planner", mode: "primary" },
-    { id: "builder", label: "Builder", mode: "primary" },
-    { id: "qa", label: "QA", mode: "primary" },
-  ],
-};
-
-const runtimeCatalogFixture = createRuntimeCatalogFixture({ models: CATALOG });
-
-const createExecuteArgs = (task: TaskCard) => {
-  const loadTaskSessionRecords = mock(async (): Promise<AgentSessionRecord[]> => []);
-
-  return {
-    activeWorkspace: {
-      repoPath: "/repo",
-      workspaceId: "repo",
-      workspaceName: "Repo",
-    },
-    task,
-    alwaysStartQaReviewsFresh: false,
-    queryClient: createQueryClient(),
-    loadTaskSessionRecords,
-    loadRepoRuntimeCatalog: mock(async (): Promise<AgentRuntimeCatalog> => runtimeCatalogFixture),
-    loadRepoRuntimeFileSearch: mock(async () => []),
-    resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
-    runSessionStartWorkflow: runSessionStartWorkflowMock,
-  };
-};
-
-describe("autopilot feature helpers", () => {
-  beforeEach(() => {
-    runSessionStartWorkflowMock.mockReset();
-    runSessionStartWorkflowMock.mockImplementation(async () => ({
-      externalSessionId: "session-new",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktrees/session-new",
-      postStartActionError: null,
-    }));
-  });
-
-  test("detects status transitions and canonical QA rejection", () => {
-    const previousSpecTask = createTask({ id: "TASK-1", status: "open" });
-    const currentSpecTask = createTask({ id: "TASK-1", status: "spec_ready" });
-    const previousQaTask = createTask({
-      id: "TASK-2",
-      status: "in_progress",
-      documentSummary: {
-        spec: { has: false },
-        plan: { has: false },
-        qaReport: { has: true, verdict: "not_reviewed" },
-      },
-    });
-    const currentQaTask = createTask({
-      id: "TASK-2",
-      status: "in_progress",
-      documentSummary: {
-        spec: { has: false },
-        plan: { has: false },
-        qaReport: { has: true, verdict: "rejected" },
-      },
-    });
-
-    const observedEvents = detectAutopilotEvents(
-      new Map([
-        [previousSpecTask.id, previousSpecTask],
-        [previousQaTask.id, previousQaTask],
-      ]),
-      [currentSpecTask, currentQaTask],
-    );
-
-    expect(observedEvents).toEqual([
-      { eventId: "taskProgressedToSpecReady", task: currentSpecTask },
-      { eventId: "taskRejectedByQa", task: currentQaTask },
-    ]);
-  });
-
-  test("does not backfill or retrigger unchanged task states", () => {
-    const currentTask = createTask({ id: "TASK-1", status: "spec_ready" });
-
-    expect(detectAutopilotEvents(new Map(), [currentTask])).toEqual([]);
-    expect(detectAutopilotEvents(new Map([[currentTask.id, currentTask]]), [currentTask])).toEqual(
-      [],
-    );
-  });
-
-  test("keeps the previous baseline when settings are unavailable and an event was observed", () => {
-    const observedEvents = detectAutopilotEvents(
-      new Map([["TASK-1", createTask({ id: "TASK-1", status: "open" })]]),
-      [createTask({ id: "TASK-1", status: "spec_ready" })],
-    );
-
-    expect(
-      shouldAdvanceAutopilotBaseline({
-        observedEvents,
-        hasAutopilotSettings: false,
-      }),
-    ).toBe(false);
-  });
-
-  test("advances the baseline immediately when no event was observed", () => {
-    expect(
-      shouldAdvanceAutopilotBaseline({
-        observedEvents: [],
-        hasAutopilotSettings: false,
-      }),
-    ).toBe(true);
-  });
-
-  test("detects a later re-entry into ai_review after leaving the state", () => {
-    const previousTask = createTask({ id: "TASK-1", status: "human_review" });
-    const currentTask = createTask({ id: "TASK-1", status: "ai_review" });
-
-    expect(
-      detectAutopilotEvents(new Map([[previousTask.id, previousTask]]), [currentTask]),
-    ).toEqual([{ eventId: "taskProgressedToAiReview", task: currentTask }]);
-  });
-
-  test("maps spec_ready automation to the planner launch action", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-PLAN", status: "spec_ready" }));
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startPlanner",
-    });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          taskId: "TASK-PLAN",
-          role: "planner",
-        }),
-        decision: expect.objectContaining({
-          startMode: "fresh",
-        }),
-      }),
-    );
-  });
-
-  test("reports post-start action errors from the workflow result", async () => {
-    const postStartError = new Error("kickoff failed");
-    runSessionStartWorkflowMock.mockImplementationOnce(async () => ({
-      externalSessionId: "session-new",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktrees/session-new",
-      postStartActionError: postStartError,
-    }));
-    const args = createExecuteArgs(createTask({ id: "TASK-PLAN", status: "spec_ready" }));
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startPlanner",
-    });
-
-    expect(outcome).toEqual({
-      kind: "started",
-      message: "Started Start Planner for TASK-PLAN.",
-      postStartActionError: postStartError,
-    });
-  });
-
-  test("skips pull request generation when no builder session exists", async () => {
-    const outcome = await executeAutopilotAction({
-      ...createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" })),
-      actionId: "startGeneratePullRequest",
-    });
-
-    expect(outcome).toEqual({
-      kind: "skipped",
-      message: 'No Builder session is available to fork for task "TASK-PR".',
-    });
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("skips pull request generation when no provider supports Pull Requests", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
-    setGitProviderContext(args.queryClient, null);
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startGeneratePullRequest",
-    });
-
-    expect(outcome).toEqual({
-      kind: "skipped",
-      message: "The current Git provider does not support Pull Requests.",
-    });
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("skips pull request generation with the provider health error", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
-    setGitProviderContext(args.queryClient, createGitProviderContextFixture({ available: false }));
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startGeneratePullRequest",
-    });
-
-    expect(outcome).toEqual({
-      kind: "skipped",
-      message: "Sign in to GitHub CLI.",
-    });
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("skips pull request generation when the provider context read fails", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
-    args.queryClient.removeQueries({
-      queryKey: repositoryGitProviderContextQueryOptions("/repo").queryKey,
-    });
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startGeneratePullRequest",
-    });
-
-    expect(outcome).toEqual({
-      kind: "skipped",
-      message:
-        "Could not load the current Git provider: OpenDucktor shell bridge is not configured. Start through the desktop shell or @openducktor/web.",
-    });
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("skips builder follow-up when the build continuation target is missing", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "in_progress" }));
-    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startReviewQaFeedbacks",
-    });
-
-    expect(outcome).toEqual({
-      kind: "skipped",
-      message: MISSING_BUILD_TARGET_ERROR,
-    });
-  });
-
-  test("starts fresh QA when the canonical task worktree does not exist yet", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "ai_review" }));
-
-    const outcome = await executeAutopilotAction({
-      ...args,
-      actionId: "startQa",
-    });
-
-    expect(outcome.kind).toBe("started");
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.not.objectContaining({ targetWorkingDirectory: expect.anything() }),
-        decision: expect.objectContaining({ startMode: "fresh" }),
-      }),
-    );
-  });
-
-  test("surfaces unexpected pull request start failures", async () => {
-    runSessionStartWorkflowMock.mockImplementationOnce(async () => {
-      throw new Error("workflow failed");
-    });
-    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
-
-    await expect(
-      executeAutopilotAction({
-        ...args,
-        actionId: "startGeneratePullRequest",
-      }),
-    ).rejects.toThrow("workflow failed");
-  });
-
-  test("falls back to a fresh builder continuation when the latest builder session targets an older worktree", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "in_progress" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({ workingDirectory: "/tmp/repo/old-worktree" }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/new-worktree",
-    });
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startReviewQaFeedbacks",
-    });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          targetWorkingDirectory: "/tmp/repo/new-worktree",
-        }),
-        decision: expect.objectContaining({
-          startMode: "fresh",
-        }),
-      }),
-    );
-  });
-
-  test("reuses QA follow-up only when the latest QA session matches the current continuation target", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "ai_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({
-        externalSessionId: "qa-session-1",
-        role: "qa",
-        workingDirectory: "/tmp/repo/current-worktree",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "qa",
-        },
-      }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startQa",
-    });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        decision: expect.objectContaining({
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "qa-session-1",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/current-worktree",
-          },
-        }),
-      }),
-    );
-  });
-
-  test("starts fresh QA without a source when the fresh-session setting is enabled", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-FRESH", status: "ai_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({
-        externalSessionId: "qa-session-existing",
-        role: "qa",
-        workingDirectory: "/tmp/repo/current-worktree",
-      }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startQa",
-      alwaysStartQaReviewsFresh: true,
-    });
-
-    expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          taskId: "TASK-QA-FRESH",
-          role: "qa",
-          launchActionId: "qa_review",
-          postStartAction: "kickoff",
-          targetWorkingDirectory: "/tmp/repo/current-worktree",
-        }),
-        decision: expect.objectContaining({
-          startMode: "fresh",
-          selectedModel: expect.objectContaining({
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-          }),
-        }),
-      }),
-    );
-    expect(runSessionStartWorkflowMock.mock.calls[0]?.[0].decision).not.toHaveProperty(
-      "sourceSession",
-    );
-  });
-
-  test("reuses the fresh catalog from the query cache without another read", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-CACHED", status: "ai_review" }));
-    args.loadRepoRuntimeCatalog.mockImplementation(async (): Promise<AgentRuntimeCatalog> => {
-      throw new Error("The catalog reader must not run for a fresh cached catalog.");
-    });
-    args.queryClient.setQueryData(
-      runtimeCatalogQueryKeys.catalog({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-      }),
-      runtimeCatalogFixture,
-    );
-
-    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
-
-    expect(args.loadRepoRuntimeCatalog).not.toHaveBeenCalled();
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        decision: expect.objectContaining({
-          startMode: "fresh",
-          selectedModel: expect.objectContaining({
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-          }),
-        }),
-      }),
-    );
-  });
-
-  test("forces a fresh decision for each enabled QA invocation", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-REPEAT", status: "ai_review" }));
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-
-    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
-    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledTimes(2);
-    expect(
-      runSessionStartWorkflowMock.mock.calls.every(
-        ([input]) => input.decision.startMode === "fresh" && !("sourceSession" in input.decision),
-      ),
-    ).toBe(true);
-  });
-
-  test("starts the second distinct session before the first kickoff completes", async () => {
-    const task = createTask({ id: "TASK-QA-OVERLAP", status: "ai_review" });
-    task.agentWorkflows.qa.available = true;
-    const args = createExecuteArgs(task);
-    args.resolveTaskWorktree
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ workingDirectory: "/tmp/repo/current-worktree" });
-    args.queryClient.setQueryData(
-      settingsSnapshotQueryOptions().queryKey,
-      createSettingsSnapshotFixture(),
-    );
-
-    const adapter = createTestOpencodeSdkAdapter();
-    const releaseStarts = createDeferred<void>();
-    const firstKickoffStarted = createDeferred<void>();
-    const releaseFirstKickoff = createDeferred<void>();
-    const secondSessionStarted = createDeferred<void>();
-    const sessionStartGate = createSessionStartGate<AgentSessionIdentity>();
-    let startCount = 0;
-    const kickoffSessionIds: string[] = [];
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      taskRef: { current: [task] },
-      sessionStartGateRef: { current: sessionStartGate },
-      startWorkflowSession: async () => {
-        startCount += 1;
-        const sessionNumber = startCount;
-        await releaseStarts.promise;
-        if (sessionNumber === 2) {
-          secondSessionStarted.resolve();
-        }
-        return {
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/current-worktree",
-          externalSessionId: `qa-session-${sessionNumber}`,
-          startedAt: `2026-08-31T10:00:0${sessionNumber}.000Z`,
-          status: "idle",
-        };
-      },
-    });
-    const runSessionStartWorkflow = createSessionStartWorkflowRunner({
-      queryClient: args.queryClient,
-      workspaceId: "repo",
-      startAgentSession: start,
-      sendAgentMessage: async (session) => {
-        kickoffSessionIds.push(session.externalSessionId);
-        if (kickoffSessionIds.length === 1) {
-          firstKickoffStarted.resolve();
-          await releaseFirstKickoff.promise;
-        }
-        return null;
-      },
-    });
-
-    try {
-      const firstStart = executeAutopilotAction({
-        ...args,
-        runSessionStartWorkflow,
-        actionId: "startQa",
-        alwaysStartQaReviewsFresh: true,
-      });
-      const secondStart = executeAutopilotAction({
-        ...args,
-        runSessionStartWorkflow,
-        actionId: "startQa",
-        alwaysStartQaReviewsFresh: true,
-      });
-      releaseStarts.resolve();
-      await firstKickoffStarted.promise;
-      const secondStartOutcome = await withTimeout(secondSessionStarted.promise, 500);
-      releaseFirstKickoff.resolve();
-      await Promise.all([firstStart, secondStart]);
-
-      expect(secondStartOutcome).not.toBe("timeout");
-      expect(args.resolveTaskWorktree).toHaveBeenCalledTimes(2);
-      expect(startCount).toBe(2);
-      expect(kickoffSessionIds).toHaveLength(2);
-      expect(new Set(kickoffSessionIds)).toEqual(new Set(["qa-session-1", "qa-session-2"]));
-    } finally {
-      releaseStarts.resolve();
-      releaseFirstKickoff.resolve();
-    }
-  });
-
-  test("does not reuse an old QA session when fresh model resolution fails", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-FAIL", status: "ai_review" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({
-        externalSessionId: "qa-session-existing",
-        role: "qa",
-        workingDirectory: "/tmp/repo/current-worktree",
-      }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-    args.loadRepoRuntimeCatalog.mockRejectedValue(
-      new Error("Cannot resolve the selected runtime. Start it from the runtime controls."),
-    );
-
-    await expect(
-      executeAutopilotAction({
-        ...args,
-        actionId: "startQa",
-        alwaysStartQaReviewsFresh: true,
-      }),
-    ).rejects.toThrow(
-      "The saved QA default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
-    );
-
-    expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("fails with a named error when no session default model is configured", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-NO-DEFAULT", status: "ai_review" }));
-    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
-      ...createRepoConfig(),
-      defaultModel: undefined,
-      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
-    });
-
-    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
-      "No model is configured for the QA session. Set a QA default or the repository Default Model in Settings > Repositories > Agents.",
-    );
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("fails with a named error when the configured default model is unavailable", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-QA-UNAVAILABLE", status: "ai_review" }));
-    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
-      ...createRepoConfig(),
-      defaultModel: { runtimeKind: "opencode", providerId: "openai", modelId: "missing-model" },
-      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
-    });
-
-    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
-      "The saved QA default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
-    );
-    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
-  });
-
-  test("does not force fresh starts for non-QA actions", async () => {
-    const args = createExecuteArgs(createTask({ id: "TASK-BUILD", status: "in_progress" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({ workingDirectory: "/tmp/repo/current-worktree" }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startReviewQaFeedbacks",
-      alwaysStartQaReviewsFresh: true,
-    });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: expect.objectContaining({ startMode: "reuse" }) }),
-    );
-  });
-
-  test("does not resolve a model selection when autopilot reuses a matching session", async () => {
-    const codexSelection = {
-      runtimeKind: "codex" as const,
-      providerId: "codex",
-      modelId: "gpt-5",
-      variant: "medium",
-    };
-    const args = createExecuteArgs(createTask({ id: "TASK-CODEX", status: "in_progress" }));
-    args.loadTaskSessionRecords.mockResolvedValue([
-      createBuilderSessionRecord({
-        externalSessionId: "codex-builder-session-1",
-        runtimeKind: "codex",
-        workingDirectory: "/tmp/repo/current-worktree",
-        selectedModel: codexSelection,
-      }),
-    ]);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
-
-    await executeAutopilotAction({
-      ...args,
-      actionId: "startReviewQaFeedbacks",
-    });
-
-    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        decision: expect.objectContaining({
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "codex-builder-session-1",
-            runtimeKind: "codex",
-            workingDirectory: "/tmp/repo/current-worktree",
-          },
-        }),
-      }),
-    );
+    taskId: "task",
+    policy: { kind: "automatic", actionId: "startBuilder" },
+    instruction: { kind: "kickoff" },
   });
 });
+
+test("shows the host's automatic skip reason", async () => {
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: {
+      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+      agentSessionWorkflowLaunchRead: async () => [],
+      agentSessionWorkflowLaunch: async (request) => ({
+        ...result(request),
+        phase: "skipped",
+        skipReason: "No Builder source",
+      }),
+    },
+  });
+  expect(outcome).toEqual({ kind: "skipped", message: "No Builder source" });
+});
+
+test("notification failure does not change an accepted launch or submit it twice", async () => {
+  const launch = mock(async (request: WorkflowLaunchRequest) => result(request));
+  const reportFailure = mock(() => {});
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: {
+      agentSessionWorkflowLaunch: launch,
+      agentSessionWorkflowLaunchRead: async () => [],
+      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+    },
+    notifications: {
+      publishSessionStarted: () => {
+        throw new Error("Notification failed");
+      },
+      publishSessionError: async () => false,
+      reportFailure,
+    },
+  });
+  expect(outcome.postStartActionError).toBeNull();
+  expect(launch).toHaveBeenCalledTimes(1);
+  expect(reportFailure).toHaveBeenCalledTimes(1);
+});
+
+test("a disconnected automatic caller reads its accepted attempt without launching again", async () => {
+  let retained: WorkflowLaunchSnapshot | undefined;
+  const launch = mock(async (request: WorkflowLaunchRequest): Promise<WorkflowLaunchSnapshot> => {
+    retained = result(request);
+    throw new Error("Transport disconnected");
+  });
+  const read = mock(async (ref: import("@openducktor/contracts").WorkflowLaunchRef) => {
+    if (!retained) throw new Error("Expected the admitted attempt");
+    expect(ref.launchAttemptId).toBe(retained.launchAttemptId);
+    return [retained];
+  });
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: {
+      agentSessionWorkflowLaunch: launch,
+      agentSessionWorkflowLaunchRead: read,
+      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+    },
+  });
+  expect(outcome.postStartActionError).toBeNull();
+  expect(launch).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+test("unknown automatic admission includes inspection guidance in failure delivery", async () => {
+  const publishSessionError = mock(
+    async (_input: SessionStartNotificationInput, _message: string) => false,
+  );
+  const showError = spyOn(toast, "error").mockImplementation(() => "toast");
+  const failure = { stage: "send" as const, message: "Exact transport failure", cleanupErrors: [] };
+  try {
+    const outcome = await executeAutopilotAction({
+      ...args,
+      client: {
+        agentSessionWorkflowLaunchRead: async () => [],
+        agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+        agentSessionWorkflowLaunch: async (request) => ({
+          ...result(request),
+          phase: "failed",
+          acceptance: "unknown",
+          recoveryAllowed: false,
+          failure,
+        }),
+      },
+      notifications: {
+        publishSessionStarted: () => {},
+        publishSessionError,
+        reportFailure: () => {},
+      },
+    });
+    expect(publishSessionError).toHaveBeenCalledTimes(1);
+    expect(publishSessionError.mock.calls[0]?.[1]).toBe(
+      "Exact transport failure Runtime acceptance is unknown. Inspect the saved session before sending another instruction.",
+    );
+    expect(showError.mock.calls.at(-1)?.[1]?.action).toBeUndefined();
+    expect(outcome.postStartActionError?.message).toContain("Inspect the saved session");
+    expect(failure.message).toBe("Exact transport failure");
+  } finally {
+    showError.mockRestore();
+  }
+});
+
+test.each(["before", "after"] as const)(
+  "Autopilot suppresses duplicate failure feedback when observation arrives %s its result",
+  async (order) => {
+    const queryClient = new QueryClient();
+    let listener: RunEventListener = () => {};
+    let retained: WorkflowLaunchSnapshot | undefined;
+    const client = createHostClient(async () => {
+      throw new Error("Unexpected host read");
+    });
+    client.agentSessionWorkflowLaunchRead = async () => [];
+    client.agentSessionWorkflowLaunchRecover = async () => {
+      throw new Error("Recovery must remain explicit");
+    };
+    client.agentSessionWorkflowLaunch = async (request) => {
+      retained = {
+        ...result(request),
+        phase: "failed",
+        acceptance: "rejected",
+        recoveryAllowed: true,
+        failure: { stage: "send", message: "Exact first-instruction failure", cleanupErrors: [] },
+      };
+      if (order === "before")
+        listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
+      return retained;
+    };
+    const settings = createDefaultNotificationSettings();
+    settings.kinds["agent.session_error"] = { enabled: true, target: "both", sound: "inherit" };
+    settings.osFocus = "always_send";
+    settings.soundFocus = "always_play";
+    settings.volumePercent = 50;
+    const genericFeedback = mock(async () => {});
+    const os = mock(async () => ({ status: "shown" as const }));
+    const sound = mock(async () => {});
+    const policy = createNotificationPolicy({
+      inApp: { deliver: genericFeedback },
+      os: { deliver: os },
+      sound: { play: sound },
+      onFailure: () => {},
+    });
+    const localFeedback = spyOn(toast, "error").mockImplementation(() => "recovery-toast");
+    const stop = await observeWorkflowLaunches({
+      workspaceId: args.activeWorkspace.workspaceId,
+      repoPath: args.activeWorkspace.repoPath,
+      taskIds: [args.task.id],
+      queryClient,
+      bridge: {
+        client,
+        subscribeRunEvents: async (next) => {
+          listener = next;
+          return () => {};
+        },
+      },
+      onSnapshot: (snapshot) => {
+        presentWorkflowLaunchOutcome(snapshot, client);
+      },
+      onError: (cause) => {
+        throw cause;
+      },
+    });
+    try {
+      const outcome = await executeAutopilotAction({
+        ...args,
+        client,
+        notifications: {
+          publishSessionStarted: () => {
+            throw new Error("A failed launch must not publish Started");
+          },
+          publishSessionError: async (input, message) => {
+            const occurrence = buildSessionStartErrorOccurrence(
+              { repoPath: "/repo", repositoryLabel: "Repo" },
+              input,
+              message,
+            );
+            const local = await policy.dispatch(
+              occurrence,
+              { phase: "local", inAppFeedbackHandled: input.inAppFeedbackHandled === true },
+              settings,
+            );
+            if (local.externalPlan)
+              await policy.dispatch(occurrence, { phase: "external", appFocused: true }, settings);
+            return local.inAppDelivered;
+          },
+          reportFailure: (cause) => {
+            throw cause;
+          },
+        },
+      });
+      if (order === "after")
+        listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
+      expect(outcome.postStartActionError).toHaveProperty("feedbackHandled", true);
+      expect(localFeedback).toHaveBeenCalled();
+      const ids = new Set(localFeedback.mock.calls.map(([, options]) => options?.id));
+      expect(ids.size).toBe(1);
+      expect(localFeedback.mock.calls.at(-1)).toEqual([
+        "First message failed for task.",
+        expect.objectContaining({
+          description: "Exact first-instruction failure",
+          action: expect.objectContaining({ label: "Retry message" }),
+        }),
+      ]);
+      expect(genericFeedback).not.toHaveBeenCalled();
+      expect(os).toHaveBeenCalledTimes(1);
+      expect(sound).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+      queryClient.clear();
+      localFeedback.mockRestore();
+    }
+  },
+);

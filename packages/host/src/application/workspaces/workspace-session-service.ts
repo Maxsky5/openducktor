@@ -1,17 +1,16 @@
+import { createWorkspaceSessionStart } from "./workspace-session-start";
 import {
   type WorkspaceSession,
   type WorkspaceSessionArchiveInput,
   type AgentSessionModelSelection,
-  type AgentSessionControlStartInput,
   type AgentSessionLiveRef,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
-  type WorkspaceSessionStartResult,
   type WorkspaceSessionRefInput,
   workspaceSessionCreateInputSchema,
   workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
-import { Cause, Clock, Effect, Exit } from "effect";
+import { Clock, Effect } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -21,7 +20,6 @@ import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-st
 import type { TerminalService } from "../terminals/terminal-service";
 import {
   planRuntimeTitleRename,
-  runtimeTitle,
   runtimeTitleWithManualTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
@@ -62,7 +60,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
 export const createWorkspaceSessionService = (
   dependencies: WorkspaceSessionServiceDependencies,
 ) => {
-  const { store, settings, live, runtime, git, operationGate, sessionTitleGate } = dependencies;
+  const { store, settings, live, git, operationGate, sessionTitleGate } = dependencies;
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
   return {
     listActive: (workspaceId: string) =>
@@ -142,92 +140,7 @@ export const createWorkspaceSessionService = (
             }),
         );
       }),
-    start: (input: WorkspaceSessionRefInput) =>
-      operationGate.run(
-        input,
-        Effect.gen(function* () {
-          const { ref, session } = yield* recordFor(input);
-          if (session.archivedAt !== null) {
-            return yield* new HostValidationError({
-              field: "sessionId",
-              message: "Restore this Workspace Session before sending a message.",
-            });
-          }
-          if (session.externalSessionId !== null) {
-            return { session, runtimeSession: null } satisfies WorkspaceSessionStartResult;
-          }
-          yield* validateWorkspaceSessionTarget(
-            dependencies,
-            ref.repoPath,
-            session.executionTarget,
-          );
-          yield* runtime.requireReady(session.runtimeKind);
-          return yield* Effect.uninterruptible(
-            Effect.gen(function* () {
-              const startTitle = runtimeTitle(session);
-              const startInput: AgentSessionControlStartInput = {
-                repoPath: ref.repoPath,
-                runtimeKind: session.runtimeKind,
-                workingDirectory: session.executionTarget.workingDirectory,
-                sessionScope:
-                  startTitle === null
-                    ? { kind: "repository" }
-                    : { kind: "repository", title: startTitle },
-                systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
-              };
-              if (session.selectedModel !== null) startInput.model = session.selectedModel;
-              const runtimeSession = yield* live.startSession(startInput);
-              const saved = yield* Effect.exit(
-                Effect.gen(function* () {
-                  if (
-                    runtimeSession.runtimeKind !== session.runtimeKind ||
-                    runtimeSession.workingDirectory !== session.executionTarget.workingDirectory
-                  ) {
-                    return yield* new HostValidationError({
-                      field: "runtimeSession",
-                      message:
-                        "Runtime returned a different Workspace Session identity or directory.",
-                    });
-                  }
-                  return yield* store.bindRuntimeSession({
-                    ...ref,
-                    externalSessionId: runtimeSession.externalSessionId,
-                  });
-                }),
-              );
-              if (Exit.isSuccess(saved)) {
-                if (session.runtimeKind === "codex")
-                  dependencies.markCodexTitleSyncPending({
-                    repoPath: ref.repoPath,
-                    runtimeKind: session.runtimeKind,
-                    externalSessionId: runtimeSession.externalSessionId,
-                    workingDirectory: runtimeSession.workingDirectory,
-                  });
-                return {
-                  session: saved.value,
-                  runtimeSession,
-                } satisfies WorkspaceSessionStartResult;
-              }
-              const released = yield* Effect.exit(
-                live.releaseSession({
-                  repoPath: ref.repoPath,
-                  runtimeKind: runtimeSession.runtimeKind,
-                  externalSessionId: runtimeSession.externalSessionId,
-                  workingDirectory: runtimeSession.workingDirectory,
-                }),
-              );
-              const releaseMessage = Exit.isFailure(released)
-                ? `\nLocal runtime release also failed: ${Cause.pretty(released.cause)}`
-                : "";
-              return yield* new HostOperationError({
-                operation: "workspaceSession.start.persist",
-                message: `Workspace Session start failed: ${Cause.pretty(saved.cause)}\nRuntime history ${runtimeSession.externalSessionId} was retained.${releaseMessage}`,
-                cause: { save: saved.cause, release: released },
-              });
-            }),
-          );
-        }),
-      ),
+    start: createWorkspaceSessionStart(dependencies),
     setDraftModel: (
       input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },
     ) =>

@@ -6,6 +6,7 @@ import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
@@ -103,6 +104,52 @@ const createService = (
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test.each(["preparation", "queued"] as const)(
+    "classifies a send failure at %s",
+    async (stage) => {
+      const base = createSession();
+      const session = createSession({
+        input: { ...base.input, sessionScope: { kind: "repository" } },
+        query: createClaudeQueryFixture({
+          mcpServerStatus: async () =>
+            stage === "preparation" ? [] : [{ name: "openducktor", status: "connected" }],
+        }),
+      });
+      const service = createService(session, () => {
+        throw new Error("Publication failed after queueing");
+      });
+      try {
+        const result = await Effect.runPromise(
+          Effect.result(
+            service.sendUserMessage(
+              {
+                repoPath: session.input.repoPath,
+                workingDirectory: session.input.workingDirectory,
+                runtimeKind: "claude",
+                runtimePolicy: { kind: "claude" },
+                externalSessionId: session.externalSessionId,
+                sessionScope: { kind: "repository" },
+                parts: [{ kind: "text", text: "First" }],
+              },
+              "runtime-1",
+            ),
+          ),
+        );
+        expect(result._tag).toBe("Failure");
+        if (result._tag !== "Failure") throw new Error("Expected send failure");
+        if (stage === "preparation") {
+          expect(result.failure).toBeInstanceOf(AgentSessionMessageRejectedError);
+          expect(session.acceptedUserMessages).toHaveLength(0);
+        } else {
+          expect(result.failure).not.toBeInstanceOf(AgentSessionMessageRejectedError);
+          expect(session.acceptedUserMessages).toHaveLength(1);
+        }
+      } finally {
+        service.dispose();
+      }
+    },
+  );
+
   for (const operation of ["start", "fork", "resume"] as const) {
     test(`${operation} applies OpenDucktor settings only to new sessions`, async () => {
       const request = {

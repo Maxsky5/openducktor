@@ -235,6 +235,105 @@ const createRepositoryConflictRetryState = (
   });
 
 describe("useRepoSessionReadModel", () => {
+  test.each(["codex", "claude", "opencode"] as const)(
+    "%s binds a new task session with its running state in one update",
+    async (runtimeKind) => {
+      const state = createState(
+        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
+        [],
+      );
+      const saved = { ...record, runtimeKind, externalSessionId: "new-thread" };
+      const ref = { ...snapshot().ref, runtimeKind, externalSessionId: saved.externalSessionId };
+      const statuses: string[] = [];
+      const unsubscribe = state.subscribe(() => {
+        const current = state.getStoredSession(ref);
+        if (current) statuses.push(current.status);
+      });
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+        await state.harness.run(() => {
+          const liveSession = snapshot({ ref, activity: "running" });
+          state.emit({ type: "session_upsert", session: liveSession });
+          const ownership = {
+            type: "task_session_records_updated" as const,
+            repoPath: "/repo",
+            taskId: "task-1",
+            agentSessions: [saved],
+            liveSession,
+          };
+          state.emit(ownership);
+        });
+        expect(statuses).toEqual(["running"]);
+      } finally {
+        unsubscribe();
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
+
+  test.each(["codex", "claude", "opencode"] as const)(
+    "%s applies new task ownership before the first user event in the same stream batch",
+    async (runtimeKind) => {
+      const state = createState(
+        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
+        [],
+      );
+      const saved = { ...record, runtimeKind, externalSessionId: "new-thread" };
+      const ref = { ...snapshot().ref, runtimeKind, externalSessionId: saved.externalSessionId };
+      const consumer = createAgentSessionTranscriptEventConsumer({
+        readSession: state.getStoredSession,
+        ensureSession: (_identity, createSession) => createSession(),
+        updateSession: state.updateSession,
+        updateSessionTodos: () => undefined,
+        sessionTurnState: createSessionTurnState(),
+      });
+      state.props.transcriptEvents = consumer;
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+        await state.harness.run(() => {
+          state.emit({
+            type: "task_session_records_updated",
+            repoPath: "/repo",
+            taskId: "task-1",
+            agentSessions: [saved],
+          });
+          state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
+          state.emit({
+            type: "transcript_event",
+            event: {
+              type: "user_message",
+              externalSessionId: ref.externalSessionId,
+              sessionRef: ref,
+              timestamp: "2026-07-16T08:00:01.000Z",
+              messageId: "first-user",
+              message: "Start this task",
+              parts: [{ kind: "text", text: "Start this task" }],
+              state: "read",
+            },
+          });
+          state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [saved]);
+        });
+        const session = state.getStoredSession(ref);
+        expect(session?.sessionAssociation).toEqual({
+          kind: "workflow",
+          taskId: "task-1",
+          role: "build",
+        });
+        expect(session?.status).toBe("running");
+        expect(sessionMessagesToArray(session!)).toContainEqual(
+          expect.objectContaining({ id: "first-user", role: "user", content: "Start this task" }),
+        );
+      } finally {
+        consumer.close();
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
+
   test("keeps current history through metadata snapshots and marks it stale on reconnect or stream failure", async () => {
     const state = createState((emit) =>
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),

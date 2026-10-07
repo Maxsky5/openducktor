@@ -1,9 +1,13 @@
+import type { createWorkspaceSessionLaunchCommandHandlers } from "../commands/workspace-session-launch-command-handlers";
 import type { createNotificationCommandHandlers } from "../commands/notification-command-handlers";
 import type { createWorkspaceSessionImportCommandHandlers } from "../commands/workspace-session-import-command-handlers";
 import type { createWorkspaceProviderSetupCommandHandlers } from "../commands/workspace-provider-setup-command-handlers";
 import type { createGeneratedImageCommandHandlers } from "../commands/generated-image-command-handlers";
 import type { Effect } from "effect";
-import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
+import type {
+  createWorkflowLaunchCommandHandlers,
+  createAgentSessionLiveCommandHandlers,
+} from "../commands/agent-session-live-command-handlers";
 import type { createAgentRuntimeQueryCommandHandlers } from "../commands/agent-runtime-query-command-handlers";
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
 import type { createGitCommandHandlers } from "../commands/git-command-handlers";
@@ -30,10 +34,12 @@ import type { createWorkspaceSettingsCommandHandlers } from "../commands/workspa
 import type { createWorkspaceSessionCommandHandlers } from "../commands/workspace-session-command-handlers";
 import type { HostCommandName } from "../commands/host-command-registry";
 
-type AllHostCommandHandlers = ReturnType<typeof createNotificationCommandHandlers> &
+type AllHostCommandHandlers = ReturnType<typeof createWorkspaceSessionLaunchCommandHandlers> &
+  ReturnType<typeof createNotificationCommandHandlers> &
   ReturnType<typeof createGeneratedImageCommandHandlers> &
   ReturnType<typeof createWorkspaceProviderSetupCommandHandlers> &
   ReturnType<typeof createAgentSessionLiveCommandHandlers> &
+  ReturnType<typeof createWorkflowLaunchCommandHandlers> &
   ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionImportCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionCommandHandlers> &

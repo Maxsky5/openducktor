@@ -1,6 +1,4 @@
 import { toast } from "sonner";
-import { QueryClient } from "@tanstack/react-query";
-import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
 import { describe, expect, spyOn, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
@@ -221,21 +219,8 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const actions = createSessionActions({ adapter, sessionsRef });
     const session = getSession(sessionsRef);
-    await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      task: null,
-      intent: {
-        taskId: "task-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-        kickoffPrompt: text,
-      },
-      selection: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-      startAgentSession: async () => session,
-      sendAgentMessage: actions.sendAgentMessage,
+    await actions.sendAgentMessage(session, [{ kind: "text", text }], {
+      preserveTextWhitespace: true,
     });
     expect(sent).toEqual([[{ kind: "text", text }]]);
     await actions.sendAgentMessage(session, [{ kind: "text", text }]);
@@ -275,9 +260,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      loadSettingsSnapshot: async () => {
-        throw new Error("session control must not load runtime policy settings");
-      },
     });
 
     try {
@@ -753,10 +735,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      loadSourceSession: async () => {
-        callOrder.push("load");
-        return null;
-      },
     });
 
     try {

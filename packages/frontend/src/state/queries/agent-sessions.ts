@@ -66,7 +66,8 @@ export const updateAgentSessionListQuery = (
 ): void => {
   incrementAgentSessionInvalidationVersion(queryClient, repoPath, records.taskId);
   const queryKey = agentSessionQueryKeys.list(repoPath, records.taskId);
-  void queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
+  // Without revert, the canceled fetch can mark the new data as failed after this commit.
+  void queryClient.cancelQueries({ queryKey, exact: true });
   queryClient.setQueryData(queryKey, records.agentSessions);
 };
 
@@ -87,11 +88,35 @@ const joinInFlightAgentSessionListQuery = (
   repoPath: string,
   taskId: string,
   readPort: Pick<AgentSessionReadPort, "agentSessionsList">,
-): Promise<AgentSessionRecord[]> =>
-  queryClient.fetchQuery({
-    ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-    staleTime: 0,
-  });
+): Promise<AgentSessionRecord[]> => {
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+  const updates = query?.state.dataUpdateCount ?? 0;
+  const version = getAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
+  return queryClient
+    .fetchQuery({
+      ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+      staleTime: 0,
+    })
+    .catch((error) => {
+      const current = queryClient
+        .getQueryCache()
+        .find<AgentSessionRecord[]>({ queryKey, exact: true });
+      // Joined callers still receive the old retryer's cancellation after a host commit.
+      if (
+        isCancelledError(error) &&
+        current !== undefined &&
+        current === query &&
+        current.state.dataUpdateCount > updates &&
+        getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== version &&
+        current.state.status === "success" &&
+        current.state.data !== undefined &&
+        !current.state.isInvalidated
+      )
+        return current.state.data;
+      throw error;
+    });
+};
 
 export const hydrateAgentSessionListQueries = async (
   queryClient: QueryClient,

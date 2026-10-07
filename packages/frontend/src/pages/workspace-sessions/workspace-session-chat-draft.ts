@@ -6,6 +6,7 @@ import {
   hydrateAgentChatDraft,
   readAgentChatDraftVersion,
   setAgentChatDraft,
+  subscribeAgentChatDraftClear,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 
 export const createWorkspaceSessionChatDraftPersistence = (
@@ -20,5 +21,6 @@ export const createWorkspaceSessionChatDraftPersistence = (
     readVersion: () => readAgentChatDraftVersion(identity),
     clear: (options) => clearAgentChatDraft(identity, options),
     flush: () => flushAgentChatDraft(identity),
+    subscribeClear: (onClear) => subscribeAgentChatDraftClear(identity, onClear),
   };
 };

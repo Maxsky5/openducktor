@@ -8,6 +8,8 @@ export type AgentChatDraftPersistence = {
   readVersion: () => number | null;
   clear: (options?: { onlyIfVersion?: number | null }) => boolean;
   flush: () => Promise<void>;
+  /** A recovery can clear the saved draft while another view owns the composer. */
+  subscribeClear?: (onClear: () => void) => () => void;
 };
 
 export type AgentChatDraftScope = {

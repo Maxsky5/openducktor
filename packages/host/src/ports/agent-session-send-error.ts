@@ -1,5 +1,9 @@
-import type { HostInvokeFailure } from "@openducktor/contracts";
-import { HostOperationError } from "../effect/host-errors";
+import type {
+  HostInvokeFailure,
+  AgentSessionLiveRef,
+  AcceptedAgentUserMessage,
+} from "@openducktor/contracts";
+import { type HostError, HostOperationError } from "../effect/host-errors";
 
 type AcceptedMessageFailure = Extract<
   HostInvokeFailure,
@@ -18,3 +22,26 @@ export class AgentSessionMessageAcceptedError extends HostOperationError {
     this.failure = { kind: "agent_session_message_accepted", ...input };
   }
 }
+
+/** The runtime did not accept this message. */
+export class AgentSessionMessageRejectedError extends HostOperationError {}
+
+export const messageSubmissionRejected = (operation: string) => (cause: HostError) =>
+  new AgentSessionMessageRejectedError({ operation, message: cause.message, cause });
+
+export const messageAcceptedFailure =
+  (sessionRef: AgentSessionLiveRef, acceptedMessage: AcceptedAgentUserMessage) =>
+  (cause: HostError) =>
+    new AgentSessionMessageAcceptedError(
+      {
+        sessionRef: {
+          repoPath: sessionRef.repoPath,
+          runtimeKind: sessionRef.runtimeKind,
+          workingDirectory: sessionRef.workingDirectory,
+          externalSessionId: sessionRef.externalSessionId,
+        },
+        acceptedMessage,
+        stage: "live_update",
+      },
+      cause,
+    );

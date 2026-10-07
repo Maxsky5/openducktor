@@ -6,7 +6,11 @@ import {
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
+import {
+  createPrepareOpencodeSessionRuntime,
+  OpenCodeMessageRejectedError,
+  type OpencodeSessionRuntimeSignal,
+} from "./index";
 import { permissionAskedEvent, sessionStatusEvent } from "./event-stream.test-support";
 import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import { TEST_MCP_SERVER_CONFIG } from "./test-support";
@@ -2379,8 +2383,10 @@ test("reports failed reload permission setup and excludes the workflow tree", as
     }
     for (const result of await sends) {
       expect(result.status).toBe("rejected");
-      if (result.status === "rejected")
+      if (result.status === "rejected") {
+        expect(result.reason).toBeInstanceOf(OpenCodeMessageRejectedError);
         expect(result.reason.message).toContain("permission API unavailable");
+      }
     }
     harness.client.session.get = get;
     expect((await restoring).sources).toEqual([]);

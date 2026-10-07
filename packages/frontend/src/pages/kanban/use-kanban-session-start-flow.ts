@@ -1,7 +1,7 @@
 import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
-import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
+import type { GitBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -49,8 +49,6 @@ type UseKanbanSessionStartFlowArgs = {
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
   workspaceRepoPath: string | null;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   runSessionStartWorkflow: RunSessionStartWorkflow;
 };
 
@@ -137,8 +135,6 @@ export function useKanbanSessionStartFlow({
   sessions,
   navigate,
   workspaceRepoPath,
-  humanRequestChangesTask,
-  setTaskTargetBranch,
   runSessionStartWorkflow,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
@@ -213,21 +209,17 @@ export function useKanbanSessionStartFlow({
         async ({ decision, runInBackground }) => {
           const input: Parameters<typeof startKanbanSessionFlow>[0] = {
             workspaceId: activeWorkspaceId,
-            isCurrent: isCurrentContext,
             request: intent,
             decision,
             startInBackground: runInBackground,
+            isCurrent: isCurrentContext,
             tasks,
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
-            humanRequestChangesTask,
             openSessionInAgentStudio: (request, session) => {
               if (isCurrentContext()) openSessionInAgentStudio(request, session);
             },
           };
-          if (setTaskTargetBranch) {
-            input.setTaskTargetBranch = setTaskTargetBranch;
-          }
           const session = await startKanbanSessionFlow(input);
           return session;
         },
@@ -236,11 +228,9 @@ export function useKanbanSessionStartFlow({
     [
       isCurrentContext,
       queryClient,
-      humanRequestChangesTask,
       openSessionInAgentStudio,
       runSessionStartWorkflow,
       runSessionStartRequest,
-      setTaskTargetBranch,
       sessions,
       tasks,
       activeWorkspaceId,

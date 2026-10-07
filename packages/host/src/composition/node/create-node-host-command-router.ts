@@ -1,9 +1,7 @@
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
 import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
-import { createNodeAgentRuntimeQueryCommandHandlers } from "./node-agent-runtime-query-command-handlers";
 import { createNodeNotificationServices } from "./node-notification-services";
 import { createNotificationCommandHandlers } from "../../interface/commands/notification-command-handlers";
-import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
@@ -13,7 +11,6 @@ import {
   createMcpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
-import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
@@ -31,12 +28,17 @@ import { createTaskWorktreeService } from "../../application/tasks/worktrees/tas
 import { createRepoActionService } from "../../application/actions/repo-action-service";
 import { createWorktreeActionRunner } from "../../application/actions/worktree-action-runner";
 import { createTerminalService } from "../../application/terminals/terminal-service";
-import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
+import { createNodeSessionLaunchControls } from "./node-session-launch-controls";
+import { resolveSessionMessageParts } from "../../application/attachments/resolve-session-message-parts";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
-import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
+import {
+  createWorkflowLaunchCommandHandlers,
+  createAgentSessionLiveCommandHandlers,
+} from "../../interface/commands/agent-session-live-command-handlers";
+import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
@@ -247,41 +249,42 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
     worktreeFiles,
   });
-  const taskActivityGuard = createRuntimeTaskActivityGuard({
-    runtimeRegistry,
-    sessionService: agentSessionLiveStateService,
-    settingsConfig,
+  const taskSessions = createNodeTaskSessionServices({
+    taskServiceInput: {
+      terminalService,
+      worktreeActions,
+      gitPort: git,
+      gitProviderResolver,
+      taskStore,
+      settingsConfig,
+      systemCommands,
+      toolDiscovery,
+      taskWorktreeService,
+      workspaceSettingsService,
+      runtimeDefinitionsService,
+      runtimeRegistry,
+      worktreeFiles,
+      taskSessionLifecycleCoordinator,
+    },
+    eventServiceInput: {
+      acceptNotificationInput: notificationComposition.acceptTask,
+      lifecycleLogger,
+      onBackgroundFailure,
+      taskEventPublicationReporter,
+      workspaceSettingsService,
+    },
+    canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
+    agentSessionLiveStateService,
+    repositoryPolicy: workspaceSessions.persistence,
+    workflowLaunch: {
+      resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
+      adapterRegistry: liveSessionAdapterRegistry,
+      withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
+      eventBus,
+    },
   });
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
-    createNodeTaskSessionServices({
-      taskServiceInput: {
-        terminalService,
-        worktreeActions,
-        gitPort: git,
-        gitProviderResolver,
-        taskStore,
-        taskActivityGuard,
-        settingsConfig,
-        systemCommands,
-        toolDiscovery,
-        taskWorktreeService,
-        workspaceSettingsService,
-        runtimeDefinitionsService,
-        runtimeRegistry,
-        worktreeFiles,
-        taskSessionLifecycleCoordinator,
-      },
-      eventServiceInput: {
-        acceptNotificationInput: notificationComposition.acceptTask,
-        lifecycleLogger,
-        onBackgroundFailure,
-        taskEventPublicationReporter,
-        workspaceSettingsService,
-      },
-      canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
-      agentSessionLiveStateService,
-      repositoryPolicy: workspaceSessions.persistence,
-    });
+    taskSessions;
   const notificationService = notificationComposition.attach({
     tasks: taskService,
     live: agentSessionLiveStateService,
@@ -310,32 +313,37 @@ export const assembleNodeEffectHostCommandRouter = (
     taskReader: taskStore,
   });
   const mcpBridge = resolvedMcpHostBridge;
-  const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
-    createNodeWorkspaceSessionServices({
-      terminalService,
-      lifecycle: taskSessionLifecycleCoordinator,
-      operationGate: workspaceSessions.operationGate,
-      sessionTitleGate: workspaceSessions.sessionTitleGate,
-      isCodexTitleSyncPending: workspaceSessions.isCodexTitleSyncPending,
-      markCodexTitleSyncPending: workspaceSessions.markCodexTitleSyncPending,
-      store: assets.workspaceSessionStore,
-      settings: workspaceSettingsService,
-      runtime: runtimeRegistry,
-      live: agentSessionLiveStateService,
-      git,
-      settingsConfig,
-      worktreeFiles,
-      worktreeActions,
-      registry: liveSessionAdapterRegistry,
-      publishUpdated: workspaceSessions.publishUpdated,
-      runtimeAdmission,
-      eventBus,
-    });
+  const workspaceChats = createNodeWorkspaceSessionServices({
+    terminalService,
+    lifecycle: taskSessionLifecycleCoordinator,
+    operationGate: workspaceSessions.operationGate,
+    sessionTitleGate: workspaceSessions.sessionTitleGate,
+    isCodexTitleSyncPending: workspaceSessions.isCodexTitleSyncPending,
+    markCodexTitleSyncPending: workspaceSessions.markCodexTitleSyncPending,
+    store: assets.workspaceSessionStore,
+    settings: workspaceSettingsService,
+    runtime: runtimeRegistry,
+    runtimeAdmission,
+    live: agentSessionLiveStateService,
+    commands: agentSessionCommandService,
+    resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
+    git,
+    settingsConfig,
+    worktreeFiles,
+    worktreeActions,
+    registry: liveSessionAdapterRegistry,
+    publishUpdated: workspaceSessions.publishUpdated,
+    eventBus,
+  });
+  const launchControls = createNodeSessionLaunchControls(agentSessionCommandService, [
+    taskSessions.workflowLaunchService,
+    workspaceChats.workspaceSessionLaunchService,
+  ]);
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     initializeAdmission: workspaceAdmissionService.initialize,
-    shutdownWorkspaceImports: workspaceSessionImports.shutdown,
+    shutdownWorkspaceImports: workspaceChats.workspaceSessionImports.shutdown,
     shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
-    unsubscribeImportCatalogs,
+    unsubscribeImportCatalogs: workspaceChats.unsubscribeImportCatalogs,
     notifications: notificationService,
     assets,
     azureDevOpsConnection,
@@ -351,20 +359,16 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
+    workflowLaunchService: launchControls,
   });
   const handlers = {
     ...setup.handlers,
+    ...workspaceChats.handlers,
     ...createNotificationCommandHandlers(notificationService),
-    ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
-    ...createNodeAgentRuntimeQueryCommandHandlers(
-      {
-        ...workingDirectoryDependencies,
-        adapterRegistry: liveSessionAdapterRegistry,
-        runtimeRegistry,
-        taskReader: taskStore,
-        worktreeReads: taskSessionLifecycleCoordinator,
-        worktreeFiles,
-      },
+    ...createAgentSessionLiveCommandHandlers(launchControls.commands, localAttachmentService),
+    ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
+    ...createAgentRuntimeQueryCommandHandlers(
+      taskSessions.agentRuntimeQueries,
       previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
     ),
     ...createFilesystemCommandHandlers(filesystemService),
@@ -404,11 +408,6 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createTerminalCommandHandlers(terminalService),
     ...createRepoActionCommandHandlers(repoActionService),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
-    ...createWorkspaceSessionImportCommandHandlers(workspaceSessionImports),
-    ...createWorkspaceSessionCommandHandlers(
-      workspaceSessionService,
-      workspaceSessions.publishUpdated,
-    ),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   return Object.assign(createEffectHostCommandRouter({ ...hostRouterLifecycle, handlers }), {

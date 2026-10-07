@@ -1,11 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import type { TaskDocuments } from "../runtime/runtime";
-import type { LoadSourceSession } from "../session-read-model/source-session-loader";
-import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnState } from "../support/session-turn-state";
 import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
@@ -14,7 +10,7 @@ import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
-import type { RuntimeDependencies } from "./start-session.types";
+import { host } from "../../shared/host";
 import { createStopAgentSession } from "./stop-session";
 import { createRefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
 
@@ -22,24 +18,16 @@ type SessionActionsDependencies = {
   workspaceRepoPath: string | null;
   workspaceId: string | null;
   adapter: AgentEnginePort;
-  replaceSession: (session: AgentSessionState) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  sessionStartGateRef: { current: SessionStartGate<AgentSessionIdentity> };
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
-  canonicalizePath: RuntimeDependencies["canonicalizePath"];
-  startWorkflowSession: RuntimeDependencies["startWorkflowSession"];
-  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  launchWorkflow: typeof host.agentSessionWorkflowLaunch;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
-  loadSourceSession: LoadSourceSession;
-  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
-  refreshSessionRecords: (repoPath: string, taskId: string) => Promise<void>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
 };
@@ -48,24 +36,16 @@ export const createAgentSessionActions = ({
   workspaceRepoPath,
   workspaceId,
   adapter,
-  replaceSession,
   readSessionSnapshot,
   taskRef,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  sessionStartGateRef,
   sessionTurnState,
   updateSession,
   closeBackgroundQuestions,
-  canonicalizePath,
-  startWorkflowSession,
-  loadTaskDocuments,
+  launchWorkflow,
   loadRepoPromptOverrides,
-  loadSettingsSnapshot,
   liveSessionHost,
-  loadSourceSession,
-  loadAgentSessionHistory,
-  refreshSessionRecords,
   refreshTaskData,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
@@ -98,38 +78,8 @@ export const createAgentSessionActions = ({
   });
 
   const startAgentSession = createStartAgentSession({
-    repo: {
-      workspaceRepoPath,
-      workspaceId,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-    },
-    session: {
-      replaceSession,
-      readSessionSnapshot,
-      sessionStartGateRef,
-      loadSourceSession,
-      loadAgentSessionHistory,
-      clearSessionObservationState: sessionTurnState.clearSession,
-    },
-    runtime: {
-      adapter,
-      canonicalizePath,
-      startWorkflowSession,
-    },
-    task: {
-      taskRef,
-      loadTaskDocuments,
-      refreshSessionRecords,
-      refreshTaskData,
-      sendAgentMessage: async (identity, parts) => {
-        await sendAgentMessage(identity, parts);
-      },
-    },
-    model: {
-      loadRepoPromptOverrides,
-      loadSettingsSnapshot,
-    },
+    repo: { workspaceRepoPath, workspaceId },
+    runtime: { launchWorkflow },
   });
 
   const stopAgentSession = createStopAgentSession({

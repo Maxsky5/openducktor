@@ -447,6 +447,34 @@ describe("local host SSE subscriptions", () => {
     expect(eventSource.closed).toBe(true);
   });
 
+  test("delivers reconnect and replay-gap controls to workflow launch observers", async () => {
+    const { subscribeLocalHostRunEvents } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }))),
+    );
+    const listener = mock(() => {});
+    const subscription = subscribeLocalHostRunEvents(listener);
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    const unsubscribe = await subscription;
+    eventSource.emit("error", "");
+    eventSource.emit("open", "");
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __openducktorBrowserLive: true,
+        kind: "reconnected",
+      }),
+    );
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __openducktorBrowserLive: true,
+        kind: "stream-warning",
+      }),
+    );
+    unsubscribe();
+  });
+
   test("shares one EventSource across non-task host event channels", async () => {
     const {
       observeLocalHostAgentSessions,
@@ -466,7 +494,7 @@ describe("local host SSE subscriptions", () => {
     const workspaceSessionListener = mock(() => {});
     const setupListener = mock(() => {});
 
-    const unsubscribeRun = await subscribeLocalHostRunEvents(runListener);
+    const runSubscription = subscribeLocalHostRunEvents(runListener);
     const workspaceSessionSubscription =
       subscribeLocalHostWorkspaceSessionUpdates(workspaceSessionListener);
     const setupSubscription = subscribeLocalHostWorkspaceProviderSetupUpdates(setupListener);
@@ -475,11 +503,14 @@ describe("local host SSE subscriptions", () => {
       liveSessionListener,
     );
 
+    await waitForEventSourceInstance();
+    await waitForEventSourceListener(FakeEventSource.instances[0]!, "open");
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events?notifications=1");
     expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     FakeEventSource.instances[0]?.emit("open", "");
+    const unsubscribeRun = await runSubscription;
     const unsubscribeWorkspaceSession = await workspaceSessionSubscription;
     const unsubscribeSetup = await setupSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
@@ -560,10 +591,13 @@ describe("local host SSE subscriptions", () => {
       throw failure;
     });
     const later = mock(() => {});
-    const unsubscribeFirst = await subscribeLocalHostRunEvents(first);
-    unsubscribeLater = await subscribeLocalHostRunEvents(later);
+    const firstSubscription = subscribeLocalHostRunEvents(first);
+    const laterSubscription = subscribeLocalHostRunEvents(later);
     const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
     eventSource.emit("open", "");
+    const unsubscribeFirst = await firstSubscription;
+    unsubscribeLater = await laterSubscription;
     const data = JSON.stringify({ channel: "openducktor://run-event", payload: { type: "run" } });
 
     let thrown: unknown;
@@ -1644,9 +1678,12 @@ test("notification and host listeners share one physical stream and retain indep
     frames,
     failures,
   );
-  const stopRun = await transport.subscribeLocalHostRunEvents(() => {});
+  const runSubscription = transport.subscribeLocalHostRunEvents(() => {});
   expect(FakeEventSource.instances).toHaveLength(1);
   const source = FakeEventSource.instances[0]!;
+  await waitForEventSourceListener(source, "open");
+  source.emit("open", "");
+  const stopRun = await runSubscription;
   const frame = {
     type: "attached",
     reason: "new",

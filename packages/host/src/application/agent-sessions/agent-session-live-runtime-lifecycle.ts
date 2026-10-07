@@ -32,6 +32,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   listSnapshots,
   refreshSnapshots,
   observedRepoPaths,
+  onDetach,
 }: {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
@@ -47,6 +48,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   ) => Effect.Effect<void, HostError>;
   /** Repositories whose live state a renderer has observed. */
   readonly observedRepoPaths: () => ReadonlyArray<string>;
+  readonly onDetach: (binding: AgentSessionLiveRegistration) => void;
 }): LiveRuntimeLifecycle => {
   const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
   const activeRegistrations = new WeakSet<AgentSessionLiveRegistration>();
@@ -68,6 +70,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   const markDetached = (binding: AgentSessionLiveRegistration) => {
     detachedBindings.add(binding);
     activeRegistrations.delete(binding);
+    onDetach(binding);
   };
 
   const releaseAttached = createLiveRuntimeRelease({

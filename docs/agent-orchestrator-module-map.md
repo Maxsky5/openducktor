@@ -35,7 +35,7 @@ The same activity snapshot exposes `pendingInputSessions` for every session with
 
 ## Host live projection
 
-Files: `session-read-model/agent-session-live-projection.ts`, `session-read-model/agent-session-workflow-records.ts`, `session-read-model/source-session-loader.ts`, `session-read-model/use-task-session-records.ts`, and `hooks/use-repo-session-read-model.ts`.
+Files: `session-read-model/agent-session-live-projection.ts`, `session-read-model/agent-session-workflow-records.ts`, `session-read-model/use-task-session-records.ts`, and `hooks/use-repo-session-read-model.ts`.
 
 Owns durable record reads, root admission from durable records or explicit starts, host live attachment, the first snapshot, ordered changes, one collection commit, and parent-child pending-input links.
 
@@ -51,7 +51,7 @@ Rules:
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
 - Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks chat actions, not healthy task sessions.
-- Load one missing source record through `source-session-loader.ts`. Do not load its transcript or refresh the full repository model.
+- Use `session-read-model/agent-session-workflow-records.ts` to project durable ownership into the collection. The host workflow launch service resolves source records when it prepares a launch.
 
 This owner does not load catalogs, file status, diff, selected history, or page navigation. It does not select a native runtime protocol.
 
@@ -340,9 +340,11 @@ Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent
 
 ## Session actions
 
-Files: `handlers/start-session.ts`, `handlers/session-launch-executor.ts`, `handlers/start-session-workflow-launch.ts`, `handlers/session-actions.ts`, `handlers/send-agent-message.ts`, `handlers/stop-session.ts`, `handlers/session-model-actions.ts`, `handlers/pending-input-actions.ts`, and `handlers/public-operations.ts`.
+Files: `handlers/start-session.ts`, `handlers/session-actions.ts`, `handlers/send-agent-message.ts`, `handlers/stop-session.ts`, `handlers/session-model-actions.ts`, `handlers/pending-input-actions.ts`, and `handlers/public-operations.ts`.
 
-Owns start, reuse, fork, send, stop, model update, pending-input replies, and workflow session registration.
+Owns launch requests, interactive send, stop, model update, pending-input replies, and presentation.
+
+The host owns complete workflow execution.
 
 The shared send handler checks a typed accepted-message failure before ordinary send recovery. It upserts the native message once and adds a scoped failure notice. It completes the send action without restoring the accepted draft or resetting running state and pending input. Both task and workspace actions use this handler. Runtime-service conversion checks the exact session reference and preserves accepted model fields.
 
@@ -355,13 +357,12 @@ Rules:
 - Action availability uses task, role, launch action, and loaded session. Transcript loading belongs to the selected view.
 - An existing session gets runtime capability from its runtime data or `AgentSessionState.runtimeKind`, not the composer draft.
 - A send, model update, or reply requires loaded session state. Missing state is an invariant error.
-- Start code marks every decided start as `starting`.
-- Register a workflow session in this order: create it in the runtime, persist its task record in the host, then attach it to local task state.
-- Stop preparation failures before host control succeeds. If later frontend work fails, keep the task session stored by the host.
-- Only the explicit workflow start path can register task ownership. Runtime events cannot attach an unrelated root session.
-- A fresh or forked start holds `starting` until its first message finishes or fails.
-- `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`. Kanban and the task content of the Sessions page supply its local recovery callback. The runner invokes that callback before notification delivery, which suppresses the generic in-app toast for that failure and keeps OS and sound policy unchanged.
-- The task content of the Sessions page, Kanban, and Autopilot call the same `RunSessionStartWorkflow` command.
+- Start requests capture workspace and task identity before host admission.
+- The host saves ownership before the first instruction and preserves it after a send or publication failure.
+- Runtime events cannot attach an unrelated root session.
+- The runner presents the host result and offers only host-authorized recovery.
+- Kanban and the task content of the Sessions page supply local recovery presentation before notification delivery.
+- Manual starts and Autopilot use the same host launch service.
 - Sessionless send uses the same start-availability rule as an explicit start.
 - The start modal reads runtime definitions from runtime availability context.
 - Action state owns busy, waiting, queued, and send-block rules. It does not copy identity or runtime-data loading.

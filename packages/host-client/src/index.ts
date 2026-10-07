@@ -80,6 +80,14 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceSessionClient.workspaceSessionCreate.bind(workspaceSessionClient),
     workspaceSessionStart:
       workspaceSessionClient.workspaceSessionStart.bind(workspaceSessionClient),
+    workspaceSessionLaunch:
+      workspaceSessionClient.workspaceSessionLaunch.bind(workspaceSessionClient),
+    workspaceSessionLaunchRead:
+      workspaceSessionClient.workspaceSessionLaunchRead.bind(workspaceSessionClient),
+    workspaceSessionLaunchRecover:
+      workspaceSessionClient.workspaceSessionLaunchRecover.bind(workspaceSessionClient),
+    workspaceSessionLaunchCancel:
+      workspaceSessionClient.workspaceSessionLaunchCancel.bind(workspaceSessionClient),
     workspaceSessionSetDraftModel:
       workspaceSessionClient.workspaceSessionSetDraftModel.bind(workspaceSessionClient),
     workspaceSessionRename:
@@ -248,6 +256,14 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionControlSend.bind(agentSessionLiveClient),
     agentSessionControlStart:
       agentSessionLiveClient.agentSessionControlStart.bind(agentSessionLiveClient),
+    agentSessionWorkflowLaunch:
+      agentSessionLiveClient.agentSessionWorkflowLaunch.bind(agentSessionLiveClient),
+    agentSessionWorkflowLaunchRead:
+      agentSessionLiveClient.agentSessionWorkflowLaunchRead.bind(agentSessionLiveClient),
+    agentSessionWorkflowLaunchRecover:
+      agentSessionLiveClient.agentSessionWorkflowLaunchRecover.bind(agentSessionLiveClient),
+    agentSessionWorkflowLaunchCancel:
+      agentSessionLiveClient.agentSessionWorkflowLaunchCancel.bind(agentSessionLiveClient),
     agentSessionWorkflowStart:
       agentSessionLiveClient.agentSessionWorkflowStart.bind(agentSessionLiveClient),
     agentSessionControlStop:

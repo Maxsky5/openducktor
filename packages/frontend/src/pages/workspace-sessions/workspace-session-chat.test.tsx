@@ -5,6 +5,7 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
+  type WorkspaceSessionLaunchRequest,
 } from "@openducktor/contracts";
 import { act, type ReactElement, type ReactNode, useState } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
@@ -99,15 +100,18 @@ test.each(["local_repo_root", "local_worktree"] as const)(
     });
     const store = createAgentSessionsStore(workspace.repoPath);
     const sends: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[] = [];
-    const start = mock(async () => ({
-      session: { ...entry, externalSessionId: session.externalSessionId },
-      runtimeSession: null,
+    const launch = mock(async (request: WorkspaceSessionLaunchRequest) => ({
+      ...request,
+      phase: "completed" as const,
+      acceptance: "accepted" as const,
+      ownershipSaved: true,
+      record: { ...entry, externalSessionId: session.externalSessionId },
     }));
     configureShellBridge(
       createShellBridgeFixture({
         client: {
           workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-          workspaceSessionStart: start,
+          workspaceSessionLaunch: launch,
         },
       }),
     );
@@ -143,24 +147,21 @@ test.each(["local_repo_root", "local_worktree"] as const)(
     try {
       const send = await view.findByRole("button", { name: "Send message" });
       await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false));
-      expect(start).toHaveBeenCalledTimes(0);
+      expect(launch).toHaveBeenCalledTimes(0);
       await act(async () => {
         fireEvent.click(send);
       });
-      await waitFor(() => expect(sends).toHaveLength(1));
-      expect(start).toHaveBeenCalledWith({
+      await waitFor(() => expect(launch).toHaveBeenCalledTimes(1));
+      expect(launch.mock.calls[0]?.[0]).toMatchObject({
         workspaceId: workspace.workspaceId,
+        repoPath: workspace.repoPath,
         sessionId: entry.id,
       });
-      expect(sends[0]?.[0]).toEqual({
-        runtimeKind: entry.runtimeKind,
-        externalSessionId: session.externalSessionId,
-        workingDirectory: executionTarget.workingDirectory,
-      });
-      expect(sends[0]?.[1]).toEqual([
+      expect(sends).toEqual([]);
+      expect(launch.mock.calls[0]?.[0].parts).toEqual([
         { kind: "text", text: expect.stringContaining("Review uncommitted") },
       ]);
-      expect(sends[0]?.[1][0]).toMatchObject({
+      expect(launch.mock.calls[0]?.[0].parts[0]).toMatchObject({
         text: expect.stringContaining("Review target"),
       });
       expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);

@@ -1,3 +1,4 @@
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -8,7 +9,6 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { createSessionStartWorkflowRunner } from "@/features/session-start";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { hostClient } from "@/lib/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -208,7 +208,6 @@ const createBaseArgs = (): HookArgs => {
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => undefined,
-    humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     scheduleQueryUpdate: () => {},

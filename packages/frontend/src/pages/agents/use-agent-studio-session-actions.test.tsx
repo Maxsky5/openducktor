@@ -1,3 +1,5 @@
+import { createSessionStartWorkflowRunner as createHostRunner } from "@/features/session-start/session-start-orchestration";
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
@@ -16,7 +18,6 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { createSessionStartWorkflowRunner } from "@/features/session-start";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -381,7 +382,6 @@ const createBaseArgs = (): HookArgs => {
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => undefined,
-    humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     scheduleQueryUpdate: () => {},
@@ -713,11 +713,9 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("request changes quick action applies feedback before starting Builder", async () => {
+  test("request changes quick action submits feedback and mutation intent to the host", async () => {
+    let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
     const calls: string[] = [];
-    const humanRequestChangesTask = mock(async () => {
-      calls.push("request-changes");
-    });
     const startAgentSession = mock(async () => {
       calls.push("start-session");
       return sessionIdentity("builder-rework-session");
@@ -744,10 +742,12 @@ describe("useAgentStudioSessionActions", () => {
         variant: "default",
         profileId: "build",
       },
-      humanRequestChangesTask,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
         sendAgentMessage,
+        onRequest: (request) => {
+          submitted = request;
+        },
       }),
       sendAgentMessage,
     });
@@ -801,11 +801,15 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-    expect(humanRequestChangesTask).toHaveBeenCalledWith(
-      "task-1",
-      "Please address the review comments.",
-    );
-    expect(calls).toEqual(["request-changes", "start-session"]);
+    expect(submitted?.beforeStartAction).toEqual({
+      action: "human_request_changes",
+      note: "Please address the review comments.",
+    });
+    expect(submitted?.instruction).toMatchObject({
+      kind: "kickoff",
+      feedback: "Please address the review comments.",
+    });
+    expect(calls).toEqual(["start-session"]);
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "task-1", role: "build", startMode: "fresh" }),
     );
@@ -813,7 +817,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend starts session and sends trimmed message", async () => {
+  test("onSend starts a session and applies composer whitespace rules", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
@@ -852,10 +856,9 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
-      holdForPostStartMessage: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
-      { kind: "text", text: "  hello world  " },
+      { kind: "text", text: "hello world  " },
     ]);
     expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
 
@@ -1810,7 +1813,7 @@ describe("useAgentStudioSessionActions", () => {
       sendAgentMessage,
     });
 
-    expect(harness.getLatest().isSending).toBe(true);
+    expect(harness.getLatest().isSending || harness.getLatest().isStarting).toBe(true);
 
     await harness.run(async () => {
       sendDeferred.resolve();
@@ -2165,7 +2168,6 @@ describe("direct prepared submission", () => {
   ] as const)("ignores an unrelated target branch error for %s", async (role, launchActionId) => {
     const start = mock(async () => sessionIdentity("direct"));
     const send = mock(async () => null);
-    const persist = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
       role,
@@ -2178,8 +2180,10 @@ describe("direct prepared submission", () => {
           qa: { required: true, canSkip: false, available: true, completed: false },
         },
       }),
-      setTaskTargetBranch: persist,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     });
@@ -2190,7 +2194,6 @@ describe("direct prepared submission", () => {
       });
       expect(start).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
-      expect(persist).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -2203,7 +2206,6 @@ describe("direct prepared submission", () => {
   ] as const)("starts %s without unrelated repository settings", async (role, launchActionId) => {
     const start = mock(async () => sessionIdentity("direct"));
     const send = mock(async () => null);
-    const persist = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
       role,
@@ -2216,8 +2218,10 @@ describe("direct prepared submission", () => {
         },
       }),
       repoSettings: null,
-      setTaskTargetBranch: persist,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     });
@@ -2228,7 +2232,6 @@ describe("direct prepared submission", () => {
       });
       expect(start).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
-      expect(persist).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -2242,7 +2245,10 @@ describe("direct prepared submission", () => {
       role: "build",
       launchActionId: "build_implementation_start",
       selectedTask: createTask({ targetBranchError: "Invalid task target branch" }),
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     });
@@ -2268,7 +2274,10 @@ describe("direct prepared submission", () => {
       role: "build",
       launchActionId: "build_implementation_start",
       repoSettings: null,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     });
@@ -2307,7 +2316,10 @@ describe("direct prepared submission", () => {
             qa: { required: true, canSkip: false, available: true, completed: false },
           },
         }),
-        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({
+          startAgentSession: start,
+          sendAgentMessage: send,
+        }),
         sendAgentMessage: send,
         continueInterruptedTurn: async () => undefined,
       };
@@ -2323,7 +2335,6 @@ describe("direct prepared submission", () => {
           role,
           startMode: "fresh",
           selectedModel: args.selectionForNewSession,
-          holdForPostStartMessage: true,
         }),
       );
       expect(send).toHaveBeenCalledTimes(1);
@@ -2357,7 +2368,10 @@ describe("direct prepared submission", () => {
     });
     const args = {
       ...createBaseArgs(),
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     };
@@ -2393,7 +2407,10 @@ describe("prepared composer catalog refresh", () => {
       const send = mock(async () => null);
       const args = {
         ...createBaseArgs(),
-        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({
+          startAgentSession: start,
+          sendAgentMessage: send,
+        }),
         sendAgentMessage: send,
         continueInterruptedTurn: async () => undefined,
       };
@@ -2485,7 +2502,10 @@ describe("direct submission context isolation", () => {
     const args = {
       ...createBaseArgs(),
       scheduleQueryUpdate: navigation,
-      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({
+        startAgentSession: start,
+        sendAgentMessage: send,
+      }),
       sendAgentMessage: send,
       continueInterruptedTurn: async () => undefined,
     };
@@ -2526,7 +2546,10 @@ describe("direct submission context isolation", () => {
       const args = {
         ...createBaseArgs(),
         scheduleQueryUpdate: navigation,
-        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({
+          startAgentSession: start,
+          sendAgentMessage: send,
+        }),
         sendAgentMessage: send,
         continueInterruptedTurn: async () => undefined,
       };
@@ -2578,3 +2601,59 @@ describe("direct submission context isolation", () => {
     },
   );
 });
+
+test.each(["accepted", "unknown", "rejected", "unreadable"] as const)(
+  "task drafts respect the real runner first-send outcome: %s",
+  async (acceptance) => {
+    const send = mock(async () => null);
+    const launch = mock(async (request: import("@openducktor/contracts").WorkflowLaunchRequest) => {
+      if (acceptance === "unreadable") throw new Error("Disconnected");
+      return {
+        ...request,
+        role: "spec" as const,
+        phase: "failed" as const,
+        acceptance,
+        recoveryAllowed: acceptance === "rejected",
+        ownershipSaved: true,
+        completedPreStartActions: [],
+        session: {
+          ...sessionIdentity("saved"),
+          startedAt: "2026-10-04T00:00:00Z",
+          status: "idle" as const,
+        },
+        failure: { message: "Native send failed", stage: "send", cleanupErrors: [] },
+      };
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sendAgentMessage: send,
+      runSessionStartWorkflow: createHostRunner({
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        client: {
+          agentSessionWorkflowLaunch: launch,
+          agentSessionWorkflowLaunchRead: async () => [],
+          agentSessionWorkflowLaunchRecover: async () => {
+            throw new Error("Unexpected resend");
+          },
+        },
+      }),
+    });
+    await harness.mount();
+    try {
+      await harness.run(async (state) => {
+        const result = await state.onSend(createComposerDraft("First instruction"));
+        if (acceptance === "rejected")
+          expect(result).toMatchObject({
+            kind: "recover_draft",
+            onRecovered: expect.any(Function),
+          });
+        else expect(result).toBe(true);
+      });
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  },
+);

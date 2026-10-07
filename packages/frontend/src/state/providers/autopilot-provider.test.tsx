@@ -1,7 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import type { TaskCard, TaskWorktreeSummary, WorkflowLaunchSnapshot } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import * as autopilotActions from "@/features/autopilot/autopilot-actions";
 import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
@@ -23,6 +23,12 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
 import { AutopilotProvider } from "./autopilot-provider";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  getShellBridge,
+} from "@/lib/shell-bridge";
+import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
@@ -140,6 +146,110 @@ const agentOperations: AgentOperationsContextValue = {
 };
 
 describe("AutopilotProvider", () => {
+  test.each(["completed", "failed"] as const)(
+    "automatic launch refreshes the requested worktree after creation: %s",
+    async (phase) => {
+      const originalBridge = getShellBridge();
+      const bridge = createUnavailableShellBridge();
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      let worktree: TaskWorktreeSummary | null = null;
+      bridge.client.taskWorktreeGet = mock(async () => worktree);
+      bridge.client.agentSessionWorkflowLaunch = mock(
+        async (request): Promise<WorkflowLaunchSnapshot> => {
+          worktree = { workingDirectory: "/worktrees/task-1" };
+          return {
+            launchAttemptId: request.launchAttemptId,
+            workspaceId: request.workspaceId,
+            repoPath: request.repoPath,
+            taskId: request.taskId,
+            role: "build",
+            phase,
+            acceptance: phase === "completed" ? "accepted" : "not_submitted",
+            ownershipSaved: phase === "completed",
+            completedPreStartActions: [],
+            ...(phase === "completed"
+              ? {
+                  session: {
+                    externalSessionId: "native",
+                    runtimeKind: "codex",
+                    workingDirectory: "/worktrees/task-1",
+                    startedAt: "2026-10-08T00:00:00Z",
+                    status: "idle",
+                  } as const,
+                }
+              : {
+                  failure: {
+                    message: "Start failed after worktree creation",
+                    stage: "session",
+                    cleanupErrors: [],
+                  } as const,
+                }),
+          };
+        },
+      );
+      const reads = [null, "old-version"].map((taskVersion) =>
+        taskWorktreeQueryOptions({
+          repoPath: "/repo",
+          taskId: "task-1",
+          taskVersion,
+          hostClient: bridge.client,
+        }),
+      );
+      const otherReads = [
+        { repoPath: "/repo", taskId: "other-task" },
+        { repoPath: "/other-repo", taskId: "task-1" },
+      ].map((input) => taskWorktreeQueryOptions({ ...input, hostClient: bridge.client }));
+      queryClient.setQueryData(
+        workspaceQueryKeys.settingsSnapshot(),
+        createSettingsSnapshotFixture({
+          autopilot: {
+            alwaysStartQaReviewsFresh: false,
+            rules: [{ eventId: "taskProgressedToReadyForDev", actionIds: ["startBuilder"] }],
+          },
+        }),
+      );
+      const workspace = createWorkspaceState();
+      const notifications = createNotificationContext();
+      const view = (task: TaskCard) => (
+        <QueryClientProvider client={queryClient}>
+          <WorkspaceStateContext value={workspace}>
+            <TaskSnapshotContext value={{ tasks: [task], isLoadingTasks: false }}>
+              <NotificationContext value={notifications}>
+                <AutopilotProvider />
+              </NotificationContext>
+            </TaskSnapshotContext>
+          </WorkspaceStateContext>
+        </QueryClientProvider>
+      );
+      configureShellBridge(bridge);
+      let unmount: (() => void) | undefined;
+      try {
+        for (const read of [...reads, ...otherReads])
+          expect(await queryClient.fetchQuery(read)).toBeNull();
+        const rendered = render(
+          view(createTaskCardFixture({ id: "task-1", status: "spec_ready" })),
+        );
+        unmount = rendered.unmount;
+        await act(async () => {
+          rendered.rerender(view(createTaskCardFixture({ id: "task-1", status: "ready_for_dev" })));
+        });
+        await waitFor(() =>
+          expect(queryClient.getQueryState(reads[0]!.queryKey)?.isInvalidated).toBe(true),
+        );
+        expect(bridge.client.agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
+        for (const read of reads)
+          expect(await queryClient.fetchQuery(read)).toEqual({
+            workingDirectory: "/worktrees/task-1",
+          });
+        for (const read of otherReads) expect(await queryClient.fetchQuery(read)).toBeNull();
+      } finally {
+        unmount?.();
+        queryClient.clear();
+        configureShellBridge(originalBridge);
+      }
+    },
+  );
+
   test.each([false, true])(
     "shows kickoff failure only when in-app feedback was not handled (%s)",
     async (feedbackHandled) => {

@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
+import { projectWorkflowLaunch } from "./session-read-model/workflow-launch-projection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import {
@@ -8,10 +9,8 @@ import {
   sessionHistoryQueryOptions,
 } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
-import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import { withWorktreeRefresh } from "@/features/session-start/with-worktree-refresh";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
-import { invalidateTerminalList } from "@/state/queries/terminals";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
   ActiveWorkspace,
@@ -29,12 +28,11 @@ import { createSessionHistoryReadGeneration } from "./history/session-history-re
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import { loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
+import { loadRepoPromptOverrides } from "./runtime/runtime";
 import {
   closeProjectedBackgroundQuestions,
   toContextUsage,
 } from "./session-read-model/agent-session-live-projection";
-import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
 
@@ -75,26 +73,15 @@ export function useAgentOrchestratorOperations({
     [dependencies],
   );
   const { queryClient, hostPort, runtimeHostPort, liveSessionHostPort } = resolvedDependencies;
-  const {
-    sessionStore,
-    taskRef,
-    currentWorkspaceRepoPathRef,
-    repoEpochRef,
-    sessionStartGateRef,
-    sessionTurnState,
-  } = useOrchestratorSessionState({
-    workspaceRepoPath,
-    tasks,
-  });
+  const { sessionStore, taskRef, currentWorkspaceRepoPathRef, repoEpochRef, sessionTurnState } =
+    useOrchestratorSessionState({
+      workspaceRepoPath,
+      tasks,
+    });
   const invalidateSessionStopQueries = useCallback(
     ({ repoPath }: { repoPath: string; taskId: string }) =>
       invalidateRepoTaskQueries(queryClient, repoPath),
     [queryClient],
-  );
-  const refreshSessionRecords = useCallback(
-    (repoPath: string, taskId: string) =>
-      refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort),
-    [hostPort, queryClient],
   );
   const updateSession = useCallback<UpdateSession>(
     (identity, updater) => sessionStore.updateSession(identity, updater),
@@ -138,25 +125,6 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
       }),
     [ensureSession, queryClient, sessionStore, sessionTurnState, updateSession],
-  );
-  const loadSourceSession = useMemo(
-    () =>
-      createLoadSourceSession({
-        workspaceRepoPath,
-        repoEpochRef,
-        currentWorkspaceRepoPathRef,
-        readSessionSnapshot: sessionStore.getSessionSnapshot,
-        queryClient,
-        readPort: hostPort,
-      }),
-    [
-      currentWorkspaceRepoPathRef,
-      hostPort,
-      queryClient,
-      repoEpochRef,
-      sessionStore,
-      workspaceRepoPath,
-    ],
   );
   const historyReadGeneration = useMemo(() => createSessionHistoryReadGeneration(), []);
   const sessionHistoryLoaders = useMemo(() => {
@@ -228,42 +196,24 @@ export function useAgentOrchestratorOperations({
         workspaceRepoPath,
         workspaceId,
         adapter: agentEngine,
-        replaceSession: sessionStore.replaceSession,
         readSessionSnapshot: sessionStore.getSessionSnapshot,
         taskRef,
         repoEpochRef,
         currentWorkspaceRepoPathRef,
-        sessionStartGateRef,
         sessionTurnState,
         updateSession,
         closeBackgroundQuestions,
-        canonicalizePath: runtimeHostPort.gitCanonicalizePath,
-        startWorkflowSession: async (input) => {
+        launchWorkflow: withWorktreeRefresh(queryClient, async (input) => {
+          const outcome = await runtimeHostPort.agentSessionWorkflowLaunch(input);
           try {
-            const started = await runtimeHostPort.agentSessionWorkflowStart(input);
-            await invalidateTerminalList(queryClient, {
-              kind: "task",
-              repoPath: input.repoPath,
-              taskId: input.sessionScope.taskId,
-            });
-            return started;
-          } finally {
-            await queryClient.invalidateQueries({
-              queryKey: taskWorktreeQueryKeys.taskWorktree({
-                repoPath: input.repoPath,
-                taskId: input.sessionScope.taskId,
-              }),
-            });
+            projectWorkflowLaunch(sessionStore, queryClient, outcome);
+          } catch (cause) {
+            console.error("Cannot project the prepared workflow session.", cause);
           }
-        },
-        loadTaskDocuments: (repoPath, taskId) =>
-          loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGet),
+          return outcome;
+        }),
         loadRepoPromptOverrides: queryBackedPromptOverrides,
-        loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
         liveSessionHost: liveSessionHostPort,
-        loadSourceSession,
-        loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
-        refreshSessionRecords,
         refreshTaskData,
         invalidateSessionStopQueries,
       }),
@@ -271,19 +221,14 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       currentWorkspaceRepoPathRef,
       closeBackgroundQuestions,
-      hostPort,
       invalidateSessionStopQueries,
-      loadSourceSession,
       queryBackedPromptOverrides,
       queryClient,
       repoEpochRef,
-      refreshSessionRecords,
       refreshTaskData,
       runtimeHostPort,
       liveSessionHostPort,
       sessionStore,
-      sessionHistoryLoaders,
-      sessionStartGateRef,
       sessionTurnState,
       taskRef,
       updateSession,

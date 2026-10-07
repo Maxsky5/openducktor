@@ -29,6 +29,7 @@ export type StartGitConflictResolutionSessionInput = {
   initialSourceSession: AgentSessionIdentity | null;
   targetWorkingDirectory: string;
   assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
+  assertBeforeLaunch?: () => void;
 };
 
 type GitConflictTaskContext = {
@@ -123,6 +124,7 @@ export function useGitConflictResolution({
         initialStartMode: defaultBuilder ? "reuse" : "fresh",
         initialSourceSession: defaultBuilder ? toAgentSessionIdentity(defaultBuilder) : null,
         targetWorkingDirectory: git.workingDirectory,
+        assertBeforeLaunch: () => assertCurrent?.(),
         assertCanSubmit: (recipient, ownsStart) => {
           assertCurrent?.();
           if (normalizeWorkingDirectory(recipient.workingDirectory) !== workingDirectory)
@@ -142,6 +144,7 @@ export function useGitConflictResolution({
       if (failure instanceof GitConflictRequestCancelled) return false;
       assertCurrent?.();
       taskContext.onOpenSession(session);
+      if (session.postStartMessageReceipt) return session.postStartMessageReceipt;
       if (session.postStartActionError) throw session.postStartActionError;
       if (!session.postStartMessageReceipt)
         throw new Error(

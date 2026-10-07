@@ -28,6 +28,7 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
@@ -309,12 +310,18 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
     return Effect.gen({ self: this }, function* () {
-      const scope = yield* requireClaudeSessionScope(
-        input.sessionScope,
-        "send Claude user message",
-      );
-      const session = yield* this.requireSessionForSend(input, runtimeId, scope);
-      assertClaudeSessionRef(session, input, "send message");
+      const session = yield* Effect.gen({ self: this }, function* () {
+        const scope = yield* requireClaudeSessionScope(
+          input.sessionScope,
+          "send Claude user message",
+        );
+        const session = yield* this.requireSessionForSend(input, runtimeId, scope);
+        yield* Effect.try({
+          try: () => assertClaudeSessionRef(session, input, "send message"),
+          catch: (cause) => toHostOperationError(cause, "claudeRuntime.prepare-send"),
+        });
+        return session;
+      }).pipe(Effect.mapError(messageSubmissionRejected("claudeRuntime.prepare-send")));
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
           messageInput: input,
@@ -458,8 +465,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private requireSessionForSend(input: SendInput, runtimeId: string, scope: SessionScope) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
-      assertClaudeSessionRef(existing, input, "send message");
       return fromPromise("claudeRuntime.sendUserMessage", async () => {
+        assertClaudeSessionRef(existing, input, "send message");
         await requireClaudeOpenDucktorMcpForScope(scope, existing.query, {
           externalSessionId: existing.externalSessionId,
           runtimeId,

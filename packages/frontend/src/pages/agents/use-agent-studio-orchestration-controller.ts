@@ -1,7 +1,6 @@
 import type {
   ChatSettings,
   GitBranch,
-  GitTargetBranch,
   PullRequest,
   RepositoryGitProviderContext,
   RuntimeDescriptor,
@@ -48,8 +47,6 @@ type AgentStudioOrchestrationActionsContext = {
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
@@ -226,8 +223,6 @@ export function useAgentStudioOrchestrationController({
     continueInterruptedTurn,
     stopAgentSession,
     updateAgentSessionModel,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
     replyAgentApproval,
     answerAgentQuestion,
     selectAgentStudioSelection,
@@ -344,8 +339,6 @@ export function useAgentStudioOrchestrationController({
     runSessionStartWorkflow,
     sendAgentMessage,
     continueInterruptedTurn,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
     replyAgentApproval,
     answerAgentQuestion,
     scheduleQueryUpdate,

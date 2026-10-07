@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
+import type { AgentSessionIdentity } from "./agent-orchestrator";
 
 export type StartAgentSessionInput =
   | {
@@ -14,9 +14,6 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel: AgentModelSelection;
       startMode: "fresh";
-      holdForPostStartMessage?: boolean;
-      /** Only the request that runs the launch can claim the held session. */
-      claimStart?: (session: AgentSessionState) => void;
       queueIfBusy?: boolean;
       targetWorkingDirectory?: string | null;
     }
@@ -26,8 +23,6 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fork";
       sourceSession: AgentSessionIdentity;
-      holdForPostStartMessage?: boolean;
-      claimStart?: (session: AgentSessionState) => void;
     };
 
 export type StartAgentSessionResult = AgentSessionIdentity;

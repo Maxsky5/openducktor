@@ -80,6 +80,7 @@ export function useAgentStudioRebaseConflictResolution({
         input.initialSourceSession = request.initialSourceSession;
       }
       if (request.assertCanSubmit) input.assertCanSubmit = request.assertCanSubmit;
+      if (request.assertBeforeLaunch) input.assertBeforeLaunch = request.assertBeforeLaunch;
       return startSessionRequest(input);
     },
     [startSessionRequest],

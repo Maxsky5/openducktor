@@ -48,7 +48,6 @@ export type {
 export {
   type SessionStartBeforeAction,
   type SessionStartPostAction,
-  type SessionStartWorkflowIntent,
   type SessionStartWorkflowResult,
   startSessionWorkflow,
 } from "./session-start-workflow";

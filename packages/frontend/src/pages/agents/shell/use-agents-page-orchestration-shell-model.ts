@@ -2,7 +2,7 @@ import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
 import { useMemo } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
-import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
+import type { useAgentOperations } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
@@ -33,8 +33,6 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     | "replyAgentApproval"
     | "answerAgentQuestion"
   >;
-  humanRequestChangesTask: ReturnType<typeof useTasksState>["humanRequestChangesTask"];
-  setTaskTargetBranch: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
 };
 
 export type AgentsPageOrchestrationShellModel = {
@@ -58,8 +56,6 @@ export function useAgentsPageOrchestrationShellModel({
   openTaskDetails,
   runSessionStartWorkflow,
   agentOperations,
-  humanRequestChangesTask,
-  setTaskTargetBranch,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
   const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
 
@@ -110,8 +106,6 @@ export function useAgentsPageOrchestrationShellModel({
       stopAgentSession: agentOperations.stopAgentSession,
       loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
-      humanRequestChangesTask,
-      setTaskTargetBranch,
       replyAgentApproval: agentOperations.replyAgentApproval,
       answerAgentQuestion: agentOperations.answerAgentQuestion,
       selectAgentStudioSelection,

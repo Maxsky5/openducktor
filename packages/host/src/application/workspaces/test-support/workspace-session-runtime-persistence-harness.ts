@@ -1,3 +1,6 @@
+import { AgentSessionMessageRejectedError } from "../../../ports/agent-session-send-error";
+import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
+import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
@@ -8,7 +11,7 @@ import type {
   AgentSessionTranscriptEvent,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { repoConfigSchema } from "@openducktor/contracts";
+import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import type { SqliteTaskStoreTestHarness } from "../../../adapters/sqlite/sqlite-task-store-test-support";
@@ -27,7 +30,10 @@ import { createAgentSessionLiveStateService } from "../../agent-sessions/agent-s
 import { createTaskSessionLifecycleCoordinator } from "../../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createWorkspaceSessionOperationGate } from "../workspace-session-operation-gate";
 import { createWorkspaceSessionRuntimePersistence } from "../workspace-session-runtime-persistence";
-import { createWorkspaceSessionService } from "../workspace-session-service";
+import {
+  type WorkspaceSessionServiceDependencies,
+  createWorkspaceSessionService,
+} from "../workspace-session-service";
 
 type NativeTitleState = { nativeTitle: string | null };
 
@@ -42,7 +48,8 @@ export const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs
 
 export const createPersistenceHarness = async (
   database: SqliteTaskStoreTestHarness,
-  runtimeKind: "opencode" | "codex" = "opencode",
+  runtimeKind: "opencode" | "codex" | "claude" = "opencode",
+  draft = false,
 ) => {
   const ref: AgentSessionLiveRef = {
     repoPath: database.repoPath,
@@ -58,7 +65,7 @@ export const createPersistenceHarness = async (
   const record: WorkspaceSession = {
     id: "session-1",
     runtimeKind,
-    externalSessionId: "native",
+    externalSessionId: draft ? null : "native",
     executionTarget: {
       kind: "local_worktree",
       workingDirectory: ref.workingDirectory,
@@ -86,14 +93,20 @@ export const createPersistenceHarness = async (
   await Effect.runPromise(store.create({ ...storeRef, session: record }));
   const updates: Array<{ workspaceId: string; session: WorkspaceSession }> = [];
   const events: AgentSessionLiveEnvelope[] = [];
+  const starts: import("@openducktor/contracts").AgentSessionControlStartInput[] = [];
   const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
+  const releases: AgentSessionLiveRef[] = [];
+  const stops: AgentSessionLiveRef[] = [];
   const activityTimes: number[] = [];
   const models: AgentSessionControlUpdateModelInput["model"][] = [];
   const titleAttempts: string[] = [];
   const titleState: NativeTitleState = { nativeTitle: null };
+  const beforeControl: Effect.Effect<void, HostError> = Effect.void;
   const state = {
     ...titleState,
+    rejectSend: false,
     failSend: false,
+    failSnapshot: false,
     failModel: false,
     failModelSave: false,
     failRestore: false,
@@ -106,7 +119,11 @@ export const createPersistenceHarness = async (
     firstTurnCompleted: true,
     publishAcceptedMessageDuringSend: false,
     registered: true,
-    beforeControl: Effect.void,
+    beforeResolveParts: Effect.void,
+    nativeStart: Effect.void,
+    beforeSnapshot: Effect.void,
+    beforeBind: Effect.void,
+    beforeControl,
     beforeModelSave: Effect.void,
     beforeTitle: Effect.void,
     beforeTitleSave: Effect.void,
@@ -227,6 +244,35 @@ export const createPersistenceHarness = async (
     live.registerRuntimeAdapter(
       createAgentSessionRuntimeAdapterTestDouble(registration, {
         listSnapshots: () => Effect.succeed([]),
+        listRetainedSnapshots: () => Effect.succeed([]),
+        readSnapshot: (ref) =>
+          state.beforeSnapshot.pipe(
+            Effect.andThen(
+              state.failSnapshot
+                ? failure("snapshot read failed")
+                : Effect.succeed({ type: "missing" as const, ref }),
+            ),
+          ),
+        releaseSession: (input) =>
+          Effect.sync(() => {
+            releases.push(input);
+            return true;
+          }),
+        stopSession: (input) =>
+          Effect.sync(() => {
+            stops.push(input);
+          }),
+        startSession: (input) =>
+          Effect.sync(() => {
+            starts.push(input);
+            return {
+              runtimeKind,
+              externalSessionId: "native",
+              workingDirectory: ref.workingDirectory,
+              startedAt: "2026-09-07T10:00:00Z",
+              status: "idle" as const,
+            };
+          }).pipe(Effect.flatMap((summary) => state.nativeStart.pipe(Effect.as(summary)))),
         resumeSession: (input) =>
           state.beforeControl.pipe(
             Effect.andThen(
@@ -248,6 +294,13 @@ export const createPersistenceHarness = async (
             Effect.andThen(
               Effect.suspend(() => {
                 inputs.push(input);
+                if (state.rejectSend)
+                  return Effect.fail(
+                    new AgentSessionMessageRejectedError({
+                      operation: "test",
+                      message: "Native send rejected",
+                    }),
+                  );
                 if (state.failSend) return failure("runtime rejected message");
                 const acceptedMessage = accepted();
                 if (!state.publishAcceptedMessageDuringSend) return Effect.succeed(acceptedMessage);
@@ -328,32 +381,49 @@ export const createPersistenceHarness = async (
     workspaceName: "Fairnest",
     repoPath: database.repoPath,
   });
-  const workspaceService = () =>
-    createWorkspaceSessionService({
-      terminalService: {
-        acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+  const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    terminalService: {
+      acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+    },
+    lifecycle: createTaskSessionLifecycleCoordinator(),
+    operationGate,
+    sessionTitleGate,
+    isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
+    markCodexTitleSyncPending: persistence.markCodexTitleSyncPending,
+    store: {
+      ...store,
+      bindRuntimeSession: (input) =>
+        state.beforeBind.pipe(Effect.andThen(store.bindRuntimeSession(input))),
+    },
+    settings: {
+      getRepoConfig: () => Effect.succeed(config),
+      listCustomAgentRoles: () => Effect.succeed([]),
+    },
+    runtime: {
+      requireReady: () =>
+        Effect.succeed({
+          runtimeId: "runtime",
+          kind: runtimeKind,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind],
+          runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
+          startedAt: "2026-09-07T10:00:00Z",
+        }),
+    },
+    live: { ...live, ...commands },
+    git: createGitPortTestDouble({
+      canonicalizePath: (value) => Effect.succeed(value),
+      isGitRepository: () => Effect.succeed(true),
+      shareGitCommonDirectory: () => Effect.succeed(true),
+      isRegisteredWorktree: () => Effect.succeed(state.registered),
+    }),
+    settingsConfig: createSettingsConfigTestDouble({}),
+    worktreeFiles: createWorktreeFilePortTestDouble({}),
+    worktreeActions: {
+      createRun: () => {
+        throw new Error("unused");
       },
-      lifecycle: createTaskSessionLifecycleCoordinator(),
-      operationGate,
-      sessionTitleGate,
-      isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
-      markCodexTitleSyncPending: persistence.markCodexTitleSyncPending,
-      store,
-      settings: {
-        getRepoConfig: () => Effect.succeed(config),
-        listCustomAgentRoles: () => Effect.succeed([]),
-      },
-      runtime: { requireReady: () => Effect.die(new Error("unexpected runtime readiness check")) },
-      live: { ...live, ...commands },
-      git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
-      settingsConfig: createSettingsConfigTestDouble({}),
-      worktreeFiles: createWorktreeFilePortTestDouble({}),
-      worktreeActions: {
-        createRun: () => {
-          throw new Error("unused");
-        },
-      },
-    });
+    },
+  });
   return {
     operationGate,
     sessionTitleGate,
@@ -376,6 +446,28 @@ export const createPersistenceHarness = async (
     emit,
     send,
     get,
-    workspaceService,
+    starts,
+    releases,
+    stops,
+    workspaceService: () => createWorkspaceSessionService(workspaceDependencies()),
+    launchService: () =>
+      createWorkspaceSessionLaunchService({
+        ...workspaceDependencies(),
+        live,
+        commands,
+        resolveParts: (parts) =>
+          state.beforeResolveParts.pipe(
+            Effect.andThen(
+              resolveSessionMessageParts(parts, {
+                resolve: ({ path }) => Effect.succeed({ path }),
+              }),
+            ),
+          ),
+        publish: () => Effect.void,
+        publishUpdated: (workspaceId, session) =>
+          Effect.sync(() => {
+            updates.push({ workspaceId, session });
+          }),
+      }),
   };
 };

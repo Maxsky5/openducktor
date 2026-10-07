@@ -1,4 +1,11 @@
 import {
+  workspaceSessionLaunchRequestSchema,
+  workspaceSessionLaunchReadSchema,
+  workspaceSessionLaunchRefSchema,
+  workspaceSessionLaunchSnapshotSchema,
+  type WorkspaceSessionLaunchRequest,
+  type WorkspaceSessionLaunchRef,
+  type WorkspaceSessionLaunchRead,
   workspaceSessionExternalListResultSchema,
   workspaceSessionImportResultSchema,
   type WorkspaceSessionExternalListInput,
@@ -23,6 +30,38 @@ import { arrayResultSchema, type InvokeFn } from "./invoke-utils";
 
 export class HostWorkspaceSessionClient {
   constructor(private readonly invoke: InvokeFn) {}
+
+  workspaceSessionLaunch(input: WorkspaceSessionLaunchRequest) {
+    return this.invoke(
+      "workspace_session_launch",
+      workspaceSessionLaunchRequestSchema.parse(input),
+      workspaceSessionLaunchSnapshotSchema,
+    );
+  }
+
+  workspaceSessionLaunchRead(input: WorkspaceSessionLaunchRead) {
+    return this.invoke(
+      "workspace_session_launch_read",
+      workspaceSessionLaunchReadSchema.parse(input),
+      arrayResultSchema(workspaceSessionLaunchSnapshotSchema, "workspace_session_launch_read"),
+    );
+  }
+
+  workspaceSessionLaunchRecover(input: WorkspaceSessionLaunchRef) {
+    return this.invoke(
+      "workspace_session_launch_recover",
+      workspaceSessionLaunchRefSchema.parse(input),
+      workspaceSessionLaunchSnapshotSchema,
+    );
+  }
+
+  workspaceSessionLaunchCancel(input: WorkspaceSessionLaunchRef) {
+    return this.invoke(
+      "workspace_session_launch_cancel",
+      workspaceSessionLaunchRefSchema.parse(input),
+      workspaceSessionLaunchSnapshotSchema,
+    );
+  }
 
   workspaceSessionExternalList(input: WorkspaceSessionExternalListInput) {
     return this.invoke(

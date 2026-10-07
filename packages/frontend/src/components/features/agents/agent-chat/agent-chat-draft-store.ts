@@ -47,6 +47,22 @@ export type AgentChatDraftCleanupTarget = AgentChatDraftSessionIdentity & {
 const MAX_WAIT_MS = 2_000;
 const TRAILING_WAIT_MS = 1_000;
 const draftEntries = new Map<string, DraftMemoryEntry>();
+const clearListeners = new Map<string, Set<() => void>>();
+let draftVersion = 0;
+
+export const subscribeAgentChatDraftClear = (
+  identity: AgentChatDraftIdentity,
+  onClear: () => void,
+): (() => void) => {
+  const key = toAgentChatDraftStorageKey(identity);
+  const listeners = clearListeners.get(key) ?? new Set<() => void>();
+  listeners.add(onClear);
+  clearListeners.set(key, listeners);
+  return () => {
+    listeners.delete(onClear);
+    if (listeners.size === 0) clearListeners.delete(key);
+  };
+};
 
 let storageOverride: DraftStorage | null = null;
 let attachmentStager: AttachmentStager = stageLocalAttachmentFile;
@@ -245,6 +261,8 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
       );
     }
 
+    // Read the current draft after each file because edits can change which file needs staging.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const didStage = await stageAttachmentForEntry(entry, unpersistableAttachment);
     const currentEntry = readEntry(entry.identity);
     if (currentEntry !== entry) {
@@ -334,7 +352,8 @@ export const setAgentChatDraft = (
 ): number => {
   const entry = upsertEntry(identity, taskId, draft);
   entry.version += 1;
-  entry.userVersion += 1;
+  // A cleared and recreated entry must not match an earlier submitted draft.
+  entry.userVersion = ++draftVersion;
   scheduleEntryFlush(entry);
   return entry.userVersion;
 };
@@ -366,6 +385,7 @@ export const clearAgentChatDraft = (
       clearEntryTimers(entry);
       draftEntries.delete(key);
     }
+    clearListeners.get(key)?.forEach((notify) => notify());
     return true;
   }
 
@@ -380,6 +400,7 @@ export const clearAgentChatDraft = (
     reportPersistenceError(error);
   }
 
+  clearListeners.get(key)?.forEach((notify) => notify());
   return true;
 };
 

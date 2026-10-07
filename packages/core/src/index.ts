@@ -33,3 +33,5 @@ export type { ManagedMcpServer, ManagedMcpServerResolver } from "./ports/managed
 export * from "./notifications/notification-occurrence";
 export * from "./notifications/notification-replay-reason";
 export * from "./notifications/session-error-message";
+export * from "./services/session-launch-actions";
+export * from "./services/autopilot-launch-policy";

@@ -1,3 +1,4 @@
+import { resolveTaskSessionStartTarget } from "./task-session-start-target";
 import type { AgentRole, RuntimeKind, TaskCard, TaskStatus } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -76,6 +77,34 @@ export const createTaskSessionStartPreparationService = ({
   taskSessionLifecycleCoordinator,
 }: TaskSessionStartPreparationDependencies) => {
   return {
+    validateTarget(input: TaskSessionStartPreparationInput): Effect.Effect<void, TaskServiceError> {
+      return Effect.gen(function* () {
+        const dependencies = yield* requireDependencies(() =>
+          requireBuildStartDependencies(
+            gitPort,
+            runtimeDefinitionsService,
+            runtimeRegistry,
+            settingsConfig,
+            worktreeActions,
+            worktreeFiles,
+            workspaceSettingsService,
+          ),
+        );
+        const repoConfig = yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
+          input.canonicalRepoPath,
+        );
+        const targetInput: Parameters<typeof resolveTaskSessionStartTarget>[0] = {
+          settingsConfig: dependencies.settingsConfig,
+          gitPort: dependencies.gitPort,
+          repoConfig,
+          taskId: input.taskId,
+          role: input.role,
+        };
+        if (input.targetWorkingDirectory)
+          targetInput.targetWorkingDirectory = input.targetWorkingDirectory;
+        yield* resolveTaskSessionStartTarget(targetInput);
+      });
+    },
     prepare(
       input: TaskSessionStartPreparationInput,
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
@@ -125,45 +154,16 @@ export const createTaskSessionStartPreparationService = ({
             }),
           );
         }
-        const worktreeBase = repoConfig.worktreeBasePath
-          ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-          : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-        const worktreePath = dependencies.settingsConfig.join(worktreeBase, taskId);
-        let targetsCanonicalWorktree = !input.targetWorkingDirectory;
-        if (input.targetWorkingDirectory) {
-          targetsCanonicalWorktree =
-            normalizePathForComparison(input.targetWorkingDirectory) ===
-            normalizePathForComparison(worktreePath);
-          if (!targetsCanonicalWorktree) {
-            const [targetExists, worktreeExists] = yield* Effect.all([
-              dependencies.settingsConfig.pathExists(input.targetWorkingDirectory),
-              dependencies.settingsConfig.pathExists(worktreePath),
-            ]);
-            if (targetExists && worktreeExists) {
-              const [canonicalTargetPath, canonicalWorktreePath] = yield* Effect.all([
-                dependencies.gitPort.canonicalizePath(input.targetWorkingDirectory),
-                dependencies.gitPort.canonicalizePath(worktreePath),
-              ]);
-              targetsCanonicalWorktree =
-                normalizePathForComparison(canonicalTargetPath) ===
-                normalizePathForComparison(canonicalWorktreePath);
-            }
-          }
-        }
-        if (!targetsCanonicalWorktree) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "targetWorkingDirectory",
-              message: `Fresh ${role} sessions must use canonical task worktree ${worktreePath}.`,
-              details: {
-                taskId,
-                role,
-                expected: worktreePath,
-                actual: input.targetWorkingDirectory,
-              },
-            }),
-          );
-        }
+        const targetInput: Parameters<typeof resolveTaskSessionStartTarget>[0] = {
+          settingsConfig: dependencies.settingsConfig,
+          gitPort: dependencies.gitPort,
+          repoConfig,
+          taskId,
+          role,
+        };
+        if (input.targetWorkingDirectory)
+          targetInput.targetWorkingDirectory = input.targetWorkingDirectory;
+        const { worktreeBase, worktreePath } = yield* resolveTaskSessionStartTarget(targetInput);
 
         let rollback: PreparedTaskWorktree["rollback"] = () => Effect.void;
         const prepared = yield* Effect.result(

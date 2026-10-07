@@ -32,7 +32,10 @@ import {
 import { useSelectedSessionContextLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import {
+  workspaceSessionIdentity,
+  workspaceSessionTitle,
+} from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -43,6 +46,7 @@ import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-act
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
+import { useWorkspaceSessionLaunchRecovery } from "./use-workspace-session-launch-recovery";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
@@ -72,6 +76,7 @@ export function WorkspaceSessionChat({
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
+  useWorkspaceSessionLaunchRecovery(workspace, record.id, workspaceSessionTitle(record));
   const { isSending, isStarting, isSavingModel } = actions;
   const draftPersistence = useMemo(
     () => createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id),

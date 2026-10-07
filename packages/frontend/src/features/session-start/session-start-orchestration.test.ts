@@ -1,13 +1,9 @@
-import { describe, expect, mock, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
+import { describe, expect, test } from "bun:test";
 import {
   createAgentSessionSummaryFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
-import {
-  buildSessionStartModalRequest,
-  executeSessionStartFromDecision,
-} from "./session-start-orchestration";
+import { buildSessionStartModalRequest } from "./session-start-orchestration";
 
 const BUILD_SELECTION = {
   runtimeKind: "opencode" as const,
@@ -15,13 +11,6 @@ const BUILD_SELECTION = {
   modelId: "gpt-5",
   variant: "default",
   profileId: "build-agent",
-};
-
-const CODEX_BUILD_SELECTION = {
-  ...BUILD_SELECTION,
-  runtimeKind: "codex" as const,
-  providerId: "codex",
-  variant: "medium",
 };
 
 const sessionIdentity = (
@@ -200,186 +189,5 @@ describe("session-start-orchestration", () => {
       branch: "release/2026.05",
     });
     expect(request.initialTargetBranchError).toBe("use the override instead");
-  });
-
-  test("maps reuse decisions to workflow execution without a selected model", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("builder-session-2"));
-
-    const result = await executeSessionStartFromDecision({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      request: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "none",
-      },
-      decision: {
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "builder-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      },
-      task: createTaskCardFixture({ id: "TASK-1" }),
-      startAgentSession,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("builder-session-2"),
-      postStartActionError: null,
-    });
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "builder-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      }),
-    );
-    expect(startAgentSession).not.toHaveBeenCalledWith(
-      expect.objectContaining({ selectedModel: expect.anything() }),
-    );
-  });
-
-  test("maps Codex reuse decisions to workflow execution with standard kickoff messaging", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("codex-session-1", "codex"));
-    const sendAgentMessage = mock(async () => null);
-
-    const result = await executeSessionStartFromDecision({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      request: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "kickoff",
-        existingSessionOptions: [
-          {
-            value: "codex-session-1",
-            sourceSession: {
-              externalSessionId: "codex-session-1",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo/worktree",
-            },
-            label: "Codex session",
-            description: "Existing Codex builder session",
-            runtimeKind: "codex",
-            selectedModel: CODEX_BUILD_SELECTION,
-          },
-        ],
-      },
-      decision: {
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "codex-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      },
-      task: createTaskCardFixture({ id: "TASK-1" }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("codex-session-1", "codex"),
-      postStartActionError: null,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("codex-session-1", "codex"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("taskId TASK-1"),
-      }),
-    ]);
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "codex-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      }),
-    );
-  });
-
-  test("maps fork decisions to workflow execution with the selected model and source session", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("builder-session-fork"));
-
-    await executeSessionStartFromDecision({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      request: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "none",
-      },
-      decision: {
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession: {
-          externalSessionId: "builder-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      },
-      task: createTaskCardFixture({ id: "TASK-1" }),
-      startAgentSession,
-    });
-
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession: {
-          externalSessionId: "builder-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      }),
-    );
-  });
-
-  test("returns post-start failures after the kickoff send finishes", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {
-      throw new Error("kickoff failed");
-    });
-
-    const result = await executeSessionStartFromDecision({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      request: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "kickoff",
-      },
-      decision: {
-        startMode: "fresh",
-        selectedModel: BUILD_SELECTION,
-      },
-      task: createTaskCardFixture({ id: "TASK-1" }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-new"),
-      postStartActionError: expect.objectContaining({ message: "kickoff failed" }),
-      retryPostStartMessage: expect.any(Function),
-    });
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        holdForPostStartMessage: true,
-      }),
-    );
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
   });
 });

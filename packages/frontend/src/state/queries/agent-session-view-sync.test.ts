@@ -1,7 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { agentSessionQueryKeys, type AgentSessionReadPort } from "./agent-sessions";
+import {
+  agentSessionQueryKeys,
+  updateAgentSessionListQuery,
+  type AgentSessionReadPort,
+} from "./agent-sessions";
 import { createAgentSessionViewSync } from "./agent-session-view-sync";
 
 const event = (): ExternalTaskSyncEvent => ({
@@ -32,6 +36,57 @@ const readPort = (overrides: Partial<TestReadPort> = {}): TestReadPort => ({
 });
 
 describe("AgentSessionViewSync", () => {
+  test("a committed session list completes a task-stream refresh without an error", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const older = Promise.withResolvers<[]>();
+    const started = Promise.withResolvers<void>();
+    const loadSessions = mock(() => {
+      started.resolve();
+      return older.promise;
+    });
+    const records = [
+      {
+        externalSessionId: "native",
+        role: "qa" as const,
+        runtimeKind: "codex" as const,
+        workingDirectory: "/repo",
+        startedAt: "2026-10-09T00:00:00.000Z",
+        selectedModel: null,
+      },
+    ];
+    const refreshLiveSessions = mock(async () => undefined);
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const unsubscribe = new QueryObserver(queryClient, {
+      queryKey,
+      queryFn: loadSessions,
+      initialData: [],
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    const sync = createAgentSessionViewSync({
+      queryClient,
+      readPort: readPort(),
+      removeTaskSessions: () => {},
+      refreshLiveSessions,
+    });
+    try {
+      const refreshing = sync.reconcileExternalEvent(event());
+      await started.promise;
+      updateAgentSessionListQuery(queryClient, "/repo", {
+        taskId: "task-1",
+        agentSessions: records,
+      });
+      older.resolve([]);
+      await refreshing;
+      expect(queryClient.getQueryState(queryKey)?.status).toBe("success");
+      expect(queryClient.getQueryData<typeof records>(queryKey)).toEqual(records);
+      expect(refreshLiveSessions).toHaveBeenCalledTimes(1);
+      expect(loadSessions).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+      queryClient.clear();
+    }
+  });
+
   test("refreshes live sessions when task session ownership changes", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");

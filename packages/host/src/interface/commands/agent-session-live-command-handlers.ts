@@ -1,7 +1,11 @@
 import {
+  workflowLaunchRequestSchema,
+  workflowLaunchRefSchema,
+  workflowLaunchReadSchema,
+} from "@openducktor/contracts";
+import type { WorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
+import {
   type AgentRepositorySessionStartInput,
-  type AgentSessionControlSendInput,
-  type AgentSessionUserMessagePart,
   type AgentSessionControlSummary,
   type AgentWorkflowSessionStartInput,
   agentRepositorySessionStartInputSchema,
@@ -21,15 +25,13 @@ import {
   agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { z } from "zod";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type { TaskServiceError } from "../../application/tasks/task-service";
-import type {
-  LocalAttachmentService,
-  LocalAttachmentServiceError,
-} from "../../application/attachments/local-attachment-service";
+import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import { resolveSessionAttachments } from "../../application/attachments/resolve-session-message-parts";
+import type { z } from "zod";
 import type { HostCommandArgs } from "./command-inputs";
 
 const parseCommandInput = <Output>(
@@ -57,29 +59,6 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
 };
-
-const resolveSendInputPart = (
-  part: AgentSessionUserMessagePart,
-  attachmentResolver: LocalAttachmentResolver,
-): Effect.Effect<AgentSessionUserMessagePart, LocalAttachmentServiceError> =>
-  Effect.gen(function* () {
-    if (part.kind !== "attachment") {
-      return part;
-    }
-    const { path } = yield* attachmentResolver.resolve({ path: part.attachment.path });
-    return {
-      ...part,
-      attachment: { ...part.attachment, path },
-    };
-  });
-
-const resolveSendInputAttachments = (
-  input: AgentSessionControlSendInput,
-  attachmentResolver: LocalAttachmentResolver,
-) =>
-  Effect.forEach(input.parts, (part) => resolveSendInputPart(part, attachmentResolver)).pipe(
-    Effect.map((parts) => ({ ...input, parts })),
-  );
 
 export const createAgentSessionLiveCommandHandlers = (
   service: AgentSessionCommandService,
@@ -110,7 +89,11 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_send",
       ).pipe(
-        Effect.flatMap((input) => resolveSendInputAttachments(input, attachmentResolver)),
+        Effect.flatMap((input) =>
+          resolveSessionAttachments(input.parts, attachmentResolver).pipe(
+            Effect.map((parts) => ({ ...input, parts })),
+          ),
+        ),
         Effect.flatMap(service.sendUserMessage),
       ),
     agent_session_control_start: (args) =>
@@ -175,4 +158,26 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_live_reply_question",
       ).pipe(Effect.flatMap(service.replyQuestion)),
+  }) satisfies HostCommandHandlerDefinitions;
+
+export const createWorkflowLaunchCommandHandlers = (workflowLaunchService: WorkflowLaunchService) =>
+  ({
+    agent_session_workflow_launch: (args) =>
+      parseCommandInput(workflowLaunchRequestSchema, args, "agent_session_workflow_launch").pipe(
+        Effect.flatMap(workflowLaunchService.launch),
+      ),
+    agent_session_workflow_launch_read: (args) =>
+      parseCommandInput(workflowLaunchReadSchema, args, "agent_session_workflow_launch_read").pipe(
+        Effect.flatMap(workflowLaunchService.read),
+      ),
+    agent_session_workflow_launch_recover: (args) =>
+      parseCommandInput(
+        workflowLaunchRefSchema,
+        args,
+        "agent_session_workflow_launch_recover",
+      ).pipe(Effect.flatMap(workflowLaunchService.recover)),
+    agent_session_workflow_launch_cancel: (args) =>
+      parseCommandInput(workflowLaunchRefSchema, args, "agent_session_workflow_launch_cancel").pipe(
+        Effect.flatMap(workflowLaunchService.cancel),
+      ),
   }) satisfies HostCommandHandlerDefinitions;

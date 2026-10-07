@@ -1,3 +1,4 @@
+import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import { createCodexSessionImportAdapter } from "./codex-session-import";
 import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
@@ -39,6 +40,7 @@ import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
   toAcceptedCodexMessageError,
+  toCodexMessageSendError,
 } from "./codex-live-session-acceptance";
 import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
@@ -423,6 +425,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           ),
         sendUserMessage: (input) =>
           bindControlPolicy(input, "send-user-message").pipe(
+            Effect.mapError(messageSubmissionRejected("codex-live-session.prepare-send")),
             Effect.flatMap((boundInput) => {
               const { resolvedQuestionRequestIds, model, parts, systemPrompt, ...requiredInput } =
                 boundInput;
@@ -440,11 +443,8 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 request.systemPrompt = systemPrompt;
               }
               return Effect.tryPromise({
-                try: () => controller.sendUserMessage(request),
-                catch: sessionError(
-                  "codex-live-session.send-user-message",
-                  input.externalSessionId,
-                ),
+                try: () => controller.sendUserMessage(request, { requireNativeAdmission: true }),
+                catch: (cause) => toCodexMessageSendError(cause, toCodexLiveSessionRef(input)),
               });
             }),
             Effect.flatMap((value) =>

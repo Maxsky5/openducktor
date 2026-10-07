@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import { isCancelledError, QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionReadPort,
   agentSessionListHydrationQueryOptions,
@@ -34,6 +34,71 @@ const createReadPort = (
 });
 
 describe("agent session query cache helpers", () => {
+  test("a committed list completes a batch that joined its older read", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const older = Promise.withResolvers<AgentSessionRecord[]>();
+    const singleRead = mock(() => older.promise);
+    const batchRead = mock(async () => [{ taskId: "task-2", agentSessions: [] }]);
+    const readPort = { agentSessionsList: singleRead, agentSessionsListForTasks: batchRead };
+    const initialRead = queryClient.fetchQuery(
+      agentSessionListQueryOptions("/repo", "task-1", readPort),
+    );
+    const canceledRead = initialRead.catch(() => undefined);
+    const loading = loadAgentSessionListsFromQuery(queryClient, "/repo", ["task-1", "task-2"], {
+      readPort,
+    }).then(
+      (data) => ({ data, error: null }),
+      (error) => ({ data: null, error }),
+    );
+    updateAgentSessionListQuery(queryClient, "/repo", {
+      taskId: "task-1",
+      agentSessions: [sessionFixture],
+    });
+    older.resolve([]);
+    const result = await loading;
+    await canceledRead;
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual({ "task-1": [sessionFixture], "task-2": [] });
+    expect(batchRead).toHaveBeenCalledTimes(1);
+    expect(singleRead).toHaveBeenCalledTimes(1);
+    queryClient.clear();
+  });
+
+  test.each(["invalidate", "remove", "failure"] as const)(
+    "a joined read does not hide %s without a committed replacement",
+    async (change) => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const older = Promise.withResolvers<AgentSessionRecord[]>();
+      const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+      queryClient.setQueryData(queryKey, []);
+      const readPort = { agentSessionsList: () => older.promise };
+      const reading = queryClient
+        .fetchQuery({ ...agentSessionListQueryOptions("/repo", "task-1", readPort), staleTime: 0 })
+        .catch(() => undefined);
+      const loading = hydrateAgentSessionListQueries(
+        queryClient,
+        "/repo",
+        ["task-1"],
+        createReadPort(async () => []),
+      ).catch((error) => error);
+      if (change === "invalidate")
+        await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+      else if (change === "remove") {
+        await removeAgentSessionListQueries(queryClient, "/repo", ["task-1"]);
+        queryClient.setQueryData(queryKey, [sessionFixture]);
+      } else older.reject(new Error("Host read failed"));
+      const error = await loading;
+      expect(
+        change === "failure"
+          ? error instanceof Error && error.message === "Host read failed"
+          : isCancelledError(error),
+      ).toBe(true);
+      older.resolve([]);
+      await reading;
+      queryClient.clear();
+    },
+  );
+
   test("a saved activity update wins over an older batch without another host read", async () => {
     const queryClient = new QueryClient();
     const batch =

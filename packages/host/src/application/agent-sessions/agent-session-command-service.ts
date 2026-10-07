@@ -7,7 +7,7 @@ import type {
   PreparedSessionModelUpdate,
 } from "./agent-session-operation-policy";
 import { createTaskWorkflowSessionPolicy } from "./task-workflow-session-policy";
-import { toControlSessionRef } from "./task-workflow-session-storage";
+import { resumeAndSaveSession } from "./session-resume";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 
 type ObservedSessionCommands = Pick<
@@ -105,25 +105,12 @@ export const createAgentSessionCommandService = ({
               const { resumeMode: _resumeMode, ...continuationInput } = prepared.input;
               return yield* runtime.continueInterruptedTurn(continuationInput);
             }
-            return yield* Effect.uninterruptible(
-              Effect.gen(function* () {
-                const summary = yield* runtime.resumeSession(prepared.input);
-                const saved = yield* Effect.result(prepared.save(summary));
-                if (saved._tag === "Success") return summary;
-                const cleanup = yield* Effect.result(
-                  runtime.releaseSession(toControlSessionRef(repoPath, summary)),
-                );
-                if (cleanup._tag === "Failure") {
-                  return yield* new HostOperationError({
-                    operation: "agent-session.resume",
-                    message: `${saved.failure.message} Cleanup failed: ${cleanup.failure.message}`,
-                    cause: { storeFailure: saved.failure, cleanupFailure: cleanup.failure },
-                    details: { ref },
-                  });
-                }
-                return yield* Effect.fail(saved.failure);
-              }),
-            );
+            return yield* resumeAndSaveSession({
+              ref,
+              resume: runtime.resumeSession(prepared.input),
+              save: prepared.save,
+              release: runtime.releaseSession,
+            }).pipe(Effect.map(({ session }) => session));
           }),
         );
       }),
