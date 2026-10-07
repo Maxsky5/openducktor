@@ -37,6 +37,11 @@ type SessionRowRange = {
   range: RowRange;
 };
 
+type ScrollSnapshot = {
+  scrollTop: number;
+  scrollHeight: number;
+};
+
 type ExpandBeforeOptions = {
   trimBottomAfterPrepend?: boolean;
 };
@@ -122,9 +127,9 @@ export function useAgentChatRowWindow({
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousRowsLengthRef = useRef(rows.length);
   const previousFirstVisibleRowKeyRef = useRef(rows[range.startRow]?.key ?? null);
-  // The scroll height before rows mount or unmount at the top, to keep the visible rows in place.
+  // The scroll state before rows mount or unmount at the top, to keep the visible rows in place.
   const scrollHeightBeforePrependRef = useRef<number | null>(null);
-  const scrollHeightBeforeTrimTopRef = useRef<number | null>(null);
+  const scrollBeforeTrimTopRef = useRef<ScrollSnapshot | null>(null);
   const shouldTrimBottomAfterPrependRef = useRef(false);
   const shouldTrimTopAfterAppendRef = useRef(false);
   const lastScrollTopRef = useRef(0);
@@ -225,14 +230,18 @@ export function useAgentChatRowWindow({
   );
 
   useLayoutEffect(() => {
-    const scrollHeightBeforeTrimTop = scrollHeightBeforeTrimTopRef.current;
-    if (scrollHeightBeforeTrimTop === null) return;
+    const scrollBeforeTrimTop = scrollBeforeTrimTopRef.current;
+    if (scrollBeforeTrimTop === null) return;
 
-    scrollHeightBeforeTrimTopRef.current = null;
+    scrollBeforeTrimTopRef.current = null;
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    container.scrollTop += Math.min(0, container.scrollHeight - scrollHeightBeforeTrimTop);
+    // The layout after the trim can clamp the scroll position to the new, smaller scroll range.
+    // So this sets the position from the value before the trim, not from the clamped value.
+    container.scrollTop =
+      scrollBeforeTrimTop.scrollTop +
+      Math.min(0, container.scrollHeight - scrollBeforeTrimTop.scrollHeight);
     lastScrollTopRef.current = container.scrollTop;
     resumeScrollAnchoring();
   });
@@ -245,6 +254,8 @@ export function useAgentChatRowWindow({
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    // The user can scroll between the prepend request and this commit, so the change is added to the
+    // current position. Rows only mount here, so the layout cannot clamp that position.
     container.scrollTop += Math.max(0, container.scrollHeight - scrollHeightBeforePrepend);
     lastScrollTopRef.current = container.scrollTop;
     resumeScrollAnchoring();
@@ -282,7 +293,10 @@ export function useAgentChatRowWindow({
     const rowsToTrim = trimRowCount(currentRange);
     if (rowsToTrim <= 0) return;
 
-    scrollHeightBeforeTrimTopRef.current = container.scrollHeight;
+    scrollBeforeTrimTopRef.current = {
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+    };
     suspendScrollAnchoring();
     setRange({
       startRow: currentRange.startRow + rowsToTrim,

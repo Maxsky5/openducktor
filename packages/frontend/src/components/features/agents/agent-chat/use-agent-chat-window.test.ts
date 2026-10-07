@@ -206,6 +206,7 @@ const mountHarness = async (
     extraContentHeightPx?: { current: number };
     containerClientHeight?: number;
     rowHeightPx?: number;
+    getRowHeightPx?: (row: AgentChatTranscriptRow) => number;
   },
 ): Promise<{
   getLatestResult: () => HookResult;
@@ -217,6 +218,7 @@ const mountHarness = async (
   const { latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
   const extraContentHeightPx = options?.extraContentHeightPx ?? { current: 0 };
   const rowHeightPx = options?.rowHeightPx ?? ROW_HEIGHT_PX;
+  const getRowHeightPx = options?.getRowHeightPx ?? (() => rowHeightPx);
 
   if (options?.attachDom) {
     const container = document.createElement("div");
@@ -243,15 +245,22 @@ const mountHarness = async (
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
       get: () =>
-        getLatestResult(latestResultRef).visibleRows.length * rowHeightPx +
-        extraContentHeightPx.current,
+        getLatestResult(latestResultRef).visibleRows.reduce(
+          (height, row) => height + getRowHeightPx(row),
+          0,
+        ) + extraContentHeightPx.current,
     });
+    // Like a browser layout, a read clamps the position when the scroll range gets smaller.
+    const clampScrollTop = (value: number): number =>
+      Math.max(0, Math.min(value, getMaxScrollTop(container)));
     Object.defineProperty(container, "scrollTop", {
       configurable: true,
-      get: () => scrollTopValue,
+      get: () => {
+        scrollTopValue = clampScrollTop(scrollTopValue);
+        return scrollTopValue;
+      },
       set: (value: number) => {
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        scrollTopValue = Math.max(0, Math.min(value, maxScrollTop));
+        scrollTopValue = clampScrollTop(value);
       },
     });
 
@@ -731,6 +740,61 @@ describe("useAgentChatWindow", () => {
     );
     expect(harness.getLatestResult().visibleRows.at(-1)?.key).toBe(
       rows[AGENT_CHAT_ROW_WINDOW_SIZE * 4 - 1]?.key,
+    );
+
+    await harness.unmount();
+  });
+
+  test("downward trim-top keeps the visible rows in place when it removes more height than remains below", async () => {
+    const tallRowHeightPx = 200;
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const tallRowKeys = new Set(rows.slice(0, AGENT_CHAT_ROW_WINDOW_SIZE).map((row) => row.key));
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        getRowHeightPx: (row) => (tallRowKeys.has(row.key) ? tallRowHeightPx : ROW_HEIGHT_PX),
+      },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const scrollToMountedBottom = async (): Promise<void> => {
+      await act(async () => {
+        container.scrollTop = getMaxScrollTop(container);
+        await dispatchPointerDown(container);
+        await dispatchScroll(container);
+      });
+      await animationFrameDriver.flushFrames();
+    };
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+    await scrollToMountedBottom();
+    await scrollToMountedBottom();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(harness.getLatestResult().visibleRows).toHaveLength(MAX_MOUNTED_ROW_COUNT);
+
+    // The trimmed top rows are taller than the appended rows and the rows below the viewport,
+    // so the scroll range after the trim ends above the scroll position before the trim.
+    const scrollTopBeforeTrim = getMaxScrollTop(container);
+    await scrollToMountedBottom();
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE);
+    expect(getMaxScrollTop(container)).toBeLessThan(scrollTopBeforeTrim);
+    expect(container.scrollTop).toBe(
+      scrollTopBeforeTrim - AGENT_CHAT_ROW_WINDOW_SIZE * tallRowHeightPx,
     );
 
     await harness.unmount();
