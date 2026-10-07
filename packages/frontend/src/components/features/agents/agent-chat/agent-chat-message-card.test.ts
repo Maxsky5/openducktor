@@ -9,7 +9,7 @@ import {
 } from "./agent-chat-message-card-test-harness";
 
 describe("AgentChatMessageCard messages", () => {
-  test("keeps the runtime visible when Codex history omits the turn model", () => {
+  test("shows only the runtime when Codex history omits the turn model", () => {
     const [message] = historyToChatMessages(
       [
         {
@@ -36,8 +36,9 @@ describe("AgentChatMessageCard messages", () => {
       createMessageCardElement({ message, ...createCodexMessageCardTestProps() }),
     );
 
-    expect(html).toContain("Codex");
-    expect(html).toContain("Model unavailable");
+    const text = new DOMParser().parseFromString(html, "text/html").body.textContent;
+    expect(text).toContain("codex");
+    expect(text).not.toContain("Model unavailable");
   });
 
   test("renders assistant footer with agent, provider/model, and variant labels", () => {

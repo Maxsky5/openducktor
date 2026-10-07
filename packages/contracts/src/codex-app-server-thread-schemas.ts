@@ -385,6 +385,8 @@ export const codexAppServerThreadSchema = z.object({
   projectId: z.string().nullable(),
   historyMode: z.enum(["legacy", "paginated"]),
   modelProvider: z.string(),
+  model: z.string().nullable(),
+  reasoningEffort: codexAppServerReasoningEffortSchema.nullable(),
   createdAt: codexInt64Schema,
   updatedAt: codexInt64Schema,
   recencyAt: codexInt64Schema.nullable(),

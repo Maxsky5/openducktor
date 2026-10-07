@@ -22,6 +22,8 @@ const codexThread = (status: CodexAppServerThreadStatus, cwd = "/repo/worktree")
     projectId: null,
     historyMode: "paginated",
     modelProvider: "openai",
+    model: null,
+    reasoningEffort: null,
     createdAt: 1,
     updatedAt: 1,
     recencyAt: 1,

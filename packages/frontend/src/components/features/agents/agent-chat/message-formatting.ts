@@ -1,4 +1,4 @@
-import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { agentModelInfoParts } from "@/lib/agent-model-presentation";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
@@ -83,12 +83,7 @@ export const getAssistantFooterData = (
   // Native history can omit a turn's model. The session's current model does not prove which one answered.
   if (!message.meta.modelId?.trim() && runtimeKind) {
     return {
-      infoParts: [
-        message.meta.profileId?.trim(),
-        RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label,
-        "Model unavailable",
-        message.meta.variant?.trim(),
-      ].filter((part): part is string => Boolean(part)),
+      infoParts: agentModelInfoParts({ ...message.meta, providerId: runtimeKind }, modelCatalog),
     };
   }
 
