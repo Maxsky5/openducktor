@@ -93,7 +93,7 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Planner owns the technical solution",
+      "Planner owns the technical design",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
       "saving the canonical spec with odt_set_spec",
       "read-only mode",
@@ -163,13 +163,14 @@ describe("buildAgentSystemPrompt", () => {
 
     expectPromptToContainAll(prompt, [
       "Describe behavior as users or external systems experience it",
-      "Planner owns the technical solution: architecture, file changes, internal APIs, library choices, configuration keys, and code-level identifiers",
+      "Planner owns the technical design: architecture, boundaries, contracts, and library choices",
+      "Builder owns file changes, configuration keys, and code-level identifiers",
       "only when the task or user explicitly makes it part of the required outcome or scope",
       "or when it defines an external contract the change must preserve",
       "State its source and required effect",
       "Leave repository coding conventions and internal design rules to Planner and Builder",
       "state the visible label and click behavior",
-      "Planner chooses the locale key and string accessor",
+      "Builder chooses the locale key and string accessor",
     ]);
   });
 
