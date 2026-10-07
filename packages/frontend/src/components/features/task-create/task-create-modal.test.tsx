@@ -144,7 +144,10 @@ describe("TaskCreateModal", () => {
       await act(async () => {
         rendered.rerender(createElement(TaskCreateModal, { ...props, open: false }));
       });
-      await waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 250 });
+      // Formatting DOM nodes on a failed poll can block the timer that restores focus.
+      await waitFor(() => expect(document.activeElement === trigger).toBe(true), {
+        timeout: 250,
+      });
     } finally {
       await act(async () => rendered.unmount());
       trigger.remove();
