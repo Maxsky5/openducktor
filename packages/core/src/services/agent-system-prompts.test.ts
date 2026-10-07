@@ -29,6 +29,12 @@ const expectPromptToContainAll = (prompt: string, fragments: string[]) => {
   }
 };
 
+const expectHeadingsInOrder = (prompt: string, headings: string[]) => {
+  const positions = headings.map((heading) => prompt.indexOf(`- ${heading}:`));
+  expect(positions).not.toContain(-1);
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+};
+
 describe("buildAgentSystemPrompt", () => {
   test("includes structured workflow guards, tool protocol, and task lock", () => {
     const prompt = buildAgentSystemPrompt({
@@ -87,7 +93,7 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Planner owns the technical solution",
+      "Planner owns the technical design",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
       "saving the canonical spec with odt_set_spec",
       "read-only mode",
@@ -145,6 +151,8 @@ describe("buildAgentSystemPrompt", () => {
       "the relevant conditions, and the expected result",
       "Keep observable outcomes and limits beside the requirement they qualify",
       "Do not add a separate acceptance-criteria section or completion checklist",
+      "Add a diagram for a multi-step user flow or a set of user-visible states",
+      "Keep diagrams and tables at product level, without internal modules or code",
     ]);
     expect(prompt).not.toContain("## Acceptance criteria");
     expect(prompt).not.toContain("requirements and acceptance criteria cover the agreed scope");
@@ -155,13 +163,14 @@ describe("buildAgentSystemPrompt", () => {
 
     expectPromptToContainAll(prompt, [
       "Describe behavior as users or external systems experience it",
-      "Planner owns the technical solution: architecture, file changes, internal APIs, library choices, configuration keys, and code-level identifiers",
+      "Planner owns the technical design: architecture, boundaries, contracts, and library choices",
+      "Builder owns file changes, configuration keys, and code-level identifiers",
       "only when the task or user explicitly makes it part of the required outcome or scope",
       "or when it defines an external contract the change must preserve",
       "State its source and required effect",
       "Leave repository coding conventions and internal design rules to Planner and Builder",
       "state the visible label and click behavior",
-      "Planner chooses the locale key and string accessor",
+      "Builder chooses the locale key and string accessor",
     ]);
   });
 
@@ -176,9 +185,15 @@ describe("buildAgentSystemPrompt", () => {
         "Use a # title, ## topic headings",
         "Leave blank lines between Markdown blocks",
         "Use paragraphs to explain context and reasoning",
-        "requirements, decisions, and findings in separate list items",
+        "Give each requirement, decision, and finding its own list item, table row, or subheading",
         "conditions and exceptions beside the rule they qualify",
         "use tables when entries share the same fields",
+        "fenced code blocks with a language tag",
+        "Add a Mermaid diagram in a fenced code block tagged mermaid",
+        "keep every requirement and decision in the text as well",
+        "do not add HTML, click handlers, or theme and style directives",
+        'declare such a state with state "In review (AI)" as Review',
+        "Draw flowcharts top to bottom with flowchart TD",
       ]);
     },
   );
@@ -206,13 +221,22 @@ describe("buildAgentSystemPrompt", () => {
       "read-only mode",
       "Make technical decisions within the agreed scope",
       "no required design decision remains open",
+      "Cover all requirements, including scope and constraints",
+      "Use the spec's requirement names when a spec exists",
+      "state ownership, and failure behavior",
+      "Work as a software architect",
+      "Stay at the architecture level",
+      "Include a detail only when changing it would change the architecture, a contract, or a required behavior",
+      "Do not show internal module functions, configuration objects, or call sites",
+      "refer to requirements by name instead of restating the spec",
+      "Show the target design in one Mermaid diagram",
+      "Write only its signature or shape",
+    ]);
+    expectHeadingsInOrder(prompt, [
       "## Approach",
       "## Design",
       "## Requirement coverage",
-      "Cover all requirements, including scope and constraints",
-      "Use the spec's requirement names when a spec exists",
       "## Risks and constraints",
-      "state ownership, and failure behavior",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
@@ -283,10 +307,11 @@ describe("buildAgentSystemPrompt", () => {
       "Choose checks based on the changed behavior and risk",
       "Do not reject valid work for a different implementation order or method",
       "material excess complexity",
-      "severity, location, impact, and a concrete correction",
+      "Give its impact, the concrete correction",
       "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
       "read-only mode",
     ]);
+    expectHeadingsInOrder(prompt, ["## Verdict", "## Findings", "## Verification"]);
     expect(prompt).not.toContain("Run at least two review lenses");
     expect(prompt).not.toContain("- odt_build_completed(");
   });
@@ -308,20 +333,20 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 6,
+        builtinVersion: 7,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 6, 7, "build"],
+    ["system.shared.workflow_guards", 7, 8, "build"],
     ["system.shared.tool_protocol", 8, 9, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 5, 6, "spec"],
-    ["system.role.planner.base", 6, 7, "planner"],
+    ["system.role.spec.base", 6, 7, "spec"],
+    ["system.role.planner.base", 7, 8, "planner"],
     ["system.role.build.base", 4, 5, "build"],
-    ["system.role.qa.base", 4, 5, "qa"],
+    ["system.role.qa.base", 5, 6, "qa"],
     ["kickoff.spec_initial", 4, 5, "spec"],
     ["kickoff.planner_initial", 4, 5, "planner"],
     ["kickoff.build_implementation_start", 4, 5, "build"],

@@ -77,7 +77,7 @@ export function MarkdownMermaid({
   const diagram =
     preview?.status === "ready" ? (
       <span
-        className="flex size-full items-center justify-center overflow-auto [&_svg]:max-h-full [&_svg]:max-w-full"
+        className="flex w-full justify-center [&_svg]:h-auto [&_svg]:max-w-full"
         // oxlint-disable-next-line react/no-danger -- Mermaid strict-mode output passes through DOMPurify
         dangerouslySetInnerHTML={{ __html: preview.svg }}
       />
@@ -88,15 +88,15 @@ export function MarkdownMermaid({
       <section
         aria-busy={!preview}
         aria-label="Mermaid diagram"
-        className="my-3 h-80 overflow-hidden rounded-md border border-border bg-white sm:h-96"
+        className="my-3 overflow-hidden rounded-md border border-border bg-white"
       >
-        <div className="flex h-full items-center justify-center overflow-auto p-3">
+        <div className="flex min-h-40 items-center justify-center p-3">
           {expandable && preview?.status === "ready" ? (
             <DialogTrigger asChild>
               <button
                 type="button"
                 aria-label="Open diagram preview"
-                className="group relative flex size-full cursor-zoom-in items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group relative flex w-full cursor-zoom-in justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setOpenSvg(preview.svg)}
               >
                 {diagram}
