@@ -1,459 +1,192 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { PropsWithChildren, ReactElement } from "react";
+import type { PropsWithChildren } from "react";
 import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
-import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  type AgentSessionFixtureOverrides,
-  createAgentSessionFixture,
-} from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
+} from "@/state/app-state-contexts";
+import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { AgentSessionHistoryLoadContextValue } from "@/types/state-slices";
-import { createSessionMessagesState } from "../support/messages";
 import { useSelectedSessionHistoryLoad } from "./use-selected-session-history-load";
 
-const selectedSessionIdentity: AgentSessionIdentity = {
+const identity = {
   externalSessionId: "session-1",
-  runtimeKind: "opencode",
+  runtimeKind: "claude" as const,
   workingDirectory: "/repo/worktree",
 };
-
-const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState => {
-  return createAgentSessionFixture(
-    {
-      externalSessionId: selectedSessionIdentity.externalSessionId,
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-
-      status: "idle",
-      runtimeStatusMessage: null,
-      startedAt: "2026-06-12T08:00:00.000Z",
-      runtimeKind: selectedSessionIdentity.runtimeKind,
-      workingDirectory: selectedSessionIdentity.workingDirectory,
-      historyLoadState: "not_requested",
-    },
-    overrides,
-  );
-};
-
-const createProps = ({
-  session = createSession(),
-  runtimeReadinessState = "ready",
-}: {
-  session?: AgentSessionState | null;
-  runtimeReadinessState?: RuntimeReadinessState;
-} = {}) => ({
-  session,
-  runtimeReadinessState,
-});
-
-const createHistoryLoadWrapper = (
-  loadSelectedSessionBaselineHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
-  revalidateAgentSessionHistory: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"],
-) => {
-  const historyLoadActions: AgentSessionHistoryLoadContextValue = {
-    loadSelectedSessionBaselineHistory,
-    revalidateAgentSessionHistory,
-  };
-  return function HistoryLoadWrapper({ children }: PropsWithChildren): ReactElement {
-    return (
-      <AgentSessionHistoryLoadContext.Provider value={historyLoadActions}>
-        {children}
-      </AgentSessionHistoryLoadContext.Provider>
-    );
-  };
-};
-
-const createHistoryLoadHarness = (
-  props: ReturnType<typeof createProps>,
-  loadSelectedSessionBaselineHistory: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"],
-  revalidateAgentSessionHistory: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"] = mock(
-    async () => null,
-  ),
+const props = (
+  session: AgentSessionState | null,
+  runtimeReadinessState: RuntimeReadinessState = "ready",
+) => ({ session, runtimeReadinessState });
+const createHarness = (
+  session: AgentSessionState | null,
+  loadAgentSessionHistory: AgentSessionHistoryLoadContextValue["loadAgentSessionHistory"],
+  readiness: { current: AgentSessionReadModelLoadState } = {
+    current: { kind: "ready", workspaceRepoPath: "/repo" },
+  },
+  runtimeReadinessState: RuntimeReadinessState = "ready",
 ) =>
-  createHookHarness(useSelectedSessionHistoryLoad, props, {
-    wrapper: createHistoryLoadWrapper(
-      loadSelectedSessionBaselineHistory,
-      revalidateAgentSessionHistory,
+  createHookHarness(useSelectedSessionHistoryLoad, props(session, runtimeReadinessState), {
+    wrapper: ({ children }: PropsWithChildren) => (
+      <AgentSessionReadModelStateContext.Provider
+        value={{
+          sessionReadModelLoadState: readiness.current,
+          workspaceSessionRecordsError: null,
+          reloadSessionReadModel: () => {},
+          getSessionFault: () => null,
+        }}
+      >
+        <AgentSessionHistoryLoadContext.Provider value={{ loadAgentSessionHistory }}>
+          {children}
+        </AgentSessionHistoryLoadContext.Provider>
+      </AgentSessionReadModelStateContext.Provider>
     ),
   });
 
-describe("useSelectedSessionHistoryLoad", () => {
-  test("loads the selected session history when the runtime is ready", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not restart history loading for unrelated selected-session changes", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(createProps(), loadSessionHistory);
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-
-      await harness.update(
-        createProps({
-          session: createSession({
-            status: "running",
-            title: "Updated title",
-          }),
-        }),
-      );
-
-      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not revalidate the history that a baseline load just delivered", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const revalidateSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps(),
-      loadSessionHistory,
-      revalidateSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-
-      await harness.update(
-        createProps({
-          session: createSession({ historyLoadState: "loaded" }),
-        }),
-      );
-
-      expect(revalidateSessionHistory).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not revalidate the history that a baseline load delivered through loading", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const revalidateSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps(),
-      loadSessionHistory,
-      revalidateSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-
-      await harness.update(
-        createProps({
-          session: createSession({ historyLoadState: "loading" }),
-        }),
-      );
-      await harness.update(
-        createProps({
-          session: createSession({ historyLoadState: "loaded" }),
-        }),
-      );
-
-      expect(revalidateSessionHistory).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("revalidates a retained session after the selection clears and returns", async () => {
-    const revalidateSessionHistory = mock(async () => null);
-    const loadedSession = createSession({ historyLoadState: "loaded" });
-    const harness = createHistoryLoadHarness(
-      createProps({ session: loadedSession }),
-      mock(async () => null),
-      revalidateSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
-
-      await harness.update(createProps({ session: null }));
-      await harness.update(createProps({ session: loadedSession }));
-
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(2);
-      expect(revalidateSessionHistory).toHaveBeenLastCalledWith(selectedSessionIdentity);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("requests a new baseline for a selected session whose baseline failed", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const revalidateSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({
-        session: createSession({ historyLoadState: "failed" }),
-      }),
-      loadSessionHistory,
-      revalidateSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
-      expect(revalidateSessionHistory).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("revalidates a loaded selected session once", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const revalidateSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({
-        session: createSession({ historyLoadState: "loaded" }),
-      }),
-      loadSessionHistory,
-      revalidateSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).not.toHaveBeenCalled();
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
-      expect(revalidateSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test.each(["accepted", "failed"] as const)(
-    "waits for a fresh Codex send and revalidates after it is %s",
-    async (outcome) => {
-      const loadSessionHistory = mock(async () => null);
-      const revalidateSessionHistory = mock(async () => null);
-      const starting = createSession({
-        runtimeKind: "codex",
-        status: "starting",
+describe("selected session history", () => {
+  test.each(["claude", "codex", "opencode"] as const)(
+    "%s navigation keeps a current transcript",
+    async (runtimeKind) => {
+      const load = mock(async () => null);
+      const current = createAgentSessionFixture({
+        ...identity,
+        runtimeKind,
         historyLoadState: "loaded",
-        messages: createSessionMessagesState("session-1"),
       });
-      const harness = createHistoryLoadHarness(
-        createProps({ session: starting }),
-        loadSessionHistory,
-        revalidateSessionHistory,
-      );
-
+      const harness = createHarness(current, load);
       try {
         await harness.mount();
-        expect(loadSessionHistory).not.toHaveBeenCalled();
-        expect(revalidateSessionHistory).not.toHaveBeenCalled();
-
-        const sending: AgentSessionState = {
-          ...starting,
-          status: "running",
-          pendingUserMessageStartedAt: 123,
-        };
-        await harness.update(createProps({ session: sending }));
-        expect(revalidateSessionHistory).not.toHaveBeenCalled();
-
-        const afterSend: AgentSessionState =
-          outcome === "accepted"
-            ? {
-                ...sending,
-                messages: createSessionMessagesState("session-1", [
-                  {
-                    id: "accepted-kickoff",
-                    role: "user",
-                    content: "Start the task.",
-                    timestamp: "2026-06-12T08:00:01.000Z",
-                  },
-                ]),
-              }
-            : { ...sending, status: "idle", pendingUserMessageStartedAt: undefined };
-        await harness.update(createProps({ session: afterSend }));
-        expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
-        expect(revalidateSessionHistory).toHaveBeenCalledWith({
-          externalSessionId: "session-1",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-        });
+        await harness.update(props(createAgentSessionFixture({ historyLoadState: "loaded" })));
+        await harness.update(props(null));
+        await harness.update(props({ ...current, status: "running" }));
+        await harness.update(props({ ...current, status: "idle" }));
+        expect(load).not.toHaveBeenCalled();
       } finally {
         await harness.unmount();
       }
     },
   );
 
-  test("revalidates each selected session after the selection changes away and back", async () => {
-    const revalidateSessionHistory = mock(async () => null);
-    const firstSession = createSession({ historyLoadState: "loaded" });
-    const secondSession = createSession({
-      externalSessionId: "session-2",
-      historyLoadState: "loaded",
-    });
-    const harness = createHistoryLoadHarness(
-      createProps({ session: firstSession }),
-      mock(async () => null),
-      revalidateSessionHistory,
-    );
-
+  test("loads a baseline once and does not refresh it after completion", async () => {
+    const load = mock(async () => null);
+    const current = createAgentSessionFixture({ ...identity, historyLoadState: "not_requested" });
+    const harness = createHarness(current, load);
     try {
       await harness.mount();
-
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
-
-      await harness.update(createProps({ session: secondSession }));
-
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(2);
-      expect(revalidateSessionHistory).toHaveBeenLastCalledWith({
-        externalSessionId: "session-2",
-        runtimeKind: selectedSessionIdentity.runtimeKind,
-        workingDirectory: selectedSessionIdentity.workingDirectory,
-      });
-
-      await harness.update(createProps({ session: firstSession }));
-
-      expect(revalidateSessionHistory).toHaveBeenCalledTimes(3);
-      expect(revalidateSessionHistory).toHaveBeenLastCalledWith(selectedSessionIdentity);
+      await harness.update(props({ ...current, title: "New title", status: "running" }));
+      await harness.update(props({ ...current, historyLoadState: "loading" }));
+      await harness.update(props({ ...current, historyLoadState: "loaded" }));
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(load).toHaveBeenCalledWith(identity);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("waits for runtime readiness before loading selected session history", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({ runtimeReadinessState: "checking" }),
-      loadSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).not.toHaveBeenCalled();
-
-      await harness.update(createProps({ runtimeReadinessState: "ready" }));
-
-      expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not load when selected history was already requested", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({
-        session: createSession({ historyLoadState: "loading" }),
-      }),
-      loadSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("uses the selected session state as the history load identity", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({
-        session: createSession({
-          externalSessionId: "session-from-state",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/codex-worktree",
-        }),
-      }),
-      loadSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledWith({
-        externalSessionId: "session-from-state",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/codex-worktree",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("loads baseline history after reload even when a live Codex message is visible", async () => {
-    const loadSessionHistory = mock(async () => null);
-    const harness = createHistoryLoadHarness(
-      createProps({
-        session: createSession({
-          runtimeKind: "codex",
-          messages: createSessionMessagesState(selectedSessionIdentity.externalSessionId, [
-            {
-              id: "live-kickoff",
-              role: "user",
-              content: "Implement the requested changes",
-              timestamp: "2026-06-12T08:00:01.000Z",
-            },
-          ]),
-        }),
-      }),
-      loadSessionHistory,
-    );
-
-    try {
-      await harness.mount();
-
-      expect(loadSessionHistory).toHaveBeenCalledWith({
-        externalSessionId: selectedSessionIdentity.externalSessionId,
-        runtimeKind: "codex",
-        workingDirectory: selectedSessionIdentity.workingDirectory,
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("reports selected-session history load failures through the orchestrator side-effect runner", async () => {
-    const originalError = console.error;
-    const errorCalls: unknown[][] = [];
-    console.error = (...args: unknown[]) => {
-      errorCalls.push(args);
+  test("waits for runtime and live observation readiness", async () => {
+    const load = mock(async () => null);
+    const current = createAgentSessionFixture({ ...identity, historyLoadState: "not_requested" });
+    let observerReady = false;
+    const readiness = {
+      get current(): AgentSessionReadModelLoadState {
+        return { kind: observerReady ? "ready" : "loading", workspaceRepoPath: "/repo" };
+      },
     };
-    const harness = createHistoryLoadHarness(createProps(), async () => {
-      throw new Error("history failed");
-    });
-
+    const harness = createHarness(current, load, readiness, "checking");
     try {
       await harness.mount();
-
-      expect(errorCalls.length).toBe(1);
-      expect(String(errorCalls[0]?.[1] ?? "")).toBe("selected-session-history-load");
-      expect(errorCalls[0]?.[2]).toMatchObject({
-        reason: "history failed",
-        tags: {
-          externalSessionId: selectedSessionIdentity.externalSessionId,
-          runtimeKind: selectedSessionIdentity.runtimeKind,
-          workingDirectory: selectedSessionIdentity.workingDirectory,
-        },
-      });
+      await harness.update(props(current));
+      expect(load).not.toHaveBeenCalled();
+      observerReady = true;
+      await harness.update(props(current));
+      expect(load).toHaveBeenCalledTimes(1);
     } finally {
-      console.error = originalError;
       await harness.unmount();
     }
   });
+
+  test("refreshes the same selected session after each coverage gap", async () => {
+    const load = mock(async () => null);
+    const current = createAgentSessionFixture({ ...identity, historyLoadState: "loaded" });
+    const harness = createHarness(current, load);
+    try {
+      await harness.mount();
+      for (let gap = 0; gap < 2; gap += 1) {
+        await harness.update(props({ ...current, historyLoadState: "stale" }));
+        await harness.update(props({ ...current, historyLoadState: "refreshing" }));
+        await harness.update(props({ ...current, historyLoadState: "loaded" }));
+      }
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not retry a failed refresh in a render loop", async () => {
+    const load = mock(async () => null);
+    const current = createAgentSessionFixture({ ...identity, historyLoadState: "stale" });
+    const harness = createHarness(current, load);
+    try {
+      await harness.mount();
+      await harness.update(props({ ...current, historyLoadState: "refreshing" }));
+      await harness.update(
+        props({
+          ...current,
+          historyLoadFailure: {
+            code: "request_failed",
+            summary: "History unavailable",
+            detail: "Offline",
+          },
+        }),
+      );
+      expect(load).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("allows a failed baseline to retry on a new visit", async () => {
+    const load = mock(async () => null);
+    const current = createAgentSessionFixture({ ...identity, historyLoadState: "not_requested" });
+    const harness = createHarness(current, load);
+    try {
+      await harness.mount();
+      await harness.update(props({ ...current, historyLoadState: "loading" }));
+      const failed = { ...current, historyLoadState: "failed" as const };
+      await harness.update(props(failed));
+      expect(load).toHaveBeenCalledTimes(1);
+      await harness.update(props(null));
+      await harness.update(props(failed));
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each(["loaded", "stale"] as const)(
+    "does not read a %s fresh Codex session before its first send",
+    async (historyLoadState) => {
+      const load = mock(async () => null);
+      const current = createAgentSessionFixture({
+        ...identity,
+        runtimeKind: "codex",
+        status: "starting",
+        historyLoadState,
+        messages: [],
+      });
+      const harness = createHarness(current, load);
+      try {
+        await harness.mount();
+        await harness.update(
+          props({ ...current, status: "running", pendingUserMessageStartedAt: 123 }),
+        );
+        expect(load).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });

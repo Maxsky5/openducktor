@@ -11,7 +11,7 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentChatComposerModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type {
   ModelPickerFavoriteState,
@@ -33,7 +33,6 @@ import {
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import { reportModelUpdateError } from "@/features/agent-chat-composer/model-selection/model-update-error";
 import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import {
@@ -65,7 +64,7 @@ type UseAgentStudioChatComposerArgs = {
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ) => Promise<void> | void;
+  ) => Promise<void>;
   favoriteState: ModelPickerFavoriteState;
   loadCatalog?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   loadFileSearch?: (
@@ -78,7 +77,11 @@ type AgentStudioChatComposerState = {
   selectionForNewSession: AgentModelSelection | null;
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
-  isSelectedSessionModelSendable: boolean;
+  /**
+   * Applies a needed session model change and tells whether the selected session can send.
+   * Only a send calls it, so viewing a session never changes or resumes it.
+   */
+  prepareSelectedSessionModelForSend: () => Promise<boolean>;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -191,7 +194,6 @@ export function useAgentStudioChatComposer({
   const sessionModelCatalog = selectedSession.runtimeData.modelCatalog;
   const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
-  const lastSessionModelRepairKeyRef = useRef<string | null>(null);
   const runtimeReadinessState = selectedSession.runtimeReadiness.state;
   const isRuntimeReady = runtimeReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
@@ -448,22 +450,14 @@ export function useAgentStudioChatComposer({
     sessionModelCatalog,
     loadedSessionIdentity,
   ]);
-  useEffect(() => {
-    if (!sessionModelRepairCommand) {
-      lastSessionModelRepairKeyRef.current = null;
-      return;
-    }
-    if (lastSessionModelRepairKeyRef.current === sessionModelRepairCommand.key) {
-      return;
-    }
-    lastSessionModelRepairKeyRef.current = sessionModelRepairCommand.key;
-    void Promise.resolve(
-      updateAgentSessionModel(
-        sessionModelRepairCommand.session,
-        sessionModelRepairCommand.selection,
-      ),
-    ).catch(reportModelUpdateError);
-  }, [sessionModelRepairCommand, updateAgentSessionModel]);
+  const prepareSelectedSessionModelForSend = useCallback(async (): Promise<boolean> => {
+    if (!sessionModelRepairCommand) return isSelectedSessionModelSendable;
+    await updateAgentSessionModel(
+      sessionModelRepairCommand.session,
+      sessionModelRepairCommand.selection,
+    );
+    return true;
+  }, [isSelectedSessionModelSendable, sessionModelRepairCommand, updateAgentSessionModel]);
 
   const searchFiles = useMemo(
     () =>
@@ -558,7 +552,7 @@ export function useAgentStudioChatComposer({
     newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
-    isSelectedSessionModelSendable,
+    prepareSelectedSessionModelForSend,
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsProfiles,

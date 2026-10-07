@@ -3,7 +3,6 @@ import { DEFAULT_AGENT_RUNTIMES, type RepositoryGitProviderContext } from "@open
 import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -20,6 +19,7 @@ import {
   ChecksStateContext,
   RuntimeDefinitionsContext,
   TasksStateContext,
+  WorkspaceBranchStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import {
@@ -54,7 +54,6 @@ import type { useAgentStudioSessionActions } from "../use-agent-studio-session-a
 import {
   createAgentChatModelFixture,
   createAgentStudioHeaderModelFixture,
-  createAgentStudioTaskTabsModelFixture,
 } from "./use-agents-page-shell-model.test-support";
 
 interface RepoSettingsStateContract {
@@ -83,7 +82,6 @@ const selectedSessionKey = (): string => agentSessionIdentityKey(createSession()
 
 const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
-const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
 const retryGitProviderContext = mock(() => {});
 const handleResolveRebaseConflict = mock(async () => true);
@@ -140,22 +138,8 @@ type SelectionState = {
     };
     isTaskReady: boolean;
   };
-  activeTaskTabId: string;
-  loadedStateWorkspaceId: string | null;
-  hasPendingTabChange: boolean;
-  taskTabs: [];
-  tabTaskIds: string[];
-  availableTabTasks: (typeof task)[];
   taskId: string;
   sessionsForTask: AgentSessionSummary[];
-  handleCreateTab: (taskId: string) => void;
-  handleCloseTab: (taskId: string) => void;
-  handleSelectTab: typeof handleSelectTab;
-  handleReorderTab: (
-    draggedTaskId: string,
-    targetTaskId: string,
-    position: "before" | "after",
-  ) => void;
 };
 
 type OrchestrationState = {
@@ -165,8 +149,6 @@ type OrchestrationState = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
-  activeTabValue: string;
-  agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: AgentStudioHeaderModel;
   gitConflictQuickAction: AgentStudioQuickActionOption | null;
   taskExecutionDocumentPanelModel: { activeDocument: null };
@@ -197,7 +179,6 @@ type OrchestrationControllerArgs = {
   draftStateKey: string;
 };
 
-const agentStudioTaskTabsModel = createAgentStudioTaskTabsModelFixture();
 const agentStudioHeaderModel = createAgentStudioHeaderModelFixture();
 const agentChatModel = createAgentChatModelFixture();
 
@@ -359,18 +340,8 @@ let selectionState: SelectionState = {
     },
     isTaskReady: true,
   },
-  activeTaskTabId: "task-1",
-  loadedStateWorkspaceId: "workspace-repo",
-  hasPendingTabChange: false,
-  taskTabs: [],
-  tabTaskIds: ["task-1"],
-  availableTabTasks: [task],
   taskId: "task-1",
   sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
-  handleCreateTab: mock((_taskId: string) => {}),
-  handleCloseTab: mock((_taskId: string) => {}),
-  handleSelectTab,
-  handleReorderTab: mock(() => {}),
 };
 const rightPanelToggleModel = {
   kind: "task_execution" as const,
@@ -438,8 +409,6 @@ let orchestrationState: OrchestrationState = {
   humanReviewFeedbackModal: { ...baseHumanReviewFeedbackModal },
   sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
-  activeTabValue: "task-1",
-  agentStudioTaskTabsModel,
   agentStudioHeaderModel,
   gitConflictQuickAction: null,
   taskExecutionDocumentPanelModel: { activeDocument: null },
@@ -598,19 +567,21 @@ const notificationContextValue: NotificationContextValue = {
 
 const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   <WorkspaceStateContext.Provider value={workspaceStateValue()}>
-    <ChecksStateContext.Provider value={checksStateValue()}>
-      <TasksStateContext.Provider value={tasksState}>
-        <AgentOperationsContext.Provider value={agentOperations}>
-          <AgentSessionsContext.Provider value={sessionStore}>
-            <NotificationContext.Provider value={notificationContextValue}>
-              <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
-                {children}
-              </RuntimeDefinitionsContext.Provider>
-            </NotificationContext.Provider>
-          </AgentSessionsContext.Provider>
-        </AgentOperationsContext.Provider>
-      </TasksStateContext.Provider>
-    </ChecksStateContext.Provider>
+    <WorkspaceBranchStateContext.Provider value={workspaceStateValue()}>
+      <ChecksStateContext.Provider value={checksStateValue()}>
+        <TasksStateContext.Provider value={tasksState}>
+          <AgentOperationsContext.Provider value={agentOperations}>
+            <AgentSessionsContext.Provider value={sessionStore}>
+              <NotificationContext.Provider value={notificationContextValue}>
+                <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+                  {children}
+                </RuntimeDefinitionsContext.Provider>
+              </NotificationContext.Provider>
+            </AgentSessionsContext.Provider>
+          </AgentOperationsContext.Provider>
+        </TasksStateContext.Provider>
+      </ChecksStateContext.Provider>
+    </WorkspaceBranchStateContext.Provider>
   </WorkspaceStateContext.Provider>
 );
 
@@ -840,18 +811,8 @@ beforeEach(async () => {
       },
       isTaskReady: true,
     },
-    activeTaskTabId: "task-1",
-    loadedStateWorkspaceId: "workspace-repo",
-    hasPendingTabChange: false,
-    taskTabs: [],
-    tabTaskIds: ["task-1"],
-    availableTabTasks: [task],
     taskId: "task-1",
     sessionsForTask: [toAgentSessionSummary(session)],
-    handleCreateTab: mock((_taskId: string) => {}),
-    handleCloseTab: mock((_taskId: string) => {}),
-    handleSelectTab,
-    handleReorderTab: mock(() => {}),
   };
   orchestrationState = {
     repoSettings: null,
@@ -864,8 +825,6 @@ beforeEach(async () => {
       ...baseSessionStartModal,
     },
     startSessionRequest: async () => undefined,
-    activeTabValue: "task-1",
-    agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     gitConflictQuickAction: null,
     taskExecutionDocumentPanelModel: { activeDocument: null },
@@ -992,7 +951,6 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
-      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -1017,8 +975,6 @@ describe("useAgentsPageShellModel", () => {
   test("keeps the active terminal scope while the selected task card loads", async () => {
     selectionState = {
       ...selectionState,
-      activeTaskTabId: "task-2",
-      tabTaskIds: ["task-1", "task-2"],
       taskId: "task-2",
       view: {
         ...selectionState.view,
@@ -1099,7 +1055,6 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
-      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -1144,7 +1099,6 @@ describe("useAgentsPageShellModel", () => {
 
       selectionState = {
         ...selectionState,
-        tabTaskIds: ["task-2"],
         view: {
           ...selectionState.view,
           taskId: "task-2",

@@ -28,13 +28,12 @@ import {
   resolveBuildContinuationLaunchAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
+import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigation";
-import { addTaskToWorkspaceAgentStudioState } from "../agents/agent-studio-state-host";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
@@ -45,7 +44,6 @@ type UseKanbanSessionStartFlowArgs = {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
-  openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
@@ -134,7 +132,6 @@ export function useKanbanSessionStartFlow({
   branches = [],
   favoriteState,
   repoSettings,
-  openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   sessions,
   navigate,
@@ -167,44 +164,35 @@ export function useKanbanSessionStartFlow({
 
   const openAgents = useCallback(
     (taskId: string, role: AgentRole): void => {
-      navigate(buildAgentStudioHref({ taskId, sessionExternalId: null, role }));
+      if (!activeWorkspaceId) {
+        throw new Error("No active workspace is selected.");
+      }
+      navigate(
+        buildSessionNavigationHref({ kind: "task", workspaceId: activeWorkspaceId, taskId, role }),
+      );
     },
-    [navigate],
+    [activeWorkspaceId, navigate],
   );
 
   const openSessionInAgentStudio = useCallback(
     (intent: KanbanSessionStartIntent, session: AgentSessionIdentity): void => {
-      navigate(
-        buildAgentStudioHref({
-          taskId: intent.taskId,
-          sessionExternalId: session.externalSessionId,
-          role: intent.role,
-        }),
-      );
-    },
-    [navigate],
-  );
-  const saveAgentStudioTab = useCallback(
-    async (taskId: string): Promise<void> => {
       if (!activeWorkspaceId) {
         throw new Error("No active workspace is selected.");
       }
-      await addTaskToWorkspaceAgentStudioState({
-        queryClient,
-        workspaceId: activeWorkspaceId,
-        taskId,
-        tasks,
-      });
+      navigate(
+        buildSessionNavigationHref({
+          kind: "task_session",
+          workspaceId: activeWorkspaceId,
+          taskId: intent.taskId,
+          role: intent.role,
+          identity: toAgentSessionIdentity(session),
+        }),
+      );
     },
-    [activeWorkspaceId, queryClient, tasks],
+    [activeWorkspaceId, navigate],
   );
-
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<AgentSessionIdentity | undefined> => {
-      if (openAgentStudioTabOnBackgroundSessionStart === null) {
-        throw new Error("Cannot start Kanban session because settings have not loaded.");
-      }
-
       const selectedTask = tasks.find((task) => task.id === intent.taskId) ?? null;
       const taskSessions = sessions.filter((session) => session.taskId === intent.taskId);
       return runSessionStartRequest(
@@ -228,7 +216,6 @@ export function useKanbanSessionStartFlow({
             request: intent,
             decision,
             startInBackground: runInBackground,
-            openAgentStudioTabOnBackgroundSessionStart,
             tasks,
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
@@ -236,7 +223,6 @@ export function useKanbanSessionStartFlow({
             openSessionInAgentStudio: (request, session) => {
               if (isCurrentContext()) openSessionInAgentStudio(request, session);
             },
-            saveAgentStudioTab,
           };
           if (setTaskTargetBranch) {
             input.setTaskTargetBranch = setTaskTargetBranch;
@@ -250,11 +236,9 @@ export function useKanbanSessionStartFlow({
       isCurrentContext,
       queryClient,
       humanRequestChangesTask,
-      openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
       runSessionStartWorkflow,
       runSessionStartRequest,
-      saveAgentStudioTab,
       setTaskTargetBranch,
       sessions,
       tasks,
@@ -313,14 +297,16 @@ export function useKanbanSessionStartFlow({
     (taskId: string, role: AgentRole, options?: SessionTargetOptions): void => {
       if (options?.session) {
         try {
-          if (!workspaceRepoPath) {
+          if (!activeWorkspaceId || !workspaceRepoPath) {
             throw new Error("Select the task's workspace, then open the session again.");
           }
           navigate(
-            buildAgentStudioHref({
+            buildSessionNavigationHref({
+              kind: "task_session",
+              workspaceId: activeWorkspaceId,
               taskId,
               role,
-              sessionExternalId: options.session.externalSessionId,
+              identity: toAgentSessionIdentity(options.session),
             }),
             {
               state: {
@@ -354,7 +340,14 @@ export function useKanbanSessionStartFlow({
 
       openAgents(taskId, role);
     },
-    [navigate, openAgents, openSessionInAgentStudio, sessions, workspaceRepoPath],
+    [
+      activeWorkspaceId,
+      navigate,
+      openAgents,
+      openSessionInAgentStudio,
+      sessions,
+      workspaceRepoPath,
+    ],
   );
 
   const onPlan = useCallback(

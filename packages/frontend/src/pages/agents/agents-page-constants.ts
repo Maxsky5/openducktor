@@ -1,7 +1,8 @@
 import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { AGENT_ROLE_LABELS } from "@/types";
+import { ROLE_OPTIONS } from "@/lib/agent-role-presentation";
+
+export { ROLE_OPTIONS };
 
 export {
   firstLaunchAction,
@@ -10,17 +11,6 @@ export {
   LAUNCH_ACTION_LABELS,
   LAUNCH_ACTIONS_BY_ROLE,
 } from "@/features/session-start";
-
-export const ROLE_OPTIONS: Array<{
-  role: AgentRole;
-  label: string;
-  icon: typeof Sparkles;
-}> = [
-  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: Sparkles },
-  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: Bot },
-  { role: "build", label: AGENT_ROLE_LABELS.build, icon: Wrench },
-  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: ShieldCheck },
-];
 
 export const AGENT_ROLE_ORDER: AgentRole[] = ROLE_OPTIONS.map((option) => option.role);
 

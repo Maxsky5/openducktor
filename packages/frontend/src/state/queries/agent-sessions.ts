@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
 import { isCancelledError, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
@@ -56,6 +56,18 @@ export const agentSessionQueryKeys = {
       repoPath,
       normalizeAgentSessionTaskIds(taskIds),
     ] as const,
+};
+
+/** A committed host update replaces the full task list and supersedes older reads. */
+export const updateAgentSessionListQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  records: TaskAgentSessions,
+): void => {
+  incrementAgentSessionInvalidationVersion(queryClient, repoPath, records.taskId);
+  const queryKey = agentSessionQueryKeys.list(repoPath, records.taskId);
+  void queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
+  queryClient.setQueryData(queryKey, records.agentSessions);
 };
 
 export const agentSessionListQueryOptions = (

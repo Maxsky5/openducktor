@@ -58,6 +58,10 @@ Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.t
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
+Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. Cancel older reads and advance the list's invalidation version so a response in flight cannot replace the event with stale data. Workspace session updates use their existing record event. These updates do not trigger another read.
+
+A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps and reads again the observed session lists of inactive workspaces, and removes the others.
+
 ### Checks and file data
 
 | Data | Stale time |

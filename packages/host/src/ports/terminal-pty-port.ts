@@ -11,6 +11,7 @@ export type TerminalPtyLaunchPlan = {
   cwd: string;
   env: Readonly<Record<string, string>>;
   grid: TerminalGrid;
+  commandNonce?: string;
 };
 
 export type TerminalPtyExit = {

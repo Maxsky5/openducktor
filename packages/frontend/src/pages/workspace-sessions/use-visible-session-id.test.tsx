@@ -1,45 +1,50 @@
 import { expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { useVisibleSessionId } from "./use-visible-session-id";
 
-test.each(["discard", "keep"])("the latest tab choice wins when the user chooses %s", (choice) => {
-  const transitions: Array<{ apply: () => void; cancel?: () => void }> = [];
-  const guard: Parameters<typeof useVisibleSessionId>[1] = (apply, cancel) => {
-    transitions.at(-1)?.cancel?.();
-    const transition: (typeof transitions)[number] = { apply };
-    if (cancel) transition.cancel = cancel;
-    transitions.push(transition);
-  };
-  const updateNavigation = mock(() => {});
-  const cancelPending = mock(() => {});
-  const view = renderHook(
-    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation, cancelPending),
-    { initialProps: { requested: "A" } },
-  );
-  try {
-    view.rerender({ requested: "B" });
-    view.rerender({ requested: "C" });
-    expect(updateNavigation).not.toHaveBeenCalled();
-    expect(view.result.current.visibleSelectedId).toBe("A");
-
-    act(() => {
-      const latest = transitions.at(-1);
-      if (choice === "discard") latest?.apply();
-      else latest?.cancel?.();
-    });
-    if (choice === "discard") {
-      expect(view.result.current.visibleSelectedId).toBe("C");
+test.each(["discard", "keep"])(
+  "the latest session choice wins when the user chooses %s",
+  (choice) => {
+    const transitions: Array<{ apply: () => void; cancel?: () => void }> = [];
+    const guard: Parameters<typeof useVisibleSessionId>[1] = (apply, cancel) => {
+      transitions.at(-1)?.cancel?.();
+      const transition: (typeof transitions)[number] = { apply };
+      if (cancel) transition.cancel = cancel;
+      transitions.push(transition);
+    };
+    const updateNavigation = mock(() => {});
+    const cancelPending = mock(() => {});
+    const view = renderHook(
+      ({ requested }) =>
+        useVisibleSessionId(requested, guard, updateNavigation, cancelPending, "workspace-a"),
+      { initialProps: { requested: "A" } },
+    );
+    try {
+      view.rerender({ requested: "B" });
+      view.rerender({ requested: "C" });
       expect(updateNavigation).not.toHaveBeenCalled();
-    } else {
       expect(view.result.current.visibleSelectedId).toBe("A");
-      expect(updateNavigation).toHaveBeenCalledWith({ sessionId: "A" });
-    }
-  } finally {
-    view.unmount();
-  }
-});
 
-test("returning to the open tab drops a pending choice", () => {
+      act(() => {
+        const latest = transitions.at(-1);
+        if (choice === "discard") latest?.apply();
+        else latest?.cancel?.();
+      });
+      if (choice === "discard") {
+        expect(view.result.current.visibleSelectedId).toBe("C");
+        expect(updateNavigation).not.toHaveBeenCalled();
+      } else {
+        expect(view.result.current.visibleSelectedId).toBe("A");
+        expect(updateNavigation).toHaveBeenCalledWith({ sessionId: "A" });
+      }
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
+test("returning to the open session drops a pending choice", () => {
   let applyPending: (() => void) | undefined;
   const guard: Parameters<typeof useVisibleSessionId>[1] = (apply) => {
     applyPending = apply;
@@ -47,7 +52,8 @@ test("returning to the open tab drops a pending choice", () => {
   const updateNavigation = mock(() => {});
   const cancelPending = mock(() => {});
   const view = renderHook(
-    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation, cancelPending),
+    ({ requested }) =>
+      useVisibleSessionId(requested, guard, updateNavigation, cancelPending, "workspace-a"),
     { initialProps: { requested: "A" } },
   );
   try {
@@ -62,7 +68,7 @@ test("returning to the open tab drops a pending choice", () => {
   }
 });
 
-test("a canceled fallback waits until the user chooses the tab again", () => {
+test("a canceled fallback waits until the user chooses the session again", () => {
   const transitions: Array<{ apply: () => void; cancel?: () => void }> = [];
   const guard: Parameters<typeof useVisibleSessionId>[1] = (apply, cancel) => {
     const transition: (typeof transitions)[number] = { apply };
@@ -71,7 +77,8 @@ test("a canceled fallback waits until the user chooses the tab again", () => {
   };
   const updateNavigation = mock(() => {});
   const view = renderHook(
-    ({ requested }) => useVisibleSessionId(requested, guard, updateNavigation, () => {}),
+    ({ requested }) =>
+      useVisibleSessionId(requested, guard, updateNavigation, () => {}, "workspace-a"),
     { initialProps: { requested: "A" } },
   );
   try {
@@ -82,10 +89,43 @@ test("a canceled fallback waits until the user chooses the tab again", () => {
     expect(transitions).toHaveLength(1);
     expect(view.result.current.visibleSelectedId).toBe("A");
 
-    act(() => view.result.current.selectTab("B"));
+    view.rerender({ requested: "A" });
+    view.rerender({ requested: "B" });
     expect(transitions).toHaveLength(2);
     act(() => transitions[1]?.apply());
     expect(view.result.current.visibleSelectedId).toBe("B");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a workspace change drops a pending chat choice before it can change the new workspace", () => {
+  let applyPending: (() => void) | undefined;
+  const guard: Parameters<typeof useVisibleSessionId>[1] = (apply) => {
+    applyPending = apply;
+  };
+  const updateNavigation = mock(() => {});
+  const commits: string[] = [];
+  const view = renderHook(
+    ({ requested, workspaceId }) => {
+      const result = useVisibleSessionId(requested, guard, updateNavigation, () => {}, workspaceId);
+      useLayoutEffect(() => {
+        commits.push(`${workspaceId}:${result.visibleSelectedId}`);
+      });
+      return result;
+    },
+    { initialProps: { requested: "A", workspaceId: "workspace-a" } },
+  );
+  try {
+    view.rerender({ requested: "B", workspaceId: "workspace-a" });
+    const staleChoice = applyPending;
+    commits.length = 0;
+    view.rerender({ requested: "Other", workspaceId: "workspace-b" });
+    expect(view.result.current.visibleSelectedId).toBe("Other");
+    act(() => staleChoice?.());
+    expect(view.result.current.visibleSelectedId).toBe("Other");
+    expect(commits.every((commit) => commit === "workspace-b:Other")).toBeTrue();
+    expect(updateNavigation).not.toHaveBeenCalled();
   } finally {
     view.unmount();
   }

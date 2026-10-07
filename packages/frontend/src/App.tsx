@@ -16,12 +16,11 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { Toaster } from "@/components/ui/sonner";
-import { CanonicalRouteRedirect } from "@/lib/canonical-route-redirect";
 import { QueryProvider } from "@/lib/query-provider";
 import { loadNotFoundPage } from "@/pages";
-import { AgentsPage } from "@/pages/agents/agents-page";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
-import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
+import { LegacySessionsRedirect } from "@/pages/sessions/legacy-sessions-redirect";
+import { SessionsPage } from "@/pages/sessions/sessions-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
 
@@ -85,12 +84,16 @@ const routes = createRoutesFromElements(
       <Route path="/" element={<Navigate to="/kanban" replace />} />
       <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
       <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
-      <Route path="/workflows" element={<AgentsPage />} />
-      <Route path="/chats" element={<WorkspaceSessionsPage />} />
-      <Route path="/agents" element={<CanonicalRouteRedirect to="/workflows" />} />
-      <Route path="/workspace-sessions" element={<CanonicalRouteRedirect to="/chats" />} />
-      <Route path="/planner" element={<Navigate to="/workflows?agent=planner" replace />} />
-      <Route path="/builder" element={<Navigate to="/workflows?agent=build" replace />} />
+      <Route path="/sessions" element={<SessionsPage />} />
+      <Route path="/workflows" element={<LegacySessionsRedirect kind="task" />} />
+      <Route path="/agents" element={<LegacySessionsRedirect kind="task" />} />
+      <Route path="/chats" element={<LegacySessionsRedirect kind="workspace" />} />
+      <Route path="/workspace-sessions" element={<LegacySessionsRedirect kind="workspace" />} />
+      <Route
+        path="/planner"
+        element={<Navigate to="/sessions?kind=task&agent=planner" replace />}
+      />
+      <Route path="/builder" element={<Navigate to="/sessions?kind=task&agent=build" replace />} />
       <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
     </Route>
   </Route>,

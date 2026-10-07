@@ -6,11 +6,195 @@ import {
   sessionMessageAt,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { historyToChatMessages } from "./session-history-chat-messages";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import { getToolDuration } from "@/components/features/agents/agent-chat/tool-duration";
+import { applyLoadedSessionHistory, historyToChatMessages } from "./session-history-chat-messages";
+import { createSessionMessagesState } from "./messages";
 
 const historyOwner = (messages: AgentChatMessage[]) => ({
   externalSessionId: "external-1",
   messages: createSessionMessagesFixture("external-1", messages),
+});
+
+test("an unchanged history read keeps message objects and the transcript revision", () => {
+  const history: AgentSessionHistoryMessage[] = [
+    {
+      messageId: "answer",
+      role: "assistant",
+      text: "Done",
+      parts: [],
+      timestamp: "2026-10-05T08:00:00.000Z",
+    },
+  ];
+  const current = applyLoadedSessionHistory(createAgentSessionFixture(), history);
+  const refreshed = applyLoadedSessionHistory(current, structuredClone(history), current.messages);
+  expect(refreshed.messages).toBe(current.messages);
+  expect(refreshed.messages.items[0]).toBe(current.messages.items[0]);
+  expect(refreshed.messages.version).toBe(current.messages.version);
+});
+
+test("history without execution timing keeps the known live tool duration", () => {
+  const history: AgentSessionHistoryMessage[] = [
+    {
+      messageId: "answer",
+      role: "assistant",
+      text: "",
+      timestamp: "2026-10-05T08:00:02.000Z",
+      parts: [
+        {
+          kind: "tool",
+          messageId: "answer",
+          partId: "tool",
+          callId: "call",
+          tool: "Bash",
+          toolType: "bash",
+          status: "completed",
+          input: { command: "bun run lint" },
+          output: "ok",
+          startedAtMs: 1000,
+          endedAtMs: 2200,
+        },
+      ],
+    },
+  ];
+  const current = applyLoadedSessionHistory(createAgentSessionFixture(), history);
+  const withoutTiming = structuredClone(history);
+  const part = withoutTiming[0]?.parts[0];
+  if (part?.kind !== "tool") throw new Error("Expected a tool fixture");
+  delete part.startedAtMs;
+  delete part.endedAtMs;
+  const refreshed = applyLoadedSessionHistory(current, withoutTiming, current.messages);
+  const tool = refreshed.messages.items[0];
+  if (tool?.meta?.kind !== "tool") throw new Error("Expected a tool message");
+  expect(getToolDuration(tool.meta, tool.timestamp)).toBe(1200);
+  expect(refreshed.messages).toBe(current.messages);
+});
+
+test("a delayed history read keeps a tool result received after the read started", () => {
+  const initial = createAgentSessionFixture({ messages: [] });
+  const timestamp = "2026-10-05T08:00:02.000Z";
+  const live = {
+    ...initial,
+    messages: createSessionMessagesState(initial.externalSessionId, [
+      {
+        id: "tool:answer:call",
+        role: "tool",
+        content: "Permission denied",
+        timestamp,
+        meta: {
+          kind: "tool",
+          partId: "tool",
+          callId: "call",
+          tool: "Bash",
+          toolType: "bash",
+          status: "error",
+          error: "Permission denied",
+          startedAtMs: 1000,
+          endedAtMs: 2200,
+        },
+      },
+    ]),
+  };
+  const refreshed = applyLoadedSessionHistory(
+    live,
+    [
+      {
+        messageId: "answer",
+        role: "assistant",
+        text: "",
+        timestamp,
+        parts: [
+          {
+            kind: "tool",
+            messageId: "answer",
+            partId: "tool",
+            callId: "call",
+            tool: "Bash",
+            toolType: "bash",
+            status: "completed",
+            output: "Old output",
+          },
+        ],
+      },
+    ],
+    initial.messages,
+  );
+  expect(refreshed.messages).toBe(live.messages);
+});
+
+test("a delayed history read does not restore an answered background question", () => {
+  const request = {
+    requestId: "question-1",
+    blocking: false,
+    questions: [
+      {
+        header: "Scope",
+        question: "Which files?",
+        options: [{ label: "Frontend", description: "Only UI" }],
+      },
+    ],
+  };
+  const initial = createAgentSessionFixture({
+    livePresence: "absent",
+    pendingQuestions: [request],
+  });
+  const live = { ...initial, pendingQuestions: [] };
+  const refreshed = applyLoadedSessionHistory(
+    live,
+    [
+      {
+        messageId: "question-1",
+        role: "assistant",
+        text: "Which files?",
+        parts: [],
+        timestamp: "2026-10-05T08:00:00.000Z",
+        questionRequest: request,
+      },
+    ],
+    initial.messages,
+    initial.pendingQuestions,
+  );
+  expect(refreshed.pendingQuestions).toEqual([]);
+});
+
+test("a delayed history read does not restore any part of a retracted response", () => {
+  const initial = createAgentSessionFixture({
+    messages: [
+      {
+        id: "text:answer:text",
+        role: "assistant",
+        content: "Draft",
+        timestamp: "2026-10-05T08:00:00.000Z",
+        meta: { kind: "assistant", sourceMessageId: "answer", partId: "text", isFinal: false },
+      },
+    ],
+  });
+  const live = { ...initial, messages: createSessionMessagesState(initial.externalSessionId, []) };
+  const refreshed = applyLoadedSessionHistory(
+    live,
+    [
+      {
+        messageId: "answer",
+        role: "assistant",
+        text: "Draft",
+        timestamp: "2026-10-05T08:00:00.000Z",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "answer",
+            partId: "tool",
+            callId: "call",
+            tool: "Bash",
+            toolType: "bash",
+            status: "completed",
+            output: "Old output",
+          },
+        ],
+      },
+    ],
+    initial.messages,
+  );
+  expect(refreshed.messages.items).toEqual([]);
 });
 
 describe("agent-orchestrator/support/session-history-chat-messages", () => {

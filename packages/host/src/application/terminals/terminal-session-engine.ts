@@ -28,6 +28,7 @@ import {
 } from "./terminal-session-output";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalSessionProducer } from "./terminal-session-producer";
+import { createTerminalActivity } from "./terminal-activity";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
 
@@ -46,16 +47,19 @@ export const createTerminalSessionEngine = ({
   scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 }) => {
   const sessions = new Map<string, TerminalSession>();
-  const lifecycle = createTerminalSessionLifecycle({ now, sessions });
+  const activity = createTerminalActivity(sessions);
+  const lifecycle = createTerminalSessionLifecycle({ now, sessions, activity });
   const { applyStreamEvents, closeSession, closeSessions, getSession, pruneExited } = lifecycle;
   const producer = createTerminalSessionProducer({
     sessions,
     ptyPort,
     lifecycle,
+    activity,
     scheduleTitleSettlement,
   });
 
   return {
+    observeActivity: activity.observe,
     countLive: (): number => {
       pruneExited();
       return [...sessions.values()].filter(
@@ -382,11 +386,13 @@ export const createTerminalSessionEngine = ({
           catch: (cause) => terminalOperationFailure(cause, "close"),
         });
         if (session.kind === "output")
-          return yield* terminalFailure(
-            "invalid_input",
-            "close",
-            "Use the dev server Stop action to close this output source.",
-            terminalId,
+          return yield* Effect.fail(
+            terminalFailure(
+              "invalid_input",
+              "close",
+              "Use the dev server Stop action to close this output source.",
+              terminalId,
+            ),
           );
         yield* closeSession(session, confirmTerminate);
       }),

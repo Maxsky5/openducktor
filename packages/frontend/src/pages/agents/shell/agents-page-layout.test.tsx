@@ -19,6 +19,7 @@ const render = (element: ReactElement) => {
 const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
   render(
     createElement(AgentsPageWorkspacePanes, {
+      workflowContent: null,
       chatContent: createElement("div", { "data-testid": "mock-chat" }, "Chat"),
       hasSelectedFilePreview,
       selectedFilePreviewContent: createElement(
@@ -113,6 +114,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const view = render(
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: null,
+        workflowContent: null,
         hasSelectedTask: true,
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: true,
@@ -180,6 +184,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const renderWorkspace = (isVisible: boolean) =>
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: null,
+        workflowContent: null,
         hasSelectedTask: true,
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: false,
@@ -263,6 +270,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     };
     const view = render(
       createElement(AgentsPageWorkspace, {
+        unavailableTaskId: null,
+        headerContent: createElement("header", null, "Session toolbar"),
+        workflowContent: createElement("nav", { "aria-label": "Task workflow" }, "Task workflow"),
         hasSelectedTask: true,
         chatContent: createElement("div", { "data-testid": "narrow-chat" }, "Chat"),
         hasSelectedFilePreview: false,
@@ -273,6 +283,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       }),
     );
     expect(view.getByRole("button", { name: "Back to workspace" })).toBeTruthy();
+    expect(view.getByText("Session toolbar").closest("[hidden]") === null).toBe(true);
+    expect(view.getByText("Session toolbar").closest("[data-panel]")).toBeNull();
+    expect(view.getByText("Task workflow").closest("[hidden]")).toBeTruthy();
     expect(view.getByTestId("narrow-chat").closest("[hidden]")).toBeTruthy();
     expect(view.getByText("No terminals.").closest("[hidden]")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));

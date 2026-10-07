@@ -142,6 +142,7 @@ export const createDevServerScriptStarter = ({
                   },
             workingDir: workingDirectory,
             label: scriptConfig.name,
+            command: scriptConfig.command,
             onForgotten: () => {
               if (runtime.terminalOutputs.get(scriptConfig.id) !== output) return;
               runtime.terminalOutputs.delete(scriptConfig.id);

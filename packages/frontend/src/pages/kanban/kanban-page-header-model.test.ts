@@ -7,6 +7,15 @@ describe("isKanbanTaskCreationDisabled", () => {
     expect(isKanbanTaskCreationDisabled(null, null)).toBe(true);
   });
 
+  test("keeps the task composer available while the workspace check loads", () => {
+    expect(
+      isKanbanTaskCreationDisabled(
+        { workspaceId: "workspace-repo", workspaceName: "Repo", repoPath: "/repo" },
+        null,
+      ),
+    ).toBe(false);
+  });
+
   test("disables task creation when the task store is unavailable", () => {
     expect(
       isKanbanTaskCreationDisabled(

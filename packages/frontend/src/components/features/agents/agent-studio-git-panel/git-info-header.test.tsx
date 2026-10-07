@@ -102,6 +102,33 @@ describe("GitInfoHeader", () => {
     expect(screen.queryByTestId("agent-studio-git-target-branch-display-row")).toBeNull();
   });
 
+  test("replaces the repository branch label with the repository branch control", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        contextMode: "repository",
+        branch: "beta",
+        repositoryBranchControl: <button type="button">Switch repository branch</button>,
+      }),
+    );
+
+    const row = screen.getByTestId("agent-studio-git-branch-context-row");
+    expect(row.textContent).toBe("Switch repository branch");
+    expect(screen.queryByTestId("agent-studio-git-current-branch")).toBeNull();
+  });
+
+  test("keeps the worktree branch rows when a repository branch control is available", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        repositoryBranchControl: <button type="button">Switch repository branch</button>,
+      }),
+    );
+
+    expect(screen.queryByRole("button", { name: "Switch repository branch" })).toBeNull();
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe(
+      "feature/task-24",
+    );
+  });
+
   test("disables Pull Request detection and shows the provider health error", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({

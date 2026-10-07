@@ -454,34 +454,21 @@ export const subscribeSessionToRuntimeEvents = (input: {
   });
 };
 
-type RegisterSessionStartEvent =
-  | {
-      emitStartedEvent?: true;
-      startedMessage: string;
-    }
-  | {
-      emitStartedEvent: false;
-      startedMessage?: never;
-    };
-
-export const registerSession = (
-  input: {
-    sessions: Map<string, SessionRecord>;
-    runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
-    createClient: ClientFactory;
-    runtimeId: string;
-    runtimeEndpoint: string;
-    externalSessionId: string;
-    sessionInput: SessionInput;
-    client: OpencodeClient;
-    startedAt: string;
-    subscribeToEvents?: boolean;
-    now: () => string;
-    emit: (externalSessionId: string, event: AgentEvent) => void;
-    logEvent?: OpencodeEventLogger;
-  } & RegisterSessionStartEvent,
-): AgentSessionSummary => {
-  const startsActive = input.emitStartedEvent !== false;
+export const registerSession = (input: {
+  sessions: Map<string, SessionRecord>;
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+  createClient: ClientFactory;
+  runtimeId: string;
+  runtimeEndpoint: string;
+  externalSessionId: string;
+  sessionInput: SessionInput;
+  client: OpencodeClient;
+  startedAt: string;
+  subscribeToEvents?: boolean;
+  now: () => string;
+  emit: (externalSessionId: string, event: AgentEvent) => void;
+  logEvent?: OpencodeEventLogger;
+}): AgentSessionSummary => {
   const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
   const title = input.sessionInput.sessionScope
     ? agentSessionTitle(input.sessionInput.sessionScope)
@@ -492,7 +479,8 @@ export const registerSession = (
     workingDirectory: input.sessionInput.workingDirectory,
     sessionAssociation,
     startedAt: input.startedAt,
-    status: startsActive ? "running" : "idle",
+    // Registration prepares a conversation. A prompt or native turn event starts work.
+    status: "idle",
   };
   if (title) {
     summary.title = title;
@@ -554,15 +542,6 @@ export const registerSession = (
       input.sessions.delete(input.externalSessionId);
       throw error;
     }
-  }
-
-  if (input.emitStartedEvent !== false) {
-    input.emit(input.externalSessionId, {
-      type: "session_started",
-      externalSessionId: input.externalSessionId,
-      timestamp: input.now(),
-      message: input.startedMessage,
-    });
   }
 
   return summary;

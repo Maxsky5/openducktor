@@ -173,7 +173,6 @@ export const createTaskSessionStartPreparationService = ({
             if (role === "build" && shouldTransitionBuilderStart(task.status)) {
               yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
             }
-            const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
             yield* Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
@@ -193,9 +192,9 @@ export const createTaskSessionStartPreparationService = ({
                     canonicalRepoPath,
                     worktreePath,
                     taskId,
-                    branch,
                   );
                 } else {
+                  const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
                   const newWorktree = yield* prepareNewTaskWorktree(
                     dependencies,
                     repoConfig,

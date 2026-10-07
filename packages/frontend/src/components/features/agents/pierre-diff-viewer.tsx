@@ -20,10 +20,12 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { toast } from "sonner";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
+import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import {
   hunkResetAnnotationMetadataSchema,
@@ -92,6 +94,7 @@ type PierreHighlightTarget =
   | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
+const EMPTY_LINE_ANNOTATIONS: DiffLineAnnotation<unknown>[] = [];
 type DiffCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
 const DIFF_WRAPPER_STYLE: DiffCssProperties = {
   "--diffs-font-size": "12px",
@@ -272,8 +275,17 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
       return;
     }
 
-    workerPool.primeDiffHighlightCache(fileDiff);
-  }, [fileDiff, workerPool]);
+    let disposed = false;
+    void workerPool.primeDiffHighlightCache(fileDiff).catch((cause: unknown) => {
+      if (disposed) return;
+      toast.error("Could not prepare syntax highlighting", {
+        description: `${filePath}: ${errorMessage(cause)}. Open the diff to try again.`,
+      });
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [fileDiff, filePath, workerPool]);
 
   return null;
 });
@@ -397,7 +409,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   onResetHunk,
   selectedLines,
   onLineSelectionEnd,
-  lineAnnotations = [],
+  lineAnnotations = EMPTY_LINE_ANNOTATIONS,
   renderAnnotation,
   className,
 }: PierreDiffViewerProps): ReactElement {

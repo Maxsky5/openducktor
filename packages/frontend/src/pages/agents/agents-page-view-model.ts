@@ -3,7 +3,6 @@ import type { AgentRole } from "@openducktor/core";
 import type {
   AgentRoleOption,
   AgentStudioHeaderModel,
-  AgentStudioTaskTabsModel,
   TaskExecutionDocument,
   TaskExecutionDocumentPanelModel,
 } from "@/components/features/agents";
@@ -23,24 +22,6 @@ export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<Age
     { ...AGENT_ROLE_LABELS },
   );
 };
-
-export const buildAgentStudioTaskTabsModel = (args: {
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  availableTabTasks: TaskCard[];
-  isLoadingTasks: boolean;
-  onCreateTab: (taskId: string) => void;
-  onCloseTab: (taskId: string) => void;
-  onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
-  agentStudioReady: boolean;
-}): AgentStudioTaskTabsModel => ({
-  tabs: args.taskTabs,
-  availableTabTasks: args.availableTabTasks,
-  isLoadingAvailableTabTasks: args.isLoadingTasks,
-  onCreateTab: args.onCreateTab,
-  onCloseTab: args.onCloseTab,
-  onReorderTab: args.onReorderTab,
-  agentStudioReady: args.agentStudioReady,
-});
 
 /** The chat header model without the git conflict handler, which the page shell adds. */
 export type AgentStudioWorkflowHeaderModel = Omit<

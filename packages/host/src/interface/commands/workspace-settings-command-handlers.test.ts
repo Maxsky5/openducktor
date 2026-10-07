@@ -1,6 +1,11 @@
 import { createHostRuntimeServiceTestDouble } from "../../test-support/host-runtime-service-test-double";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
-import { DEFAULT_AGENT_RUNTIMES, DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  settingsSnapshotSchema,
+  type SidebarSessionGrouping,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -17,6 +22,39 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createWorkspaceSettingsCommandHandlers", () => {
+  test("validates sidebar grouping before dispatch and returns the saved snapshot", async () => {
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      appearance: { sidebarSessionGrouping: "none" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const calls: SidebarSessionGrouping[] = [];
+    const service = createWorkspaceSettingsServiceTestDouble({
+      updateSidebarSessionGrouping(grouping) {
+        calls.push(grouping);
+        return Effect.succeed(snapshot);
+      },
+    });
+    const router = createHostCommandRouter({
+      handlers: createWorkspaceSettingsCommandHandlers(
+        service,
+        createHostRuntimeServiceTestDouble(),
+      ),
+    });
+    expect(
+      await router.invoke("workspace_update_sidebar_session_grouping", { grouping: "none" }),
+    ).toEqual(snapshot);
+    await expect(
+      router.invoke("workspace_update_sidebar_session_grouping", { grouping: "role" }),
+    ).rejects.toThrow(/expected one of/);
+    await expect(router.invoke("workspace_update_sidebar_session_grouping", {})).rejects.toThrow(
+      /expects argument 'grouping'/,
+    );
+    expect(calls).toEqual(["none"]);
+  });
+
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
     const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
@@ -262,7 +300,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             theme: "light",
             git: { defaultMergeMethod: "merge_commit" },
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
-            appearance: { horizontalScrollbarVisibility: "system" },
+            appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
               showThinkingMessages: false,
               expandFileDiffsByDefault: false,
@@ -292,7 +330,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             theme: "light",
             git: { defaultMergeMethod: "merge_commit" },
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
-            appearance: { horizontalScrollbarVisibility: "system" },
+            appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
               showThinkingMessages: false,
               expandFileDiffsByDefault: false,
@@ -323,7 +361,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           theme: "light",
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          appearance: { horizontalScrollbarVisibility: "system" },
+          appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
           chat: {
             showThinkingMessages: false,
             expandFileDiffsByDefault: false,
@@ -468,7 +506,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          appearance: { horizontalScrollbarVisibility: "system" },
+          appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
           chat: { showThinkingMessages: false, extra: true },
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },

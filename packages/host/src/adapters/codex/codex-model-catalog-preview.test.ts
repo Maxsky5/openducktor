@@ -44,7 +44,7 @@ test("a failed Codex preview spawn reports an error without crashing the host", 
 });
 
 describe("Codex model catalog preview lifecycle", () => {
-  const serverScript = (answerModels: boolean) => `
+  const serverScript = (modelReply: "catalog" | "none" | "error") => `
     let input = "";
     process.stdin.on("data", (chunk) => {
       input += chunk.toString();
@@ -58,9 +58,14 @@ describe("Codex model catalog preview lifecycle", () => {
             codexHome: "/tmp", platformFamily: "unix", platformOs: "linux", userAgent: "test"
           } }) + "\\n");
         }
-        if (request.method === "model/list" && ${answerModels}) {
+        if (request.method === "model/list" && ${modelReply === "catalog"}) {
           process.stdout.write(JSON.stringify({ id: request.id, result: {
             data: [], nextCursor: null
+          } }) + "\\n");
+        }
+        if (request.method === "model/list" && ${modelReply === "error"}) {
+          process.stdout.write(JSON.stringify({ id: request.id, error: {
+            code: -32603, message: "Model read failed"
           } }) + "\\n");
         }
       }
@@ -77,7 +82,7 @@ describe("Codex model catalog preview lifecycle", () => {
     const readModels = createPreview({
       processTreeTerminator,
       spawnProcess: (_command, _args, options) => {
-        const child = spawn(process.execPath, ["-e", serverScript(true)], options);
+        const child = spawn(process.execPath, ["-e", serverScript("catalog")], options);
         children.push(child);
         return child;
       },
@@ -91,7 +96,7 @@ describe("Codex model catalog preview lifecycle", () => {
     expect(children[0]?.killed).toBe(true);
   });
 
-  test("times out an unanswered model read and still releases the child", async () => {
+  test("times out an unanswered preview request and still releases the child", async () => {
     const children: CodexChildProcess[] = [];
     const processTreeTerminator: ProcessTreeTerminator = mock(() =>
       Effect.sync(() => {
@@ -102,7 +107,7 @@ describe("Codex model catalog preview lifecycle", () => {
       processTreeTerminator,
       requestTimeoutMs: 500,
       spawnProcess: (_command, _args, options) => {
-        const child = spawn(process.execPath, ["-e", serverScript(false)], options);
+        const child = spawn(process.execPath, ["-e", serverScript("none")], options);
         children.push(child);
         return child;
       },
@@ -111,6 +116,7 @@ describe("Codex model catalog preview lifecycle", () => {
     const failure = await Effect.runPromise(Effect.flip(readModels(process.cwd())));
 
     expect(failure._tag).toBe("HostOperationError");
+    expect(failure.message).toContain("Timed out waiting for Codex app-server request");
     expect(processTreeTerminator).toHaveBeenCalledTimes(1);
     expect(children[0]?.stdin.destroyed).toBe(true);
     expect(children[0]?.killed).toBe(true);
@@ -133,9 +139,8 @@ describe("Codex model catalog preview lifecycle", () => {
       );
     const readModels = createPreview({
       processTreeTerminator,
-      requestTimeoutMs: 500,
       spawnProcess: (_command, _args, options) => {
-        const child = spawn(process.execPath, ["-e", serverScript(false)], options);
+        const child = spawn(process.execPath, ["-e", serverScript("error")], options);
         children.push(child);
         return child;
       },
@@ -144,6 +149,7 @@ describe("Codex model catalog preview lifecycle", () => {
     const failure = await Effect.runPromise(Effect.flip(readModels(process.cwd())));
 
     expect(failure.message).toContain("model/list");
+    expect(failure.message).toContain("Model read failed");
     expect(failure.message).toContain("Codex cleanup failed");
     expect(children[0]?.killed).toBe(true);
   });

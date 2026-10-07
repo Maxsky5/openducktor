@@ -120,6 +120,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
+    taskStore,
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
     git,

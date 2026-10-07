@@ -1,0 +1,47 @@
+:root {
+  --session-reveal-dur: 200ms;
+}
+
+/* Collapse the row's space, like an accordion, without scaling its text or icon. */
+.session-presence {
+  interpolate-size: allow-keywords;
+  height: auto;
+  min-height: 0;
+  overflow: clip;
+  /* Let corner cues and surface shadows extend without adding space to each row. */
+  overflow-clip-margin: var(--spacing);
+  opacity: 1;
+  transition-property: height, opacity;
+  transition-duration: var(--session-reveal-dur);
+  transition-timing-function: var(--modal-ease);
+}
+
+.session-presence[data-session-presence="exiting"] {
+  height: 0;
+  opacity: 0;
+  transition-duration: var(--modal-close-dur);
+}
+
+@starting-style {
+  .session-presence[data-animate-entry="true"] {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-presence {
+    transition-property: opacity;
+    transition-duration: var(--modal-close-dur);
+  }
+
+  .session-presence[data-session-presence="exiting"] {
+    height: auto;
+  }
+
+  @starting-style {
+    .session-presence[data-animate-entry="true"] {
+      height: auto;
+    }
+  }
+}

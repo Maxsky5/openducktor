@@ -205,6 +205,100 @@ describe("createClaudeAgentSdkSession", () => {
     },
   );
 
+  test.each([
+    { name: "fresh", options: {}, events: ["session_started", "session_idle"] },
+    { name: "restored", options: { resume: "session-1" }, events: [] },
+    {
+      name: "forked",
+      options: { resume: "source-session", forkSession: true },
+      events: ["session_started", "session_idle"],
+    },
+  ])("publishes startup activity only for new sessions: $name", async (scenario) => {
+    const streamFinished = deferred<void>();
+    const fakeQuery = createClaudeQueryFixture({
+      close: () => streamFinished.resolve(),
+      initializationResult: async () => ({
+        account: {},
+        agents: [],
+        available_output_styles: [],
+        commands: [],
+        models: [],
+        output_style: "default",
+      }),
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
+
+    try {
+      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+      const events: AgentEvent[] = [];
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
+        launchPolicy: {
+          resolve: () => Effect.succeed({}),
+        },
+        onBackgroundFailure: () => Effect.void,
+        resolveMcpBridgeConnection: () => Effect.die("unused"),
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: { kind: "executable", executablePath: process.execPath },
+        }),
+        sessionStore,
+        toolDiscovery: createToolDiscovery(),
+      };
+
+      await expect(
+        createClaudeAgentSdkSession({
+          emit: (_session, event) => events.push(event),
+          input: {
+            repoPath: process.cwd(),
+            runtimeKind: "claude",
+            workingDirectory: process.cwd(),
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          initialTodos: [],
+          now: () => "2026-06-25T20:00:00.000Z",
+          randomId: () => "id",
+          resolvedDependencies: {
+            claudeExecutablePath: process.execPath,
+            mcpBridgeConnection: {
+              workspaceId: "workspace-1",
+              hostUrl: "http://127.0.0.1:1",
+              hostToken: "bridge-secret-value",
+            },
+            mcpCommand: [process.execPath],
+          },
+          runtimeId: "runtime-1",
+          serviceInput,
+          sessionInput: {
+            externalSessionId: "session-1",
+            options: scenario.options,
+            startedMessage: "Started build session",
+          },
+          sessionStore,
+        }),
+      ).resolves.toMatchObject({
+        externalSessionId: "session-1",
+        status: "idle",
+      });
+
+      expect(events.map((event) => event.type)).toEqual([...scenario.events]);
+      const session = sessionStore.get("session-1");
+      if (!session) {
+        throw new Error("Expected initialized session");
+      }
+      sessionStore.close(session);
+    } finally {
+      streamFinished.resolve();
+      querySpy.mockRestore();
+    }
+  });
+
   test("shares nested transcript state between SDK hooks and session events", async () => {
     const streamFinished = deferred<void>();
     const fakeQuery = createClaudeQueryFixture({

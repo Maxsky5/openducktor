@@ -112,25 +112,10 @@ export const mergeToolMessages = (
     );
   }
 
-  const nextMeta: typeof loadedMessage.meta = { ...loadedMessage.meta };
-  if (
-    loadedMessage.meta.observedStartedAtMs === undefined &&
-    currentMessage.meta.observedStartedAtMs !== undefined
-  ) {
-    nextMeta.observedStartedAtMs = currentMessage.meta.observedStartedAtMs;
-  }
-  if (
-    loadedMessage.meta.observedEndedAtMs === undefined &&
-    currentMessage.meta.observedEndedAtMs !== undefined
-  ) {
-    nextMeta.observedEndedAtMs = currentMessage.meta.observedEndedAtMs;
-  }
-  if (
-    loadedMessage.meta.inputReadyAtMs === undefined &&
-    currentMessage.meta.inputReadyAtMs !== undefined
-  ) {
-    nextMeta.inputReadyAtMs = currentMessage.meta.inputReadyAtMs;
-  }
+  const nextMeta = { ...currentMessage.meta, ...loadedMessage.meta };
+  // History often omits execution timing and rich tool output that live events supplied.
+  if (nextMeta.status !== "error") delete nextMeta.error;
+  if (nextMeta.status === "error") delete nextMeta.output;
 
   return applyPreferredMessageTimestamp(
     {

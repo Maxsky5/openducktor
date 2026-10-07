@@ -955,11 +955,116 @@ describe("use-agent-orchestrator-operations session state", () => {
         (entry) => entry.externalSessionId === "external-1",
       );
 
-      expect(restoredSession?.historyLoadState).toBe("loaded");
+      expect(restoredSession?.historyLoadState).toBe("stale");
       expect(historyCalls).toBe(1);
     } finally {
       await harness.unmount();
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+    }
+  });
+
+  test("a transcript gap leaves hidden sessions stale and discards an older read", async () => {
+    const secondRecord = {
+      ...persistedSessionFixture,
+      externalSessionId: "external-2",
+      role: "qa" as const,
+    };
+    const history = (text: string): AgentSessionHistoryMessage[] => [
+      {
+        messageId: "answer",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        text,
+        parts: [],
+      },
+    ];
+    const oldRead = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const historyReads: string[] = [];
+    const originalLoad = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async (input) => {
+      historyReads.push(input.externalSessionId);
+      if (historyReads.length === 3) return oldRead.promise;
+      return history(historyReads.length === 4 ? "Fresh answer" : "Baseline");
+    };
+    const liveStream = createLiveSessionStreamFixture([
+      createAgentSessionLiveSnapshotFixture(),
+      createAgentSessionLiveSnapshotFixture({
+        ref: { externalSessionId: secondRecord.externalSessionId },
+      }),
+    ]);
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies: createTestDependencies(
+        {
+          agentSessionsList: async () => [persistedSessionFixture, secondRecord],
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture, secondRecord] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
+    });
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => listHarnessSessions(state).length === 2);
+      await harness.run(async () => {
+        for (const identity of [persistedSessionFixture, secondRecord])
+          await harness.getLatest().operations.loadAgentSessionHistory(identity);
+      });
+      const baselines = listHarnessSessions(harness.getLatest()).map((session) => session.messages);
+      const emitGap = () =>
+        liveStream.emit({
+          type: "transcript_gap",
+          repoPath: "/tmp/repo",
+          message: "Missed transcript events",
+        });
+      await harness.run(emitGap);
+      expect(historyReads).toEqual(["external-1", "external-2"]);
+      expect(
+        listHarnessSessions(harness.getLatest()).map((session) => session.historyLoadState),
+      ).toEqual(["stale", "stale"]);
+      expect(listHarnessSessions(harness.getLatest()).map((session) => session.messages)).toEqual(
+        baselines,
+      );
+      let interruptedRead: Promise<unknown> | undefined;
+      await harness.run(() => {
+        interruptedRead = harness
+          .getLatest()
+          .operations.loadAgentSessionHistory(persistedSessionFixture);
+      });
+      await harness.waitFor(() => historyReads.length === 3);
+      await harness.run(emitGap);
+      await harness.run(async () => {
+        await interruptedRead;
+      });
+      await harness.run(async () => {
+        await harness.getLatest().operations.loadAgentSessionHistory(persistedSessionFixture);
+      });
+      await harness.run(() => {
+        oldRead.resolve(history("Obsolete answer"));
+      });
+      const sessions = listHarnessSessions(harness.getLatest());
+      expect(historyReads).toEqual(["external-1", "external-2", "external-1", "external-1"]);
+      expect(
+        sessions
+          .find((session) => session.externalSessionId === "external-1")
+          ?.messages.items.map((message) => message.content),
+      ).toContain("Fresh answer");
+      expect(
+        sessions
+          .find((session) => session.externalSessionId === "external-1")
+          ?.messages.items.map((message) => message.content),
+      ).not.toContain("Obsolete answer");
+      expect(
+        sessions.find((session) => session.externalSessionId === "external-2")?.historyLoadState,
+      ).toBe("stale");
+    } finally {
+      oldRead.resolve([]);
+      await harness.unmount();
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoad;
     }
   });
 

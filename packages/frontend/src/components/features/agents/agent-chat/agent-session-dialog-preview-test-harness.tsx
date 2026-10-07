@@ -25,6 +25,8 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
   AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
   AgentSessionsContext,
   HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
@@ -163,7 +165,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     sendAgentMessage: async () => undefined,
     stopAgentSession: async () => undefined,
     continueInterruptedTurn: async () => undefined,
-    updateAgentSessionModel: () => undefined,
+    updateAgentSessionModel: async () => undefined,
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,
   };
@@ -182,7 +184,24 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
             <RuntimeDefinitionsContext value={definitions}>
               <HostRuntimeStatusContext value={health}>
                 <AgentSessionsContext value={sessions}>
-                  <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+                  <AgentOperationsContext value={operations}>
+                    <AgentSessionHistoryLoadContext
+                      value={{ loadAgentSessionHistory: operations.loadAgentSessionHistory }}
+                    >
+                      <AgentSessionReadModelStateContext
+                        value={{
+                          sessionReadModelLoadState: repoPath
+                            ? { kind: "ready", workspaceRepoPath: repoPath }
+                            : { kind: "unavailable" },
+                          reloadSessionReadModel: () => {},
+                          getSessionFault: () => null,
+                          workspaceSessionRecordsError: null,
+                        }}
+                      >
+                        {children}
+                      </AgentSessionReadModelStateContext>
+                    </AgentSessionHistoryLoadContext>
+                  </AgentOperationsContext>
                 </AgentSessionsContext>
               </HostRuntimeStatusContext>
             </RuntimeDefinitionsContext>

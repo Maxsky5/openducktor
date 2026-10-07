@@ -1,11 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
+import { useLayoutEffect } from "react";
 import type { SetURLSearchParams } from "react-router";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import { getWorkspaceRestorePhase, useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
+import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 
 enableReactActEnvironment();
 
@@ -20,6 +21,7 @@ type HookArgs = {
   agentStudioStateError?: Error | null;
   retry?: () => void;
   onRender?: (state: ReturnType<typeof useAgentStudioQuerySync>) => void;
+  onCommit?: (state: ReturnType<typeof useAgentStudioQuerySync>) => void;
   setSearchParams?: SetURLSearchParams;
 };
 
@@ -31,6 +33,7 @@ const useHookHarness = ({
   agentStudioStateError = null,
   retry = () => {},
   onRender,
+  onCommit,
   setSearchParams = noopSetSearchParams,
 }: HookArgs) => {
   const state = useAgentStudioQuerySync({
@@ -45,6 +48,9 @@ const useHookHarness = ({
     setSearchParams,
   });
   onRender?.(state);
+  useLayoutEffect(() => {
+    onCommit?.(state);
+  });
   return state;
 };
 
@@ -52,23 +58,6 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 describe("useAgentStudioQuerySync", () => {
-  test("reports workspace boundary phases", () => {
-    expect(
-      getWorkspaceRestorePhase({
-        activeWorkspaceId: "repo-b",
-        lastWorkspaceId: "repo-a",
-        boundaryWorkspaceId: null,
-      }),
-    ).toBe("detecting");
-    expect(
-      getWorkspaceRestorePhase({
-        activeWorkspaceId: "repo-a",
-        lastWorkspaceId: "repo-a",
-        boundaryWorkspaceId: null,
-      }),
-    ).toBe("idle");
-  });
-
   test("restores the host-owned workspace snapshot", async () => {
     const renders: ReturnType<typeof useAgentStudioQuerySync>[] = [];
     const searchWrites: string[] = [];
@@ -118,6 +107,51 @@ describe("useAgentStudioQuerySync", () => {
     expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
     expect(harness.getLatest().roleFromQuery).toBe("qa");
     await harness.unmount();
+  });
+
+  test("commits a new workspace's direct session without clearing it or showing the old selection", async () => {
+    const commits: ReturnType<typeof useAgentStudioQuerySync>[] = [];
+    const writes: string[] = [];
+    const harness = createHookHarness({
+      activeWorkspaceId: "repo-a",
+      agentStudioState: null,
+      searchParams: new URLSearchParams("workspace=repo-a&task=task-a&session=session-a&agent=qa"),
+      onCommit: (state) => commits.push(state),
+      setSearchParams: (next) => writes.push(String(next)),
+    });
+
+    try {
+      await harness.mount();
+      commits.length = 0;
+      await harness.update({
+        activeWorkspaceId: "repo-b",
+        agentStudioState: null,
+        isLoadingAgentStudioState: true,
+        searchParams: new URLSearchParams(
+          "workspace=repo-b&task=task-b&session=session-b&agent=build&runtimeKind=claude&workingDirectory=%2Frepo-b",
+        ),
+        onCommit: (state) => commits.push(state),
+        setSearchParams: (next) => writes.push(String(next)),
+      });
+
+      expect(harness.getLatest().taskIdParam).toBe("task-b");
+      expect(harness.getLatest().sessionExternalIdParam).toBe("session-b");
+      expect(harness.getLatest().sessionIdentityParam).toEqual({
+        externalSessionId: "session-b",
+        runtimeKind: "claude",
+        workingDirectory: "/repo-b",
+      });
+      expect(harness.getLatest().isWorkspaceRestorePending).toBeFalse();
+      expect(commits.length).toBeGreaterThan(0);
+      expect(
+        commits.every(
+          (state) => state.taskIdParam === "task-b" && !state.isWorkspaceRestorePending,
+        ),
+      ).toBeTrue();
+      expect(writes).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("clears the prior workspace before restoring the next snapshot", async () => {

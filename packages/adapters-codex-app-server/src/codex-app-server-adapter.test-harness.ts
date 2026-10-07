@@ -319,6 +319,8 @@ export const codexThreadFixture = (
   projectId: null,
   historyMode: "paginated",
   modelProvider: "openai",
+  model: null,
+  reasoningEffort: null,
   createdAt: 1_778_112_000,
   updatedAt: 1_778_112_000,
   recencyAt: 1_778_112_000,

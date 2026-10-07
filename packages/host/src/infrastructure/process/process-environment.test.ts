@@ -56,6 +56,16 @@ const processHasStopped = (pid: number): boolean => {
   }
 };
 
+const stopChild = (pid: number | null): void => {
+  if (pid === null) return;
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (cause) {
+    // The probe can stop the child before test cleanup sends its signal.
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) throw cause;
+  }
+};
+
 const resolveProcessEnvironment = async (
   input: Parameters<typeof createProcessEnvironment>[0],
 ): Promise<NodeJS.ProcessEnv> =>
@@ -566,9 +576,7 @@ describe("createProcessEnvironment", () => {
         expect(resolution.environment.PATH).toBeUndefined();
         await waitFor(() => processHasStopped(stoppedPid));
       } finally {
-        if (childPid && !processHasStopped(childPid)) {
-          process.kill(childPid, "SIGKILL");
-        }
+        stopChild(childPid);
         await rm(root, { force: true, recursive: true });
       }
     },
@@ -638,9 +646,7 @@ describe("createProcessEnvironment", () => {
       expect(resolution.environment.PATH).toBeUndefined();
       await waitFor(() => processHasStopped(stoppedPid));
     } finally {
-      if (childPid && !processHasStopped(childPid)) {
-        process.kill(childPid, "SIGKILL");
-      }
+      stopChild(childPid);
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -674,9 +680,7 @@ describe("createProcessEnvironment", () => {
         expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/background");
         await waitFor(() => processHasStopped(stoppedPid));
       } finally {
-        if (childPid && !processHasStopped(childPid)) {
-          process.kill(childPid, "SIGKILL");
-        }
+        stopChild(childPid);
         await rm(root, { force: true, recursive: true });
       }
     },

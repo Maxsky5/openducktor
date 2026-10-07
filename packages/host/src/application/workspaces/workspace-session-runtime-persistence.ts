@@ -80,6 +80,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
+    recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<boolean, HostError>;
     isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
     /** Stops background renames and title syncs before their runtime and store close. */
@@ -89,7 +90,6 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const jobsScope = Scope.makeUnsafe();
   const jobs = Effect.runSync(Scope.provide(FiberSet.make<void>(), jobsScope));
   const startJob = (job: Effect.Effect<void>) => FiberSet.run(jobs, job).pipe(Effect.asVoid);
-  const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const sendsInFlight = new Set<string>();
   const codexTitleSync: CodexTitleSyncState = new Map();
   const saveCodexMessage = (
@@ -322,22 +322,20 @@ export const createWorkspaceSessionRuntimePersistence = ({
         );
       if (published._tag === "Failure") return yield* Effect.fail(published.failure);
     });
-  const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
+  const recordActivity = (runtimeRef: AgentSessionLiveRef, occurredAt: number) =>
     Effect.gen(function* () {
-      const key = agentSessionRefKey(runtimeRef);
-      const pending = pendingFinalMessages.get(key);
-      if (!pending) return;
       const known = yield* find(runtimeRef);
-      if (known && pending.occurredAt > known.session.updatedAt) {
+      if (!known) return false;
+      if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
         const saved = yield* storeEffect(
           store.recordActivity({
             ...known.ref,
-            activity: { type: "assistant_response", occurredAt: pending.occurredAt },
+            activity: { type: "session_activity", occurredAt },
           }),
         );
         yield* publishUpdated(known.ref.workspaceId, saved);
       }
-      pendingFinalMessages.delete(key);
+      return true;
     });
   const validateRef = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
@@ -353,6 +351,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   return {
     shutdown: () => Scope.close(jobsScope, Exit.void),
+    recordActivity,
     markCodexTitleSyncPending: (ref) => {
       codexTitleSync.set(agentSessionRefKey(ref), "pending");
     },
@@ -445,39 +444,22 @@ export const createWorkspaceSessionRuntimePersistence = ({
         };
       }),
     recordAcceptedMessage: (ref, message) => recordAcceptedMessage(ref, message, true),
-    observe: (envelope) =>
+    observe: (envelope, provenance) =>
       Effect.gen(function* () {
+        if (provenance === "baseline") return;
         if (envelope.type === "session_removed") {
           const key = agentSessionRefKey(envelope.ref);
-          pendingFinalMessages.delete(key);
           codexTitleSync.delete(key);
-          return;
-        }
-        if (envelope.type === "session_upsert") {
-          if (envelope.session.activity === "idle") yield* flushFinalMessage(envelope.session.ref);
           return;
         }
         if (envelope.type !== "transcript_event") return;
         const { event } = envelope;
-        const key = agentSessionRefKey(event.sessionRef);
         if (event.type === "user_message") {
           yield* recordObservedMessage(event.sessionRef, event);
-        } else if (event.type === "assistant_message") {
-          if (yield* find(event.sessionRef)) {
-            const occurredAt = Date.parse(event.timestamp);
-            const previous = pendingFinalMessages.get(key);
-            if (!previous || occurredAt > previous.occurredAt)
-              pendingFinalMessages.set(key, { messageId: event.messageId, occurredAt });
-          }
-        } else if (event.type === "transcript_retracted") {
-          const pending = pendingFinalMessages.get(key);
-          if (pending && event.messageIds.includes(pending.messageId))
-            pendingFinalMessages.delete(key);
         } else if (
           event.type === "session_idle" ||
           (event.type === "session_status" && event.status.type === "idle")
         ) {
-          yield* flushFinalMessage(event.sessionRef);
           if (
             event.type === "session_idle" &&
             event.turnCompleted === true &&

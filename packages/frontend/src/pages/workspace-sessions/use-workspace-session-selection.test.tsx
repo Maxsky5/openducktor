@@ -29,7 +29,11 @@ test("selection commits before the scheduled storage write and unmount flushes t
   const sessions = [record("First"), record("Second")];
   const h = renderHook<WorkspaceSession | null, string | undefined>(
     (requestedSessionId: string | undefined) => {
-      const selected = useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId });
+      const { selected } = useWorkspaceSessionSelection({
+        workspaceId,
+        sessions,
+        requestedSessionId,
+      });
       useLayoutEffect(() => {
         commits.push({ selected: selected?.id, stored: localStorage.getItem(key) });
       }, [selected]);
@@ -56,7 +60,8 @@ test("replaces a stale saved ID and clears it only after the loaded list becomes
   localStorage.setItem(key, "Archived");
   const h = renderHook<WorkspaceSession | null, WorkspaceSession[] | undefined>(
     (sessions: WorkspaceSession[] | undefined) =>
-      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined }),
+      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined })
+        .selected,
     { initialProps: undefined },
   );
   try {
@@ -72,5 +77,54 @@ test("replaces a stale saved ID and clears it only after the loaded list becomes
   } finally {
     h.unmount();
     localStorage.removeItem(key);
+  }
+});
+
+test("keeps a missing requested chat unselected and keeps the saved selection", () => {
+  const workspaceId = crypto.randomUUID();
+  const key = workspaceSessionSelectionStorageKey(workspaceId);
+  localStorage.setItem(key, "First");
+  const h = renderHook(() =>
+    useWorkspaceSessionSelection({
+      workspaceId,
+      sessions: [record("First"), record("Second")],
+      requestedSessionId: "Archived",
+    }),
+  );
+  try {
+    expect(h.result.current).toEqual({ selected: null, missingSessionId: "Archived" });
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(localStorage.getItem(key)).toBe("First");
+  } finally {
+    h.unmount();
+    localStorage.removeItem(key);
+  }
+});
+
+test("restores each workspace's saved chat when the page stays mounted", () => {
+  const workspaceA = crypto.randomUUID();
+  const workspaceB = crypto.randomUUID();
+  const keyA = workspaceSessionSelectionStorageKey(workspaceA);
+  const keyB = workspaceSessionSelectionStorageKey(workspaceB);
+  localStorage.setItem(keyA, "First");
+  localStorage.setItem(keyB, "Second");
+  const sessions = [record("First"), record("Second")];
+  const h = renderHook(
+    (workspaceId: string) =>
+      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined }),
+    { initialProps: workspaceA },
+  );
+  try {
+    h.rerender(workspaceB);
+    expect(h.result.current.selected?.id).toBe("Second");
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(localStorage.getItem(keyA)).toBe("First");
+    expect(localStorage.getItem(keyB)).toBe("Second");
+    h.rerender(workspaceA);
+    expect(h.result.current.selected?.id).toBe("First");
+  } finally {
+    h.unmount();
+    localStorage.removeItem(keyA);
+    localStorage.removeItem(keyB);
   }
 });

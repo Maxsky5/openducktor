@@ -10,7 +10,7 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { memo, type ReactElement, useState } from "react";
+import { memo, type ReactElement, type ReactNode, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +59,8 @@ type GitInfoHeaderProps = Pick<
   pullFromUpstream: (() => Promise<void>) | null;
   onDetectPullRequest?: (() => Promise<void> | void) | null;
   onRefresh: () => void;
+  /** Replaces the read-only branch label in repository mode with a branch switcher. */
+  repositoryBranchControl?: ReactNode;
 };
 
 type GitActionIconButtonProps = {
@@ -137,6 +139,7 @@ function GitActionIconButton({
 
 type GitBranchContextRowProps = {
   currentBranchLabel: string;
+  repositoryBranchControl: ReactNode;
   branchState: {
     hasTargetAhead: boolean;
     isRepositoryMode: boolean;
@@ -303,6 +306,7 @@ function GitTargetBranchPanel({
 
 function GitBranchContextRow({
   currentBranchLabel,
+  repositoryBranchControl,
   branchState,
   canEditTargetBranch,
   targetAheadCount,
@@ -312,6 +316,13 @@ function GitBranchContextRow({
   onUpdateTargetBranch,
 }: GitBranchContextRowProps): ReactElement {
   const { hasTargetAhead, isRepositoryMode } = branchState;
+  if (isRepositoryMode && repositoryBranchControl) {
+    return (
+      <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
+        {repositoryBranchControl}
+      </div>
+    );
+  }
   if (isRepositoryMode) {
     return (
       <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
@@ -896,6 +907,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   targetBranchOptions = [],
   targetBranchSelectionValue = "",
   onUpdateTargetBranch,
+  repositoryBranchControl = null,
 }: GitInfoHeaderProps): ReactElement {
   const state = getGitInfoHeaderState({
     contextMode,
@@ -931,6 +943,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
     <div className="flex flex-col border-b border-border">
       <GitBranchContextRow
         currentBranchLabel={state.currentBranchLabel}
+        repositoryBranchControl={repositoryBranchControl}
         branchState={{
           hasTargetAhead: state.hasTargetAhead,
           isRepositoryMode: state.isRepositoryMode,

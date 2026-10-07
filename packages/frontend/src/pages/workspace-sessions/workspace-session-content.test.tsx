@@ -23,6 +23,7 @@ import {
 } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
 import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
 import * as sessionChat from "./workspace-session-chat";
@@ -81,6 +82,7 @@ function renderClosedSession(
   panelOpen = false,
   onSafeToLeave?: () => void,
 ) {
+  let currentWorkspace: ActiveWorkspace = workspace;
   let currentRecord = sessionRecord;
   let currentFile = selectedFile;
   let sessionIds = [sessionRecord.id];
@@ -110,7 +112,7 @@ function renderClosedSession(
           {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
           <Tabs value={currentRecord.id}>
             <WorkspaceSessionContent
-              workspace={workspace}
+              workspace={currentWorkspace}
               record={currentRecord}
               sessionIds={sessionIds}
               panelState={{
@@ -137,6 +139,13 @@ function renderClosedSession(
     },
     setSessions: (ids: string[]) => {
       sessionIds = ids;
+      view.rerender(content(branch, revision));
+    },
+    setWorkspace: (next: ActiveWorkspace, session: WorkspaceSession) => {
+      currentWorkspace = next;
+      currentRecord = session;
+      currentFile = null;
+      sessionIds = [session.id];
       view.rerender(content(branch, revision));
     },
     setPanelOpen: (open: boolean) => {
@@ -212,6 +221,54 @@ test("switching chats keeps the tools and chat drafts and resets the file owner"
     queryClient.clear();
     preview.mockRestore();
     tools.mockRestore();
+    chat.mockRestore();
+  }
+});
+
+test("switching workspaces retains chat drafts without sharing them or hidden subscriptions", () => {
+  const active = new Set<string>();
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(({ workspace }) => {
+    useEffect(() => {
+      active.add(workspace.workspaceId);
+      return () => {
+        active.delete(workspace.workspaceId);
+      };
+    }, [workspace.workspaceId]);
+    return <input aria-label={`${workspace.workspaceName} draft`} />;
+  });
+  const queryClient = newQueryClient();
+  const otherWorkspace = { workspaceId: "other", workspaceName: "Other", repoPath: "/other" };
+  for (const scope of [workspace, otherWorkspace]) {
+    queryClient.setQueryData(
+      repoConfigQueryOptions(scope.workspaceId).queryKey,
+      repoConfigSchema.parse({ ...scope, agentStudioState: { openTaskIds: [] } }),
+    );
+  }
+  const otherRecord = {
+    ...record,
+    executionTarget: { kind: "local_repo_root" as const, workingDirectory: "/other" },
+  };
+  const view = renderClosedSession(queryClient, "main", undefined, record, null);
+  try {
+    const first = screen.getByLabelText<HTMLInputElement>("Workspace draft");
+    fireEvent.change(first, { target: { value: "First workspace draft" } });
+    view.setWorkspace(otherWorkspace, otherRecord);
+    const second = screen.getByLabelText<HTMLInputElement>("Other draft");
+    expect(second.value).toBe("");
+    expect(second).not.toBe(first);
+    fireEvent.change(second, { target: { value: "Second workspace draft" } });
+    expect([...active]).toEqual(["other"]);
+    view.setWorkspace(workspace, record);
+    expect(screen.getByLabelText("Workspace draft")).toBe(first);
+    expect(first.value).toBe("First workspace draft");
+    expect([...active]).toEqual(["workspace"]);
+    view.setWorkspace(otherWorkspace, otherRecord);
+    expect(screen.getByLabelText("Other draft")).toBe(second);
+    expect(second.value).toBe("Second workspace draft");
+  } finally {
+    view.unmount();
+    expect(active.size).toBe(0);
+    queryClient.clear();
     chat.mockRestore();
   }
 });
@@ -589,8 +646,8 @@ test("a guarded workspace change locks the preview and file selection until it f
   }
 });
 
-test("the tools panel starts beside the chat header", () => {
-  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+test("the tools panel stays beside the chat", () => {
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div>Chat</div>);
   const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
     <div>Tools</div>
   ));
@@ -629,9 +686,7 @@ test("the tools panel starts beside the chat header", () => {
   try {
     const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
     expect(panels.length).toBe(2);
-    expect(
-      screen.getByRole("heading", { name: "Chat" }).closest('[data-slot="resizable-panel"]'),
-    ).toBe(panels.item(0));
+    expect(screen.getByText("Chat").closest('[data-slot="resizable-panel"]')).toBe(panels.item(0));
     expect(panels[1]?.textContent).toBe("Tools");
   } finally {
     view.unmount();

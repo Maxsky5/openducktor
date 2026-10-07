@@ -85,7 +85,7 @@ export const createAgentRuntimeQueryService = (
           }).pipe(
             Effect.as(false),
             Effect.catchTag("HostOperationError", (cause) =>
-              method === "loadSessionHistory" &&
+              readsSavedSession(method) &&
               input.sessionScope?.kind === "workflow" &&
               hasNestedNodeErrorCode(cause, "ENOENT")
                 ? Effect.succeed(true)
@@ -186,6 +186,9 @@ export const createAgentRuntimeQueryService = (
     });
   }
 };
+
+/** Saved workflow sessions stay readable after task cleanup removes their managed worktree. */
+const readsSavedSession = (method: QueryMethod): boolean => method === "loadSessionHistory";
 
 const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean => {
   const { promptInput, optionalSurfaces, history } = runtime.capabilities;

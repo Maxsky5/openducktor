@@ -1,9 +1,40 @@
 import { describe, expect, test } from "bun:test";
+import { access } from "node:fs/promises";
 import { assertTerminalPtyConformance } from "../../testing/terminal-pty-conformance";
 import { Effect } from "effect";
 import { createNodePtyPort } from "./pty-process-adapter";
 
 describe("createNodePtyPort", () => {
+  test("removes command hook files when native spawn fails", async () => {
+    let root: string | undefined;
+    const port = createNodePtyPort({
+      nodePty: {
+        spawn: (_shell, _args, options) => {
+          root = options.env?.ZDOTDIR;
+          throw new Error("Native spawn failed");
+        },
+      },
+    });
+    const result = await Effect.runPromise(
+      Effect.result(
+        port.start(
+          {
+            shell: "/bin/zsh",
+            args: ["-l"],
+            cwd: "/repo",
+            env: {},
+            grid: { columns: 80, rows: 24 },
+            commandNonce: "source",
+          },
+          { onOutput: () => {}, onFailure: () => {}, onExit: () => {} },
+        ),
+      ),
+    );
+    expect(result._tag).toBe("Failure");
+    expect(root).toBeString();
+    await expect(access(root!)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   test("includes the native spawn error, shell, and directory in startup failures", async () => {
     const port = createNodePtyPort({
       nodePty: {

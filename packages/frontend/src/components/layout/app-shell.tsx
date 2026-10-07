@@ -1,29 +1,17 @@
-import { LoaderCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  lazy,
-  memo,
-  type ReactElement,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
+import { LoaderCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
-import { SettingsModal } from "@/components/features/settings/settings-modal";
-import {
-  AgentActivityCard,
-  AppBrand,
-  BranchSwitcher,
-  SidebarNavigation,
-} from "@/components/layout/sidebar";
+import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
+import { WorkspaceSidebar } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
+import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import {
   useActiveWorkspace,
@@ -31,10 +19,8 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
-import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
-const WorkspaceCreateActions = lazy(() => import("./sidebar/workspace-create-actions"));
 
 const APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE: AppShellSidebarPreference = "opened";
@@ -89,12 +75,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
   );
-  const hasActiveWorkspace = activeWorkspace !== null;
-  const agentActivity = useShellAgentActivity(
-    activeWorkspace?.repoPath ?? null,
-    activeWorkspace?.workspaceId ?? null,
-  );
-
   useEffect(() => {
     if (workspaces.length === 0) setRepositoryModalOpen(true);
   }, [workspaces.length]);
@@ -118,139 +98,48 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   }, []);
 
   return (
-    <>
-      <div
-        className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
-        data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
-      >
+    <VisibleSessionTargetProvider>
+      <SessionReadStateProvider>
         <div
-          className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
-          aria-hidden="true"
-        />
-        <div className="flex h-full min-h-0 w-full">
-          <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
+          className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
+          data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
+        >
+          <div
+            className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
+            aria-hidden="true"
+          />
+          <div className="flex h-full min-h-0 w-full">
+            <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
 
-          <aside
-            className={cn(
-              "workspace-sidebar flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
-              isSidebarOpen ? "w-[248px]" : "w-14",
-            )}
-          >
-            {isSidebarOpen ? (
-              <>
-                <div className="electron-sidebar-content-open hide-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-                  <div className="electron-sidebar-heading flex items-center justify-between gap-2">
-                    <div className="electron-sidebar-brand">
-                      <AppBrand />
-                    </div>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                      onClick={handleHideSidebar}
-                      aria-label="Hide sidebar"
-                      title="Hide sidebar"
-                    >
-                      <PanelLeftClose className="size-4" />
-                    </Button>
-                  </div>
+            <WorkspaceSidebar
+              isOpen={isSidebarOpen}
+              onHide={handleHideSidebar}
+              onShow={handleShowSidebar}
+              onOpenRepositoryModal={openRepositoryModal}
+            />
 
-                  <div className="space-y-2">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
-                      Workspace
-                    </p>
-                    <p
-                      className="px-1 text-[1rem] font-semibold leading-tight text-sidebar-foreground"
-                      title={activeWorkspace?.workspaceName ?? "No workspace selected"}
-                    >
-                      <span className="line-clamp-2 break-words">
-                        {activeWorkspace?.workspaceName ?? "No workspace selected"}
-                      </span>
-                    </p>
-                  </div>
-
-                  <BranchSwitcher />
-
-                  <DiagnosticsPanel />
-
-                  <SidebarNavigation
-                    hasActiveWorkspace={hasActiveWorkspace}
-                    onBeforeNavigate={guardWorkspaceChange}
-                  />
-                  <Suspense fallback={null}>
-                    <WorkspaceCreateActions />
-                  </Suspense>
-                  <AgentActivityCard
-                    activeSessionCount={agentActivity.activeSessionCount}
-                    waitingForInputCount={agentActivity.waitingForInputCount}
-                    activeSessions={agentActivity.activeSessions}
-                    waitingForInputSessions={agentActivity.waitingForInputSessions}
-                  />
-                </div>
-
-                <div className="border-t border-sidebar-border p-3">
-                  <SettingsModal triggerClassName="w-full justify-start" triggerSize="default" />
-                </div>
-              </>
-            ) : (
-              <div className="electron-sidebar-content-collapsed flex h-full flex-col items-center gap-2 p-2">
-                <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                    onClick={handleShowSidebar}
-                    aria-label="Show sidebar"
-                    title="Show sidebar"
-                  >
-                    <PanelLeftOpen className="size-4" />
-                  </Button>
-                </div>
-                <div className="flex w-full justify-center border-t border-sidebar-border pt-2">
-                  <DiagnosticsPanel
-                    triggerClassName="text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                    triggerVariant="icon"
-                  />
-                </div>
-                <div className="w-full border-t border-sidebar-border pt-2">
-                  <SidebarNavigation
-                    hasActiveWorkspace={hasActiveWorkspace}
-                    compact
-                    onBeforeNavigate={guardWorkspaceChange}
-                  />
-                  <Suspense fallback={null}>
-                    <WorkspaceCreateActions compact />
-                  </Suspense>
-                </div>
-                <div className="mt-auto flex w-full justify-center border-t border-sidebar-border pt-2">
-                  <SettingsModal
-                    triggerClassName="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                    triggerIconOnly
-                  />
-                </div>
-              </div>
-            )}
-          </aside>
-
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-            <main
-              data-main-scroll-container="true"
-              className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
-            >
-              <Outlet />
-            </main>
-          </section>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+              <main
+                data-main-scroll-container="true"
+                className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+              >
+                <DiffWorkerProvider>
+                  <AgentChatTranscriptCacheProvider>
+                    <Outlet />
+                  </AgentChatTranscriptCacheProvider>
+                </DiffWorkerProvider>
+              </main>
+            </section>
+          </div>
         </div>
-      </div>
-      <OpenRepositoryModal
-        open={isRepositoryModalOpen}
-        canClose
-        onOpenChange={handleRepositoryModalOpenChange}
-        requestTransition={guardWorkspaceChange}
-      />
-    </>
+        <OpenRepositoryModal
+          open={isRepositoryModalOpen}
+          canClose
+          onOpenChange={handleRepositoryModalOpenChange}
+          requestTransition={guardWorkspaceChange}
+        />
+      </SessionReadStateProvider>
+    </VisibleSessionTargetProvider>
   );
 });
 

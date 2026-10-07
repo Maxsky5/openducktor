@@ -1067,8 +1067,8 @@ export class CodexAppServerAdapter
     return latestLiveTodos ?? historyTodos;
   }
 
-  async resolveSessionParent(input: SessionRef): Promise<string | null> {
-    const { client } = await this.runtimeClients.resolve(input, "read session parent");
+  /** Reads a thread without its turns and checks that it is the selected session. */
+  private async readScopedThread(client: CodexAppServerClient, input: SessionRef) {
     const { thread } = await client.threadRead({
       threadId: input.externalSessionId,
       includeTurns: false,
@@ -1079,6 +1079,12 @@ export class CodexAppServerAdapter
         "The native session does not match the selected session and working directory. Select the matching session.",
       );
     }
+    return thread;
+  }
+
+  async resolveSessionParent(input: SessionRef): Promise<string | null> {
+    const { client } = await this.runtimeClients.resolve(input, "read session parent");
+    const thread = await this.readScopedThread(client, input);
     const sourceParent = codexSubAgentSourceMetadata(thread.source)?.parentThreadId;
     if (sourceParent && thread.parentThreadId && sourceParent !== thread.parentThreadId) {
       throw new AgentRuntimeQueryError(

@@ -41,11 +41,15 @@ type PendingDiscardIntent =
   | { type: "close-modal" }
   | { type: "switch-section"; next: EditTaskSection };
 
+/** The workspace that was active when New task opened. A new task is created only there. */
+export type TaskCreateDestination = { workspaceId: string; workspaceName: string };
+
 type UseTaskCreateModalControllerOptions = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: TaskCard[];
   task: TaskCard | null;
+  destination?: TaskCreateDestination | null;
 };
 
 type TaskCreateModalState = {
@@ -231,6 +235,7 @@ function createTaskSubmit({
   composer,
   createTask,
   descriptionAssetDraft,
+  destinationError,
   dispatch,
   hasExternalTaskConflict,
   isRecoveryBlocked,
@@ -243,6 +248,7 @@ function createTaskSubmit({
   composer: ComposerState;
   createTask: ReturnType<typeof useTasksState>["createTask"];
   descriptionAssetDraft: ReturnType<typeof useTaskDescriptionAssetDraft>;
+  destinationError: string | null;
   dispatch: Dispatch<TaskCreateModalAction>;
   hasExternalTaskConflict: boolean;
   isRecoveryBlocked: boolean;
@@ -254,6 +260,10 @@ function createTaskSubmit({
 }): () => Promise<void> {
   return async () => {
     if (isRecoveryBlocked || hasExternalTaskConflict) return;
+    if (destinationError) {
+      dispatch({ type: "submitBlocked", error: destinationError });
+      return;
+    }
     if (descriptionAssetDraft.isUploading) {
       dispatch({
         type: "submitBlocked",
@@ -431,10 +441,17 @@ export function useTaskCreateModalController({
   onOpenChange,
   tasks,
   task,
+  destination = null,
 }: UseTaskCreateModalControllerOptions) {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const workspaceId = activeWorkspace?.workspaceId ?? null;
+  // Images stage in the destination. Task creation runs in the active workspace, so another
+  // active workspace blocks it.
+  const workspaceId = destination?.workspaceId ?? activeWorkspace?.workspaceId ?? null;
+  const destinationError =
+    destination && destination.workspaceId !== activeWorkspace?.workspaceId
+      ? `This task is for ${destination.workspaceName}. Open ${destination.workspaceName} again to create it.`
+      : null;
   const { createTask, updateTask } = useTasksState();
   const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
   const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId);
@@ -570,6 +587,7 @@ export function useTaskCreateModalController({
     composer,
     createTask,
     descriptionAssetDraft,
+    destinationError,
     dispatch,
     hasExternalTaskConflict,
     isRecoveryBlocked,
@@ -645,7 +663,9 @@ export function useTaskCreateModalController({
     hasExternalTaskConflict,
     isTypeStepVisible,
     isEditingDocument,
-    footerError,
+    footerError: destinationError ?? footerError,
+    destination,
+    destinationError,
     isActiveDocumentDirty,
     updateState,
     stageDescriptionImage: descriptionAssetDraft.stage,

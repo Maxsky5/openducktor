@@ -4,6 +4,7 @@ import { TaskCardViewControl } from "@/components/features/kanban/task-card-view
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useChecksState, useWorkspaceState } from "@/state";
+import { issueImportProvider, issueImportSourceLabel } from "./issue-import-provider";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
 import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
 
@@ -15,12 +16,9 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
   const { activeWorkspace } = useWorkspaceState();
   const { taskStoreCheck } = useChecksState();
   const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck.data);
-  const provider = model.importProviderContext;
-  const canImport =
-    !isCreateTaskDisabled &&
-    provider?.config.enabled === true &&
-    provider.config.repository !== undefined &&
-    provider.descriptor.capabilities.issueAccess !== undefined;
+  const importProvider = isCreateTaskDisabled
+    ? null
+    : issueImportProvider(model.importProviderContext);
 
   return (
     <div className="electron-titlebar-safe-area flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
@@ -37,14 +35,14 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
           <Button
             type="button"
             size="default"
-            className={canImport ? "h-10 rounded-r-none" : "h-10"}
+            className={importProvider ? "h-10 rounded-r-none" : "h-10"}
             disabled={isCreateTaskDisabled}
             onClick={model.onCreateTask}
           >
             <Plus data-icon="inline-start" aria-hidden="true" />
             New task
           </Button>
-          {canImport ? (
+          {importProvider ? (
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -63,8 +61,7 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
                   className="h-auto w-full justify-start whitespace-normal px-3 py-2 text-left font-normal"
                   onClick={model.onImportIssues}
                 >
-                  Import from{" "}
-                  {provider.config.id === "github" ? "GitHub Issues" : "Azure DevOps work items"}
+                  Import from {issueImportSourceLabel(importProvider.config.id)}
                 </Button>
               </PopoverContent>
             </Popover>

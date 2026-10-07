@@ -17,7 +17,6 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
-import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
@@ -194,8 +193,14 @@ const createState = (
       runtimeKind: AgentSessionRecord["runtimeKind"];
       workingDirectory: string;
     }) => sessionStore.getSessionSnapshot(identity),
-    getActivitySummary: () =>
-      summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
+    getSessionActivityStates: () =>
+      sessionStore
+        .getActivitySnapshot()
+        .sessions.map(({ externalSessionId, activityState }) => ({
+          externalSessionId,
+          activityState,
+        }))
+        .sort((left, right) => left.externalSessionId.localeCompare(right.externalSessionId)),
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
     observeAgentSessionLive,
@@ -230,6 +235,48 @@ const createRepositoryConflictRetryState = (
   });
 
 describe("useRepoSessionReadModel", () => {
+  test("keeps current history through metadata snapshots and marks it stale on reconnect or stream failure", async () => {
+    const state = createState((emit) =>
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+    );
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.updateSession(record, (current) => ({ ...current, historyLoadState: "loaded" }));
+      });
+      const messages = state.getSession()?.messages;
+      await state.harness.run(() =>
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ title: "Updated title" })],
+        }),
+      );
+      expect(state.getSession()?.historyLoadState).toBe("loaded");
+      await state.harness.run(() =>
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          isConnectionSnapshot: true,
+          sessions: [snapshot()],
+        }),
+      );
+      expect(state.getSession()?.historyLoadState).toBe("stale");
+      expect(state.getSession()?.messages).toBe(messages);
+      await state.harness.run(() => {
+        state.updateSession(record, (current) => ({ ...current, historyLoadState: "loaded" }));
+      });
+      await state.harness.run(() =>
+        state.emit({ type: "fault", repoPath: "/repo", message: "Disconnected" }),
+      );
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
+      expect(state.getSession()?.historyLoadState).toBe("stale");
+      expect(state.getSession()?.messages).toBe(messages);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
   test.each(["snapshot", "session_upsert"] as const)(
     "publishes policy feedback and session fields together for %s",
     async (type) => {
@@ -2320,15 +2367,11 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
       expect(state.getSession()?.pendingApprovals).toHaveLength(1);
-      expect(state.getActivitySummary()).toMatchObject({
-        activeSessionCount: 0,
-        waitingForInputCount: 3,
-      });
-      expect(
-        state
-          .getActivitySummary()
-          .waitingForInputSessions.map(({ externalSessionId }) => externalSessionId),
-      ).toEqual(["thread-3", "thread-2", "thread-1"]);
+      expect(state.getSessionActivityStates()).toEqual([
+        { externalSessionId: "thread-1", activityState: "waiting_input" },
+        { externalSessionId: "thread-2", activityState: "waiting_input" },
+        { externalSessionId: "thread-3", activityState: "waiting_input" },
+      ]);
     } finally {
       await state.harness.unmount();
     }

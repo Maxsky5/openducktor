@@ -31,6 +31,7 @@ import {
   repoConfigSchema,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
+  type SidebarSessionGrouping,
   settingsSnapshotSchema,
   type WorkspaceRecord,
   type WorkspaceAgentStudioState,
@@ -243,6 +244,12 @@ const workspaceUpdateGlobalGitConfig = async (
 ): Promise<void> => {
   await invokeFn("workspace_update_global_git_config", { git }, voidResultSchema);
 };
+
+const workspaceUpdateSidebarSessionGrouping = async (
+  invokeFn: InvokeFn,
+  grouping: SidebarSessionGrouping,
+): Promise<SettingsSnapshot> =>
+  invokeFn("workspace_update_sidebar_session_grouping", { grouping }, settingsSnapshotSchema);
 
 const workspaceDetectGithubRepository = async (
   invokeFn: InvokeFn,
@@ -528,6 +535,12 @@ export class HostWorkspaceClient {
     taskCardView: KanbanTaskCardView,
   ): Promise<SettingsSnapshot> {
     return workspaceUpdateKanbanTaskCardView(this.invokeFn, taskCardView);
+  }
+
+  async workspaceUpdateSidebarSessionGrouping(
+    grouping: SidebarSessionGrouping,
+  ): Promise<SettingsSnapshot> {
+    return workspaceUpdateSidebarSessionGrouping(this.invokeFn, grouping);
   }
 
   async workspaceUpdateGlobalGitConfig(git: GlobalGitConfig): Promise<void> {

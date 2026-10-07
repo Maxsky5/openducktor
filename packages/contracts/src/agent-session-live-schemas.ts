@@ -21,6 +21,7 @@ import {
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { fileDiffSchema } from "./git-schemas";
+import { taskAgentSessionsSchema } from "./session-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
@@ -112,6 +113,11 @@ export const agentSessionLiveSnapshotSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * Why `activity` is not current. A failed status read sets it on the kept snapshot, and
+     * the next status update clears it. Other updates keep it.
+     */
+    statusUnavailableReason: nonEmptyStringSchema.optional(),
   })
   .strict();
 export type AgentSessionLiveSnapshot = z.infer<typeof agentSessionLiveSnapshotSchema>;
@@ -142,6 +148,12 @@ export const agentSessionLiveScopeSchema = z
 export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
+  taskAgentSessionsSchema
+    .extend({
+      type: z.literal("task_session_records_updated"),
+      repoPath: nonEmptyStringSchema,
+    })
+    .strict(),
   z
     .object({
       type: z.literal("snapshot"),
@@ -197,6 +209,11 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
       message: nonEmptyStringSchema,
       operation: nonEmptyStringSchema.optional(),
       ref: agentSessionLiveRefSchema.optional(),
+      /**
+       * True when the current status of `ref` could not be read. The last snapshot of that
+       * session stays, but its status can be out of date until a newer update.
+       */
+      statusUnavailable: z.literal(true).optional(),
     })
     .strict(),
 ]);

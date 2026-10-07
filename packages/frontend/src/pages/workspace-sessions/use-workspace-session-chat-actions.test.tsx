@@ -80,7 +80,7 @@ const createOperations = (
     throw new Error("Unexpected workflow start");
   },
   stopAgentSession: async () => {},
-  updateAgentSessionModel: () => {},
+  updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
   ...overrides,

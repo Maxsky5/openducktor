@@ -92,6 +92,7 @@ const createArgs = (
   loadSettingsSnapshot: mock(async () => createSnapshot()),
   isAgentModelFavoritesMutationPending: false,
   isKanbanTaskCardViewMutationPending: false,
+  isSidebarSessionGroupingMutationPending: false,
   wasKanbanTaskCardViewEdited: false,
   ...overrides,
 });
@@ -231,6 +232,50 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
+  test("blocks a full snapshot save while sidebar grouping is being written", async () => {
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
+    const harness = createHookHarness(
+      createArgs(
+        { saveSettingsSnapshot, isSidebarSessionGroupingMutationPending: true },
+        { ...EMPTY_DIRTY_SECTIONS, appearance: true },
+      ),
+    );
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(false));
+      expect(harness.getLatest().saveError).toBe(
+        "Wait for the session grouping update to finish before saving settings.",
+      );
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("saves an explicit grouping edit over a different saved shortcut value", async () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.appearance.sidebarSessionGrouping = "none";
+    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
+    const harness = createHookHarness(
+      createArgs(
+        { snapshotDraft, saveSettingsSnapshot },
+        { ...EMPTY_DIRTY_SECTIONS, appearance: true },
+      ),
+    );
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(true));
+      expect(saveSettingsSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appearance: expect.objectContaining({ sidebarSessionGrouping: "none" }),
+        }),
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("merges independently saved fields into a full snapshot save", async () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentModelFavorites = [
@@ -241,6 +286,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     ];
     latestSnapshot.kanban.taskCardView = "compact";
+    latestSnapshot.appearance.sidebarSessionGrouping = "none";
     const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs(
@@ -262,6 +308,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       expect.objectContaining({
         agentModelFavorites: latestSnapshot.agentModelFavorites,
         kanban: expect.objectContaining({ taskCardView: "compact" }),
+        appearance: expect.objectContaining({ sidebarSessionGrouping: "none" }),
       }),
       undefined,
     );
@@ -614,6 +661,7 @@ describe("useSettingsModalSaveOrchestration", () => {
         chat: expectedChatSettings,
         appearance: {
           horizontalScrollbarVisibility: "show",
+          sidebarSessionGrouping: "task",
         },
         general: {
           openAgentStudioTabOnBackgroundSessionStart: true,

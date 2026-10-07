@@ -3,6 +3,7 @@ import { type PropsWithChildren, type ReactElement, useEffect, useMemo } from "r
 import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
 import { hostBridge } from "@/lib/host-client";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
+import { updateAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import { createWorkspaceArchivedSessionsPort } from "../workspace-activity/archived-sessions-port";
@@ -25,10 +26,16 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
   const observer = useMemo(
     () =>
       createWorkspaceActivityObserver({
-        observe: hostBridge.observeAgentSessionLive,
+        observe: (input, listener) =>
+          hostBridge.observeAgentSessionLive(input, (envelope) => {
+            if (envelope.type === "task_session_records_updated") {
+              updateAgentSessionListQuery(queryClient, envelope.repoPath, envelope);
+            }
+            listener(envelope);
+          }),
         archivedSessions,
       }),
-    [archivedSessions],
+    [archivedSessions, queryClient],
   );
 
   // The archived chat lists stay current from the ordered record stream, so no

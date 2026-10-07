@@ -1,5 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router";
 import {
   type AgentStudioNavigationState,
@@ -11,6 +10,7 @@ import {
 } from "./agent-studio-navigation";
 
 type UseNavigationUrlSyncArgs = {
+  workspaceId: string | null;
   initialNavigation?: AgentStudioNavigationState;
   locationKey: string;
   navigationType: "POP" | "PUSH" | "REPLACE";
@@ -20,83 +20,114 @@ type UseNavigationUrlSyncArgs = {
 
 type UseNavigationUrlSyncResult = {
   navigation: AgentStudioNavigationState;
-  setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
+  setNavigation: (
+    update: (current: AgentStudioNavigationState) => AgentStudioNavigationState,
+  ) => void;
   updateQuery: (updates: AgentStudioQueryUpdate) => void;
 };
 
 export function useNavigationUrlSync({
+  workspaceId,
   initialNavigation,
   locationKey,
   navigationType,
   searchParams,
   setSearchParams,
 }: UseNavigationUrlSyncArgs): UseNavigationUrlSyncResult {
-  const syncingFromSearchParamsRef = useRef(false);
-  const [initialSearchNavigation] = useState(() =>
-    parseNavigationStateFromSearchParams(searchParams),
-  );
-  const [initialSearchParamsKey] = useState(() => toCanonicalSearchParamsKey(searchParams));
-  const waitsForInitialWriteRef = useRef(
-    initialNavigation !== undefined &&
-      !isSameNavigationState(initialNavigation, initialSearchNavigation),
-  );
-  const latestSearchParamsRef = useRef<URLSearchParams | null>(null);
-  if (latestSearchParamsRef.current === null) {
-    latestSearchParamsRef.current = new URLSearchParams(searchParams);
-  }
+  const [scope, setScope] = useState(() => ({ workspaceId, searchParams, initialNavigation }));
+  const waitsForInitialWriteRef = useRef(false);
+  const latestSearchParamsRef = useRef(searchParams);
   const pendingSearchParamWritesRef = useRef<string[]>([]);
-  const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
-    () => initialNavigation ?? initialSearchNavigation,
-  );
+  const searchKey = toCanonicalSearchParamsKey(searchParams);
+  const [snapshot, setSnapshot] = useState(() => ({
+    address: { locationKey, navigationType, searchKey, searchParams },
+    navigation: initialNavigation ?? parseNavigationStateFromSearchParams(searchParams),
+  }));
+  const workspaceChanged = scope.workspaceId !== workspaceId;
+  let currentSnapshot = snapshot;
+  if (
+    workspaceChanged ||
+    snapshot.address.locationKey !== locationKey ||
+    snapshot.address.navigationType !== navigationType ||
+    snapshot.address.searchKey !== searchKey
+  ) {
+    // A delayed echo must not replace a newer local selection. External routes
+    // must reach the selection controller in this render, before its effects run.
+    const isOwnWrite =
+      !workspaceChanged &&
+      navigationType === "REPLACE" &&
+      pendingSearchParamWritesRef.current.includes(searchKey);
+    currentSnapshot = {
+      address: { locationKey, navigationType, searchKey, searchParams },
+      navigation: workspaceChanged
+        ? (initialNavigation ?? parseNavigationStateFromSearchParams(searchParams))
+        : isOwnWrite
+          ? snapshot.navigation
+          : parseNavigationStateFromSearchParams(searchParams),
+    };
+    setSnapshot(currentSnapshot);
+  }
+  if (workspaceChanged) {
+    setScope({ workspaceId, searchParams, initialNavigation });
+  }
+  const { address, navigation } = currentSnapshot;
 
-  const updateQuery = useCallback((updates: AgentStudioQueryUpdate): void => {
-    setNavigation((current) => applyQueryUpdateToNavigationState(current, updates));
+  useLayoutEffect(() => {
+    latestSearchParamsRef.current = new URLSearchParams(scope.searchParams);
+    pendingSearchParamWritesRef.current = [];
+    waitsForInitialWriteRef.current =
+      scope.initialNavigation !== undefined &&
+      !isSameNavigationState(
+        scope.initialNavigation,
+        parseNavigationStateFromSearchParams(scope.searchParams),
+      );
+  }, [scope]);
+
+  const setNavigation = useCallback<UseNavigationUrlSyncResult["setNavigation"]>((update) => {
+    setSnapshot((current) => {
+      const next = update(current.navigation);
+      return isSameNavigationState(current.navigation, next)
+        ? current
+        : { ...current, navigation: next };
+    });
   }, []);
 
-  useEffect(() => {
-    const currentSearchParamsKey = toCanonicalSearchParamsKey(searchParams);
-    if (waitsForInitialWriteRef.current && currentSearchParamsKey === initialSearchParamsKey) {
+  const updateQuery = useCallback(
+    (updates: AgentStudioQueryUpdate): void => {
+      setNavigation((current) => applyQueryUpdateToNavigationState(current, updates));
+    },
+    [setNavigation],
+  );
+
+  useLayoutEffect(() => {
+    const currentSearchParamsKey = address.searchKey;
+    if (
+      waitsForInitialWriteRef.current &&
+      currentSearchParamsKey === toCanonicalSearchParamsKey(scope.searchParams)
+    ) {
       return;
     }
     waitsForInitialWriteRef.current = false;
 
     const pendingWriteIndex =
-      navigationType === "POP"
-        ? -1
-        : pendingSearchParamWritesRef.current.indexOf(currentSearchParamsKey);
+      address.navigationType === "REPLACE"
+        ? pendingSearchParamWritesRef.current.indexOf(currentSearchParamsKey)
+        : -1;
     if (pendingWriteIndex !== -1) {
       pendingSearchParamWritesRef.current.splice(pendingWriteIndex, 1);
 
       if (pendingSearchParamWritesRef.current.length === 0) {
-        latestSearchParamsRef.current = new URLSearchParams(searchParams);
+        latestSearchParamsRef.current = new URLSearchParams(address.searchParams);
       }
       return;
     }
 
     pendingSearchParamWritesRef.current = [];
-    latestSearchParamsRef.current = new URLSearchParams(searchParams);
-
-    const parsed = parseNavigationStateFromSearchParams(searchParams);
-    setNavigation((current) => {
-      if (isSameNavigationState(current, parsed)) {
-        return current;
-      }
-      syncingFromSearchParamsRef.current = true;
-      return parsed;
-    });
-  }, [initialSearchParamsKey, locationKey, navigationType, searchParams]);
+    latestSearchParamsRef.current = new URLSearchParams(address.searchParams);
+  }, [address, scope]);
 
   useEffect(() => {
-    if (syncingFromSearchParamsRef.current) {
-      syncingFromSearchParamsRef.current = false;
-      return;
-    }
-
     const latestSearchParams = latestSearchParamsRef.current;
-    if (latestSearchParams === null) {
-      return;
-    }
-
     const currentSearchParams = toCanonicalSearchParamsKey(latestSearchParams);
     const next = buildSearchParamsFromNavigationState(latestSearchParams, navigation);
     const nextSearchParams = toCanonicalSearchParamsKey(next);
@@ -111,7 +142,7 @@ export function useNavigationUrlSync({
     latestSearchParamsRef.current = new URLSearchParams(next);
     pendingSearchParamWritesRef.current.push(nextSearchParams);
     setSearchParams(next, { replace: true });
-  }, [navigation, setSearchParams]);
+  }, [navigation, scope, setSearchParams]);
 
   return {
     navigation,

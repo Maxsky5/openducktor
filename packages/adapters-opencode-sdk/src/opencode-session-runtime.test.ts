@@ -1044,6 +1044,94 @@ describe("OpenCode session runtime connection", () => {
     }
   });
 
+  test.each(["start", "fork", "resume"] as const)(
+    "keeps an idle session idle during %s and status refresh, then follows its real turn",
+    async (mode) => {
+      const harness = createLiveClientHarness();
+      harness.setPendingApproval(false);
+      harness.client.session.create = async (request) => ({
+        data: createOpencodeSessionFixture({
+          id: "session-1",
+          directory: "/repo",
+          permission: request?.permission ?? [],
+          metadata: request?.metadata,
+        }),
+        error: undefined,
+      });
+      harness.client.session.fork = async () => ({
+        data: createOpencodeSessionFixture({ id: "session-1", directory: "/repo" }),
+        error: undefined,
+      });
+      const prepared = await createPrepareRuntime(harness)(runtimeInput);
+      const signals: OpencodeSessionRuntimeSignal[] = [];
+      await prepared.startForwarding((signal) => {
+        signals.push(signal);
+      });
+      const ref = {
+        repoPath: "/repo",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+      };
+      const input = {
+        ...ref,
+        runtimePolicy: { kind: "opencode" as const },
+        sessionScope: { kind: "repository" as const },
+        systemPrompt: "",
+      };
+      try {
+        const summary =
+          mode === "start"
+            ? await prepared.connection.startSession(input)
+            : mode === "fork"
+              ? await prepared.connection.forkSession({
+                  ...input,
+                  parentExternalSessionId: "parent",
+                })
+              : await prepared.connection.resumeSession(input);
+        expect(summary.status).toBe("idle");
+        const read = await prepared.connection.readSessionSources(input.repoPath, [input]);
+        expect(read.sources[0]?.runtimeActivity).toBe("idle");
+
+        await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "session-1"));
+        expect(
+          signals.some(
+            (signal) => signal.type === "session_event" && signal.event.type === "session_started",
+          ),
+        ).toBe(false);
+        expect((await prepared.connection.resumeSession(input)).status).toBe("running");
+
+        await harness.emitAndWait(sessionStatusEvent({ type: "idle" }, "session-1"));
+        expect((await prepared.connection.resumeSession(input)).status).toBe("idle");
+        expect(harness.promptCalls).toEqual([]);
+      } finally {
+        await prepared.release();
+      }
+    },
+  );
+
+  test("reattaches to a restored active session without settling its control status", async () => {
+    const harness = createLiveClientHarness({ busySessionIds: ["session-1"] });
+    harness.setPendingApproval(false);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "opencode" as const },
+      sessionScope: { kind: "repository" as const },
+    };
+    try {
+      const read = await prepared.connection.readSessionSources(input.repoPath, [input]);
+      expect(read.sources[0]?.runtimeActivity).toBe("running");
+      expect((await prepared.connection.resumeSession(input)).status).toBe("running");
+      expect(harness.promptCalls).toEqual([]);
+    } finally {
+      await prepared.release();
+    }
+  });
+
   test("reads scoped restored roots and children without binding or changing live state", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session"],
@@ -1780,6 +1868,8 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "repository" },
       parts: [{ kind: "text", text: "Do the work" }],
     });
+    expect(sessionStatuses).toEqual(["busy"]);
+    expect(transcriptEventTypes).not.toContain("user_message");
     await harness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -1807,11 +1897,137 @@ describe("OpenCode session runtime connection", () => {
       properties: { sessionID: "session-1" },
     });
 
-    expect(sessionStatuses).toEqual(["busy"]);
+    expect(sessionStatuses).toEqual(["busy", "busy"]);
     expect(transcriptEventTypes).toContain("session_idle");
     expect(transcriptEventTypes).toContain("assistant_message");
     await prepared.release();
   });
+
+  test("waits for its send activity when native events are still being delivered", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const nativeStatusStarted = Promise.withResolvers<void>();
+    const nativeStatusGate = Promise.withResolvers<void>();
+    const nativePartStarted = Promise.withResolvers<void>();
+    const nativePartGate = Promise.withResolvers<void>();
+    const sendStatusStarted = Promise.withResolvers<void>();
+    const sendStatusGate = Promise.withResolvers<void>();
+    const pending: Promise<unknown>[] = [];
+    try {
+      await resumeOpenDucktorSession(prepared);
+      let statusCount = 0;
+      await prepared.startForwarding(async (signal) => {
+        if (signal.type !== "session_event") return;
+        if (signal.event.type === "session_status") {
+          statusCount++;
+          const started = statusCount === 1 ? nativeStatusStarted : sendStatusStarted;
+          const gate = statusCount === 1 ? nativeStatusGate : sendStatusGate;
+          started.resolve();
+          await gate.promise;
+        } else if (signal.event.type === "assistant_part") {
+          nativePartStarted.resolve();
+          await nativePartGate.promise;
+        }
+      });
+      pending.push(
+        harness.emitAndWait(
+          createOpencodeMessageEventGroupFixture({
+            info: { id: "assistant-1", sessionID: "session-1", role: "assistant" },
+            parts: [
+              {
+                id: "assistant-tool",
+                sessionID: "session-1",
+                messageID: "assistant-1",
+                type: "tool",
+                callID: "call-1",
+                tool: "read",
+                state: {
+                  status: "running",
+                  input: {},
+                  title: "Read README",
+                  time: { start: 1 },
+                },
+              },
+            ],
+          }),
+        ),
+      );
+      await nativeStatusStarted.promise;
+      pending.push(
+        prepared.connection.sendUserMessage({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          runtimePolicy: { kind: "opencode" },
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text: "Do the work" }],
+        }),
+      );
+      nativeStatusGate.resolve();
+      await nativePartStarted.promise;
+      nativePartGate.resolve();
+      await sendStatusStarted.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(harness.promptCalls).toEqual([]);
+      sendStatusGate.resolve();
+      await Promise.all(pending);
+      expect(harness.promptCalls).toHaveLength(1);
+    } finally {
+      nativeStatusGate.resolve();
+      nativePartGate.resolve();
+      sendStatusGate.resolve();
+      await Promise.all(pending);
+      await prepared.release();
+    }
+  });
+
+  test.each([
+    ["succeeds", false],
+    ["fails", true],
+  ] as const)(
+    "reports a rejected prompt as idle and keeps send errors when idle delivery %s",
+    async (_case, failIdleDelivery) => {
+      const harness = createLiveClientHarness();
+      const promptError = new Error("prompt rejected");
+      const idleError = new Error("idle delivery failed");
+      harness.client.session.promptAsync = async () => {
+        throw promptError;
+      };
+      const prepared = await createPrepareRuntime(harness)(runtimeInput);
+      try {
+        await resumeOpenDucktorSession(prepared);
+        const activity: string[] = [];
+        await prepared.startForwarding((signal) => {
+          if (signal.type !== "session_event") return;
+          activity.push(signal.event.type);
+          if (signal.event.type === "session_idle" && failIdleDelivery) throw idleError;
+        });
+        const send = prepared.connection.sendUserMessage({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          runtimePolicy: { kind: "opencode" },
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text: "Do the work" }],
+        });
+        if (failIdleDelivery) {
+          await expect(send).rejects.toMatchObject({
+            errors: [
+              expect.objectContaining({ message: expect.stringContaining("prompt rejected") }),
+              idleError,
+            ],
+          });
+        } else {
+          await expect(send).rejects.toThrow("prompt rejected");
+        }
+        expect(activity).toEqual(["session_status", "session_idle"]);
+      } finally {
+        await prepared.release();
+      }
+    },
+  );
 
   test("loads context on demand without enumerating sessions", async () => {
     const missingHarness = createLiveClientHarness({ totalTokens: 1_200 });

@@ -180,7 +180,13 @@ export type AgentSessionContextUsage = {
   profileId?: string;
 };
 
-export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
+export type AgentSessionHistoryLoadState =
+  | "not_requested"
+  | "loading"
+  | "loaded"
+  | "stale"
+  | "refreshing"
+  | "failed";
 export type AgentSessionRuntimeAvailability = "runtime" | "missing";
 
 export type AgentSessionState = {

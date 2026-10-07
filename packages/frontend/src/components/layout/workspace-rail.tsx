@@ -28,7 +28,6 @@ import {
   useEffect,
   useId,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -40,12 +39,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
-import {
-  deriveWorkspaceInitials,
-  noColorTileClasses,
-  tileColorFaceStyle,
-  tileLabelSizeClass,
-} from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useWorkspaceActivity } from "@/state/workspace-activity/workspace-activity-context";
 import {
@@ -54,6 +47,7 @@ import {
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
 import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
+import { WorkspaceTile } from "./workspace-tile";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
 import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
 
@@ -67,37 +61,8 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
   }
 };
 
-function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
-    (_current: string | null, next: string) => next,
-    null,
-  );
-  const iconDataUrl = workspace.iconDataUrl ?? null;
-
-  if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
-    return (
-      <img
-        src={iconDataUrl}
-        alt=""
-        aria-hidden="true"
-        className="size-6 rounded-md object-cover"
-        onError={() => {
-          markIconDataUrlFailed(iconDataUrl);
-        }}
-      />
-    );
-  }
-
-  const label = workspace.abbreviation ?? deriveWorkspaceInitials(workspace.workspaceName);
-
-  return (
-    <span className={cn("font-semibold leading-none", tileLabelSizeClass(label))}>{label}</span>
-  );
-}
-
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
-  tileColor: string | null;
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   shellRef?: RefCallback<HTMLDivElement>;
   style?: CSSProperties;
@@ -114,7 +79,6 @@ type WorkspaceRailButtonShellProps = {
 
 function WorkspaceRailButtonShell({
   workspace,
-  tileColor,
   dragListeners,
   shellRef,
   style,
@@ -155,13 +119,9 @@ function WorkspaceRailButtonShell({
         variant="ghost"
         className={cn(
           // The activity badge strip is positioned against the tile.
-          "relative size-10 rounded-lg border-none p-0 shadow-sm transition-none",
-          // A picked color replaces the theme classes, so a tile keeps its own color in both
-          // states and in the drag preview.
-          !tileColor && noColorTileClasses(isActiveWorkspace),
+          "relative size-10 rounded-lg border-none bg-transparent p-0 shadow-none transition-none hover:bg-transparent",
           isDragOverlay && "pointer-events-none",
         )}
-        style={tileColor ? tileColorFaceStyle(tileColor) : undefined}
         aria-label={workspace.workspaceName}
         aria-describedby={activityBadges.length > 0 ? activityBadgesId : undefined}
         title={workspace.workspaceName}
@@ -187,7 +147,7 @@ function WorkspaceRailButtonShell({
           onSelectWorkspace?.(workspace.workspaceId);
         }}
       >
-        <WorkspaceRailAvatar workspace={workspace} />
+        <WorkspaceTile workspace={workspace} size="lg" active={isActiveWorkspace} />
         <WorkspaceRailActivityBadges badges={activityBadges} describedById={activityBadgesId} />
       </Button>
     </div>
@@ -196,7 +156,6 @@ function WorkspaceRailButtonShell({
 
 function SortableWorkspaceRailButton({
   workspace,
-  tileColor,
   isActiveDrag,
   shouldSuppressSelection,
   isSwitchingWorkspace,
@@ -205,7 +164,6 @@ function SortableWorkspaceRailButton({
   onRequestRemoveWorkspace,
 }: {
   workspace: WorkspaceRecord;
-  tileColor: string | null;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
@@ -227,7 +185,6 @@ function SortableWorkspaceRailButton({
       <ContextMenuTrigger className="block">
         <WorkspaceRailButtonShell
           workspace={workspace}
-          tileColor={tileColor}
           shellRef={setNodeRef}
           dragListeners={isSwitchingWorkspace ? undefined : listeners}
           dragState={{
@@ -368,7 +325,6 @@ export function WorkspaceRail({
                     <SortableWorkspaceRailButton
                       key={workspace.workspaceId}
                       workspace={workspace}
-                      tileColor={workspace.tileColor}
                       isActiveDrag={activeWorkspaceId === workspace.workspaceId}
                       shouldSuppressSelection={
                         suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
@@ -410,7 +366,6 @@ export function WorkspaceRail({
                 {activeDragWorkspace ? (
                   <WorkspaceRailButtonShell
                     workspace={activeDragWorkspace}
-                    tileColor={activeDragWorkspace.tileColor}
                     dragState={{ isOverlay: true }}
                     interactionState={{ isSwitchingWorkspace }}
                   />

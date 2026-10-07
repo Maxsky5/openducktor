@@ -1,5 +1,6 @@
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 import { isSessionSystemPromptMessage } from "./session-prompt";
 
 /** Sending marks the session running before Codex accepts its first message. */
@@ -8,7 +9,7 @@ export const isFreshCodexSessionAwaitingKickoff = (session: AgentSessionState): 
   (session.status === "starting" ||
     (session.status === "running" && session.pendingUserMessageStartedAt !== undefined)) &&
   session.livePresence !== "absent" &&
-  session.historyLoadState === "loaded" &&
+  hasLoadedSessionHistory(session) &&
   session.messages.externalSessionId === session.externalSessionId &&
   session.messages.items.every(isSessionSystemPromptMessage);
 

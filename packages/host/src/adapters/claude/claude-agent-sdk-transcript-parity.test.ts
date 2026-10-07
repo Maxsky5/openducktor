@@ -188,6 +188,11 @@ describe("Claude live and hydrated transcript parity", () => {
       () => resultTimestamp,
     ).filter((message) => message.role === "assistant");
     expect(hydratedMessages).toHaveLength(1);
+    expect(hydratedMessages[0]?.parts.map((part) => part.kind)).toEqual([
+      "reasoning",
+      "text",
+      "tool",
+    ]);
     expect(hydratedMessages[0]).toMatchObject({
       messageId: responseId,
       text: "I’m waiting for both review passes.",

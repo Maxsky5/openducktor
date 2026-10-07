@@ -15,11 +15,9 @@ type StartKanbanSessionFlowInput = {
   isCurrent?: () => boolean;
   decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
-  openAgentStudioTabOnBackgroundSessionStart: boolean;
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
   workspaceId: string | null;
-  saveAgentStudioTab: (taskId: string) => Promise<void>;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -34,10 +32,7 @@ export const startKanbanSessionFlow = async ({
   isCurrent,
   decision,
   startInBackground,
-  openAgentStudioTabOnBackgroundSessionStart,
   tasks,
-  workspaceId,
-  saveAgentStudioTab,
   runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
@@ -65,24 +60,7 @@ export const startKanbanSessionFlow = async ({
       description: workflow.postStartActionError.message,
     });
   }
-  if (startInBackground) {
-    if (openAgentStudioTabOnBackgroundSessionStart) {
-      if (!workspaceId) {
-        toast.warning("Session started, but its task workflow tab could not be saved.", {
-          description: "No active workspace is selected.",
-        });
-      } else {
-        try {
-          await saveAgentStudioTab(request.taskId);
-        } catch (error) {
-          toast.warning("Session started, but its task workflow tab could not be saved.", {
-            description:
-              error instanceof Error ? error.message : "Unable to update task workflow tabs.",
-          });
-        }
-      }
-    }
-  } else {
+  if (!startInBackground) {
     openSessionInAgentStudio(request, workflow);
   }
 

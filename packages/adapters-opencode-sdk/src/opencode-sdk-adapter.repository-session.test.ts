@@ -23,6 +23,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.updateCalls).toEqual([]);
     expect(mock.session.promptCalls).toEqual([]);
   });
+
   test("preserves native title and permissions when resuming an imported chat without a role", async () => {
     const mock = makeMockClient({ sessionId: "native" });
     const get = mock.client.session.get;

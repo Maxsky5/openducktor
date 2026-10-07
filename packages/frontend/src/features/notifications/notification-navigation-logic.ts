@@ -5,7 +5,10 @@ import type {
   TaskCard,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
+import {
+  buildSessionNavigationHref,
+  type SessionsPageKind,
+} from "@/features/session-navigation/session-navigation-target";
 import { findWorkspaceSessionByIdentity } from "@/state/queries/agent-session-association";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 
@@ -107,7 +110,11 @@ export const navigateToNotificationTarget = async (
       dependencies.reportStale("The exact Workspace Session is no longer available.");
       return;
     }
-    const href = `/chats?session=${encodeURIComponent(session.id)}`;
+    const href = buildSessionNavigationHref({
+      kind: "workspace_session",
+      workspaceId: workspace.workspaceId,
+      sessionId: session.id,
+    });
     await open(target.type === "agent_session" ? href : addNotificationAttention(href, target), {
       state: { notificationTarget: target },
     });
@@ -128,9 +135,10 @@ export const navigateToNotificationTarget = async (
 
   if (target.type === "agent_studio_task") {
     await open(
-      buildAgentStudioHref({
+      buildSessionNavigationHref({
+        kind: "task",
+        workspaceId: workspace.workspaceId,
         taskId: task.id,
-        sessionExternalId: null,
         role: target.preferredRole ?? roleForTask(task),
       }),
     );
@@ -144,14 +152,47 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  const href = buildAgentStudioHref({
+  const href = buildSessionNavigationHref({
+    kind: "task_session",
+    workspaceId: workspace.workspaceId,
     taskId,
-    sessionExternalId: session.externalSessionId,
     role: session.role,
+    identity: {
+      externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
+    },
   });
   await open(target.type === "agent_session" ? href : addNotificationAttention(href, target), {
     state: { notificationTarget: target },
   });
+};
+
+/** The Sessions content that a target opens, or null when the target opens another page. */
+const notificationTargetContentKind = (
+  target: Exclude<NotificationNavigationTarget, { type: "notification_settings" }>,
+): SessionsPageKind | null => {
+  if (target.type === "kanban_task") return null;
+  if (target.type === "agent_studio_task") return "task";
+  return target.taskId === undefined ? "workspace" : "task";
+};
+
+/**
+ * Tell whether a target replaces the content on the Sessions page.
+ *
+ * Content asks about unsaved edits before its own selection changes, so the check before
+ * navigation is only for another workspace, another content kind, or another page.
+ */
+export const notificationTargetReplacesContent = (
+  target: NotificationNavigationTarget,
+  targetWorkspaceId: string,
+  activeWorkspaceId: string | null,
+  visibleKind: SessionsPageKind | null,
+): boolean => {
+  if (target.type === "notification_settings" || visibleKind === null) return false;
+  return (
+    targetWorkspaceId !== activeWorkspaceId || notificationTargetContentKind(target) !== visibleKind
+  );
 };
 
 export const findNotificationAttentionTarget = (kind: string, id: string): HTMLElement | null => {

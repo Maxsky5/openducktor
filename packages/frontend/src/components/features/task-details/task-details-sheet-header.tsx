@@ -1,16 +1,13 @@
 import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import { Link2, Sparkles, Unlink } from "lucide-react";
 import type { ReactElement } from "react";
-import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
-import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
-import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
+import { TaskHeaderBadges } from "@/components/features/tasks/task-header-badges";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
-import { isQaRejectedTask } from "@/lib/task-qa";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;
@@ -23,47 +20,6 @@ type TaskDetailsSheetHeaderProps = {
   isDetectingPullRequest?: boolean;
   isUnlinkingPullRequest?: boolean;
 };
-
-function TaskHeaderBadges({ task, subtasksCount }: { task: TaskCard; subtasksCount: number }) {
-  const isEpic = task.issueType === "epic";
-  const qaRejected = isQaRejectedTask(task);
-  return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <IssueTypeBadge issueType={task.issueType} />
-      <PriorityBadge priority={task.priority} />
-      {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
-      {task.sourceIssue ? <TaskSourceIssueLink sourceIssue={task.sourceIssue} /> : null}
-      {qaRejected ? (
-        <Badge
-          variant="outline"
-          className="border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300"
-        >
-          QA Rejected
-        </Badge>
-      ) : null}
-      {task.aiReviewEnabled ? (
-        <Badge
-          variant="outline"
-          className="border-success-border bg-success-surface text-success-muted"
-        >
-          AI QA required
-        </Badge>
-      ) : (
-        <Badge variant="outline" className="border-input bg-muted text-foreground">
-          AI QA optional
-        </Badge>
-      )}
-      {isEpic ? (
-        <Badge
-          variant="outline"
-          className="border-pending-border bg-pending-surface text-pending-muted"
-        >
-          {subtasksCount} subtask{subtasksCount === 1 ? "" : "s"}
-        </Badge>
-      ) : null}
-    </div>
-  );
-}
 
 function TaskPullRequestActions({
   disabledReason,

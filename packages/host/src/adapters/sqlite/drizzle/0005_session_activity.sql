@@ -1,0 +1,1 @@
+ALTER TABLE `workspace_sessions` ADD `last_activity_at_ms` integer;

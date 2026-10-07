@@ -10,9 +10,9 @@ import {
   isClaudeToolUseBlockType,
 } from "./claude-agent-sdk-tool-shapes";
 import {
-  createClaudeAssistantReasoningPart,
-  createClaudeAssistantTextPart,
   createClaudeFinishStepPart,
+  createClaudeAssistantTextPart,
+  projectClaudeAssistantBlock,
 } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
@@ -21,6 +21,36 @@ export type MutableAssistantHistoryMessage = Extract<
   AgentSessionHistoryMessage,
   { role: "assistant" }
 >;
+
+/** Tool-call maps retain this object, so merge snapshots without replacing its identity. */
+export const updateClaudeHistoryAssistantSnapshot = (
+  current: MutableAssistantHistoryMessage,
+  snapshot: MutableAssistantHistoryMessage,
+): void => {
+  const nextParts = new Map(snapshot.parts.map((part) => [part.partId, part]));
+  const existingPartIds = new Set(current.parts.map((part) => part.partId));
+  const parts = [
+    ...current.parts.map((part) => nextParts.get(part.partId) ?? part),
+    ...snapshot.parts.filter((part) => !existingPartIds.has(part.partId)),
+  ];
+  if (snapshot.text.trim().length > 0 && !snapshot.parts.some((part) => part.kind === "text")) {
+    // Final text completes the last streamed text row instead of adding a second row.
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const part = parts[index];
+      if (part?.kind !== "text") continue;
+      parts[index] = createClaudeAssistantTextPart({
+        messageId: snapshot.messageId,
+        partId: part.partId,
+        text: snapshot.text,
+      });
+      break;
+    }
+  }
+  Object.assign(current, snapshot, {
+    text: snapshot.text.trim().length > 0 ? snapshot.text : current.text,
+    parts,
+  });
+};
 
 export const addClaudeHistoryFinishStep = (
   message: MutableAssistantHistoryMessage,
@@ -96,22 +126,16 @@ export const projectClaudeHistoryAssistantMessage = ({
   const parts: AgentStreamPart[] = [];
   const stopReason = readStringProp(assistantEntry.message, "stop_reason");
   const messageId = responseId ?? entry.uuid;
-  const preservesBlockOrder =
-    stopReason === "tool_use" &&
-    Array.isArray(content) &&
-    content.some((block) => readStringProp(block, "type") !== "text");
+  const hasToolUse = content.some((block) =>
+    isClaudeToolUseBlockType(readStringProp(block, "type")),
+  );
   for (const [index, block] of content.entries()) {
     const type = readStringProp(block, "type");
-    if (type === "text" && preservesBlockOrder) {
-      const blockText = readStringProp(block, "text");
-      if (blockText?.trim()) {
-        parts.push(
-          createClaudeAssistantTextPart({
-            messageId,
-            partId: `${messageId}:text:${index}`,
-            text: blockText,
-          }),
-        );
+    const part = projectClaudeAssistantBlock({ block, index, messageId, hasToolUse });
+    if (part) {
+      // Final text uses the response identity, as the live assistant_message does.
+      if (part.kind !== "text" || hasToolUse || !isLiveFinalAssistantStopReason(stopReason)) {
+        parts.push(part);
       }
       continue;
     }
@@ -130,18 +154,6 @@ export const projectClaudeHistoryAssistantMessage = ({
         }
       }
       continue;
-    }
-    if (type === "thinking") {
-      const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
-      if (thinkingText) {
-        parts.push(
-          createClaudeAssistantReasoningPart({
-            messageId,
-            partId: `${messageId}:thinking:${index}`,
-            text: thinkingText,
-          }),
-        );
-      }
     }
   }
   if (text.trim().length === 0 && parts.length === 0) {

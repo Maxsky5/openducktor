@@ -42,6 +42,7 @@ import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 import { NotificationProvider } from "./providers/notification-provider";
 import { WorkspaceActivityProvider } from "./providers/workspace-activity-provider";
+import { TerminalActivityProvider } from "./providers/terminal-activity-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
@@ -62,7 +63,9 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                       <DelegationStateProvider>
                         <AgentStudioStateProvider agentEngine={agentEngine}>
                           <AppLifecycleStateProvider>
-                            <AutopilotProvider>{children}</AutopilotProvider>
+                            <TerminalActivityProvider>
+                              <AutopilotProvider>{children}</AutopilotProvider>
+                            </TerminalActivityProvider>
                           </AppLifecycleStateProvider>
                         </AgentStudioStateProvider>
                       </DelegationStateProvider>

@@ -215,7 +215,12 @@ export function OpenInMenu({
     <OpenInActionGroup>
       {defaultButton}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Choose a different tool</TooltipContent>
+        </Tooltip>
         <OpenInMenuBody>
           <div className="border-b border-border px-3 py-2">
             <p className="text-xs font-medium text-foreground">Other tools for {targetLabel}</p>
@@ -269,23 +274,30 @@ function OpenInDefaultButton({
   const icon = tool ? <OpenInToolIcon tool={tool} /> : <FolderOpen className="size-3.5" />;
   const isPending = tool != null && pendingToolId === tool.toolId;
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className={
-        hasMenuTrigger
-          ? "h-7 gap-1.5 rounded-r-none px-2 text-[11px]"
-          : "h-7 gap-1.5 px-2 text-[11px]"
-      }
-      data-testid="agent-studio-git-open-in-default-button"
-      aria-label={`Open ${targetLabel} in ${label}`}
-      onClick={tool ? () => void onOpen(tool.toolId) : undefined}
-      disabled={disabled || tool == null}
-    >
-      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : icon}
-      <span className="truncate">{label}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={
+            hasMenuTrigger
+              ? "h-7 gap-1.5 rounded-r-none px-2 text-[11px]"
+              : "h-7 gap-1.5 px-2 text-[11px]"
+          }
+          data-testid="agent-studio-git-open-in-default-button"
+          aria-label={`Open ${targetLabel} in ${label}`}
+          onClick={tool ? () => void onOpen(tool.toolId) : undefined}
+          disabled={disabled || tool == null}
+        >
+          {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : icon}
+          <span className="truncate">{label}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        Open {targetLabel} in {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -6,6 +6,49 @@ import {
 } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
+  test("updates streamed text in place when the same response finishes with new text", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "draft",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:14.000Z",
+          message: {
+            id: "response-1",
+            role: "assistant",
+            content: [{ type: "text", text: "Checking" }],
+            stop_reason: null,
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "final",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:15.000Z",
+          message: {
+            id: "response-1",
+            role: "assistant",
+            content: [{ type: "text", text: "Checked all files" }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+    expect(history).toHaveLength(1);
+    expect(history[0]?.parts.filter((part) => part.kind === "text")).toEqual([
+      {
+        kind: "text",
+        messageId: "response-1",
+        partId: "response-1:text",
+        text: "Checked all files",
+        completed: true,
+      },
+    ]);
+  });
   test("keeps a task-notification response open while an ordinary background task runs", () => {
     const entries = claudeHistoryMessagesFixture([
       {
@@ -291,7 +334,15 @@ describe("claude-agent-sdk-history assistant turns", () => {
       role: "assistant",
       timestamp: "2026-06-26T11:03:15.000Z",
       text: "I will inspect the task first.",
-      parts: [],
+      parts: [
+        {
+          kind: "text",
+          messageId: "assistant-draft",
+          partId: "assistant-draft:text",
+          text: "I will inspect the task first.",
+          completed: true,
+        },
+      ],
     });
     expect(history[1]).toMatchObject({
       messageId: "result-1",
@@ -620,6 +671,13 @@ describe("claude-agent-sdk-history assistant turns", () => {
       messageId: "response-draft",
       text: "Spec persisted.",
       parts: [
+        {
+          kind: "text",
+          messageId: "response-draft",
+          partId: "response-draft:text",
+          text: "Spec persisted.",
+          completed: true,
+        },
         {
           kind: "step",
           messageId: "response-draft",

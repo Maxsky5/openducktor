@@ -137,6 +137,7 @@ describe("shared snapshot activity policy", () => {
               parentKey: null,
               status,
               executionEpisodeId: current.executionEpisodeId,
+              statusUnavailableReason: null,
               runtimeStatusMessage: current.runtimeStatusMessage,
               stopRequestedAt: null,
               pendingApprovals: [],
@@ -348,34 +349,46 @@ describe("applyWorkspaceActivityEnvelope", () => {
     expect(apply(gapped, sessionSnapshot([])).unavailableReason).toBeNull();
   });
 
-  test("ignores a session-scoped fault without changing the ready projection", () => {
+  test("keeps a session-scoped fault on its session until the session updates", () => {
     const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
-    const faulted = applyWorkspaceActivityEnvelope(ready, {
+    const fault: AgentSessionLiveEnvelope = {
       type: "fault",
       repoPath,
       ref: snapshot("a").ref,
       message: "Codex thread reported a system error.",
       operation: "codex-live-session.process-event",
-    });
+    };
+    const faulted = applyWorkspaceActivityEnvelope(ready, fault);
 
-    expect(faulted).toBe(ready);
+    expect(faulted.sessions).toBe(ready.sessions);
     expect(faulted.hasSnapshot).toBe(true);
     expect(faulted.unavailableReason).toBeNull();
+    expect(faulted.faults.get(key("a"))).toEqual({
+      message: "Codex thread reported a system error. (during codex-live-session.process-event)",
+      statusUnavailable: false,
+    });
     expect(badges(faulted)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(applyWorkspaceActivityEnvelope(faulted, fault)).toBe(faulted);
 
-    const unavailable = apply(ready, {
+    const updated = apply(faulted, { type: "session_upsert", session: snapshot("a") });
+    expect(updated.faults.size).toBe(0);
+    expect(apply(faulted, sessionSnapshot([snapshot("a")])).faults.size).toBe(0);
+  });
+
+  test("records when a session fault means that its status could not be read", () => {
+    const ready = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]));
+    const faulted = apply(ready, {
       type: "fault",
       repoPath,
-      message: "stream closed",
+      ref: snapshot("a").ref,
+      message: "Status read failed.",
+      operation: "opencode-live-session.refresh-session",
+      statusUnavailable: true,
     });
-    expect(
-      applyWorkspaceActivityEnvelope(unavailable, {
-        type: "fault",
-        repoPath,
-        ref: snapshot("a").ref,
-        message: "session failed",
-      }),
-    ).toBe(unavailable);
+
+    expect(faulted.sessions).toBe(ready.sessions);
+    expect(faulted.faults.get(key("a"))?.statusUnavailable).toBe(true);
+    expect(apply(faulted, { type: "session_upsert", session: snapshot("a") }).faults.size).toBe(0);
   });
 
   test("returns the same reference when an envelope changes no badge input", () => {

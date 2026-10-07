@@ -37,7 +37,6 @@ const createNavigationState = (
     sessionExternalIdParam: null,
     hasExplicitRoleParam: false,
     roleFromQuery: "spec" as const,
-    activeTaskTabId: "",
     ...overrides,
   };
   return resolveAgentStudioNavigationState({
@@ -55,17 +54,14 @@ const createNavigationState = (
 };
 
 describe("resolveAgentStudioNavigationState", () => {
-  test("clears query when URL task no longer exists", () => {
-    expect(
-      createNavigationState({
-        tasks: [createTask("task-1")],
-        taskIdParam: "missing-task",
-      }).queryUpdate,
-    ).toEqual({
-      task: undefined,
-      session: undefined,
-      agent: undefined,
+  test("keeps an unavailable requested task selected without replacing its URL", () => {
+    const state = createNavigationState({
+      tasks: [createTask("task-1")],
+      taskIdParam: "missing-task",
     });
+    expect(state.queryUpdate).toBeNull();
+    expect(state.view.taskId).toBe("missing-task");
+    expect(state.view.selectedTask).toBeNull();
   });
 
   test("does not resolve an external session id without its task id", () => {
@@ -217,7 +213,7 @@ describe("resolveAgentStudioNavigationState", () => {
     expect(state.queryUpdate).toBeNull();
   });
 
-  test("does not repair the URL while local tab selection is ahead of route persistence", () => {
+  test("does not repair the URL while committed selection is ahead of route persistence", () => {
     const routeSession = createSession("task-1", "session-1");
 
     expect(
@@ -262,4 +258,32 @@ test("resolves the exact notification session when native IDs collide", () => {
     workingDirectory: "/repo/second",
   });
   expect(state.queryUpdate).toBeNull();
+});
+
+test("reports an address without identity that matches more than one session", () => {
+  const first = createAgentSessionSummaryFixture({
+    externalSessionId: "shared",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/first",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+  });
+  const second = createAgentSessionSummaryFixture({
+    externalSessionId: "shared",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/second",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  });
+  const state = createNavigationState({
+    sessions: [first, second],
+    taskIdParam: "task-1",
+    sessionExternalIdParam: "shared",
+  });
+
+  expect(state.routeSessionResolution).toEqual({
+    kind: "failed",
+    sessionExternalId: "shared",
+    message:
+      'More than one session of this task has the session ID "shared". Open the session from the session list.',
+  });
+  expect(state.view.sessionIdentity).toBeNull();
 });

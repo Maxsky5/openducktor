@@ -83,20 +83,12 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
-      const hasCachedCurrentBranch =
-        queryClient.getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch(repoPath)) !==
-        undefined;
-      const hasCachedBranches =
-        queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(repoPath)) !== undefined;
-      const invalidations: Promise<void>[] = [];
-
-      if (force || hasCachedCurrentBranch) {
-        invalidations.push(invalidateCurrentBranchQuery(queryClient, repoPath));
+      if (force) {
+        await Promise.all([
+          invalidateCurrentBranchQuery(queryClient, repoPath),
+          invalidateRepoBranchesQuery(queryClient, repoPath),
+        ]);
       }
-      if (force || hasCachedBranches) {
-        invalidations.push(invalidateRepoBranchesQuery(queryClient, repoPath));
-      }
-      await Promise.all(invalidations);
 
       try {
         await Promise.all([
@@ -119,7 +111,7 @@ export function useWorkspaceBranchOperations({
   );
 
   const refreshBranches = useCallback(
-    async (force = false): Promise<void> => {
+    async (force = true): Promise<void> => {
       if (!activeRepo) {
         clearBranchData();
         return;

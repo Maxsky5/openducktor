@@ -874,7 +874,7 @@ describe("first-message composer recovery", () => {
             busySendBlockedReason: null,
           },
           isSessionModelCatalogLoading: false,
-          isSelectedSessionModelSendable: true,
+          prepareSelectedSessionModelForSend: async () => true,
           agentStudioReady: true,
           canStartNewSession: true,
           reusablePrompts: [],

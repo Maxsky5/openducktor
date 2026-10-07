@@ -54,6 +54,7 @@ import {
   toOpencodeObservationFailureMessage,
 } from "./opencode-session-runtime-signals";
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
+import { markStreamTurnActive } from "./session-activity";
 import type {
   OpencodeSdkAdapterOptions,
   ReadOpencodeDirectory,
@@ -139,6 +140,8 @@ export const createPrepareOpencodeSessionRuntime = (
     const mcpBindings = createOpencodeMcpDirectoryBindings({
       resolveServerConfig: resolveMcpServerConfig,
     });
+    const pendingSignals: OpencodeSessionRuntimeSignal[] = [];
+    const pendingSessionSignals: OpencodeSessionRuntimeSignal[] = [];
     const controlAdapter = new OpencodeSdkAdapter(
       {
         ...adapterOptions,
@@ -149,10 +152,17 @@ export const createPrepareOpencodeSessionRuntime = (
           runtimeRoute: { type: "local_http", endpoint: input.runtimeEndpoint },
         },
       },
-      { sessions: eventSessions, runtimeEventTransports, restorePermissions },
+      {
+        sessions: eventSessions,
+        runtimeEventTransports,
+        restorePermissions,
+        // Publish activity before sending; the host publishes the accepted message itself.
+        onSendActivity: async (externalSessionId, event) => {
+          await drainSessionSignals();
+          await emitSignal({ type: "session_event", externalSessionId, event });
+        },
+      },
     );
-    const pendingSignals: OpencodeSessionRuntimeSignal[] = [];
-    const pendingSessionSignals: OpencodeSessionRuntimeSignal[] = [];
     const eventsBeforeSubscribers: Event[] = [];
     const initializationEvents: Event[] = [];
     let forwardingListener:
@@ -293,7 +303,6 @@ export const createPrepareOpencodeSessionRuntime = (
             workingDirectory: source.workingDirectory,
           }),
           startedAt: source.startedAt,
-          emitStartedEvent: false,
           now,
           emit: (externalSessionId, event) => {
             pendingSessionSignals.push({ type: "session_event", externalSessionId, event });
@@ -303,6 +312,9 @@ export const createPrepareOpencodeSessionRuntime = (
           registrationInput.logEvent = adapterOptions.logEvent;
         }
         registerSession(registrationInput);
+        if (source.runtimeActivity !== "idle") {
+          markStreamTurnActive(eventSessions.get(source.externalSessionId));
+        }
       }
     };
 

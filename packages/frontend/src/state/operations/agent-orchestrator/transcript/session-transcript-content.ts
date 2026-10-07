@@ -8,7 +8,10 @@ type SessionTranscriptContent = Pick<
 
 export const hasLoadedSessionHistory = (
   session: Pick<AgentSessionState, "historyLoadState">,
-): boolean => session.historyLoadState === "loaded";
+): boolean =>
+  session.historyLoadState === "loaded" ||
+  session.historyLoadState === "stale" ||
+  session.historyLoadState === "refreshing";
 
 export const hasRenderableSessionTranscript = (session: SessionTranscriptContent): boolean =>
   getSessionMessageCount(session) > 0 || hasLoadedSessionHistory(session);

@@ -1,4 +1,5 @@
 import type { PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
+import type { ReactNode } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentStudioPendingForcePush,
@@ -13,6 +14,8 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   /** Identifies the task or session that the panel shows. A new value clears the file search and opens all directories. */
   subjectKey: string;
   contextMode?: "repository" | "worktree";
+  /** A repository-root branch switcher shown in repository mode. */
+  repositoryBranchControl?: ReactNode;
   comparisonUnavailableReason?: string | null;
   commentOwner?: { workspaceId: string; taskId: string } | null;
   pullRequest?: PullRequest | null;

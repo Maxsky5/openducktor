@@ -7,6 +7,7 @@ const unexpectedTaskStoreCall = (methodName: keyof TaskStorePort) => () =>
 export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePort>>(
   overrides: Overrides,
 ): TaskStorePort => ({
+  recordAgentSessionActivity: unexpectedTaskStoreCall("recordAgentSessionActivity"),
   clearAgentSessionsByRoles: unexpectedTaskStoreCall("clearAgentSessionsByRoles"),
   clearQaReports: unexpectedTaskStoreCall("clearQaReports"),
   clearWorkflowDocuments: unexpectedTaskStoreCall("clearWorkflowDocuments"),

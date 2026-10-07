@@ -10,9 +10,9 @@ import {
 import type { AgentChatModel, AgentChatSurfaceModel } from "./agent-chat.types";
 import { AgentChatComposer, type AgentChatComposerHandle } from "./agent-chat-composer";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { AgentChatThread } from "./agent-chat-thread";
+import { AgentChatThreads } from "./agent-chat-threads";
 
-const MemoizedAgentChatThread = memo(AgentChatThread);
+const MemoizedAgentChatThreads = memo(AgentChatThreads);
 const MemoizedAgentChatComposer = memo(AgentChatComposer);
 
 const hasDraggedFiles = (dataTransfer: DataTransfer | null | undefined): boolean => {
@@ -203,7 +203,7 @@ export function AgentChatSurface({
             </div>
           ) : null}
           <AgentChatSettingsProvider value={model.chatSettings}>
-            <MemoizedAgentChatThread model={model.thread} visitKey={visitKey} />
+            <MemoizedAgentChatThreads model={model.thread} visitKey={visitKey} />
             {supportsComposer && composerModel ? (
               <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
             ) : null}

@@ -1,13 +1,9 @@
-import type { ChatSettings, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import {
-  buildAgentStudioTaskTabsModel,
-  buildTaskExecutionDocumentPanelModel,
-} from "./agents-page-view-model";
+import { buildTaskExecutionDocumentPanelModel } from "./agents-page-view-model";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
   type AgentStudioChatComposerContext,
@@ -16,15 +12,6 @@ import {
   useAgentStudioChatModel,
 } from "./use-agent-studio-chat-model";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
-
-type AgentStudioTaskTabsContext = {
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  availableTabTasks: TaskCard[];
-  isLoadingTasks: boolean;
-  onCreateTab: (taskId: string) => void;
-  onCloseTab: (taskId: string) => void;
-  onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
-};
 
 type AgentStudioSessionActionsContext = AgentStudioChatSessionActionsContext & {
   handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
@@ -35,9 +22,7 @@ type AgentStudioSessionActionsContext = AgentStudioChatSessionActionsContext & {
 };
 
 type UseAgentStudioPageModelsArgs = {
-  activeTabValue: string;
   selectedSession: AgentStudioSelectedSessionContext;
-  taskTabs: AgentStudioTaskTabsContext;
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
   chatSettings: ChatSettings;
@@ -46,9 +31,7 @@ type UseAgentStudioPageModelsArgs = {
 };
 
 export function useAgentStudioPageModels({
-  activeTabValue,
   selectedSession,
-  taskTabs,
   sessionActions,
   modelSelection,
   chatSettings,
@@ -56,27 +39,6 @@ export function useAgentStudioPageModels({
   composer,
 }: UseAgentStudioPageModelsArgs) {
   const agentStudioReady = selectedSession.selectedSession.runtimeReadiness.state === "ready";
-  const agentStudioTaskTabsModel = useMemo(
-    () =>
-      buildAgentStudioTaskTabsModel({
-        taskTabs: taskTabs.taskTabs,
-        availableTabTasks: taskTabs.availableTabTasks,
-        isLoadingTasks: taskTabs.isLoadingTasks,
-        onCreateTab: taskTabs.onCreateTab,
-        onCloseTab: taskTabs.onCloseTab,
-        onReorderTab: taskTabs.onReorderTab,
-        agentStudioReady,
-      }),
-    [
-      agentStudioReady,
-      taskTabs.availableTabTasks,
-      taskTabs.isLoadingTasks,
-      taskTabs.onCloseTab,
-      taskTabs.onCreateTab,
-      taskTabs.onReorderTab,
-      taskTabs.taskTabs,
-    ],
-  );
 
   const {
     workflowSessionByRole,
@@ -130,14 +92,10 @@ export function useAgentStudioPageModels({
   });
 
   return {
-    activeTabValue,
-    agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     taskExecutionDocumentPanelModel,
     agentChatModel,
   } satisfies {
-    activeTabValue: string;
-    agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
     agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
     taskExecutionDocumentPanelModel: ReturnType<typeof buildTaskExecutionDocumentPanelModel>;
     agentChatModel: ReturnType<typeof useAgentStudioChatModel>;

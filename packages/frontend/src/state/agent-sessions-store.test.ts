@@ -411,9 +411,9 @@ describe("createAgentSessionsStore repository retention", () => {
     store.resetWorkspace("/repo-a");
 
     const restored = store.getSessionSnapshot(session);
-    expect(restored).toBe(session);
-    expect(restored?.historyLoadState).toBe("loaded");
-    expect(store.listSessionSnapshots()).toEqual([session]);
+    expect(restored?.messages).toBe(session.messages);
+    expect(restored?.historyLoadState).toBe("stale");
+    expect(store.listSessionSnapshots()).toEqual([{ ...session, historyLoadState: "stale" }]);
   });
 
   test("scopes the activity snapshot and session reads to the active repository", () => {
@@ -445,7 +445,7 @@ describe("createAgentSessionsStore repository retention", () => {
       expect.objectContaining({ externalSessionId: "session-a" }),
     ]);
     expect(store.getSessionSnapshot(sessionB)).toBeNull();
-    expect(store.listSessionSnapshots()).toEqual([sessionA]);
+    expect(store.listSessionSnapshots()).toEqual([{ ...sessionA, historyLoadState: "stale" }]);
   });
 
   test("retains every visited repository collection", () => {
@@ -460,13 +460,16 @@ describe("createAgentSessionsStore repository retention", () => {
     replaceStoreSessions(store, [sessionC]);
 
     store.resetWorkspace("/repo-b");
-    expect(store.getSessionSnapshot(sessionB)).toBe(sessionB);
+    expect(store.getSessionSnapshot(sessionB)?.messages).toBe(sessionB.messages);
+    expect(store.getSessionSnapshot(sessionB)?.historyLoadState).toBe("stale");
 
     store.resetWorkspace("/repo-a");
-    expect(store.getSessionSnapshot(sessionA)).toBe(sessionA);
+    expect(store.getSessionSnapshot(sessionA)?.messages).toBe(sessionA.messages);
+    expect(store.getSessionSnapshot(sessionA)?.historyLoadState).toBe("stale");
 
     store.resetWorkspace("/repo-c");
-    expect(store.getSessionSnapshot(sessionC)).toBe(sessionC);
+    expect(store.getSessionSnapshot(sessionC)?.messages).toBe(sessionC.messages);
+    expect(store.getSessionSnapshot(sessionC)?.historyLoadState).toBe("stale");
   });
 
   test("reopens an interrupted history load when its repository becomes inactive", () => {

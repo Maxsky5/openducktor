@@ -66,6 +66,10 @@ export class TerminalScreenState {
     return this.pendingBytes;
   }
 
+  onOsc(code: number, listener: (data: string) => boolean): void {
+    this.terminal.parser.registerOscHandler(code, listener);
+  }
+
   write(data: Uint8Array, parsed: () => void): void {
     if (data.byteLength === 0) return;
     const copy = data.slice();

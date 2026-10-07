@@ -17,7 +17,10 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { useTaskCreateModalController } from "./use-task-create-modal-controller";
+import {
+  type TaskCreateDestination,
+  useTaskCreateModalController,
+} from "./use-task-create-modal-controller";
 
 const workspaceState = {
   isSwitchingWorkspace: false,
@@ -125,6 +128,7 @@ const renderController = (
   initialTask: ReturnType<typeof createTaskCardFixture> | null,
   updateTask: TasksStateContextValue["updateTask"],
   createTask: TasksStateContextValue["createTask"] = async () => {},
+  destination: TaskCreateDestination | null = null,
 ) => {
   let latest: Controller | null = null;
 
@@ -134,6 +138,7 @@ const renderController = (
       onOpenChange: () => {},
       tasks: task ? [task] : [],
       task,
+      destination,
     });
     return null;
   };
@@ -198,6 +203,49 @@ describe("useTaskCreateModalController", () => {
       }
     },
   );
+
+  test("creates a new task only in the workspace that was active when it opened", async () => {
+    const createTask = mock(async () => {});
+    const harness = renderController(null, async () => {}, createTask, {
+      workspaceId: "workspace-2",
+      workspaceName: "Other workspace",
+    });
+    try {
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      expect(harness.getController().footerError).toBe(
+        "This task is for Other workspace. Open Other workspace again to create it.",
+      );
+
+      await act(async () => {
+        await harness.getController().submit();
+      });
+
+      expect(createTask).not.toHaveBeenCalled();
+      expect(harness.getController().state.title).toBe("Draft");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("creates a new task when its workspace is active", async () => {
+    const createTask = mock(async () => {});
+    const harness = renderController(null, async () => {}, createTask, {
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+    });
+    try {
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      expect(harness.getController().footerError).toBeNull();
+
+      await act(async () => {
+        await harness.getController().submit();
+      });
+
+      expect(createTask).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
 
   test("rehydrates an untouched draft when the open task changes with the same ID", async () => {
     const original = createTaskCardFixture({

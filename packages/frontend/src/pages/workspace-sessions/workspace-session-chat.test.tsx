@@ -110,7 +110,7 @@ const createWorkspaceChatHarness = ({
     },
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
-    updateAgentSessionModel: () => {},
+    updateAgentSessionModel: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
   };
@@ -161,12 +161,10 @@ const createWorkspaceChatHarness = ({
             <AgentOperationsContext value={operations}>
               <AgentSessionHistoryLoadContext
                 value={{
-                  loadSelectedSessionBaselineHistory: async () => {
-                    counters.baselineLoads += 1;
-                    return session;
-                  },
-                  revalidateAgentSessionHistory: async () => {
-                    counters.revalidations += 1;
+                  loadAgentSessionHistory: async () => {
+                    if (store.getSessionSnapshot(session)?.historyLoadState === "stale")
+                      counters.revalidations += 1;
+                    else counters.baselineLoads += 1;
                     return session;
                   },
                 }}
@@ -509,7 +507,7 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
   const view = render(<Harness />);
   try {
     await view.findByText("Retained answer", {}, { timeout: 2000 });
-    await waitFor(() => expect(counters.revalidations).toBe(1));
+    expect(counters.revalidations).toBe(0);
     expect(counters.baselineLoads).toBe(0);
 
     await act(async () => {
@@ -520,7 +518,7 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
 
     await view.findByText("Retained answer", {}, { timeout: 2000 });
     expect(counters.baselineLoads).toBe(0);
-    await waitFor(() => expect(counters.revalidations).toBe(2));
+    await waitFor(() => expect(counters.revalidations).toBe(1));
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

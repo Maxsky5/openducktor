@@ -352,9 +352,9 @@ describe("dev server terminal viewport", () => {
     expect(harness.emulators[1]?.writes).toEqual([new TextEncoder().encode("new")]);
     expect(harness.bridge.connect).toHaveBeenCalledTimes(1);
     expect(
-      harness.sent
-        .filter((frame) => frame.message.type === "attach")
-        .map((frame) => frame.message.terminalId),
+      harness.sent.flatMap((frame) =>
+        frame.message.type === "attach" ? [frame.message.terminalId] : [],
+      ),
     ).toEqual(["old-run", "new-run"]);
     view.unmount();
   });

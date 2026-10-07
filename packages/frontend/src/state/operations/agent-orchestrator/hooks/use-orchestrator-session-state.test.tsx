@@ -206,7 +206,12 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
         tasks: [taskFixture],
       });
 
-      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBe(session);
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)?.messages).toBe(
+        session.messages,
+      );
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)?.historyLoadState).toBe(
+        "stale",
+      );
     } finally {
       await harness.unmount();
     }

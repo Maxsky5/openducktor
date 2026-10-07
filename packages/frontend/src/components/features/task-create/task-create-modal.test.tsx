@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@/types/task-composer";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
@@ -75,6 +75,8 @@ const controllerMock: ReturnType<
   knownLabels: [],
   updateState: (_patch: Partial<ComposerState>) => {},
   footerError: noFooterError(),
+  destination: null,
+  destinationError: noFooterError(),
   isEditingDocument: true,
   close: async () => {},
   discardCurrentDocumentDraft: () => {},
@@ -92,6 +94,8 @@ const controllerMock: ReturnType<
   descriptionAssetPreviews: new Map(),
 };
 
+let controllerForTest = controllerMock;
+
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
@@ -101,7 +105,7 @@ describe("TaskCreateModal", () => {
         createElement("div", { "data-testid": "mock-task-create-discard-dialog" }),
       ),
       spyOn(taskCreateModalControllerModule, "useTaskCreateModalController").mockImplementation(
-        () => controllerMock,
+        () => controllerForTest,
       ),
       spyOn(taskDocumentEditorModule, "TaskDocumentEditor").mockImplementation(() =>
         createElement("div", null, "Mock task document editor"),
@@ -113,6 +117,41 @@ describe("TaskCreateModal", () => {
   afterEach(() => {
     for (const testSpy of testSpies) testSpy.mockRestore();
     testSpies = [];
+    controllerForTest = controllerMock;
+  });
+
+  test("returns keyboard focus to the control that opened the task dialog", async () => {
+    controllerForTest = {
+      ...controllerMock,
+      mode: "create",
+      taskId: null,
+      step: "type",
+      isTypeStepVisible: true,
+      activeDocumentSection: null,
+      isEditingDocument: false,
+    };
+    const trigger = document.createElement("button");
+    trigger.textContent = "New task";
+    document.body.append(trigger);
+    trigger.focus();
+    const props = { open: true, onOpenChange: () => {}, tasks: [] };
+    const rendered = render(createElement(TaskCreateModal, props));
+    try {
+      const dialog = screen.getByRole("dialog", { name: "Create Task" });
+      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true), {
+        timeout: 250,
+      });
+      await act(async () => {
+        rendered.rerender(createElement(TaskCreateModal, { ...props, open: false }));
+      });
+      // Formatting DOM nodes on a failed poll can block the timer that restores focus.
+      await waitFor(() => expect(document.activeElement === trigger).toBe(true), {
+        timeout: 250,
+      });
+    } finally {
+      await act(async () => rendered.unmount());
+      trigger.remove();
+    }
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
@@ -134,6 +173,40 @@ describe("TaskCreateModal", () => {
     const scrollRegion = dialog.querySelector("fieldset .overflow-y-auto");
     expect(scrollRegion?.parentElement?.classList.contains("min-h-0")).toBe(true);
     expect(scrollRegion?.parentElement?.classList.contains("flex")).toBe(true);
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("names the destination workspace and blocks Create while it is not active", async () => {
+    controllerForTest = {
+      ...controllerMock,
+      mode: "create",
+      taskId: null,
+      editSection: "details",
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      destination: { workspaceId: "alpha", workspaceName: "Alpha" },
+      destinationError: "This task is for Alpha. Open Alpha again to create it.",
+      footerError: "This task is for Alpha. Open Alpha again to create it.",
+    };
+    testSpies.push(
+      spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+        createElement("div", null, "Mock task details form"),
+      ),
+    );
+    const rendered = render(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Create a task in Alpha with the fields Planner and Builder rely on.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("This task is for Alpha. Open Alpha again to create it.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create Task" }).hasAttribute("disabled")).toBe(true);
 
     await act(async () => {
       rendered.unmount();

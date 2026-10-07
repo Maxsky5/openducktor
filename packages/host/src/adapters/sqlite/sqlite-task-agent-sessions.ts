@@ -1,6 +1,6 @@
 import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
@@ -68,6 +68,63 @@ export const listAgentSessionsForTasks = (
     return results;
   });
 
+/** Save a root's event time without changing the task's edit time. */
+export const recordAgentSessionActivity = (
+  session: TaskStoreSession,
+  input: Parameters<TaskStorePort["recordAgentSessionActivity"]>[0],
+): Effect.Effect<TaskAgentSessions | null, SqliteTaskStoreWriteError> =>
+  Effect.gen(function* () {
+    if (!Number.isSafeInteger(input.occurredAt) || input.occurredAt < 0) {
+      return yield* new SqliteTaskStoreDataError({
+        field: "lastActivityAt",
+        message: "Session activity requires an epoch timestamp in milliseconds.",
+      });
+    }
+    // Live events can spell the same path differently; the shared identity check owns path matching.
+    const rows = yield* session.execute(
+      (database) =>
+        database.select({ id: tasks.id, agentSessionsJson: tasks.agentSessionsJson }).from(tasks)
+          .where(sql`exists (
+          select 1 from json_each(${tasks.agentSessionsJson}) as saved
+          where json_extract(saved.value, '$.runtimeKind') = ${input.identity.runtimeKind}
+            and json_extract(saved.value, '$.externalSessionId') = ${input.identity.externalSessionId}
+        )`),
+      "sqliteTaskRepository.recordAgentSessionActivity.findOwner",
+    );
+    let owner: {
+      taskId: string;
+      sessions: AgentSessionRecord[];
+      stored: AgentSessionRecord;
+    } | null = null;
+    for (const row of rows) {
+      const sessions = yield* agentSessionsFromRow(row);
+      const stored = sessions.find((record) => hasSameAgentSessionIdentity(record, input.identity));
+      if (!stored) continue;
+      if (owner) {
+        return yield* new SqliteTaskStoreDataError({
+          field: "agentSessionsJson",
+          message: `More than one task owns session '${input.identity.externalSessionId}'.`,
+        });
+      }
+      owner = { taskId: row.id, sessions, stored };
+    }
+    if (!owner) return null;
+    const { taskId, sessions, stored } = owner;
+    if (input.occurredAt <= (stored.lastActivityAt ?? Date.parse(stored.startedAt))) return null;
+    const next = sessions.map((record) =>
+      record === stored ? { ...record, lastActivityAt: input.occurredAt } : record,
+    );
+    yield* session.execute(
+      (database) =>
+        database
+          .update(tasks)
+          .set({ agentSessionsJson: encodeAgentSessionBatch(next) })
+          .where(eq(tasks.id, taskId)),
+      "sqliteTaskRepository.recordAgentSessionActivity.updateSession",
+    );
+    return { taskId, agentSessions: next };
+  });
+
 export const clearAgentSessionsByRoles = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["clearAgentSessionsByRoles"]>[0],
@@ -119,7 +176,14 @@ export const upsertAgentSession = (
       hasSameAgentSessionIdentity(entry, compactSession),
     );
     if (existingIndex >= 0) {
-      sessions[existingIndex] = compactSession;
+      const stored = sessions[existingIndex];
+      sessions[existingIndex] =
+        stored?.lastActivityAt === undefined
+          ? compactSession
+          : {
+              ...compactSession,
+              lastActivityAt: Math.max(stored.lastActivityAt, compactSession.lastActivityAt ?? 0),
+            };
     } else {
       sessions.push(compactSession);
     }

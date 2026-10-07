@@ -139,6 +139,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceUpdateAgentModelFavorites.bind(workspaceClient),
     workspaceUpdateKanbanTaskCardView:
       workspaceClient.workspaceUpdateKanbanTaskCardView.bind(workspaceClient),
+    workspaceUpdateSidebarSessionGrouping:
+      workspaceClient.workspaceUpdateSidebarSessionGrouping.bind(workspaceClient),
     workspaceUpdateGlobalGitConfig:
       workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
     workspaceDetectGithubRepository:

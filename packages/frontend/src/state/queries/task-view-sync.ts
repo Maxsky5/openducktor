@@ -134,6 +134,15 @@ export const createTaskViewSync = ({
       { silent: true },
     );
 
+  // An inactive workspace still refreshes a task list that a view observes, such as the
+  // session sidebar in all-workspaces scope. Unobserved lists stay invalidated until read.
+  const refetchObservedTaskList = (repoPath: string): Promise<void> =>
+    queryClient.refetchQueries({
+      queryKey: taskQueryKeys.repoData(repoPath),
+      exact: true,
+      type: "active",
+    });
+
   const removeDocuments = (repoPath: string, taskIds: string[]): void => {
     const taskIdSet = new Set(taskIds);
     for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
@@ -268,6 +277,7 @@ export const createTaskViewSync = ({
             invalidateRepoTaskQueries(queryClient, event.repoPath),
             invalidateDocuments(event.repoPath),
           ]);
+          await refetchObservedTaskList(event.repoPath);
         });
         return;
       }
@@ -318,6 +328,7 @@ export const createTaskViewSync = ({
             invalidateRepoTaskQueries(queryClient, repoPath),
             invalidateDocuments(repoPath),
           ]);
+          await refetchObservedTaskList(repoPath);
         });
       const inactiveRefreshes: Promise<void>[] = [];
       for (const repoPath of repos) {

@@ -20,6 +20,7 @@ export const createAgentSessionLiveEnvelopePublisher = (
 ) => {
   const publishEnvelopeResult = (
     envelope: AgentSessionLiveEnvelope,
+    provenance?: "baseline" | "live",
   ): Effect.Effect<HostError | null, HostError> =>
     Effect.gen(function* () {
       if (envelope.type === "fault") {
@@ -62,7 +63,7 @@ export const createAgentSessionLiveEnvelopePublisher = (
         catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
       });
       if (persistence) {
-        const persisted = yield* Effect.result(persistence.observe(envelope));
+        const persisted = yield* Effect.result(persistence.observe(envelope, provenance));
         if (persisted._tag === "Failure") {
           let ref: AgentSessionLiveRef | undefined;
           if (envelope.type === "transcript_event") ref = envelope.event.sessionRef;
@@ -143,6 +144,9 @@ export const toAgentSessionLiveEnvelope = (
       }
       if (change.ref) {
         envelope.ref = change.ref;
+      }
+      if (change.statusUnavailable) {
+        envelope.statusUnavailable = true;
       }
       return envelope;
   }

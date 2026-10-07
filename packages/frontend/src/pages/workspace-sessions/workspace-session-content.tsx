@@ -15,12 +15,13 @@ import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
 import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
-import { WorkspaceSessionHeader } from "./workspace-session-header";
+import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
 } from "./workspace-session-file-preview";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export function WorkspaceSessionContent({
   const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
-  const workingDirectory = sessionWorkingDirectory(workspace, record);
+  const workingDirectory = workspaceSessionWorkingDirectory(workspace, record);
   const isWorktree = record.executionTarget.kind === "local_worktree";
   const branch = useWorkspaceSessionBranch({
     repoPath: workspace.repoPath,
@@ -144,27 +145,24 @@ export function WorkspaceSessionContent({
     />
   );
   const mainContent = (
-    <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      {previewContent}
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        style={{ visibility: panelState.selectedFile ? "hidden" : undefined }}
-        inert={panelState.selectedFile !== null}
-      >
-        <WorkspaceSessionHeader
-          key={record.id}
-          workspaceId={workspace.workspaceId}
-          record={record}
-        />
-        <WorkspaceSessionChatPanes
-          workspace={workspace}
-          record={record}
-          sessionIds={sessionIds}
-          onToolRefresh={onToolRefresh}
-          onSelectFile={onSelectFile}
-          workingDirectory={workingDirectory}
-          branchKey={branchKey}
-        />
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {previewContent}
+        <div
+          className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+          style={{ visibility: panelState.selectedFile ? "hidden" : undefined }}
+          inert={panelState.selectedFile !== null}
+        >
+          <WorkspaceSessionChatPanes
+            workspace={workspace}
+            record={record}
+            sessionIds={sessionIds}
+            onToolRefresh={onToolRefresh}
+            onSelectFile={onSelectFile}
+            workingDirectory={workingDirectory}
+            branchKey={branchKey}
+          />
+        </div>
       </div>
     </div>
   );
@@ -175,6 +173,7 @@ export function WorkspaceSessionContent({
       sessionId={record.id}
       workingDirectory={workingDirectory}
       contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
+      repositoryBranchControl={<RepositoryBranchSwitcher layout="inline" />}
       branchKey={branchKey}
       branchReady={branchReady}
       target={target}
@@ -189,12 +188,14 @@ export function WorkspaceSessionContent({
     />
   );
   return (
-    <WorkspaceSessionPaneLayout
-      isOpen={panelState.isOpen}
-      isNarrow={isNarrow}
-      mainContent={mainContent}
-      toolsContent={toolsContent}
-    />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+      <WorkspaceSessionPaneLayout
+        isOpen={panelState.isOpen}
+        isNarrow={isNarrow}
+        mainContent={mainContent}
+        toolsContent={toolsContent}
+      />
+    </div>
   );
 }
 
@@ -214,15 +215,6 @@ export function WorkspaceSessionReadModelNotice() {
       </Button>
     </div>
   );
-}
-
-function sessionWorkingDirectory(
-  workspace: ActiveWorkspace,
-  record: WorkspaceSession,
-): string | null {
-  return record.executionTarget.kind === "local_repo_root"
-    ? workspace.repoPath || null
-    : record.executionTarget.workingDirectory || null;
 }
 
 function WorkspaceSessionPaneLayout({

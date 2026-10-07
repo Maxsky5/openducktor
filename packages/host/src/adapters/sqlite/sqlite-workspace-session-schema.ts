@@ -12,6 +12,7 @@ export const workspaceSessions = sqliteTable(
     generatedTitle: text("generated_title"),
     manualTitle: text("manual_title"),
     createdAt: integer("created_at_ms").notNull(),
+    lastActivityAt: integer("last_activity_at_ms"),
     updatedAt: integer("updated_at_ms").notNull(),
     archivedAt: integer("archived_at_ms"),
   },

@@ -197,7 +197,7 @@ export const createAgentSessionLiveStateService = ({
       for (const change of changes) {
         const envelope = executionEpisodes.accept(toAgentSessionLiveEnvelope(change));
         observeNotificationInput?.(envelope, change.provenance ?? "live");
-        const result = yield* publishEnvelopeResult(envelope);
+        const result = yield* publishEnvelopeResult(envelope, change.provenance);
         if (faultLogFailure === null && result) {
           faultLogFailure = result;
         }

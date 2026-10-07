@@ -17,6 +17,7 @@ import {
   type SettingsSnapshot,
   type TaskCard,
   type TaskStoreCheck,
+  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
@@ -25,21 +26,28 @@ import type {
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
 } from "@openducktor/core";
+import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import type { WorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
 import {
   UNKNOWN_WORKSPACE_ACTIVITY,
   type WorkspaceActivityState,
+  type WorkspaceSessionLiveState,
 } from "@/features/workspace-activity/workspace-activity-state";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type {
   AgentChatMessage,
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { HostRuntimeStatusMap, ObservedCheck } from "@/types/diagnostics";
-import type { ChecksStateContextValue, HostRuntimeStatusContextValue } from "@/types/state-slices";
+import type {
+  ChecksStateContextValue,
+  HostRuntimeStatusContextValue,
+  WorkspaceStateContextValue,
+} from "@/types/state-slices";
 
 export type RuntimeCatalogFixtureSurfaces = {
   models?: AgentModelCatalog;
@@ -506,12 +514,51 @@ export const createHostRuntimeStatusContextValue = (
  */
 export const createWorkspaceActivityObserverStub = (
   states: Readonly<Record<string, WorkspaceActivityState>> = {},
-): WorkspaceActivityObserver => ({
-  syncWorkspaces: () => {},
-  setSessionRecordsError: () => {},
-  subscribe: () => () => {},
-  getWorkspaceActivity: (workspaceId) => states[workspaceId] ?? UNKNOWN_WORKSPACE_ACTIVITY,
-  dispose: () => {},
+  liveStates: Readonly<Record<string, WorkspaceSessionLiveState>> = {},
+): WorkspaceActivityObserver => {
+  const liveSnapshot = {
+    statesByWorkspaceId: new Map(Object.entries(liveStates)),
+    sessionRecordsError: null,
+  };
+  return {
+    syncWorkspaces: () => {},
+    setSessionRecordsError: () => {},
+    subscribe: () => () => {},
+    getWorkspaceActivity: (workspaceId) => states[workspaceId] ?? UNKNOWN_WORKSPACE_ACTIVITY,
+    getSessionLiveSnapshot: () => liveSnapshot,
+    getWorkspaceProjection: () => null,
+    dispose: () => {},
+  };
+};
+
+/** Task workflow actions that do nothing, for views that only need the action context. */
+export const createTaskWorkflowActionsFixture = (
+  overrides: Partial<TaskWorkflowActions> = {},
+): TaskWorkflowActions => ({
+  onCreateTask: () => {},
+  onPlan: () => {},
+  onQaStart: () => {},
+  onQaOpen: () => {},
+  onBuild: () => {},
+  onOpenSession: () => {},
+  onDelegate: () => {},
+  onEdit: () => {},
+  onHumanApprove: () => {},
+  onHumanRequestChanges: () => {},
+  onResetImplementation: () => {},
+  onResetTask: async () => {},
+  onCloseTask: async () => {},
+  onDelete: async () => {},
+  onDetectPullRequest: () => {},
+  onUnlinkPullRequest: () => {},
+  detectingPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  gitProviderContext: undefined,
+  gitProviderReadError: null,
+  registerTaskDetailsClose: () => () => {},
+  taskSessionsByTaskId: new Map(),
+  activeTaskSessionContextByTaskId: new Map(),
+  ...overrides,
 });
 
 export const createObservedCheckFixture = <T>(
@@ -534,3 +581,69 @@ export const createChecksStateFixture = (
   refreshChecks: async () => undefined,
   ...overrides,
 });
+
+export const createWorkspaceRecordFixture = (
+  overrides: Partial<WorkspaceRecord> = {},
+): WorkspaceRecord => ({
+  workspaceId: "workspace-1",
+  workspaceName: "OpenDucktor",
+  abbreviation: null,
+  tileColor: null,
+  repoPath: "/repo",
+  iconDataUrl: undefined,
+  isActive: true,
+  hasConfig: true,
+  configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: null,
+  effectiveWorktreeBasePath: null,
+  ...overrides,
+});
+
+/** Workspace state with one active workspace. Operations do nothing unless a test overrides them. */
+export const createWorkspaceStateFixture = (
+  overrides: Partial<WorkspaceStateContextValue> = {},
+): WorkspaceStateContextValue => {
+  const activeWorkspace = createWorkspaceRecordFixture();
+  return {
+    isSwitchingWorkspace: false,
+    closedWorkspaces: [],
+    incompleteRemovals: [],
+    closeWorkspace: async () => {},
+    removeWorkspace: async () => {},
+    reopenWorkspace: async () => {},
+    resolveWorkspacePath: async () => ({ kind: "new" }),
+    isLoadingBranches: false,
+    isSwitchingBranch: false,
+    branchSyncDegraded: false,
+    workspaces: [activeWorkspace],
+    activeWorkspace,
+    branches: [],
+    activeBranch: null,
+    addWorkspace: async () => {
+      throw new Error("addWorkspace is not configured for this test.");
+    },
+    commitWorkspaceProviderSetup: async () => {
+      throw new Error("commitWorkspaceProviderSetup is not configured for this test.");
+    },
+    saveWorkspaceModelDefaults: async () => {},
+    selectWorkspace: async () => {},
+    reorderWorkspaces: async () => {},
+    refreshBranches: async () => {},
+    switchBranch: async () => {},
+    loadRepoSettings: async () => {
+      throw new Error("loadRepoSettings is not configured for this test.");
+    },
+    saveRepoSettings: async () => {},
+    loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    detectGithubRepository: async () => null,
+    saveGlobalGitConfig: async () => {},
+    previewSettingsSnapshotRuntime: async () => {
+      throw new Error("previewSettingsSnapshotRuntime is not configured for this test.");
+    },
+    saveSettingsSnapshot: async () => savedSettingsResult(),
+    saveAgentModelFavorites: async () => {
+      throw new Error("saveAgentModelFavorites is not configured for this test.");
+    },
+    ...overrides,
+  };
+};

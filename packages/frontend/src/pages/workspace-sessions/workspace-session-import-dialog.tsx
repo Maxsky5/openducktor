@@ -34,6 +34,7 @@ type Props = {
   workspaceId: string;
   onClose: () => void;
   onImported: (session: WorkspaceSession) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 };
 export function WorkspaceSessionImportDialog(props: Props) {
   const runtime = useRuntimeAvailabilityContext();
@@ -47,6 +48,7 @@ export function WorkspaceSessionImportDialog(props: Props) {
       }}
     >
       <DialogContent
+        onCloseAutoFocus={props.onCloseAutoFocus}
         className={`my-0 gap-0 p-0 sm:max-w-3xl ${selectedRuntime ? "h-[min(48rem,calc(100dvh-2rem))]" : ""}`}
         closeButton={
           <Button

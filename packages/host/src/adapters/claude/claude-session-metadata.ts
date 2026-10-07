@@ -1,5 +1,5 @@
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
-import type { SessionRef } from "@openducktor/core";
+import { type SessionRef } from "@openducktor/core";
 import { z } from "zod";
 import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
 

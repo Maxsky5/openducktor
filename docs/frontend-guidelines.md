@@ -31,6 +31,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Apply semantic tokens with `className` at the use site.
 - Keep base shadcn components free of feature-specific hardcoded colors.
 - Make each new UI element work in light and dark themes.
+- Use `warning-surface-hover` and `warning-surface-selected` for interactive warning surfaces. Use the matching `info-surface-hover` and `info-surface-selected` tokens for information surfaces. These tokens keep the base state color across hover and selection in both themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.
 

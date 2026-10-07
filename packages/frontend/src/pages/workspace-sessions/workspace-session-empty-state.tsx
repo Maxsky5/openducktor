@@ -13,7 +13,7 @@ export function WorkspaceSessionEmptyState({ hasSessions, onCreate }: Props): Re
       <MessageCirclePlus className="size-8 text-muted-foreground" aria-hidden="true" />
       <h1 className="text-lg font-semibold">Workspace chat</h1>
       <p className="text-muted-foreground">
-        {hasSessions ? "Select a session above." : "No active sessions."}
+        {hasSessions ? "Select a session in the sidebar." : "No active sessions."}
       </p>
       <p className="max-w-sm text-sm text-muted-foreground">
         Work with an agent outside a task. Choose a repository or worktree and start a conversation.

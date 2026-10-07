@@ -5,6 +5,7 @@ import {
   kanbanTaskCardViewSchema,
   repoHooksSchema,
   settingsSnapshotSaveInputSchema,
+  sidebarSessionGroupingSchema,
   themePreferenceSchema,
   workspaceRepoConfigInputSchema,
   workspaceRepoSettingsInputSchema,
@@ -154,6 +155,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "setTheme"
     | "updateAgentModelFavorites"
     | "updateKanbanTaskCardView"
+    | "updateSidebarSessionGrouping"
     | "updateGlobalGitConfig"
     | "updateRepoConfig"
     | "updateRepoHooks"
@@ -334,6 +336,14 @@ export const createWorkspaceSettingsCommandHandlers = (
           kanbanTaskCardViewSchema,
           requireObjectArgs("workspace_update_kanban_task_card_view", args, "taskCardView"),
           "taskCardView",
+        ),
+      ),
+    workspace_update_sidebar_session_grouping: (args) =>
+      workspaceSettingsService.updateSidebarSessionGrouping(
+        requireParsedInput(
+          sidebarSessionGroupingSchema,
+          requireObjectArgs("workspace_update_sidebar_session_grouping", args, "grouping"),
+          "grouping",
         ),
       ),
     set_theme: (args) =>

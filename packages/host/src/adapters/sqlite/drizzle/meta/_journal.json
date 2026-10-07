@@ -36,6 +36,13 @@
       "when": 1790200888389,
       "tag": "0004_puzzling_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791125128897,
+      "tag": "0005_session_activity",
+      "breakpoints": true
     }
   ]
 }

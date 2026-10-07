@@ -5,6 +5,7 @@ import {
   findNotificationAttentionTarget,
   matchesNotificationSession,
   navigateToNotificationTarget,
+  notificationTargetReplacesContent,
 } from "./notification-navigation-logic";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
@@ -76,11 +77,11 @@ describe("notification navigation", () => {
 
   test("adds only transient attention keys to the Agent Studio URL", () => {
     const href = addNotificationAttention(
-      "/workflows?task=task-1&session=session-1&agent=build",
+      "/sessions?kind=task&task=task-1&session=session-1&agent=build",
       target,
     );
     expect(href).toBe(
-      "/workflows?task=task-1&session=session-1&agent=build&attention=permission&attentionId=request-1",
+      "/sessions?kind=task&task=task-1&session=session-1&agent=build&attention=permission&attentionId=request-1",
     );
     expect(href).not.toContain("runtimeKind");
     expect(href).not.toContain("workingDirectory");
@@ -163,7 +164,9 @@ describe("notification navigation", () => {
     finishSelection?.();
     await navigation;
 
-    expect(navigate).toHaveBeenCalledWith("/workflows?task=task-1&agent=build");
+    expect(navigate).toHaveBeenCalledWith(
+      "/sessions?workspace=workspace-repo&kind=task&task=task-1&agent=build",
+    );
   });
 
   test("matches only the requested error episode", () => {
@@ -178,6 +181,32 @@ describe("notification navigation", () => {
     ).toBe("error-2");
     expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
   });
+});
+
+test("asks about unsaved edits only when a target replaces the Sessions content", () => {
+  const chatTarget: NotificationNavigationTarget = {
+    type: "pending_input",
+    repoPath: "/repo",
+    session: { externalSessionId: "native", runtimeKind: "codex", workingDirectory: "/repo" },
+    inputKind: "question",
+    requestId: "request-1",
+  };
+  const taskTarget: NotificationNavigationTarget = { ...chatTarget, taskId: "task-1" };
+
+  expect(notificationTargetReplacesContent(chatTarget, "alpha", "alpha", "workspace")).toBe(false);
+  expect(notificationTargetReplacesContent(taskTarget, "alpha", "alpha", "task")).toBe(false);
+  expect(notificationTargetReplacesContent(chatTarget, "alpha", "alpha", "task")).toBe(true);
+  expect(notificationTargetReplacesContent(taskTarget, "alpha", "alpha", "workspace")).toBe(true);
+  expect(notificationTargetReplacesContent(chatTarget, "beta", "alpha", "workspace")).toBe(true);
+  expect(
+    notificationTargetReplacesContent(
+      { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+      "alpha",
+      "alpha",
+      "task",
+    ),
+  ).toBe(true);
+  expect(notificationTargetReplacesContent(chatTarget, "beta", "alpha", null)).toBe(false);
 });
 
 test("rejects a matching native ID from a different runtime or worktree", () => {
@@ -203,7 +232,7 @@ test("passes the exact session identity through transient navigation state", asy
     },
   });
   expect(navigate).toHaveBeenCalledWith(
-    "/workflows?task=task-1&session=session-1&agent=build&attention=permission&attentionId=request-1",
+    "/sessions?workspace=workspace&kind=task&task=task-1&session=session-1&agent=build&runtimeKind=codex&workingDirectory=%2Frepo%2Fworktree&attention=permission&attentionId=request-1",
     { state: { notificationTarget: target } },
   );
 });

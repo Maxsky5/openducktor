@@ -917,7 +917,7 @@ describe("agent-chat-message-card-model", () => {
       });
 
       expect(message.meta?.kind === "assistant" ? message.meta.modelId : null).toBe("sonnet");
-      expect(getAssistantFooterData(message, catalog).infoParts).toEqual([
+      expect(getAssistantFooterData(message, null, catalog).infoParts).toEqual([
         "claude/GPT-5.6-TERRA",
         "high",
       ]);
@@ -936,6 +936,7 @@ describe("agent-chat-message-card-model", () => {
             profileId: "builder",
           },
         }),
+        null,
       );
       expect(footer.infoParts).toEqual(["builder", "openai/gpt-5", "high"]);
     });
@@ -953,13 +954,14 @@ describe("agent-chat-message-card-model", () => {
             profileId: "builder",
           },
         }),
+        null,
       );
 
       expect(footer.infoParts).toEqual(["builder", "openai"]);
     });
 
     test("does not show footer for assistant messages without final metadata", () => {
-      const footer = getAssistantFooterData(createMessage());
+      const footer = getAssistantFooterData(createMessage(), null);
       expect(footer.infoParts).toEqual([]);
     });
 
@@ -975,12 +977,13 @@ describe("agent-chat-message-card-model", () => {
             profileId: "hephaestus",
           },
         }),
+        null,
       );
       expect(footer.infoParts).toEqual([]);
     });
 
     test("returns empty parts for non-assistant messages and blank metadata", () => {
-      const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }));
+      const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }), null);
       expect(nonAssistant.infoParts).toEqual([]);
 
       const blankMeta = getAssistantFooterData(
@@ -993,6 +996,7 @@ describe("agent-chat-message-card-model", () => {
             profileId: " ",
           },
         }),
+        null,
       );
       expect(blankMeta.infoParts).toEqual([]);
     });

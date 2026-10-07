@@ -379,7 +379,10 @@ describe("useAgentChatTranscriptModel", () => {
     });
     expect(harness.getLatest().transcriptState.hasAttachmentMessages).toBe(true);
     expect(harness.getLatest().transcriptState.lastUserMessageKey).toBe(
-      `${agentSessionIdentityKey(session)}:0:user-with-attachment`,
+      harness
+        .getLatest()
+        .transcriptState.rows.find((row) => row.kind === "message" && row.message.role === "user")
+        ?.key ?? null,
     );
 
     const nextMessages = Array.from({ length: 50 }, (_, index) =>

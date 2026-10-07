@@ -54,7 +54,6 @@ export type ResolveAgentStudioNavigationStateArgs = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectionState: AgentStudioSelectionState;
-  activeTaskTabId: string;
 };
 
 export const resolveAgentStudioNavigationState = ({
@@ -68,7 +67,6 @@ export const resolveAgentStudioNavigationState = ({
   hasExplicitRoleParam,
   roleFromQuery,
   selectionState,
-  activeTaskTabId,
 }: ResolveAgentStudioNavigationStateArgs): AgentStudioNavigationState => {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const sessionsByTaskId = groupSessionsByTaskId(sessions);
@@ -101,23 +99,14 @@ export const resolveAgentStudioNavigationState = ({
     hasExplicitRoleParam,
     roleFromQuery,
   });
-  const selectedViewTaskId = activeTaskTabId || taskId;
-  const selectedViewTask = selectedViewTaskId ? (tasksById.get(selectedViewTaskId) ?? null) : null;
-  const selectedViewSessions = selectedViewTaskId
-    ? (sessionsByTaskId.get(selectedViewTaskId) ?? [])
-    : [];
   const view = resolveNavigationViewSelection({
     routeSessionResolution,
     selectionState,
-    selectedTaskId: taskId,
-    selectedViewTaskId,
-    selectedViewTask,
-    selectedViewSessions,
+    selectedTask,
+    sessionsForTask,
   });
   const queryUpdate = resolveNavigationQueryUpdate({
     isWorkspaceRestorePending,
-    isLoadingTasks,
-    tasks,
     taskIdParam,
     sessionExternalIdParam,
     routeSessionResolution,
@@ -181,53 +170,35 @@ const resolveRouteSession = ({
 const resolveNavigationViewSelection = ({
   routeSessionResolution,
   selectionState,
-  selectedTaskId,
-  selectedViewTaskId,
-  selectedViewTask,
-  selectedViewSessions,
+  selectedTask,
+  sessionsForTask,
 }: {
   routeSessionResolution: AgentStudioRouteSessionResolution;
   selectionState: AgentStudioSelectionState;
-  selectedTaskId: string;
-  selectedViewTaskId: string;
-  selectedViewTask: TaskCard | null;
-  selectedViewSessions: AgentSessionSummary[];
+  selectedTask: TaskCard | null;
+  sessionsForTask: AgentSessionSummary[];
 }): AgentStudioNavigationViewSelection => {
-  const selectionSessionExternalId = agentStudioSelectionSessionExternalId(selectionState);
-  const isDetachedFromSelectedTask = Boolean(
-    selectedViewTaskId && selectedTaskId && selectedViewTaskId !== selectedTaskId,
-  );
-  const sessionExternalId = isDetachedFromSelectedTask ? null : selectionSessionExternalId;
+  const sessionExternalId = agentStudioSelectionSessionExternalId(selectionState);
   const resolvedRouteSessionIdentity =
     routeSessionResolution.kind === "found" &&
     routeSessionResolution.session.taskId === selectionState.taskId &&
-    routeSessionResolution.session.externalSessionId === selectionSessionExternalId
+    routeSessionResolution.session.externalSessionId === sessionExternalId
       ? toAgentSessionIdentity(routeSessionResolution.session)
       : null;
-  const sessionIdentity = isDetachedFromSelectedTask
-    ? null
-    : (selectionState.sessionIdentity ?? resolvedRouteSessionIdentity);
-  const role = isDetachedFromSelectedTask ? "spec" : selectionState.role;
-  const hasExplicitRoleSelection =
-    !isDetachedFromSelectedTask && selectionState.hasExplicitRoleSelection;
-
   return {
-    taskId: selectedViewTaskId,
-    selectedTask: selectedViewTask,
-    sessionsForTask: selectedViewSessions,
+    taskId: selectionState.taskId,
+    selectedTask,
+    sessionsForTask,
     sessionExternalId,
-    sessionIdentity,
-    role,
-    hasExplicitRoleSelection,
-    keepExplicitRoleSessionless:
-      !isDetachedFromSelectedTask && selectionState.keepSessionless && sessionExternalId === null,
+    sessionIdentity: selectionState.sessionIdentity ?? resolvedRouteSessionIdentity,
+    role: selectionState.role,
+    hasExplicitRoleSelection: selectionState.hasExplicitRoleSelection,
+    keepExplicitRoleSessionless: selectionState.keepSessionless && sessionExternalId === null,
   };
 };
 
 const resolveNavigationQueryUpdate = ({
   isWorkspaceRestorePending,
-  isLoadingTasks,
-  tasks,
   taskIdParam,
   sessionExternalIdParam,
   routeSessionResolution,
@@ -237,8 +208,6 @@ const resolveNavigationQueryUpdate = ({
   hasExplicitRoleParam,
 }: {
   isWorkspaceRestorePending: boolean;
-  isLoadingTasks: boolean;
-  tasks: TaskCard[];
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   routeSessionResolution: AgentStudioRouteSessionResolution;
@@ -263,16 +232,6 @@ const resolveNavigationQueryUpdate = ({
 
   const sessionFromQuery =
     routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
-
-  if (
-    !isLoadingTasks &&
-    taskIdParam &&
-    !sessionExternalIdParam &&
-    !sessionFromQuery &&
-    !tasks.some((entry) => entry.id === taskIdParam)
-  ) {
-    return clearAgentStudioRouteSelection();
-  }
 
   const updates: AgentStudioQueryUpdate = {};
 
@@ -311,10 +270,3 @@ const hasLocalSelectionAheadOfRoute = ({
     agentStudioSelectionQueryKey(selectionState) !== agentStudioSelectionQueryKey(routeSelection)
   );
 };
-
-const clearAgentStudioRouteSelection = () =>
-  ({
-    [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-  }) satisfies AgentStudioQueryUpdate;

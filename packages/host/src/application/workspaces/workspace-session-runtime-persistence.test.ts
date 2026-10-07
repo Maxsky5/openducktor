@@ -441,6 +441,7 @@ describe("Workspace Session persistence through the shared command module", () =
       ...h.record,
       generatedTitle: "First accepted prompt",
       updatedAt: Date.parse(h.accepted().timestamp),
+      lastActivityAt: Date.parse(h.accepted().timestamp),
       selectedModel: model,
     });
     expect(h.updates).toEqual([]);

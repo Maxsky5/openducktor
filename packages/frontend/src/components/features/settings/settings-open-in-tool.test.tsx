@@ -29,7 +29,7 @@ function Harness({
     <QueryProvider useIsolatedClient>
       <ThemeProvider>
         <SettingsAppearanceSection
-          appearance={{ horizontalScrollbarVisibility: "system" }}
+          appearance={{ horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" }}
           onUpdateAppearance={() => {}}
           system={system}
           disabled={disabled}

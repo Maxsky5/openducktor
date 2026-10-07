@@ -40,6 +40,8 @@ const taskStoreWithTasks = (
   sessionsByTaskId: Record<string, ReturnType<typeof createAgentSessionRecord>[]> = {},
 ): RealTaskStorePort =>
   ({
+    recordAgentSessionActivity: () =>
+      Effect.die(new Error("unexpected recordAgentSessionActivity")),
     clearAgentSessionsByRoles: () => Effect.die(new Error("unexpected clearAgentSessionsByRoles")),
     clearQaReports: () => Effect.die(new Error("unexpected clearQaReports")),
     clearWorkflowDocuments: () => Effect.die(new Error("unexpected clearWorkflowDocuments")),

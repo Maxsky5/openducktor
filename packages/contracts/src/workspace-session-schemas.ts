@@ -65,6 +65,7 @@ export const workspaceSessionSchema = z
     generatedTitle: workspaceSessionGeneratedTitleSchema.nullable(),
     manualTitle: z.string().min(1).nullable(),
     createdAt: z.number().int(),
+    lastActivityAt: z.number().int().nonnegative().optional(),
     updatedAt: z.number().int(),
     archivedAt: z.number().int().nullable(),
   })
@@ -79,7 +80,7 @@ export const workspaceSessionSchema = z
 export type WorkspaceSession = z.infer<typeof workspaceSessionSchema>;
 
 export const workspaceSessionActivitySchema = z.strictObject({
-  type: z.enum(["user_message", "assistant_response"]),
+  type: z.enum(["user_message", "assistant_response", "session_activity"]),
   occurredAt: z.number().int(),
 });
 export type WorkspaceSessionActivity = z.infer<typeof workspaceSessionActivitySchema>;

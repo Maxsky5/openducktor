@@ -19,6 +19,7 @@ const createTerminalClientService = <Overrides extends Partial<TerminalClientSer
   detach: () => Effect.die("detach is not configured for this test"),
   resize: () => Effect.die("resize is not configured for this test"),
   write: () => Effect.die("write is not configured for this test"),
+  observeActivity: () => Effect.die("observeActivity is not configured for this test"),
   ...overrides,
 });
 

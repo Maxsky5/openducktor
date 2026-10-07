@@ -1,5 +1,6 @@
 import { CheckCircle2, CheckSquare, Circle, MessageSquarePlus, Square } from "lucide-react";
-import type { HTMLAttributes, ReactElement } from "react";
+import { useId, type HTMLAttributes, type ReactElement } from "react";
+import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ export const QuestionTab = ({
   onChangeFreeText,
   panelProps,
 }: QuestionTabProps): ReactElement => {
+  const answerId = useId();
   const { className: panelClassName, ...rootProps } = panelProps ?? {};
   const selectedOptionLabels = new Set(entry?.selectedOptionLabels ?? []);
 
@@ -116,8 +118,11 @@ export const QuestionTab = ({
 
       {question.options.length === 0 || entry?.useFreeText ? (
         <div className="space-y-1">
-          <p className="text-[11px] text-muted-foreground">Free text answer</p>
+          <Label htmlFor={answerId} className="text-[11px] font-normal text-muted-foreground">
+            Free text answer
+          </Label>
           <Textarea
+            id={answerId}
             value={entry?.freeText ?? ""}
             disabled={disabled}
             className="min-h-16 bg-card text-sm"

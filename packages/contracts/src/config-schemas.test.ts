@@ -419,6 +419,19 @@ describe("config-schemas", () => {
     expect(globalConfig.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
   });
 
+  test("defaults existing appearance settings to task grouping and rejects unknown modes", () => {
+    expect(appearanceSettingsSchema.parse({ horizontalScrollbarVisibility: "hide" })).toEqual({
+      horizontalScrollbarVisibility: "hide",
+      sidebarSessionGrouping: "task",
+    });
+    for (const sidebarSessionGrouping of ["task", "none"] as const) {
+      expect(
+        appearanceSettingsSchema.parse({ sidebarSessionGrouping }).sidebarSessionGrouping,
+      ).toBe(sidebarSessionGrouping);
+    }
+    expect(() => appearanceSettingsSchema.parse({ sidebarSessionGrouping: "role" })).toThrow();
+  });
+
   test("accepts and rejects horizontal scrollbar appearance modes", () => {
     for (const horizontalScrollbarVisibility of HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES) {
       expect(

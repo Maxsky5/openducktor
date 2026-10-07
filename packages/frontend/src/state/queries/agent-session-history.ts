@@ -15,6 +15,8 @@ export const SESSION_HISTORY_STALE_TIME_MS = 0;
 
 export const agentSessionHistoryQueryKeys = {
   all: ["agent-session-history"] as const,
+  workspace: (repoPath: string) =>
+    ["agent-session-history", normalizeWorkingDirectory(repoPath)] as const,
   history: ({
     repoPath,
     runtimeKind,
@@ -28,8 +30,7 @@ export const agentSessionHistoryQueryKeys = {
     runtimePolicy,
   }: LoadAgentSessionHistoryInput) =>
     [
-      ...agentSessionHistoryQueryKeys.all,
-      normalizeWorkingDirectory(repoPath),
+      ...agentSessionHistoryQueryKeys.workspace(repoPath),
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,

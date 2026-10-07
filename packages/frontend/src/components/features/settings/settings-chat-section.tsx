@@ -109,10 +109,10 @@ export function SettingsChatSection({
 
       <ChatSettingSwitchRow
         title="Show Thinking Messages"
-        description="Thinking messages are hidden by default. When enabled, they will appear in Chats and Workflows transcripts after you save settings."
+        description="Thinking messages are hidden by default. When enabled, they will appear in session transcripts after you save settings."
         checked={chat.showThinkingMessages}
         disabled={disabled}
-        ariaLabel="Show thinking messages in Chats and Workflows transcripts"
+        ariaLabel="Show thinking messages in session transcripts"
         onCheckedChange={(checked) =>
           onUpdateChat((current) => ({ ...current, showThinkingMessages: checked }))
         }
@@ -120,10 +120,10 @@ export function SettingsChatSection({
 
       <ChatSettingSwitchRow
         title="Expand file diffs by default"
-        description="File diffs in Chats and Workflows transcripts will start expanded after you save settings."
+        description="File diffs in session transcripts will start expanded after you save settings."
         checked={chat.expandFileDiffsByDefault}
         disabled={disabled}
-        ariaLabel="Expand file diffs by default in Chats and Workflows transcripts"
+        ariaLabel="Expand file diffs by default in session transcripts"
         onCheckedChange={(checked) =>
           onUpdateChat((current) => ({ ...current, expandFileDiffsByDefault: checked }))
         }
@@ -131,7 +131,7 @@ export function SettingsChatSection({
 
       <SettingsSegmentedOptionRow<ChatDiffStyle>
         title="Diff Style"
-        description="Choose how file diffs are displayed in Chats and Workflows transcripts."
+        description="Choose how file diffs are displayed in session transcripts."
         value={chat.diffStyle}
         options={diffStyleOptions}
         disabled={disabled}

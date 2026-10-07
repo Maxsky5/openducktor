@@ -9,6 +9,8 @@ import {
   TERMINAL_PROTOCOL_VERSION,
   terminalClientMessageSchema,
   terminalServerMessageSchema,
+  isTerminalClientMessage,
+  type TerminalProtocolMessage,
 } from "./terminal-protocol";
 
 const inputMessage = {
@@ -18,6 +20,46 @@ const inputMessage = {
 };
 
 describe("terminal protocol", () => {
+  test("round trips activity metadata without terminal output", () => {
+    const messages: TerminalProtocolMessage[] = [
+      { version: TERMINAL_PROTOCOL_VERSION, type: "observe_activity" },
+      { version: TERMINAL_PROTOCOL_VERSION, type: "unobserve_activity" },
+      { version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" },
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "activity_updated",
+        activity: {
+          kind: "dev_server",
+          command: "bun run dev --port 3000",
+          summary: {
+            terminalId: "dev-1",
+            label: "Web app",
+            initialWorkingDir: "/repo/worktree",
+            createdAt: "2026-10-04T12:00:00.000Z",
+            lifecycle: "running",
+            exit: null,
+            context: { repoPath: "/repo", taskId: "task-1" },
+          },
+        },
+      },
+      { version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" },
+      { version: TERMINAL_PROTOCOL_VERSION, type: "activity_removed", terminalId: "dev-1" },
+    ];
+    for (const message of messages) {
+      const decoded = decodeTerminalProtocolFrame(
+        encodeTerminalProtocolFrame({ message, payload: new Uint8Array() }),
+      );
+      expect(decoded.message).toEqual(message);
+      expect(decoded.payload.byteLength).toBe(0);
+      expect(isTerminalClientMessage(decoded.message)).toBe(
+        message.type === "observe_activity" || message.type === "unobserve_activity",
+      );
+      expect(() => encodeTerminalProtocolFrame({ message, payload: new Uint8Array([1]) })).toThrow(
+        "does not accept a binary payload",
+      );
+    }
+  });
+
   test("round trips binary input at the exact input limit", () => {
     const payload = new Uint8Array(TERMINAL_PROTOCOL_MAX_INPUT_BYTES);
     const decoded = decodeTerminalProtocolFrame(

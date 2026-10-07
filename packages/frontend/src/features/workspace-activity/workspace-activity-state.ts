@@ -1,7 +1,10 @@
+import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import {
   getAgentSessionActivityState,
   isAgentSessionActivityWorking,
 } from "@/lib/agent-session-activity-state";
+import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentSessionTranscriptActivityFacts } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-activity";
 
 /**
@@ -11,11 +14,20 @@ import type { AgentSessionTranscriptActivityFacts } from "@/state/operations/age
  * projection cost stays independent of transcript size.
  */
 export type WorkspaceActivitySession = AgentSessionTranscriptActivityFacts & {
+  pendingApprovals: Readonly<AgentSessionLiveSnapshot["pendingApprovals"]>;
+  pendingQuestions: Readonly<AgentSessionLiveSnapshot["pendingQuestions"]>;
   /** Identity key of this session, used as its map key. */
   key: string;
   /** Identity key of the parent session when this session is a subagent. */
   parentKey: string | null;
   executionEpisodeId?: string | undefined;
+  /** Why the status of this session is not current, after a failed status read. */
+  statusUnavailableReason: string | null;
+  /** Small live preview data. This keeps no transcript, messages, or context usage. */
+  preview?: Pick<
+    AgentSessionLiveSnapshot,
+    "ref" | "model" | "title" | "repositoryScope" | "pendingApprovals" | "pendingQuestions"
+  >;
 };
 
 export type WorkspaceActivityBadges = {
@@ -58,7 +70,7 @@ export const sameWorkspaceActivityState = (
  * A subagent whose parent is not reported is its own owner, so real runtime
  * activity is reported instead of dropped.
  */
-const resolveOwnerKey = (
+export const resolveWorkspaceSessionOwnerKey = (
   sessions: ReadonlyMap<string, WorkspaceActivitySession>,
   key: string,
 ): string => {
@@ -105,6 +117,104 @@ const isArchivedBranch = (
 };
 
 /**
+ * Live facts of one reported root session.
+ *
+ * Subagent pending input counts for the root that owns it,
+ * so a sidebar entry shows the attention of its whole conversation.
+ */
+export type WorkspaceSessionLiveFacts = {
+  activityState: AgentSessionActivityState;
+  pendingQuestion: boolean;
+  pendingPermission: boolean;
+  /** Request identities include the owning child and type, so reused IDs stay distinct. */
+  pendingInputs: ReadonlySet<string>;
+  fault: string | null;
+  /** Why the status of the root session is not current, after a failed status read. */
+  statusUnavailableReason: string | null;
+};
+
+/** A session-scoped observation fault. */
+export type WorkspaceSessionFault = {
+  message: string;
+  /** The current status of the session could not be read, so its live facts can be stale. */
+  statusUnavailable: boolean;
+};
+
+export type WorkspaceSessionLiveState =
+  | { kind: "unknown" }
+  | {
+      kind: "ready";
+      sessions: ReadonlyMap<string, WorkspaceSessionLiveFacts>;
+      /** Session faults by identity key, also for a session without live facts. */
+      faults: ReadonlyMap<string, WorkspaceSessionFault>;
+    }
+  | {
+      kind: "unavailable";
+      reason: string;
+      /** Facts known before observation stopped. They can be out of date. */
+      sessions: ReadonlyMap<string, WorkspaceSessionLiveFacts>;
+      faults: ReadonlyMap<string, WorkspaceSessionFault>;
+    };
+
+export const UNKNOWN_WORKSPACE_SESSION_LIVE_STATE: WorkspaceSessionLiveState = { kind: "unknown" };
+
+type MutableLiveFacts = {
+  status: WorkspaceActivitySession["status"];
+  statusUnavailableReason: string | null;
+  pendingQuestion: boolean;
+  pendingPermission: boolean;
+  pendingInputs: Set<string>;
+  fault: string | null;
+};
+
+/** Reduce the live sessions of one workspace to one fact record per root, keyed by identity. */
+export const foldWorkspaceSessionLiveFacts = (
+  sessions: ReadonlyMap<string, WorkspaceActivitySession>,
+  faults: ReadonlyMap<string, WorkspaceSessionFault>,
+): ReadonlyMap<string, WorkspaceSessionLiveFacts> => {
+  const owners = new Map<string, MutableLiveFacts>();
+  for (const [key, session] of sessions) {
+    const ownerKey = resolveWorkspaceSessionOwnerKey(sessions, key);
+    const owner = owners.get(ownerKey) ?? {
+      status: sessions.get(ownerKey)?.status ?? session.status,
+      statusUnavailableReason: sessions.get(ownerKey)?.statusUnavailableReason ?? null,
+      pendingQuestion: false,
+      pendingPermission: false,
+      pendingInputs: new Set<string>(),
+      fault: null,
+    };
+    owner.pendingQuestion ||= session.pendingQuestions.length > 0;
+    owner.pendingPermission ||= session.pendingApprovals.length > 0;
+    for (const request of session.pendingQuestions) {
+      owner.pendingInputs.add(JSON.stringify([key, "question", pendingInputIdentity(request)]));
+    }
+    for (const request of session.pendingApprovals) {
+      owner.pendingInputs.add(JSON.stringify([key, "permission", pendingInputIdentity(request)]));
+    }
+    owner.fault ??= faults.get(key)?.message ?? null;
+    owners.set(ownerKey, owner);
+  }
+
+  const facts = new Map<string, WorkspaceSessionLiveFacts>();
+  for (const [key, owner] of owners) {
+    // Members of a parent cycle own each other, so none of them is a root.
+    if (resolveWorkspaceSessionOwnerKey(sessions, key) !== key) continue;
+    facts.set(key, {
+      activityState: getAgentSessionActivityState({
+        status: owner.status,
+        hasPendingInput: owner.pendingQuestion || owner.pendingPermission,
+      }),
+      pendingQuestion: owner.pendingQuestion,
+      pendingPermission: owner.pendingPermission,
+      pendingInputs: owner.pendingInputs,
+      fault: owner.fault,
+      statusUnavailableReason: owner.statusUnavailableReason,
+    });
+  }
+  return facts;
+};
+
+/**
  * Reduce the live sessions of one workspace to the three badge booleans.
  *
  * Subagent pending input is attributed to its nearest reported ancestor, the
@@ -121,27 +231,10 @@ export const foldWorkspaceActivityBadges = (
     }
   }
 
-  const ownerKeys = new Map<string, string>();
-  const pendingInputOwnerKeys = new Set<string>();
-  for (const [key, session] of counted) {
-    const ownerKey = resolveOwnerKey(counted, key);
-    ownerKeys.set(key, ownerKey);
-    if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
-      pendingInputOwnerKeys.add(ownerKey);
-    }
-  }
-
   let inputRequired = false;
   let error = false;
   let active = false;
-  for (const [key, session] of counted) {
-    if (ownerKeys.get(key) !== key) {
-      continue;
-    }
-    const activityState = getAgentSessionActivityState({
-      status: session.status,
-      hasPendingInput: pendingInputOwnerKeys.has(key),
-    });
+  for (const { activityState } of foldWorkspaceSessionLiveFacts(counted, new Map()).values()) {
     if (activityState === "waiting_input") {
       inputRequired = true;
       continue;

@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import { createAgentSessionActivityPersistence } from "../../application/agent-sessions/agent-session-activity-persistence";
+import type { AgentSessionRepository } from "../../ports/task-repository-ports";
 import type { AgentSessionLiveFaultLogger } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createWorkspaceSessionRuntimePersistence } from "../../application/workspaces/workspace-session-runtime-persistence";
 import type {
@@ -17,6 +19,7 @@ import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
 export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
   faultLog,
+  taskStore,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
@@ -24,6 +27,7 @@ export const createNodeWorkspaceSessionPersistence = ({
 > & {
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
+  taskStore: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
   // Title transitions serialize on their own gate, because an observed message
@@ -70,13 +74,26 @@ export const createNodeWorkspaceSessionPersistence = ({
       ),
       Effect.ignore,
     );
-  const persistence = createWorkspaceSessionRuntimePersistence({
+  const workspacePersistence = createWorkspaceSessionRuntimePersistence({
     ...dependencies,
     publishUpdated,
     operationGate,
     sessionTitleGate,
     reportRenameFailure,
   });
+  const persistence = {
+    ...workspacePersistence,
+    ...createAgentSessionActivityPersistence({
+      tasks: taskStore,
+      workspace: workspacePersistence,
+      publishTaskRecords: (repoPath, records) =>
+        Effect.try({
+          try: () =>
+            publishLiveEnvelope({ type: "task_session_records_updated", repoPath, ...records }),
+          catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
+        }),
+    }),
+  };
   return {
     persistence,
     publishUpdated,

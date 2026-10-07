@@ -21,6 +21,7 @@ import {
   workspaceRecordsInEffectiveOrder,
 } from "./workspace-catalog-model";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
+import { updateSidebarSessionGrouping } from "./workspace-sidebar-grouping";
 import {
   areAgentModelFavoritesEqual,
   withSerializedConfigWrites,
@@ -400,6 +401,9 @@ const createUnserializedWorkspaceSettingsService = (
           }),
       });
     });
+  },
+  updateSidebarSessionGrouping(sidebarSessionGrouping) {
+    return updateSidebarSessionGrouping(settingsConfig, sidebarSessionGrouping);
   },
   setTheme(theme) {
     return Effect.gen(function* () {

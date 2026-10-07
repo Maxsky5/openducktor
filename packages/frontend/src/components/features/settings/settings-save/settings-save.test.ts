@@ -436,6 +436,7 @@ describe("settings save transforms", () => {
     ]);
     expect(snapshot.appearance).toEqual({
       horizontalScrollbarVisibility: "hide",
+      sidebarSessionGrouping: "task",
     });
     expect(snapshot.kanban.doneVisibleDays).toBe(1);
     expect(snapshot.agentModelFavorites).toEqual([

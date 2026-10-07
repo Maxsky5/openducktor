@@ -18,12 +18,9 @@ describe("AgentsPageShell", () => {
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
-        activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
         onRetryGitProviderContext: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
       }),
     );
@@ -39,12 +36,9 @@ describe("AgentsPageShell", () => {
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
-        activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
         onRetryGitProviderContext: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
       }),
     );
@@ -59,18 +53,15 @@ describe("AgentsPageShell", () => {
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
-        activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
         onRetryGitProviderContext: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
       }),
     );
 
     expect(html).toContain("workspace");
-    expect(html).toContain("tabs");
+    expect(html).not.toContain('role="tablist"');
   });
 
   test("renders a retryable chat settings error banner without hiding the workspace", () => {
@@ -80,17 +71,14 @@ describe("AgentsPageShell", () => {
         navigationPersistenceError: null,
         chatSettingsLoadError: new Error("settings read failed"),
         gitProviderContextLoadError: null,
-        activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
         onRetryGitProviderContext: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
       }),
     );
 
-    expect(html).toContain("Task workflows couldn&#x27;t load chat settings.");
+    expect(html).toContain("Task sessions couldn&#x27;t load chat settings.");
     expect(html).toContain("settings read failed");
     expect(html).toContain("Retry load");
     expect(html).toContain("workspace");
@@ -103,17 +91,14 @@ describe("AgentsPageShell", () => {
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
         gitProviderContextLoadError: new Error("provider context read failed"),
-        activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
         onRetryGitProviderContext: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
       }),
     );
 
-    expect(html).toContain("Task workflows couldn&#x27;t load Git provider features.");
+    expect(html).toContain("Task sessions couldn&#x27;t load Git provider features.");
     expect(html).toContain("provider context read failed");
     expect(html).toContain("Retry provider load");
     expect(html).toContain("workspace");

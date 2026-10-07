@@ -37,7 +37,9 @@ function TaskIdBadgeComponent({
   return (
     <div className={cn("inline-flex items-center gap-1", className)}>
       {iconOnly ? null : (
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{taskId}</span>
+        <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+          {taskId}
+        </span>
       )}
       <TooltipProvider>
         <Tooltip>

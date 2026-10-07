@@ -881,6 +881,8 @@ describe("Codex app-server protocol", () => {
       projectId: "project-1",
       historyMode: "paginated",
       modelProvider: "openai",
+      model: "gpt-6.1-sol",
+      reasoningEffort: "xhigh",
       createdAt: 1,
       updatedAt: 2,
       recencyAt: 2,
@@ -911,6 +913,10 @@ describe("Codex app-server protocol", () => {
     const { historyMode: _, ...withoutHistoryMode } = thread;
 
     expect(parseCodexAppServerRequestResult("thread/read", { thread })).toEqual({ thread });
+    const unknownModel = { ...thread, model: null, reasoningEffort: null };
+    expect(parseCodexAppServerRequestResult("thread/read", { thread: unknownModel })).toEqual({
+      thread: unknownModel,
+    });
     expect(() =>
       parseCodexAppServerRequestResult("thread/read", {
         thread: {

@@ -76,7 +76,6 @@ export function SettingsModalContent({
     updateAgentRuntimes,
     setCodexDangerAcknowledged,
     updateGlobalGitConfig,
-    updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateGlobalChatSettings,
     updateNotificationSettings,
@@ -103,13 +102,7 @@ export function SettingsModalContent({
   }
 
   if (section === "general") {
-    return (
-      <GeneralSettingsSection
-        general={snapshotDraft.general}
-        disabled={isInteractionDisabled}
-        onUpdateGeneral={updateGlobalGeneralSettings}
-      />
-    );
+    return <GeneralSettingsSection disabled={isInteractionDisabled} />;
   }
 
   if (section === "custom-agent-roles") {

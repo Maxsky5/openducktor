@@ -21,6 +21,7 @@ import {
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
 } from "../../../test-support/service-test-doubles";
+import { createAgentSessionActivityPersistence } from "../../agent-sessions/agent-session-activity-persistence";
 import { createAgentSessionCommandService } from "../../agent-sessions/agent-session-command-service";
 import { createAgentSessionLiveStateService } from "../../agent-sessions/agent-session-live-state-service";
 import { createTaskSessionLifecycleCoordinator } from "../../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -138,7 +139,7 @@ export const createPersistenceHarness = async (
   let updateLiveRuntimeTitle:
     | ((title: string) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>)
     | null = null;
-  const persistence = createWorkspaceSessionRuntimePersistence({
+  const workspacePersistence = createWorkspaceSessionRuntimePersistence({
     updateRuntimeSessionTitle: ({ title }) =>
       updateLiveRuntimeTitle
         ? updateLiveRuntimeTitle(title)
@@ -197,6 +198,17 @@ export const createPersistenceHarness = async (
         renameFailures.push(message);
       }),
   });
+  const persistence = {
+    ...workspacePersistence,
+    ...createAgentSessionActivityPersistence({
+      workspace: workspacePersistence,
+      tasks: database.store,
+      publishTaskRecords: (repoPath, records) =>
+        Effect.sync(() => {
+          events.push({ type: "task_session_records_updated", repoPath, ...records });
+        }),
+    }),
+  };
   const live = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission: { admit: (_runtimeKind, effect) => effect },

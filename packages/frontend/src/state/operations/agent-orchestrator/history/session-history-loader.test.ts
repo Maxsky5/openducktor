@@ -20,12 +20,9 @@ import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import {
   createLoadAgentSessionHistory,
-  createRevalidateAgentSessionHistory,
-  loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
-  reloadSessionHistoryIntoStore,
-  revalidateSessionHistoryIntoStore,
 } from "./session-history-loader";
+import { markSessionHistoryStale } from "./session-history-freshness";
 import { createSessionHistoryReadGeneration } from "./session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./workflow-session-history-policy";
 
@@ -129,7 +126,7 @@ const createFinalAssistantHistoryMessage = ({
 const createRetainedSessionHarness = () =>
   createHistoryLoadHarness({
     ...createSession(),
-    historyLoadState: "loaded",
+    historyLoadState: "stale",
     messages: createSessionMessagesState("external-1", [
       {
         id: "retained-1",
@@ -139,6 +136,11 @@ const createRetainedSessionHarness = () =>
       },
     ]),
   });
+
+const refreshHistory = (args: Parameters<typeof loadSessionHistoryIntoStore>[0]) => {
+  args.updateSession(args.identity, markSessionHistoryStale);
+  return loadSessionHistoryIntoStore(args);
+};
 
 describe("session history loader", () => {
   test("history reloads clear absent image media and can later restore it", async () => {
@@ -181,7 +183,7 @@ describe("session history loader", () => {
       { ...available, output: { revision: "new" } },
     ]) {
       image = next;
-      await reloadSessionHistoryIntoStore(input);
+      await refreshHistory(input);
       expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([
         next,
       ]);
@@ -222,11 +224,11 @@ describe("session history loader", () => {
     await loadSessionHistoryIntoStore(input);
     expect(sessionMessagesToArray(harness.session)).toHaveLength(1);
     image = { ...image, output: { revision: "second" }, savedPath: "/second.png" };
-    await reloadSessionHistoryIntoStore(input);
+    await refreshHistory(input);
     expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([image]);
     const { savedPath: _savedPath, ...inline } = image;
     image = { ...inline, output: { revision: "third" } };
-    await reloadSessionHistoryIntoStore(input);
+    await refreshHistory(input);
     expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([image]);
   });
 
@@ -247,7 +249,7 @@ describe("session history loader", () => {
       messages: upsertImageGenerationMessage(current, beforeRead, timestamp),
     }));
     const live = { ...beforeRead, output: { revision: "live" } };
-    await reloadSessionHistoryIntoStore({
+    await refreshHistory({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -590,7 +592,7 @@ describe("session history loader", () => {
       ]),
     });
 
-    await reloadSessionHistoryIntoStore({
+    await refreshHistory({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -622,23 +624,21 @@ describe("session history loader", () => {
       ]),
     });
 
-    await expect(
-      reloadSessionHistoryIntoStore({
-        repoPath: "/repo",
-        adapter: {
-          loadSessionHistory: async () => {
-            throw new Error("history unavailable");
-          },
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("history unavailable");
         },
-        readSessionSnapshot: harness.readSessionSnapshot,
-        updateSession: harness.updateSession,
-        identity: sessionTarget,
-        isStaleRepoOperation: () => false,
-        historyReadGeneration,
-      }),
-    ).rejects.toThrow("history unavailable");
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
 
-    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadState).toBe("stale");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Last known transcript",
     ]);
@@ -648,7 +648,7 @@ describe("session history loader", () => {
     const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
     const harness = createRetainedSessionHarness();
 
-    const loadPromise = revalidateSessionHistoryIntoStore({
+    const loadPromise = refreshHistory({
       repoPath: "/repo",
       adapter: { loadSessionHistory: async () => historyPromise.promise },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -658,7 +658,7 @@ describe("session history loader", () => {
       historyReadGeneration,
     });
 
-    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadState).toBe("refreshing");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Retained transcript",
     ]);
@@ -683,7 +683,7 @@ describe("session history loader", () => {
       started.resolve();
       return historyPromise.promise;
     });
-    const revalidateAgentSessionHistory = createRevalidateAgentSessionHistory({
+    const revalidateAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
       adapter: { loadSessionHistory },
       repoEpochRef: { current: 0 },
@@ -699,7 +699,7 @@ describe("session history loader", () => {
     const skippedLoad = await revalidateAgentSessionHistory(sessionTarget);
 
     expect(loadSessionHistory).toHaveBeenCalledTimes(1);
-    expect(skippedLoad?.historyLoadState).toBe("loaded");
+    expect(skippedLoad?.historyLoadState).toBe("refreshing");
 
     historyPromise.resolve([retainedHistoryMessage, missedHistoryMessage]);
     await firstLoad;
@@ -709,6 +709,7 @@ describe("session history loader", () => {
       "Produced while inactive",
     ]);
 
+    harness.updateSession(sessionTarget, markSessionHistoryStale);
     await revalidateAgentSessionHistory(sessionTarget);
 
     expect(loadSessionHistory).toHaveBeenCalledTimes(2);
@@ -718,7 +719,7 @@ describe("session history loader", () => {
     const staleHistoryPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
     const harness = createRetainedSessionHarness();
 
-    const revalidationPromise = revalidateSessionHistoryIntoStore({
+    const revalidationPromise = refreshHistory({
       repoPath: "/repo",
       adapter: { loadSessionHistory: async () => staleHistoryPromise.promise },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -728,9 +729,9 @@ describe("session history loader", () => {
       historyReadGeneration,
     });
 
-    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadState).toBe("refreshing");
 
-    await reloadSessionHistoryIntoStore({
+    await refreshHistory({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [
@@ -773,7 +774,7 @@ describe("session history loader", () => {
     const recoveryHistoryPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
     const harness = createRetainedSessionHarness();
 
-    const revalidationPromise = revalidateSessionHistoryIntoStore({
+    const revalidationPromise = refreshHistory({
       repoPath: "/repo",
       adapter: { loadSessionHistory: async () => staleHistoryPromise.promise },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -782,7 +783,7 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
       historyReadGeneration,
     });
-    const recoveryPromise = reloadSessionHistoryIntoStore({
+    const recoveryPromise = refreshHistory({
       repoPath: "/repo",
       adapter: { loadSessionHistory: async () => recoveryHistoryPromise.promise },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -800,7 +801,7 @@ describe("session history loader", () => {
     ]);
     await revalidationPromise;
 
-    expect(harness.session.historyLoadState).toBe("loading");
+    expect(harness.session.historyLoadState).toBe("refreshing");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Retained transcript",
     ]);
@@ -822,7 +823,7 @@ describe("session history loader", () => {
   test("keeps the retained transcript and records the failure when a revalidation fails", async () => {
     const harness = createRetainedSessionHarness();
 
-    await revalidateSessionHistoryIntoStore({
+    await refreshHistory({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -836,30 +837,11 @@ describe("session history loader", () => {
       historyReadGeneration,
     });
 
-    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadState).toBe("stale");
     expect(harness.session.historyLoadFailure).toMatchObject({ code: "request_failed" });
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Retained transcript",
     ]);
-  });
-
-  test("does not revalidate a retained session before its baseline history loads", async () => {
-    const loadSessionHistory = mock(async () => []);
-    const harness = createHistoryLoadHarness();
-
-    const session = await revalidateSessionHistoryIntoStore({
-      repoPath: "/repo",
-      adapter: { loadSessionHistory },
-      readSessionSnapshot: harness.readSessionSnapshot,
-      updateSession: harness.updateSession,
-      identity: sessionTarget,
-      isStaleRepoOperation: () => false,
-      historyReadGeneration,
-    });
-
-    expect(loadSessionHistory).not.toHaveBeenCalled();
-    expect(session?.historyLoadState).toBe("not_requested");
-    expect(harness.session.historyLoadState).toBe("not_requested");
   });
 
   test("keeps a direct question that arrives during a history read", async () => {
@@ -1004,7 +986,7 @@ describe("session history loader", () => {
     });
     const harness = createHistoryLoadHarness();
 
-    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+    const loadPromise = loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => historyPromise,
@@ -1087,7 +1069,7 @@ describe("session history loader", () => {
       ],
     };
 
-    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+    const loadPromise = loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -1131,7 +1113,7 @@ describe("session history loader", () => {
     });
     const harness = createHistoryLoadHarness();
 
-    const loadPromise = loadSelectedSessionBaselineHistoryIntoStore({
+    const loadPromise = loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => historyPromise,
@@ -1202,7 +1184,7 @@ describe("session history loader", () => {
       },
     ]);
 
-    await loadSelectedSessionBaselineHistoryIntoStore({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
@@ -1253,7 +1235,7 @@ describe("session history loader", () => {
         });
       });
 
-    const loadedSession = await loadSelectedSessionBaselineHistoryIntoStore({
+    const loadedSession = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,

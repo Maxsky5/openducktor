@@ -55,6 +55,11 @@ export const toOpenCodeLiveSession = ({
   if (summary.sessionAssociation.kind === "repository") {
     snapshotInput.repositoryScope = summary.sessionAssociation;
   }
+  // A kept activity keeps its status read failure, because the summary does not confirm it.
+  const statusUnavailableReason = keepActivity ? previous?.snapshot.statusUnavailableReason : null;
+  if (statusUnavailableReason) {
+    snapshotInput.statusUnavailableReason = statusUnavailableReason;
+  }
   const session: OpenCodeLiveSession = {
     runtimeActivity,
     snapshot: parseOpenCodeLiveSnapshot(snapshotInput, "opencode-live-session.control-summary"),

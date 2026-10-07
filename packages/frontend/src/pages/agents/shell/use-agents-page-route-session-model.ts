@@ -13,13 +13,16 @@ import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sy
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioWorkspaceStateSave } from "../use-agent-studio-workspace-state-save";
 import { useAgentStudioWorkspaceStateLoad } from "../use-agent-studio-workspace-state-load";
-import { useAgentStudioTabStateChange } from "../use-agent-studio-tab-state-change";
 import {
   type UseTaskExecutionFilePreviewControllerResult,
   useTaskExecutionFilePreviewController,
 } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
+import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
+import { useTaskPreviewTransitionGuard } from "./use-task-preview-transition-guard";
 
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
@@ -57,7 +60,6 @@ export function useAgentsPageRouteSessionModel({
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const {
     loadedAgentStudioState,
-    agentStudioStateLoadKey,
     agentStudioState,
     isLoading: isLoadingAgentStudioState,
     error: agentStudioStateLoadError,
@@ -75,6 +77,7 @@ export function useAgentsPageRouteSessionModel({
   const {
     taskIdParam,
     sessionExternalIdParam,
+    sessionIdentityParam,
     hasExplicitRoleParam,
     roleFromQuery,
     isWorkspaceRestorePending,
@@ -103,46 +106,47 @@ export function useAgentsPageRouteSessionModel({
     [updateQuery],
   );
 
+  const addressSessionIdentity = useStableAgentSessionIdentity(sessionIdentityParam);
   const routeSessionIdentity = useMemo(() => {
     const state = notificationRouteStateSchema.safeParse(locationState);
-    return notificationRouteSessionIdentity(
+    const notificationIdentity = notificationRouteSessionIdentity(
       state.success ? state.data.notificationTarget : null,
       workspaceRepoPath,
       taskIdParam,
       sessionExternalIdParam,
     );
-  }, [locationState, workspaceRepoPath, taskIdParam, sessionExternalIdParam]);
+    return notificationIdentity ?? addressSessionIdentity;
+  }, [
+    addressSessionIdentity,
+    locationState,
+    workspaceRepoPath,
+    taskIdParam,
+    sessionExternalIdParam,
+  ]);
 
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
-  const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
-    useAgentStudioSelectionState({
-      activeWorkspaceId,
-      routeSessionIdentity,
-      isWorkspaceRestorePending,
-      taskIdParam,
-      sessionExternalIdParam,
-      hasExplicitRoleParam,
-      roleFromQuery,
-      scheduleQueryUpdate,
-      requestContextTransition: taskExecutionFilePreview.requestContextTransition,
-    });
-  const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
   const {
-    onTabChange,
-    saveError: tabSaveError,
-    retry: retryTabSave,
-  } = useAgentStudioTabStateChange({ workspaceId: activeWorkspaceId });
-
+    selection: selectionState,
+    isRoutePending,
+    selectAgentStudioSelection: applyAgentStudioSelection,
+  } = useAgentStudioSelectionState({
+    activeWorkspaceId,
+    routeSessionIdentity,
+    isWorkspaceRestorePending,
+    taskIdParam,
+    sessionExternalIdParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scheduleQueryUpdate,
+    requestContextTransition: taskExecutionFilePreview.requestContextTransition,
+  });
+  const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
-    loadedAgentStudioState,
-    agentStudioStateLoadKey,
-    agentStudioState,
     workspaceRepoPath,
     isWorkspaceRestorePending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
-    tasksAreCurrent,
     sessions,
     taskIdParam,
     sessionExternalIdParam,
@@ -151,20 +155,18 @@ export function useAgentsPageRouteSessionModel({
     selectionState,
     repoSettings,
     isLoadingRepoSettings,
-    selectAgentStudioSelection,
-    onTabChange,
   });
 
   const stateSnapshot = useMemo(
     () =>
       createAgentStudioStateSnapshot({
-        openTaskIds: selection.tabTaskIds,
+        openTaskIds: loadedAgentStudioState?.openTaskIds ?? [],
         taskId: selection.view.taskId,
         role: selection.view.role,
         externalSessionId: selection.view.selectedSession.identity?.externalSessionId ?? null,
       }),
     [
-      selection.tabTaskIds,
+      loadedAgentStudioState?.openTaskIds,
       selection.view.role,
       selection.view.selectedSession.identity?.externalSessionId,
       selection.view.taskId,
@@ -175,12 +177,12 @@ export function useAgentsPageRouteSessionModel({
       workspaceId: activeWorkspaceId,
       loadedState: loadedAgentStudioState,
       state: stateSnapshot,
-      hasPendingTabChange: selection.hasPendingTabChange,
       enabled:
         canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
         !isWorkspaceRestorePending &&
-        selection.loadedStateWorkspaceId === activeWorkspaceId,
+        !isRoutePending &&
+        selection.view.selectedTask !== null,
     });
   const retryNavigationPersistence = useCallback((): void => {
     if (navigationPersistenceError) {
@@ -189,28 +191,42 @@ export function useAgentsPageRouteSessionModel({
     if (stateSaveError) {
       retryAgentStudioStateSave();
     }
-    if (tabSaveError) {
-      retryTabSave();
-    }
   }, [
     navigationPersistenceError,
     retryAgentStudioStateLoad,
     retryAgentStudioStateSave,
     stateSaveError,
-    tabSaveError,
-    retryTabSave,
   ]);
 
   useEffect(() => {
-    if (!selection.queryUpdate) {
+    if (isRoutePending || !selection.queryUpdate) {
       return;
     }
 
     scheduleQueryUpdate(selection.queryUpdate);
-  }, [scheduleQueryUpdate, selection.queryUpdate]);
+  }, [isRoutePending, scheduleQueryUpdate, selection.queryUpdate]);
+
+  useTaskPreviewTransitionGuard(taskExecutionFilePreview, workspaceRepoPath);
+
+  const visibleIdentity = useStableAgentSessionIdentity(selection.view.selectedSession.identity);
+  const visibleTaskId = selection.view.taskId;
+  const visibleRole = selection.view.role;
+  const visibleTarget = useMemo<SessionNavigationTarget | null>(() => {
+    if (!activeWorkspaceId || !visibleTaskId) return null;
+    return visibleIdentity
+      ? {
+          kind: "task_session",
+          workspaceId: activeWorkspaceId,
+          taskId: visibleTaskId,
+          role: visibleRole,
+          identity: visibleIdentity,
+        }
+      : { kind: "task", workspaceId: activeWorkspaceId, taskId: visibleTaskId, role: visibleRole };
+  }, [activeWorkspaceId, visibleIdentity, visibleRole, visibleTaskId]);
+  usePublishVisibleSessionTarget(visibleTarget);
 
   return {
-    navigationPersistenceError: navigationPersistenceError ?? tabSaveError ?? stateSaveError,
+    navigationPersistenceError: navigationPersistenceError ?? stateSaveError,
     retryNavigationPersistence,
     scheduleQueryUpdate,
     selection,

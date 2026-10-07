@@ -25,6 +25,7 @@ import {
 } from "./issue-import-dialog-state";
 import { IssueReviewStep } from "./issue-import-review-step";
 import { IssueSelectionStep } from "./issue-import-selection-step";
+import { issueImportSourceLabel } from "./issue-import-provider";
 
 type IssueImportDialogProps = {
   open: boolean;
@@ -32,6 +33,7 @@ type IssueImportDialogProps = {
   repoPath: string;
   provider: NonNullable<RepositoryGitProviderContext>;
   onImported: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function IssueImportDialog({ open, ...props }: IssueImportDialogProps): ReactElement | null {
@@ -43,6 +45,7 @@ function IssueImportDialogSession({
   repoPath,
   provider,
   onImported,
+  onCloseAutoFocus,
 }: Omit<IssueImportDialogProps, "open">): ReactElement {
   const { openSettings } = useSettingsModal();
   const [step, setStep] = useState<"select" | "review">("select");
@@ -126,6 +129,7 @@ function IssueImportDialogSession({
       }}
     >
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         className="my-0 gap-0 p-0 sm:max-w-3xl"
         closeButton={isSubmitting || refreshingId !== null ? null : undefined}
       >
@@ -250,9 +254,7 @@ function IssueImportHeader({
 }): ReactElement {
   return (
     <DialogHeader className="border-b border-border px-6 py-4 pr-14">
-      <DialogTitle>
-        Import from {providerId === "github" ? "GitHub Issues" : "Azure DevOps work items"}
-      </DialogTitle>
+      <DialogTitle>Import from {issueImportSourceLabel(providerId)}</DialogTitle>
       <DialogDescription>
         {step === "select"
           ? "Choose open source items. Your selections stay when you search or change pages."

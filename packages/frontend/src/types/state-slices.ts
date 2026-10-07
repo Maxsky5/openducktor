@@ -113,7 +113,7 @@ export type WorkspaceStateContextValue = {
     workspaceId: string,
     draft: WorkspaceModelDefaultsDraft,
   ) => Promise<void>;
-  selectWorkspace: (workspaceId: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
   reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
@@ -255,12 +255,7 @@ export type AgentSessionReadModelStateContextValue = {
 };
 
 export type AgentSessionHistoryLoadContextValue = {
-  loadSelectedSessionBaselineHistory: (
-    session: AgentSessionIdentity,
-  ) => Promise<AgentSessionState | null>;
-  revalidateAgentSessionHistory: (
-    session: AgentSessionIdentity,
-  ) => Promise<AgentSessionState | null>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
 };
 
 export type AgentOperationsContextValue = {
@@ -285,7 +280,7 @@ export type AgentOperationsContextValue = {
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ) => void;
+  ) => Promise<void>;
   replyAgentApproval: (
     session: AgentSessionIdentity,
     request: AgentApprovalRequest,

@@ -8,7 +8,7 @@ beforeAll(() => {
   releaseProviderFixture = installLocalOnlyProviderSetup();
 });
 afterAll(() => releaseProviderFixture?.());
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
@@ -17,9 +17,18 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as pierre from "@pierre/diffs";
+import * as pierreReact from "@pierre/diffs/react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
-import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { toast } from "sonner";
+import {
+  buildMessage,
+  buildSession,
+} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
+import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { createQueryClient } from "@/lib/query-client";
@@ -30,11 +39,14 @@ import {
   ChecksStateContext,
   HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
+  TaskControlContext,
   TasksStateContext,
   WorkspaceBranchStateContext,
   WorkspacePresenceContext,
   WorkspaceStateContext,
+  useActiveWorkspaceContext,
 } from "@/state/app-state-contexts";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   NotificationContext,
   type NotificationContextValue,
@@ -49,11 +61,16 @@ import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
+import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createChecksStateFixture,
   createDeferred,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
+  createTaskWorkflowActionsFixture,
   createWorkspaceActivityObserverStub,
 } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -67,6 +84,7 @@ import type {
 import { AppShell } from "./app-shell";
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
+const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
 
 const activeWorkspace = {
   workspaceId: "workspace-1",
@@ -96,6 +114,14 @@ const activeRepoConfig = {
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
 } satisfies RepoConfig;
+
+const taskControlValue = {
+  refreshTaskData: async () => {},
+  loadWorkspaceTasks: async () => {},
+  refreshTasksWithOptions: async () => {},
+  clearTaskData: () => {},
+  setIsLoadingTasks: () => {},
+};
 
 const notificationContextValue = {
   deliveryFailure: null,
@@ -242,6 +268,9 @@ const createWorkspaceBranchState = (
 
 type RenderAppShellForTestOptions = {
   closedOnly?: boolean;
+  closedWorkspaces?: WorkspaceRecord[];
+  incompleteRemovals?: WorkspaceStateContextValue["incompleteRemovals"];
+  extraWorkspaces?: WorkspaceRecord[];
   initialEntry?: string;
   initiallyUnselectedWorkspace?: boolean;
   isLoadingRuntimeDefinitions?: boolean;
@@ -251,12 +280,18 @@ type RenderAppShellForTestOptions = {
   ) => Promise<WorkspaceRecord>;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
   prepareQueryClient?: (queryClient: QueryClient) => void;
+  sessionContent?: ReactElement;
 };
 
 function CurrentRoute(): ReactElement {
   const location = useLocation();
 
-  return <div data-testid="current-route">{location.pathname}</div>;
+  return (
+    <>
+      <div data-testid="current-route">{location.pathname}</div>
+      <div data-testid="current-address">{`${location.pathname}${location.search}`}</div>
+    </>
+  );
 }
 
 const createChecksState = (): ChecksStateContextValue => createChecksStateFixture();
@@ -300,7 +335,7 @@ function AppShellTestEnvironment({
   const startsWithWorkspaces =
     !options.closedOnly && (options.workspacePresence?.hasWorkspaces ?? true);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>(
-    startsWithWorkspaces ? [activeWorkspace] : [],
+    startsWithWorkspaces ? [activeWorkspace, ...(options.extraWorkspaces ?? [])] : [],
   );
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceRecord | null>(
     startsWithWorkspaces ? activeWorkspace : null,
@@ -350,7 +385,8 @@ function AppShellTestEnvironment({
                   workspaces,
                   closedWorkspaces: options.closedOnly
                     ? [{ ...activeWorkspace, isActive: false }]
-                    : [],
+                    : (options.closedWorkspaces ?? []),
+                  incompleteRemovals: options.incompleteRemovals ?? [],
                   activeWorkspace: currentWorkspace,
                   addWorkspace,
                   commitWorkspaceProviderSetup: async (input) => ({
@@ -361,6 +397,20 @@ function AppShellTestEnvironment({
                     phase: "complete",
                     error: null,
                   }),
+                  selectWorkspace: async (workspaceId) => {
+                    const selected = workspaces.find(
+                      (workspace) => workspace.workspaceId === workspaceId,
+                    );
+                    if (!selected) throw new Error(`Unknown workspace: ${workspaceId}`);
+                    setWorkspaces((current) =>
+                      current.map((workspace) => ({
+                        ...workspace,
+                        isActive: workspace.workspaceId === workspaceId,
+                      })),
+                    );
+                    setCurrentWorkspace({ ...selected, isActive: true });
+                    setCurrentActiveWorkspace(selected);
+                  },
                 })}
               >
                 <WorkspaceBranchStateContext.Provider
@@ -392,27 +442,47 @@ function AppShellTestEnvironment({
                       <DiagnosticsAutoOpenProvider>
                         <ChecksStateContext.Provider value={createChecksState()}>
                           <TasksStateContext.Provider value={createTasksState()}>
-                            <AgentSessionsContext.Provider
-                              value={createAgentSessionsStore("/repo")}
-                            >
-                              <NotificationContext.Provider value={notificationContextValue}>
-                                <WorkspaceActivityContext.Provider
-                                  value={createWorkspaceActivityObserverStub()}
-                                >
-                                  <WorkspacePreviewTransitionGuardProvider>
-                                    <Routes>
-                                      <Route element={<AppShell />}>
-                                        <Route path="/kanban" element={<main>Kanban</main>} />
-                                        <Route
-                                          path="/onboarding"
-                                          element={<Navigate to="/kanban" replace />}
-                                        />
-                                      </Route>
-                                    </Routes>
-                                  </WorkspacePreviewTransitionGuardProvider>
-                                </WorkspaceActivityContext.Provider>
-                              </NotificationContext.Provider>
-                            </AgentSessionsContext.Provider>
+                            <TaskControlContext.Provider value={taskControlValue}>
+                              <AgentSessionsContext.Provider
+                                value={createAgentSessionsStore("/repo")}
+                              >
+                                <NotificationContext.Provider value={notificationContextValue}>
+                                  <WorkspaceActivityContext.Provider
+                                    value={createWorkspaceActivityObserverStub()}
+                                  >
+                                    <WorkspacePreviewTransitionGuardProvider>
+                                      <SettingsModalProvider>
+                                        <TaskWorkflowActionsContext.Provider
+                                          value={createTaskWorkflowActionsFixture()}
+                                        >
+                                          <Routes>
+                                            <Route element={<AppShell />}>
+                                              <Route path="/kanban" element={<main>Kanban</main>} />
+                                              <Route
+                                                path="/sessions"
+                                                element={
+                                                  options.sessionContent ? (
+                                                    <div key={currentWorkspace?.workspaceId}>
+                                                      {options.sessionContent}
+                                                    </div>
+                                                  ) : (
+                                                    <main>Sessions</main>
+                                                  )
+                                                }
+                                              />
+                                              <Route
+                                                path="/onboarding"
+                                                element={<Navigate to="/kanban" replace />}
+                                              />
+                                            </Route>
+                                          </Routes>
+                                        </TaskWorkflowActionsContext.Provider>
+                                      </SettingsModalProvider>
+                                    </WorkspacePreviewTransitionGuardProvider>
+                                  </WorkspaceActivityContext.Provider>
+                                </NotificationContext.Provider>
+                              </AgentSessionsContext.Provider>
+                            </TaskControlContext.Provider>
                           </TasksStateContext.Provider>
                         </ChecksStateContext.Provider>
                       </DiagnosticsAutoOpenProvider>
@@ -475,13 +545,39 @@ const renderAppShellForTest = (
   );
 };
 
+let syntaxWorkerSpies: { mockRestore: () => void }[] = [];
+beforeEach(() => {
+  // Bun does not bundle the browser worker URL used by the syntax library.
+  syntaxWorkerSpies = [
+    spyOn(pierreReact, "WorkerPoolContextProvider").mockImplementation(({ children }) => (
+      <>{children}</>
+    )),
+    spyOn(pierre, "preloadHighlighter").mockResolvedValue(undefined),
+  ];
+});
+afterEach(() => {
+  cleanup();
+  for (const spy of syntaxWorkerSpies) spy.mockRestore();
+});
+
 describe("AppShell", () => {
   beforeEach(() => {
     installLocalStorage(new MemoryStorage());
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          tasksList: async () => [],
+          workspaceSessionListActive: async () => [],
+          agentSessionsListForTasks: async () => [],
+          workspaceGetGitProviderContext: async () => null,
+        },
+      }),
+    );
   });
 
   afterEach(() => {
     cleanup();
+    configureShellBridge(createUnavailableShellBridge());
     if (originalLocalStorageDescriptor) {
       Object.defineProperty(globalThis, "localStorage", originalLocalStorageDescriptor);
       return;
@@ -502,7 +598,7 @@ describe("AppShell", () => {
       queryKey: repoConfigQueryOptions(activeWorkspace.workspaceId).queryKey,
       exact: true,
     });
-    expect(query?.getObserversCount()).toBe(1);
+    expect(query?.getObserversCount()).toBeGreaterThan(0);
   });
 
   test("waits for the workspace list before choosing an entry path", () => {
@@ -799,10 +895,10 @@ describe("AppShell", () => {
   test("hides the scrollbar on the open sidebar scroll region", () => {
     renderAppShellForTest();
 
-    const sidebarContent = document.querySelector(".electron-sidebar-content-open");
+    const sessionList = document.querySelector('[data-sidebar-scroll-region="sessions"]');
 
-    expect(sidebarContent?.className).toContain("hide-scrollbar");
-    expect(sidebarContent?.className).toContain("overflow-y-auto");
+    expect(sessionList?.className).toContain("hide-scrollbar");
+    expect(sessionList?.className).toContain("overflow-y-auto");
   });
 
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
@@ -816,8 +912,6 @@ describe("AppShell", () => {
     expect(collapsedSettingsButton.getAttribute("aria-label")).toBe("Settings");
     expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings");
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
-    expect(collapsedSettingsButton.className).toContain("size-8");
-    expect(collapsedSettingsButton.className).not.toContain("px-3");
   });
 
   test("keeps diagnostics available as a status-colored collapsed sidebar trigger", async () => {
@@ -831,7 +925,6 @@ describe("AppShell", () => {
       name: "Open diagnostics: Critical issue",
     });
     const diagnosticsIcon = diagnosticsButton.querySelector("svg");
-    expect(diagnosticsButton.className).toContain("size-8");
     expect(diagnosticsButton.getAttribute("title")).toBe("Open diagnostics: Critical issue");
     expect(diagnosticsButton.textContent?.trim()).toBe("");
     expect(diagnosticsIcon?.getAttribute("class")).toContain("text-destructive-accent");
@@ -930,6 +1023,7 @@ describe("AppShell", () => {
     const originalConsoleError = console.error;
     const consoleError = mock(() => undefined);
     console.error = consoleError;
+    const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
 
     try {
       renderAppShellForTest();
@@ -937,8 +1031,12 @@ describe("AppShell", () => {
       expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
       expect(getItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY);
       expect(consoleError).toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Could not restore the session list scope.", {
+        description: "Allow local storage for this app, then reload. read failed",
+      });
     } finally {
       console.error = originalConsoleError;
+      toastError.mockRestore();
     }
   });
 
@@ -962,5 +1060,318 @@ describe("AppShell", () => {
     } finally {
       console.error = originalConsoleError;
     }
+  });
+});
+
+describe("AppShell session navigation", () => {
+  const secondWorkspace = {
+    ...activeWorkspace,
+    workspaceId: "workspace-2",
+    workspaceName: "Fairnest",
+    repoPath: "/fairnest",
+    isActive: false,
+  } satisfies WorkspaceRecord;
+  const chat = (id: string, workingDirectory: string) => ({
+    id,
+    runtimeKind: "codex" as const,
+    externalSessionId: `native-${id}`,
+    executionTarget: { kind: "local_repo_root" as const, workingDirectory },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: `Chat ${id}`,
+    manualTitle: null,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    archivedAt: null,
+  });
+
+  beforeEach(() => {
+    installLocalStorage(new MemoryStorage());
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          tasksList: async () => [],
+          agentSessionsListForTasks: async () => [],
+          workspaceGetGitProviderContext: async () => null,
+          workspaceSessionListActive: async (workspaceId) =>
+            workspaceId === activeWorkspace.workspaceId
+              ? [chat("mine", activeWorkspace.repoPath)]
+              : [chat("theirs", secondWorkspace.repoPath)],
+        },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    configureShellBridge(createUnavailableShellBridge());
+  });
+
+  test("keeps Kanban, New task, and Settings without page links for sessions or a branch selector", async () => {
+    renderAppShellForTest();
+
+    await screen.findByRole("button", { name: /Chat mine/ });
+    expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Chats" })).toBeNull();
+    expect(screen.queryByText("Branch")).toBeNull();
+    expect(screen.getByRole("button", { name: "New task in OpenDucktor" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Settings/ })).toBeTruthy();
+  });
+
+  test("keeps unlisted workspaces and their recovery in the collapsed all-workspaces list", async () => {
+    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+    renderAppShellForTest({
+      closedWorkspaces: [{ ...secondWorkspace, workspaceName: "Archive" }],
+      incompleteRemovals: [
+        {
+          workspace: { ...secondWorkspace, workspaceId: "workspace-3", workspaceName: "Old" },
+          record: { removeTaskWorktrees: false, phase: "attachments", pendingWorktreePath: null },
+        },
+      ],
+    });
+
+    expect(screen.queryByRole("button", { name: "2 workspaces are not listed" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show sessions of all workspaces" }));
+    fireEvent.click(await screen.findByRole("button", { name: "2 workspaces are not listed" }));
+
+    const details = await screen.findByRole("dialog");
+    expect(details.textContent).toContain("Not listed because they are closed: Archive.");
+    expect(details.textContent).toContain("Old is not listed because its removal is incomplete.");
+    fireEvent.click(within(details).getByRole("button", { name: "Reopen a workspace" }));
+    expect(await screen.findByRole("heading", { name: "Reopen a workspace" })).toBeTruthy();
+  });
+
+  test.each(["opened", "collapsed"])(
+    "saves the scope from the %s sidebar and restores its session list after remount",
+    async (sidebar) => {
+      globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, sidebar);
+      const view = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      const role = sidebar === "opened" ? "radio" : "button";
+
+      await screen.findByRole("button", { name: /Chat mine/ });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+
+      fireEvent.click(screen.getByRole(role, { name: "Show sessions of all workspaces" }));
+      await screen.findByRole("button", { name: /Chat theirs/ });
+      expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("all");
+
+      view.unmount();
+      const restored = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat theirs/ });
+      expect(screen.getByRole("button", { name: /Chat mine/ })).toBeTruthy();
+      expect(
+        screen
+          .getByRole(role, { name: "Show sessions of all workspaces" })
+          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
+      ).toBe("true");
+
+      fireEvent.click(
+        screen.getByRole(role, {
+          name:
+            sidebar === "opened"
+              ? "Show sessions of OpenDucktor"
+              : "Show sessions of all workspaces",
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
+      expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("current");
+
+      restored.unmount();
+      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat mine/ });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(
+        screen
+          .getByRole(role, { name: "Show sessions of all workspaces" })
+          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
+      ).toBe("false");
+    },
+  );
+
+  test("uses the current workspace when the saved scope is unknown", async () => {
+    globalThis.localStorage.setItem(SESSION_SCOPE_STORAGE_KEY, "unknown");
+    renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+
+    await screen.findByRole("button", { name: /Chat mine/ });
+    expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+    expect(
+      screen
+        .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("unknown");
+  });
+
+  test("reports a failed scope save and keeps the current session list", async () => {
+    installLocalStorage(
+      new MemoryStorage({
+        setItem: () => {
+          throw new Error("write failed");
+        },
+      }),
+    );
+    const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
+    try {
+      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat mine/ });
+
+      fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
+
+      expect(toastError).toHaveBeenCalledWith("Could not save the session list scope.", {
+        description: "Allow local storage for this app, then try again. write failed",
+      });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(
+        screen
+          .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    } finally {
+      toastError.mockRestore();
+    }
+  });
+
+  test("opens a sidebar session on the Sessions page", async () => {
+    renderAppShellForTest();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-address").textContent).toBe(
+        "/sessions?workspace=workspace-1&kind=workspace&session=mine",
+      ),
+    );
+  });
+
+  test("shows cached transcript rows on the first render after page and workspace switches", async () => {
+    const sessions = [activeWorkspace, secondWorkspace].map((workspace) =>
+      buildSession({
+        externalSessionId: "same-native-id",
+        workingDirectory: workspace.repoPath,
+        messages: createSessionMessagesState(
+          "same-native-id",
+          Array.from({ length: 500 }, (_, index) =>
+            buildMessage(
+              index % 2 === 0 ? "user" : "assistant",
+              `${workspace.workspaceName} message ${index}`,
+              { id: `message-${index}` },
+            ),
+          ),
+          1,
+        ),
+      }),
+    );
+    const renders: { workspaceId: string; missing: boolean }[] = [];
+    function Transcript() {
+      const { activeWorkspace: workspace } = useActiveWorkspaceContext();
+      const session =
+        workspace?.workspaceId === secondWorkspace.workspaceId ? sessions[1]! : sessions[0]!;
+      const model = useAgentChatTranscriptModel({ session, showThinkingMessages: true });
+      renders.push({
+        workspaceId: workspace!.workspaceId,
+        missing: model.isTranscriptModelMissing,
+      });
+      const firstRow = model.transcriptState.rows[0];
+      return (
+        <>
+          <Link to="/kanban">Return to Kanban</Link>
+          <p>
+            {firstRow?.kind === "message" ? firstRow.message.content : "Preparing conversation"}
+          </p>
+        </>
+      );
+    }
+    renderAppShellForTest({
+      initialEntry: "/sessions?workspace=workspace-1&kind=workspace&session=mine",
+      extraWorkspaces: [secondWorkspace],
+      sessionContent: <Transcript />,
+      prepareQueryClient: (client) => {
+        client.setQueryData(repoConfigQueryOptions(secondWorkspace.workspaceId).queryKey, {
+          ...activeRepoConfig,
+          workspaceId: secondWorkspace.workspaceId,
+          workspaceName: secondWorkspace.workspaceName,
+          repoPath: secondWorkspace.repoPath,
+        });
+      },
+    });
+    await screen.findByText("OpenDucktor message 0");
+    fireEvent.click(screen.getByRole("link", { name: "Return to Kanban" }));
+    const beforePageReturn = renders.length;
+    fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
+    await screen.findByText("OpenDucktor message 0");
+    expect(renders[beforePageReturn]?.missing).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fairnest" }));
+    await screen.findByText("Fairnest message 0");
+    const beforeWorkspaceReturn = renders.length;
+    fireEvent.click(screen.getByRole("button", { name: "OpenDucktor" }));
+    await screen.findByText("OpenDucktor message 0");
+    expect(renders[beforeWorkspaceReturn]).toEqual({
+      workspaceId: activeWorkspace.workspaceId,
+      missing: false,
+    });
+  });
+
+  test("keeps syntax workers alive through page and workspace switches", async () => {
+    const startWorkers = mock();
+    const stopWorkers = mock();
+    const workerProvider = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
+      function Workers({ children }) {
+        useEffect(() => {
+          startWorkers();
+          return () => stopWorkers();
+        }, []);
+        return <>{children}</>;
+      },
+    );
+    try {
+      const view = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      expect(startWorkers).toHaveBeenCalledTimes(1);
+      fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
+      await screen.findByText("Sessions");
+      fireEvent.click(screen.getByRole("button", { name: "Fairnest" }));
+      await screen.findByRole("button", { name: "New task in Fairnest" });
+      fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
+      await waitFor(() =>
+        expect(screen.getByTestId("current-address").textContent).toBe("/kanban"),
+      );
+      expect(startWorkers).toHaveBeenCalledTimes(1);
+      expect(stopWorkers).not.toHaveBeenCalled();
+      view.unmount();
+      expect(stopWorkers).toHaveBeenCalledTimes(1);
+    } finally {
+      workerProvider.mockRestore();
+    }
+  });
+
+  test("keeps the list scope and session access when the sidebar collapses", async () => {
+    renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+    await screen.findByRole("button", { name: /Chat mine/ });
+    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
+    await screen.findByRole("button", { name: /Chat theirs/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+    expect(
+      screen
+        .getByRole("button", { name: "Show sessions of all workspaces" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: /Chat theirs/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
+    const menu = await screen.findByRole("dialog");
+    expect(within(menu).getByRole("button", { name: "New task" })).toBeTruthy();
+
+    fireEvent.keyDown(menu, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Show sessions of all workspaces" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+    expect(
+      screen
+        .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 });

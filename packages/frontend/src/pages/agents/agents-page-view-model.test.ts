@@ -10,7 +10,6 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildAgentStudioHeaderModel,
-  buildAgentStudioTaskTabsModel,
   buildRoleLabelByRole,
   buildTaskExecutionDocumentPanelModel,
 } from "./agents-page-view-model";
@@ -80,30 +79,6 @@ describe("agents-page-view-model", () => {
     expect(labels.build).toBe("Builder");
     expect(labels.planner).toBe("Planner");
     expect(labels.qa).toBe("QA");
-  });
-
-  test("buildAgentStudioTaskTabsModel maps tab model fields", () => {
-    const onCreateTab = mock(() => {});
-    const onCloseTab = mock(() => {});
-    const onReorderTab = mock(() => {});
-    const task = createTaskCard("task-1");
-
-    const model = buildAgentStudioTaskTabsModel({
-      taskTabs: [{ taskId: task.id, taskTitle: task.title, status: "idle", isActive: true }],
-      availableTabTasks: [task],
-      isLoadingTasks: true,
-      onCreateTab,
-      onCloseTab,
-      onReorderTab,
-      agentStudioReady: false,
-    });
-
-    expect(model.tabs).toHaveLength(1);
-    expect(model.availableTabTasks[0]?.id).toBe("task-1");
-    expect(model.isLoadingAvailableTabTasks).toBe(true);
-    expect(model.agentStudioReady).toBe(false);
-    model.onReorderTab("task-1", "task-1", "before");
-    expect(onReorderTab).toHaveBeenCalledWith("task-1", "task-1", "before");
   });
 
   test("buildAgentStudioHeaderModel keeps selector and workflow contracts", () => {

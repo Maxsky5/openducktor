@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { act, render, waitFor } from "@testing-library/react";
+import { useLayoutEffect, useState } from "react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { taskQueryKeys } from "../../queries/tasks";
@@ -128,6 +131,100 @@ const createRepoSelectionHarness = (
   });
 
 describe("use-workspace-selection-operations", () => {
+  test("commits workspace selection and session navigation together after the host accepts the switch", async () => {
+    const response = createDeferred<WorkspaceRecord>();
+    workspaceHost.workspaceSelect = mock(() => response.promise);
+    const commits: string[] = [];
+    let openSession: (() => Promise<void>) | undefined;
+    let hasLoadedWorkspaceList = false;
+    function Harness() {
+      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(
+        workspace("/repo-a", true),
+      );
+      const operations = useWorkspaceSelectionOperations({
+        activeWorkspace,
+        setActiveWorkspace,
+        hostClient: workspaceHost,
+        clearTaskData: () => {},
+        clearBranchData: () => {},
+      });
+      hasLoadedWorkspaceList = operations.hasLoadedWorkspaceList;
+      const navigate = useNavigate();
+      const location = useLocation();
+      const routeWorkspace = new URLSearchParams(location.search).get("workspace");
+      useLayoutEffect(() => {
+        commits.push(`${activeWorkspace?.workspaceId}:${routeWorkspace}`);
+      }, [activeWorkspace, routeWorkspace]);
+      openSession = () =>
+        operations.selectWorkspace("repo-b", () => {
+          void navigate("/sessions?workspace=repo-b&kind=task&task=task-b");
+        });
+      return <p>{`${activeWorkspace?.workspaceId}:${routeWorkspace}`}</p>;
+    }
+    const view = render(
+      <IsolatedQueryWrapper>
+        <MemoryRouter initialEntries={["/sessions?workspace=repo-a&kind=task&task=task-a"]}>
+          <Harness />
+        </MemoryRouter>
+      </IsolatedQueryWrapper>,
+    );
+    try {
+      await waitFor(() => expect(hasLoadedWorkspaceList).toBeTrue());
+      commits.length = 0;
+      let switching: Promise<void> | undefined;
+      act(() => {
+        switching = openSession?.();
+      });
+      expect(view.getByText("repo-a:repo-a")).toBeTruthy();
+      await act(async () => {
+        response.resolve(workspace("/repo-b", true));
+        await switching;
+      });
+      expect(view.getByText("repo-b:repo-b")).toBeTruthy();
+      expect(commits).toEqual(["repo-b:repo-b"]);
+    } finally {
+      response.resolve(workspace("/repo-b", true));
+      view.unmount();
+    }
+  });
+
+  test("does not navigate for a workspace switch that a newer switch supersedes", async () => {
+    const first = createDeferred<WorkspaceRecord>();
+    const second = createDeferred<WorkspaceRecord>();
+    workspaceHost.workspaceSelect = mock((id) =>
+      id === "repo-b" ? first.promise : second.promise,
+    );
+    const navigateFirst = mock(() => {});
+    const navigateSecond = mock(() => {});
+    const setActiveRepo = mock((_repo: string | null) => {});
+    const harness = createRepoSelectionHarness("/repo-a", setActiveRepo);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+      setActiveRepo.mockClear();
+      let firstSwitch: Promise<void> | undefined;
+      let secondSwitch: Promise<void> | undefined;
+      await harness.run((operations) => {
+        firstSwitch = operations.selectWorkspace("repo-b", navigateFirst);
+        secondSwitch = operations.selectWorkspace("repo-c", navigateSecond);
+      });
+      await harness.run(async () => {
+        second.resolve(workspace("/repo-c", true));
+        await secondSwitch;
+        first.resolve(workspace("/repo-b", true));
+        await firstSwitch;
+      });
+      expect(setActiveRepo).toHaveBeenCalledWith("/repo-c");
+      expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-b");
+      expect(navigateSecond).toHaveBeenCalledTimes(1);
+      expect(navigateFirst).not.toHaveBeenCalled();
+    } finally {
+      first.resolve(workspace("/repo-b", true));
+      second.resolve(workspace("/repo-c", true));
+      await harness.unmount();
+    }
+  });
+
   test.each([false, true])(
     "keeps a partially saved workspace when refresh fails=%s",
     async (failRefresh) => {

@@ -11,6 +11,7 @@ import {
   toAgentStudioTaskSelection,
 } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
+import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 
 enableReactActEnvironment();
 
@@ -60,6 +61,45 @@ function SelectionProbe({
 }
 
 describe("useAgentStudioSelectionState", () => {
+  test("commits a workspace's URL selection before selection state can capture the previous task", async () => {
+    const commits: string[] = [];
+    const useSelection = ({ workspaceId }: { workspaceId: string }) => {
+      const query = useAgentStudioQuerySync({
+        activeWorkspaceId: workspaceId,
+        agentStudioState: null,
+        isLoadingAgentStudioState: true,
+        agentStudioStateError: null,
+        retryAgentStudioStateLoad: () => {},
+        locationKey: workspaceId,
+        navigationType: "PUSH",
+        searchParams: new URLSearchParams(
+          `workspace=${workspaceId}&task=task-${workspaceId}&session=session-${workspaceId}&agent=build`,
+        ),
+        setSearchParams: () => {},
+      });
+      const result = useAgentStudioSelectionState(
+        baseProps({
+          activeWorkspaceId: workspaceId,
+          ...query,
+          routeSessionIdentity: query.sessionIdentityParam,
+        }),
+      );
+      useLayoutEffect(() => {
+        commits.push(`${workspaceId}:${result.selection.taskId}`);
+      });
+      return result;
+    };
+    const harness = createSharedHookHarness(useSelection, { workspaceId: "workspace-a" });
+    try {
+      await harness.mount();
+      commits.length = 0;
+      await harness.update({ workspaceId: "workspace-b" });
+      expect(commits.length).toBeGreaterThan(0);
+      expect(commits.every((value) => value === "workspace-b:task-workspace-b")).toBeTrue();
+    } finally {
+      await harness.unmount();
+    }
+  });
   test("does not publish a local task change before the preview guard applies it", async () => {
     const scheduleQueryUpdate = mock(() => {});
     let applyTransition: (() => void) | null = null;
@@ -106,6 +146,7 @@ describe("useAgentStudioSelectionState", () => {
     );
 
     expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().isRoutePending).toBe(true);
     await harness.run(() => applyTransition?.());
     expect(harness.getLatest().selection).toEqual({
       taskId: "task-3",
@@ -115,6 +156,7 @@ describe("useAgentStudioSelectionState", () => {
       hasExplicitRoleSelection: true,
       keepSessionless: false,
     });
+    expect(harness.getLatest().isRoutePending).toBe(false);
 
     await harness.unmount();
   });
@@ -230,6 +272,8 @@ describe("useAgentStudioSelectionState", () => {
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
       task: "task-1",
       session: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
       agent: "build",
     });
 

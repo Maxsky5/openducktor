@@ -166,6 +166,7 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     hostInstanceId: "test-instance",
     inspectWorkspaceActivity: () => unexpectedTerminalOperation("inspectWorkspaceActivity"),
     list: () => unexpectedTerminalOperation("list"),
+    observeActivity: () => unexpectedTerminalOperation("observeActivity"),
     preparePathInput: () => unexpectedTerminalOperation("preparePathInput"),
     resize: () => unexpectedTerminalOperation("resize"),
     write: () => unexpectedTerminalOperation("write"),

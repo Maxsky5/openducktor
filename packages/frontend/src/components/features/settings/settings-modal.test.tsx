@@ -54,7 +54,7 @@ for (const shared of [true, false]) {
       fireEvent.click(content.getByRole("tab", { name: "Builder" }));
       fireEvent.click(content.getByRole("button", { name: "Chat" }));
       const thinkingMessages = content.getByRole("switch", {
-        name: "Show thinking messages in Chats and Workflows transcripts",
+        name: "Show thinking messages in session transcripts",
       });
       expect(thinkingMessages.getAttribute("aria-checked")).toBe("false");
       fireEvent.click(thinkingMessages);

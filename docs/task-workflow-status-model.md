@@ -24,6 +24,8 @@ This document defines persisted task status, UI labels, issue type rules, and ta
 
 `close_task` is an administrative override. It does not prove that code was merged, QA passed, or all workflow steps finished.
 
+The sidebar excludes sessions for `closed` tasks. If the visible task closes, the Sessions page returns to Kanban. Closing a task keeps its saved session history.
+
 ## Issue types
 
 The UI supports `epic`, `feature`, `task`, and `bug`. It does not support `chore` or `decision`.

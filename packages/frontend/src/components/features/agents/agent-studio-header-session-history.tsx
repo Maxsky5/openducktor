@@ -10,6 +10,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioSessionSelectorModel } from "./agent-studio-header.types";
 import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 
@@ -44,22 +45,30 @@ export function SessionHistoryMenu({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          type="button"
-          variant="outline"
-          size="icon"
-          className="size-9 rounded-md"
-          disabled={selector.disabled || !agentStudioReady}
-          title={selectedOption ? `Session history · ${selectedOption.label}` : "Session history"}
-          aria-label={
-            selectedOption ? `Session history, selected ${selectedOption.label}` : "Session history"
-          }
-        >
-          <History className="size-4" />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              ref={triggerRef}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              disabled={selector.disabled || !agentStudioReady}
+              aria-label={
+                selectedOption
+                  ? `Session history, selected ${selectedOption.label}`
+                  : "Session history"
+              }
+            >
+              <History className="size-4" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          {selectedOption ? `Session history · ${selectedOption.label}` : "Session history"}
+        </TooltipContent>
+      </Tooltip>
       <PopoverContent
         align="end"
         className="w-80 p-0"

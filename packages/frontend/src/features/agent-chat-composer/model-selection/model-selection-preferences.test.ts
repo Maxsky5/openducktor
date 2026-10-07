@@ -298,7 +298,6 @@ describe("model-selection-preferences", () => {
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
       sessionModelRepairCommand: {
-        key: "session-1|opencode|%2Frepo\u001fopencode\u001fanthropic\u001fclaude-sonnet\u001f\u001f",
         session: sessionIdentity,
         selection: defaultSelection,
       },
@@ -349,7 +348,6 @@ describe("model-selection-preferences", () => {
         variant: "default",
       },
       sessionModelRepairCommand: {
-        key: "session-1|opencode|%2Frepo\u001fopencode\u001fopenai\u001fgpt-5\u001fdefault\u001f",
         session: sessionIdentity,
         selection: {
           runtimeKind: "opencode",

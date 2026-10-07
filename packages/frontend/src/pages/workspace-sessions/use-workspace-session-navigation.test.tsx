@@ -4,7 +4,10 @@ import { StrictMode, useLayoutEffect } from "react";
 import type { NavigateOptions, SetURLSearchParams } from "react-router";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 
-type Route = Omit<Parameters<typeof useWorkspaceSessionNavigation>[0], "setSearchParams">;
+type Route = Omit<
+  Parameters<typeof useWorkspaceSessionNavigation>[0],
+  "setSearchParams" | "workspaceId"
+>;
 
 function createHarness(search = "session=First&keep=value") {
   const writes: Array<{ search: string; options: NavigateOptions | undefined }> = [];
@@ -21,10 +24,15 @@ function createHarness(search = "session=First&keep=value") {
   };
   const hook = renderHook(
     (route: Route) => {
-      const navigation = useWorkspaceSessionNavigation({ ...route, setSearchParams });
+      const workspaceId = route.searchParams.get("workspace") ?? "workspace-a";
+      const navigation = useWorkspaceSessionNavigation({
+        ...route,
+        workspaceId,
+        setSearchParams,
+      });
       useLayoutEffect(() => {
         events.push(`selected:${navigation.sessionId}`);
-      }, [navigation.sessionId]);
+      }, [navigation.sessionId, workspaceId]);
       return navigation;
     },
     { initialProps, wrapper: ({ children }) => <StrictMode>{children}</StrictMode> },
@@ -172,6 +180,26 @@ test("clearing selection removes only the session param and retains the explicit
     });
     expect(h.result.current.sessionId).toBeNull();
     expect(h.writes).toHaveLength(1);
+  } finally {
+    h.unmount();
+  }
+});
+
+test("a workspace switch commits the requested chat without writing the old workspace's selection", () => {
+  const h = createHarness("workspace=workspace-a&session=First");
+  try {
+    act(() => h.result.current.updateNavigation({ sessionId: "Second" }, false));
+    h.events.length = 0;
+    h.rerender({
+      searchParams: new URLSearchParams("workspace=workspace-b&session=Other"),
+      locationKey: "other-workspace",
+      navigationType: "PUSH",
+    });
+    expect(h.result.current.sessionId).toBe("Other");
+    expect(h.events).toEqual(["selected:Other"]);
+    expect(h.writes).toHaveLength(1);
+    act(() => h.result.current.updateNavigation({ sessionId: "Next" }));
+    expect(h.writes[1]?.search).toBe("workspace=workspace-b&session=Next");
   } finally {
     h.unmount();
   }

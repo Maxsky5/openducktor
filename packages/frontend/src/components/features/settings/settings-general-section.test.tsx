@@ -1,42 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import type { GeneralSettings } from "@openducktor/contracts";
+import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GeneralSettingsSection } from "./settings-general-section";
 
-const renderSection = (general: GeneralSettings, disabled = false): string =>
-  renderToStaticMarkup(
-    createElement(GeneralSettingsSection, {
-      general,
-      disabled,
-      onUpdateGeneral: () => general,
-    }),
-  );
-
-describe("settings general section", () => {
-  test("renders background Task workflows tab setting copy", () => {
-    const html = renderSection({ openAgentStudioTabOnBackgroundSessionStart: true });
-
-    expect(html).toContain("General Settings");
-    expect(html).toContain("Open Task workflows tab for background sessions");
-    expect(html).toContain("without navigating away from Kanban");
-  });
-
-  test("renders switch as checked when enabled", () => {
-    const html = renderSection({ openAgentStudioTabOnBackgroundSessionStart: true });
-
-    expect(html).toContain('aria-checked="true"');
-  });
-
-  test("renders switch as unchecked when disabled", () => {
-    const html = renderSection({ openAgentStudioTabOnBackgroundSessionStart: false });
-
-    expect(html).toContain('aria-checked="false"');
-  });
-
-  test("switch is disabled while interactions are disabled", () => {
-    const html = renderSection({ openAgentStudioTabOnBackgroundSessionStart: true }, true);
-
-    expect(html).toContain("disabled");
-  });
+test("general settings retain app updates without the obsolete background-tab preference", () => {
+  const html = renderToStaticMarkup(createElement(GeneralSettingsSection, { disabled: false }));
+  expect(html).toContain("General Settings");
+  expect(html).not.toContain("task tab");
 });

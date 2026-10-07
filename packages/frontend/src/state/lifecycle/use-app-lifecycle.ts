@@ -49,6 +49,7 @@ export function useAppLifecycle({
   const shouldLoadWorkspaceTasksRef = useRef<Promise<boolean>>(loadTasksWithoutStream);
   const failedStreamSnapshotReposRef = useRef<Set<string>>(new Set());
   const streamSnapshotReposRef = useRef<Set<string>>(new Set());
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -106,7 +107,6 @@ export function useAppLifecycle({
   }, [queryClient, taskStreamControllerFactory]);
 
   useEffect(() => {
-    const activeRepoPath = activeWorkspace?.repoPath ?? null;
     if (!activeRepoPath) {
       clearBranchData();
       return;
@@ -139,11 +139,5 @@ export function useAppLifecycle({
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [
-    activeWorkspace,
-    clearBranchData,
-    queryClient,
-    refreshTaskStoreCheckForRepo,
-    refreshBranches,
-  ]);
+  }, [activeRepoPath, clearBranchData, queryClient, refreshTaskStoreCheckForRepo, refreshBranches]);
 }

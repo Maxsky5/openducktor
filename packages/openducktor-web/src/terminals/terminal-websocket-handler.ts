@@ -27,7 +27,7 @@ const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 
 export type TerminalWebSocketService = Pick<
   TerminalService,
-  "acknowledge" | "attach" | "detach" | "resize" | "write"
+  "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity"
 >;
 
 export type TerminalWebSocketData = {
@@ -192,7 +192,9 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
     message.type === "attach"
       ? socket.data.attachPermit.run(waitForWritable(socket).pipe(Effect.flatMap(() => handle)))
       : handle;
-  Effect.runFork(socket.data.messageGate.run(message.terminalId, operation));
+  Effect.runFork(
+    socket.data.messageGate.run("terminalId" in message ? message.terminalId : "", operation),
+  );
 };
 
 export const terminalWebSocketHandler = {

@@ -3,13 +3,14 @@ import { useSessionStartContext } from "@/features/session-start/use-session-sta
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
 import { supportsTaskTargetBranchSelection } from "@/features/session-start/constants";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { effectiveTaskTargetBranch, taskTargetBranchValidationError } from "@/lib/target-branch";
 import { requireDirectSessionSelection } from "./direct-session-selection";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -18,17 +19,16 @@ import type {
   RunSessionStartWorkflow,
   SessionLaunchActionId,
   SessionStartFlowRequest,
-  SessionStartGate,
   SessionStartLaunchRequest,
   SessionStartPostAction,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
-  createSessionStartGate,
   isSessionStartFailureFeedbackHandled,
   sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
+  useWorkspaceSessionStartGate,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
@@ -120,18 +120,8 @@ export function useAgentStudioSessionStartFlow({
       session: selectedSessionIdentity,
     }),
   );
-  const sessionStartGateScopeRef = useRef(workspaceId);
-  const sessionStartGateRef = useRef<SessionStartGate<AgentStudioSessionStartGateResult> | null>(
-    null,
-  );
-  if (sessionStartGateRef.current === null) {
-    sessionStartGateRef.current = createSessionStartGate<AgentStudioSessionStartGateResult>();
-  }
-  const sessionStartGate = sessionStartGateRef.current;
-  if (sessionStartGateScopeRef.current !== workspaceId) {
-    sessionStartGateScopeRef.current = workspaceId;
-    sessionStartGate.clear();
-  }
+  const sessionStartGate =
+    useWorkspaceSessionStartGate<AgentStudioSessionStartGateResult>(workspaceId);
 
   const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
     useAgentStudioAsyncActivityTracker();
@@ -239,7 +229,7 @@ export function useAgentStudioSessionStartFlow({
             scheduleQueryUpdate(
               buildAgentStudioSelectionQueryUpdate({
                 taskId: request.taskId,
-                sessionExternalId: workflow.externalSessionId,
+                session: toAgentSessionIdentity(workflow),
                 role: request.role,
               }),
             );
@@ -380,7 +370,7 @@ export function useAgentStudioSessionStartFlow({
           buildAgentStudioSelectionQueryUpdate({
             taskId,
             role,
-            sessionExternalId: result.externalSessionId,
+            session: toAgentSessionIdentity(result),
           }),
         );
       return result;

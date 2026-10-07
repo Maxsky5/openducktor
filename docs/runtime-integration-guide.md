@@ -27,7 +27,7 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 
 `RuntimeRoute` can be `local_http`, `stdio`, or `host_service`. A `local_http` route must use the loopback host `localhost`, `127.0.0.1`, or `::1`. Never persist a route. `RuntimeTransport` carries request-scoped `local_http` and `stdio` connections. A host service can resolve inside its host adapter without a new public transport type.
 
-`AgentSessionRecord` stores only the external session ID, role, start time, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
+`AgentSessionRecord` stores the external session ID, role, start time, optional `lastActivityAt`, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
 
 The live-session adapter owns the normalized snapshot, transcript, current context use, pending approvals and questions, child links, and native reply IDs. Keep this state out of SQLite and renderer caches.
 
@@ -75,7 +75,17 @@ Put shared data in `packages/contracts` only when it is an OpenDucktor concept. 
 
 Create and subscribe the live-session adapter before the runtime can send events. Use TanStack Query for stable frontend reads such as history and catalogs. Keep live transcript state in the live-session store.
 
+OpenCode creation, fork, and reattach prepare a conversation without starting agent work. Keep control summaries in sync with the known turn state. Prompt submission reports running activity while OpenCode starts the turn. Native turn events then confirm running or idle activity. Registration must not emit a synthetic `session_started` activity event.
+
+Restoring an idle Claude session must not publish new activity. Publish startup activity for a new session, a fork, or an interrupted turn that the runtime continues.
+
 Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse the native controller that owns its session state. Route frontend reads through `HostClient`. Check that queries do not resume sessions or change live state. Test reads during live updates and runtime replacement.
+
+The host saves `lastActivityAt` in task and workspace session records as epoch milliseconds. The session list reads that field through its existing record queries. Older task records use `startedAt`; older workspace records use `createdAt`. Never read native metadata or load a transcript to get a navigation date.
+
+`agent-session-activity-persistence.ts` saves dates from the ordered live stream at message and turn boundaries. New pending input uses the host clock because request snapshots have no event timestamp. Child activity updates its saved root. Saves use the full session identity and never move the date backwards. Task activity saves do not change the task's edit time. Committed records reach the frontend through the existing live channel.
+
+Restore baselines, repeated status reports, title and model edits, streamed text, and idle connection cleanup do not change activity dates. Claude writes native bookkeeping records on restore and shutdown; do not use those records as activity. A context usage read must not persist a resumed Claude session.
 
 Before you map a feature, inspect official SDK types, protocol docs, or runtime source. Check startup, config, auth, models, sessions, activity, history, tools, approvals, questions, context, catalogs, and optional features. Keep a capability off when the public runtime contract lacks the needed data.
 
@@ -236,6 +246,10 @@ The persistence observer does not call the runtime inside the publication or loc
 Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
 
 Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.
+
+When the adapter cannot read the current status of a session, it reports a session-scoped `fault` with `statusUnavailable`. If it keeps the last snapshot, it also sets `statusUnavailableReason` on that snapshot. Keep the reason through context, title, and other updates that do not read the status. Clear it with the next status read or live status event. That change makes the snapshot differ, so an unchanged successful read still publishes the recovery. Other session faults keep the live status.
+
+A status read can overlap other updates. When a live status event, a control result that sets the status, or another successful read confirms the status during the read, ignore the status of the read. When only context, title, or pending input changes during the read, apply only the status of the read and keep the newer data. A failed read does not confirm a status, so a successful read that overlaps it still clears the failure.
 
 Current context use is live state, not total result use. If a direct read races stream events, queued events set the baseline and an event processed during the read wins.
 

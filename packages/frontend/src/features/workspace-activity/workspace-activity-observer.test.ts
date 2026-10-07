@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { buildSessionNavigationModel } from "@/state/read-models/session-navigation-read-model";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createWorkspaceActivityObserver,
   type WorkspaceActivityArchivedSessionsPort,
@@ -113,6 +115,160 @@ const createHarness = ({
 };
 
 describe("createWorkspaceActivityObserver", () => {
+  test("keeps a failed status read in the session list until a status update confirms it", () => {
+    const harness = createHarness();
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    const task = createTaskCardFixture({ id: "task-1", status: "in_progress" });
+    const statusOfSession = () => {
+      const live = harness.observer.getSessionLiveSnapshot().statesByWorkspaceId.get("alpha");
+      if (!live) throw new Error("Expected live state for alpha.");
+      const model = buildSessionNavigationModel([
+        {
+          workspace: {
+            workspaceId: "alpha",
+            workspaceName: "Alpha",
+            repoPath: "/alpha",
+            abbreviation: null,
+            tileColor: null,
+            iconDataUrl: null,
+          },
+          tasks: { status: "ready", data: [task], refreshError: null },
+          taskSessions: new Map([
+            [
+              task.id,
+              {
+                status: "ready",
+                data: [
+                  {
+                    externalSessionId: "root",
+                    role: "build",
+                    runtimeKind,
+                    workingDirectory: "/alpha",
+                    startedAt: "2026-09-15T08:00:00.000Z",
+                    selectedModel: null,
+                  },
+                ],
+                refreshError: null,
+              },
+            ],
+          ]),
+          workspaceSessions: { status: "ready", data: [], refreshError: null },
+          live,
+        },
+      ]);
+      return model.groups.flatMap((group) => group.entries)[0]?.status;
+    };
+    const failure = "Failed to refresh the session: status failed";
+    const running = snapshot("/alpha", "root", { activity: "running" });
+    const ref = running.ref;
+
+    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [running] });
+    expect(statusOfSession()).toEqual({ kind: "running" });
+
+    harness.emit("/alpha", {
+      type: "session_upsert",
+      session: { ...running, statusUnavailableReason: failure },
+    });
+    harness.emit("/alpha", {
+      type: "fault",
+      repoPath: "/alpha",
+      ref,
+      operation: "opencode-live-session.refresh-session",
+      message: failure,
+      statusUnavailable: true,
+    });
+    expect(statusOfSession()).toEqual({ kind: "unavailable", reason: failure });
+
+    harness.emit("/alpha", {
+      type: "session_upsert",
+      session: {
+        ...running,
+        statusUnavailableReason: failure,
+        contextUsage: { totalTokens: 84 },
+      },
+    });
+    harness.emit("/alpha", {
+      type: "transcript_event",
+      event: {
+        type: "session_todos_updated",
+        externalSessionId: "root",
+        timestamp: "2026-09-15T08:02:00.000Z",
+        sessionRef: ref,
+        todos: [],
+      },
+    });
+    expect(statusOfSession()).toEqual({ kind: "unavailable", reason: failure });
+
+    harness.emit("/alpha", { type: "session_upsert", session: running });
+    expect(statusOfSession()).toEqual({ kind: "running" });
+  });
+
+  test("reports per-root live facts and keeps known facts while observation is unavailable", async () => {
+    const harness = createHarness();
+    const alphaLive = () =>
+      harness.observer.getSessionLiveSnapshot().statesByWorkspaceId.get("alpha");
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    expect(alphaLive()).toEqual({ kind: "unknown" });
+
+    harness.emit("/alpha", {
+      type: "snapshot",
+      repoPath: "/alpha",
+      sessions: [
+        snapshot("/alpha", "root", { activity: "running" }),
+        snapshot("/alpha", "child", {
+          parentExternalSessionId: "root",
+          pendingQuestions: [{ requestId: "q", questions: [] }],
+        }),
+      ],
+    });
+    const rootKey = agentSessionIdentityKey({
+      externalSessionId: "root",
+      runtimeKind,
+      workingDirectory: "/alpha",
+    });
+    // useSyncExternalStore needs the same snapshot object until something changes.
+    expect(harness.observer.getSessionLiveSnapshot()).toBe(
+      harness.observer.getSessionLiveSnapshot(),
+    );
+    const ready = alphaLive();
+    expect(ready?.kind).toBe("ready");
+    expect(ready?.kind === "ready" ? ready.sessions.get(rootKey) : null).toMatchObject({
+      activityState: "waiting_input",
+      pendingQuestion: true,
+      pendingPermission: false,
+    });
+
+    harness.emit("/alpha", {
+      type: "fault",
+      repoPath: "/alpha",
+      ref: {
+        repoPath: "/alpha",
+        runtimeKind,
+        workingDirectory: "/alpha",
+        externalSessionId: "root",
+      },
+      message: "status read failed",
+      statusUnavailable: true,
+    });
+    const statusFailed = alphaLive();
+    expect(statusFailed?.kind === "ready" ? statusFailed.faults.get(rootKey) : null).toEqual({
+      message: "status read failed",
+      statusUnavailable: true,
+    });
+    expect(
+      statusFailed?.kind === "ready" ? statusFailed.sessions.get(rootKey) : null,
+    ).toMatchObject({ pendingQuestion: true });
+
+    harness.emit("/alpha", { type: "fault", repoPath: "/alpha", message: "stream closed" });
+    const unavailable = alphaLive();
+    expect(unavailable).toMatchObject({ kind: "unavailable", reason: "stream closed" });
+    expect(
+      unavailable?.kind === "unavailable"
+        ? unavailable.sessions.get(rootKey)?.pendingQuestion
+        : null,
+    ).toBe(true);
+  });
+
   test("reports unknown until the first snapshot and the archived list settle", async () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);

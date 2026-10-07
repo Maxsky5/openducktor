@@ -76,7 +76,7 @@ export function SharedToolsPanel<Id extends string>({
 }
 
 export const sharedToolsPanelToggleButtonClassName =
-  "size-8 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10";
+  "size-7 text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:text-foreground";
 export function SharedToolsPanelToggleButton({
   label,
   isOpen,
@@ -88,17 +88,28 @@ export function SharedToolsPanelToggleButton({
 }) {
   const actionLabel = `${isOpen ? "Hide" : "Show"} ${label} panel`;
   return (
-    <Button
-      type="button"
-      size="icon"
-      variant="ghost"
-      className={sharedToolsPanelToggleButtonClassName}
-      onClick={onToggle}
-      aria-label={actionLabel}
-      title={actionLabel}
-    >
-      {isOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
-    </Button>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className={sharedToolsPanelToggleButtonClassName}
+            onClick={onToggle}
+            aria-label={actionLabel}
+            aria-pressed={isOpen}
+          >
+            {isOpen ? (
+              <PanelRightClose className="size-4" aria-hidden="true" />
+            ) : (
+              <PanelRightOpen className="size-4" aria-hidden="true" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{actionLabel}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

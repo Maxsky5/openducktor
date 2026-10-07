@@ -154,7 +154,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         roots?: AgentSessionAuthorizedRoot[],
       ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
-          const readVersions = state.versions();
+          const readStart = state.readStart();
           const readEffect = Effect.tryPromise({
             try: () => prepared.connection.readSessionSources(repoPath, roots),
             catch: (cause) =>
@@ -167,7 +167,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           yield* serializeRuntime(
             commit("opencode-live-session.commit-refreshed-snapshots", () => ({
               value: undefined,
-              changes: state.applySessionSources(repoPath, read, readVersions),
+              changes: state.applySessionSources(repoPath, read, readStart),
             })),
           );
         });

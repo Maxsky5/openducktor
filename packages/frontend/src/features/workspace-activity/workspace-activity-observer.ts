@@ -7,9 +7,12 @@ import {
 } from "./workspace-activity-projection";
 import {
   foldWorkspaceActivityBadges,
+  foldWorkspaceSessionLiveFacts,
   sameWorkspaceActivityState,
   UNKNOWN_WORKSPACE_ACTIVITY,
+  UNKNOWN_WORKSPACE_SESSION_LIVE_STATE,
   type WorkspaceActivityState,
+  type WorkspaceSessionLiveState,
 } from "./workspace-activity-state";
 
 export type WorkspaceActivityWorkspace = {
@@ -46,7 +49,18 @@ export type WorkspaceActivityObserver = {
   setSessionRecordsError(message: string | null): void;
   subscribe(listener: () => void): () => void;
   getWorkspaceActivity(workspaceId: string): WorkspaceActivityState;
+  /** Live facts for session navigation. The object stays the same until an observed change. */
+  getSessionLiveSnapshot(): WorkspaceSessionLiveSnapshot;
+  /** The existing lightweight projection, mounted by an open session preview only. */
+  getWorkspaceProjection(workspaceId: string): WorkspaceActivityProjection | null;
   dispose(): void;
+};
+
+export type WorkspaceSessionLiveSnapshot = {
+  /** Per-root live facts of each observed workspace. */
+  statesByWorkspaceId: ReadonlyMap<string, WorkspaceSessionLiveState>;
+  /** Health of the shared workspace session record stream. */
+  sessionRecordsError: string | null;
 };
 
 type Observation = {
@@ -78,6 +92,7 @@ export const createWorkspaceActivityObserver = ({
   let sessionRecordsError: string | null = null;
   let stopArchivedSubscription: (() => void) | null = null;
   let version = 0;
+  let liveSnapshot: { version: number; value: WorkspaceSessionLiveSnapshot } | null = null;
 
   const emit = (): void => {
     version += 1;
@@ -106,6 +121,21 @@ export const createWorkspaceActivityObserver = ({
       kind: "ready",
       ...foldWorkspaceActivityBadges(observation.projection.sessions, archived.keys),
     };
+  };
+
+  const computeWorkspaceSessionLive = (workspaceId: string): WorkspaceSessionLiveState => {
+    const projection = observations.get(workspaceId)?.projection;
+    if (!projection) {
+      return UNKNOWN_WORKSPACE_SESSION_LIVE_STATE;
+    }
+    const sessions = foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults);
+    const { faults } = projection;
+    if (projection.unavailableReason !== null) {
+      return { kind: "unavailable", reason: projection.unavailableReason, sessions, faults };
+    }
+    return projection.hasSnapshot
+      ? { kind: "ready", sessions, faults }
+      : UNKNOWN_WORKSPACE_SESSION_LIVE_STATE;
   };
 
   const stopObservation = (workspaceId: string): void => {
@@ -221,6 +251,25 @@ export const createWorkspaceActivityObserver = ({
       cache.set(workspaceId, { version, state });
       return state;
     },
+    getSessionLiveSnapshot(): WorkspaceSessionLiveSnapshot {
+      if (liveSnapshot?.version === version) {
+        return liveSnapshot.value;
+      }
+      const value = {
+        statesByWorkspaceId: new Map(
+          [...observations.keys()].map((workspaceId) => [
+            workspaceId,
+            computeWorkspaceSessionLive(workspaceId),
+          ]),
+        ),
+        sessionRecordsError,
+      };
+      liveSnapshot = { version, value };
+      return value;
+    },
+    getWorkspaceProjection(workspaceId: string): WorkspaceActivityProjection | null {
+      return observations.get(workspaceId)?.projection ?? null;
+    },
     dispose(): void {
       stopArchivedSubscription?.();
       stopArchivedSubscription = null;
@@ -229,6 +278,7 @@ export const createWorkspaceActivityObserver = ({
       }
       listeners.clear();
       cache.clear();
+      liveSnapshot = null;
     },
   };
 };

@@ -177,6 +177,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_update_kanban_task_card_view",
   "workspace_update_repo_config",
   "workspace_update_repo_hooks",
+  "workspace_update_sidebar_session_grouping",
 ] as const;
 
 export type HostCommandName = (typeof HOST_COMMAND_NAMES)[number];

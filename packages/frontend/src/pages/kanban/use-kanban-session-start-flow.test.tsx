@@ -62,14 +62,18 @@ const createRunSessionStartWorkflow = (
 const agentStudioSessionUrl = (
   taskId: string,
   role: string,
-  session: { externalSessionId: string },
+  session: { externalSessionId: string; runtimeKind: string; workingDirectory: string },
 ): string => {
   const search = new URLSearchParams({
+    workspace: "workspace-1",
+    kind: "task",
     task: taskId,
     session: session.externalSessionId,
     agent: role,
+    runtimeKind: session.runtimeKind,
+    workingDirectory: session.workingDirectory,
   });
-  return `/workflows?${search.toString()}`;
+  return `/sessions?${search.toString()}`;
 };
 
 const createModalCatalog = (): AgentModelCatalog => ({
@@ -230,7 +234,6 @@ const createBaseArgs = (): HookArgs => ({
     { name: "origin/release/2026.04", isCurrent: false, isRemote: true },
   ],
   repoSettings: null,
-  openAgentStudioTabOnBackgroundSessionStart: true,
   tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
   sessions: [
     createAgentSessionSummaryFixture({
@@ -328,27 +331,6 @@ describe("useKanbanSessionStartFlow", () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceApplyAgentStudioStateAction = originalWorkspaceApplyAgentStudioStateAction;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-  });
-
-  test("rejects session starts while settings are unavailable", async () => {
-    const args = createBaseArgs();
-    args.openAgentStudioTabOnBackgroundSessionStart = null;
-
-    const harness = createHookHarness(args);
-    await harness.mount();
-
-    await expect(
-      harness.getLatest().startSessionIntent({
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "kickoff",
-      }),
-    ).rejects.toThrow("Cannot start Kanban session because settings have not loaded.");
-
-    expect(harness.getLatest().sessionStartModal).toBeNull();
-
-    await harness.unmount();
   });
 
   test("opens the shared session start modal for QA review", async () => {
@@ -671,7 +653,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("background start adds one Agent Studio task tab when setting is enabled", async () => {
+  test("background starts keep the current page without writing tab state", async () => {
     const toastSuccess = mock(() => "toast-id");
     const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccess);
     const navigate = mock(() => {});
@@ -699,10 +681,7 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(applyAgentStudioStateAction).toHaveBeenCalledWith("workspace-1", {
-        type: "ensure_tab",
-        taskId: "TASK-1",
-      });
+      expect(applyAgentStudioStateAction).not.toHaveBeenCalled();
       expect(navigate).not.toHaveBeenCalled();
       expect(toastSuccess).not.toHaveBeenCalled();
 
@@ -719,39 +698,9 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(applyAgentStudioStateAction).toHaveBeenCalledTimes(2);
-      expect(repoConfig.agentStudioState.openTaskIds).toEqual(["TASK-1"]);
-    } finally {
-      toastSuccessSpy.mockRestore();
-      await harness.unmount();
-    }
-  });
-
-  test("background start does not add Agent Studio task tab when setting is disabled", async () => {
-    const args = createBaseArgs();
-    args.repoSettings = createDefaultRepoSettings();
-    args.openAgentStudioTabOnBackgroundSessionStart = false;
-    args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
-
-    const harness = createHookHarness(args);
-    try {
-      await harness.mount();
-      await harness.run((state) => {
-        state.onDelegate("TASK-1");
-      });
-      await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
-      await harness.run(async (state) => {
-        state.sessionStartModal?.onConfirm({
-          runInBackground: true,
-          startMode: "fresh",
-          sourceSessionOptionValue: null,
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
       expect(applyAgentStudioStateAction).not.toHaveBeenCalled();
     } finally {
+      toastSuccessSpy.mockRestore();
       await harness.unmount();
     }
   });
@@ -1190,7 +1139,9 @@ describe("useKanbanSessionStartFlow", () => {
       state.onOpenSession("TASK-404", "qa");
     });
 
-    expect(args.navigate).toHaveBeenCalledWith("/workflows?task=TASK-404&agent=qa");
+    expect(args.navigate).toHaveBeenCalledWith(
+      "/sessions?workspace=workspace-1&kind=task&task=TASK-404&agent=qa",
+    );
 
     await harness.unmount();
   });

@@ -946,7 +946,9 @@ describe("KanbanPage session start modal flow", () => {
         }),
       );
       expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toBe("/workflows?task=TASK-123&session=session-1&agent=build");
+      expect(renderer.getLocation()).toBe(
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fsession-1",
+      );
 
       await act(async () => {
         renderer.unmount();
@@ -1323,7 +1325,9 @@ describe("KanbanPage session start modal flow", () => {
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
-    expect(renderer.getLocation()).toBe("/workflows?task=TASK-123&session=session-1&agent=build");
+    expect(renderer.getLocation()).toBe(
+      "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fsession-1",
+    );
     expect(publishSessionErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "TASK-123",
@@ -1473,7 +1477,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
       expect(renderer.getLocation()).toBe(
-        "/workflows?task=TASK-123&session=session-spec&agent=spec",
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-spec&agent=spec&runtimeKind=opencode&workingDirectory=%2Frepo",
       );
 
       await act(async () => {
@@ -1851,7 +1855,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(renderer.getSessionStartModalModel()).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe(
-      "/workflows?task=TASK-123&session=session-build-older&agent=build",
+      "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-build-older&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo",
     );
 
     await act(async () => {
@@ -1937,7 +1941,9 @@ describe("KanbanPage session start modal flow", () => {
           variant: "default",
         });
         await waitFor(() => {
-          expect(page.getLocation()).toBe("/workflows?task=TASK-123&session=session-1&agent=build");
+          expect(page.getLocation()).toBe(
+            "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fsession-1",
+          );
         });
         const sessionExternalId = new URL(
           page.getLocation(),
@@ -1979,7 +1985,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
       expect(renderer.getLocation()).toBe(
-        "/workflows?task=TASK-123&session=session-build-older&agent=build",
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-build-older&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo",
       );
 
       await act(async () => {
@@ -2004,7 +2010,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
       expect(renderer.getLocation()).toBe(
-        "/workflows?task=TASK-123&session=session-build-older&agent=build",
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-build-older&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo",
       );
 
       await act(async () => {
@@ -2025,7 +2031,9 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
-    expect(renderer.getLocation()).toBe("/workflows?task=TASK-123&agent=qa");
+    expect(renderer.getLocation()).toBe(
+      "/sessions?workspace=repo&kind=task&task=TASK-123&agent=qa",
+    );
 
     await act(async () => {
       renderer.unmount();
@@ -2106,7 +2114,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
       expect(renderer.getLocation()).toBe(
-        "/workflows?task=TASK-123&session=session-build-older&agent=build",
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-build-older&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo",
       );
 
       await act(async () => {

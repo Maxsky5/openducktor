@@ -9,6 +9,7 @@ export const markStreamTurnActive = (session: SessionRecord | undefined): void =
     return;
   }
   session.streamTurnStatus = "active";
+  session.summary = { ...session.summary, status: "running" };
   session.isAwaitingRuntimeTurnStart = false;
 };
 
@@ -17,6 +18,7 @@ export const markStreamTurnIdle = (session: SessionRecord | undefined): void => 
     return;
   }
   session.streamTurnStatus = "idle";
+  session.summary = { ...session.summary, status: "idle" };
   session.isAwaitingRuntimeTurnStart = false;
   session.activeAssistantMessageId = null;
 };
@@ -26,6 +28,7 @@ export const startUserMessageSend = (
   options: { expectRuntimeTurnStart?: boolean } = {},
 ): void => {
   session.isSendingUserMessage = true;
+  session.summary = { ...session.summary, status: "running" };
   if (options.expectRuntimeTurnStart === true) {
     session.isAwaitingRuntimeTurnStart = true;
   }

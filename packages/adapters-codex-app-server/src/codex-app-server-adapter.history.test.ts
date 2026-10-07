@@ -338,6 +338,7 @@ describe("CodexAppServerAdapter history loading", () => {
       adapter.resolveSessionParent({ ...ref, workingDirectory: "/other" }),
     ).rejects.toMatchObject({ code: "scope_mismatch" });
   });
+
   test("keeps a hydrated subagent at its exact thread item position", async () => {
     const thread = {
       id: "parent-thread",

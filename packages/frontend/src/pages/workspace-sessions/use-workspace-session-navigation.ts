@@ -7,6 +7,7 @@ type Navigation = {
 };
 
 type UseWorkspaceSessionNavigationArgs = {
+  workspaceId: string;
   locationKey: string;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
@@ -18,11 +19,13 @@ type WorkspaceSessionNavigation = Navigation & {
 };
 
 export function useWorkspaceSessionNavigation({
+  workspaceId,
   locationKey,
   navigationType,
   searchParams,
   setSearchParams,
 }: UseWorkspaceSessionNavigationArgs): WorkspaceSessionNavigation {
+  const [scope, setScope] = useState({ workspaceId, searchParams });
   const [navigation, setNavigation] = useState<Navigation>(() => ({
     sessionId: searchParams.get("session") ?? undefined,
     creating: searchParams.get("create") === "session",
@@ -31,6 +34,22 @@ export function useWorkspaceSessionNavigation({
   const pendingWrites = useRef<string[]>([]);
   const syncingFromUrl = useRef(false);
   const replaceHistory = useRef(true);
+  let currentNavigation = navigation;
+  if (scope.workspaceId !== workspaceId) {
+    setScope({ workspaceId, searchParams });
+    currentNavigation = {
+      sessionId: searchParams.get("session") ?? undefined,
+      creating: searchParams.get("create") === "session",
+    };
+    setNavigation(currentNavigation);
+  }
+
+  useEffect(() => {
+    latestSearchParams.current = scope.searchParams;
+    pendingWrites.current = [];
+    syncingFromUrl.current = false;
+    replaceHistory.current = true;
+  }, [scope]);
 
   const updateNavigation = useCallback((update: Partial<Navigation>, replace = true): void => {
     replaceHistory.current = replace;
@@ -61,7 +80,7 @@ export function useWorkspaceSessionNavigation({
       if (current.sessionId === sessionId && current.creating === creating) return current;
       return { sessionId, creating };
     });
-  }, [locationKey, navigationType, searchParams]);
+  }, [locationKey, navigationType, scope, searchParams]);
 
   useEffect(() => {
     if (syncingFromUrl.current) {
@@ -81,7 +100,7 @@ export function useWorkspaceSessionNavigation({
     startTransition(() => {
       setSearchParams(next, { replace: replaceHistory.current, preventScrollReset: true });
     });
-  }, [locationKey, navigation, navigationType, searchParams, setSearchParams]);
+  }, [locationKey, navigation, navigationType, scope, searchParams, setSearchParams]);
 
-  return { ...navigation, updateNavigation };
+  return { ...currentNavigation, updateNavigation };
 }

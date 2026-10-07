@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { SetURLSearchParams } from "react-router";
 import {
+  MemoryRouter,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useSearchParams,
+} from "react-router";
+import { useLayoutEffect } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -15,15 +24,63 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useNavigationUrlSync, initialProps);
 
 describe("useNavigationUrlSync", () => {
+  test("commits an external session address with its new selection on the first render", () => {
+    const commits: { address: string | null; task: string }[] = [];
+    function Session() {
+      const location = useLocation();
+      const navigate = useNavigate();
+      const [searchParams, setSearchParams] = useSearchParams();
+      const navigationType = useNavigationType();
+      const { navigation } = useNavigationUrlSync({
+        workspaceId: "w",
+        locationKey: location.key,
+        navigationType,
+        searchParams,
+        setSearchParams,
+      });
+      useLayoutEffect(() => {
+        commits.push({ address: searchParams.get("task"), task: navigation.taskId });
+      });
+      return (
+        <button
+          onClick={() =>
+            void navigate(
+              "/sessions?workspace=w&task=next&session=native-next&agent=build&runtimeKind=claude&workingDirectory=%2Fnext",
+            )
+          }
+        >
+          Open next session
+        </button>
+      );
+    }
+    const view = render(
+      <MemoryRouter
+        initialEntries={[
+          "/sessions?workspace=w&task=first&session=native-first&agent=qa&runtimeKind=codex&workingDirectory=%2Ffirst",
+        ]}
+      >
+        <Session />
+      </MemoryRouter>,
+    );
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Open next session" }));
+      expect(commits.filter((commit) => commit.address === "next").length).toBeGreaterThan(0);
+      expect(commits.filter((commit) => commit.address !== commit.task)).toEqual([]);
+    } finally {
+      view.unmount();
+    }
+  });
   test("starts from caller state and writes it to the URL once", async () => {
     const calls: SearchParamsCall[] = [];
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
       calls.push([nextInit, navigateOptions]);
     };
     const harness = createHookHarness({
+      workspaceId: "w",
       initialNavigation: {
         taskId: "task-1",
         sessionExternalId: "session-1",
+        sessionIdentity: null,
         role: "planner",
       },
       locationKey: "location-1",
@@ -34,9 +91,11 @@ describe("useNavigationUrlSync", () => {
 
     await harness.mount();
     await harness.update({
+      workspaceId: "w",
       initialNavigation: {
         taskId: "task-1",
         sessionExternalId: "session-1",
+        sessionIdentity: null,
         role: "planner",
       },
       locationKey: "location-1",
@@ -48,12 +107,38 @@ describe("useNavigationUrlSync", () => {
     expect(harness.getLatest().navigation).toEqual({
       taskId: "task-1",
       sessionExternalId: "session-1",
+      sessionIdentity: null,
       role: "planner",
     });
     expect(calls).toHaveLength(1);
     const [next, options] = calls[0] ?? [];
     expect(next?.toString()).toBe("task=task-1&session=session-1&agent=planner");
     expect(options).toEqual({ replace: true });
+    await harness.unmount();
+  });
+
+  test("keeps a complete session identity in the address on mount", async () => {
+    const calls: SearchParamsCall[] = [];
+    const harness = createHookHarness({
+      workspaceId: "w",
+      locationKey: "location-1",
+      navigationType: "PUSH",
+      searchParams: new URLSearchParams(
+        "workspace=w&kind=task&task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo",
+      ),
+      setSearchParams: (nextInit, navigateOptions) => {
+        calls.push([nextInit, navigateOptions]);
+      },
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().navigation.sessionIdentity).toEqual({
+      externalSessionId: "native",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
+    expect(calls).toHaveLength(0);
     await harness.unmount();
   });
 
@@ -68,6 +153,7 @@ describe("useNavigationUrlSync", () => {
 
     try {
       const harness = createHookHarness({
+        workspaceId: "w",
         locationKey: "location-1",
         navigationType: "REPLACE",
         searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
@@ -117,6 +203,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      workspaceId: "w",
       locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
@@ -132,6 +219,7 @@ describe("useNavigationUrlSync", () => {
     expect(calls).toHaveLength(0);
 
     await harness.update({
+      workspaceId: "w",
       locationKey: "location-2",
       navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
@@ -155,6 +243,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      workspaceId: "w",
       locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
@@ -183,6 +272,7 @@ describe("useNavigationUrlSync", () => {
     }
 
     await harness.update({
+      workspaceId: "w",
       locationKey: "location-2",
       navigationType: "REPLACE",
       searchParams: firstNext,
@@ -197,6 +287,7 @@ describe("useNavigationUrlSync", () => {
     expect(calls).toHaveLength(2);
 
     await harness.update({
+      workspaceId: "w",
       locationKey: "location-3",
       navigationType: "REPLACE",
       searchParams: secondNext,
@@ -220,6 +311,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      workspaceId: "w",
       locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
@@ -242,6 +334,7 @@ describe("useNavigationUrlSync", () => {
     }
 
     await harness.update({
+      workspaceId: "w",
       locationKey: "location-2",
       navigationType: "POP",
       searchParams: previousUrl,

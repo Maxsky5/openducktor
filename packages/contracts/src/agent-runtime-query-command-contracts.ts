@@ -105,7 +105,6 @@ export const agentRuntimeSearchFilesInputSchema = runtimeWorkingDirectoryRefSche
   query: z.string(),
 });
 export type AgentRuntimeSearchFilesInput = z.infer<typeof agentRuntimeSearchFilesInputSchema>;
-
 export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown> = {
   command: string;
   inputSchema: z.ZodType<Input>;

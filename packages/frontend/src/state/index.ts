@@ -9,4 +9,3 @@ export {
   useTasksState,
   useWorkspaceState,
 } from "./app-state-provider";
-export { useShellAgentActivity } from "./queries/use-shell-agent-activity";

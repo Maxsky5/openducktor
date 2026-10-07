@@ -7,6 +7,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
+import { replaceEqualDeep } from "@tanstack/react-query";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { createAssistantMessageMeta } from "./assistant-meta";
@@ -434,9 +435,13 @@ export const applyLoadedSessionHistory = (
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const historyQuestions = projectBackgroundQuestions(history);
-  const historyQuestionIds = new Set(historyQuestions.map(pendingInputIdentity));
   const oldQuestionIds = new Set(questionsAtReadStart?.map(pendingInputIdentity));
+  const currentQuestionIds = new Set(session.pendingQuestions.map(pendingInputIdentity));
+  const historyQuestions = projectBackgroundQuestions(history).filter((request) => {
+    const id = pendingInputIdentity(request);
+    return !oldQuestionIds.has(id) || currentQuestionIds.has(id);
+  });
+  const historyQuestionIds = new Set(historyQuestions.map(pendingInputIdentity));
   const pendingQuestions =
     session.livePresence === "present"
       ? session.pendingQuestions
@@ -456,7 +461,7 @@ export const applyLoadedSessionHistory = (
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
-    pendingQuestions,
+    pendingQuestions: replaceEqualDeep(session.pendingQuestions, pendingQuestions),
     messages: settleImageGenerationMessages({
       ...session,
       messages: mergeHistoryMessages(

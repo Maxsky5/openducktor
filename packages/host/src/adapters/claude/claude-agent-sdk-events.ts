@@ -42,7 +42,7 @@ import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-resul
 import { decodeClaudeToolUseBlock, isClaudeToolUseBlockType } from "./claude-agent-sdk-tool-shapes";
 import {
   claudeAssistantTextPartEvent,
-  createClaudeAssistantReasoningPart,
+  projectClaudeAssistantBlock,
 } from "./claude-agent-sdk-transcript-parts";
 import {
   emitRetractedTranscriptMessages,
@@ -384,20 +384,19 @@ const handleAssistantMessage = ({
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
-      const type = readStringProp(block, "type");
-      if (type === "text" && hasToolUse) {
-        const blockText = readStringProp(block, "text");
-        if (blockText?.trim()) {
-          emit(
-            claudeAssistantTextPartEvent({
-              externalSessionId: session.externalSessionId,
-              messageId: assistantMessageId,
-              partId: `${assistantMessageId}:text:${index}`,
-              text: blockText,
-              timestamp,
-            }),
-          );
-        }
+      const part = projectClaudeAssistantBlock({
+        block,
+        index,
+        messageId: assistantMessageId,
+        hasToolUse,
+      });
+      if (part && (part.kind !== "text" || hasToolUse)) {
+        emit({
+          type: "assistant_part",
+          externalSessionId: session.externalSessionId,
+          timestamp,
+          part,
+        });
         continue;
       }
       const toolUse = decodeClaudeToolUseBlock({
@@ -420,21 +419,6 @@ const handleAssistantMessage = ({
           timestamp,
           toolUse,
         });
-      }
-      if (type === "thinking") {
-        const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
-        if (thinkingText) {
-          emit({
-            type: "assistant_part",
-            externalSessionId: session.externalSessionId,
-            timestamp,
-            part: createClaudeAssistantReasoningPart({
-              messageId: assistantMessageId,
-              partId: `${assistantMessageId}:thinking:${index}`,
-              text: thinkingText,
-            }),
-          });
-        }
       }
     }
   }

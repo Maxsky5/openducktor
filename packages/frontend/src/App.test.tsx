@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { isValidElement, type ReactNode } from "react";
 import { type RouteObject, RouterProvider } from "react-router";
 import { App } from "./App";
-import { CanonicalRouteRedirect } from "./lib/canonical-route-redirect";
-import { AgentsPage } from "./pages/agents/agents-page";
-import WorkspaceSessionsPage from "./pages/workspace-sessions/workspace-sessions-page";
+import { LegacySessionsRedirect } from "./pages/sessions/legacy-sessions-redirect";
+import { SessionsPage } from "./pages/sessions/sessions-page";
 
 function findRouteElement(routes: RouteObject[], path: string): ReactNode {
   for (const route of routes) {
@@ -23,31 +22,27 @@ function appRoutes(): RouteObject[] {
   return app.props.router.routes;
 }
 
-test("Chats and Task workflows are available without a lazy route or page-loading boundary", () => {
-  const routes = appRoutes();
-  for (const [path, page] of [
-    ["/workflows", AgentsPage],
-    ["/chats", WorkspaceSessionsPage],
-  ] as const) {
-    const element = findRouteElement(routes, path);
-    expect(isValidElement(element)).toBe(true);
-    if (!isValidElement(element)) throw new Error(`Missing route element for ${path}`);
-    expect(element.type).toBe(page);
-  }
+test("Sessions is available without a lazy route or page-loading boundary", () => {
+  const element = findRouteElement(appRoutes(), "/sessions");
+  expect(isValidElement(element)).toBe(true);
+  if (!isValidElement(element)) throw new Error("Missing route element for /sessions");
+  expect(element.type).toBe(SessionsPage);
 });
 
-test("old session page routes redirect to their canonical routes", () => {
+test("old task workflow and chat routes redirect to the matching Sessions content", () => {
   const routes = appRoutes();
-  for (const [path, destination] of [
-    ["/agents", "/workflows"],
-    ["/workspace-sessions", "/chats"],
+  for (const [path, kind] of [
+    ["/workflows", "task"],
+    ["/agents", "task"],
+    ["/chats", "workspace"],
+    ["/workspace-sessions", "workspace"],
   ] as const) {
     const element = findRouteElement(routes, path);
-    expect(isValidElement<{ to: string }>(element)).toBe(true);
-    if (!isValidElement<{ to: string }>(element)) {
+    expect(isValidElement<{ kind: string }>(element)).toBe(true);
+    if (!isValidElement<{ kind: string }>(element)) {
       throw new Error(`Missing route element for ${path}`);
     }
-    expect(element.type).toBe(CanonicalRouteRedirect);
-    expect(element.props.to).toBe(destination);
+    expect(element.type).toBe(LegacySessionsRedirect);
+    expect(element.props.kind).toBe(kind);
   }
 });
