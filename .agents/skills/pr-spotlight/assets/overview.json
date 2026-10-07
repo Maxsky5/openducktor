@@ -1,0 +1,268 @@
+{
+  "version": 2,
+  "id": "overview-example",
+  "durationNanos": 1000000000,
+  "actors": [
+    {
+      "id": "layout",
+      "recipe": "stage",
+      "data": {
+        "post": {
+          "bloom": 0,
+          "grain": 0,
+          "vignette": 0,
+          "backdrop": 0
+        },
+        "elements": [
+          {
+            "kind": "card",
+            "id": "task-page",
+            "at": [450, 450, 0],
+            "size": [300, 110],
+            "title": "Task page",
+            "status": [
+              {
+                "text": "Task sessions"
+              }
+            ],
+            "tone": "plain"
+          },
+          {
+            "kind": "card",
+            "id": "chat-page",
+            "at": [450, 740, 0],
+            "size": [300, 110],
+            "title": "Chat page",
+            "status": [
+              {
+                "text": "Workspace chats"
+              }
+            ],
+            "tone": "plain"
+          },
+          {
+            "kind": "card",
+            "id": "shared-page",
+            "at": [1380, 585, 0],
+            "size": [760, 660],
+            "title": "",
+            "tone": "accent"
+          },
+          {
+            "kind": "card",
+            "id": "attention",
+            "at": [1380, 450, 0],
+            "size": [310, 62],
+            "title": "Needs you",
+            "status": [
+              {
+                "text": "Task question"
+              }
+            ],
+            "tone": "plain"
+          },
+          {
+            "kind": "card",
+            "id": "running",
+            "at": [1380, 615, 0],
+            "size": [310, 62],
+            "title": "Running",
+            "status": [
+              {
+                "text": "Active workspace chat"
+              }
+            ],
+            "tone": "plain"
+          },
+          {
+            "kind": "card",
+            "id": "recent",
+            "at": [1380, 780, 0],
+            "size": [310, 62],
+            "title": "Recent",
+            "status": [
+              {
+                "text": "Earlier task session"
+              }
+            ],
+            "tone": "plain"
+          }
+        ]
+      }
+    },
+    {
+      "id": "title",
+      "recipe": "caption",
+      "data": {
+        "origin": [100, 80],
+        "size": 64,
+        "align": "left",
+        "lines": [
+          [
+            {
+              "text": "Task and chat sessions share one page",
+              "tone": "plain"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "before",
+      "recipe": "caption",
+      "data": {
+        "origin": [170, 290],
+        "size": 38,
+        "align": "left",
+        "lines": [
+          [
+            {
+              "text": "Before",
+              "tone": "plain"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "after",
+      "recipe": "caption",
+      "data": {
+        "origin": [1050, 225],
+        "size": 38,
+        "align": "left",
+        "lines": [
+          [
+            {
+              "text": "After",
+              "tone": "accent"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "shared-label",
+      "recipe": "caption",
+      "data": {
+        "origin": [1380, 330],
+        "size": 42,
+        "align": "center",
+        "lines": [
+          [
+            {
+              "text": "One session page",
+              "tone": "plain"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comparison",
+      "recipe": "caption",
+      "data": {
+        "origin": [930, 585],
+        "size": 32,
+        "align": "center",
+        "lines": [
+          [
+            {
+              "text": "becomes",
+              "tone": "muted"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "before-outcome",
+      "recipe": "caption",
+      "data": {
+        "origin": [450, 955],
+        "size": 38,
+        "align": "center",
+        "lines": [
+          [
+            {
+              "text": "Separate destinations",
+              "tone": "plain"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "after-outcome",
+      "recipe": "caption",
+      "data": {
+        "origin": [1380, 955],
+        "size": 38,
+        "align": "center",
+        "lines": [
+          [
+            {
+              "text": "One grouped list",
+              "tone": "accent"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "footer",
+      "recipe": "caption",
+      "data": {
+        "origin": [100, 1040],
+        "size": 35,
+        "align": "left",
+        "lines": [
+          [
+            {
+              "text": "Conceptual example. Replace with verified PR facts.",
+              "tone": "muted"
+            }
+          ]
+        ]
+      }
+    }
+  ],
+  "continuousChannels": [
+    {
+      "id": "task-page-scale",
+      "actorId": "layout",
+      "property": "task-page.scale",
+      "initial": 2,
+      "events": []
+    },
+    {
+      "id": "chat-page-scale",
+      "actorId": "layout",
+      "property": "chat-page.scale",
+      "initial": 2,
+      "events": []
+    },
+    {
+      "id": "attention-scale",
+      "actorId": "layout",
+      "property": "attention.scale",
+      "initial": 2.25,
+      "events": []
+    },
+    {
+      "id": "running-scale",
+      "actorId": "layout",
+      "property": "running.scale",
+      "initial": 2.25,
+      "events": []
+    },
+    {
+      "id": "recent-scale",
+      "actorId": "layout",
+      "property": "recent.scale",
+      "initial": 2.25,
+      "events": []
+    }
+  ],
+  "stateChannels": []
+}
