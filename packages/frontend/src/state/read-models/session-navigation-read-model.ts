@@ -108,6 +108,12 @@ export type SessionNavigationSourceIssue = {
   message: string;
 };
 
+type TaskBlockTarget = Extract<SessionNavigationTarget, { kind: "task" | "task_session" }>;
+type TaskBlockSnapshot = {
+  workspaceId: string;
+  tasks: { taskId: string; blocked: boolean; target: TaskBlockTarget | null }[];
+};
+
 export type SessionNavigationModel = {
   /** Always Needs you, Running, and Recent, in this order. */
   groups: SessionNavigationGroup[];
@@ -115,6 +121,8 @@ export type SessionNavigationModel = {
   /** True while a source has not answered yet. Entries shown so far stay usable. */
   isLoading: boolean;
   issues: SessionNavigationSourceIssue[];
+  /** Confirmed task state before grouping can hide its row. */
+  taskBlocks: TaskBlockSnapshot[];
 };
 
 export const SESSION_NAVIGATION_GROUP_ORDER: readonly SessionNavigationGroupId[] = [
@@ -151,7 +159,44 @@ export const buildSessionNavigationModel = (
     entryCount: entries.length,
     isLoading: workspaces.some(isWorkspaceLoading),
     issues: workspaces.flatMap(workspaceIssues),
+    taskBlocks: workspaces.flatMap(taskBlockSnapshot),
   };
+};
+
+const taskBlockSnapshot = (sources: SessionNavigationWorkspaceSources): TaskBlockSnapshot[] => {
+  if (sources.tasks.status !== "ready" || sources.tasks.refreshError !== null) return [];
+  return [
+    {
+      workspaceId: sources.workspace.workspaceId,
+      tasks: sources.tasks.data
+        .filter((task) => task.status !== "closed")
+        .map((task) => ({
+          taskId: task.id,
+          blocked: task.status === "blocked",
+          target: taskBlockTarget(sources, task),
+        })),
+    },
+  ];
+};
+
+const taskBlockTarget = (
+  sources: SessionNavigationWorkspaceSources,
+  task: TaskCard,
+): TaskBlockTarget | null => {
+  const read = sources.taskSessions.get(task.id);
+  if (task.status !== "blocked" || read?.status !== "ready" || read.refreshError !== null) {
+    return null;
+  }
+  const record = latestStartedRecord(read.data);
+  return record
+    ? {
+        kind: "task_session",
+        workspaceId: sources.workspace.workspaceId,
+        taskId: task.id,
+        role: record.role,
+        identity: toAgentSessionIdentity(record),
+      }
+    : { kind: "task", workspaceId: sources.workspace.workspaceId, taskId: task.id, role: null };
 };
 
 const navigationEntry = (

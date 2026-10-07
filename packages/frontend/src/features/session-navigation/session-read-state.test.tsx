@@ -1,5 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveSnapshot,
+  TaskCard,
+} from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
@@ -40,7 +44,7 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
-const createHarness = ({ taskSession = false, unbound = false } = {}) => {
+const createHarness = ({ taskSession = false, unbound = false, noSessions = false } = {}) => {
   const listeners = new Map<string, (envelope: AgentSessionLiveEnvelope) => void>();
   const workspaces = [alphaWorkspace, betaWorkspace];
   const entries = workspaces.map((workspace) =>
@@ -48,6 +52,19 @@ const createHarness = ({ taskSession = false, unbound = false } = {}) => {
       ? taskSessionEntry("native-alpha")
       : workspaceSessionEntry(`saved-${workspace.workspaceId}`, { workspace }),
   );
+  if (noSessions) {
+    for (const entry of entries) {
+      if (entry.context.kind !== "task") continue;
+      entry.context.sessions = [];
+      entry.target = {
+        kind: "task",
+        workspaceId: entry.workspace.workspaceId,
+        taskId: entry.context.task.id,
+        role: null,
+      };
+      entry.key = sessionNavigationTargetKey(entry.target);
+    }
+  }
   const snapshots = entries.flatMap((entry): AgentSessionLiveSnapshot[] => {
     let identity;
     if (entry.target.kind === "task_session") identity = entry.target.identity;
@@ -99,15 +116,31 @@ const createHarness = ({ taskSession = false, unbound = false } = {}) => {
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   clients.push(client);
-  type ViewProps = { rail?: boolean; scope?: string; allowNavigation?: boolean };
-  function Body({ rail = false, scope = "all", allowNavigation = true }: ViewProps) {
+  type ViewProps = {
+    rail?: boolean;
+    scope?: string;
+    allowNavigation?: boolean;
+    taskStatus?: TaskCard["status"];
+    taskReadError?: string | null;
+  };
+  function Body({
+    rail = false,
+    scope = "all",
+    allowNavigation = true,
+    taskStatus,
+    taskReadError = null,
+  }: ViewProps) {
     const live = useWorkspaceSessionLiveSnapshot();
     const [target, setTarget] = useState<SessionNavigationTarget | null>(null);
     const visibleRecord = entries.find(
       (entry) => entry.key === (target ? sessionNavigationTargetKey(target) : null),
     );
+    const visibleTarget = useMemo<SessionNavigationTarget | null>(
+      () => (target?.kind === "task" ? { ...target, role: "build" } : target),
+      [target],
+    );
     usePublishVisibleSessionTarget(
-      target,
+      visibleTarget,
       visibleRecord?.context.kind === "workspace"
         ? workspaceSessionIdentity(visibleRecord.context.session)
         : null,
@@ -124,10 +157,10 @@ const createHarness = ({ taskSession = false, unbound = false } = {}) => {
                 data: entries.flatMap((entry) =>
                   entry.workspace.workspaceId === workspace.workspaceId &&
                   entry.context.kind === "task"
-                    ? [entry.context.task]
+                    ? [{ ...entry.context.task, status: taskStatus ?? entry.context.task.status }]
                     : [],
                 ),
-                refreshError: null,
+                refreshError: taskReadError,
               },
               taskSessions: new Map(
                 entries.flatMap((entry) =>
@@ -159,7 +192,7 @@ const createHarness = ({ taskSession = false, unbound = false } = {}) => {
               live: live.statesByWorkspaceId.get(workspace.workspaceId) ?? { kind: "unknown" },
             })),
         ),
-      [live, scope],
+      [live, scope, taskReadError, taskStatus],
     );
     useWatchSessionBlockers(model);
     const Navigation = rail ? SessionNavigationRail : SessionNavigationList;
@@ -221,6 +254,48 @@ test("clears a manual unread mark when an unbound workspace session becomes visi
   expect(row().getAttribute("aria-current")).toBe("true");
   expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
 });
+
+test.each(["in_progress", "blocked"] as const)(
+  "tracks repeated blockers with no saved sessions after first loading %s",
+  async (initialStatus) => {
+    const { View } = createHarness({ taskSession: true, noSessions: true });
+    const view = render(<View taskStatus={initialStatus} allowNavigation={false} />);
+    const row = () => screen.getByRole("button", { name: /Task native-alpha/ });
+    const markRead = async () => {
+      fireEvent.contextMenu(row(), { button: 2, clientX: 20, clientY: 20 });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Mark as read" }));
+      expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+    };
+    if (initialStatus === "blocked") {
+      expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+    }
+    view.rerender(<View taskStatus="in_progress" allowNavigation={false} />);
+    expect(screen.queryByRole("button", { name: /Task native-alpha/ })).toBeNull();
+
+    view.rerender(<View taskStatus="blocked" taskReadError="Offline" allowNavigation={false} />);
+    expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+    view.rerender(<View taskStatus="blocked" allowNavigation={false} />);
+    expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
+    await markRead();
+
+    view.rerender(<View taskStatus="in_progress" allowNavigation={false} />);
+    expect(screen.queryByRole("button", { name: /Task native-alpha/ })).toBeNull();
+    view.rerender(<View taskStatus="blocked" allowNavigation={false} />);
+    expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
+    await markRead();
+
+    view.rerender(<View taskStatus="closed" allowNavigation={false} />);
+    expect(screen.queryByRole("button", { name: /Task native-alpha/ })).toBeNull();
+    view.rerender(<View taskStatus="blocked" allowNavigation={false} />);
+    expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+
+    view.rerender(<View taskStatus="in_progress" />);
+    view.rerender(<View taskStatus="blocked" />);
+    expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
+    fireEvent.click(row());
+    expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
+  },
+);
 
 test("captures fast background completions across sidebar scopes and layouts, and reads only committed content", async () => {
   const { View, emit, session } = createHarness();

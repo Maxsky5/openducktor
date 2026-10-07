@@ -345,14 +345,31 @@ describe("Session read state", () => {
 
   test("marks a new task blocker unread, while initial blockers and visible blockers stay seen", () => {
     const store = createSessionReadStateStore();
-    store.observeBlocked(key, true);
+    const observe = (blocked: boolean, readKey: string | null = key) =>
+      store.observeTaskBlocks("alpha", [{ taskId: "task", blocked, readKey }]);
+    observe(true);
     expect(store.isUnread(key)).toBe(false);
-    store.observeBlocked(key, false);
-    store.observeBlocked(key, true);
+    observe(false);
+    observe(true);
     expect(store.isUnread(key)).toBe(true);
     store.setVisibleKey(key);
-    store.observeBlocked(key, false);
-    store.observeBlocked(key, true);
+    observe(false);
+    observe(true);
+    expect(store.isUnread(key)).toBe(false);
+
+    store.setVisibleKey(null);
+    observe(false);
+    observe(true, null);
+    expect(store.isUnread(key)).toBe(false);
+    observe(true);
+    expect(store.isUnread(key)).toBe(true);
+
+    const otherKey = sessionReadStateKey("beta", identity);
+    store.observeTaskBlocks("beta", [{ taskId: "task", blocked: true, readKey: otherKey }]);
+    expect(store.isUnread(otherKey)).toBe(false);
+    store.setUnread(key, false);
+    store.observeTaskBlocks("alpha", []);
+    observe(true);
     expect(store.isUnread(key)).toBe(false);
   });
 });

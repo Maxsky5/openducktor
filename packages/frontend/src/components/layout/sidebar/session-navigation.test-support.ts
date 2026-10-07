@@ -167,6 +167,7 @@ export const navigationModel = (
     entryCount: orderedGroups.reduce((count, group) => count + group.entries.length, 0),
     isLoading: false,
     issues: [],
+    taskBlocks: [],
     ...overrides,
   };
 };

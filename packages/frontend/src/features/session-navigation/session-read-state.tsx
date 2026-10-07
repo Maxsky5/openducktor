@@ -21,6 +21,10 @@ import {
   type SessionReadStateStore,
 } from "./session-read-state-store";
 import { useVisibleSessionReadKey } from "./visible-session-target";
+import {
+  sessionNavigationTargetKey,
+  type SessionNavigationTarget,
+} from "./session-navigation-target";
 
 const SessionReadStateContext = createContext<SessionReadStateStore | null>(null);
 
@@ -69,25 +73,32 @@ export const useSetSessionUnread = (): ((
   );
 };
 
-/** Mark a task's latest entry unread when a new blocker appears. */
+/** Watch task metadata even when the sidebar has no row for the task. */
 export const useWatchSessionBlockers = (model: SessionNavigationModel): void => {
   const store = useRequiredContext(SessionReadStateContext, "useWatchSessionBlockers");
   useEffect(() => {
-    for (const group of model.groups) {
-      for (const entry of group.entries) {
-        store.observeBlocked(sessionEntryReadKey(entry), entry.attention.includes("blocked"));
-      }
+    for (const snapshot of model.taskBlocks) {
+      store.observeTaskBlocks(
+        snapshot.workspaceId,
+        snapshot.tasks.map(({ taskId, blocked, target }) => ({
+          taskId,
+          blocked,
+          readKey: target ? targetReadKey(target) : null,
+        })),
+      );
     }
   }, [model, store]);
 };
 
 const sessionEntryReadKey = (entry: SessionNavigationEntry): string => {
-  if (entry.target.kind === "task_session") {
-    return sessionReadStateKey(entry.workspace.workspaceId, entry.target.identity);
-  }
   if (entry.context.kind === "workspace") {
     const identity = workspaceSessionIdentity(entry.context.session);
     if (identity) return sessionReadStateKey(entry.workspace.workspaceId, identity);
   }
-  return entry.key;
+  return targetReadKey(entry.target);
 };
+
+const targetReadKey = (target: SessionNavigationTarget): string =>
+  target.kind === "task_session"
+    ? sessionReadStateKey(target.workspaceId, target.identity)
+    : sessionNavigationTargetKey(target);

@@ -21,7 +21,10 @@ export type SessionReadStateStore = {
   setUnread(key: string, value: boolean): void;
   setVisibleKey(key: string | null): void;
   observeLiveSnapshot(snapshot: WorkspaceSessionLiveSnapshot): void;
-  observeBlocked(key: string, blocked: boolean): void;
+  observeTaskBlocks(
+    workspaceId: string,
+    tasks: readonly { taskId: string; blocked: boolean; readKey: string | null }[],
+  ): void;
 };
 
 /**
@@ -32,7 +35,7 @@ export const createSessionReadStateStore = (): SessionReadStateStore => {
   const listeners = new Set<() => void>();
   const unread = new Set<string>();
   const baselinesByWorkspace = new Map<string, Map<string, Baseline>>();
-  const blockedByKey = new Map<string, boolean>();
+  const blockedByWorkspace = new Map<string, Map<string, boolean>>();
   let visibleKey: string | null = null;
 
   const emit = (): void => {
@@ -99,10 +102,24 @@ export const createSessionReadStateStore = (): SessionReadStateStore => {
       }
       if (changed) emit();
     },
-    observeBlocked(key, blocked) {
-      const before = blockedByKey.get(key);
-      blockedByKey.set(key, blocked);
-      if (before === false && blocked && markUnread(key)) emit();
+    observeTaskBlocks(workspaceId, tasks) {
+      const baselines = blockedByWorkspace.get(workspaceId) ?? new Map<string, boolean>();
+      const current = new Set(tasks.map((task) => task.taskId));
+      let changed = false;
+      for (const task of tasks) {
+        // Keep the prior state until the session list confirms which row owns the blocker.
+        if (task.blocked && task.readKey === null) continue;
+        const before = baselines.get(task.taskId);
+        baselines.set(task.taskId, task.blocked);
+        if (before === false && task.blocked && task.readKey !== null) {
+          if (markUnread(task.readKey)) changed = true;
+        }
+      }
+      for (const taskId of baselines.keys()) {
+        if (!current.has(taskId)) baselines.delete(taskId);
+      }
+      blockedByWorkspace.set(workspaceId, baselines);
+      if (changed) emit();
     },
   };
 };
