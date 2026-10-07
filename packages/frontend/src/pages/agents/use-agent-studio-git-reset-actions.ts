@@ -1,7 +1,7 @@
 import type { GitResetWorktreeSelection } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { AgentStudioPendingReset, GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { host } from "@/state/operations/shared/host";
 import {
   CONFLICT_LOCK_REASON,
@@ -12,6 +12,7 @@ import {
 type UseAgentStudioGitResetActionsArgs = {
   repoPath: string | null;
   workingDir: string | null;
+  branchIdentityKey: string | null;
   targetBranch: string;
   hashVersion: number | null;
   statusHash: string | null;
@@ -27,6 +28,7 @@ type UseAgentStudioGitResetActionsArgs = {
 export function useAgentStudioGitResetActions({
   repoPath,
   workingDir,
+  branchIdentityKey,
   targetBranch,
   hashVersion,
   statusHash,
@@ -39,21 +41,24 @@ export function useAgentStudioGitResetActions({
   setResetError,
 }: UseAgentStudioGitResetActionsArgs) {
   const [isResetting, setIsResetting] = useState(false);
-  const [pendingReset, setPendingReset] = useState<AgentStudioPendingReset | null>(null);
-  const [resetSnapshotKey, setResetSnapshotKey] = useState<string | null>(
-    worktreeStatusSnapshotKey,
-  );
+  const scopeKey = JSON.stringify([repoPath, workingDir, branchIdentityKey, targetBranch]);
+  const [pending, setPending] = useState<{
+    scopeKey: string;
+    request: Parameters<typeof host.gitResetWorktreeSelection>[0];
+  } | null>(null);
+  const request = pending?.scopeKey === scopeKey ? pending.request : null;
+  const pendingReset = request?.selection ?? null;
 
-  if (worktreeStatusSnapshotKey == null) {
-    if (resetSnapshotKey !== null) {
-      setResetSnapshotKey(null);
-    }
-  } else if (resetSnapshotKey !== worktreeStatusSnapshotKey) {
-    const previousSnapshotKey = resetSnapshotKey;
-    setResetSnapshotKey(worktreeStatusSnapshotKey);
-    if (previousSnapshotKey !== null) {
+  const [lastSnapshot, setLastSnapshot] = useState({ scopeKey, key: worktreeStatusSnapshotKey });
+  if (lastSnapshot.scopeKey !== scopeKey || lastSnapshot.key !== worktreeStatusSnapshotKey) {
+    setLastSnapshot({ scopeKey, key: worktreeStatusSnapshotKey });
+    if (
+      lastSnapshot.scopeKey === scopeKey &&
+      lastSnapshot.key !== null &&
+      worktreeStatusSnapshotKey !== null
+    ) {
       setResetError(null);
-      setPendingReset(null);
+      if (request) setPending(null);
     }
   }
 
@@ -136,9 +141,9 @@ export function useAgentStudioGitResetActions({
       }
 
       setResetError(null);
-      setPendingReset(selection);
+      setPending({ scopeKey, request: built.request });
     },
-    [buildResetRequest, setResetError],
+    [buildResetRequest, scopeKey, setResetError],
   );
 
   const requestFileReset = useCallback(
@@ -156,11 +161,13 @@ export function useAgentStudioGitResetActions({
   );
 
   const confirmReset = useCallback(async (): Promise<void> => {
-    if (pendingReset == null) {
+    if (request == null) {
       return;
     }
 
-    const built = buildResetRequest(pendingReset);
+    const selection = request.selection;
+    // Check current availability, but send the snapshot the user approved.
+    const built = buildResetRequest(selection);
     if ("error" in built) {
       setResetError(built.error);
       toast.error("Reset failed", { description: built.error });
@@ -170,11 +177,11 @@ export function useAgentStudioGitResetActions({
     setIsResetting(true);
     setResetError(null);
     try {
-      const result = await host.gitResetWorktreeSelection(built.request);
+      const result = await host.gitResetWorktreeSelection(request);
       clearActionErrors();
-      setPendingReset(null);
+      setPending(null);
       const affectedCount = result.affectedPaths.length;
-      toast.success(pendingReset.kind === "file" ? "File reset" : "Hunk reset", {
+      toast.success(selection.kind === "file" ? "File reset" : "Hunk reset", {
         description:
           affectedCount === 1
             ? result.affectedPaths[0]
@@ -197,10 +204,10 @@ export function useAgentStudioGitResetActions({
     } finally {
       setIsResetting(false);
     }
-  }, [buildResetRequest, clearActionErrors, pendingReset, refreshDiffData, setResetError]);
+  }, [buildResetRequest, clearActionErrors, request, refreshDiffData, setResetError]);
 
   const cancelReset = useCallback((): void => {
-    setPendingReset(null);
+    setPending(null);
     setResetError(null);
   }, [setResetError]);
 

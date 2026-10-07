@@ -290,9 +290,13 @@ Rules:
 - The chat header reads the git conflict from the page shell. Do not send right panel state to the page shell from an effect.
 - The workflow model builds the git conflict quick action. The header model hook adds it while the git actions report a conflict.
 - Show the git conflict quick action only while the right panel is open. Git data does not refresh while the panel is closed.
-- Keep git state through a right panel toggle, so a running git action keeps its result.
-- Show a force push confirmation or a local git conflict only in the worktree where its git action ran. This state stays when the user selects another task.
+- Keep git state through a right panel toggle or a Git tab close, so a running git action keeps its result. Both session kinds use `pages/agents/use-agent-studio-git-actions.ts`. Task workflow policy stays in the task adapter.
+- Show action errors, a force push confirmation, or a local git conflict only in the repository and working directory where the action ran. Pull/rebase confirmations also belong to the original branch identity. Reset confirmations also belong to the original branch identity, comparison target, and displayed snapshot.
 - Keep the dev server in the right panel, so its output does not render the page shell again.
+
+`pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
+
+Dynamic tabs in `openduckto-k0u1t` must keep this hook in the session shell. Closing or hiding the Git tab must only unmount its view. Conflict assistance must use the same controller and keep task workflow policy in the task adapter.
 
 ## Composer
 

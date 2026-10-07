@@ -2,18 +2,17 @@ import type { DevServerOwner, GitComparisonTarget, GitTargetBranch } from "@open
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import {
-  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
   useEffectEvent,
   useMemo,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
-import { useAgentStudioDiffData } from "@/features/agent-studio-git";
-import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
+import { collectUnmergedFilePaths, useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
@@ -28,6 +27,7 @@ import type {
   TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
+import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { WorkspaceSessionGitTools } from "./workspace-session-git-tools";
 
 export type WorkspaceToolsTabId = "git" | "file_explorer";
@@ -35,17 +35,8 @@ type WorkspaceRefreshMode = "hard" | "soft" | "scheduled";
 
 const missingWorkingDirectoryReason = "The selected working directory is unavailable.";
 
-export function WorkspaceSessionToolsPanel(props: WorkspaceSessionToolsProps): ReactElement {
-  // Pending refreshes and tool state belong to this working directory.
-  return (
-    <WorkspaceSessionTools
-      key={JSON.stringify([props.repoPath, props.workingDirectory])}
-      {...props}
-    />
-  );
-}
-
 type WorkspaceSessionToolsProps = {
+  isVisible: boolean;
   repoPath: string;
   workspaceId: string;
   sessionId: string;
@@ -61,12 +52,13 @@ type WorkspaceSessionToolsProps = {
   onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
-  onRefreshReady: (refresh: ((scope: "git" | "all") => Promise<void>) | null) => void;
   /** Replaces the read-only repository branch label for a repository-root session. */
   repositoryBranchControl?: ReactNode;
 };
 
-function WorkspaceSessionTools({
+/** The session shell owns this hook even when the tools view unmounts. */
+export function useWorkspaceSessionTools({
+  isVisible,
   repoPath,
   workspaceId,
   sessionId,
@@ -82,20 +74,15 @@ function WorkspaceSessionTools({
   onActiveTabChange,
   selectedFile,
   onSelectFile,
-  onRefreshReady,
   repositoryBranchControl,
-}: WorkspaceSessionToolsProps): ReactElement {
+}: WorkspaceSessionToolsProps) {
   const devServerOwner = useMemo<DevServerOwner>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
   );
-  const devServerModel = useAgentStudioDevServerPanel({
-    repoPath,
-    owner: devServerOwner,
-    enabled: true,
-  });
   const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
     useWorkspaceSessionComparison({
+      isVisible,
       repoPath,
       workingDirectory,
       target,
@@ -108,7 +95,7 @@ function WorkspaceSessionTools({
     repoPath: workingDirectory ? repoPath : null,
     worktreePath: workingDirectory,
     worktreeResolutionTaskId: null,
-    shouldBlockDiffLoading: workingDirectory === null || !isReady,
+    shouldBlockDiffLoading: !isVisible || workingDirectory === null || !isReady,
     isWorktreeResolutionResolving: false,
     worktreeResolutionError: null,
     retryWorktreeResolution,
@@ -134,23 +121,63 @@ function WorkspaceSessionTools({
     readBranch,
     refresh,
   });
-  useEffect(() => {
-    onRefreshReady((scope) => refresh("soft", scope === "all"));
-    return () => onRefreshReady(null);
-  }, [onRefreshReady, refresh]);
+  const refreshTools = useCallback(
+    (scope: "git" | "all") => refresh("soft", scope === "all"),
+    [refresh],
+  );
   const refreshWhenVisible = useEffectEvent(() => {
     if (document.visibilityState === "visible") void refresh("scheduled");
   });
   useEffect(() => {
-    if (!workingDirectory) return;
+    if (!isVisible || !workingDirectory) return;
     globalThis.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       globalThis.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [workingDirectory]);
-  const refreshDiffData = useCallback(() => refresh("soft"), [refresh]);
+  }, [isVisible, workingDirectory]);
+  const queryClient = useQueryClient();
+  const viewRef = useRef({ isVisible, repoPath, workingDirectory, branchKey, refresh });
+  useLayoutEffect(() => {
+    viewRef.current = { isVisible, repoPath, workingDirectory, branchKey, refresh };
+  }, [isVisible, repoPath, workingDirectory, branchKey, refresh]);
+  const refreshDiffData = useCallback(async () => {
+    // Completion invalidates the original directory. Only the current visible view reads again.
+    if (workingDirectory) {
+      await invalidateGitWorkingDirectoryQueries(queryClient, repoPath, workingDirectory);
+    }
+    const current = viewRef.current;
+    if (
+      current.isVisible &&
+      current.repoPath === repoPath &&
+      current.workingDirectory === workingDirectory &&
+      current.branchKey === branchKey
+    ) {
+      await current.refresh("soft");
+    }
+  }, [branchKey, queryClient, repoPath, workingDirectory]);
+  const conflictedFiles = useMemo(
+    () => collectUnmergedFilePaths(diffData.fileStatuses),
+    [diffData.fileStatuses],
+  );
+  const actions = useAgentStudioGitActions({
+    repoPath: workingDirectory ? repoPath : null,
+    workingDir: workingDirectory,
+    branch: branchReady ? diffData.branch : null,
+    branchIdentityKey: branchKey,
+    targetBranch: resolvedTarget ?? "",
+    resetTargetBranch: resolvedTarget ?? "HEAD",
+    hashVersion: diffData.hashVersion,
+    statusHash: diffData.statusHash,
+    diffHash: diffData.diffHash,
+    upstreamAheadBehind: diffData.upstreamAheadBehind,
+    detectedConflict: diffData.gitConflict ?? null,
+    detectedConflictedFiles: conflictedFiles,
+    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
+    refreshDiffData,
+    isDiffDataLoading: diffData.isLoading || !branchReady,
+  });
   const fileModel = {
     ...workspaceFileModel({
       workingDirectory,
@@ -163,11 +190,13 @@ function WorkspaceSessionTools({
     }),
     branchKey,
   };
-  return (
+  const toolsContent = (
     <WorkspaceSessionGitTools
-      key={branchKey}
+      key={JSON.stringify([repoPath, workingDirectory, branchKey])}
       subjectKey={JSON.stringify([workspaceId, sessionId])}
       repoPath={repoPath}
+      devServerOwner={devServerOwner}
+      actions={actions}
       diffData={diffData}
       contextMode={contextMode}
       repositoryBranchControl={repositoryBranchControl}
@@ -177,7 +206,6 @@ function WorkspaceSessionTools({
       workingDirectory={workingDirectory}
       isFetchingTarget={isFetchingTarget || isWaitingForBranch}
       refresh={manualRefresh}
-      refreshDiffData={refreshDiffData}
       tools={{
         tabs: [
           {
@@ -193,10 +221,10 @@ function WorkspaceSessionTools({
         tabListLabel: "Workspace session tools",
         testIdPrefix: "workspace-session-tools",
         headerActions: null,
-        devServerModel,
       }}
     />
   );
+  return { toolsContent, refresh: isVisible ? refreshTools : null };
 }
 
 const retryWorktreeResolution = (): void => undefined;
@@ -497,6 +525,7 @@ type WorkspaceComparison = {
 };
 
 function useWorkspaceSessionComparison(input: {
+  isVisible: boolean;
   repoPath: string;
   workingDirectory: string | null;
   target: GitTargetBranch | null;
@@ -504,7 +533,10 @@ function useWorkspaceSessionComparison(input: {
   branchKey: string;
   branchReady: boolean;
 }): WorkspaceComparison {
-  const { repoPath, workingDirectory, target, targetError, branchKey, branchReady } = input;
+  const { isVisible, repoPath, workingDirectory, target, targetError, branchKey, branchReady } =
+    input;
+  const hasComparisonTarget =
+    branchReady && Boolean(workingDirectory) && target !== null && targetError === null;
   const comparison = useQuery({
     ...gitComparisonTargetQueryOptions(
       repoPath,
@@ -512,15 +544,10 @@ function useWorkspaceSessionComparison(input: {
       target ?? { branch: "HEAD" },
       branchKey,
     ),
-    enabled: branchReady && workingDirectory !== null && target !== null && targetError === null,
+    enabled: isVisible && hasComparisonTarget,
   });
   const resolvedTarget =
-    branchReady &&
-    workingDirectory &&
-    target &&
-    !targetError &&
-    !comparison.isError &&
-    comparison.data?.kind === "available"
+    hasComparisonTarget && !comparison.isError && comparison.data?.kind === "available"
       ? comparison.data.reference
       : null;
   return {

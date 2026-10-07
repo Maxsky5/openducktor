@@ -7,11 +7,18 @@ import { SettingsModalProvider } from "@/components/features/settings/settings-m
 import { buildState } from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { WorkspaceSessionToolsPanel } from "./workspace-session-tools-panel";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
+
+function ToolsOwner(props: Parameters<typeof useWorkspaceSessionTools>[0]) {
+  const { toolsContent } = useWorkspaceSessionTools(props);
+  return props.isVisible ? toolsContent : null;
+}
 
 test.each(["directory", "branch"] as const)(
-  "drops a pending Git confirmation when its %s changes",
+  "scopes a pending Git confirmation when its %s changes",
   async (change) => {
     const status = (workingDir = "/repo/a"): GitWorktreeStatus => ({
       currentBranch: { name: "feature", detached: false },
@@ -63,16 +70,22 @@ test.each(["directory", "branch"] as const)(
       }),
     );
     const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
     const panel = (
       sessionId: string,
       workingDirectory: string,
       branchKey: string,
       activeTabId: "git" | "file_explorer" = "git",
+      isVisible = true,
     ) => (
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <SettingsModalProvider>
-            <WorkspaceSessionToolsPanel
+            <ToolsOwner
+              isVisible={isVisible}
               repoPath="/repo"
               workspaceId="workspace"
               sessionId={sessionId}
@@ -88,7 +101,6 @@ test.each(["directory", "branch"] as const)(
               onActiveTabChange={() => {}}
               selectedFile={null}
               onSelectFile={() => {}}
-              onRefreshReady={() => {}}
             />
           </SettingsModalProvider>
         </ThemeProvider>
@@ -108,6 +120,10 @@ test.each(["directory", "branch"] as const)(
       expect(Boolean(screen.queryByRole("dialog", { name: "Confirm pull with rebase" }))).toBe(
         true,
       );
+      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "git", false));
+      expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
+      rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
+      expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
       rendered.rerender(panel("session-b", "/repo/a", "branch:feature"));
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
       const nextDirectory = change === "directory" ? "/repo/b" : "/repo/a";
@@ -128,8 +144,11 @@ test.each(["directory", "branch"] as const)(
       );
       expect(pull).toHaveBeenCalledWith("/repo", nextDirectory);
     } finally {
-      rendered.unmount();
-      queryClient.clear();
+      await act(async () => {
+        rendered.unmount();
+        await queryClient.cancelQueries();
+        queryClient.clear();
+      });
       configureShellBridge(createUnavailableShellBridge());
     }
   },

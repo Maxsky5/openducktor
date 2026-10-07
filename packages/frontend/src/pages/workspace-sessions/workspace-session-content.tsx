@@ -1,11 +1,19 @@
 import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import {
-  WorkspaceSessionToolsPanel,
+  useWorkspaceSessionTools,
   type WorkspaceToolsTabId,
-} from "@/components/features/agents/workspace-session-tools-panel";
+} from "@/components/features/agents/use-workspace-session-tools";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
@@ -86,12 +94,6 @@ export function WorkspaceSessionContent({
     record.executionTarget.kind === "local_worktree" && repoConfig.isError
       ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
       : null;
-  const onRefreshReady = useCallback(
-    (refresh: ((scope: "git" | "all") => Promise<void>) | null) => {
-      refreshRef.current = refresh;
-    },
-    [],
-  );
   const refreshAfterChange = useCallback(
     (scope: "git" | "all") => {
       if (isWorktree || scope === "all") refreshBranch();
@@ -166,27 +168,31 @@ export function WorkspaceSessionContent({
       </div>
     </div>
   );
-  const toolsContent = (
-    <WorkspaceSessionToolsPanel
-      repoPath={workspace.repoPath}
-      workspaceId={workspace.workspaceId}
-      sessionId={record.id}
-      workingDirectory={workingDirectory}
-      contextMode={record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree"}
-      repositoryBranchControl={<RepositoryBranchSwitcher layout="inline" />}
-      branchKey={branchKey}
-      branchReady={branchReady}
-      target={target}
-      targetError={targetError}
-      readBranch={readBranch}
-      retryTarget={retryTarget}
-      activeTabId={panelState.activeTabId}
-      onActiveTabChange={onActiveTabChange}
-      selectedFile={panelState.selectedFile}
-      onSelectFile={onSelectFile}
-      onRefreshReady={onRefreshReady}
-    />
-  );
+  const { toolsContent, refresh: refreshTools } = useWorkspaceSessionTools({
+    isVisible: panelState.isOpen,
+    repoPath: workspace.repoPath,
+    workspaceId: workspace.workspaceId,
+    sessionId: record.id,
+    workingDirectory,
+    contextMode: record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree",
+    repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
+    branchKey,
+    branchReady,
+    target,
+    targetError,
+    readBranch,
+    retryTarget,
+    activeTabId: panelState.activeTabId,
+    onActiveTabChange,
+    selectedFile: panelState.selectedFile,
+    onSelectFile,
+  });
+  useLayoutEffect(() => {
+    refreshRef.current = refreshTools;
+    return () => {
+      refreshRef.current = null;
+    };
+  }, [refreshTools]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
       <WorkspaceSessionPaneLayout

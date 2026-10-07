@@ -10,6 +10,7 @@ type CommitComposerProps = {
   isCommitting: boolean;
   isPushing: boolean;
   isRebasing: boolean;
+  isResetting: boolean;
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
   commitError: string | null;
@@ -22,13 +23,15 @@ export const CommitComposer = memo(function CommitComposer({
   isCommitting,
   isPushing,
   isRebasing,
+  isResetting,
   isGitActionsLocked,
   gitActionsLockReason,
   commitError,
   commitAll,
 }: CommitComposerProps): ReactElement {
   const [commitMessage, setCommitMessage] = useState("");
-  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const copy = getCopy(isGitActionsLocked, gitActionsLockReason, hasUncommittedFiles);
+  const isAnyActionInFlight = isCommitting || isPushing || isRebasing || isResetting;
   const canWrite = commitAll != null && !isAnyActionInFlight && !isGitActionsLocked;
   const canCommit = canWrite && hasUncommittedFiles && commitMessage.trim().length > 0;
 
@@ -62,26 +65,14 @@ export const CommitComposer = memo(function CommitComposer({
       <Textarea
         value={commitMessage}
         onChange={(event) => setCommitMessage(event.currentTarget.value)}
-        placeholder={
-          isGitActionsLocked
-            ? (gitActionsLockReason ?? "Git actions are disabled.")
-            : hasUncommittedFiles
-              ? "Describe what changed and why"
-              : "No uncommitted files to commit"
-        }
+        placeholder={copy.placeholder}
         className="min-h-20 resize-none border-input"
         disabled={!canWrite}
         data-testid="agent-studio-git-commit-message-input"
       />
 
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-sidebar-foreground/70">
-          {isGitActionsLocked
-            ? (gitActionsLockReason ?? "Git actions are disabled.")
-            : hasUncommittedFiles
-              ? "This action commits all listed changes in one go."
-              : "Make a change first, then write a commit message."}
-        </p>
+        <p className="text-[11px] text-sidebar-foreground/70">{copy.hint}</p>
         <Button
           type="button"
           size="sm"
@@ -103,3 +94,24 @@ export const CommitComposer = memo(function CommitComposer({
     </div>
   );
 });
+
+function getCopy(
+  isGitActionsLocked: boolean,
+  gitActionsLockReason: string | null,
+  hasUncommittedFiles: boolean,
+) {
+  if (isGitActionsLocked) {
+    const reason = gitActionsLockReason ?? "Git actions are disabled.";
+    return { placeholder: reason, hint: reason };
+  }
+  if (hasUncommittedFiles) {
+    return {
+      placeholder: "Describe what changed and why",
+      hint: "This action commits all listed changes in one go.",
+    };
+  }
+  return {
+    placeholder: "No uncommitted files to commit",
+    hint: "Make a change first, then write a commit message.",
+  };
+}
