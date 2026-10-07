@@ -331,10 +331,13 @@ describe("SQLite Workspace Session store", () => {
         )
       ).manualTitle,
     ).toBe(importedTitle);
+    const generatedTitle =
+      "For testing, ask me any question about this workspace and show the complete session title without cutting it off early.";
     const generated = await Effect.runPromise(
-      repository.setGeneratedTitle({ ...ref(), generatedTitle: "Generated title" }),
+      repository.setGeneratedTitle({ ...ref(), generatedTitle }),
     );
     expect(generated.updatedAt).toBe(1);
+    expect((await Effect.runPromise(repository.get(ref()))).generatedTitle).toBe(generatedTitle);
     expect(
       (
         await Effect.runPromise(

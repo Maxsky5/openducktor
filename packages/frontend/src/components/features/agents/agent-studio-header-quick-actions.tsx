@@ -1,7 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
-import { ChevronDown, MessageCirclePlus, Zap } from "lucide-react";
+import { MessageCirclePlus, Zap } from "lucide-react";
 import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -11,6 +10,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SessionActionButton, SessionActionMenuTrigger } from "./session-action-button";
 import type {
   AgentSessionCreateOption,
   AgentStudioQuickActionOption,
@@ -165,7 +166,6 @@ export function QuickActionsMenu({
   onPrepareMessageFirstSession,
   onResolveGitConflictQuickAction,
 }: QuickActionsMenuProps): ReactElement {
-  const triggerTitle = primaryAction ? `Quick actions · ${primaryAction.label}` : "Quick actions";
   const sessionStartBlockedReason = isCreatingSession
     ? "Session start is already in progress."
     : null;
@@ -178,6 +178,14 @@ export function QuickActionsMenu({
   const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
   const isMenuOpen = isOpen && canOpenActionsMenu;
   const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
+  const primaryActionHint = primaryAction
+    ? (getQuickActionBlockedReason({
+        option: primaryAction,
+        agentStudioReady,
+        sessionStartBlockedReason,
+        onResolveGitConflictQuickAction,
+      }) ?? primaryAction.label)
+    : "No quick action is available for this task.";
 
   const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
     if (
@@ -209,39 +217,45 @@ export function QuickActionsMenu({
 
   return (
     <div className="flex items-center gap-0">
-      <Button
-        type="button"
-        variant="accent"
-        size="sm"
-        className="h-9 max-w-48 gap-2 rounded-r-none px-3"
-        disabled={!canRunPrimaryAction}
-        title={triggerTitle}
-        aria-label={
-          primaryAction ? `Run quick action: ${primaryAction.label}` : "Run primary quick action"
-        }
-        onClick={() => {
-          if (primaryAction) {
-            selectMenuEntry({ kind: "quick_action", option: primaryAction });
-          }
-        }}
-      >
-        <Zap className="size-4 text-amber-400 dark:text-amber-500" />
-        <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <SessionActionButton
+              disabled={!canRunPrimaryAction}
+              aria-label={
+                primaryAction
+                  ? `Run quick action: ${primaryAction.label}`
+                  : "Run primary quick action"
+              }
+              onClick={() => {
+                if (primaryAction) {
+                  selectMenuEntry({ kind: "quick_action", option: primaryAction });
+                }
+              }}
+            >
+              <Zap className="size-3.5" aria-hidden="true" />
+              <span className="truncate @max-[640px]/session-header:hidden">
+                {primaryAction?.label ?? "Actions"}
+              </span>
+            </SessionActionButton>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-64">
+          {primaryActionHint}
+        </TooltipContent>
+      </Tooltip>
       <Popover open={isMenuOpen} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="accent"
-            size="sm"
-            className="h-9 rounded-l-none border-l border-sidebar-border/70 px-2"
-            disabled={!canOpenActionsMenu}
-            title="Open quick actions menu"
-            aria-label="Open quick actions menu"
-          >
-            <ChevronDown className="size-3.5 opacity-80" />
-          </Button>
-        </PopoverTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <SessionActionMenuTrigger
+                disabled={!canOpenActionsMenu}
+                aria-label="Open quick actions menu"
+              />
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Quick actions</TooltipContent>
+        </Tooltip>
         <PopoverContent align="end" className="w-96 p-0">
           <Command>
             <CommandInput

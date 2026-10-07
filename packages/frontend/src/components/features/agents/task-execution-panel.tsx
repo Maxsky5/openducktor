@@ -2,7 +2,6 @@ import { FileText, FolderTree, GitBranch, ListChecks } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
-import { OpenInMenu } from "./agent-studio-git-panel/open-in-menu";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import {
@@ -100,19 +99,9 @@ export function TaskExecutionPanel({ model }: { model: TaskExecutionPanelModel }
         onActiveTabChange: model.onActiveTabChange,
         tabListLabel: "Task execution sections",
         testIdPrefix: "task-execution",
-        headerActions: (
-          <>
-            {gitModel.pullRequest ? (
-              <TaskPullRequestLink pullRequest={gitModel.pullRequest} className="shrink-0" />
-            ) : null}
-            <OpenInMenu
-              contextMode={gitModel.contextMode ?? "worktree"}
-              targetPath={gitModel.openInTargetPath ?? null}
-              disabledReason={gitModel.openInDisabledReason ?? null}
-              onOpenInTool={gitModel.openDirectoryInTool}
-            />
-          </>
-        ),
+        headerActions: gitModel.pullRequest ? (
+          <TaskPullRequestLink pullRequest={gitModel.pullRequest} className="shrink-0" />
+        ) : null,
         devServerModel: model.devServerModel,
       }}
     />

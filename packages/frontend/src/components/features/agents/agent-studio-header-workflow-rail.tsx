@@ -222,7 +222,7 @@ function WorkflowStepButton({
         "border transition-none cursor-pointer",
         compact
           ? "h-7 min-w-0 flex-1 gap-1 rounded-md px-1.5 text-[11px] [&_svg]:size-3 [&_svg]:shrink-0"
-          : "h-9 shrink-0 gap-2 rounded-lg px-4 text-sm @max-[480px]/workflow:px-1.5",
+          : "h-9 shrink-0 gap-2 rounded-lg px-4 text-sm @max-[480px]/workflow:gap-1 @max-[480px]/workflow:px-1.5 @max-[480px]/workflow:text-xs @max-[480px]/workflow:[&_svg]:size-3",
         workflowStepClassName(step.state),
         AGENT_WORKFLOW_TONE_TEXT_CLASSES[step.state.tone],
         workflowBorderStyleClassName(step.state),
@@ -254,7 +254,10 @@ export function WorkflowRail({
         {steps.map((step, index) => {
           const nextStep = steps[index + 1] ?? null;
           return (
-            <div key={step.role} className="flex min-w-0 items-center gap-2">
+            <div
+              key={step.role}
+              className="flex min-w-0 items-center gap-2 @max-[480px]/workflow:gap-1"
+            >
               <WorkflowStepButton
                 step={step}
                 isSelected={selectedRole === step.role}
@@ -263,7 +266,10 @@ export function WorkflowRail({
               />
               {nextStep ? (
                 <ChevronRight
-                  className={cn("size-4 shrink-0", workflowConnectorClassName(nextStep.state))}
+                  className={cn(
+                    "size-4 shrink-0 @max-[480px]/workflow:size-3",
+                    workflowConnectorClassName(nextStep.state),
+                  )}
                 />
               ) : null}
             </div>

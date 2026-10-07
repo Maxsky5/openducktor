@@ -15,7 +15,7 @@ import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
 import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
-import { WorkspaceSessionHeader } from "./workspace-session-header";
+import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
@@ -36,9 +36,6 @@ export function WorkspaceSessionContent({
   panelState,
   onPanelStateChange: changePanel,
   onSafeToLeave,
-  viewControls,
-  onArchive,
-  isArchiving,
 }: {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
@@ -49,9 +46,6 @@ export function WorkspaceSessionContent({
     update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
   ) => void;
   onSafeToLeave?: () => void;
-  viewControls: ReactNode;
-  onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
-  isArchiving: boolean;
 }) {
   const onPanelStateChange = useCallback(
     (update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>) =>
@@ -61,7 +55,7 @@ export function WorkspaceSessionContent({
   const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const queryClient = useQueryClient();
-  const workingDirectory = sessionWorkingDirectory(workspace, record);
+  const workingDirectory = workspaceSessionWorkingDirectory(workspace, record);
   const isWorktree = record.executionTarget.kind === "local_worktree";
   const branch = useWorkspaceSessionBranch({
     repoPath: workspace.repoPath,
@@ -152,14 +146,6 @@ export function WorkspaceSessionContent({
   );
   const mainContent = (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <WorkspaceSessionHeader
-        key={record.id}
-        workspaceId={workspace.workspaceId}
-        record={record}
-        viewControls={viewControls}
-        onArchive={onArchive}
-        isArchiving={isArchiving}
-      />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {previewContent}
         <div
@@ -229,15 +215,6 @@ export function WorkspaceSessionReadModelNotice() {
       </Button>
     </div>
   );
-}
-
-function sessionWorkingDirectory(
-  workspace: ActiveWorkspace,
-  record: WorkspaceSession,
-): string | null {
-  return record.executionTarget.kind === "local_repo_root"
-    ? workspace.repoPath || null
-    : record.executionTarget.workingDirectory || null;
 }
 
 function WorkspaceSessionPaneLayout({

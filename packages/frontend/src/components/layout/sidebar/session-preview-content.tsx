@@ -1,6 +1,6 @@
 import type { RuntimeWorkingDirectoryRef, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Archive, ArrowUpRight, CircleAlert, MessagesSquare } from "lucide-react";
+import { Archive, ArrowUpRight, Bot, CircleAlert, Folder, MessagesSquare } from "lucide-react";
 import { useMemo, type ReactElement } from "react";
 import { WorkflowRailPreview } from "@/components/features/agents/agent-studio-header-workflow-rail";
 import { TaskHeaderBadges } from "@/components/features/tasks/task-header-badges";
@@ -18,6 +18,7 @@ import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import { cn } from "@/lib/utils";
 import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
 import { createHostRuntimeCatalogOperations } from "@/state/operations/shared/runtime-catalog";
+import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   resolveRuntimeCatalogSurface,
   runtimeCatalogQueryOptions,
@@ -123,6 +124,9 @@ function SessionPreviewHeader({
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
   const customRole = workspaceSession?.roleSnapshot;
+  const workingDirectory = workspaceSession
+    ? workspaceSessionWorkingDirectory(entry.workspace, workspaceSession)
+    : null;
   return (
     <header className="space-y-3 p-4 pb-3">
       <div className="flex items-start gap-3">
@@ -135,10 +139,22 @@ function SessionPreviewHeader({
             <div
               role="group"
               aria-label="Custom role"
-              className="truncate text-xs font-medium text-muted-foreground"
-              title={customRole.name}
+              className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground"
             >
-              {customRole.name}
+              <Bot className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">{customRole.name}</span>
+            </div>
+          ) : null}
+          {workspaceSession ? (
+            <div
+              role="group"
+              aria-label="Working directory"
+              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+            >
+              <Folder className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-all">
+                {workingDirectory ?? "Working directory unavailable"}
+              </span>
             </div>
           ) : null}
         </div>

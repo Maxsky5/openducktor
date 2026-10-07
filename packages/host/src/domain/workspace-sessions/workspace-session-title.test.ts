@@ -44,23 +44,28 @@ test("uses visible text, reference labels, and attachment names without hidden i
 test("limits titles at a word boundary with a complete ellipsis", () => {
   const title = buildWorkspaceSessionTitle(
     message([
-      { kind: "text", text: "Investigate the Workspace Session creation failure in the host" },
+      {
+        kind: "text",
+        text: "Investigate all Workspace Session creation failures in the host and preserve the full session title in the header during runtime startup and shutdown.",
+      },
     ]),
   );
-  expect(title).toBe("Investigate the Workspace Session…");
-  expect(title!.length).toBeLessThanOrEqual(40);
+  expect(title).toBe(
+    "Investigate all Workspace Session creation failures in the host and preserve the full session title in the header…",
+  );
+  expect(title!.length).toBeLessThanOrEqual(120);
 });
 
 test("retains exact-limit titles and safely cuts long single words and emoji", () => {
-  const exact = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(40) }]));
-  expect(exact).toBe("a".repeat(40));
-  expect(exact!.length).toBe(40);
-  const singleWord = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(41) }]));
-  expect(singleWord).toBe(`${"a".repeat(39)}…`);
-  expect(singleWord!.length).toBe(40);
-  const emoji = buildWorkspaceSessionTitle(message([{ kind: "text", text: "😀".repeat(25) }]));
-  expect(emoji).toBe(`${"😀".repeat(19)}…`);
-  expect(emoji!.length).toBeLessThanOrEqual(40);
+  const exact = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(120) }]));
+  expect(exact).toBe("a".repeat(120));
+  expect(exact!.length).toBe(120);
+  const singleWord = buildWorkspaceSessionTitle(message([{ kind: "text", text: "a".repeat(121) }]));
+  expect(singleWord).toBe(`${"a".repeat(119)}…`);
+  expect(singleWord!.length).toBe(120);
+  const emoji = buildWorkspaceSessionTitle(message([{ kind: "text", text: "😀".repeat(65) }]));
+  expect(emoji).toBe(`${"😀".repeat(59)}…`);
+  expect(emoji!.length).toBeLessThanOrEqual(120);
 });
 
 test("does not invent a title for empty visible content", () => {

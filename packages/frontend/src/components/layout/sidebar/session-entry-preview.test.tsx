@@ -311,9 +311,12 @@ describe("Sidebar session previews", () => {
     expect(history).not.toHaveBeenCalled();
   });
 
-  test.each(["Code reviewer", null])(
-    "shows a workspace session's saved custom role only when present: %s",
-    async (roleName) => {
+  test.each([
+    ["local_repo_root", "Code reviewer"],
+    ["local_worktree", null],
+  ] as const)(
+    "shows the %s working directory and saved custom role in a workspace preview",
+    async (kind, roleName) => {
       const entry = workspaceSessionEntry("workspace-chat", {
         workspace: betaWorkspace,
         title: "Ship sign in",
@@ -322,7 +325,15 @@ describe("Sidebar session previews", () => {
       entry.context.session = {
         ...entry.context.session,
         externalSessionId: ref.externalSessionId,
-        executionTarget: { kind: "local_repo_root", workingDirectory: ref.workingDirectory },
+        executionTarget:
+          kind === "local_repo_root"
+            ? { kind, workingDirectory: "/old/repo" }
+            : {
+                kind,
+                workingDirectory: ref.workingDirectory,
+                branchName: "chat",
+                worktreeState: "present",
+              },
         roleSnapshot: roleName
           ? { id: "reviewer", name: roleName, systemPrompt: "Private role instructions" }
           : null,
@@ -331,6 +342,9 @@ describe("Sidebar session previews", () => {
       const preview = await openPreview(row);
       const role = within(preview).queryByLabelText("Custom role");
       expect(role?.textContent ?? null).toBe(roleName);
+      expect(within(preview).getByLabelText("Working directory").textContent).toBe(
+        kind === "local_repo_root" ? betaWorkspace.repoPath : ref.workingDirectory,
+      );
       expect(within(preview).queryByLabelText("Role lane")).toBeNull();
       expect(within(preview).queryByText("Private role instructions")).toBeNull();
       expect(within(preview).queryByText(/AI QA (required|optional)/)).toBeNull();

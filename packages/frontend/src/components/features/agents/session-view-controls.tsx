@@ -1,6 +1,7 @@
 import { SquareTerminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TerminalPanelModel } from "@/features/terminals/use-terminals";
 import {
   SharedToolsPanelToggleButton,
@@ -15,25 +16,29 @@ type SessionViewControlsProps = {
 export function SessionViewControls({ terminal, tools }: SessionViewControlsProps): ReactElement {
   const terminalLabel = terminal.isVisible ? "Hide terminal" : "Show terminal";
   return (
-    <div
-      role="group"
-      aria-label="Session views"
-      className="flex shrink-0 items-center gap-0.5 rounded-md border border-input bg-muted/50 p-0.5 shadow-sm"
-    >
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        className={sharedToolsPanelToggleButtonClassName}
-        aria-label={terminalLabel}
-        aria-pressed={terminal.isVisible}
-        title={terminalLabel}
-        disabled={!terminal.isAvailable}
-        onClick={terminal.onToggle}
-      >
-        <SquareTerminal aria-hidden="true" />
-      </Button>
-      {tools ? <SharedToolsPanelToggleButton {...tools} /> : null}
-    </div>
+    <TooltipProvider>
+      <div role="group" aria-label="Session views" className="flex shrink-0 items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={sharedToolsPanelToggleButtonClassName}
+                aria-label={terminalLabel}
+                aria-pressed={terminal.isVisible}
+                disabled={!terminal.isAvailable}
+                onClick={terminal.onToggle}
+              >
+                <SquareTerminal aria-hidden="true" />
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{terminalLabel}</TooltipContent>
+        </Tooltip>
+        {tools ? <SharedToolsPanelToggleButton {...tools} /> : null}
+      </div>
+    </TooltipProvider>
   );
 }

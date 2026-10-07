@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import {
+  settingsSnapshotSchema,
+  type SystemOpenInToolId,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { WorkspaceSessionRenameDialog } from "./workspace-session-rename-dialog";
@@ -24,6 +29,115 @@ const record = (): WorkspaceSession => ({
 });
 
 describe("Workspace Session metadata UI", () => {
+  test.each([
+    ["local_repo_root", "Reviewer"],
+    ["local_worktree", null],
+  ] as const)(
+    "the top bar exposes metadata in tooltips and copies and opens the %s directory",
+    async (kind, roleName) => {
+      const opened: Array<[string, SystemOpenInToolId]> = [];
+      const copied: string[] = [];
+      const restoreClipboard = replaceNavigatorClipboard(async (value) => {
+        copied.push(value);
+      });
+      const session: WorkspaceSession = {
+        ...record(),
+        roleSnapshot: roleName ? record().roleSnapshot : null,
+        executionTarget:
+          kind === "local_repo_root"
+            ? { kind, workingDirectory: "/old/repo" }
+            : {
+                kind,
+                workingDirectory: "/repo/worktrees/chat",
+                branchName: "chat",
+                worktreeState: "present",
+              },
+      };
+      configureShellBridge(
+        createShellBridgeFixture({
+          client: {
+            workspaceGetSettingsSnapshot: async () =>
+              settingsSnapshotSchema.parse({ theme: "light" }),
+            systemListOpenInTools: async () => [
+              { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
+            ],
+            systemOpenDirectoryInTool: async (path, toolId) => {
+              opened.push([path, toolId]);
+            },
+          },
+        }),
+      );
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <WorkspaceSessionHeader
+            workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
+            record={session}
+            viewControls={null}
+            onArchive={() => {}}
+            isArchiving={false}
+          />
+        </QueryProvider>,
+      );
+      try {
+        const target = kind === "local_repo_root" ? "repository root" : "workspace worktree";
+        const open = await view.findByRole(
+          "button",
+          { name: `Open ${target} in Finder` },
+          { timeout: 800 },
+        );
+        await waitFor(() => expect(open.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+        expect(open.closest("header")).toBe(
+          view.getByRole("heading", { name: "My session" }).closest("header"),
+        );
+        const directory = kind === "local_repo_root" ? "/repo" : "/repo/worktrees/chat";
+        expect(open.closest("header")?.textContent).not.toContain(directory);
+        expect(open.closest("header")?.textContent).not.toContain("Reviewer");
+        const role = view.queryByRole("img", { name: "Custom role" });
+        if (roleName) {
+          expect(role).toBeTruthy();
+          fireEvent.focus(role!);
+          expect((await view.findByRole("tooltip")).textContent).toBe(roleName);
+          fireEvent.blur(role!);
+        } else {
+          expect(role).toBeNull();
+        }
+        const copy = view.getByRole("button", { name: "Copy working directory" });
+        fireEvent.focus(copy);
+        await waitFor(() => expect(view.getByRole("tooltip").textContent).toContain(directory));
+        if (roleName) {
+          // Happy DOM has no layout. These boxes put the role inside the path tooltip's pointer travel area.
+          const trigger = copy.parentElement!;
+          const content = view
+            .getByRole("tooltip")
+            .closest<HTMLElement>('[data-slot="tooltip-content"]')!;
+          trigger.getBoundingClientRect = () => new DOMRect(332, 0, 28, 28);
+          content.getBoundingClientRect = () => new DOMRect(154, 28, 384, 48);
+          fireEvent.pointerLeave(trigger, { pointerType: "mouse", clientX: 332, clientY: 14 });
+          fireEvent.pointerMove(role!, { pointerType: "mouse", clientX: 314, clientY: 14 });
+          await waitFor(() => expect(view.getByRole("tooltip").textContent).toBe(roleName), {
+            timeout: 500,
+          });
+          fireEvent.blur(role!);
+          fireEvent.focus(copy);
+        }
+        await act(async () => {
+          fireEvent.click(copy);
+        });
+        expect(copied).toEqual([directory]);
+        fireEvent.blur(copy);
+        fireEvent.focus(copy);
+        await waitFor(() => expect(view.getByRole("tooltip").textContent).toContain("Copied"));
+        expect(view.getByRole("tooltip").textContent).toContain(directory);
+        fireEvent.click(open);
+        await waitFor(() => expect(opened).toEqual([[directory, "finder"]]), { timeout: 800 });
+      } finally {
+        view.unmount();
+        restoreClipboard();
+        configureShellBridge(createUnavailableShellBridge());
+      }
+    },
+  );
+
   test("rename separates the header, body, and footer with Cancel on the left", () => {
     const view = render(
       <QueryProvider useIsolatedClient>
@@ -78,7 +192,7 @@ describe("Workspace Session metadata UI", () => {
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}
-          workspaceId="A"
+          workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
           record={record()}
         />
       </QueryProvider>,
@@ -88,7 +202,6 @@ describe("Workspace Session metadata UI", () => {
       fireEvent.click(heading);
       expect(view.queryByRole("textbox")).toBeNull();
       const actions = view.getByRole("button", { name: "Session actions" });
-      expect(actions.querySelector("svg.lucide-ellipsis-vertical")).not.toBeNull();
       fireEvent.click(actions);
       fireEvent.click(await view.findByRole("button", { name: "Rename" }, { timeout: 800 }));
       const title = await view.findByRole("textbox", { name: "Name" }, { timeout: 800 });
@@ -127,7 +240,7 @@ describe("Workspace Session metadata UI", () => {
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}
-          workspaceId="A"
+          workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
           record={record()}
         />
       </QueryProvider>,
@@ -322,7 +435,7 @@ describe("Workspace Session metadata UI", () => {
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}
-          workspaceId="A"
+          workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
           record={record()}
         />
       </QueryProvider>,

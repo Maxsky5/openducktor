@@ -101,7 +101,10 @@ describe("Workspace Session contracts", () => {
 
   test("validates title lengths and integer timestamps without cross-field ordering rules", () => {
     expect(
-      workspaceSessionSchema.safeParse({ ...session(), generatedTitle: "a".repeat(41) }).success,
+      workspaceSessionSchema.safeParse({ ...session(), generatedTitle: "a".repeat(120) }).success,
+    ).toBe(true);
+    expect(
+      workspaceSessionSchema.safeParse({ ...session(), generatedTitle: "a".repeat(121) }).success,
     ).toBe(false);
     expect(
       workspaceSessionSchema.safeParse({ ...session(), manualTitle: "a".repeat(121) }).success,

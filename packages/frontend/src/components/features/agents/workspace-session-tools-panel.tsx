@@ -23,7 +23,6 @@ import {
   gitComparisonTargetQueryOptions,
   invalidateGitWorkingDirectoryQueries,
 } from "@/state/queries/git";
-import { OpenInMenu } from "./agent-studio-git-panel/open-in-menu";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
@@ -193,9 +192,7 @@ function WorkspaceSessionTools({
         onActiveTabChange,
         tabListLabel: "Workspace session tools",
         testIdPrefix: "workspace-session-tools",
-        headerActions: (
-          <WorkspaceOpenInAction contextMode={contextMode} workingDirectory={workingDirectory} />
-        ),
+        headerActions: null,
         devServerModel,
       }}
     />
@@ -395,28 +392,6 @@ function comparisonUnavailableReason(input: {
   if (input.isPending) return "Checking the comparison target…";
   if (input.isError) return errorMessage(input.error);
   return input.data?.kind === "unavailable" ? input.data.reason : null;
-}
-
-function WorkspaceOpenInAction({
-  contextMode,
-  workingDirectory,
-}: {
-  contextMode: "repository" | "worktree";
-  workingDirectory: string | null;
-}): ReactElement {
-  return (
-    <OpenInMenu
-      contextMode={contextMode}
-      targetPath={workingDirectory}
-      targetLabel={contextMode === "repository" ? "repository root" : "workspace worktree"}
-      disabledReason={workingDirectory ? null : missingWorkingDirectoryReason}
-      onOpenInTool={
-        workingDirectory
-          ? (toolId) => hostClient.systemOpenDirectoryInTool(workingDirectory, toolId)
-          : undefined
-      }
-    />
-  );
 }
 
 async function refreshWorkspaceSessionData(input: {

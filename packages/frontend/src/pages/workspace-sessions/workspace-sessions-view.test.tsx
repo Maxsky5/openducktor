@@ -1,7 +1,7 @@
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { afterEach, expect, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
@@ -25,7 +25,6 @@ import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { WorkspaceSessions } from "./workspace-sessions-view";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
@@ -72,9 +71,12 @@ const worktreeRecord = (id: string): WorkspaceSession => ({
   },
 });
 
-test.each([true, false])(
-  "worktree archive opens a modal on the first click and sends removal=%s only after confirmation",
-  async (removeWorktree) => {
+test.each([
+  [true, "primary"],
+  [false, "menu"],
+] as const)(
+  "worktree archive confirms removal=%s from the %s action",
+  async (removeWorktree, entry) => {
     const worktree = worktreeRecord("Second");
     const requests: unknown[] = [];
     configureShellBridge(
@@ -96,18 +98,14 @@ test.each([true, false])(
     );
     const view = renderSessions();
     try {
-      await openArchive(view, "Second");
+      const trigger = await openArchive(view, "Second", entry);
       expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
       expect(requests).toEqual([]);
       fireEvent.click(view.getByRole("button", { name: "Cancel" }));
       expect(view.queryByRole("dialog")).toBeNull();
-      await waitFor(() =>
-        expect(
-          document.activeElement === view.getByRole("button", { name: "Session actions" }),
-        ).toBe(true),
-      );
+      await waitFor(() => expect(document.activeElement === trigger).toBe(true));
       expect(requests).toEqual([]);
-      await openArchive(view, "Second");
+      await openArchive(view, "Second", entry);
       await view.findByText(/This worktree has local changes/, {}, { timeout: 800 });
       await act(async () => {
         view.store.replaceSession(
@@ -282,15 +280,29 @@ function SessionLinks() {
   );
 }
 
-async function openArchive(view: ReturnType<typeof renderSessions>, id: string) {
+async function openArchive(
+  view: ReturnType<typeof renderSessions>,
+  id: string,
+  entry: "primary" | "menu" = "menu",
+) {
   if (!view.queryByRole("heading", { name: id, level: 2 })) {
     fireEvent.click(view.getByRole("link", { name: "Open " + id.toLowerCase() + " chat" }));
     await view.findByRole("heading", { name: id, level: 2 });
   }
-  fireEvent.click(view.getByRole("button", { name: "Session actions" }));
-  const archive = await view.findByRole("button", { name: "Archive chat" });
+  const trigger = view.getByRole("button", {
+    name: entry === "primary" ? "Archive chat" : "Session actions",
+  });
+  if (entry === "primary") {
+    trigger.focus();
+    fireEvent.click(trigger);
+    return trigger;
+  }
+  fireEvent.click(trigger);
+  const menu = await view.findByRole("dialog", { name: "Session actions" });
+  const archive = within(menu).getByRole("button", { name: "Archive chat" });
   archive.focus();
   fireEvent.click(archive);
+  return trigger;
 }
 
 function RouteControls() {
@@ -1251,16 +1263,9 @@ test.each([true, false])(
     const first = sessionRecord("First");
     const archiveDone = Promise.withResolvers<WorkspaceSession>();
     const content = spyOn(sessionContent, "WorkspaceSessionContent").mockImplementation(
-      function SessionContent({ record, viewControls, onArchive, isArchiving, workspace }) {
+      function SessionContent({ record }) {
         return (
           <div data-testid="visible-chat">
-            <WorkspaceSessionHeader
-              workspaceId={workspace.workspaceId}
-              record={record}
-              viewControls={viewControls}
-              onArchive={onArchive}
-              isArchiving={isArchiving}
-            />
             {record.id}
             <DirtyPreview startOpen={false} />
           </div>
@@ -1279,7 +1284,12 @@ test.each([true, false])(
     );
     const view = renderSessions(undefined, "/chats?session=First");
     try {
-      await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
+      const heading = await view.findByRole(
+        "heading",
+        { name: "First", level: 2 },
+        { timeout: 800 },
+      );
+      expect(heading.closest("[data-panel]") === null).toBe(true);
       fireEvent.click(view.getByRole("button", { name: "Open draft" }));
       fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
       expect(view.getByTestId("draft").textContent).toBe("draft.ts");

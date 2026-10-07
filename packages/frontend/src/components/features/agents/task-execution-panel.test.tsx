@@ -408,35 +408,16 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("Spec");
   });
 
-  test("renders Open In in the shared panel header", () => {
-    const html = renderPanel({
-      ...basePanelModel,
-      gitModel: {
-        ...diffModel,
-        openInTargetPath: "/tmp/worktree/task-12",
-        openInDisabledReason: null,
-        openDirectoryInTool: async () => {},
-      },
-    });
-
-    expect(html).toContain("agent-studio-git-open-in-actions");
-    expect(html).toContain("agent-studio-git-open-in-default-button");
-  });
-
   test("renders the pull request link once in the shared panel header", () => {
     const html = renderPanel({
       ...basePanelModel,
       gitModel: {
         ...diffModel,
         pullRequest: linkedPullRequest,
-        openInTargetPath: "/tmp/worktree/task-12",
-        openInDisabledReason: null,
-        openDirectoryInTool: async () => {},
       },
     });
 
     expect(html.match(/PR #110/g)?.length).toBe(1);
-    expect(html).toContain("agent-studio-git-open-in-actions");
   });
 
   test("renders cached CI status dot colors in the tab header", () => {

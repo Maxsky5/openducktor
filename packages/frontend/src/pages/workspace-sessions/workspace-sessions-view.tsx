@@ -33,6 +33,7 @@ import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
+import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "./use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
@@ -275,19 +276,26 @@ function WorkspaceSessionActiveContent({
   if (!selected)
     return <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />;
   return (
-    <WorkspaceSessionTerminalLayout model={terminalModel}>
-      <WorkspaceSessionContent
+    <>
+      <WorkspaceSessionHeader
+        key={selected.id}
         workspace={workspace}
         record={selected}
-        sessionIds={sessionIds}
-        panelState={panelState}
-        onPanelStateChange={onPanelStateChange}
-        onSafeToLeave={onSafeToLeave}
         viewControls={viewControls}
         onArchive={onArchive}
         isArchiving={isArchiving}
       />
-    </WorkspaceSessionTerminalLayout>
+      <WorkspaceSessionTerminalLayout model={terminalModel}>
+        <WorkspaceSessionContent
+          workspace={workspace}
+          record={selected}
+          sessionIds={sessionIds}
+          panelState={panelState}
+          onPanelStateChange={onPanelStateChange}
+          onSafeToLeave={onSafeToLeave}
+        />
+      </WorkspaceSessionTerminalLayout>
+    </>
   );
 }
 

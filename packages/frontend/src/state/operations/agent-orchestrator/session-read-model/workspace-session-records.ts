@@ -7,6 +7,7 @@ import {
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionRefKey } from "@openducktor/core";
 import { createSessionMessagesState } from "../support/messages";
 
@@ -21,6 +22,14 @@ export const workspaceSessionIdentity = (record: WorkspaceSession): AgentSession
 
 export const workspaceSessionTitle = (record: WorkspaceSession): string =>
   record.manualTitle ?? record.generatedTitle ?? "Untitled session";
+
+export const workspaceSessionWorkingDirectory = (
+  workspace: Pick<ActiveWorkspace, "repoPath">,
+  record: WorkspaceSession,
+): string | null =>
+  (record.executionTarget.kind === "local_repo_root"
+    ? workspace.repoPath
+    : record.executionTarget.workingDirectory) || null;
 
 export const workspaceSessionTargetFaultKey = (
   repoPath: string,

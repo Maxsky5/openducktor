@@ -1,12 +1,13 @@
 import { type ReactElement, type ReactNode, useCallback, useState } from "react";
+import { ArrowUpRightFromSquare } from "lucide-react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
-import { OpenTaskDetailsButton } from "@/components/features/tasks/open-task-details-button";
-import { CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SessionPageHeader } from "./session-page-header";
 import type { AgentStudioHeaderModel } from "./agent-studio-header.types";
 import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
 import { canOpenQuickActionsMenu } from "./agent-studio-header-quick-actions-availability";
 import { SessionHistoryMenu } from "./agent-studio-header-session-history";
-import { WorkflowRail } from "./agent-studio-header-workflow-rail";
 
 export type { AgentRoleOption, AgentStudioHeaderModel } from "./agent-studio-header.types";
 
@@ -17,29 +18,42 @@ type HeaderTitleProps = {
 };
 
 function HeaderTitle({ taskTitle, taskId, onOpenTaskDetails }: HeaderTitleProps): ReactElement {
-  const normalizedTaskTitle = taskTitle?.trim() ?? "";
-  const hasTaskTitle = normalizedTaskTitle.length > 0;
-  const normalizedTaskId = taskId?.trim() ?? "";
-  const hasTaskId = normalizedTaskId.length > 0;
-  const canOpenTaskDetails = hasTaskId && Boolean(onOpenTaskDetails);
+  const title = taskTitle?.trim() || "Task session";
+  const id = taskId?.trim() || null;
+  const canOpenTaskDetails = Boolean(id && onOpenTaskDetails);
 
   return (
-    <div className="min-w-0 flex-1">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <CardTitle
-          className="truncate text-lg leading-6"
-          title={hasTaskTitle ? normalizedTaskTitle : undefined}
-        >
-          {hasTaskTitle ? normalizedTaskTitle : "Task session"}
-        </CardTitle>
-      </div>
-      {hasTaskId ? (
-        <div className="flex items-center gap-1.5">
-          <TaskIdBadge taskId={normalizedTaskId} />
-          {canOpenTaskDetails ? (
-            <OpenTaskDetailsButton onClick={() => onOpenTaskDetails?.()} />
-          ) : null}
-        </div>
+    <div className="flex min-w-0 items-center gap-2">
+      <h2 className="min-w-0 flex-1 text-sm font-semibold leading-5" aria-label={title}>
+        {canOpenTaskDetails ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-1.5 h-7 w-full justify-start gap-1.5 px-1.5 text-sm font-semibold"
+                aria-label="Open task details"
+                onClick={() => onOpenTaskDetails?.()}
+              >
+                <span className="truncate">{title}</span>
+                <ArrowUpRightFromSquare className="size-3 shrink-0 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-96">
+              <p className="font-medium">{title}</p>
+              <p className="text-xs opacity-75">Open task details · {id}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="block truncate">{title}</span>
+        )}
+      </h2>
+      {id ? (
+        <TaskIdBadge
+          taskId={id}
+          className="shrink-0 [&_button]:size-7 @max-[1000px]/session-header:[&>span]:hidden @max-[480px]/session-header:hidden"
+        />
       ) : null}
     </div>
   );
@@ -82,9 +96,11 @@ function AgentStudioQuickActionsMenu({
 export function AgentStudioHeader({
   model,
   viewControls,
+  openIn,
 }: {
   model: AgentStudioHeaderModel;
   viewControls: ReactNode;
+  openIn: ReactNode;
 }): ReactElement {
   const canOpenActionsMenu = canOpenQuickActionsMenu({
     agentStudioReady: model.agentStudioReady,
@@ -99,14 +115,16 @@ export function AgentStudioHeader({
     : "quick-actions-unavailable";
 
   return (
-    <CardHeader className="electron-titlebar-safe-area border-b border-border bg-card py-3 px-4">
-      <div className="flex items-start justify-between gap-2">
+    <SessionPageHeader
+      title={
         <HeaderTitle
           taskTitle={model.taskTitle}
           taskId={model.taskId}
           onOpenTaskDetails={model.onOpenTaskDetails}
         />
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      }
+      actions={
+        <>
           <SessionHistoryMenu
             selector={model.sessionSelector}
             agentStudioReady={model.agentStudioReady}
@@ -116,20 +134,10 @@ export function AgentStudioHeader({
             canOpenActionsMenu={canOpenActionsMenu}
             model={model}
           />
-        </div>
-      </div>
-
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="@container/workflow min-w-0 flex-1 overflow-x-auto px-1 py-1">
-          <WorkflowRail
-            steps={model.workflowSteps}
-            selectedRole={model.selectedRole}
-            agentStudioReady={model.agentStudioReady}
-            onStepSelect={model.onWorkflowStepSelect}
-          />
-        </div>
-        {viewControls}
-      </div>
-    </CardHeader>
+        </>
+      }
+      openIn={openIn}
+      viewControls={viewControls}
+    />
   );
 }

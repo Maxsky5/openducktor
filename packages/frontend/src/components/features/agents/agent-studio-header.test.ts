@@ -1,11 +1,13 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, createElement } from "react";
+import { act, type ComponentProps, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioHeader } from "./agent-studio-header";
 import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
+import { WorkflowRail } from "./agent-studio-header-workflow-rail";
 import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -28,7 +30,6 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-  document.body.innerHTML = "";
 });
 
 const roleIcon = (index: number) => {
@@ -166,22 +167,30 @@ const buildModel = () => ({
   agentStudioReady: true,
 });
 
+const renderWorkflow = (props: Partial<ComponentProps<typeof WorkflowRail>> = {}) => {
+  const model = buildModel();
+  return renderToStaticMarkup(
+    createElement(WorkflowRail, {
+      steps: model.workflowSteps,
+      selectedRole: model.selectedRole,
+      agentStudioReady: model.agentStudioReady,
+      onStepSelect: model.onWorkflowStepSelect,
+      ...props,
+    }),
+  );
+};
+
 describe("AgentStudioHeader", () => {
-  test("renders workflow rail and session controls", () => {
+  test("renders the task title and session controls", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
+      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
     );
 
     expect(html).toContain("Rework Agent Studio UI");
     expect(html).toContain("fairnest-97f");
     expect(html).toContain('aria-label="Open task details"');
     expect(html).toMatch(/aria-label="Session history[^"]*"/);
-    expect(html).toContain(">Open<");
-    expect(html).toContain("Quick actions");
-    const taskIdIndex = html.indexOf("fairnest-97f");
-    const openButtonIndex = html.indexOf('aria-label="Open task details"');
-    expect(taskIdIndex).toBeGreaterThan(-1);
-    expect(openButtonIndex).toBeGreaterThan(taskIdIndex);
+    expect(html).toContain('aria-label="Open quick actions menu"');
     expect(html).not.toContain("Viewing Session");
     expect(html).not.toContain("Sessions:");
     expect(html).not.toContain("Messages:");
@@ -195,6 +204,7 @@ describe("AgentStudioHeader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           taskTitle: null,
@@ -205,20 +215,44 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("Task session");
   });
 
-  test("adds full task title as hover affordance on truncated heading", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
+  test("opens task details from the title and shows the full title and ID in its tooltip", async () => {
+    const model = buildModel();
+    const onOpenTaskDetails = mock(() => {});
+    const view = render(
+      createElement(AgentStudioHeader, {
+        viewControls: null,
+        openIn: null,
+        model: { ...model, onOpenTaskDetails },
+      }),
     );
-
-    expect(html).toContain('title="Rework Agent Studio UI"');
+    try {
+      const trigger = view.getByRole("button", { name: "Open task details" });
+      act(() => trigger.focus());
+      const tooltip = await view.findByRole("tooltip", {}, { timeout: 800 });
+      expect(tooltip.textContent).toContain(model.taskTitle);
+      expect(tooltip.textContent).toContain(model.taskId);
+      fireEvent.click(trigger);
+      expect(onOpenTaskDetails).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+    }
   });
 
-  test("shows selected session label in history trigger title", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
+  test("shows the selected session in the history tooltip", async () => {
+    const view = render(
+      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
     );
-
-    expect(html).toContain('title="Session history · Spec Revision · Spec"');
+    try {
+      const trigger = view.getByRole("button", {
+        name: "Session history, selected Spec Revision · Spec",
+      });
+      act(() => trigger.focus());
+      expect((await view.findByRole("tooltip", {}, { timeout: 800 })).textContent).toBe(
+        "Session history · Spec Revision · Spec",
+      );
+    } finally {
+      view.unmount();
+    }
   });
 
   test("opens session history menu with grouped options and selects session", () => {
@@ -226,6 +260,7 @@ describe("AgentStudioHeader", () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           sessionSelector: {
@@ -280,6 +315,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...model,
           sessionSelector: {
@@ -307,6 +343,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           sessionSelector: {
@@ -384,6 +421,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           onPrepareMessageFirstSession,
@@ -412,6 +450,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           onQuickAction,
@@ -435,6 +474,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           sessionCreateOptions: [
@@ -497,6 +537,7 @@ describe("AgentStudioHeader", () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -542,6 +583,7 @@ describe("AgentStudioHeader", () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -587,7 +629,7 @@ describe("AgentStudioHeader", () => {
 
   test("closes quick-actions menu when actions become unavailable", async () => {
     const { rerender } = render(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
+      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
     );
 
     await act(async () => {
@@ -599,6 +641,7 @@ describe("AgentStudioHeader", () => {
       rerender(
         createElement(AgentStudioHeader, {
           viewControls: null,
+          openIn: null,
           model: {
             ...buildModel(),
             agentStudioReady: false,
@@ -610,7 +653,9 @@ describe("AgentStudioHeader", () => {
     expect(screen.queryByText("Prepare Builder session")).toBeNull();
 
     await act(async () => {
-      rerender(createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }));
+      rerender(
+        createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
+      );
     });
 
     expect(screen.queryByText("Prepare Builder session")).toBeNull();
@@ -622,6 +667,7 @@ describe("AgentStudioHeader", () => {
     render(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           quickActions: [
@@ -662,14 +708,27 @@ describe("AgentStudioHeader", () => {
 
   test("disables git conflict quick action when the conflict handler is missing", async () => {
     const html = renderToStaticMarkup(
-      createElement(QuickActionsMenu, {
-        canOpenActionsMenu: true,
-        isOpen: true,
-        onOpenChange: () => {},
-        agentStudioReady: true,
-        isCreatingSession: false,
-        options: [
-          {
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(QuickActionsMenu, {
+          canOpenActionsMenu: true,
+          isOpen: true,
+          onOpenChange: () => {},
+          agentStudioReady: true,
+          isCreatingSession: false,
+          options: [
+            {
+              id: "quick:build_rebase_conflict_resolution",
+              role: "build" as const,
+              launchActionId: "build_rebase_conflict_resolution" as const,
+              label: "Resolve Git Conflict",
+              description: "Ask Builder to resolve the active git conflict.",
+              postStartAction: "send_message" as const,
+              disabled: false,
+            },
+          ],
+          primaryAction: {
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
@@ -678,21 +737,12 @@ describe("AgentStudioHeader", () => {
             postStartAction: "send_message" as const,
             disabled: false,
           },
-        ],
-        primaryAction: {
-          id: "quick:build_rebase_conflict_resolution",
-          role: "build" as const,
-          launchActionId: "build_rebase_conflict_resolution" as const,
-          label: "Resolve Git Conflict",
-          description: "Ask Builder to resolve the active git conflict.",
-          postStartAction: "send_message" as const,
-          disabled: false,
-        },
-        sessionCreateOptions: [],
-        onQuickAction: () => {},
-        onPrepareMessageFirstSession: () => {},
-        onResolveGitConflictQuickAction: null,
-      }),
+          sessionCreateOptions: [],
+          onQuickAction: () => {},
+          onPrepareMessageFirstSession: () => {},
+          onResolveGitConflictQuickAction: null,
+        }),
+      ),
     );
 
     expect(html).toMatch(
@@ -700,24 +750,11 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("uses the accent variant for the quick action split button", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
-    );
-
-    expect(html).toMatch(
-      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Run quick action: Start Implementation"|variant="accent"[^>]*aria-label="Run quick action: Start Implementation")/,
-    );
-    expect(html).toMatch(
-      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"|variant="accent"[^>]*aria-label="Open quick actions menu")/,
-    );
-    expect(html).toContain("border-l border-sidebar-border/70");
-  });
-
   test("hides the task details button when no task is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           taskId: null,
@@ -734,6 +771,7 @@ describe("AgentStudioHeader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           agentStudioReady: false,
@@ -757,6 +795,7 @@ describe("AgentStudioHeader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...model,
           sessionSelector: {
@@ -776,6 +815,7 @@ describe("AgentStudioHeader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         viewControls: null,
+        openIn: null,
         model: {
           ...buildModel(),
           isCreatingSession: true,
@@ -794,70 +834,58 @@ describe("AgentStudioHeader", () => {
   });
 
   test("keeps unavailable workflow step clickable without existing session", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          selectedRole: "qa",
-          workflowSteps: [
-            {
-              role: "spec" as const,
-              label: "Spec",
-              icon: roleIcon(0),
-              state: {
-                tone: "in_progress" as const,
-                availability: "available" as const,
-                completion: "in_progress" as const,
-                liveSession: "running" as const,
-              },
-              sessionValue: "spec-session",
-            },
-            {
-              role: "planner" as const,
-              label: "Planner",
-              icon: roleIcon(1),
-              state: {
-                tone: "blocked" as const,
-                availability: "blocked" as const,
-                completion: "not_started" as const,
-                liveSession: "none" as const,
-              },
-              sessionValue: null,
-            },
-          ],
+    const html = renderWorkflow({
+      selectedRole: "qa",
+      steps: [
+        {
+          role: "spec" as const,
+          label: "Spec",
+          icon: roleIcon(0),
+          state: {
+            tone: "in_progress" as const,
+            availability: "available" as const,
+            completion: "in_progress" as const,
+            liveSession: "running" as const,
+          },
+          sessionValue: "spec-session",
         },
-      }),
-    );
+        {
+          role: "planner" as const,
+          label: "Planner",
+          icon: roleIcon(1),
+          state: {
+            tone: "blocked" as const,
+            availability: "blocked" as const,
+            completion: "not_started" as const,
+            liveSession: "none" as const,
+          },
+          sessionValue: null,
+        },
+      ],
+    });
 
     expect(html).toContain('title="Blocked by workflow state"');
     expect(html).not.toContain('title="Blocked by workflow state" disabled');
   });
 
   test("highlights selected role with a ring without changing done status color", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          selectedRole: "planner",
-          workflowSteps: [
-            {
-              role: "planner" as const,
-              label: "Planner",
-              icon: roleIcon(1),
-              state: {
-                tone: "done" as const,
-                availability: "available" as const,
-                completion: "done" as const,
-                liveSession: "idle" as const,
-              },
-              sessionValue: "planner-session",
-            },
-          ],
+    const html = renderWorkflow({
+      selectedRole: "planner",
+      steps: [
+        {
+          role: "planner" as const,
+          label: "Planner",
+          icon: roleIcon(1),
+          state: {
+            tone: "done" as const,
+            availability: "available" as const,
+            completion: "done" as const,
+            liveSession: "idle" as const,
+          },
+          sessionValue: "planner-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain("ring-2 ring-offset-2 ring-offset-card ring-success-ring");
     expect(html).toContain("border-success-border");
@@ -866,38 +894,30 @@ describe("AgentStudioHeader", () => {
   });
 
   test("marks workflow step buttons with pressed state for the selected role", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, model: buildModel() }),
-    );
+    const html = renderWorkflow();
 
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('aria-pressed="false"');
   });
 
   test("renders waiting-input workflow step hint and warning styling", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          selectedRole: "qa",
-          workflowSteps: [
-            {
-              role: "qa" as const,
-              label: "QA",
-              icon: roleIcon(3),
-              state: {
-                tone: "waiting_input" as const,
-                availability: "optional" as const,
-                completion: "in_progress" as const,
-                liveSession: "waiting_input" as const,
-              },
-              sessionValue: "qa-session",
-            },
-          ],
+    const html = renderWorkflow({
+      selectedRole: "qa",
+      steps: [
+        {
+          role: "qa" as const,
+          label: "QA",
+          icon: roleIcon(3),
+          state: {
+            tone: "waiting_input" as const,
+            availability: "optional" as const,
+            completion: "in_progress" as const,
+            liveSession: "waiting_input" as const,
+          },
+          sessionValue: "qa-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain('title="Session is waiting for input"');
     expect(html).toContain("border-warning-border");
@@ -905,29 +925,23 @@ describe("AgentStudioHeader", () => {
   });
 
   test("renders blocked builder warning with alert icon and blocked-task copy", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          selectedRole: "build",
-          workflowSteps: [
-            {
-              role: "build" as const,
-              label: "Builder",
-              icon: roleIcon(2),
-              state: {
-                tone: "waiting_input" as const,
-                availability: "available" as const,
-                completion: "in_progress" as const,
-                liveSession: "stopped" as const,
-              },
-              sessionValue: "build-session",
-            },
-          ],
+    const html = renderWorkflow({
+      selectedRole: "build",
+      steps: [
+        {
+          role: "build" as const,
+          label: "Builder",
+          icon: roleIcon(2),
+          state: {
+            tone: "waiting_input" as const,
+            availability: "available" as const,
+            completion: "in_progress" as const,
+            liveSession: "stopped" as const,
+          },
+          sessionValue: "build-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain('title="Task is blocked and waiting for user action"');
     expect(html).toContain("border-warning-border");
@@ -936,29 +950,23 @@ describe("AgentStudioHeader", () => {
   });
 
   test("renders optional workflow step as neutral dashed styling", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          selectedRole: "qa",
-          workflowSteps: [
-            {
-              role: "qa" as const,
-              label: "QA",
-              icon: roleIcon(3),
-              state: {
-                tone: "optional" as const,
-                availability: "optional" as const,
-                completion: "not_started" as const,
-                liveSession: "none" as const,
-              },
-              sessionValue: null,
-            },
-          ],
+    const html = renderWorkflow({
+      selectedRole: "qa",
+      steps: [
+        {
+          role: "qa" as const,
+          label: "QA",
+          icon: roleIcon(3),
+          state: {
+            tone: "optional" as const,
+            availability: "optional" as const,
+            completion: "not_started" as const,
+            liveSession: "none" as const,
+          },
+          sessionValue: null,
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain("border-dashed");
     expect(html).toContain("border-input");
@@ -968,111 +976,87 @@ describe("AgentStudioHeader", () => {
   });
 
   test("does not keep the dashed border once an optional step becomes active", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          workflowSteps: [
-            {
-              role: "qa" as const,
-              label: "QA",
-              icon: roleIcon(3),
-              state: {
-                tone: "in_progress" as const,
-                availability: "optional" as const,
-                completion: "in_progress" as const,
-                liveSession: "running" as const,
-              },
-              sessionValue: "qa-session",
-            },
-          ],
+    const html = renderWorkflow({
+      steps: [
+        {
+          role: "qa" as const,
+          label: "QA",
+          icon: roleIcon(3),
+          state: {
+            tone: "in_progress" as const,
+            availability: "optional" as const,
+            completion: "in_progress" as const,
+            liveSession: "running" as const,
+          },
+          sessionValue: "qa-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).not.toContain("border-dashed");
   });
 
   test("renders failed workflow step hint and destructive styling", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          workflowSteps: [
-            {
-              role: "planner" as const,
-              label: "Planner",
-              icon: roleIcon(1),
-              state: {
-                tone: "failed" as const,
-                availability: "available" as const,
-                completion: "in_progress" as const,
-                liveSession: "error" as const,
-              },
-              sessionValue: "planner-session",
-            },
-          ],
+    const html = renderWorkflow({
+      steps: [
+        {
+          role: "planner" as const,
+          label: "Planner",
+          icon: roleIcon(1),
+          state: {
+            tone: "failed" as const,
+            availability: "available" as const,
+            completion: "in_progress" as const,
+            liveSession: "error" as const,
+          },
+          sessionValue: "planner-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain('title="Latest session failed"');
     expect(html).toContain("border-destructive-border");
   });
 
   test("renders failed workflow step without session as actionable startup failure", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          workflowSteps: [
-            {
-              role: "planner" as const,
-              label: "Planner",
-              icon: roleIcon(1),
-              state: {
-                tone: "failed" as const,
-                availability: "blocked" as const,
-                completion: "not_started" as const,
-                liveSession: "none" as const,
-              },
-              sessionValue: null,
-            },
-          ],
+    const html = renderWorkflow({
+      steps: [
+        {
+          role: "planner" as const,
+          label: "Planner",
+          icon: roleIcon(1),
+          state: {
+            tone: "failed" as const,
+            availability: "blocked" as const,
+            completion: "not_started" as const,
+            liveSession: "none" as const,
+          },
+          sessionValue: null,
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain('title="Step failed before a session could start"');
     expect(html).not.toContain('title="Blocked by workflow state"');
   });
 
   test("uses neutral rejection copy for rejected review steps", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        viewControls: null,
-        model: {
-          ...buildModel(),
-          workflowSteps: [
-            {
-              role: "qa" as const,
-              label: "QA",
-              icon: roleIcon(3),
-              state: {
-                tone: "rejected" as const,
-                availability: "available" as const,
-                completion: "rejected" as const,
-                liveSession: "idle" as const,
-              },
-              sessionValue: "qa-session",
-            },
-          ],
+    const html = renderWorkflow({
+      steps: [
+        {
+          role: "qa" as const,
+          label: "QA",
+          icon: roleIcon(3),
+          state: {
+            tone: "rejected" as const,
+            availability: "available" as const,
+            completion: "rejected" as const,
+            liveSession: "idle" as const,
+          },
+          sessionValue: "qa-session",
         },
-      }),
-    );
+      ],
+    });
 
     expect(html).toContain('title="Latest review rejected this task"');
     expect(html).not.toContain("Latest QA review rejected this task");
@@ -1083,29 +1067,23 @@ describe("AgentStudioHeader", () => {
 
   test("throws for invalid workflow tones instead of masking them as blocked", () => {
     expect(() =>
-      renderToStaticMarkup(
-        createElement(AgentStudioHeader, {
-          viewControls: null,
-          model: {
-            ...buildModel(),
-            workflowSteps: [
-              {
-                role: "qa" as const,
-                label: "QA",
-                icon: roleIcon(3),
-                state: {
-                  // @ts-expect-error This negative test verifies fail-fast handling of an unknown tone.
-                  tone: "broken",
-                  availability: "available" as const,
-                  completion: "not_started" as const,
-                  liveSession: "none" as const,
-                },
-                sessionValue: null,
-              },
-            ],
+      renderWorkflow({
+        steps: [
+          {
+            role: "qa" as const,
+            label: "QA",
+            icon: roleIcon(3),
+            state: {
+              // @ts-expect-error This negative test verifies fail-fast handling of an unknown tone.
+              tone: "broken",
+              availability: "available" as const,
+              completion: "not_started" as const,
+              liveSession: "none" as const,
+            },
+            sessionValue: null,
           },
-        }),
-      ),
+        ],
+      }),
     ).toThrow("Unknown workflow tone");
   });
 });

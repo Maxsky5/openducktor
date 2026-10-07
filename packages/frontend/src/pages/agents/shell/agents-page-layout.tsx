@@ -12,6 +12,8 @@ import {
 } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
+import { WorkflowRail } from "@/components/features/agents/agent-studio-header-workflow-rail";
+import { SessionOpenInAction } from "@/components/features/agents/session-open-in-action";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import type { TaskExecutionPanelToggleModel } from "@/components/features/agents/task-execution-panel";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
@@ -53,6 +55,7 @@ type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
   unavailableTaskId: string | null;
   headerContent: ReactNode;
+  workflowContent: ReactNode;
   chatContent: ReactElement;
   hasSelectedFilePreview: boolean;
   selectedFilePreviewContent: ReactNode;
@@ -63,7 +66,7 @@ type AgentsPageWorkspaceProps = {
 
 export type AgentsPageWorkspacePanesProps = Omit<
   AgentsPageWorkspaceProps,
-  "hasSelectedTask" | "unavailableTaskId" | "terminalPanel"
+  "hasSelectedTask" | "unavailableTaskId" | "terminalPanel" | "headerContent"
 >;
 
 type AgentChatPaneProps = {
@@ -71,7 +74,7 @@ type AgentChatPaneProps = {
 };
 
 export function AgentsPageWorkspacePanes({
-  headerContent,
+  workflowContent,
   chatContent,
   hasSelectedFilePreview,
   selectedFilePreviewContent,
@@ -82,7 +85,7 @@ export function AgentsPageWorkspacePanes({
     <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
       <ResizablePanel defaultSize={63} minSize={35}>
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          {headerContent}
+          {workflowContent}
           <div
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
             style={PANEL_CONTAINMENT_STYLE}
@@ -124,6 +127,7 @@ export function AgentsPageWorkspace({
   hasSelectedTask,
   unavailableTaskId,
   headerContent,
+  workflowContent,
   chatContent,
   hasSelectedFilePreview,
   selectedFilePreviewContent,
@@ -156,7 +160,7 @@ export function AgentsPageWorkspace({
 
   const workspacePanes = (
     <AgentsPageWorkspacePanes
-      headerContent={headerContent}
+      workflowContent={workflowContent}
       chatContent={chatContent}
       hasSelectedFilePreview={hasSelectedFilePreview}
       selectedFilePreviewContent={selectedFilePreviewContent}
@@ -165,15 +169,18 @@ export function AgentsPageWorkspace({
     />
   );
   return (
-    <TerminalSplitLayout
-      ids={TERMINAL_SPLIT_IDS}
-      model={terminalPanel}
-      layout={layout}
-      className="h-full min-h-0 overflow-hidden"
-      contentClassName="h-full min-h-0"
-    >
-      {workspacePanes}
-    </TerminalSplitLayout>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {headerContent}
+      <TerminalSplitLayout
+        ids={TERMINAL_SPLIT_IDS}
+        model={terminalPanel}
+        layout={layout}
+        className="min-h-0 flex-1 overflow-hidden"
+        contentClassName="h-full min-h-0"
+      >
+        {workspacePanes}
+      </TerminalSplitLayout>
+    </div>
   );
 }
 
@@ -259,10 +266,23 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     void refreshWorktreeRef.current?.("soft");
   }, []);
 
+  const buildToolsSnapshot = rightPanelBridge?.rightPanel.buildTools.buildToolsSnapshot;
+  const openInContextMode = buildToolsSnapshot?.gitPanelContextMode ?? "worktree";
+  const openInTargetPath = buildToolsSnapshot?.openInTarget.path ?? null;
+  const openInDisabledReason = buildToolsSnapshot
+    ? buildToolsSnapshot.openInTarget.disabledReason
+    : "The task working directory is unavailable.";
   const headerContent = useMemo(
     () => (
       <AgentStudioHeader
         model={chatHeaderModel}
+        openIn={
+          <SessionOpenInAction
+            contextMode={openInContextMode}
+            targetPath={openInTargetPath}
+            disabledReason={openInDisabledReason}
+          />
+        }
         viewControls={
           <SessionViewControls
             terminal={terminalPanel}
@@ -273,7 +293,32 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         }
       />
     ),
-    [chatHeaderModel, rightPanelToggleModel, terminalPanel],
+    [
+      chatHeaderModel,
+      openInContextMode,
+      openInTargetPath,
+      openInDisabledReason,
+      rightPanelToggleModel,
+      terminalPanel,
+    ],
+  );
+  const workflowContent = useMemo(
+    () => (
+      <div className="@container/workflow min-w-0 shrink-0 overflow-x-auto border-b border-border bg-card px-4 py-2">
+        <WorkflowRail
+          steps={chatHeaderModel.workflowSteps}
+          selectedRole={chatHeaderModel.selectedRole}
+          agentStudioReady={chatHeaderModel.agentStudioReady}
+          onStepSelect={chatHeaderModel.onWorkflowStepSelect}
+        />
+      </div>
+    ),
+    [
+      chatHeaderModel.workflowSteps,
+      chatHeaderModel.selectedRole,
+      chatHeaderModel.agentStudioReady,
+      chatHeaderModel.onWorkflowStepSelect,
+    ],
   );
   const chatContent = useMemo(
     () => (
@@ -308,6 +353,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         hasSelectedTask={hasSelectedTask}
         unavailableTaskId={unavailableTaskId}
         headerContent={headerContent}
+        workflowContent={workflowContent}
         chatContent={chatContent}
         hasSelectedFilePreview={hasSelectedFilePreview}
         selectedFilePreviewContent={selectedFilePreviewContent}
@@ -322,6 +368,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       hasSelectedTask,
       unavailableTaskId,
       headerContent,
+      workflowContent,
       isRightPanelVisible,
       rightPanelContent,
       selectedFilePreviewContent,

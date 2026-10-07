@@ -112,9 +112,6 @@ function renderClosedSession(
           {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
           <Tabs value={currentRecord.id}>
             <WorkspaceSessionContent
-              viewControls={null}
-              onArchive={() => {}}
-              isArchiving={false}
               workspace={currentWorkspace}
               record={currentRecord}
               sessionIds={sessionIds}
@@ -649,8 +646,8 @@ test("a guarded workspace change locks the preview and file selection until it f
   }
 });
 
-test("the tools panel starts beside the chat header", () => {
-  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
+test("the tools panel stays beside the chat", () => {
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div>Chat</div>);
   const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
     <div>Tools</div>
   ));
@@ -675,9 +672,6 @@ test("the tools panel starts beside the chat header", () => {
         <WorkspacePreviewTransitionGuardProvider>
           <Tabs value={record.id}>
             <WorkspaceSessionContent
-              viewControls={null}
-              onArchive={() => {}}
-              isArchiving={false}
               workspace={workspace}
               record={record}
               sessionIds={[record.id]}
@@ -692,9 +686,7 @@ test("the tools panel starts beside the chat header", () => {
   try {
     const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
     expect(panels.length).toBe(2);
-    expect(
-      screen.getByRole("heading", { name: "Chat" }).closest('[data-slot="resizable-panel"]'),
-    ).toBe(panels.item(0));
+    expect(screen.getByText("Chat").closest('[data-slot="resizable-panel"]')).toBe(panels.item(0));
     expect(panels[1]?.textContent).toBe("Tools");
   } finally {
     view.unmount();
