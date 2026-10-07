@@ -18,6 +18,7 @@ export const prepareTerminalShell = (
     const shell = basename(plan.shell).toLowerCase();
     const nonce = plan.commandNonce;
     if (!nonce || !["bash", "zsh", "fish"].includes(shell)) return { plan, dispose: Effect.void };
+    if (shell === "bash" && !supportsBashHooks(plan)) return { plan, dispose: Effect.void };
     if (shell === "fish")
       return {
         plan: { ...plan, args: [...plan.args, "--init-command", fishHooks(nonce)] },
@@ -42,7 +43,13 @@ export const prepareTerminalShell = (
       plan:
         shell === "zsh"
           ? { ...plan, env: { ...plan.env, ZDOTDIR: root } }
-          : { ...plan, args: ["--init-file", join(root, "bashrc"), "-i"] },
+          : plan.args.includes("-l")
+            ? {
+                ...plan,
+                args: ["--posix", ...plan.args],
+                env: { ...plan.env, ENV: join(root, "bashrc") },
+              }
+            : { ...plan, args: ["--init-file", join(root, "bashrc"), ...plan.args] },
       dispose,
     };
   });
@@ -67,14 +74,40 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
   };
 }
 
+function supportsBashHooks(plan: TerminalPtyLaunchPlan): boolean {
+  // POSIX startup belongs to the user's ENV file.
+  if (
+    plan.args.includes("--posix") ||
+    plan.env.POSIXLY_CORRECT !== undefined ||
+    plan.env.SHELLOPTS?.split(":").includes("posix")
+  )
+    return false;
+  // Apple's Bash ignores the ENV hook. Keep its real login mode and startup files.
+  return !(
+    process.platform === "darwin" &&
+    ["/bin/bash", "/usr/bin/bash"].includes(plan.shell) &&
+    plan.args.includes("-l")
+  );
+}
+
 function bashScript(plan: TerminalPtyLaunchPlan, nonce: string): string {
-  // Bash ignores --init-file with -l. Read the same profiles and retain login-shell exit behavior.
+  const options = plan.env.BASHOPTS?.split(":") ?? [];
+  // GNU Bash reads ENV in POSIX mode. Restore normal mode before the user's profiles run.
   const startup = plan.args.includes("-l")
     ? [
-        "shopt -s login_shell",
-        "[[ ! -r /etc/profile ]] || source /etc/profile",
+        "set +o posix",
+        ...(options.includes("shift_verbose") ? [] : ["shopt -u shift_verbose"]),
+        ...(options.includes("inherit_errexit")
+          ? []
+          : [
+              "if (( BASH_VERSINFO[0] > 4 || BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4 )); then shopt -u inherit_errexit; fi",
+            ]),
+        plan.env.ENV === undefined
+          ? "unset ENV"
+          : `export ENV=${formatTerminalPathInput(plan.shell, [plan.env.ENV])}`,
+        "[[ ! -r /etc/profile ]] || builtin source /etc/profile",
         'for _odt_profile in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do',
-        '  if [[ -r "$_odt_profile" ]]; then source "$_odt_profile"; break; fi',
+        '  if [[ -r "$_odt_profile" ]]; then builtin source "$_odt_profile"; break; fi',
         "done",
         "unset _odt_profile",
       ]

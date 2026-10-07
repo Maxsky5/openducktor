@@ -15,6 +15,7 @@ import { prepareTerminalShell, type TerminalShell } from "./terminal-shell-integ
 
 for (const [name, config] of [
   ["bash", "default"],
+  ["bash", "non-login"],
   ["zsh", "default"],
   ["zsh", "custom directory"],
   ["zsh", "redirected directory"],
@@ -23,7 +24,11 @@ for (const [name, config] of [
   ["fish", "default"],
 ] as const) {
   const shell = Bun.which(name);
-  test.skipIf(process.platform === "win32" || shell === null)(
+  test.skipIf(
+    process.platform === "win32" ||
+      shell === null ||
+      (process.platform === "darwin" && shell === "/bin/bash" && config === "default"),
+  )(
     `${name} (${config}) reports commands and keeps the user's shell setup`,
     async () => {
       const root = await mkdtemp(join(tmpdir(), "odt-shell-hooks-test-"));
@@ -124,7 +129,10 @@ for (const [name, config] of [
           screen.write(data, () => {});
         };
         child.stdout!.on("data", consume);
-        child.stderr!.on("data", consume);
+        // Pipe callbacks can insert prompts into OSC bytes. The hooks write OSC to stdout.
+        child.stderr!.on("data", (data: Buffer) => {
+          output += data.toString();
+        });
         child.on("error", (error) => {
           failure = error;
         });
@@ -217,10 +225,82 @@ for (const [name, config] of [
   );
 }
 
+const bash = Bun.which("bash");
+test.skipIf(process.platform === "win32" || bash === null)(
+  "Bash keeps native login startup, history, and logout",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-bash-login-test-"));
+    let prepared: TerminalShell | undefined;
+    try {
+      const historyPath = join(root, "history");
+      const profile = [
+        'printf "user-profile\\n"',
+        'PS1="fixture> "',
+        'HISTFILE="$HOME/history"',
+        "HISTSIZE=1000",
+        "HISTFILESIZE=1000",
+        'printf "user-env:%s\\n" "$ENV"',
+        "shopt -q login_shell || exit 91",
+        "shopt -qo posix && exit 92",
+        "shopt -q shift_verbose && exit 93",
+        "if (( BASH_VERSINFO[0] > 4 || BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4 )); then shopt -q inherit_errexit && exit 94; fi",
+      ].join("\n");
+      await writeFile(join(root, ".bash_profile"), profile);
+      await writeFile(join(root, ".bash_logout"), 'printf "user-logout\\n"');
+      await writeFile(historyPath, "echo saved-before-terminal\n");
+      const inheritedEnv = { ...process.env };
+      delete inheritedEnv.POSIXLY_CORRECT;
+      delete inheritedEnv.BASHOPTS;
+      delete inheritedEnv.SHELLOPTS;
+      const env = {
+        ...inheritedEnv,
+        HOME: root,
+        HISTFILE: historyPath,
+        ENV: "$HOME/original environment",
+        TERM: "xterm-256color",
+      };
+      const plan: TerminalPtyLaunchPlan = {
+        shell: bash!,
+        args: ["-l", "-i"],
+        cwd: root,
+        env,
+        grid: { columns: 80, rows: 24 },
+        commandNonce: "login-test",
+      };
+      const run = (launch: TerminalPtyLaunchPlan) =>
+        spawnSync(launch.shell, [...launch.args], {
+          cwd: launch.cwd,
+          env: launch.env,
+          input: "history\nprintf 'saved-after-terminal\\n'\nlogout\n",
+          encoding: "utf8",
+          timeout: 2000,
+        });
+      const native = run(plan);
+      expect(native.status).toBe(0);
+      prepared = await Effect.runPromise(prepareTerminalShell(plan));
+      const hooked = run(prepared.plan);
+      expect(hooked.status).toBe(0);
+      for (const result of [native, hooked]) {
+        expect(result.stdout).toContain("user-profile");
+        expect(result.stdout).toContain("user-env:$HOME/original environment");
+        expect(result.stdout).toContain("saved-before-terminal");
+        expect(result.stdout).toContain("user-logout");
+        expect(result.stdout.split("user-profile")).toHaveLength(2);
+      }
+      expect(await readFile(historyPath, "utf8")).toContain("saved-after-terminal");
+      expect(await readFile(join(root, ".bash_profile"), "utf8")).toBe(profile);
+    } finally {
+      if (prepared) await Effect.runPromise(prepared.dispose);
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  5000,
+);
+
 test("removes temporary startup files and leaves unsupported shells unchanged", async () => {
   const plan: TerminalPtyLaunchPlan = {
     shell: "/bin/bash",
-    args: ["-l"],
+    args: ["-i"],
     cwd: tmpdir(),
     env: {},
     grid: { columns: 80, rows: 24 },
