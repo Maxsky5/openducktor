@@ -22,6 +22,7 @@ import * as pierreReact from "@pierre/diffs/react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
 import { Link, MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { toast } from "sonner";
 import {
   buildMessage,
   buildSession,
@@ -83,6 +84,7 @@ import type {
 import { AppShell } from "./app-shell";
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
+const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
 
 const activeWorkspace = {
   workspaceId: "workspace-1",
@@ -1021,6 +1023,7 @@ describe("AppShell", () => {
     const originalConsoleError = console.error;
     const consoleError = mock(() => undefined);
     console.error = consoleError;
+    const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
 
     try {
       renderAppShellForTest();
@@ -1028,8 +1031,12 @@ describe("AppShell", () => {
       expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
       expect(getItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY);
       expect(consoleError).toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Could not restore the session list scope.", {
+        description: "Allow local storage for this app, then reload. read failed",
+      });
     } finally {
       console.error = originalConsoleError;
+      toastError.mockRestore();
     }
   });
 
@@ -1135,18 +1142,94 @@ describe("AppShell session navigation", () => {
     expect(await screen.findByRole("heading", { name: "Reopen a workspace" })).toBeTruthy();
   });
 
-  test("switches the list to all workspaces in one action and back", async () => {
+  test.each(["opened", "collapsed"])(
+    "saves the scope from the %s sidebar and restores its session list after remount",
+    async (sidebar) => {
+      globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, sidebar);
+      const view = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      const role = sidebar === "opened" ? "radio" : "button";
+
+      await screen.findByRole("button", { name: /Chat mine/ });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+
+      fireEvent.click(screen.getByRole(role, { name: "Show sessions of all workspaces" }));
+      await screen.findByRole("button", { name: /Chat theirs/ });
+      expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("all");
+
+      view.unmount();
+      const restored = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat theirs/ });
+      expect(screen.getByRole("button", { name: /Chat mine/ })).toBeTruthy();
+      expect(
+        screen
+          .getByRole(role, { name: "Show sessions of all workspaces" })
+          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
+      ).toBe("true");
+
+      fireEvent.click(
+        screen.getByRole(role, {
+          name:
+            sidebar === "opened"
+              ? "Show sessions of OpenDucktor"
+              : "Show sessions of all workspaces",
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
+      expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("current");
+
+      restored.unmount();
+      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat mine/ });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(
+        screen
+          .getByRole(role, { name: "Show sessions of all workspaces" })
+          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
+      ).toBe("false");
+    },
+  );
+
+  test("uses the current workspace when the saved scope is unknown", async () => {
+    globalThis.localStorage.setItem(SESSION_SCOPE_STORAGE_KEY, "unknown");
     renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
 
     await screen.findByRole("button", { name: /Chat mine/ });
     expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+    expect(
+      screen
+        .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("unknown");
+  });
 
-    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
-    await screen.findByRole("button", { name: /Chat theirs/ });
-    expect(screen.getByRole("button", { name: /Chat mine/ })).toBeTruthy();
+  test("reports a failed scope save and keeps the current session list", async () => {
+    installLocalStorage(
+      new MemoryStorage({
+        setItem: () => {
+          throw new Error("write failed");
+        },
+      }),
+    );
+    const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
+    try {
+      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await screen.findByRole("button", { name: /Chat mine/ });
 
-    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of OpenDucktor" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
+      fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
+
+      expect(toastError).toHaveBeenCalledWith("Could not save the session list scope.", {
+        description: "Allow local storage for this app, then try again. write failed",
+      });
+      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(
+        screen
+          .getByRole("radio", { name: "Show sessions of OpenDucktor" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    } finally {
+      toastError.mockRestore();
+    }
   });
 
   test("opens a sidebar session on the Sessions page", async () => {

@@ -1,6 +1,15 @@
 import { PanelLeftClose, PanelLeftOpen, TriangleAlert } from "lucide-react";
-import { type ReactElement, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
@@ -15,6 +24,7 @@ import { useSessionNavigationModel } from "@/features/session-navigation/use-ses
 import { useVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@/features/session-navigation/session-read-state";
 import { useMinuteClock } from "@/lib/relative-time";
+import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useSidebarSessionGrouping } from "@/state/mutations/use-sidebar-session-grouping";
@@ -35,6 +45,13 @@ type WorkspaceSidebarProps = {
   onHide: () => void;
   onShow: () => void;
   onOpenRepositoryModal: () => void;
+};
+
+const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
+
+type SessionScopeState = {
+  scope: SessionNavigationScope;
+  error: string | null;
 };
 
 function UnlistedWorkspacesNote({
@@ -106,12 +123,7 @@ function CollapsedUnlistedWorkspaces({
   );
 }
 
-/**
- * The sidebar with task sessions and workspace sessions in one list.
- *
- * The list scope is transient view state. It starts on the active workspace and stays the
- * same when the sidebar expands, collapses, or opens a session from another workspace.
- */
+/** The sidebar lists task and workspace sessions with the saved workspace scope. */
 export function WorkspaceSidebar({
   isOpen,
   onHide,
@@ -122,7 +134,23 @@ export function WorkspaceSidebar({
   const { workspaces, activeWorkspace, isSwitchingWorkspace, selectWorkspace } =
     useWorkspaceState();
   const navigate = useNavigate();
-  const [scope, setScope] = useState<SessionNavigationScope>("current");
+  const [{ scope, error: scopeError }, setScope] = useState(readScope);
+  useEffect(() => {
+    if (scopeError === null) return;
+    toast.error("Could not restore the session list scope.", {
+      description: `Allow local storage for this app, then reload. ${scopeError}`,
+    });
+  }, [scopeError]);
+  const changeScope = useCallback((scope: SessionNavigationScope) => {
+    try {
+      globalThis.localStorage.setItem(SESSION_SCOPE_STORAGE_KEY, scope);
+      setScope({ scope, error: null });
+    } catch (error) {
+      toast.error("Could not save the session list scope.", {
+        description: `Allow local storage for this app, then try again. ${errorMessage(error)}`,
+      });
+    }
+  }, []);
   const scopedWorkspaces = useMemo(() => {
     if (scope === "all") return workspaces;
     return activeWorkspace ? [activeWorkspace] : [];
@@ -231,7 +259,7 @@ export function WorkspaceSidebar({
               <div className="min-w-0 flex-1">
                 <SessionScopeSwitch
                   scope={scope}
-                  onScopeChange={setScope}
+                  onScopeChange={changeScope}
                   workspace={activeWorkspace}
                 />
               </div>
@@ -293,7 +321,7 @@ export function WorkspaceSidebar({
             <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
               <SessionScopeSwitch
                 scope={scope}
-                onScopeChange={setScope}
+                onScopeChange={changeScope}
                 workspace={activeWorkspace}
                 compact
               />
@@ -330,4 +358,13 @@ export function WorkspaceSidebar({
       </aside>
     </SessionMenuProvider>
   );
+}
+
+function readScope(): SessionScopeState {
+  try {
+    const saved = globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY);
+    return { scope: saved === "all" ? "all" : "current", error: null };
+  } catch (error) {
+    return { scope: "current", error: errorMessage(error) };
+  }
 }
