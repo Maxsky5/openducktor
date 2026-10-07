@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Exit, Fiber } from "effect";
+import { Deferred, Effect, Exit, Fiber, Scheduler } from "effect";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
 import {
   createHarness,
@@ -616,8 +616,8 @@ describe("asset-aware task store lifecycle", () => {
   });
 
   test("a delete interrupted at lock acquisition never leaves the lock held", async () => {
-    // A fiber yields after a fixed number of operations. The sweep moves the yield across the
-    // lock transaction, so some runs are interrupted after the lock commits and before the delete.
+    // A fiber first yields after a fixed number of operations. The sweep moves that yield across
+    // the lock transaction, so some runs stop after the lock commits and before the delete.
     const steps = (count: number) => {
       let effect: Effect.Effect<void> = Effect.void;
       for (let step = 0; step < count; step += 1) effect = effect.pipe(Effect.andThen(Effect.void));
@@ -643,7 +643,8 @@ describe("asset-aware task store lifecycle", () => {
       resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
     });
     let interrupted = 0;
-    for (let count = 1900; count < 2100; count += 1) {
+    const YIELD_BUDGET = 256;
+    for (let count = 0; count < YIELD_BUDGET; count += 1) {
       const deletion = Effect.runFork(
         steps(count).pipe(
           Effect.andThen(
@@ -653,6 +654,7 @@ describe("asset-aware task store lifecycle", () => {
               deleteSubtasks: false,
             }),
           ),
+          Effect.provideService(Scheduler.MaxOpsBeforeYield, YIELD_BUDGET),
         ),
       );
       await Effect.runPromise(Effect.yieldNow);

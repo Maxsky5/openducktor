@@ -34,6 +34,7 @@ const sessionIdentity = (
 });
 
 describe("session-start-orchestration", () => {
+  // This test is fast, but a stalled Windows CI worker took 1.6 s to run it. The budget covers the stall.
   test("prefers the preferred reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",

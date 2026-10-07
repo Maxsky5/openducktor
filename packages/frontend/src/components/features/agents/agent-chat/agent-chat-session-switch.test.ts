@@ -123,6 +123,7 @@ test.each([
   }
 });
 
+// Each case renders the chat, loads history, and switches sessions, which can exceed 1000 ms on a loaded CI runner.
 test.each([
   [false, true],
   [true, true],

@@ -59,6 +59,7 @@ describe("transcript cache lifetime", () => {
     restoreActEnvironment();
   });
 
+  // Builds and mounts large transcripts, which can exceed 1000 ms on a loaded CI runner.
   test("keeps large cached transcripts current across keyed chat mounts", async () => {
     const transcript = createLargeSession("keyed-large");
     const first = createAgentSessionFixture({ ...transcript, historyLoadState: "loaded" });
@@ -130,6 +131,7 @@ describe("transcript cache lifetime", () => {
     }
   }, 5_000);
 
+  // Builds and mounts large transcripts, which can exceed 1000 ms on a loaded CI runner.
   test("does not show a stale transcript when a hidden chat returns before its build finishes", async () => {
     const first = createLargeSession("hidden-large");
     const observed: HookResult[] = [];

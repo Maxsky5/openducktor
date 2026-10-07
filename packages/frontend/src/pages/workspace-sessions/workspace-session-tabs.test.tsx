@@ -37,6 +37,9 @@ import * as workspaceChat from "./workspace-session-chat";
 import * as sessionContent from "./workspace-session-content";
 import { WorkspaceSessionTabs } from "./workspace-session-tabs";
 
+// Every test here renders the full workspace session page, which can exceed 1000 ms on a loaded
+// CI runner. Each test sets a 5_000 ms budget for that render.
+
 const testWorkspaceIds = new Set<string>();
 const sessionTabs = (view: ReturnType<typeof render>) =>
   within(view.getByRole("tablist", { name: "Workspace session tabs" })).queryAllByRole("tab");
