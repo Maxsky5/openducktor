@@ -6,8 +6,15 @@ import { Deferred, Effect } from "effect";
  */
 export type SerialLane = {
   run<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
-  /** Reports whether an operation holds or waits for the lane. Never waits. */
-  isActive(): boolean;
+};
+
+/** Runs operations one at a time for each key, in arrival order. Keys do not wait for each other. */
+export type SerialGate = {
+  run<A, E, R>(key: string, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+  /** Reports whether an operation holds or waits for the key. Never waits. */
+  isActive(key: string): boolean;
+  /** Waits until every operation that holds or waits for a key now has left. */
+  drain(): Effect.Effect<void>;
 };
 
 type Lane = {
@@ -65,31 +72,37 @@ export const createSerialLane = (): SerialLane => {
         operation,
         () => {},
       ),
-    isActive: () => lane.users > 0,
   };
 };
 
 /** Keeps one serial lane for each key and forgets a lane when it has no operation. */
-export const createSerialGate = () => {
+export const createSerialGate = (): SerialGate => {
   const lanes = new Map<string, Lane>();
+  const run: SerialGate["run"] = (key, operation) =>
+    runInLane(
+      () => {
+        let lane = lanes.get(key);
+        if (!lane) {
+          lane = { last: null, users: 0 };
+          lanes.set(key, lane);
+        }
+        return lane;
+      },
+      operation,
+      (lane) => {
+        if (lanes.get(key) === lane) lanes.delete(key);
+      },
+    );
 
   return {
-    run: <A, E, R>(key: string, operation: Effect.Effect<A, E, R>) =>
-      runInLane(
-        () => {
-          let lane = lanes.get(key);
-          if (!lane) {
-            lane = { last: null, users: 0 };
-            lanes.set(key, lane);
-          }
-          return lane;
-        },
-        operation,
-        (lane) => {
-          if (lanes.get(key) === lane) lanes.delete(key);
-        },
+    run,
+    isActive: (key) => (lanes.get(key)?.users ?? 0) > 0,
+    drain: () =>
+      Effect.suspend(() =>
+        Effect.all(
+          [...lanes.keys()].map((key) => run(key, Effect.void)),
+          { concurrency: "unbounded", discard: true },
+        ),
       ),
-    /** Reports whether an operation holds or waits for the key. Never waits. */
-    isActive: (key: string): boolean => (lanes.get(key)?.users ?? 0) > 0,
   };
 };

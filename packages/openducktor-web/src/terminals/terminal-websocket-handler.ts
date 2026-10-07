@@ -10,7 +10,7 @@ import {
   type TerminalServerMessage,
 } from "@openducktor/contracts";
 import {
-  createSerialGate,
+  type SerialGate,
   createTerminalClientSession,
   type SerialLane,
   type TerminalClientSession,
@@ -41,7 +41,7 @@ export type TerminalWebSocketData = {
   drainWaiters: Set<(writable: boolean) => void>;
   attachPermit: SerialLane;
   /** Runs the messages of each terminal in arrival order. */
-  messageGate: ReturnType<typeof createSerialGate>;
+  messageGate: SerialGate;
   closed: boolean;
   logger: WebLogger;
   onBackgroundFailure(cause: unknown): void;

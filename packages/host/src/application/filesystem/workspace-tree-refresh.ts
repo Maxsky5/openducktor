@@ -23,7 +23,7 @@ import {
 import { toWorkspaceRelativeGitPath } from "./workspace-files-paths";
 import { compareWorkspacePaths, buildWorkspaceTree } from "./workspace-files-projection";
 import { topPaths, inRegion, parentPath, WorkspaceTreeIndex } from "./workspace-tree-index";
-import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
+import { createSerialGate } from "../../effect/serial-gate";
 
 type TreeGit = Pick<
   GitPort,
@@ -56,8 +56,7 @@ type History = Pick<View, "context" | "cursor" | "journal" | "retainedFrom">;
 export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: TreeGit) => {
   const views = new Map<string, View>();
   let disposed = false;
-  // Reserve each root lock before yielding so concurrent reads share it.
-  const locks = new Map<string, { lane: SerialLane; users: number }>();
+  const locks = createSerialGate();
   type Operation = {
     read: Effect.Effect<WorkspaceFileTreeRefreshResult, HostValidationErrorAggregate>;
     settled: boolean;
@@ -99,12 +98,9 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
       const existing = requests.get(requestKey);
       if (existing) return respond(existing, yield* existing.read, input);
       const needsFull = input.mode === "full" && views.has(key);
-      let gate = locks.get(key);
-      if (!gate) locks.set(key, (gate = { lane: createSerialLane(), users: 0 }));
-      gate.users += 1;
-      const owner = gate;
-      const run = owner.lane
+      const run = locks
         .run(
+          key,
           Effect.gen(function* () {
             if (disposed)
               return yield* new HostValidationError({
@@ -187,12 +183,6 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
           ),
         )
         .pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              owner.users -= 1;
-              if (owner.users === 0) locks.delete(key);
-            }),
-          ),
           Effect.mapError((cause) =>
             workspaceFileValidationError(
               cause,
@@ -222,10 +212,7 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
     dispose: () =>
       Effect.gen(function* () {
         disposed = true;
-        yield* Effect.all(
-          [...locks.values()].map((owner) => owner.lane.run(Effect.void)),
-          { concurrency: "unbounded" },
-        );
+        yield* locks.drain();
         views.clear();
         requests.clear();
       }),

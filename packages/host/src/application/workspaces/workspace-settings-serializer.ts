@@ -13,8 +13,7 @@ export const areAgentModelFavoritesEqual = (
 export const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
 ): WorkspaceSettingsService => {
-  const lane = createSerialLane();
-  const serialize = lane.run;
+  const serialize = createSerialLane().run;
 
   return {
     ...service,

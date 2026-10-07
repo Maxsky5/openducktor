@@ -69,7 +69,12 @@ export {
 } from "./config/openducktor-config-dir";
 export type { HostValidationErrorAggregate } from "./effect/host-errors";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
-export { createSerialGate, createSerialLane, type SerialLane } from "./effect/serial-gate";
+export {
+  createSerialGate,
+  createSerialLane,
+  type SerialGate,
+  type SerialLane,
+} from "./effect/serial-gate";
 export {
   createHostEventBus,
   type HostEventBusPort,

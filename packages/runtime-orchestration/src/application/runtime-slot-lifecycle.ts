@@ -148,55 +148,51 @@ export const createRuntimeSlotLifecycle = <E>({
     settings: Partial<SlotStatus>,
   ) =>
     Effect.gen(function* () {
-      // A runtime cannot start or become ready after shutdown began.
-      if (isShuttingDown()) {
-        update(slot, { ...settings, state: "disabled", failure: null });
-        return false;
-      }
-      const generation: Generation = { exitMessage: null, cleanupFailure: null };
-      slot.generation = generation;
-      update(slot, {
-        ...settings,
-        state: replacing ? "restarting" : "starting",
-        trigger: request.trigger,
-        failure: null,
-      });
-      // Shutdown interrupts this fiber. The tap records a returned handle before an interrupt
-      // can act, so shutdown always finds and stops it.
-      const start = Effect.uninterruptibleMask((restore) =>
-        restore(
-          drivers[slot.kind].start({
-            configuredExecutablePath: request.configuredExecutablePath,
-            ownCleanup: (cleanup) => {
-              if (slot.generation === generation) slot.orphanCleanup = cleanup;
-            },
-            onRuntimeExit: (message) => reportExit(slot, generation, message),
-            onRuntimeCleanupFailed: (cause) => reportCleanupFailure(slot, generation, cause),
-          }),
-        ).pipe(
-          Effect.tap((handle) =>
-            Effect.sync(() => {
-              // From here the handle owns the resources.
-              slot.orphanCleanup = null;
-              slot.handle = handle;
-            }),
-          ),
-        ),
-      );
       const context = yield* Effect.context<never>();
-      // Check shutdown, start the fiber, and register it in one synchronous step. A fiber can
-      // yield between operations, and shutdown must never miss a start that it did not stop.
-      const fiber = yield* Effect.sync(() => {
-        if (isShuttingDown()) return null;
-        const started = Effect.runForkWith(context)(start);
-        slot.startFiber = started;
-        return started;
+      // A runtime cannot start or become ready after shutdown began. Check shutdown, start the
+      // fiber, and register it in one synchronous step. A fiber can yield between operations,
+      // and shutdown must never miss a start that it did not stop.
+      const started = yield* Effect.sync(() => {
+        if (isShuttingDown()) {
+          update(slot, { ...settings, state: "disabled", failure: null });
+          return null;
+        }
+        const generation: Generation = { exitMessage: null, cleanupFailure: null };
+        slot.generation = generation;
+        update(slot, {
+          ...settings,
+          state: replacing ? "restarting" : "starting",
+          trigger: request.trigger,
+          failure: null,
+        });
+        // Shutdown interrupts this fiber. The tap records a returned handle before an interrupt
+        // can act, so shutdown always finds and stops it.
+        const start = Effect.uninterruptibleMask((restore) =>
+          restore(
+            drivers[slot.kind].start({
+              configuredExecutablePath: request.configuredExecutablePath,
+              ownCleanup: (cleanup) => {
+                if (slot.generation === generation) slot.orphanCleanup = cleanup;
+              },
+              onRuntimeExit: (message) => reportExit(slot, generation, message),
+              onRuntimeCleanupFailed: (cause) => reportCleanupFailure(slot, generation, cause),
+            }),
+          ).pipe(
+            Effect.tap((handle) =>
+              Effect.sync(() => {
+                // From here the handle owns the resources.
+                slot.orphanCleanup = null;
+                slot.handle = handle;
+              }),
+            ),
+          ),
+        );
+        const fiber = Effect.runForkWith(context)(start);
+        slot.startFiber = fiber;
+        return { fiber, generation };
       });
-      if (fiber === null) {
-        slot.generation = null;
-        update(slot, { state: "disabled", failure: null });
-        return false;
-      }
+      if (started === null) return false;
+      const { fiber, generation } = started;
       const exit = yield* Fiber.await(fiber);
       slot.startFiber = null;
       if (Exit.isFailure(exit)) {
