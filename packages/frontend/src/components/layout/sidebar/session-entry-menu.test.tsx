@@ -138,7 +138,7 @@ test.each(["list", "rail"] as const)(
       let menu = await openMenu(view, entry.title);
       expect(menu.queryByRole("menuitem", { name: "Rename session" })).toBeNull();
       expect(menu.queryByRole("menuitem", { name: "Archive session" })).toBeNull();
-      expect(view.queryByRole("dialog")).toBeNull();
+      expect(view.queryByRole("dialog") === null).toBe(true);
       fireEvent.click(menu.getByRole("menuitem", { name: "Mark as unread" }));
       const row = view.getByRole("button", { name: new RegExp(entry.title) });
       expect(within(row).getByRole("img", { name: "Unread session" })).toBeTruthy();
@@ -197,7 +197,8 @@ test("workspace menu copies the external ID and renames in its own workspace wit
       target: { value: "Renamed chat" },
     });
     fireEvent.click(dialog.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+    // Printing a DOM node on a failed poll can block the timer that closes the dialog.
+    await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true));
     expect(rename).toHaveBeenCalledWith({
       workspaceId: "beta",
       sessionId: "saved-id",
@@ -249,7 +250,9 @@ test.each(
         fireEvent.click(within(header).getByRole("button", { name: "Archive session" }));
       }
       const dialog = await view.findByRole("dialog", { name: "Archive chat" });
-      await waitFor(() => expect(view.queryByRole("dialog", { name: entry.title })).toBeNull());
+      await waitFor(() =>
+        expect(view.queryByRole("dialog", { name: entry.title }) === null).toBe(true),
+      );
       return within(dialog);
     };
     try {
@@ -257,8 +260,8 @@ test.each(
       expect(dialog.getByText(record.executionTarget.workingDirectory)).toBeTruthy();
       expect(archive).not.toHaveBeenCalled();
       fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
-      await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
-      expect(document.activeElement).toBe(row);
+      await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true));
+      await waitFor(() => expect(document.activeElement === row).toBe(true));
       expect(archive).not.toHaveBeenCalled();
       dialog = await openArchive();
       fireEvent.click(dialog.getByRole("button", { name: "Archive chat" }));
@@ -280,7 +283,7 @@ test.each(
         ]);
       });
       await act(async () => done.resolve({ ...record, archivedAt: NOW }));
-      await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+      await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true));
       expect(view.queryByRole("button", { name: /Chat archive/ })).toBeNull();
       expect(view.getByRole("button", { name: /Chat keep/ })).toBeTruthy();
       expect(view.getByLabelText("Current address").textContent).toBe(
