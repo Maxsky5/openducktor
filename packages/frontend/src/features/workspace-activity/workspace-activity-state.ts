@@ -1,4 +1,5 @@
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import {
   getAgentSessionActivityState,
   isAgentSessionActivityWorking,
@@ -13,6 +14,8 @@ import type { AgentSessionTranscriptActivityFacts } from "@/state/operations/age
  * projection cost stays independent of transcript size.
  */
 export type WorkspaceActivitySession = AgentSessionTranscriptActivityFacts & {
+  pendingApprovals: Readonly<AgentSessionLiveSnapshot["pendingApprovals"]>;
+  pendingQuestions: Readonly<AgentSessionLiveSnapshot["pendingQuestions"]>;
   /** Identity key of this session, used as its map key. */
   key: string;
   /** Identity key of the parent session when this session is a subagent. */
@@ -123,6 +126,8 @@ export type WorkspaceSessionLiveFacts = {
   activityState: AgentSessionActivityState;
   pendingQuestion: boolean;
   pendingPermission: boolean;
+  /** Request identities include the owning child and type, so reused IDs stay distinct. */
+  pendingInputs: ReadonlySet<string>;
   fault: string | null;
   /** Why the status of the root session is not current, after a failed status read. */
   statusUnavailableReason: string | null;
@@ -158,6 +163,7 @@ type MutableLiveFacts = {
   statusUnavailableReason: string | null;
   pendingQuestion: boolean;
   pendingPermission: boolean;
+  pendingInputs: Set<string>;
   fault: string | null;
 };
 
@@ -174,10 +180,17 @@ export const foldWorkspaceSessionLiveFacts = (
       statusUnavailableReason: sessions.get(ownerKey)?.statusUnavailableReason ?? null,
       pendingQuestion: false,
       pendingPermission: false,
+      pendingInputs: new Set<string>(),
       fault: null,
     };
     owner.pendingQuestion ||= session.pendingQuestions.length > 0;
     owner.pendingPermission ||= session.pendingApprovals.length > 0;
+    for (const request of session.pendingQuestions) {
+      owner.pendingInputs.add(JSON.stringify([key, "question", pendingInputIdentity(request)]));
+    }
+    for (const request of session.pendingApprovals) {
+      owner.pendingInputs.add(JSON.stringify([key, "permission", pendingInputIdentity(request)]));
+    }
     owner.fault ??= faults.get(key)?.message ?? null;
     owners.set(ownerKey, owner);
   }
@@ -193,6 +206,7 @@ export const foldWorkspaceSessionLiveFacts = (
       }),
       pendingQuestion: owner.pendingQuestion,
       pendingPermission: owner.pendingPermission,
+      pendingInputs: owner.pendingInputs,
       fault: owner.fault,
       statusUnavailableReason: owner.statusUnavailableReason,
     });

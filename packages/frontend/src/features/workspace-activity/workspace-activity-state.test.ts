@@ -26,6 +26,17 @@ const fold = (sessions: WorkspaceActivitySession[], archived: string[] = []) =>
     new Set(archived),
   );
 
+const approval = (): WorkspaceActivitySession["pendingApprovals"][number] => ({
+  requestId: "permission",
+  requestType: "runtime_tool",
+  title: "Permission",
+});
+
+const question = (): WorkspaceActivitySession["pendingQuestions"][number] => ({
+  requestId: "question",
+  questions: [],
+});
+
 describe("foldWorkspaceActivityBadges", () => {
   test("reports no badge for idle and stopped sessions", () => {
     expect(fold([session("a"), session("b", { status: "stopped" })])).toEqual({
@@ -40,8 +51,8 @@ describe("foldWorkspaceActivityBadges", () => {
       fold([
         session("running-1", { status: "running" }),
         session("running-2", { status: "starting" }),
-        session("waiting-1", { pendingApprovals: [{}] }),
-        session("waiting-2", { pendingQuestions: [{}] }),
+        session("waiting-1", { pendingApprovals: [approval()] }),
+        session("waiting-2", { pendingQuestions: [question()] }),
         session("failed-1", { status: "error" }),
         session("failed-2", { status: "error" }),
       ]),
@@ -57,7 +68,7 @@ describe("foldWorkspaceActivityBadges", () => {
   });
 
   test("pending input wins over the session status", () => {
-    expect(fold([session("a", { status: "running", pendingApprovals: [{}] })])).toEqual({
+    expect(fold([session("a", { status: "running", pendingApprovals: [approval()] })])).toEqual({
       inputRequired: true,
       error: false,
       active: false,
@@ -90,7 +101,7 @@ describe("foldWorkspaceActivityBadges", () => {
     expect(
       fold([
         session("parent"),
-        session("child", { parentKey: "parent", status: "error", pendingQuestions: [{}] }),
+        session("child", { parentKey: "parent", status: "error", pendingQuestions: [question()] }),
       ]),
     ).toEqual({ inputRequired: true, error: false, active: false });
   });
@@ -126,15 +137,15 @@ describe("foldWorkspaceSessionLiveFacts", () => {
         session("root", { status: "running" }),
         session("child", {
           parentKey: "root",
-          pendingQuestions: [{}],
+          pendingQuestions: [question()],
         }),
-        session("grandchild", { parentKey: "child", pendingApprovals: [{}] }),
+        session("grandchild", { parentKey: "child", pendingApprovals: [approval()] }),
       ],
       [["child", "child stream failed"]],
     );
 
     expect([...result.keys()]).toEqual(["root"]);
-    expect(result.get("root")).toEqual({
+    expect(result.get("root")).toMatchObject({
       activityState: "waiting_input",
       pendingQuestion: true,
       pendingPermission: true,
@@ -146,7 +157,7 @@ describe("foldWorkspaceSessionLiveFacts", () => {
   test("reports no root for the members of a parent cycle", () => {
     const result = facts([
       session("a", { parentKey: "b", status: "running" }),
-      session("b", { parentKey: "a", pendingQuestions: [{}] }),
+      session("b", { parentKey: "a", pendingQuestions: [question()] }),
     ]);
 
     expect(result.size).toBe(0);

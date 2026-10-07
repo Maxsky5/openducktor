@@ -1,11 +1,20 @@
 import { describe, expect, test } from "bun:test";
+import {
+  agentSessionLiveSnapshotSchema,
+  type AgentSessionLiveSnapshot,
+} from "@openducktor/contracts";
 import type { WorkspaceSessionLiveSnapshot } from "@/features/workspace-activity/workspace-activity-observer";
-import type {
-  WorkspaceSessionLiveFacts,
-  WorkspaceSessionLiveState,
+import {
+  foldWorkspaceSessionLiveFacts,
+  type WorkspaceSessionLiveFacts,
+  type WorkspaceSessionLiveState,
 } from "@/features/workspace-activity/workspace-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  applyWorkspaceActivityEnvelope,
+  emptyWorkspaceActivityProjection,
+} from "@/features/workspace-activity/workspace-activity-projection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionReadStateStore, sessionReadStateKey } from "./session-read-state-store";
 
 const identity: AgentSessionIdentity = {
@@ -21,6 +30,7 @@ const facts = (
   activityState,
   pendingQuestion: activityState === "waiting_input",
   pendingPermission: false,
+  pendingInputs: new Set(),
   fault: null,
   statusUnavailableReason: null,
   ...overrides,
@@ -40,7 +50,168 @@ const snapshot = (
   sessionRecordsError: null,
 });
 
+const liveSession = (overrides: Partial<AgentSessionLiveSnapshot>): AgentSessionLiveSnapshot =>
+  agentSessionLiveSnapshotSchema.parse({
+    ref: { repoPath: "/repo", ...identity },
+    activity: "running",
+    title: "Session",
+    startedAt: "2026-10-07T08:00:00.000Z",
+    pendingApprovals: [],
+    pendingQuestions: [],
+    contextUsage: null,
+    ...overrides,
+  });
+
 describe("Session read state", () => {
+  test.each([
+    ["question", "root"],
+    ["question", "child"],
+    ["permission", "root"],
+    ["permission", "child"],
+  ] as const)(
+    "new %s requests from a %s session become unread while input stays pending",
+    (kind, source) => {
+      const store = createSessionReadStateStore();
+      const ref = {
+        repoPath: "/repo",
+        ...identity,
+        externalSessionId: source === "child" ? "child" : identity.externalSessionId,
+      };
+      const inputSession = (requestIds: string[]) => {
+        const inputs: Partial<AgentSessionLiveSnapshot> = {
+          ref,
+          activity: kind === "question" ? "waiting_for_question" : "waiting_for_permission",
+          pendingQuestions:
+            kind === "question"
+              ? requestIds.map((requestId) => ({
+                  requestId,
+                  questions: [{ header: "Choice", question: "Which option?", options: [] }],
+                }))
+              : [],
+          pendingApprovals:
+            kind === "permission"
+              ? requestIds.map((requestId) => ({
+                  requestId,
+                  requestType: "command_execution",
+                  title: "Run command",
+                }))
+              : [],
+        };
+        if (source === "child") inputs.parentExternalSessionId = identity.externalSessionId;
+        return liveSession(inputs);
+      };
+      let projection = applyWorkspaceActivityEnvelope(emptyWorkspaceActivityProjection(), {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions:
+          source === "child" ? [liveSession({}), inputSession(["a"])] : [inputSession(["a"])],
+      });
+      const observe = () =>
+        store.observeLiveSnapshot(
+          snapshot({
+            kind: "ready",
+            sessions: foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults),
+            faults: projection.faults,
+          }),
+        );
+      const update = (requestIds: string[]) => {
+        projection = applyWorkspaceActivityEnvelope(projection, {
+          type: "session_upsert",
+          session: inputSession(requestIds),
+        });
+        observe();
+      };
+
+      observe();
+      expect(store.isUnread(key)).toBe(false);
+      store.setVisibleKey(key);
+      store.setVisibleKey(null);
+      update(["a"]);
+      expect(store.isUnread(key)).toBe(false);
+
+      update(["b"]);
+      expect(store.isUnread(key)).toBe(true);
+      store.setVisibleKey(key);
+      update(["c"]);
+      expect(store.isUnread(key)).toBe(false);
+      store.setVisibleKey(null);
+      update(["c"]);
+      expect(store.isUnread(key)).toBe(false);
+
+      update(["c", "d"]);
+      expect(store.isUnread(key)).toBe(true);
+      store.setUnread(key, false);
+      update(["d", "c"]);
+      expect(store.isUnread(key)).toBe(false);
+      update(["c"]);
+      expect(store.isUnread(key)).toBe(false);
+
+      projection = applyWorkspaceActivityEnvelope(projection, {
+        type: "session_upsert",
+        session: liveSession({
+          ...inputSession(["c"]),
+          ref: { ...ref, externalSessionId: "another-child" },
+          parentExternalSessionId: identity.externalSessionId,
+        }),
+      });
+      observe();
+      expect(store.isUnread(key)).toBe(true);
+
+      store.setUnread(key, false);
+      const current = inputSession(["c"]);
+      const changedKind = liveSession({
+        ...current,
+        activity: kind === "permission" ? "waiting_for_question" : "waiting_for_permission",
+        pendingQuestions: kind === "permission" ? [{ requestId: "c", questions: [] }] : [],
+        pendingApprovals:
+          kind === "question"
+            ? [
+                {
+                  requestId: "c",
+                  requestType: "command_execution",
+                  title: "Run command",
+                },
+              ]
+            : [],
+      });
+      projection = applyWorkspaceActivityEnvelope(projection, {
+        type: "session_upsert",
+        session: changedKind,
+      });
+      observe();
+      expect(store.isUnread(key)).toBe(true);
+
+      if (kind === "question") {
+        projection = applyWorkspaceActivityEnvelope(projection, {
+          type: "session_upsert",
+          session: current,
+        });
+        observe();
+        store.setUnread(key, false);
+        const nextInstance = liveSession({
+          ...current,
+          pendingQuestions: current.pendingQuestions.map((request) => ({
+            ...request,
+            requestInstanceId: "next-instance",
+          })),
+        });
+        projection = applyWorkspaceActivityEnvelope(projection, {
+          type: "session_upsert",
+          session: nextInstance,
+        });
+        observe();
+        expect(store.isUnread(key)).toBe(true);
+        store.setUnread(key, false);
+        projection = applyWorkspaceActivityEnvelope(projection, {
+          type: "session_upsert",
+          session: nextInstance,
+        });
+        observe();
+        expect(store.isUnread(key)).toBe(false);
+      }
+    },
+  );
+
   test("manual read marks survive unchanged activity and can mark the visible session unread", () => {
     const store = createSessionReadStateStore();
     let notifications = 0;

@@ -10,6 +10,11 @@ export const sessionReadStateKey = (workspaceId: string, identity: AgentSessionI
 
 type Activity = "running" | "waiting_input" | "idle";
 
+type Baseline = {
+  activity: Activity;
+  pendingInputs: ReadonlySet<string>;
+};
+
 export type SessionReadStateStore = {
   subscribe(listener: () => void): () => void;
   isUnread(key: string): boolean;
@@ -26,7 +31,7 @@ export type SessionReadStateStore = {
 export const createSessionReadStateStore = (): SessionReadStateStore => {
   const listeners = new Set<() => void>();
   const unread = new Set<string>();
-  const activityByWorkspace = new Map<string, Map<string, Activity>>();
+  const baselinesByWorkspace = new Map<string, Map<string, Baseline>>();
   const blockedByKey = new Map<string, boolean>();
   let visibleKey: string | null = null;
 
@@ -61,7 +66,7 @@ export const createSessionReadStateStore = (): SessionReadStateStore => {
       for (const [workspaceId, live] of snapshot.statesByWorkspaceId) {
         // A lost stream or failed status read cannot confirm that work finished.
         if (live.kind !== "ready") continue;
-        const activities = activityByWorkspace.get(workspaceId) ?? new Map<string, Activity>();
+        const baselines = baselinesByWorkspace.get(workspaceId) ?? new Map<string, Baseline>();
         for (const [identityKey, facts] of live.sessions) {
           if (
             facts.statusUnavailableReason !== null ||
@@ -69,24 +74,28 @@ export const createSessionReadStateStore = (): SessionReadStateStore => {
           )
             continue;
           const activity = readActivity(facts.activityState);
-          const before = activities.get(identityKey);
-          if (before !== undefined && before !== activity && activity !== "running") {
+          const before = baselines.get(identityKey);
+          if (
+            before !== undefined &&
+            ((before.activity !== activity && activity !== "running") ||
+              hasNewInput(facts.pendingInputs, before.pendingInputs))
+          ) {
             if (markUnread(readKey(workspaceId, identityKey))) changed = true;
           }
-          activities.set(identityKey, activity);
+          baselines.set(identityKey, { activity, pendingInputs: facts.pendingInputs });
         }
         // Removal from a current live list confirms that the saved session is idle.
-        for (const [identityKey, activity] of activities) {
+        for (const [identityKey, before] of baselines) {
           if (
-            activity === "idle" ||
+            before.activity === "idle" ||
             live.sessions.has(identityKey) ||
             live.faults.get(identityKey)?.statusUnavailable
           )
             continue;
-          activities.set(identityKey, "idle");
+          baselines.set(identityKey, { activity: "idle", pendingInputs: new Set<string>() });
           if (markUnread(readKey(workspaceId, identityKey))) changed = true;
         }
-        activityByWorkspace.set(workspaceId, activities);
+        baselinesByWorkspace.set(workspaceId, baselines);
       }
       if (changed) emit();
     },
@@ -105,4 +114,11 @@ const readActivity = (state: AgentSessionActivityState): Activity => {
   if (isAgentSessionActivityWorking(state)) return "running";
   if (state === "waiting_input") return "waiting_input";
   return "idle";
+};
+
+const hasNewInput = (current: ReadonlySet<string>, before: ReadonlySet<string>): boolean => {
+  for (const key of current) {
+    if (!before.has(key)) return true;
+  }
+  return false;
 };

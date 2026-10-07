@@ -56,6 +56,7 @@ const facts = (overrides: Partial<WorkspaceSessionLiveFacts> = {}): WorkspaceSes
   activityState: "idle",
   pendingQuestion: false,
   pendingPermission: false,
+  pendingInputs: new Set(),
   fault: null,
   statusUnavailableReason: null,
   ...overrides,
