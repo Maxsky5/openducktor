@@ -49,29 +49,21 @@ export const prepareTerminalShell = (
 
 function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
   const quote = (value: string) => formatTerminalPathInput(plan.shell, [value]);
-  const restore = 'if (( _odt_zdotdir_set )); then ZDOTDIR="$_odt_zdotdir"; else unset ZDOTDIR; fi';
-  const save = '_odt_zdotdir="${ZDOTDIR-$HOME}"\n_odt_zdotdir_set=${+ZDOTDIR}';
-  const redirect = `ZDOTDIR=${quote(root)}`;
-  const source = (name: string) =>
-    `[[ ! -r "\${ZDOTDIR-$HOME}/${name}" ]] || source "\${ZDOTDIR-$HOME}/${name}"`;
   return {
     ".zshenv": [
       plan.env.ZDOTDIR === undefined ? "unset ZDOTDIR" : `ZDOTDIR=${quote(plan.env.ZDOTDIR)}`,
-      source(".zshenv"),
-      save,
-      redirect,
+      '[[ ! -r "${ZDOTDIR-$HOME}/.zshenv" ]] || source "${ZDOTDIR-$HOME}/.zshenv"',
+      // System profiles use ZDOTDIR for history and key files. Keep the user's directory
+      // throughout startup, then append our hooks before the first interactive command.
+      'builtin zmodload zsh/sched || { print -u2 -- "OpenDucktor could not load zsh/sched. Install the zsh modules, then reopen the terminal."; exit 1; }',
+      `builtin sched +0 ${quote(`source ${quote(join(root, "hooks.zsh"))}`)}`,
     ].join("\n"),
-    ".zprofile": [restore, source(".zprofile"), save, redirect].join("\n"),
-    ".zshrc": [
-      restore,
-      source(".zshrc"),
+    "hooks.zsh": [
       posixHooks(nonce),
       "preexec_functions+=(_odt_command_start)",
       "precmd_functions+=(_odt_command_end)",
-      save,
-      `[[ ! -o login ]] || ${redirect}`,
+      "_odt_command_end",
     ].join("\n"),
-    ".zlogin": [restore, source(".zlogin"), "unset _odt_zdotdir _odt_zdotdir_set"].join("\n"),
   };
 }
 

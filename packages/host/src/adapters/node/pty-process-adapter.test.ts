@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { access } from "node:fs/promises";
 import { assertTerminalPtyConformance } from "../../testing/terminal-pty-conformance";
 import { Effect } from "effect";
 import { createNodePtyPort } from "./pty-process-adapter";
@@ -31,7 +32,7 @@ describe("createNodePtyPort", () => {
     );
     expect(result._tag).toBe("Left");
     expect(root).toBeString();
-    expect(await Bun.file(`${root}/.zshrc`).exists()).toBe(false);
+    await expect(access(root!)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("includes the native spawn error, shell, and directory in startup failures", async () => {
