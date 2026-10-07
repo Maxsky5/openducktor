@@ -192,7 +192,9 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
     message.type === "attach"
       ? socket.data.attachPermit.run(waitForWritable(socket).pipe(Effect.flatMap(() => handle)))
       : handle;
-  Effect.runFork(socket.data.messageGate.run("terminalId" in message ? message.terminalId : "", operation));
+  Effect.runFork(
+    socket.data.messageGate.run("terminalId" in message ? message.terminalId : "", operation),
+  );
 };
 
 export const terminalWebSocketHandler = {

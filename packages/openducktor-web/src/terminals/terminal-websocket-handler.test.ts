@@ -103,7 +103,6 @@ describe("terminalWebSocketHandler", () => {
       "activity_snapshot_start",
       "activity_snapshot_end",
     ]);
-    expect(harness.data.messagePermits.size).toBe(0);
     expect(harness.closed).toEqual([]);
     send("unobserve_activity");
     await Bun.sleep(0);

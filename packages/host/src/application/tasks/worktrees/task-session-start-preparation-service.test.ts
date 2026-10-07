@@ -26,10 +26,10 @@ const createService = (gitOverrides: Partial<GitPort>) => {
     }),
     gitPort: {
       ...createBuildStartGitPort({ calls }),
-      createWorktree: () => Effect.dieMessage("must keep the existing worktree"),
-      removeWorktree: () => Effect.dieMessage("must keep the existing worktree"),
-      deleteLocalBranch: () => Effect.dieMessage("must keep the existing branch"),
-      configureBranchUpstream: () => Effect.dieMessage("must keep the existing branch"),
+      createWorktree: () => Effect.die(new Error("must keep the existing worktree")),
+      removeWorktree: () => Effect.die(new Error("must keep the existing worktree")),
+      deleteLocalBranch: () => Effect.die(new Error("must keep the existing branch")),
+      configureBranchUpstream: () => Effect.die(new Error("must keep the existing branch")),
       ...gitOverrides,
     },
     settingsConfig: createBuildSettingsConfig(new Set(["/repo", worktreePath])),
@@ -70,7 +70,7 @@ describe("task session preparation in an existing worktree", () => {
 
     expect(prepared).toMatchObject({ workingDirectory: worktreePath, role });
     await Effect.runPromise(
-      service.complete(prepared, () => Effect.dieMessage("must keep the task status")),
+      service.complete(prepared, () => Effect.die(new Error("must keep the task status"))),
     );
     await expect(Effect.runPromise(prepared.cleanup())).resolves.toBe("");
   });
@@ -104,7 +104,7 @@ describe("task session preparation in an existing worktree", () => {
     },
   ])("rejects an existing task directory that is $reason", async ({ gitOverrides, error }) => {
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         createService(gitOverrides).prepare({
           canonicalRepoPath: "/repo",
           taskId: "task-1",
@@ -115,8 +115,8 @@ describe("task session preparation in an existing worktree", () => {
     );
 
     expect(result).toMatchObject({
-      _tag: "Left",
-      left: { operation: "task.session_start.prepare", message: error },
+      _tag: "Failure",
+      failure: { operation: "task.session_start.prepare", message: error },
     });
   });
 });

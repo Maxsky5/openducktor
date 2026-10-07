@@ -5,7 +5,8 @@ import type {
   AgentSessionTranscriptEvent,
   TaskAgentSessions,
 } from "@openducktor/contracts";
-import { Effect, TestClock, TestContext } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -228,8 +229,8 @@ const setup = async () => {
       now === undefined
         ? persistence.observe(envelope, provenance)
         : TestClock.setTime(now).pipe(
-            Effect.zipRight(persistence.observe(envelope, provenance)),
-            Effect.provide(TestContext.TestContext),
+            Effect.andThen(persistence.observe(envelope, provenance)),
+            Effect.provide(TestClock.layer()),
           ),
     );
   return {

@@ -386,11 +386,13 @@ export const createTerminalSessionEngine = ({
           catch: (cause) => terminalOperationFailure(cause, "close"),
         });
         if (session.kind === "output")
-          return yield* terminalFailure(
-            "invalid_input",
-            "close",
-            "Use the dev server Stop action to close this output source.",
-            terminalId,
+          return yield* Effect.fail(
+            terminalFailure(
+              "invalid_input",
+              "close",
+              "Use the dev server Stop action to close this output source.",
+              terminalId,
+            ),
           );
         yield* closeSession(session, confirmTerminate);
       }),

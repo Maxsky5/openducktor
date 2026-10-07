@@ -254,7 +254,7 @@ export const createTerminalSessionLifecycle = ({
       forgetTerminalSession(session);
       sessions.delete(terminalId);
       activity.remove(terminalId);
-    }).pipe(session.operations.withPermits(1));
+    }).pipe(session.operations.run);
 
   const closeSessions = (
     targets: readonly TerminalSession[],

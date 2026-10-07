@@ -16,7 +16,7 @@ describe("createNodePtyPort", () => {
       },
     });
     const result = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         port.start(
           {
             shell: "/bin/zsh",
@@ -30,7 +30,7 @@ describe("createNodePtyPort", () => {
         ),
       ),
     );
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(root).toBeString();
     await expect(access(root!)).rejects.toMatchObject({ code: "ENOENT" });
   });

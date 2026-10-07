@@ -256,8 +256,8 @@ describe("TerminalService", () => {
     pty.port.start = (plan, handlers) =>
       Effect.uninterruptible(
         Deferred.succeed(started, undefined).pipe(
-          Effect.zipRight(Deferred.await(release)),
-          Effect.zipRight(start(plan, handlers)),
+          Effect.andThen(Deferred.await(release)),
+          Effect.andThen(start(plan, handlers)),
         ),
       );
     const { service } = await makeService(pty);
@@ -266,7 +266,7 @@ describe("TerminalService", () => {
     );
     try {
       await Effect.runPromise(Deferred.await(started));
-      await Effect.runPromise(Fiber.interruptFork(fiber));
+      fiber.interruptUnsafe();
       await Effect.runPromise(Deferred.succeed(release, undefined));
       await Effect.runPromise(Fiber.await(fiber));
       await Effect.runPromise(service.dispose());
@@ -286,8 +286,8 @@ describe("TerminalService", () => {
     const start = pty.port.start;
     pty.port.start = (plan, handlers) =>
       Deferred.succeed(started, undefined).pipe(
-        Effect.zipRight(Deferred.await(release)),
-        Effect.zipRight(start(plan, handlers)),
+        Effect.andThen(Deferred.await(release)),
+        Effect.andThen(start(plan, handlers)),
       );
     const { service } = await makeService(pty);
     const creating = Effect.runFork(
@@ -457,11 +457,11 @@ describe("TerminalService", () => {
       pty.failNextTerminate();
       rejectDelivery = true;
       const failure = await Effect.runPromise(
-        Effect.either(
+        Effect.result(
           service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: true }),
         ),
       );
-      expect(failure._tag).toBe("Left");
+      expect(failure._tag).toBe("Failure");
       expect(messages.at(-1)).toMatchObject({
         type: "activity_updated",
         activity: { summary: { lifecycle: "close_failed" } },

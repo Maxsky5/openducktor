@@ -469,10 +469,10 @@ describe("createWorkspaceSettingsService", () => {
       writeConfig: () => Effect.fail(failure),
     });
     const result = await Effect.runPromise(
-      Effect.either(service.updateSidebarSessionGrouping("none")),
+      Effect.result(service.updateSidebarSessionGrouping("none")),
     );
-    expect(result._tag).toBe("Left");
-    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure).toBe(failure);
     expect(
       (await Effect.runPromise(service.getSettingsSnapshot())).appearance.sidebarSessionGrouping,
     ).toBe("task");
