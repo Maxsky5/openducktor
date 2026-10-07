@@ -96,6 +96,8 @@ for (const [name, config] of [
           HOME: root,
           HISTFILE: historyPath,
           TERM: "xterm-256color",
+          // The non-ASCII command needs a UTF-8 locale, and the test runner can have none.
+          LC_ALL: "C.UTF-8",
         };
         if (name === "zsh") {
           const plain = spawnSync(shell!, args, {

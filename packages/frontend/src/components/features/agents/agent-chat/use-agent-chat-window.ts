@@ -50,7 +50,6 @@ export function useAgentChatWindow({
     isFollowingLatestWindow: isPinned,
     displayedSessionKey,
     messagesContainerRef,
-    messagesContentRef,
   });
   const { isNearBottom, isNearTop, pin, unpin, syncScrollPosition } = useAgentChatScrollController({
     messagesContainerRef,

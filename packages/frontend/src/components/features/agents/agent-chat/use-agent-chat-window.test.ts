@@ -206,6 +206,7 @@ const mountHarness = async (
     extraContentHeightPx?: { current: number };
     containerClientHeight?: number;
     rowHeightPx?: number;
+    getRowHeightPx?: (row: AgentChatTranscriptRow) => number;
   },
 ): Promise<{
   getLatestResult: () => HookResult;
@@ -217,6 +218,7 @@ const mountHarness = async (
   const { latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
   const extraContentHeightPx = options?.extraContentHeightPx ?? { current: 0 };
   const rowHeightPx = options?.rowHeightPx ?? ROW_HEIGHT_PX;
+  const getRowHeightPx = options?.getRowHeightPx ?? (() => rowHeightPx);
 
   if (options?.attachDom) {
     const container = document.createElement("div");
@@ -243,15 +245,57 @@ const mountHarness = async (
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
       get: () =>
-        getLatestResult(latestResultRef).visibleRows.length * rowHeightPx +
-        extraContentHeightPx.current,
+        getLatestResult(latestResultRef).visibleRows.reduce(
+          (height, row) => height + getRowHeightPx(row),
+          0,
+        ) + extraContentHeightPx.current,
     });
+    // Like a browser layout, a read clamps the position when the scroll range gets smaller.
+    const clampScrollTop = (value: number): number =>
+      Math.max(0, Math.min(value, getMaxScrollTop(container)));
     Object.defineProperty(container, "scrollTop", {
       configurable: true,
-      get: () => scrollTopValue,
+      get: () => {
+        scrollTopValue = clampScrollTop(scrollTopValue);
+        return scrollTopValue;
+      },
       set: (value: number) => {
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        scrollTopValue = Math.max(0, Math.min(value, maxScrollTop));
+        scrollTopValue = clampScrollTop(value);
+      },
+    });
+
+    // The mounted rows follow the committed row window, like the rows that React renders.
+    const rowElementsByKey = new Map<string, HTMLElement>();
+    const readRowRect = (rowKey: string): DOMRect => {
+      const visibleRows = getLatestResult(latestResultRef).visibleRows;
+      const rowIndex = visibleRows.findIndex((row) => row.key === rowKey);
+      const offset = visibleRows
+        .slice(0, rowIndex)
+        .reduce((height, row) => height + getRowHeightPx(row), 0);
+      const row = visibleRows[rowIndex];
+      return new DOMRect(0, offset - container.scrollTop, 0, row ? getRowHeightPx(row) : 0);
+    };
+    const getRowElement = (rowKey: string): HTMLElement => {
+      const existingElement = rowElementsByKey.get(rowKey);
+      if (existingElement) {
+        return existingElement;
+      }
+      const element = document.createElement("div");
+      element.dataset.rowKey = rowKey;
+      Object.defineProperty(element, "getBoundingClientRect", {
+        configurable: true,
+        value: () => readRowRect(rowKey),
+      });
+      rowElementsByKey.set(rowKey, element);
+      return element;
+    };
+    Object.defineProperty(container, "querySelectorAll", {
+      configurable: true,
+      value: (selector: string) => {
+        if (selector !== "[data-row-key]") {
+          throw new Error(`Unexpected transcript selector: ${selector}`);
+        }
+        return getLatestResult(latestResultRef).visibleRows.map((row) => getRowElement(row.key));
       },
     });
 
@@ -298,41 +342,6 @@ const mountPinnedTranscript = async () => {
     throw new Error("Expected messages container");
   }
   return { harness, container, extraContentHeightPx };
-};
-
-const renderMountedRowElements = (
-  harness: Awaited<ReturnType<typeof mountHarness>>,
-  rowHeightPx = ROW_HEIGHT_PX,
-): void => {
-  const container = harness.messagesContainerRef.current;
-  const content = harness.messagesContentRef.current;
-  if (!container || !content) {
-    throw new Error("Expected mounted row DOM");
-  }
-
-  content.replaceChildren();
-  harness.getLatestResult().visibleRows.forEach((row, rowIndex) => {
-    const element = document.createElement("div");
-    element.dataset.rowKey = row.key;
-    Object.defineProperty(element, "getBoundingClientRect", {
-      configurable: true,
-      value: () => {
-        const top = rowIndex * rowHeightPx - container.scrollTop;
-        return {
-          bottom: top + rowHeightPx,
-          height: rowHeightPx,
-          left: 0,
-          right: 0,
-          top,
-          width: 0,
-          x: 0,
-          y: top,
-          toJSON: () => ({}),
-        };
-      },
-    });
-    content.appendChild(element);
-  });
 };
 
 const dispatchWheelUp = async (container: HTMLDivElement): Promise<void> => {
@@ -736,6 +745,61 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("downward trim-top keeps the visible rows in place when it removes more height than remains below", async () => {
+    const tallRowHeightPx = 200;
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const tallRowKeys = new Set(rows.slice(0, AGENT_CHAT_ROW_WINDOW_SIZE).map((row) => row.key));
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        getRowHeightPx: (row) => (tallRowKeys.has(row.key) ? tallRowHeightPx : ROW_HEIGHT_PX),
+      },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const scrollToMountedBottom = async (): Promise<void> => {
+      await act(async () => {
+        container.scrollTop = getMaxScrollTop(container);
+        await dispatchPointerDown(container);
+        await dispatchScroll(container);
+      });
+      await animationFrameDriver.flushFrames();
+    };
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await animationFrameDriver.flushFrames();
+    await scrollToMountedBottom();
+    await scrollToMountedBottom();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(harness.getLatestResult().visibleRows).toHaveLength(MAX_MOUNTED_ROW_COUNT);
+
+    // The trimmed top rows are taller than the appended rows and the rows below the viewport,
+    // so the scroll range after the trim ends above the scroll position before the trim.
+    const scrollTopBeforeTrim = getMaxScrollTop(container);
+    await scrollToMountedBottom();
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE);
+    expect(getMaxScrollTop(container)).toBeLessThan(scrollTopBeforeTrim);
+    expect(container.scrollTop).toBe(
+      scrollTopBeforeTrim - AGENT_CHAT_ROW_WINDOW_SIZE * tallRowHeightPx,
+    );
+
+    await harness.unmount();
+  });
+
   test("scrollToTop from a slid row window selects the first window and pins top with one click", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
     const harness = await mountHarness(
@@ -818,8 +882,6 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(harness.getLatestResult().visibleRows).toHaveLength(MAX_MOUNTED_ROW_COUNT);
-
-    renderMountedRowElements(harness);
     const preloadScrollTop =
       (MAX_MOUNTED_ROW_COUNT - AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT - 1) * ROW_HEIGHT_PX -
       container.clientHeight +
@@ -1030,6 +1092,72 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("upward prepend at the top edge keeps the visible rows in place", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    // Browser scroll anchoring does not apply at scroll offset zero.
+    await act(async () => {
+      container.scrollTop = 0;
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 4);
+    expect(container.scrollTop).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * ROW_HEIGHT_PX);
+
+    await harness.unmount();
+  });
+
+  test("upward prepend keeps the user's scroll between the request and the commit", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const scrollTopAtRequest = (AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT - 1) * ROW_HEIGHT_PX;
+    const scrollTopAtCommit = scrollTopAtRequest + ROW_HEIGHT_PX / 2;
+    await act(async () => {
+      container.scrollTop = scrollTopAtRequest;
+      await dispatchWheelUp(container);
+      container.dispatchEvent(new Event("scroll"));
+      container.scrollTop = scrollTopAtCommit;
+      container.dispatchEvent(new Event("scroll"));
+      expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 5);
+    });
+    await animationFrameDriver.flushFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 4);
+    expect(container.scrollTop).toBe(
+      scrollTopAtCommit + AGENT_CHAT_ROW_WINDOW_SIZE * ROW_HEIGHT_PX,
+    );
+
+    await harness.unmount();
+  });
+
   test("native scroll near the top slides the mounted range and unmounts newer bottom rows", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
     const harness = await mountHarness(
@@ -1098,8 +1226,6 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
     expect(harness.getLatestResult().visibleRows).toHaveLength(MAX_MOUNTED_ROW_COUNT);
-
-    renderMountedRowElements(harness);
 
     await act(async () => {
       container.scrollTop = (AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT + 10) * ROW_HEIGHT_PX;
@@ -1739,12 +1865,14 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    container.scrollTop = 260;
+    // The user scrolls up but stays below the preload row, so the row window does not change.
+    container.scrollTop = (AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT + 5) * ROW_HEIGHT_PX;
     await act(async () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
     });
     await animationFrameDriver.flushFrames();
+    expect(harness.getLatestResult().visibleRows[0]?.key).toBe(firstVisibleRowKey);
 
     await harness.update({
       rows: prependedRows,
