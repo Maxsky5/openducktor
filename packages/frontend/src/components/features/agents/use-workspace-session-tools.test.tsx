@@ -129,6 +129,7 @@ function PanelHarness({
     workingDirectory,
     contextMode: contextMode,
     branchKey: branchKey,
+    currentBranch: branchReady ? { name: branchKey, detached: false } : null,
     branchReady: branchReady,
     target: target,
     targetError: targetError,
@@ -353,6 +354,59 @@ test("shows a failed dev-server read after loading", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("reuses checked Git data when workspace sessions share a directory and comparison", async () => {
+  const comparison = mock(async (): Promise<GitComparisonTarget> => ({
+    kind: "available",
+    reference: targetReference,
+  }));
+  const status = mock(
+    async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+      worktreeStatus(target, scope),
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitGetWorktreeStatus: status,
+        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const client = createToolsQueryClient();
+  const panel = (sessionId: string) => (
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <PanelHarness key={sessionId} sessionId={sessionId} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel("session-1"));
+  try {
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature"),
+    );
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    const reads = status.mock.calls.length;
+    view.rerender(panel("session-2"));
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    expect(screen.queryByText(/Checking comparison|Loading comparison/)).toBeNull();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(status).toHaveBeenCalledTimes(reads);
+    expect(comparison).toHaveBeenCalledTimes(1);
+    view.rerender(panel("session-1"));
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(status).toHaveBeenCalledTimes(reads);
+  } finally {
+    view.unmount();
+    client.clear();
     configureShellBridge(createUnavailableShellBridge());
   }
 });
@@ -1135,7 +1189,9 @@ test.each(
       expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
         false,
       );
-      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(true);
+      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(
+        change === "branch" || stage === "settings" || stage === "branch",
+      );
       if (change === "branch") expect(reads.some((read) => read.startsWith("fetch:"))).toBe(false);
     }
   } finally {
@@ -1485,6 +1541,11 @@ test.each(
         );
         fireEvent.click(screen.getByTestId("agent-studio-git-confirm-reset-button"));
       } else {
+        await waitFor(() =>
+          expect(
+            screen.getByTestId(`agent-studio-git-${kind}-button`).hasAttribute("disabled"),
+          ).toBe(false),
+        );
         fireEvent.click(screen.getByTestId(`agent-studio-git-${kind}-button`));
       }
       await waitFor(() => expect(operation).toHaveBeenCalledTimes(1));

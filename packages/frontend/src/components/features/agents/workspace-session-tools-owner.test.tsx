@@ -63,6 +63,7 @@ test("returning to a session checks fresh comparison data while its previous rea
     contextMode: "worktree",
     branchKey: "branch-a",
     branchReady: true,
+    currentBranch: { name: "feature", detached: false },
     target: { branch: "main" },
     targetError: null,
     applyTarget: async () => {},
@@ -179,6 +180,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
             sessionId="session"
             workingDirectory="/repo/a"
             contextMode="worktree"
+            currentBranch={{ name: "feature", detached: false }}
             branchKey="feature"
             branchReady={true}
             target={{ branch: target }}
@@ -306,6 +308,7 @@ test.each(["directory", "branch"] as const)(
               sessionId={sessionId}
               workingDirectory={workingDirectory}
               contextMode="worktree"
+              currentBranch={{ name: branchKey, detached: false }}
               branchKey={branchKey}
               branchReady={true}
               target={{ branch: "main", remote: "origin" }}

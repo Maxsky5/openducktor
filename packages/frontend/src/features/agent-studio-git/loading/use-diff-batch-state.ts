@@ -61,7 +61,7 @@ type UseAgentStudioDiffBatchStateResult = {
   applyScopeLoadError: (args: ApplyScopeLoadErrorArgs) => void;
   applySummaryResult: (args: ApplySummaryResultArgs) => void;
   consumePendingFullReload: (loadContext: LoadRequestContext) => void;
-  resetControllerState: () => void;
+  resetControllerState: (state?: DiffBatchState) => void;
   setBatchLoading: (isLoading: boolean) => void;
 };
 
@@ -124,10 +124,13 @@ export function useAgentStudioDiffBatchState({
     [commitControllerState],
   );
 
-  const resetControllerState = useCallback((): void => {
-    resetRequestTracking();
-    commitControllerState(createInitialControllerState());
-  }, [commitControllerState, resetRequestTracking]);
+  const resetControllerState = useCallback(
+    (state = createInitialDiffBatchState()): void => {
+      resetRequestTracking();
+      commitControllerState({ ...createInitialControllerState(), batchState: state });
+    },
+    [commitControllerState, resetRequestTracking],
+  );
 
   const applySummaryResult = useCallback(
     ({

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
+  gitQueryKeys,
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
@@ -14,6 +15,7 @@ import type { LoadRequestContext } from "./use-diff-batch-state";
 
 type UseDiffLoadRunnerArgs = Pick<
   UseAgentStudioDiffLoaderArgs,
+  | "cacheKey"
   | "repoPathRef"
   | "requestContextKeyRef"
   | "targetBranchRef"
@@ -27,6 +29,7 @@ type UseDiffLoadRunnerArgs = Pick<
 >;
 
 export const useAgentStudioDiffLoadRunner = ({
+  cacheKey,
   requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
@@ -69,7 +72,7 @@ export const useAgentStudioDiffLoadRunner = ({
         scope === "uncommitted" ? "HEAD" : targetBranch,
         scope,
         workingDir,
-        { branchKey: requestContextKey },
+        { branchKey: cacheKey },
       );
 
       if (!isStale(context) && shouldApplyResult(scope, "summary", version)) {
@@ -81,7 +84,20 @@ export const useAgentStudioDiffLoadRunner = ({
             targetBranch,
             workingDir,
           },
-          markScopeInvalidated,
+          markScopeInvalidated: (invalidatedScope) => {
+            markScopeInvalidated(invalidatedScope);
+            void queryClient.invalidateQueries({
+              queryKey: gitQueryKeys.worktreeStatus(
+                repoPath,
+                invalidatedScope === "uncommitted" ? "HEAD" : targetBranch,
+                invalidatedScope,
+                workingDir,
+                cacheKey,
+              ),
+              exact: true,
+              refetchType: "none",
+            });
+          },
           requestSequence,
           scope,
           summaryFields: toScopeSummaryFields(summary),
@@ -91,6 +107,7 @@ export const useAgentStudioDiffLoadRunner = ({
     },
     [
       applySummaryResult,
+      cacheKey,
       isStale,
       markScopeInvalidated,
       onLoadApplied,
@@ -121,7 +138,7 @@ export const useAgentStudioDiffLoadRunner = ({
         scope === "uncommitted" ? "HEAD" : targetBranch,
         scope,
         workingDir,
-        { force, branchKey: requestContextKey },
+        { force, branchKey: cacheKey, staleTime: Infinity },
       );
 
       if (!isStale(context) && shouldApplyResult(scope, "full", version)) {
@@ -136,6 +153,7 @@ export const useAgentStudioDiffLoadRunner = ({
     },
     [
       applyFullResult,
+      cacheKey,
       clearScopeInvalidation,
       isStale,
       onLoadApplied,

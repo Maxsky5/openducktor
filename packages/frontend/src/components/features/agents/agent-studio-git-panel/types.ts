@@ -18,6 +18,8 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   /** A repository-root branch switcher shown in repository mode. */
   repositoryBranchControl?: ReactNode;
   comparisonUnavailableReason?: string | null;
+  comparisonPending?: boolean;
+  branchKnown?: boolean;
   comparisonReference?: string | null;
   commentOwner?: InlineCommentOwner | null;
   commentPlaceholder?: string;

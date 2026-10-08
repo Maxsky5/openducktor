@@ -1,3 +1,4 @@
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import {
   canonicalTargetBranch,
   targetBranchFromSelection,
@@ -11,14 +12,21 @@ export function buildComparisonView<T extends DiffDataState>(
   data: T,
   comparison: ReturnType<typeof useSessionComparison>,
   label: string,
+  branch: GitCurrentBranch | null,
 ) {
   const target = data.scopeStatesByScope.target;
-  const targetLabel =
-    comparison.target?.branch === UPSTREAM_TARGET_BRANCH
-      ? comparison.resolvedTarget
-        ? canonicalTargetBranch(targetBranchFromSelection(comparison.resolvedTarget))
-        : "Upstream"
-      : label;
+  let targetLabel = label;
+  if (comparison.target?.branch === UPSTREAM_TARGET_BRANCH) {
+    targetLabel = "Upstream";
+    if (comparison.resolvedTarget) {
+      targetLabel = canonicalTargetBranch(targetBranchFromSelection(comparison.resolvedTarget));
+    }
+  }
+  const comparisonPending =
+    !target.error &&
+    (comparison.isPending ||
+      (!!comparison.resolvedTarget &&
+        (!data.loadedScopesByScope.target || !data.loadedScopesByScope.uncommitted)));
   const unavailableReason =
     comparison.unavailableReason ??
     target.error ??
@@ -33,9 +41,12 @@ export function buildComparisonView<T extends DiffDataState>(
   return {
     ...data,
     ...active,
+    branch: branch?.name ?? null,
+    branchKnown: branch !== null,
     diffScope,
     targetBranch: targetLabel,
     comparisonUnavailableReason: unavailableReason,
+    comparisonPending,
     commitsAheadBehind: reference ? target.commitsAheadBehind : null,
     hashVersion: uncommitted.hashVersion,
     statusHash: uncommitted.statusHash,

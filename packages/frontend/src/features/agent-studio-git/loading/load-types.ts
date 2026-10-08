@@ -40,6 +40,7 @@ export type DiffLoadRefs = {
 };
 
 export type UseAgentStudioDiffLoaderArgs = DiffLoadRefs & {
+  cacheKey: string;
   shouldBlockDiffLoading: boolean;
   applyFullResult: DiffBatchStateController["applyFullResult"];
   applyScopeLoadError: DiffBatchStateController["applyScopeLoadError"];
@@ -55,7 +56,7 @@ export type UseAgentStudioDiffLoaderArgs = DiffLoadRefs & {
 
 export type UseAgentStudioDiffLoaderResult = {
   loadData: (showLoading?: boolean, context?: LoadDataContext) => Promise<void>;
-  refreshActiveScope: (context?: DiffRefreshScopeContext) => Promise<void>;
+  refreshActiveScope: (context?: DiffRefreshScopeContext, force?: boolean) => Promise<void>;
   refreshActiveScopeSummary: (context?: DiffRefreshScopeContext) => Promise<void>;
 };
 

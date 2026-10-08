@@ -7,6 +7,7 @@ import { useAgentStudioDiffLoadData } from "./use-diff-load-data";
 import { useAgentStudioDiffLoadRunner } from "./use-diff-load-runner";
 
 export function useAgentStudioDiffLoader({
+  cacheKey,
   requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
@@ -32,6 +33,7 @@ export function useAgentStudioDiffLoader({
     diffScopeRef,
   };
   const runner = useAgentStudioDiffLoadRunner({
+    cacheKey,
     requestContextKeyRef,
     repoPathRef,
     targetBranchRef,

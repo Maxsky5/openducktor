@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
 import {
   applyFullSnapshot,
+  applyScopeError,
   applySummarySnapshot,
   createInitialDiffBatchState,
   getSummaryReloadDecision,
@@ -24,6 +25,7 @@ const createScopeSnapshot = (overrides: Partial<ScopeSnapshot> = {}): ScopeSnaps
   commitsAheadBehind: { ahead: 0, behind: 0 },
   upstreamAheadBehind: { ahead: 1, behind: 0 },
   upstreamStatus: "tracking",
+  upstreamError: null,
   error: null,
   hashVersion: 1,
   statusHash: "status-1",
@@ -39,6 +41,7 @@ const createScopeSummaryFields = (
   commitsAheadBehind: { ahead: 0, behind: 0 },
   upstreamAheadBehind: { ahead: 1, behind: 0 },
   upstreamStatus: "tracking",
+  upstreamError: null,
   error: null,
   hashVersion: 1,
   statusHash: "status-1",
@@ -48,16 +51,21 @@ const createScopeSummaryFields = (
 
 describe("diff-data-model", () => {
   test.each(["full", "summary"] as const)(
-    "keeps upstream errors shared by a %s read until each scope's own full recovery",
+    "shares upstream errors from a %s read without clearing a failed diff scope",
     (mode) => {
       const upstreamError = "Upstream status unavailable: failed to read upstream.";
       const args = {
-        state: createInitialDiffBatchState(),
+        state: applyScopeError({
+          state: createInitialDiffBatchState(),
+          scope: "target",
+          mode: "full",
+          error: "Could not read target diff.",
+        }),
         scope: "uncommitted" as const,
         requestSequence: 1,
         latestSharedSequence: 0,
       };
-      const failedUpstream = { upstreamStatus: "error" as const, error: upstreamError };
+      const failedUpstream = { upstreamStatus: "error" as const, upstreamError };
       const loaded =
         mode === "full"
           ? applyFullSnapshot({ ...args, snapshot: createScopeSnapshot(failedUpstream) })
@@ -65,7 +73,10 @@ describe("diff-data-model", () => {
               ...args,
               summaryFields: createScopeSummaryFields(failedUpstream),
             });
-      expect(loaded.nextState.byScope.target.error).toBe(upstreamError);
+      expect(loaded.nextState.byScope.target.upstreamError).toBe(upstreamError);
+      expect(loaded.nextState.byScope.uncommitted.upstreamError).toBe(upstreamError);
+      expect(loaded.nextState.byScope.target.error).toBe("Could not read target diff.");
+      expect(loaded.nextState.byScope.uncommitted.error).toBeNull();
 
       const recoveredUncommitted = applyFullSnapshot({
         ...args,
@@ -75,7 +86,10 @@ describe("diff-data-model", () => {
         latestSharedSequence: loaded.nextLatestSharedSequence,
       });
       expect(recoveredUncommitted.nextState.byScope.uncommitted.error).toBeNull();
-      expect(recoveredUncommitted.nextState.byScope.target.error).toBe(upstreamError);
+      expect(recoveredUncommitted.nextState.byScope.target.upstreamError).toBeNull();
+      expect(recoveredUncommitted.nextState.byScope.target.error).toBe(
+        "Could not read target diff.",
+      );
 
       const recoveredTarget = applyFullSnapshot({
         ...args,

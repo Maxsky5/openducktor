@@ -62,6 +62,8 @@ const useAgentStudioDiffDataMock = mock(
     refresh: refreshDiffMock,
     refreshAllScopes: async () => {},
     refreshInactiveScope: async () => {},
+    loadAllScopes: async () => {},
+    loadInactiveScope: async () => {},
     setDiffScope: setDiffScopeMock,
   }),
 );
@@ -387,6 +389,66 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       });
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/next");
       expect(readStatus.mock.calls.some((call) => call[1] === "refs/heads/next")).toBe(true);
+    } finally {
+      await harness.unmount();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+
+  test("reuses branch and comparison reads when task sessions share a worktree", async () => {
+    const readBranch = mock(async () => ({ name: "feature/task-24", detached: false }));
+    const readComparison = mock(async () => ({
+      kind: "available" as const,
+      reference: "refs/heads/release",
+    }));
+    const readStatus = mock(
+      async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+        taskStatus(target, scope),
+    );
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitGetCurrentBranch: readBranch,
+          gitGetComparisonTarget: readComparison,
+          gitGetWorktreeStatus: readStatus,
+        },
+      }),
+    );
+    const useRealSnapshot = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
+      taskWorktreeHost: { taskWorktreeGet: taskWorktreeGetMock },
+    });
+    const argsFor = (sessionId: string) =>
+      createBaseArgs({
+        selectedView: createSelectedView({
+          loadedSession: createAgentSessionFixture({
+            externalSessionId: sessionId,
+            workingDirectory: "/repo/.worktrees/task-24",
+            sessionAssociation: { kind: "workflow", taskId: "task-24", role: "build" },
+          }),
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release" },
+          }),
+        }),
+      });
+    const harness = createSharedHookHarness(useRealSnapshot, argsFor("first"));
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.comparisonReference === "refs/heads/release" && !state.diffData.isLoading,
+      );
+      const reads = readStatus.mock.calls.length;
+      for (const sessionId of ["second", "first"]) {
+        await harness.update(argsFor(sessionId));
+        expect(harness.getLatest().resolvedGitPanelBranch).toBe("feature/task-24");
+        expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+        expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+        expect(harness.getLatest().diffData.fileStatuses[0]?.path).toBe("draft.ts");
+        expect(readStatus).toHaveBeenCalledTimes(reads);
+        expect(readBranch).toHaveBeenCalledTimes(1);
+        expect(readComparison).toHaveBeenCalledTimes(1);
+      }
     } finally {
       await harness.unmount();
       configureShellBridge(createUnavailableShellBridge());

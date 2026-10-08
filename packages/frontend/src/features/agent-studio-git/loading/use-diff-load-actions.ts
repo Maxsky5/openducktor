@@ -20,7 +20,7 @@ export const useAgentStudioDiffLoadActions = ({
   loadData,
 }: UseDiffLoadActionsArgs): Omit<UseAgentStudioDiffLoaderResult, "loadData"> => {
   const refreshActiveScope = useCallback(
-    async (context?: DiffRefreshScopeContext): Promise<void> => {
+    async (context?: DiffRefreshScopeContext, force = true): Promise<void> => {
       const refreshContext = context ?? {
         requestContextKey: requestContextKeyRef.current,
         repoPath: repoPathRef.current,
@@ -39,8 +39,8 @@ export const useAgentStudioDiffLoadActions = ({
         targetBranch: refreshContext.targetBranch,
         workingDir: refreshContext.workingDir,
         scope: refreshContext.scope,
-        force: true,
-        replayIfInFlight: true,
+        force,
+        replayIfInFlight: force,
       });
     },
     [

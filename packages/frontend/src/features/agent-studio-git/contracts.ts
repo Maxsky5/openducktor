@@ -24,6 +24,7 @@ export type UseAgentStudioDiffDataInput = {
   comparisonReference?: string;
   preconditionError?: string | null;
   branchIdentityKey?: string | null;
+  cacheKey?: string | undefined;
   enableScheduledRefresh: boolean;
 };
 
@@ -44,6 +45,8 @@ export type DiffScopeState = {
 };
 
 export type DiffDataState = {
+  branchKnown?: boolean;
+  comparisonPending?: boolean;
   branch: string | null;
   worktreePath: string | null;
   targetBranch: string;

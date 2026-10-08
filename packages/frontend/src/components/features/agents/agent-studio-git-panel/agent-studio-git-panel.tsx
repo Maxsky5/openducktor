@@ -196,9 +196,11 @@ function getGitInfoHeaderProps(
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
     comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
+    comparisonPending: model.comparisonPending ?? false,
+    branchKnown: model.branchKnown ?? true,
     comparisonReference: model.comparisonReference ?? null,
     pullRequest: model.pullRequest ?? null,
-    branch: view.displayedScopeState.branch,
+    branch: model.branch,
     targetBranch: model.targetBranch,
     diffScope: view.diffScope,
     uncommittedFileCount: view.displayedUncommittedFileCount,

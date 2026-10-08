@@ -1,6 +1,6 @@
 import type { GitBranch, GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { hostClient } from "@/lib/host-client";
 import { errorMessage } from "@/lib/errors";
@@ -32,11 +32,8 @@ export type SessionComparisonInput = {
   branchError?: string | null;
 };
 
-/** A new view needs a fresh check, even when it returns to the same branch and target. */
+/** Cache Git data by branch and target; guard actions by the selected view. */
 export function useSessionComparison(input: SessionComparisonInput) {
-  const queryClient = useQueryClient();
-  const fetchedAt = useRef(new Map<string, number>());
-  const fetches = useRef(new Map<string, Promise<void>>());
   const mountId = useId();
   const identity = JSON.stringify([
     input.viewKey,
@@ -61,8 +58,10 @@ export function useSessionComparison(input: SessionComparisonInput) {
       input.repoPath,
       input.workingDirectory ?? "__missing_directory__",
       input.target ?? { branch: "HEAD" },
-      contextKey,
+      input.branchKey,
     ),
+    staleTime: Infinity,
+    refetchOnMount: false,
     enabled:
       input.enabled &&
       input.branchReady &&
@@ -71,69 +70,18 @@ export function useSessionComparison(input: SessionComparisonInput) {
       input.targetError === null &&
       !input.branchError,
   });
-  const unavailableReason = comparisonUnavailableReason(input, comparison);
-  const resolvedTarget =
-    unavailableReason === null && comparison.data?.kind === "available"
-      ? comparison.data.reference
-      : null;
-  const { refetch } = comparison;
-  const { repoPath, workingDirectory, target } = input;
-  const refreshComparison = useCallback(
-    async (mode: "hard" | "soft" | "scheduled" = "soft") => {
-      if (
-        !workingDirectory ||
-        !target ||
-        !activeContext.current.enabled ||
-        activeContext.current.key !== contextKey
-      )
-        return null;
-      const targetBranch =
-        target.branch === "@{upstream}" ? target.branch : targetBranchSelectionValue(target);
-      const key = createScheduledFetchCooldownKey({
-        repoPath,
-        workingDir: workingDirectory,
-        targetBranch,
-      });
-      const fetchDue =
-        mode === "scheduled" &&
-        shouldRunScheduledFetch({
-          lastFetchedAtMs: fetchedAt.current.get(key) ?? null,
-          nowMs: Date.now(),
-        });
-      if (mode === "hard" || fetchDue) {
-        let pending = fetches.current.get(key);
-        if (!pending) {
-          pending = (async () => {
-            const result = await hostClient.gitFetchRemote(
-              repoPath,
-              targetBranch,
-              workingDirectory,
-            );
-            renewWorkspaceReadContext(queryClient, workingDirectory);
-            if (result.outcome === "fetched")
-              await invalidateRepoBranchesQuery(queryClient, repoPath);
-            fetchedAt.current.set(key, Date.now());
-          })().finally(() => {
-            fetches.current.delete(key);
-          });
-          fetches.current.set(key, pending);
-        }
-        await pending;
-      }
-      // A fetch can outlive the view that started it. Check only the captured view.
-      if (!activeContext.current.enabled || activeContext.current.key !== contextKey) return null;
-      const checked = await refetch();
-      if (checked.isError) throw checked.error;
-      return checked.data?.kind === "available" ? checked.data.reference : null;
-    },
-    [repoPath, workingDirectory, target, refetch, contextKey, queryClient],
+  const refreshComparison = useComparisonRefresh(
+    input,
+    contextKey,
+    activeContext,
+    comparison.refetch,
   );
   return {
     target: input.target,
     refreshComparison,
     contextKey,
-    resolvedTarget,
-    unavailableReason,
+    cacheKey: input.branchKey,
+    ...comparisonState(input, comparison),
   };
 }
 
@@ -196,6 +144,87 @@ export function sessionComparisonOptions(
   if (allowUpstream && selection !== "@{upstream}")
     included.push({ value: "@{upstream}", label: "Tracked upstream", secondaryLabel: "upstream" });
   return toBranchSelectorOptions(branches, { valueFormat: "full_ref", includeOptions: included });
+}
+
+/** Share in-flight fetches and keep the scheduled fetch cooldown for this view. */
+function useComparisonRefresh(
+  input: Pick<SessionComparisonInput, "repoPath" | "workingDirectory" | "target">,
+  contextKey: string,
+  activeContext: RefObject<{ key: string; enabled: boolean }>,
+  refetch: UseQueryResult<GitComparisonTarget, Error>["refetch"],
+) {
+  const queryClient = useQueryClient();
+  const fetchedAt = useRef(new Map<string, number>());
+  const fetches = useRef(new Map<string, Promise<void>>());
+  const { repoPath, workingDirectory, target } = input;
+  return useCallback(
+    async (mode: "hard" | "soft" | "scheduled" = "soft") => {
+      if (
+        !workingDirectory ||
+        !target ||
+        !activeContext.current.enabled ||
+        activeContext.current.key !== contextKey
+      )
+        return null;
+      const targetBranch =
+        target.branch === "@{upstream}" ? target.branch : targetBranchSelectionValue(target);
+      const key = createScheduledFetchCooldownKey({
+        repoPath,
+        workingDir: workingDirectory,
+        targetBranch,
+      });
+      const fetchDue =
+        mode === "scheduled" &&
+        shouldRunScheduledFetch({
+          lastFetchedAtMs: fetchedAt.current.get(key) ?? null,
+          nowMs: Date.now(),
+        });
+      if (mode === "hard" || fetchDue) {
+        let pending = fetches.current.get(key);
+        if (!pending) {
+          pending = (async () => {
+            const result = await hostClient.gitFetchRemote(
+              repoPath,
+              targetBranch,
+              workingDirectory,
+            );
+            renewWorkspaceReadContext(queryClient, workingDirectory);
+            if (result.outcome === "fetched")
+              await invalidateRepoBranchesQuery(queryClient, repoPath);
+            fetchedAt.current.set(key, Date.now());
+          })().finally(() => {
+            fetches.current.delete(key);
+          });
+          fetches.current.set(key, pending);
+        }
+        await pending;
+      }
+      // A fetch can outlive the view that started it. Check only the captured view.
+      if (!activeContext.current.enabled || activeContext.current.key !== contextKey) return null;
+      const checked = await refetch();
+      if (checked.isError) throw checked.error;
+      return checked.data?.kind === "available" ? checked.data.reference : null;
+    },
+    [repoPath, workingDirectory, target, refetch, contextKey, activeContext, queryClient],
+  );
+}
+
+function comparisonState(
+  input: SessionComparisonInput,
+  comparison: UseQueryResult<GitComparisonTarget, Error>,
+) {
+  const unavailableReason = comparisonUnavailableReason(input, comparison);
+  return {
+    isPending:
+      !input.branchError &&
+      !input.targetError &&
+      (!input.branchReady || !input.target || comparison.isPending),
+    resolvedTarget:
+      unavailableReason === null && comparison.data?.kind === "available"
+        ? comparison.data.reference
+        : null,
+    unavailableReason,
+  };
 }
 
 function comparisonUnavailableReason(

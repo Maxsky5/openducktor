@@ -1,3 +1,7 @@
+import type { GitWorktreeStatus } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import { gitQueryKeys } from "@/state/queries/git";
+import { toScopeSnapshot } from "../model/normalization";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DiffScope } from "../contracts";
 import {
@@ -16,6 +20,7 @@ type UseAgentStudioDiffControllerArgs = {
   targetBranch: string;
   workingDir: string | null;
   requestContextKey: string | null;
+  cacheKey: string;
   shouldBlockDiffLoading: boolean;
   onLoadApplied?: (requestContextKey: string) => void;
 };
@@ -35,9 +40,56 @@ export function useAgentStudioDiffController({
   targetBranch,
   workingDir,
   requestContextKey,
+  cacheKey,
   shouldBlockDiffLoading,
   onLoadApplied,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
+  const queryClient = useQueryClient();
+  const cachedState = useMemo(() => {
+    const cached = createInitialDiffBatchState();
+    if (!repoPath || !requestContextKey || shouldBlockDiffLoading) return cached;
+    for (const scope of ["uncommitted", "target"] as const) {
+      const reference = scope === "uncommitted" ? "HEAD" : targetBranch;
+      const full = queryClient.getQueryState<GitWorktreeStatus>(
+        gitQueryKeys.worktreeStatus(repoPath, reference, scope, workingDir, cacheKey),
+      );
+      if (full?.status !== "success" || full.isInvalidated || !full.data) continue;
+      cached.byScope[scope] = toScopeSnapshot(full.data);
+      cached.loadedByScope[scope] = true;
+    }
+    return cached;
+  }, [
+    cacheKey,
+    queryClient,
+    repoPath,
+    requestContextKey,
+    shouldBlockDiffLoading,
+    targetBranch,
+    workingDir,
+  ]);
+  useLayoutEffect(() => {
+    if (!repoPath) return;
+    // Cancel unfinished reads on exit so a later activation cannot join an old read.
+    return () => {
+      for (const scope of ["uncommitted", "target"] as const) {
+        const reference = scope === "uncommitted" ? "HEAD" : targetBranch;
+        void queryClient.cancelQueries({
+          queryKey: gitQueryKeys.worktreeStatus(repoPath, reference, scope, workingDir, cacheKey),
+          exact: true,
+        });
+        void queryClient.cancelQueries({
+          queryKey: gitQueryKeys.worktreeStatusSummary(
+            repoPath,
+            reference,
+            scope,
+            workingDir,
+            cacheKey,
+          ),
+          exact: true,
+        });
+      }
+    };
+  }, [cacheKey, queryClient, repoPath, requestContextKey, targetBranch, workingDir]);
   const [scopeSelection, setScopeSelection] = useState<{
     contextKey: string | null;
     scope: DiffScope;
@@ -88,6 +140,7 @@ export function useAgentStudioDiffController({
   });
 
   const { loadData, refreshActiveScope, refreshActiveScopeSummary } = useAgentStudioDiffLoader({
+    cacheKey,
     requestContextKeyRef,
     repoPathRef,
     targetBranchRef,
@@ -138,8 +191,8 @@ export function useAgentStudioDiffController({
       return;
     }
 
-    if (hasContextChanged) {
-      resetControllerState();
+    if (hasContextChanged || previousContextKey === null) {
+      resetControllerState(cachedState);
     }
 
     const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
@@ -151,10 +204,11 @@ export function useAgentStudioDiffController({
         workingDir,
         scope,
         requestContextKey,
-        force: hasContextChanged,
+        force: false,
       });
     }
   }, [
+    cachedState,
     loadData,
     repoPath,
     requestContextKey,
@@ -174,7 +228,7 @@ export function useAgentStudioDiffController({
       return;
     }
 
-    const shouldForce = isScopeInvalidated(diffScope);
+    const shouldForce = isScopeInvalidated(diffScope) && !cachedState.loadedByScope[diffScope];
 
     void loadData(true, {
       repoPath,
@@ -185,6 +239,7 @@ export function useAgentStudioDiffController({
       force: shouldForce,
     });
   }, [
+    cachedState,
     diffScope,
     isScopeInvalidated,
     loadData,
@@ -204,10 +259,20 @@ export function useAgentStudioDiffController({
     }
 
     return {
-      ...createInitialDiffBatchState(),
-      isLoading: repoPath !== null && !shouldBlockDiffLoading,
+      ...cachedState,
+      isLoading:
+        repoPath !== null &&
+        !shouldBlockDiffLoading &&
+        !cachedState.loadedByScope[visibleDiffScope],
     };
-  }, [isRenderContextStale, repoPath, shouldBlockDiffLoading, state]);
+  }, [
+    cachedState,
+    isRenderContextStale,
+    repoPath,
+    shouldBlockDiffLoading,
+    state,
+    visibleDiffScope,
+  ]);
   const visibleActiveScopeState = visibleState.byScope[visibleDiffScope];
   const visibleStatusSnapshotKey = useMemo(
     () => toStatusSnapshotKey(visibleActiveScopeState),

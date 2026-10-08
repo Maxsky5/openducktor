@@ -4,6 +4,8 @@ import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
+  currentBranchQueryOptions,
+  worktreeBranchQueryOptions,
 } from "./git";
 
 test("comparison target reads keep the working directory and target in their query keys", async () => {
@@ -67,3 +69,55 @@ test("Git invalidation keeps other worktrees fresh", async () => {
   expect(client.getQueryState(worktreeTarget)?.isInvalidated).toBe(false);
   expect(client.getQueryState(worktreeStatus)?.isInvalidated).toBe(false);
 });
+
+test.each(["/repo", "/worktree"])(
+  "a branch change in %s invalidates completed and pending comparisons",
+  async (directory) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let name = "feature";
+    const host = { gitGetCurrentBranch: async () => ({ name, detached: false }) };
+    const readBranch = () =>
+      directory === "/repo"
+        ? client.fetchQuery({ ...currentBranchQueryOptions("/repo", host), staleTime: 0 })
+        : client.fetchQuery({
+            ...worktreeBranchQueryOptions("/repo", directory, host),
+            staleTime: 0,
+          });
+    const statusKey = gitQueryKeys.worktreeStatus(
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      directory,
+      "feature",
+    );
+    const otherKey = gitQueryKeys.worktreeStatus(
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      "/other",
+      "feature",
+    );
+    const pending = Promise.withResolvers<string>();
+    try {
+      await readBranch();
+      client.setQueryData(statusKey, "before");
+      client.setQueryData(otherKey, "other");
+      await readBranch();
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(false);
+      const read = client
+        .fetchQuery({ queryKey: statusKey, queryFn: () => pending.promise, staleTime: 0 })
+        .catch(() => undefined);
+      name = "other";
+      await readBranch();
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(true);
+      pending.resolve("late");
+      await read;
+      expect(client.getQueryData<string>(statusKey)).toBe("before");
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
+    } finally {
+      pending.resolve("late");
+      client.clear();
+    }
+  },
+);

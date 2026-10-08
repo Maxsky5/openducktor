@@ -109,7 +109,7 @@ describe("useAgentStudioGitConflictController", () => {
     }
   });
   test.each(["assistanceContextKey", "contextKey"] as const)(
-    "reserves assistance synchronously and cancels a request after switching $contextKey away and back",
+    "reserves assistance synchronously and cancels a request after switching %s away and back",
     async (contextKey) => {
       const prepared = createDeferred<void>();
       let submissions = 0;

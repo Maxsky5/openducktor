@@ -101,7 +101,8 @@ export const currentBranchQueryOptions = (
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.currentBranch(repoPath),
-    queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath),
+    queryFn: ({ client }): Promise<GitCurrentBranch> =>
+      readCurrentBranch(client, repoPath, undefined, hostClient),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
@@ -112,7 +113,8 @@ export const worktreeBranchQueryOptions = (
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeBranch(repoPath, workingDir),
-    queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath, workingDir),
+    queryFn: ({ client }): Promise<GitCurrentBranch> =>
+      readCurrentBranch(client, repoPath, workingDir, hostClient),
     staleTime: 0,
   });
 
@@ -125,19 +127,21 @@ export const gitComparisonTargetQueryOptions = (
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.comparisonTarget(repoPath, workingDir, target, branchKey),
-    queryFn: (): Promise<GitComparisonTarget> =>
-      hostClient.gitGetComparisonTarget(repoPath, workingDir, target),
+    queryFn: ({ signal }): Promise<GitComparisonTarget> => {
+      signal.throwIfAborted();
+      return hostClient.gitGetComparisonTarget(repoPath, workingDir, target);
+    },
     staleTime: 0,
   });
 
-export const invalidateGitWorkingDirectoryQueries = (
+export const invalidateGitWorkingDirectoryQueries = async (
   queryClient: QueryClient,
   repoPath: string,
   workingDir: string,
-): Promise<void> =>
-  queryClient.invalidateQueries({
+): Promise<void> => {
+  const filter = {
     queryKey: gitQueryKeys.all,
-    predicate: (query) => {
+    predicate: (query: { queryKey: readonly unknown[] }) => {
       const key = query.queryKey;
       if (key[2] !== repoPath) return false;
       if (key[1] === "comparison-target") return key[3] === workingDir;
@@ -146,8 +150,11 @@ export const invalidateGitWorkingDirectoryQueries = (
       }
       return false;
     },
-    refetchType: "none",
-  });
+  };
+  // An old read must not make an invalidated branch snapshot fresh again.
+  await queryClient.cancelQueries(filter);
+  await queryClient.invalidateQueries({ ...filter, refetchType: "none" });
+};
 
 const worktreeStatusQueryOptions = (
   repoPath: string,
@@ -245,6 +252,7 @@ export const loadWorktreeStatusFromQuery = (
   options?: {
     force?: boolean;
     branchKey?: string;
+    staleTime?: number;
   },
   hostClient?: GitWorktreeStatusQueryHost,
 ): Promise<GitWorktreeStatus> => {
@@ -270,7 +278,7 @@ export const loadWorktreeStatusFromQuery = (
       hostClient,
       branchKey,
     ),
-    staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
+    staleTime: options?.force === true ? 0 : (options?.staleTime ?? WORKTREE_STATUS_STALE_TIME_MS),
   });
 };
 
@@ -308,6 +316,31 @@ export const loadWorktreeStatusSummaryFromQuery = (
       hostClient,
       branchKey,
     ),
-    staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
+    staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 };
+
+async function readCurrentBranch(
+  client: QueryClient,
+  repoPath: string,
+  workingDir: string | undefined,
+  hostClient: GitCurrentBranchQueryHost,
+): Promise<GitCurrentBranch> {
+  const key =
+    workingDir === undefined
+      ? gitQueryKeys.currentBranch(repoPath)
+      : gitQueryKeys.worktreeBranch(repoPath, workingDir);
+  const before = client.getQueryData<GitCurrentBranch>(key);
+  const args: Parameters<GitCurrentBranchQueryHost["gitGetCurrentBranch"]> = [repoPath];
+  if (workingDir !== undefined) args.push(workingDir);
+  const branch = await hostClient.gitGetCurrentBranch(...args);
+  if (
+    before &&
+    (before.name !== branch.name ||
+      before.detached !== branch.detached ||
+      before.revision !== branch.revision)
+  ) {
+    await invalidateGitWorkingDirectoryQueries(client, repoPath, workingDir ?? repoPath);
+  }
+  return branch;
+}

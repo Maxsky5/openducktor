@@ -1,3 +1,4 @@
+import { isCancelledError } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type {
   DiffLoadRefs,
@@ -85,7 +86,7 @@ export const useAgentStudioDiffLoadData = ({
 
         await runner.runFullLoad({ ...request, force });
       } catch (error) {
-        if (runner.isStale(loadContext)) {
+        if (isCancelledError(error) || runner.isStale(loadContext)) {
           return;
         }
 

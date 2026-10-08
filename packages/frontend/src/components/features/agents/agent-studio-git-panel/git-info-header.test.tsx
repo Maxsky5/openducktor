@@ -89,6 +89,15 @@ describe("GitInfoHeader", () => {
     expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
   });
 
+  test("does not report an unknown branch as detached while Git state loads", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({ branch: null, branchKnown: false, isLoading: true }),
+    );
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).not.toBe(
+      "Detached HEAD",
+    );
+  });
+
   test("shows a repository branch in one compact row", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({ contextMode: "repository", branch: "beta" }),

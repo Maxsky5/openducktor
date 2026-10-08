@@ -33,6 +33,8 @@ type GitInfoHeaderProps = Pick<
   | "targetBranchesError"
   | "retryTargetBranches"
   | "contextMode"
+  | "comparisonPending"
+  | "branchKnown"
   | "comparisonUnavailableReason"
   | "comparisonReference"
   | "pullRequest"
@@ -73,6 +75,8 @@ type GitInfoHeaderProps = Pick<
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
   comparisonUnavailableReason,
+  comparisonPending,
+  branchKnown = true,
   comparisonReference,
   pullRequest,
   branch,
@@ -112,6 +116,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   retryTargetBranches,
 }: GitInfoHeaderProps): ReactElement {
   const state = getGitInfoHeaderState({
+    branchKnown,
     contextMode,
     pullRequest,
     branch,
@@ -207,7 +212,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
           tracking settings.
         </p>
       ) : null}
-      {comparisonUnavailableReason ? (
+      {comparisonUnavailableReason && !comparisonPending ? (
         <p
           role="status"
           className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
@@ -753,6 +758,7 @@ const getPushTooltip = ({
 };
 
 type GitInfoHeaderStateInput = {
+  branchKnown: boolean;
   branch: GitInfoHeaderProps["branch"];
   commitsAheadBehind: GitInfoHeaderProps["commitsAheadBehind"];
   contextMode: GitInfoHeaderProps["contextMode"];
@@ -831,7 +837,7 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
     canPush,
     canRebase,
     canRefresh,
-    currentBranchLabel: isDetachedHead ? "Detached HEAD" : (props.branch ?? ""),
+    currentBranchLabel: getBranchLabel(props),
     hasTargetAhead,
     isRepositoryMode,
     pullTooltip: getPullTooltip({
@@ -860,3 +866,8 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
     targetBranchLabel: hasTargetBranch ? props.targetBranch : "No comparison target",
   };
 };
+
+function getBranchLabel(props: GitInfoHeaderStateInput): string {
+  if (!props.branchKnown) return props.isLoading ? "Reading branch..." : "Branch unavailable";
+  return props.branch?.trim() ? props.branch : "Detached HEAD";
+}

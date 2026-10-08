@@ -142,7 +142,7 @@ export function WorkspaceSessionContent({
   const refreshAfterChange = useCallback(
     (scope: "git" | "all") => {
       if (isWorktree || scope === "all") refreshBranch();
-      const refresh = refreshRef.current;
+      const refresh = panelState.isOpen ? refreshRef.current : null;
       if (workingDirectory && (scope === "git" || !refresh)) {
         void invalidateGitWorkingDirectoryQueries(
           queryClient,
@@ -156,7 +156,14 @@ export function WorkspaceSessionContent({
       }
       void refresh?.(scope);
     },
-    [isWorktree, queryClient, refreshBranch, workingDirectory, workspace.repoPath],
+    [
+      isWorktree,
+      panelState.isOpen,
+      queryClient,
+      refreshBranch,
+      workingDirectory,
+      workspace.repoPath,
+    ],
   );
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
     const actions = previewRef.current;
@@ -228,6 +235,7 @@ export function WorkspaceSessionContent({
     contextMode: record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree",
     repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
     branchKey,
+    currentBranch: branch.currentBranch,
     branchReady,
     branchError: (isWorktree ? branch.worktreeBranch : branch.rootBranch).isError
       ? errorMessage((isWorktree ? branch.worktreeBranch : branch.rootBranch).error)

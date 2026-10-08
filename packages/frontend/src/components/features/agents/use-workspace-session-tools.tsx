@@ -4,7 +4,7 @@ import {
   useSessionComparisonControl,
 } from "@/features/agent-studio-git/use-session-comparison";
 import { buildComparisonView } from "@/features/agent-studio-git/session-comparison-view";
-import type { DevServerOwner, GitTargetBranch } from "@openducktor/contracts";
+import type { DevServerOwner, GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import {
@@ -50,6 +50,7 @@ type WorkspaceSessionToolsProps = {
   workingDirectory: string | null;
   contextMode: "repository" | "worktree";
   branchKey: string;
+  currentBranch: GitCurrentBranch | null;
   branchReady: boolean;
   branchError?: string | null;
   target: GitTargetBranch | null;
@@ -86,6 +87,7 @@ export function useWorkspaceSessionTools({
   workingDirectory,
   contextMode,
   branchKey,
+  currentBranch,
   branchReady,
   branchError,
   applyTarget,
@@ -139,12 +141,14 @@ export function useWorkspaceSessionTools({
     comparisonReference: readTarget,
     defaultTargetBranch: { branch: readTarget },
     branchIdentityKey: comparison.contextKey,
+    cacheKey: comparison.cacheKey,
     enableScheduledRefresh: false,
   });
   const diffData = buildComparisonView(
     reads,
     comparison,
     target ? canonicalTargetBranch(target) : "Default target pending",
+    currentBranch,
   );
   const unavailableReason = diffData.comparisonUnavailableReason;
   const markerTarget = diffData.comparisonReference;
@@ -156,10 +160,10 @@ export function useWorkspaceSessionTools({
     scopeStatesByScope: diffData.scopeStatesByScope,
     loadedScopesByScope: diffData.loadedScopesByScope,
   });
-  const { refreshInactiveScope } = reads;
+  const { loadInactiveScope } = reads;
   useEffect(() => {
-    if (isVisible && resolvedTarget) void refreshInactiveScope();
-  }, [isVisible, resolvedTarget, refreshInactiveScope]);
+    if (isVisible && resolvedTarget) void loadInactiveScope();
+  }, [isVisible, resolvedTarget, loadInactiveScope]);
   const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
     isVisible,
     viewRef,
