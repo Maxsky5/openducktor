@@ -138,6 +138,8 @@ export const createStartAgentSession = ({
               ctx: startCtx,
               deps: { session, runtime, task },
             });
+            if (startCtx.holdForPostStartMessage)
+              input.claimStart?.(registrationInput.sessionState);
           },
           rollback: async (rollbackInput) =>
             stopStoredWorkflowSessionAfterLaunchFailure({

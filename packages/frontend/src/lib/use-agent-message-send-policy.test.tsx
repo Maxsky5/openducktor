@@ -15,11 +15,110 @@ import {
   createSessionsRef,
   getSession,
 } from "@/state/operations/agent-orchestrator/handlers/session-actions.test-helpers";
-import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
+import {
+  createOpenCodeAgentEngineTestAdapter,
+  createTestOpencodeSdkAdapter,
+} from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 import { acceptedUserMessage } from "@/state/operations/agent-orchestrator/handlers/session-actions-send.test-support";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { useAgentMessageSendPolicy } from "./use-agent-message-send-policy";
+
+test.each(["fresh", "fork"] as const)(
+  "only the launch owner can send first after coalesced %s starts",
+  async (startMode) => {
+    const launched = Promise.withResolvers<void>();
+    const releaseLaunch = Promise.withResolvers<void>();
+    const joined = Promise.withResolvers<void>();
+    const preparing = Promise.withResolvers<void>();
+    const prepared = Promise.withResolvers<void>();
+    let launches = 0;
+    let requests = 0;
+    let preparations = 0;
+    const sent: string[] = [];
+    const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
+    const launch = async () => {
+      launches += 1;
+      launched.resolve();
+      await releaseLaunch.promise;
+      return {
+        runtimeKind: "opencode" as const,
+        externalSessionId: "started",
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-10-08T00:00:00Z",
+        status: "idle" as const,
+      };
+    };
+    adapter.forkSession = launch;
+    adapter.loadSessionHistory = async () => [];
+    adapter.sendUserMessage = async (input) => {
+      sent.push(input.parts[0]?.kind === "text" ? input.parts[0].text : "");
+      return acceptedUserMessage(input);
+    };
+    const source = buildSession({ status: "idle", historyLoadState: "loaded" });
+    const sessionsRef = createSessionsRef([source]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      startWorkflowSession: launch,
+      loadRepoPromptOverrides: async () => {
+        if (launches === 0) return {};
+        if (++preparations === 1) {
+          preparing.resolve();
+          await prepared.promise;
+        }
+        return {};
+      },
+    });
+    const harness = await mountPolicy();
+    const queryClient = new QueryClient();
+    const run = (message: string) =>
+      startSessionWorkflow({
+        queryClient,
+        workspaceId: "workspace-1",
+        task: null,
+        selection: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+        intent: {
+          taskId: "task-1",
+          role: "build",
+          launchActionId: "build_rebase_conflict_resolution",
+          startMode,
+          sourceSession: source,
+          targetWorkingDirectory: source.workingDirectory,
+          postStartAction: "send_message",
+          message,
+          assertCanSubmit: harness.getLatest(),
+        },
+        startAgentSession: (input) => {
+          const result = actions.startAgentSession(input);
+          if (++requests === 2) joined.resolve();
+          return result;
+        },
+        sendAgentMessage: actions.sendAgentMessage,
+      });
+    const first = run("First prompt");
+    await launched.promise;
+    const second = run("Second prompt");
+    try {
+      await joined.promise;
+      releaseLaunch.resolve();
+      await preparing.promise;
+      const result = await second;
+      expect(result.postStartActionError).toBeInstanceOf(Error);
+      expect(result.postStartActionError?.message).toContain("finish starting");
+      expect(launches).toBe(1);
+      expect(sent).toEqual([]);
+      expect(getSession(sessionsRef, "started").status).toBe("starting");
+    } finally {
+      releaseLaunch.resolve();
+      prepared.resolve();
+      await Promise.all([first, second]);
+      queryClient.clear();
+      await harness.unmount();
+    }
+    expect(sent).toEqual(["First prompt"]);
+  },
+);
 
 test.each([
   ["fresh", false],
@@ -70,7 +169,11 @@ test.each([
           if (!current) throw new Error("Selection changed");
         },
       },
-      startAgentSession: async () => getSession(sessionsRef),
+      startAgentSession: async (input) => {
+        const session = getSession(sessionsRef);
+        if (input.startMode !== "reuse") input.claimStart?.(session);
+        return session;
+      },
       sendAgentMessage: actions.sendAgentMessage,
     });
     try {

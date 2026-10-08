@@ -10,6 +10,7 @@ import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,
   AgentSessionIdentity,
+  AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
 import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
@@ -112,12 +113,18 @@ export const startSessionWorkflow = async ({
   requireCurrentContext();
   await runBeforeStartAction(beforeStartActionArgs);
 
-  const session = await startSessionFromIntent({
+  let heldStart: AgentSessionState | null = null;
+  const startOptions: Parameters<typeof startSessionFromIntent>[0] = {
     intent,
     selection,
     startAgentSession,
     holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
-  });
+  };
+  if (intent.assertCanSubmit)
+    startOptions.claimStart = (session) => {
+      heldStart = session;
+    };
+  const session = await startSessionFromIntent(startOptions);
 
   if (intent.postStartAction === "none") {
     return {
@@ -133,7 +140,7 @@ export const startSessionWorkflow = async ({
     throw new Error("Post-start message is unavailable.");
   }
 
-  const ownsStart = intent.startMode === "reuse" ? null : createAgentMessageStartOwner(session);
+  const ownsStart = heldStart ? createAgentMessageStartOwner(heldStart) : null;
   let postStartMessageReceipt: AgentMessageSendReceipt | null = null;
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
@@ -206,8 +213,10 @@ const startSessionFromIntent = ({
   selection,
   startAgentSession,
   holdForPostStartMessage,
+  claimStart,
 }: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
   holdForPostStartMessage: boolean;
+  claimStart?: (session: AgentSessionState) => void;
 }): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return startAgentSession({
@@ -219,14 +228,16 @@ const startSessionFromIntent = ({
   }
 
   if (intent.startMode === "fork") {
-    return startAgentSession({
+    const forkRequest: Extract<StartAgentSessionInput, { startMode: "fork" }> = {
       taskId: intent.taskId,
       role: intent.role,
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
       sourceSession: requireSourceSession(intent.sourceSession, "fork"),
       holdForPostStartMessage,
-    });
+    };
+    if (claimStart) forkRequest.claimStart = claimStart;
+    return startAgentSession(forkRequest);
   }
 
   const freshRequest: Extract<StartAgentSessionInput, { startMode: "fresh" }> = {
@@ -236,6 +247,7 @@ const startSessionFromIntent = ({
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
+  if (claimStart) freshRequest.claimStart = claimStart;
   if (intent.queueIfBusy) {
     freshRequest.queueIfBusy = true;
   }

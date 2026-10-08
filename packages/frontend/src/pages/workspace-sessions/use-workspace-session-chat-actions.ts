@@ -110,6 +110,14 @@ export function useWorkspaceSessionChatActions(
     return identity;
   };
 
+  const getStartOwner = (identity: AgentSessionIdentity) => {
+    if (!ownedStartup.current) return null;
+    const session = store.getSessionSnapshot(identity);
+    if (!session)
+      throw new Error("The started chat is missing. Reload session data before sending.");
+    return createAgentMessageStartOwner(session);
+  };
+
   const sendStandaloneMessage = async (
     parts: AgentUserMessagePart[],
     options: AgentMessageSendOptions & { assertCurrent: () => void },
@@ -145,7 +153,8 @@ export function useWorkspaceSessionChatActions(
           options.assertCanSubmit?.(session, ownsStart);
         },
       };
-      if (ownedStartup.current) sendOptions.ownsStart = createAgentMessageStartOwner(identity);
+      const ownsStart = getStartOwner(identity);
+      if (ownsStart) sendOptions.ownsStart = ownsStart;
       const receipt = await operations.sendAgentMessage(identity, parts, sendOptions);
       if (!receipt)
         throw new Error(
@@ -232,7 +241,8 @@ export function useWorkspaceSessionChatActions(
         const sendOptions: AgentMessageSendOptions = {
           assertCanSubmit: options.assertCanSubmit,
         };
-        if (ownedStartup.current) sendOptions.ownsStart = createAgentMessageStartOwner(identity);
+        const ownsStart = getStartOwner(identity);
+        if (ownsStart) sendOptions.ownsStart = ownsStart;
         await operations.sendAgentMessage(identity, parts, sendOptions);
       } else await operations.sendAgentMessage(identity, parts);
       return true;

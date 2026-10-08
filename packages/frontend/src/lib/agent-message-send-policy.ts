@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
 import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
@@ -52,11 +52,8 @@ export const getAgentMessageSendBlockedReason = (input: {
 };
 
 /** A first-message retry must keep its original session and execution episode. */
-export const createAgentMessageStartOwner = (identity: AgentSessionIdentity) => {
-  let start: AgentSessionState | null = null;
-  return (session: AgentSessionState): boolean => {
-    if (!matchesAgentSessionIdentity(session, identity)) return false;
-    start ??= session;
-    return session.executionEpisodeId === start.executionEpisodeId;
-  };
-};
+export const createAgentMessageStartOwner =
+  (start: AgentSessionState) =>
+  (session: AgentSessionState): boolean =>
+    matchesAgentSessionIdentity(session, start) &&
+    session.executionEpisodeId === start.executionEpisodeId;
