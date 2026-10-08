@@ -15,6 +15,7 @@ describe("AgentsPageShell", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
+        navigationPersistenceOperation: "load",
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
@@ -25,7 +26,7 @@ describe("AgentsPageShell", () => {
       }),
     );
 
-    expect(html).toContain("restore failed");
+    expect(html).toContain("Couldn&#x27;t open your conversation");
     expect(html).not.toContain("workspace");
   });
 
@@ -33,6 +34,7 @@ describe("AgentsPageShell", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: null,
+        navigationPersistenceOperation: "load",
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
@@ -50,6 +52,7 @@ describe("AgentsPageShell", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
+        navigationPersistenceOperation: "load",
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
         gitProviderContextLoadError: null,
@@ -68,6 +71,7 @@ describe("AgentsPageShell", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
+        navigationPersistenceOperation: "load",
         navigationPersistenceError: null,
         chatSettingsLoadError: new Error("settings read failed"),
         gitProviderContextLoadError: null,
@@ -88,6 +92,7 @@ describe("AgentsPageShell", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
+        navigationPersistenceOperation: "load",
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
         gitProviderContextLoadError: new Error("provider context read failed"),

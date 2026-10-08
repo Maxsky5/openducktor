@@ -1,3 +1,4 @@
+import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import { AlertTriangle, RefreshCcw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
@@ -7,6 +8,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 export function AgentsPageShell({
   activeWorkspace,
   navigationPersistenceError,
+  navigationPersistenceOperation,
   isRetryingNavigationPersistence = false,
   chatSettingsLoadError,
   gitProviderContextLoadError,
@@ -23,6 +25,7 @@ export function AgentsPageShell({
         scopeLabel="Task sessions"
         repositoryPath={workspaceRepoPath}
         error={navigationPersistenceError}
+        operation={navigationPersistenceOperation}
         onRetry={onRetryNavigationPersistence}
         isPending={isRetryingNavigationPersistence}
       />
@@ -58,6 +61,7 @@ export function AgentsPageShell({
 type AgentsPageShellProps = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
+  navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
   isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;

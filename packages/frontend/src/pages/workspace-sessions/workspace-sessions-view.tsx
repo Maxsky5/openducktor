@@ -73,6 +73,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     selected: requestedSelected,
     missingSessionId,
     navigationPersistenceError,
+    navigationPersistenceOperation,
     retryNavigationPersistence,
     isRetryingNavigationPersistence,
   } = useWorkspaceSessionSelection({
@@ -150,6 +151,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         scopeLabel="Workspace sessions"
         repositoryPath={workspace.repoPath}
         error={navigationPersistenceError}
+        operation={navigationPersistenceOperation}
         onRetry={retryNavigationPersistence}
         isPending={isRetryingNavigationPersistence}
       />

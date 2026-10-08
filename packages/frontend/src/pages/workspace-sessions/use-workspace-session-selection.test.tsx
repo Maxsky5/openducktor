@@ -188,6 +188,7 @@ test.each([undefined, "Second", "First"])(
     );
     try {
       expect(h.result.current.selected).toBeNull();
+      expect(h.result.current.navigationPersistenceOperation).toBe("load");
       expect(h.result.current.navigationPersistenceError?.message).toContain("Storage denied");
       act(() => h.result.current.retryNavigationPersistence());
       expect(h.result.current.navigationPersistenceError?.message).toContain("Storage denied");
@@ -198,6 +199,7 @@ test.each([undefined, "Second", "First"])(
       expect(getItem(key)).toBe("Second");
       if (requestedSessionId === "First") {
         expect(writes).toBe(1);
+        expect(h.result.current.navigationPersistenceOperation).toBe("save");
         expect(h.result.current.navigationPersistenceError?.message).toContain("Write denied");
       } else {
         expect(writes).toBe(0);

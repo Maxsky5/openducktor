@@ -16,6 +16,7 @@ export function useSessionNavigationRecovery({
   const recovery = useSessionRecoveryAction(scopeKey, readError ? retryRead : retryWrite);
   return {
     navigationPersistenceError: readError ?? writeError ?? recovery.error,
+    navigationPersistenceOperation: readError ? "load" : "save",
     retryNavigationPersistence: recovery.retry,
     isRetryingNavigationPersistence: recovery.isPending,
   };
@@ -23,6 +24,7 @@ export function useSessionNavigationRecovery({
 
 export type SessionNavigationRecovery = {
   navigationPersistenceError: Error | null;
+  navigationPersistenceOperation: "load" | "save";
   retryNavigationPersistence: () => void;
   isRetryingNavigationPersistence: boolean;
 };
