@@ -102,7 +102,6 @@ type SelectionState = {
   routeSessionResolution: { kind: "none" };
   selectedSessionFromRoute: null;
   selectedTask: typeof task | null;
-  allSessionSummaries: AgentSessionSummary[];
   resolvedRouteSession: AgentSessionSummary | null;
   queryUpdate: AgentStudioQueryUpdate | null;
   isLoadingTasks: boolean;
@@ -304,7 +303,6 @@ let selectionState: SelectionState = {
   routeSessionResolution: { kind: "none" },
   selectedSessionFromRoute: null,
   selectedTask: task,
-  allSessionSummaries: [toAgentSessionSummary(initialSelectionSession)],
   resolvedRouteSession: null,
   queryUpdate: null,
   isLoadingTasks: false,
@@ -775,7 +773,6 @@ beforeEach(async () => {
     routeSessionResolution: { kind: "none" },
     selectedSessionFromRoute: null,
     selectedTask: task,
-    allSessionSummaries: [toAgentSessionSummary(session)],
     resolvedRouteSession: null,
     queryUpdate: null,
     isLoadingTasks: false,

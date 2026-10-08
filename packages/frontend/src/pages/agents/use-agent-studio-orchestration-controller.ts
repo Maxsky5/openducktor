@@ -360,7 +360,6 @@ export function useAgentStudioOrchestrationController({
         role: view.role,
         selectedTask: view.selectedTask,
         sessionsForTask: view.sessionsForTask,
-        allSessionSummaries: selection.allSessionSummaries,
         selectedSession,
         documents: {
           specDoc,
@@ -391,7 +390,6 @@ export function useAgentStudioOrchestrationController({
       planDoc,
       qaDoc,
       roleLabelByRole,
-      selection.allSessionSummaries,
       selectedSession,
       specDoc,
       view,

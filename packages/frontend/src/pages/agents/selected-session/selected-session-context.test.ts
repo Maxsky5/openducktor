@@ -72,7 +72,6 @@ const createInput = (
     role: "spec",
     selectedTask,
     sessionsForTask,
-    allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
     selectedSession: {
       identity: selectedSessionIdentity,
       activityState: selectedSessionActivityState,
@@ -122,7 +121,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         taskId: "",
         selectedTask: null,
         sessionsForTask: [],
-        allSessionSummaries: [],
         selectedSession: { loadedSession: null },
       }),
     );
@@ -149,7 +147,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           role,
           selectedSession: { loadedSession: session },
           sessionsForTask: [toAgentSessionSummary(session)],
-          allSessionSummaries: [toAgentSessionSummary(session)],
         }),
       );
 
@@ -176,7 +173,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           loadedSession: staleLoadedSession,
         },
         sessionsForTask: [toAgentSessionSummary(selectedSession)],
-        allSessionSummaries: [toAgentSessionSummary(selectedSession)],
       }),
     );
 
@@ -227,7 +223,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         selectedTask: unavailableQaTask,
         selectedSession: { loadedSession: qaSession },
         sessionsForTask: [toAgentSessionSummary(qaSession)],
-        allSessionSummaries: [toAgentSessionSummary(qaSession)],
       }),
     );
 
@@ -300,7 +295,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         sessionsForTask: [],
-        allSessionSummaries: [],
         selectedSession: {
           loadedSession: null,
           transcriptState: createSelectedSessionTranscriptStateFixture({
@@ -323,7 +317,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         sessionsForTask: [],
-        allSessionSummaries: [],
         selectedSession: {
           loadedSession: null,
           transcriptState: createSelectedSessionTranscriptStateFixture(),
@@ -340,7 +333,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.selectedSession.transcriptState).toEqual({ kind: "visible" });
   });
 
-  test("propagates selected-session and subagent pending input affordances", () => {
+  test("propagates selected-session pending input affordances", () => {
     const approvalReply = mock(async () => {});
     const questionReply = mock(async () => {});
     const session = createSession({
@@ -358,31 +351,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       ],
       pendingQuestions: [{ requestId: "question-main", questions: [] }],
     });
-    const subagentSession = createSession({
-      externalSessionId: "session-sub",
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
-      pendingApprovals: [
-        {
-          requestId: "approval-sub",
-          requestType: "runtime_tool",
-          title: "Approve subagent tool",
-          summary: "Approve a subagent tool call.",
-          tool: { name: "shell" },
-          mutation: "mutating",
-          supportedReplyOutcomes: ["approve_once", "reject"],
-        },
-      ],
-      pendingQuestions: [{ requestId: "question-sub", questions: [] }],
-    });
-
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         selectedSession: { loadedSession: session },
         sessionsForTask: [toAgentSessionSummary(session)],
-        allSessionSummaries: [
-          toAgentSessionSummary(session),
-          toAgentSessionSummary(subagentSession),
-        ],
         sessionActions: {
           ...createInput().sessionActions,
           onSubmitQuestionAnswers: questionReply,
@@ -410,16 +382,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       errorByRequestId: { "approval-main": "failed" },
     });
     expect(context.pendingInput.approvals.onReply).toBe(approvalReply);
-    expect(context.pendingInput.subagentPendingApprovalCountBySessionKey).toEqual({
-      [agentSessionIdentityKey(session)]: 1,
-      [agentSessionIdentityKey(subagentSession)]: 1,
-    });
-    expect(context.pendingInput.subagentPendingQuestionCountBySessionKey).toEqual({
-      [agentSessionIdentityKey(session)]: 1,
-      [agentSessionIdentityKey(subagentSession)]: 1,
-    });
   });
-
   test("shows a Codex background question as pending input", () => {
     const session = createSession({
       runtimeKind: "codex",
@@ -463,67 +426,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     ]);
   });
 
-  test("indexes parent-visible subagent pending input by child session identity", () => {
-    const childSession = toAgentSessionIdentity({
-      externalSessionId: "session-child",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktree",
-    });
-    const childTarget = {
-      ...childSession,
-      sessionAssociation: { kind: "repository" as const },
-    };
-    const parentSession = createSession({
-      externalSessionId: "session-parent",
-      workingDirectory: "/repo/worktree",
-      pendingApprovals: [
-        {
-          requestId: "approval-child",
-          requestType: "runtime_tool",
-          title: "Approve subagent tool",
-          summary: "Approve a subagent tool call.",
-          tool: { name: "shell" },
-          mutation: "mutating",
-          supportedReplyOutcomes: ["approve_once", "reject"],
-          responseSession: childTarget,
-          source: {
-            kind: "subagent",
-            parentExternalSessionId: "session-parent",
-            childExternalSessionId: "session-child",
-            subagentCorrelationKey: "part:assistant-parent:subtask",
-          },
-        },
-      ],
-      pendingQuestions: [
-        {
-          requestId: "question-child",
-          questions: [],
-          source: {
-            kind: "subagent",
-            parentExternalSessionId: "session-parent",
-            childExternalSessionId: "session-child",
-            subagentCorrelationKey: "part:assistant-parent:subtask",
-          },
-        },
-      ],
-    });
-
-    const context = buildAgentStudioSelectedSessionContext(
-      createInput({
-        selectedSession: { loadedSession: parentSession },
-        sessionsForTask: [],
-        allSessionSummaries: [],
-      }),
-    );
-
-    expect(context.pendingInput.subagentPendingApprovalCountBySessionKey).toEqual({
-      [agentSessionIdentityKey(childSession)]: 1,
-    });
-    expect(context.pendingInput.subagentPendingQuestionCountBySessionKey).toEqual({
-      [agentSessionIdentityKey(childSession)]: 1,
-    });
-  });
-
   test("disables pending input actions when the selected session has no pending items", () => {
     const noActiveSessionContext = buildAgentStudioSelectedSessionContext(
       createInput({ selectedSession: { loadedSession: null } }),
@@ -538,7 +440,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         selectedSession: { loadedSession: idleSession },
         sessionsForTask: [toAgentSessionSummary(idleSession)],
-        allSessionSummaries: [toAgentSessionSummary(idleSession)],
       }),
     );
 

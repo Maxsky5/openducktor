@@ -12,6 +12,7 @@ import { deriveAgentChatReadiness } from "@/components/features/agents/agent-cha
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
+import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
@@ -80,34 +81,27 @@ export function WorkspaceSessionChat({
   });
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
-  const {
-    sessionKey,
-    selectedModel,
-    transcriptSession,
-    transcriptTarget,
-    canStopSession,
-    observationReady,
-    targetFault,
-    activityState,
-    isWorking,
-    transcriptState,
-    pendingApprovals,
-    pendingQuestions,
-    isReadOnly,
-    readOnlyReason,
-  } = projectWorkspaceSessionChatState({
-    record,
-    identity,
-    session,
-    readModelLoadState: readModel.sessionReadModelLoadState,
-    runtimeReadinessState: runtimeReadiness.state,
-    fault,
-  });
+  const chatState = useMemo(
+    () =>
+      projectWorkspaceSessionChatState({
+        record,
+        identity,
+        session,
+        readModelLoadState: readModel.sessionReadModelLoadState,
+        runtimeReadinessState: runtimeReadiness.state,
+        fault,
+      }),
+    [record, identity, session, readModel.sessionReadModelLoadState, runtimeReadiness.state, fault],
+  );
   const runtimeData = useSessionRuntimeData({
     repoPath: workspace.repoPath,
     selectedSession:
       identity && !isStarting
-        ? { identity, selectedModel, sessionAssociation: { kind: "repository" } }
+        ? {
+            identity,
+            selectedModel: chatState.selectedModel,
+            sessionAssociation: { kind: "repository" },
+          }
         : null,
     runtimeDefinitions: runtime.allRuntimeDefinitions,
     runtimeReadinessState: runtimeReadiness.state,
@@ -153,7 +147,7 @@ export function WorkspaceSessionChat({
       runtimeKind: record.runtimeKind,
       runtimeRef,
       updateDraft: updateDraftModel,
-      selection: selectedModel,
+      selection: chatState.selectedModel,
       catalog: modelCatalog,
       isLoading: isLoadingModelCatalog,
       error: catalogError,
@@ -165,7 +159,7 @@ export function WorkspaceSessionChat({
       record.runtimeKind,
       runtimeRef,
       updateDraftModel,
-      selectedModel,
+      chatState.selectedModel,
       modelCatalog,
       isLoadingModelCatalog,
       catalogError,
@@ -195,13 +189,21 @@ export function WorkspaceSessionChat({
     sessionModelCatalog: modelCatalog,
     selectedModelEntry: picker.selectedModelEntry,
   });
-  const readiness = deriveAgentChatReadiness({
-    transcriptState,
+  const presentation = useAgentChatPresentation({
+    session: chatState.transcriptSession,
+    sessionIdentity: identity,
+    pendingApprovals: chatState.pendingApprovals,
+    pendingQuestions: chatState.pendingQuestions,
+    skills: skills.skills,
+    profileId: chatState.selectedModel?.profileId,
+    runtimeKind: record.runtimeKind,
+    sessionAgentColors: picker.agentAccentColorsByProfileId,
     runtimeReadiness,
-    runtimeBlockedAction: {
-      label: "Recheck",
-      onAction: () => void runtimeReadiness.refreshChecks(),
-    },
+  });
+  const readiness = deriveAgentChatReadiness({
+    transcriptState: chatState.transcriptState,
+    runtimeReadiness,
+    runtimeBlockedAction: presentation.runtimeBlockedAction,
     failedTranscriptAction: {
       label: "Retry",
       onAction: () => {
@@ -212,43 +214,43 @@ export function WorkspaceSessionChat({
   const canResumeSession = canResumeWorkspaceSession({
     identity,
     isStarting,
-    activityState,
+    activityState: chatState.activityState,
     messages: session?.messages.items ?? [],
     runtimeDefinitions: runtime.allRuntimeDefinitions,
     runtimeKind: record.runtimeKind,
   });
   const canInteract = canInteractWithWorkspaceSession({
     runtimeInteractionEnabled: readiness.interactionEnabled,
-    observationReady,
+    observationReady: chatState.observationReady,
     recordsError,
-    targetFault,
+    targetFault: chatState.targetFault,
     isSavingModel,
   });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
-    pendingApprovals,
+    pendingApprovals: chatState.pendingApprovals,
     canReplyToApprovals: canInteract,
     replyAgentApproval: operations.replyAgentApproval,
   });
   const questionActions = useAgentSessionQuestionActions({
     sessionIdentity: identity,
-    pendingQuestions,
+    pendingQuestions: chatState.pendingQuestions,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
   });
   const transcript = resolveAgentChatTranscriptPresentation({
     repoPath: workspace.repoPath,
-    sessionKey,
-    session: transcriptSession,
-    target: transcriptTarget,
-    state: transcriptState,
-    notice: targetFault
+    sessionKey: chatState.sessionKey,
+    session: presentation.transcriptSession,
+    target: chatState.transcriptTarget,
+    state: chatState.transcriptState,
+    notice: chatState.targetFault
       ? {
           kind: "session_failed",
           severity: "error",
           title: "Workspace Session target mismatch",
-          description: targetFault.message,
+          description: chatState.targetFault.message,
           action: { label: "Retry", onAction: readModel.reloadSessionReadModel },
         }
       : readiness.transcriptNotice,
@@ -272,10 +274,13 @@ export function WorkspaceSessionChat({
     interactionEnabled: canInteract,
     runtimePresentation,
     emptyState: null,
-    pendingApprovalRequests: pendingApprovals,
-    pendingQuestionRequests: pendingQuestions,
+    pendingApprovalRequests: chatState.pendingApprovals,
+    pendingQuestionRequests: chatState.pendingQuestions,
     todos: runtimeData.todos,
+    sessionAccentColor: presentation.sessionAccentColor,
     sessionAgentColors: picker.agentAccentColorsByProfileId,
+    subagentPendingApprovalCountBySessionKey: presentation.subagentPendingApprovalCountBySessionKey,
+    subagentPendingQuestionCountBySessionKey: presentation.subagentPendingQuestionCountBySessionKey,
     approvals: {
       canReply: canInteract,
       isSubmittingByRequestId: approvalActions.isSubmittingApprovalByRequestId,
@@ -300,21 +305,18 @@ export function WorkspaceSessionChat({
           }
         : undefined,
     composer: {
-      displayedSessionKey: sessionKey,
-      selectedSession: identity ? { ...identity, selectedModel } : null,
+      displayedSessionKey: chatState.sessionKey,
+      selectedSession: identity ? { ...identity, selectedModel: chatState.selectedModel } : null,
       isSessionModelCatalogLoading: isLoadingModelCatalog,
-      isSessionWorking: isWorking,
-      isWaitingInput: isAgentSessionBlockedOnInput({ pendingApprovals, pendingQuestions }),
-      waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder({
-        pendingApprovals,
-        pendingQuestions,
-      }),
+      isSessionWorking: chatState.isWorking,
+      isWaitingInput: isAgentSessionBlockedOnInput(chatState),
+      waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(chatState),
       busySendBlockedReason: null,
-      canStopSession,
+      canStopSession: chatState.canStopSession,
       stopAgentSession: operations.stopAgentSession,
       isResumingSession: actions.isResumingSession,
-      isReadOnly,
-      readOnlyReason,
+      isReadOnly: chatState.isReadOnly,
+      readOnlyReason: chatState.readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
       onSend: (draft) =>
         actions.sendDraft(draft, {
@@ -326,7 +328,7 @@ export function WorkspaceSessionChat({
       isSending,
       isStarting,
       contextUsage,
-      selectedModelSelection: selectedModel,
+      selectedModelSelection: chatState.selectedModel,
       selectedModelDescriptor: picker.selectedModelEntry,
       isSelectionCatalogLoading: picker.isLoading,
       supportsProfiles: picker.supportsProfiles,

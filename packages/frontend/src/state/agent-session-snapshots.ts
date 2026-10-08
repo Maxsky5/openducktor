@@ -24,15 +24,58 @@ export type AgentActivitySessionsSnapshot = {
   workspaceRepoPath: string | null;
   sessions: AgentSessionSummary[];
   repositorySessions: RepositoryAgentSessionSummary[];
+  pendingInputSessions: AgentSessionPendingInputSummary[];
 };
+
+export type AgentSessionPendingInputSummary = AgentSessionIdentity &
+  Pick<AgentSessionSummary, "pendingApprovalCount" | "pendingQuestionCount">;
 
 export type RepositoryAgentSessionSummary = Omit<AgentSessionSummary, "taskId" | "role">;
 
-const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
-  left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
+export const createEmptyAgentActivitySnapshot = (
+  workspaceRepoPath: string | null,
+): AgentActivitySessionsSnapshot => createActivitySnapshot(workspaceRepoPath, []);
 
-export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
-export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
+export const createAgentActivitySnapshot = ({
+  collection,
+  previous,
+  workspaceRepoPath,
+}: {
+  collection: AgentSessionCollection;
+  previous: AgentActivitySessionsSnapshot;
+  workspaceRepoPath: string | null;
+}): AgentActivitySessionsSnapshot => {
+  const previousSummaryByIdentity = new Map(
+    previous.sessions.map((summary) => [agentSessionIdentityKey(summary), summary]),
+  );
+  const sessions = listAgentSessions(collection).sort(newestFirst);
+  const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
+    if (!isWorkflowAgentSession(session) || session.liveParentExternalSessionId !== undefined) {
+      return [];
+    }
+    const nextSummary = toAgentSessionSummary(session);
+    const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
+    return sameSummary(previousSummary, nextSummary) && previousSummary
+      ? [previousSummary]
+      : [nextSummary];
+  });
+  const activitySessions = reuseArray(previous.sessions, nextActivitySessions);
+  const repositorySessions = repositoryActivitySummaries(sessions, previous.repositorySessions);
+  const pendingInputSessions = pendingInputCounts(sessions, previous.pendingInputSessions);
+
+  return previous.workspaceRepoPath === workspaceRepoPath &&
+    previous.sessions === activitySessions &&
+    previous.repositorySessions === repositorySessions &&
+    previous.pendingInputSessions === pendingInputSessions
+    ? previous
+    : createActivitySnapshot(
+        workspaceRepoPath,
+        activitySessions,
+        repositorySessions,
+        pendingInputSessions,
+      );
+};
+
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
   if (!isWorkflowAgentSession(session)) {
     throw new Error(
@@ -56,10 +99,13 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
   return summary;
 }
 
-const areSummariesEquivalent = (
-  left: AgentSessionSummary | undefined,
-  right: AgentSessionSummary,
-): boolean =>
+const newestFirst = (left: AgentSessionState, right: AgentSessionState): number => {
+  if (left.startedAt > right.startedAt) return -1;
+  if (left.startedAt < right.startedAt) return 1;
+  return 0;
+};
+
+const sameSummary = (left: AgentSessionSummary | undefined, right: AgentSessionSummary): boolean =>
   left !== undefined &&
   agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
   left.title === right.title &&
@@ -73,7 +119,7 @@ const areSummariesEquivalent = (
   left.pendingApprovalCount === right.pendingApprovalCount &&
   left.pendingQuestionCount === right.pendingQuestionCount;
 
-const reuseArrayWhenItemsMatch = <T>(previous: T[], next: T[]): T[] => {
+const reuseArray = <T>(previous: T[], next: T[]): T[] => {
   if (previous.length !== next.length) {
     return next;
   }
@@ -89,11 +135,35 @@ const createActivitySnapshot = (
   workspaceRepoPath: string | null,
   sessions: AgentSessionSummary[],
   repositorySessions: RepositoryAgentSessionSummary[] = [],
+  pendingInputSessions: AgentSessionPendingInputSummary[] = [],
 ): AgentActivitySessionsSnapshot => ({
   workspaceRepoPath,
   sessions,
   repositorySessions,
+  pendingInputSessions,
 });
+
+const pendingInputCounts = (
+  sessions: AgentSessionState[],
+  previous: AgentSessionPendingInputSummary[],
+): AgentSessionPendingInputSummary[] => {
+  const previousByIdentity = new Map(
+    previous.map((summary) => [agentSessionIdentityKey(summary), summary]),
+  );
+  const next = sessions.flatMap((session): AgentSessionPendingInputSummary[] => {
+    const pendingApprovalCount = session.pendingApprovals.length;
+    const pendingQuestionCount = session.pendingQuestions.length;
+    if (pendingApprovalCount + pendingQuestionCount === 0) return [];
+    const prior = previousByIdentity.get(agentSessionIdentityKey(session));
+    if (
+      prior?.pendingApprovalCount === pendingApprovalCount &&
+      prior.pendingQuestionCount === pendingQuestionCount
+    )
+      return [prior];
+    return [{ ...toAgentSessionIdentity(session), pendingApprovalCount, pendingQuestionCount }];
+  });
+  return reuseArray(previous, next);
+};
 
 const repositoryActivitySummaries = (
   sessions: AgentSessionState[],
@@ -131,42 +201,5 @@ const repositoryActivitySummaries = (
       return [prior];
     return [summary];
   });
-  return reuseArrayWhenItemsMatch(previous, next);
-};
-
-export const createEmptyAgentActivitySnapshot = (
-  workspaceRepoPath: string | null,
-): AgentActivitySessionsSnapshot => createActivitySnapshot(workspaceRepoPath, []);
-
-export const createAgentActivitySnapshot = ({
-  collection,
-  previous,
-  workspaceRepoPath,
-}: {
-  collection: AgentSessionCollection;
-  previous: AgentActivitySessionsSnapshot;
-  workspaceRepoPath: string | null;
-}): AgentActivitySessionsSnapshot => {
-  const previousSummaryByIdentity = new Map(
-    previous.sessions.map((summary) => [agentSessionIdentityKey(summary), summary]),
-  );
-  const sessions = listAgentSessions(collection).sort(sortByStartedAtDesc);
-  const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
-    if (!isWorkflowAgentSession(session) || session.liveParentExternalSessionId !== undefined) {
-      return [];
-    }
-    const nextSummary = toAgentSessionSummary(session);
-    const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
-    return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
-      ? [previousSummary]
-      : [nextSummary];
-  });
-  const activitySessions = reuseArrayWhenItemsMatch(previous.sessions, nextActivitySessions);
-  const repositorySessions = repositoryActivitySummaries(sessions, previous.repositorySessions);
-
-  return previous.workspaceRepoPath === workspaceRepoPath &&
-    previous.sessions === activitySessions &&
-    previous.repositorySessions === repositorySessions
-    ? previous
-    : createActivitySnapshot(workspaceRepoPath, activitySessions, repositorySessions);
+  return reuseArray(previous, next);
 };

@@ -77,7 +77,6 @@ const createBaseArgs = (): BuildArgs => {
       role: "planner",
       selectedTask: task,
       sessionsForTask: [sessionSummary],
-      allSessionSummaries: [sessionSummary],
       selectedSession: {
         identity: toAgentSessionIdentity(session),
         activityState: sessionSummary.activityState,

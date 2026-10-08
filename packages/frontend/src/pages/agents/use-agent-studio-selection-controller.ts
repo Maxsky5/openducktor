@@ -42,7 +42,6 @@ export type AgentStudioSelectionControllerResult = {
   selectedSessionFromRoute: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
-  allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
   resolvedRouteSession: AgentSessionSummary | null;
   queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
@@ -139,7 +138,6 @@ export function useAgentStudioSelectionController({
       selectedSessionFromRoute: navigationState.selectedSessionFromRoute,
       taskId: navigationState.taskId,
       selectedTask: navigationState.selectedTask,
-      allSessionSummaries: sessions,
       sessionsForTask: navigationState.sessionsForTask,
       resolvedRouteSession: navigationState.resolvedRouteSession,
       queryUpdate: navigationState.queryUpdate,
@@ -151,6 +149,6 @@ export function useAgentStudioSelectionController({
         ...selectedSessionViewWithContextError,
       },
     }),
-    [isActiveTaskReady, navigationState, selectedSessionViewWithContextError, sessions],
+    [isActiveTaskReady, navigationState, selectedSessionViewWithContextError],
   );
 }

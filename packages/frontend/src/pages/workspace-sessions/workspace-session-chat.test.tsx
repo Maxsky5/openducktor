@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CHAT_SETTINGS,
+  CLAUDE_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
 } from "@openducktor/contracts";
@@ -191,8 +192,267 @@ const createWorkspaceChatHarness = ({
     );
   }
 
-  return { Harness, completeObservation: () => completeObservation() };
+  return { Harness, operations, definitions, completeObservation: () => completeObservation() };
 };
+
+const createPresentationScenario = (
+  runtimeKind: WorkspaceSession["runtimeKind"] = "opencode",
+  messages: AgentSessionState["messages"]["items"] = [],
+) => {
+  const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
+  const entry: WorkspaceSession = {
+    id: "presentation-session",
+    runtimeKind,
+    externalSessionId: "native-parent",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    createdAt: 1000,
+    updatedAt: 1000,
+    archivedAt: null,
+  };
+  const session = createAgentSessionFixture({
+    runtimeKind,
+    externalSessionId: entry.externalSessionId!,
+    workingDirectory: "/repo",
+    sessionAssociation: { kind: "repository" },
+    historyLoadState: "loaded",
+    livePresence: "present",
+    status: "idle",
+    messages: [...messages],
+    pendingApprovals: [],
+    pendingQuestions: [],
+  });
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(session);
+  return {
+    workspace,
+    entry,
+    session,
+    store,
+    ...createWorkspaceChatHarness({
+      workspace,
+      entry,
+      session,
+      store,
+      scenario: "streaming",
+      counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+    }),
+  };
+};
+
+test.each(["light", "dark"] as const)(
+  "workspace child attention follows live input and full identity in the %s theme",
+  async (theme) => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    const { Harness, store, session } = createPresentationScenario("opencode", [
+      buildMessage("assistant", "Inspect the code", {
+        id: "subagent-message",
+        meta: {
+          kind: "subagent",
+          partId: "child-part",
+          correlationKey: "child-part",
+          externalSessionId: "native-child",
+          agent: "Explorer",
+          status: "running",
+        },
+      }),
+    ]);
+    const child = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "native-child",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "repository" },
+      liveParentExternalSessionId: "native-parent",
+      status: "running",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+    store.replaceSession(child);
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+      }),
+    );
+    const view = render(<Harness />);
+    try {
+      await view.findByText("Running");
+      const badgeRow = view.getByText("Explorer").parentElement!;
+      expect(badgeRow.querySelector(".animate-spin")).not.toBeNull();
+      await act(async () => {
+        store.replaceSession({ ...child, pendingApprovals: [buildApprovalRequest()] });
+      });
+      expect(view.getByText("Waiting for input")).toBeTruthy();
+      expect(badgeRow.querySelector(".animate-spin")).toBeNull();
+      await act(async () => {
+        store.replaceSession({ ...child, pendingQuestions: [buildQuestionRequest()] });
+      });
+      expect(view.getByText("Waiting for input")).toBeTruthy();
+      expect(badgeRow.querySelector(".animate-spin")).toBeNull();
+      await act(async () => {
+        store.replaceSession(child);
+        store.replaceSession({
+          ...child,
+          runtimeKind: "claude",
+          pendingApprovals: [buildApprovalRequest()],
+        });
+        store.replaceSession({
+          ...child,
+          workingDirectory: "/other",
+          pendingQuestions: [buildQuestionRequest()],
+        });
+      });
+      expect(view.getByText("Running")).toBeTruthy();
+      expect(view.queryByText("Waiting for input")).toBeNull();
+      expect(badgeRow.querySelector(".animate-spin")).not.toBeNull();
+      await act(async () => {
+        store.replaceSession({
+          ...session,
+          pendingQuestions: [
+            buildQuestionRequest({
+              source: {
+                kind: "subagent",
+                parentExternalSessionId: "native-parent",
+                childExternalSessionId: "native-child",
+                subagentCorrelationKey: "subagent-message",
+              },
+            }),
+          ],
+        });
+      });
+      expect(view.getByText("Waiting for input")).toBeTruthy();
+      expect(badgeRow.querySelector(".animate-spin")).toBeNull();
+    } finally {
+      view.unmount();
+      document.documentElement.classList.remove("dark");
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  // The full chat render waits for catalog, history, and runtime reads.
+  5000,
+);
+
+test.each(["light", "dark"] as const)(
+  "workspace Claude history renders skill chips and the runtime todo accent in the %s theme",
+  async (theme) => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    const skill = { id: "review", name: "review", path: "review", title: "Review code" };
+    const { Harness, definitions, operations } = createPresentationScenario("claude", [
+      buildMessage("user", "/review", { id: "plain", meta: { kind: "user", state: "read" } }),
+      buildMessage("user", "/review", {
+        id: "structured",
+        meta: {
+          kind: "user",
+          state: "read",
+          parts: [
+            {
+              kind: "skill_mention",
+              skill,
+              sourceText: { value: "/review", start: 0, end: 7 },
+            },
+          ],
+        },
+      }),
+    ]);
+    definitions.runtimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
+    definitions.availableRuntimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
+    definitions.loadRepoRuntimeCatalog = async () => ({
+      models: { status: "available", catalog: { models: [], defaultModelsByProvider: {} } },
+      skills: { status: "available", catalog: { skills: [skill] } },
+    });
+    operations.readSessionTodos = async () => [
+      { id: "todo-1", content: "Review the code", status: "pending", priority: "medium" },
+    ];
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+      }),
+    );
+    const view = render(<Harness />);
+    try {
+      await view.findByLabelText("Agent todo list");
+      await waitFor(() => expect(view.getAllByTitle("Review code").length).toBe(2));
+      const accent = view.getByLabelText("Agent todo list").firstElementChild;
+      if (!(accent instanceof HTMLElement)) throw new Error("Expected the todo accent element");
+      expect(accent.style.borderLeftColor).toBe("var(--odt-runtime-accent-claude)");
+    } finally {
+      view.unmount();
+      document.documentElement.classList.remove("dark");
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  // The full chat render waits for catalog, history, and runtime reads.
+  5000,
+);
+
+test("workspace Recheck disables repeat input and shows pending feedback", async () => {
+  const { Harness, workspace, entry, store, session } = createPresentationScenario();
+  store.replaceSession({ ...session, historyLoadState: "not_requested" });
+  let finishRefresh = () => {};
+  let refreshCount = 0;
+  function BlockedChat() {
+    const [isRefreshing, setRefreshing] = useState(false);
+    const status = createHostRuntimeStatusContextValue({
+      readError: "Runtime check failed",
+      isRefreshing,
+      refresh: async () => {
+        refreshCount += 1;
+        setRefreshing(true);
+        await new Promise<void>((resolve) => {
+          finishRefresh = resolve;
+        });
+        setRefreshing(false);
+      },
+    });
+    return (
+      <HostRuntimeStatusContext value={status}>
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={entry}
+          chatSettings={DEFAULT_CHAT_SETTINGS}
+          reusablePrompts={[]}
+          onToolRefresh={() => {}}
+          isMounted={() => true}
+        />
+      </HostRuntimeStatusContext>
+    );
+  }
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const view = render(
+    <Harness>
+      <BlockedChat />
+    </Harness>,
+  );
+  try {
+    const recheck = await view.findByRole("button", { name: "Recheck" });
+    if (!(recheck instanceof HTMLButtonElement)) throw new Error("Expected the Recheck button");
+    await act(async () => {
+      fireEvent.click(recheck);
+    });
+    expect(recheck.disabled).toBe(true);
+    expect(recheck.querySelector(".animate-spin")).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(recheck);
+    });
+    expect(refreshCount).toBe(1);
+    await act(async () => {
+      finishRefresh();
+    });
+    expect(recheck.disabled).toBe(false);
+    expect(recheck.querySelector(".animate-spin")).toBeNull();
+  } finally {
+    finishRefresh();
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+  // The full chat render waits for the deferred runtime check and catalog reads.
+}, 5000);
 
 test("returning to a retained chat expands requests without clearing drafts, while a preview keeps collapse choices", async () => {
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
