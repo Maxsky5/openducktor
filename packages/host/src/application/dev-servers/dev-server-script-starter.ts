@@ -10,7 +10,6 @@ import {
 import {
   DevServerProcessStartExitError,
   devServerExitMessage,
-  type DevServerProcessHandle,
   type DevServerProcessPort,
 } from "../../ports/dev-server-process-port";
 import type {
@@ -170,7 +169,7 @@ export const createDevServerScriptStarter = ({
           script.lastError = null;
         });
         writeSystemMessage(runtime, scriptConfig.id, `Starting \`${scriptConfig.command}\``);
-        const nativeHandle = yield* processPort
+        const handle = yield* processPort
           .start({
             command: scriptConfig.command,
             cwd: workingDirectory,
@@ -205,15 +204,6 @@ export const createDevServerScriptStarter = ({
               }),
             ),
           );
-        const handle: DevServerProcessHandle = {
-          ...nativeHandle,
-          stop: () =>
-            nativeHandle
-              .stop()
-              .pipe(
-                Effect.tap(() => Effect.sync(() => output.exit({ exitCode: null, signal: null }))),
-              ),
-        };
         runtime.processes.set(scriptConfig.id, handle);
         const startingScript = runtime.state.scripts.find(
           (candidate) => candidate.scriptId === scriptConfig.id,
@@ -263,10 +253,15 @@ export const createDevServerScriptStarter = ({
                     state.status = "stopping";
                   });
                 }
-                yield* handle.stop().pipe(
-                  Effect.tapError(failStartup),
-                  Effect.mapError((cause) => mapOutputFailure(cause, "terminate")),
-                );
+                const stopError = yield* stopScriptProcessHandle({
+                  handle,
+                  runtime,
+                  scriptId: scriptConfig.id,
+                  updateScriptState,
+                });
+                if (stopError !== null) {
+                  return yield* mapOutputFailure({ message: stopError }, "terminate");
+                }
               }),
           })
           .pipe(

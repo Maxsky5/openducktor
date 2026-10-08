@@ -833,11 +833,15 @@ describe("createDevServerService", () => {
     await expect(Effect.runPromise(oldProducer.terminate())).rejects.toThrow(
       "Old process stop failed.",
     );
+    oldStopFails = false;
+    await Effect.runPromise(oldProducer.terminate());
+    starts[1]?.onOutput({ data: "CURRENT-OUTPUT\n" });
 
     const state = await Effect.runPromise(
       service.getState({ repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } }),
     );
     expect(readOutput(service, state).some((data) => data.includes("LATE-OLD"))).toBe(false);
+    expect(readOutput(service, state)).toContain("CURRENT-OUTPUT\n");
     expect(events.some((event) => JSON.stringify(event.payload).includes("LATE-OLD"))).toBe(false);
     expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700, lastError: null });
     expect(state.scripts[0]?.terminalId).not.toBe(first.scripts[0]?.terminalId);

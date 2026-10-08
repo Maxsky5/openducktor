@@ -84,6 +84,12 @@ Reject it while a live role owns mutable task state. Reject an epic while a dire
 
 Only the task detail sheet can show `close_task`. Do not show it on a Kanban card, Task Workflows quick action, bulk action, header, or command palette.
 
+## Merged pull requests
+
+Pull request sync records the merged pull request, stops task terminals and dev servers, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
+
+A successful dev server stop clears its process ownership and records `stopped` before terminal cleanup can forget its output source. A later process exit callback must not change a replacement server.
+
 ## UI rules
 
 A task can have more than one action. The UI can choose one primary action and put the rest in a menu. Display order is a UI rule. The backend list remains the authority.
