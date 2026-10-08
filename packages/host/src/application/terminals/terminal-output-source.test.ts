@@ -7,7 +7,8 @@ import {
 } from "@openducktor/contracts";
 import { Terminal } from "@xterm/headless";
 import { Effect, Fiber } from "effect";
-import { createDevServerService } from "../dev-servers/dev-server-service";
+import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../effect/host-errors";
 import type {
   DevServerProcessPort,
@@ -19,10 +20,7 @@ import {
   createGitPortTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
-import { TERMINAL_LIMITS } from "./terminal-limits";
-import { createTerminalService } from "./terminal-service";
-import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
-import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
+import { createDevServerService } from "../dev-servers/dev-server-service";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import {
   createBuildSettingsConfig,
@@ -32,6 +30,8 @@ import {
   githubPullResponsePayload,
   task,
 } from "../tasks/test-support/task-workflow-harness";
+import { TERMINAL_LIMITS } from "./terminal-limits";
+import { createTerminalService } from "./terminal-service";
 
 const unused = () => Effect.die("Unexpected target or shell operation in output source test.");
 const filesystem: FilesystemPort = {
@@ -423,18 +423,10 @@ describe("dev server terminal ownership", () => {
           ),
       }),
       taskStore: {
-        listPullRequestSyncCandidates: () =>
-          Effect.succeed(
-            currentTask.pullRequest
-              ? [
-                  {
-                    id: currentTask.id,
-                    status: currentTask.status,
-                    pullRequest: currentTask.pullRequest,
-                  },
-                ]
-              : [],
-          ),
+        listPullRequestSyncCandidates: () => {
+          const { id, status, pullRequest } = currentTask;
+          return Effect.succeed(pullRequest ? [{ id, status, pullRequest }] : []);
+        },
         listTasks: () => Effect.succeed([currentTask]),
         setPullRequest: ({ pullRequest }) =>
           Effect.sync(() => {

@@ -65,15 +65,15 @@ export const stopScriptProcessHandle = ({
   runtime: DevServerGroupRuntime;
   scriptId: string;
   updateScriptState: UpdateScriptState;
-}) =>
+}): Effect.Effect<string | null> =>
   Effect.gen(function* () {
     const output =
       runtime.processes.get(scriptId) === handle
         ? runtime.terminalOutputs.get(scriptId)
         : undefined;
     const stopResult = yield* Effect.result(handle.stop());
+    const isCurrentHandle = runtime.processes.get(scriptId) === handle;
     if (stopResult._tag === "Success") {
-      const isCurrentHandle = runtime.processes.get(scriptId) === handle;
       if (isCurrentHandle) {
         runtime.unresolvedStops.delete(scriptId);
         runtime.processes.delete(scriptId);
@@ -93,7 +93,7 @@ export const stopScriptProcessHandle = ({
     }
 
     const message = errorMessage(stopResult.failure);
-    if (runtime.processes.get(scriptId) === handle) {
+    if (isCurrentHandle) {
       updateScriptState(runtime, scriptId, (script) => {
         script.status = "failed";
         script.lastError = message;
