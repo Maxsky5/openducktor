@@ -15,7 +15,10 @@ import type {
   WorkspaceSessionLiveFacts,
   WorkspaceSessionLiveState,
 } from "@/features/workspace-activity/workspace-activity-state";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import {
+  isAgentSessionActivityActive,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
 import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
@@ -223,10 +226,8 @@ const sessionLiveFactsOf = (
   const key = agentSessionIdentityKey(identity);
   const facts = live.sessions.get(key) ?? null;
   const ownFault = live.faults.get(key);
-  // A kept snapshot carries its read failure; a session without one relies on the fault.
-  let statusFailure: string | null = null;
-  if (facts) statusFailure = facts.statusUnavailableReason;
-  else if (ownFault?.statusUnavailable) statusFailure = ownFault.message;
+  const statusFailure =
+    facts?.statusUnavailableReason ?? (ownFault?.statusUnavailable ? ownFault.message : null);
   return {
     facts,
     fault: facts?.fault ?? ownFault?.message ?? null,
@@ -265,7 +266,7 @@ const taskSessionTime = (record: AgentSessionRecord): SessionNavigationTime => {
   return startedAt === null ? { kind: "none" } : { kind: "started", at: startedAt };
 };
 
-/** The latest started saved session carries the Blocked reason of its task. */
+/** Select the latest started saved session, with a stable identity tie-breaker. */
 const latestStartedRecord = (records: readonly AgentSessionRecord[]): AgentSessionRecord | null => {
   let latest: AgentSessionRecord | null = null;
   for (const record of records) {
@@ -315,7 +316,17 @@ const taskEntries = (
       }
       continue;
     }
-    const blockedRecord = isBlocked ? latestStartedRecord(read.data) : null;
+    const hasActiveSession =
+      live.kind === "ready" &&
+      read.data.some((record) => {
+        const { facts, statusFailure } = sessionLiveFactsOf(live, toAgentSessionIdentity(record));
+        return (
+          facts !== null &&
+          statusFailure === null &&
+          isAgentSessionActivityActive(facts.activityState)
+        );
+      });
+    const blockedRecord = isBlocked && !hasActiveSession ? latestStartedRecord(read.data) : null;
     let latest: SessionNavigationEntry | null = null;
     let needsInput = false;
     for (const record of read.data) {
