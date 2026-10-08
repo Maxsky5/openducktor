@@ -4,6 +4,7 @@ import type { DiffScope } from "@/features/agent-studio-git";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import {
   type PersistedInlineCommentDraft,
+  pruneInlineCommentDraftsFromStorage,
   readInlineCommentDraftsFromStorage,
   toInlineCommentDraftStorageKey,
   writeInlineCommentDraftsToStorage,
@@ -344,8 +345,9 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
   hydrate: (ownerKey) => {
     if (get().hydratedOwners[ownerKey]) return;
     try {
+      const storage = getStorage();
       const result = readInlineCommentDraftsFromStorage({
-        storage: getStorage(),
+        storage,
         ownerKey,
         now: new Date(),
       });
@@ -359,6 +361,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
         }));
         getOrCreateOwnerEntry(ownerKey);
       }
+      startCleanup(storage);
     } catch (error) {
       setPersistenceWarning(ownerKey, "storage_unavailable");
       reportPersistenceError(error);
@@ -387,7 +390,10 @@ export const toInlineCommentDraftOwnerKey = (owner: InlineCommentOwner | null): 
   );
 };
 
-type InlineCommentDraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type InlineCommentDraftStorage = Pick<
+  Storage,
+  "length" | "key" | "getItem" | "setItem" | "removeItem"
+>;
 
 type PersistenceErrorReporter = (error: Error) => void;
 
@@ -409,7 +415,9 @@ const missingDraftsBySubmission = new Map<
 >();
 
 let storageOverride: InlineCommentDraftStorage | null = null;
-let scheduleFlushTask: ScheduleTask = scheduleTask;
+let schedule: ScheduleTask = scheduleTask;
+let cleanupStarted = false;
+let cancelCleanup: (() => void) | null = null;
 let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
   console.error(error);
 };
@@ -487,6 +495,25 @@ const getStorage = (): InlineCommentDraftStorage => {
 
 const reportPersistenceError = (cause: unknown): void => {
   persistenceErrorReporter(cause instanceof Error ? cause : new Error(String(cause)));
+};
+
+const startCleanup = (storage: InlineCommentDraftStorage): void => {
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  const cleanup = pruneInlineCommentDraftsFromStorage({ storage });
+  const run = (): void => {
+    cancelCleanup = null;
+    try {
+      if (!cleanup.next().done) cancelCleanup = schedule(run, 0);
+    } catch (error) {
+      reportPersistenceError(
+        new Error("Failed to clean up saved Git diff comments. Check access to local storage.", {
+          cause: error,
+        }),
+      );
+    }
+  };
+  cancelCleanup = schedule(run, 0);
 };
 
 const toPersistedDraft = (draft: InlineCommentDraft): PersistedInlineCommentDraft => ({
@@ -592,13 +619,13 @@ const flushOwner = (ownerKey: string): void => {
 const scheduleOwnerFlush = (ownerKey: string): void => {
   const entry = getOrCreateOwnerEntry(ownerKey);
   if (entry.cancelMaxFlush === null) {
-    entry.cancelMaxFlush = scheduleFlushTask(() => {
+    entry.cancelMaxFlush = schedule(() => {
       flushOwner(ownerKey);
     }, MAX_WAIT_MS);
   }
 
   entry.cancelTrailingFlush?.();
-  entry.cancelTrailingFlush = scheduleFlushTask(() => {
+  entry.cancelTrailingFlush = schedule(() => {
     flushOwner(ownerKey);
   }, TRAILING_WAIT_MS);
 };
@@ -628,10 +655,13 @@ export const setInlineCommentDraftPersistenceErrorReporter = (
 };
 
 export const setInlineCommentDraftScheduleTaskForTests = (scheduler: ScheduleTask | null): void => {
-  scheduleFlushTask = scheduler ?? scheduleTask;
+  schedule = scheduler ?? scheduleTask;
 };
 
 export const resetInlineCommentDraftStoreForTests = (): void => {
+  cancelCleanup?.();
+  cancelCleanup = null;
+  cleanupStarted = false;
   for (const entry of ownerEntries.values()) {
     clearOwnerTimers(entry);
   }
@@ -639,7 +669,7 @@ export const resetInlineCommentDraftStoreForTests = (): void => {
   validatedOwnerScopes.clear();
   missingDraftsBySubmission.clear();
   storageOverride = null;
-  scheduleFlushTask = scheduleTask;
+  schedule = scheduleTask;
   persistenceErrorReporter = (error) => {
     console.error(error);
   };

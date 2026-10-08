@@ -217,6 +217,28 @@ export const readInlineCommentDraftsFromStorage = ({
   return result;
 };
 
+/** Remove stale comment records in small batches without loading other owners. */
+export function* pruneInlineCommentDraftsFromStorage({
+  storage,
+}: {
+  storage: Pick<Storage, "length" | "key" | "getItem" | "removeItem">;
+}): Generator<void> {
+  const keys: string[] = [];
+  const length = storage.length;
+  // Snapshot keys before deletion can change their order.
+  for (let index = 0; index < length; index++) {
+    const key = storage.key(index);
+    if (key && isInlineCommentDraftStorageKey(key)) keys.push(key);
+    if ((index + 1) % CLEANUP_BATCH_SIZE === 0) yield;
+  }
+  yield;
+
+  for (const [index, ownerKey] of keys.entries()) {
+    readInlineCommentDraftsFromStorage({ storage, ownerKey });
+    if ((index + 1) % CLEANUP_BATCH_SIZE === 0) yield;
+  }
+}
+
 const readStoragePayload = (storage: Pick<Storage, "getItem">, key: string): string | null => {
   try {
     return storage.getItem(key);
@@ -234,6 +256,7 @@ const removeStoragePayload = (storage: Pick<Storage, "removeItem">, key: string)
 };
 
 const encoder = new TextEncoder();
+const CLEANUP_BATCH_SIZE = 32;
 
 const DIFF_SCOPES = ["uncommitted", "target"] as const satisfies readonly DiffScope[];
 const INLINE_COMMENT_SIDES = ["old", "new"] as const satisfies readonly InlineCommentSide[];

@@ -21,6 +21,8 @@ Task v1 records keep `version`, `workspaceId`, `taskId`, `updatedAt`, and `comme
 
 Each owner hydrates its exact key. Hydration keeps newer in-memory drafts. Both formats expire seven days after `updatedAt` and have a 131,072-byte payload limit. Invalid, future-dated, expired, mismatched, and oversized records cannot become sendable comments. Storage failures and size warnings belong to the affected owner.
 
+After the first successful owner read, background cleanup checks both comment namespaces once. Each scheduled step inspects at most 32 keys or records. Cleanup snapshots the keys before it removes records, then uses the same codec to drop invalid, expired, and oversized payloads. It checks the current time for each record so a save during cleanup remains valid. It keeps valid records and in-memory drafts. Cleanup failures stop the pass and report the error without changing owner warnings or retrying.
+
 The first successful available diff validates each restored scope against its full file list. Loading, failed reads, and unavailable comparisons do not remove comments. Neutral `HEAD` reads do not validate an unavailable target comparison.
 
 If validation finds a missing file while its comment is being sent, the store keeps the comment locked until Send settles. On rejection, the store drops and saves only the missing revisions found by that validation. On acceptance, the store clears the batch once. Later comments stay pending, even when they use the same file path. This tracking stays in memory and does not change stored records.

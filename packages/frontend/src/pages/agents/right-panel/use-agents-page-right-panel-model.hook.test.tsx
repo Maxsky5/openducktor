@@ -214,6 +214,10 @@ describe("useAgentsPageRightPanelModel", () => {
   test("validates task comments without mounting the Git tab", async () => {
     const values = new Map<string, string>();
     setInlineCommentDraftStorageForTests({
+      get length() {
+        return values.size;
+      },
+      key: (index) => Array.from(values.keys())[index] ?? null,
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => {
         values.set(key, value);

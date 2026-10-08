@@ -21,6 +21,10 @@ for (const owner of [
       resetInlineCommentDraftStoreForTests();
       const values = new Map<string, string>();
       const storage = {
+        get length() {
+          return values.size;
+        },
+        key: (index: number) => Array.from(values.keys())[index] ?? null,
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => {
           values.set(key, value);
