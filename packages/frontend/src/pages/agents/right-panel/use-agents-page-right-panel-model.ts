@@ -10,6 +10,7 @@ import type {
   TaskExecutionFileSelectionResult,
   TaskExecutionSelectedFile,
 } from "@/components/features/agents";
+import { useGitCommentDraftValidation } from "@/components/features/agents/agent-studio-git-panel/use-git-comment-draft-validation";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
@@ -495,6 +496,7 @@ export function useAgentsPageRightPanelModel({
     setTaskTargetBranch,
     selectedView.selectedTask,
   ]);
+  useGitCommentDraftValidation(diffModel);
 
   const rightPanelModel = useMemo(
     () =>

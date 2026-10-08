@@ -5,7 +5,16 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 import type { AgentStudioGitPanelModel } from "./types";
 
-export function useGitCommentDraftValidation(model: AgentStudioGitPanelModel): void {
+export function useGitCommentDraftValidation(
+  model: Pick<
+    AgentStudioGitPanelModel,
+    | "commentOwner"
+    | "targetBranch"
+    | "comparisonUnavailableReason"
+    | "scopeStatesByScope"
+    | "loadedScopesByScope"
+  >,
+): void {
   const ownerKey = toInlineCommentDraftOwnerKey(model.commentOwner ?? null);
   const hydrated = useInlineCommentDraftStore(
     (store) => ownerKey !== null && store.hydratedOwners[ownerKey] === true,

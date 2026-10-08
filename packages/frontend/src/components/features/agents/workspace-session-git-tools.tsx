@@ -7,6 +7,7 @@ import type { DiffDataState } from "@/features/agent-studio-git";
 import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
+import { useGitCommentDraftValidation } from "./agent-studio-git-panel/use-git-comment-draft-validation";
 import { SharedToolsPanel, type SharedToolsPanelModel } from "./shared-tools-panel";
 import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
@@ -68,6 +69,7 @@ export function WorkspaceSessionGitTools({
       ? null
       : "The selected working directory is unavailable.",
   };
+  useGitCommentDraftValidation(model);
   return (
     <SharedToolsPanel
       model={{

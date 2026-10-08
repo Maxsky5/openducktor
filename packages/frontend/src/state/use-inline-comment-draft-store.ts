@@ -205,20 +205,34 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return;
     }
 
+    const missingDrafts = missingDraftsBySubmission.get(submissionId) ?? [];
+    missingDraftsBySubmission.delete(submissionId);
+    const changedOwnerKeys: string[] = [];
     set((state) => {
       let didChange = false;
       const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
       for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
-        const nextDrafts = drafts.map((draft) =>
-          draft.status === "submitting" && draft.submissionId === submissionId
-            ? { ...draft, status: "pending" as const, submissionId: null }
-            : draft,
-        );
-        didChange = didChange || nextDrafts.some((draft, index) => draft !== drafts[index]);
+        const nextDrafts: InlineCommentDraft[] = [];
+        for (const draft of drafts) {
+          if (draft.status !== "submitting" || draft.submissionId !== submissionId) {
+            nextDrafts.push(draft);
+            continue;
+          }
+          didChange = true;
+          if (
+            !missingDrafts.some(
+              (snapshot) => snapshot.ownerKey === ownerKey && matchesRevision(draft, snapshot),
+            )
+          ) {
+            nextDrafts.push({ ...draft, status: "pending", submissionId: null });
+          }
+        }
+        if (nextDrafts.length !== drafts.length) changedOwnerKeys.push(ownerKey);
         draftsByOwner[ownerKey] = nextDrafts;
       }
       return didChange ? { draftsByOwner } : state;
     });
+    for (const ownerKey of changedOwnerKeys) markOwnerChangedNow(ownerKey);
   },
 
   completeSubmittingDrafts: (submissionId) => {
@@ -226,6 +240,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return;
     }
 
+    missingDraftsBySubmission.delete(submissionId);
     const state = get();
     const changedOwnerKeys: string[] = [];
     const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
@@ -262,12 +277,17 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return;
     }
 
-    const nextDrafts = drafts.filter(
-      (draft) =>
-        draft.status === "submitting" ||
-        draft.diffScope !== diffScope ||
-        presentFilePaths.has(draft.filePath),
-    );
+    const nextDrafts = drafts.filter((draft) => {
+      if (draft.diffScope !== diffScope || presentFilePaths.has(draft.filePath)) return true;
+      if (draft.status !== "submitting") return false;
+      // Keep the batch locked until Send settles, then drop only these missing revisions.
+      if (draft.submissionId !== null) {
+        const missingDrafts = missingDraftsBySubmission.get(draft.submissionId) ?? [];
+        missingDrafts.push({ ownerKey, id: draft.id, revision: draft.revision });
+        missingDraftsBySubmission.set(draft.submissionId, missingDrafts);
+      }
+      return true;
+    });
     if (nextDrafts.length === drafts.length) {
       return;
     }
@@ -383,6 +403,10 @@ const TRAILING_WAIT_MS = 1_000;
 
 const ownerEntries = new Map<string, OwnerPersistenceEntry>();
 const validatedOwnerScopes = new Set<string>();
+const missingDraftsBySubmission = new Map<
+  string,
+  Array<InlineCommentDraftSnapshot & { ownerKey: string }>
+>();
 
 let storageOverride: InlineCommentDraftStorage | null = null;
 let scheduleFlushTask: ScheduleTask = scheduleTask;
@@ -613,6 +637,7 @@ export const resetInlineCommentDraftStoreForTests = (): void => {
   }
   ownerEntries.clear();
   validatedOwnerScopes.clear();
+  missingDraftsBySubmission.clear();
   storageOverride = null;
   scheduleFlushTask = scheduleTask;
   persistenceErrorReporter = (error) => {

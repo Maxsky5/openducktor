@@ -12,6 +12,13 @@ import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { filesystemQueryKeys, workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
+import {
+  resetInlineCommentDraftStoreForTests,
+  setInlineCommentDraftScheduleTaskForTests,
+  setInlineCommentDraftStorageForTests,
+  toInlineCommentDraftOwnerKey,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -149,6 +156,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 };
 
 beforeEach(async () => {
+  resetInlineCommentDraftStoreForTests();
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot();
@@ -168,6 +176,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  resetInlineCommentDraftStoreForTests();
   for (const testSpy of testSpies) testSpy.mockRestore();
   testSpies = [];
 });
@@ -202,6 +211,45 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentsPageRightPanelModel", () => {
+  test("validates task comments without mounting the Git tab", async () => {
+    const values = new Map<string, string>();
+    setInlineCommentDraftStorageForTests({
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => {
+        values.set(key, value);
+      },
+      removeItem: (key) => {
+        values.delete(key);
+      },
+    });
+    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    const ownerKey = toInlineCommentDraftOwnerKey({
+      kind: "task",
+      workspaceId: "workspace-repo",
+      taskId: "task-1",
+    });
+    if (ownerKey === null) throw new Error("Expected a task comment owner.");
+    useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+      filePath: "src/missing.ts",
+      diffScope: "uncommitted",
+      startLine: 1,
+      endLine: 1,
+      side: "new",
+      text: "Missing file comment",
+      codeContext: [],
+    });
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({ activeTabId: "file_explorer" }),
+    );
+    try {
+      await harness.mount();
+      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps a changed detached HEAD out of the selected explorer cache", async () => {
     buildToolsSnapshotState.current = {
       ...createSnapshot(),

@@ -4,9 +4,9 @@
 
 Task comments belong to the workspace and task, across roles and runtime sessions. Workspace comments belong to the workspace and saved workspace session record, including before runtime startup. Sessions that use the same directory have separate comments.
 
-The Git panel shares annotation actions and restored-file validation for both owner kinds. The composer uses `useReviewCommentComposer` to capture pending comment revisions and the Send callback before asynchronous preparation. New comments stay pending for the next Send. Submitted comments cannot be edited or removed until the send settles.
+The Git panel shares annotation actions for both owner kinds. The task and workspace Git models run shared restored-file validation while another tools tab is active. The composer uses `useReviewCommentComposer` to capture pending comment revisions and the Send callback before asynchronous preparation. New comments stay pending for the next Send. Submitted comments cannot be edited or removed until the send settles.
 
-Known message acceptance clears the captured batch once. A rejected send restores that batch. The normal composer draft store recovers the original text and attachments without the comment appendix, and keeps newer edits. A session that disappears during preparation rejects the send with an error. A later update or save failure cannot change known acceptance.
+Known message acceptance clears the captured batch once. A rejected send restores valid comments in that batch. The normal composer draft store recovers the original text and attachments without the comment appendix, and keeps newer edits. A session that disappears during preparation rejects the send with an error. A later update or save failure cannot change known acceptance.
 
 ## Local storage compatibility
 
@@ -22,6 +22,8 @@ Task v1 records keep `version`, `workspaceId`, `taskId`, `updatedAt`, and `comme
 Each owner hydrates its exact key. Hydration keeps newer in-memory drafts. Both formats expire seven days after `updatedAt` and have a 131,072-byte payload limit. Invalid, future-dated, expired, mismatched, and oversized records cannot become sendable comments. Storage failures and size warnings belong to the affected owner.
 
 The first successful available diff validates each restored scope against its full file list. Loading, failed reads, and unavailable comparisons do not remove comments. Neutral `HEAD` reads do not validate an unavailable target comparison.
+
+If validation finds a missing file while its comment is being sent, the store keeps the comment locked until Send settles. On rejection, the store drops and saves only the missing revisions found by that validation. On acceptance, the store clears the batch once. Later comments stay pending, even when they use the same file path. This tracking stays in memory and does not change stored records.
 
 Each scope keeps its read error until its own full diff read succeeds. A successful read of the other scope or a summary-only read cannot clear that error or remove restored comments.
 

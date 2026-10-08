@@ -20,7 +20,6 @@ import {
   GitConflictDialog,
   GitConflictStrip,
 } from "@/features/git-conflict-resolution";
-import { useGitCommentDraftValidation } from "./use-git-comment-draft-validation";
 import { toInlineCommentDraftOwnerKey } from "@/state/use-inline-comment-draft-store";
 import { CommitComposer } from "./commit-composer";
 import { INLINE_CODE_CLASS_NAME, PRELOAD_DIFF_LIMIT } from "./constants";
@@ -44,7 +43,6 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }: {
   model: AgentStudioGitPanelModel;
 }): ReactElement {
-  useGitCommentDraftValidation(model);
   const expandedSelection = useExpandedFileSelection();
   const { diffScope, handleDiffScopeChange } = useOptimisticDiffScope(
     model,
