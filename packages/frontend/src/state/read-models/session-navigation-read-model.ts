@@ -317,7 +317,6 @@ const taskEntries = (
       continue;
     }
     const hasActiveSession =
-      isBlocked &&
       live.kind === "ready" &&
       read.data.some((record) => {
         const { facts, statusFailure } = sessionLiveFactsOf(live, toAgentSessionIdentity(record));
