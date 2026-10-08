@@ -8,12 +8,8 @@ import type { AgentStudioGitPanelModel } from "./types";
 export function useGitCommentDraftValidation(
   model: Pick<
     AgentStudioGitPanelModel,
-    | "commentOwner"
-    | "targetBranch"
-    | "comparisonUnavailableReason"
-    | "scopeStatesByScope"
-    | "loadedScopesByScope"
-  >,
+    "commentOwner" | "comparisonUnavailableReason" | "scopeStatesByScope" | "loadedScopesByScope"
+  > & { targetBranch: string | null },
 ): void {
   const ownerKey = toInlineCommentDraftOwnerKey(model.commentOwner ?? null);
   const hydrated = useInlineCommentDraftStore(

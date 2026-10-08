@@ -207,26 +207,31 @@ for (const owner of [
 
       await harness.unmount();
     });
-    test("keeps target drafts when only neutral HEAD data is available", async () => {
-      const storage = createMemoryStorage();
-      setCommentStorage(storage);
-      seedStoredComments([createCommentInput({ diffScope: "target" })]);
-      reloadCommentStore(storage);
-      const model = {
-        ...createModel(owner),
-        targetBranch: "HEAD",
-        comparisonUnavailableReason: "No upstream branch",
-      };
-      model.loadedScopesByScope = { target: true, uncommitted: true };
-      model.scopeStatesByScope = {
-        target: createEmptyScopeStateFixture(),
-        uncommitted: createEmptyScopeStateFixture(),
-      };
-      const harness = createHookHarness(useGitCommentDraftValidation, model);
-      await harness.mount();
-      expect(pendingCommentPaths()).toEqual(["src/file.ts"]);
-      await harness.unmount();
-    });
+    test.each([
+      { targetBranch: "HEAD", comparisonUnavailableReason: "No upstream branch" },
+      { targetBranch: null, comparisonUnavailableReason: null },
+    ])(
+      "keeps target drafts when the comparison is unavailable: $targetBranch",
+      async (comparison) => {
+        const storage = createMemoryStorage();
+        setCommentStorage(storage);
+        seedStoredComments([createCommentInput({ diffScope: "target" })]);
+        reloadCommentStore(storage);
+        const model = {
+          ...createModel(owner),
+          ...comparison,
+        };
+        model.loadedScopesByScope = { target: true, uncommitted: true };
+        model.scopeStatesByScope = {
+          target: createEmptyScopeStateFixture(),
+          uncommitted: createEmptyScopeStateFixture(),
+        };
+        const harness = createHookHarness(useGitCommentDraftValidation, model);
+        await harness.mount();
+        expect(pendingCommentPaths()).toEqual(["src/file.ts"]);
+        await harness.unmount();
+      },
+    );
 
     test.each(["target", "uncommitted"] satisfies DiffScope[])(
       "keeps restored %s comments through other-scope and summary reads until full recovery",

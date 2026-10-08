@@ -4,7 +4,7 @@
 
 Task comments belong to the workspace and task, across roles and runtime sessions. Workspace comments belong to the workspace and saved workspace session record, including before runtime startup. Sessions that use the same directory have separate comments.
 
-The Git panel shares annotation actions for both owner kinds. The task and workspace Git models run shared restored-file validation while another tools tab is active. The composer uses `useReviewCommentComposer` to capture pending comment revisions and the Send callback before asynchronous preparation. New comments stay pending for the next Send. Submitted comments cannot be edited or removed until the send settles.
+The Git panel shares annotation actions for both owner kinds. Shared restored-file validation runs outside active tab content. The workspace tools owner also checks full reads that finish after the tools view closes. The composer uses `useReviewCommentComposer` to capture pending comment revisions and the Send callback before asynchronous preparation. New comments stay pending for the next Send. Submitted comments cannot be edited or removed until the send settles.
 
 Known message acceptance clears the captured batch once. A rejected send restores valid comments in that batch. The normal composer draft store recovers the original text and attachments without the comment appendix, and keeps newer edits. A session that disappears during preparation rejects the send with an error. A later update or save failure cannot change known acceptance.
 

@@ -30,6 +30,7 @@ import type {
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { WorkspaceSessionGitTools } from "./workspace-session-git-tools";
+import { useGitCommentDraftValidation } from "./agent-studio-git-panel/use-git-comment-draft-validation";
 
 export type WorkspaceToolsTabId = "git" | "file_explorer";
 type WorkspaceRefreshMode = "hard" | "soft" | "scheduled";
@@ -86,7 +87,7 @@ export function useWorkspaceSessionTools({
 }: WorkspaceSessionToolsProps) {
   const directoryKey = JSON.stringify([repoPath, workingDirectory]);
   const viewRef = useRef<WorkspaceToolsView | null>(null);
-  const devServerOwner = useMemo<DevServerOwner>(
+  const owner = useMemo<Extract<DevServerOwner, { kind: "workspace_session" }>>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
   );
@@ -112,6 +113,14 @@ export function useWorkspaceSessionTools({
     defaultTargetBranch: { branch: readTarget },
     branchIdentityKey: `${workingDirectory ?? ""}:${branchKey}`,
     enableScheduledRefresh: false,
+  });
+  // An in-flight diff can finish after the tools view closes.
+  useGitCommentDraftValidation({
+    commentOwner: owner,
+    targetBranch: resolvedTarget,
+    comparisonUnavailableReason: unavailableReason,
+    scopeStatesByScope: diffData.scopeStatesByScope,
+    loadedScopesByScope: diffData.loadedScopesByScope,
   });
   const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
     isVisible,
@@ -209,9 +218,9 @@ export function useWorkspaceSessionTools({
   const toolsContent = (
     <WorkspaceSessionGitTools
       key={JSON.stringify([repoPath, workingDirectory, branchKey])}
-      commentOwner={{ kind: "workspace_session", workspaceId, sessionId }}
+      commentOwner={owner}
       repoPath={repoPath}
-      devServerOwner={devServerOwner}
+      devServerOwner={owner}
       actions={actions}
       diffData={diffData}
       contextMode={contextMode}
