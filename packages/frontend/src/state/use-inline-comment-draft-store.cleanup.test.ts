@@ -139,7 +139,7 @@ test.each(["task", "workspace_session"] as const)(
   },
 );
 
-test("limits background steps and completes the pass after records shift on removal", () => {
+test("limits background record reads and completes the pass after records shift on removal", () => {
   const { storage, values, runStep, seed } = setup();
   const active = seed({ workspaceId: "w", taskId: "active" });
   for (let index = 0; index < 70; index++) {
@@ -149,12 +149,7 @@ test("limits background steps and completes the pass after records shift on remo
     );
   }
   let work = 0;
-  const key = storage.key;
   const read = storage.getItem;
-  storage.key = (index) => {
-    work++;
-    return key(index);
-  };
   storage.getItem = (ownerKey) => {
     work++;
     return read(ownerKey);
@@ -207,4 +202,21 @@ test("keeps a record saved after cleanup starts", async () => {
   seed(identity);
   finish();
   expect(values.has(active)).toBe(true);
+});
+
+test("keeps the snapshot complete when a key is removed between cleanup steps", () => {
+  const { storage, values, runStep, finish, seed } = setup();
+  storage.setItem("other-app", "value");
+  for (let index = 0; index < 70; index++) {
+    seed(
+      { workspaceId: "w", workspaceSessionId: `stale-${index}` },
+      new Date(Date.now() - INLINE_COMMENT_DRAFT_STORAGE_TTL_MS).toISOString(),
+    );
+  }
+  const active = seed({ workspaceId: "w", taskId: "active" });
+  useInlineCommentDraftStore.getState().hydrate(active);
+  expect(runStep()).toBe(true);
+  storage.removeItem("other-app");
+  finish();
+  expect(Array.from(values.keys())).toEqual([active]);
 });

@@ -225,11 +225,10 @@ export function* pruneInlineCommentDraftsFromStorage({
 }): Generator<void> {
   const keys: string[] = [];
   const length = storage.length;
-  // Snapshot keys before deletion can change their order.
+  // Read keys in one step so deletions between batches cannot shift the cursor.
   for (let index = 0; index < length; index++) {
     const key = storage.key(index);
     if (key && isInlineCommentDraftStorageKey(key)) keys.push(key);
-    if ((index + 1) % CLEANUP_BATCH_SIZE === 0) yield;
   }
   yield;
 
