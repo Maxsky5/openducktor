@@ -38,8 +38,9 @@ export function useFailedTranscriptAction({
   } else if (transcriptState.kind === "failed" && !hasLoadedSession && observationFailed) {
     retry = reloadReadModel;
   }
+  const source = retry === reloadReadModel ? "observation" : "history";
   const recovery = useSessionRecoveryAction(
-    `${scopeKey}:${identity ? agentSessionIdentityKey(identity) : "sessionless"}`,
+    `${scopeKey}:${identity ? agentSessionIdentityKey(identity) : "sessionless"}:${source}`,
     retry,
   );
   return {

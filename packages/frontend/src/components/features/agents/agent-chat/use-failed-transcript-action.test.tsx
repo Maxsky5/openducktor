@@ -120,3 +120,52 @@ test("a rejected retry stays visible, succeeds on request, and ignores the prior
     h.unmount();
   }
 });
+
+test.each([
+  {
+    name: "missing session",
+    changes: {
+      hasLoadedSession: false,
+      transcriptState: { kind: "failed", message: "Observation failed" },
+    },
+  },
+  { name: "target mismatch", changes: { targetMismatch: true } },
+] satisfies Array<{ name: string; changes: Partial<Input> }>)(
+  "$name permits a new retry and keeps its error when an old history retry fails",
+  async ({ changes }) => {
+    let rejectHistory = (_cause: Error) => {};
+    const history = new Promise<null>((_resolve, reject) => {
+      rejectHistory = reject;
+    });
+    const reloadReadModel = mock((): void => {
+      throw new Error("Observation retry denied");
+    });
+    const args = input({
+      transcriptState: { kind: "failed", message: "History failed", historyFailure },
+      hasLoadedSession: true,
+      loadHistory: mock(() => history),
+      reloadReadModel,
+    });
+    const h = renderHook((props: Input) => useFailedTranscriptAction(props), {
+      initialProps: args,
+    });
+    try {
+      act(() => h.result.current.action?.onAction());
+      h.rerender(args);
+      expect(h.result.current.action?.disabled).toBe(true);
+      h.rerender({ ...args, ...changes });
+      expect(h.result.current.action?.disabled).toBe(false);
+      expect(h.result.current.error).toBeNull();
+      act(() => h.result.current.action?.onAction());
+      expect(reloadReadModel).toHaveBeenCalledTimes(1);
+      expect(h.result.current.error).toBe("Observation retry denied");
+      await act(async () => rejectHistory(new Error("Old history retry denied")));
+      expect(h.result.current.error).toBe("Observation retry denied");
+      reloadReadModel.mockImplementation(() => undefined);
+      act(() => h.result.current.action?.onAction());
+      expect(h.result.current.error).toBeNull();
+    } finally {
+      h.unmount();
+    }
+  },
+);
