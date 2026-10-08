@@ -1,6 +1,7 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   ChatSettings,
+  AgentSessionUsageLimit,
   RuntimeApprovalReplyOutcome,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -114,6 +115,7 @@ export type AgentChatInterruptedTurnResumeModel = {
   isPending: boolean;
   error: string | null;
   onResume: () => void;
+  usageLimit?: AgentSessionUsageLimit | undefined;
 };
 
 export type AgentChatThreadModel = {

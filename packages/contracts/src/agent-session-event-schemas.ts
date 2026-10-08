@@ -23,6 +23,11 @@ import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
+export const agentSessionUsageLimitSchema = z
+  .object({ resetsAtEpochMs: finiteNonNegativeNumberSchema.optional() })
+  .strict();
+export type AgentSessionUsageLimit = z.output<typeof agentSessionUsageLimitSchema>;
+
 export const agentToolDataSchema = z.record(z.string(), z.json());
 export type AgentToolData = z.output<typeof agentToolDataSchema>;
 
@@ -415,6 +420,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     type: z.literal("turn_error"),
     messageId: z.string().optional(),
     message: z.string(),
+    usageLimit: agentSessionUsageLimitSchema.optional(),
   }),
   transcriptEventSchema({
     type: z.literal("session_error"),

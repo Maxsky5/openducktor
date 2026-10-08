@@ -384,6 +384,7 @@ export const historyToChatMessages = (
             reason,
             title,
           };
+          if (notice.usageLimit) meta.usageLimit = notice.usageLimit;
         } else {
           meta = {
             kind: "session_notice",

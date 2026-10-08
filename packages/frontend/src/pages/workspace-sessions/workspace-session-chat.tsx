@@ -1,3 +1,4 @@
+import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
@@ -292,6 +293,7 @@ export function WorkspaceSessionChat({
         ? {
             isPending: actions.isResumingSession,
             error: actions.resumeSessionError,
+            usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
             onResume: () => {
               if (identity) {
                 actions.resumeInterruptedTurn(identity);

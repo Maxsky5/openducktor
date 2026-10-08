@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createSessionTurnTiming } from "../support/session-turn-timing";
+import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  canResumeInterruptedTurn,
+  latestTurnUsageLimit,
+} from "@/lib/agent-session-interrupted-turn";
 import {
   buildSession,
   createSessionsRef,
@@ -13,6 +18,88 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
+  test("updates a limit notice with a late reset time and offers Resume only for the current turn", async () => {
+    let handleEvent: ((event: SessionEvent) => void) | undefined;
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "claude",
+        status: "running",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "Build",
+            timestamp: "2026-10-08T00:24:00.000Z",
+            meta: { kind: "user", state: "read" },
+          },
+        ],
+      }),
+    ]);
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter: {
+        subscribeEvents: async (_id, handler) => {
+          handleEvent = handler;
+          return () => {};
+        },
+        replyApproval: async () => {},
+      },
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+    try {
+      if (!handleEvent) throw new Error("Expected session event handler");
+      const error: SessionEvent = {
+        type: "turn_error",
+        externalSessionId: "session-1",
+        messageId: "limit-response",
+        message: "Session limit",
+        timestamp: "2026-10-08T00:24:06.000Z",
+        usageLimit: {},
+      };
+      handleEvent(error);
+      handleEvent({
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-10-08T00:24:08.000Z",
+      });
+      handleEvent({ ...error, usageLimit: { resetsAtEpochMs: 1791430800000 } });
+      const messages = getSessionMessages(sessionsRef);
+      expect(messages.filter((message) => message.id === "limit-response")).toHaveLength(1);
+      expect(latestTurnUsageLimit(messages)).toEqual({ resetsAtEpochMs: 1791430800000 });
+      expect(
+        canResumeInterruptedTurn({
+          activityState: "idle",
+          messages,
+          runtimeDescriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+        }),
+      ).toBe(true);
+      handleEvent({
+        type: "turn_error",
+        externalSessionId: "session-1",
+        messageId: "later-error",
+        message: "Server error",
+        timestamp: "2026-10-08T00:24:09.000Z",
+      });
+      expect(latestTurnUsageLimit(getSessionMessages(sessionsRef))).toBeUndefined();
+      handleEvent({
+        type: "user_message",
+        externalSessionId: "session-1",
+        messageId: "user-2",
+        message: "Start new work",
+        parts: [],
+        state: "read",
+        timestamp: "2026-10-08T00:25:00.000Z",
+      });
+      expect(latestTurnUsageLimit(getSessionMessages(sessionsRef))).toBeUndefined();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("preserves explicit history load state when live transcript changes", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

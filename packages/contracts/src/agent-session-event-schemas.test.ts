@@ -222,6 +222,14 @@ describe("agent session transcript event contract", () => {
         status: { type: "retry", attempt: 2, message: "Busy", nextEpochMs: 123 },
       },
       { ...base, type: "turn_error", messageId: "result-1", message: "Turn failed" },
+      {
+        ...base,
+        type: "turn_error",
+        messageId: "limit-1",
+        message: "Usage limit",
+        usageLimit: { resetsAtEpochMs: 1791430800000 },
+      },
+      { ...base, type: "turn_error", messageId: "limit-2", message: "Usage limit", usageLimit: {} },
       { ...base, type: "session_error", message: "Failed" },
       { ...base, type: "session_idle" },
       { ...base, type: "session_finished", message: "Finished" },
@@ -229,6 +237,19 @@ describe("agent session transcript event contract", () => {
 
     for (const event of lifecycleEvents) {
       expect(agentSessionTranscriptEventSchema.parse(event)).toEqual(event);
+    }
+  });
+
+  test("rejects invalid usage-limit reset times", () => {
+    for (const resetsAtEpochMs of [-1, Number.POSITIVE_INFINITY, Number.NaN, "1791430800000"]) {
+      expect(
+        agentSessionTranscriptEventSchema.safeParse({
+          ...base,
+          type: "turn_error",
+          message: "Usage limit",
+          usageLimit: { resetsAtEpochMs },
+        }).success,
+      ).toBe(false);
     }
   });
 

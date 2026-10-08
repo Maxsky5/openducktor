@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import { handleAssistantError, updateRateLimit } from "./claude-agent-sdk-errors";
 import {
   projectClaudeBackgroundTaskEdge,
   projectClaudeBackgroundTaskSnapshot,
@@ -76,6 +77,10 @@ export const handleClaudeSdkMessage = ({
   timestamp,
 }: SdkMessageHandlerInput): void => {
   const messageValue = message;
+  if (message.type === "rate_limit_event") {
+    updateRateLimit({ info: message.rate_limit_info, session, emit, timestamp });
+    return;
+  }
   if (message.type === "user" && isClaudeMetaStreamMessage(messageValue)) {
     return;
   }
@@ -124,7 +129,7 @@ export const handleClaudeSdkMessage = ({
   }
   const isRootSession = !isClaudeSubagentTranscriptTarget(session.externalSessionId);
   if (message.type === "assistant") {
-    if (isClaudeSyntheticAssistantMessage(messageValue)) {
+    if (!message.error && isClaudeSyntheticAssistantMessage(messageValue)) {
       return;
     }
     if (isRootSession && message.parent_tool_use_id === null) {
@@ -346,6 +351,12 @@ const handleAssistantMessage = ({
   message: ClaudeSdkAssistantMessageProjection;
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
+  if (message.error) {
+    handleAssistantError({ emit, message, session, timestamp });
+    return;
+  }
+  delete session.lastError;
+  delete session.usageReset;
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
   const assistantMessage = message.message;
   const content = assistantMessage.content;

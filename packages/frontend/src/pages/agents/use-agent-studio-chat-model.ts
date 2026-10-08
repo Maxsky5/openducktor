@@ -19,6 +19,7 @@ import type { AgentChatComposerConfig } from "@/components/features/agents/agent
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useActiveWorkspace, useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { InlineCommentPersistenceWarning } from "@/state/use-inline-comment-draft-store";
@@ -361,6 +362,7 @@ export function useAgentStudioChatModel({
             isPending: sessionActions.isResumingSession,
             error: sessionActions.resumeSessionError,
             onResume: onResumeSession,
+            usageLimit: latestTurnUsageLimit(transcriptSession?.messages.items ?? []),
           }
         : undefined,
     [
@@ -368,6 +370,7 @@ export function useAgentStudioChatModel({
       sessionActions.canResumeSession,
       sessionActions.isResumingSession,
       sessionActions.resumeSessionError,
+      transcriptSession?.messages,
     ],
   );
   const pendingSendItems = useMemo<AgentChatPendingSendItems | null>(() => {

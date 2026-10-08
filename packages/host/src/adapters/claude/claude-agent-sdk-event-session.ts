@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import type { ErrorState } from "./claude-agent-sdk-errors";
 import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
@@ -10,52 +11,63 @@ import type {
   ClaudeSessionActivity,
 } from "./claude-agent-sdk-types";
 
-export type ClaudeEventSession = ClaudeBackgroundToolState & {
-  appliedPermissionMode?: string;
-  requestedPermissionMode?: string;
-  acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
-  activeBackgroundSubagentTaskIds?: Set<string>;
-  activeManualCompaction?: ClaudeManualCompactionState;
-  activeSdkUserTurnCount?: number;
-  activity: ClaudeSessionActivity;
-  assistantTurnOriginKind?: string;
-  externalSessionId: string;
-  hiddenSubagentTaskIds?: Set<string>;
-  pendingApprovals?: Map<string, PendingApproval>;
-  pendingQuestions?: Map<string, PendingQuestion>;
-  pendingUserTurnCount?: number;
-  retractedSubagentTaskIds?: Set<string>;
-  retractedToolUseIds?: Set<string>;
-  lastAssistantTextMessageId?: string;
-  lastAssistantText?: string;
-  lastAssistantTextFinal?: boolean;
-  lastAssistantTextModel?: AgentModelSelection;
-  lastAssistantTextTurnIndex?: number;
-  lastSuccessfulResultTurnIndex?: number;
-  model?: AgentModelSelection | undefined;
-  pendingSubagentAssistantMessage?: {
-    messageId: string;
-    model?: AgentModelSelection;
-    text: string;
+export type ClaudeEventSession = ClaudeBackgroundToolState &
+  ErrorState & {
+    appliedPermissionMode?: string;
+    requestedPermissionMode?: string;
+    acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
+    activeBackgroundSubagentTaskIds?: Set<string>;
+    activeManualCompaction?: ClaudeManualCompactionState;
+    activeSdkUserTurnCount?: number;
+    activity: ClaudeSessionActivity;
+    assistantTurnOriginKind?: string;
+    externalSessionId: string;
+    hiddenSubagentTaskIds?: Set<string>;
+    pendingApprovals?: Map<string, PendingApproval>;
+    pendingQuestions?: Map<string, PendingQuestion>;
+    pendingUserTurnCount?: number;
+    retractedSubagentTaskIds?: Set<string>;
+    retractedToolUseIds?: Set<string>;
+    lastAssistantTextMessageId?: string;
+    lastAssistantText?: string;
+    lastAssistantTextFinal?: boolean;
+    lastAssistantTextModel?: AgentModelSelection;
+    lastAssistantTextTurnIndex?: number;
+    lastSuccessfulResultTurnIndex?: number;
+    model?: AgentModelSelection | undefined;
+    pendingSubagentAssistantMessage?: {
+      messageId: string;
+      model?: AgentModelSelection;
+      text: string;
+    };
+    streamReasoningByBlockIndex?: Map<number, string>;
+    streamAssistantResponseId?: string;
+    streamAssistantMessageOrdinal: number;
+    streamAssistantMessageIdsByBlockIndex: Map<number, string>;
+    todoProjection?: ClaudeTodoProjection;
+    todosById: ClaudeTodoState;
+    toolEndedAtMsByCallId?: Map<string, number>;
+    toolStartedAtMsByCallId: Map<string, number>;
+    subagentMessageIdsByTaskId: Map<string, string>;
+    subagentAgentIdsByToolUseId?: Map<string, string>;
+    subagentTaskIdsByToolUseId: Map<string, string>;
+    subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
   };
-  streamReasoningByBlockIndex?: Map<number, string>;
-  streamAssistantResponseId?: string;
-  streamAssistantMessageOrdinal: number;
-  streamAssistantMessageIdsByBlockIndex: Map<number, string>;
-  todoProjection?: ClaudeTodoProjection;
-  todosById: ClaudeTodoState;
-  toolEndedAtMsByCallId?: Map<string, number>;
-  toolStartedAtMsByCallId: Map<string, number>;
-  subagentMessageIdsByTaskId: Map<string, string>;
-  subagentAgentIdsByToolUseId?: Map<string, string>;
-  subagentTaskIdsByToolUseId: Map<string, string>;
-  subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
-};
 
 export type ClaudeBackgroundWorkSession = {
   backgroundToolActiveTaskIds?: ReadonlySet<string>;
   activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
+};
+
+export const userTurnIndex = (
+  session: Pick<ClaudeEventSession, "acceptedUserMessages" | "pendingUserTurnCount">,
+): number => {
+  const accepted = Array.isArray(session.acceptedUserMessages)
+    ? session.acceptedUserMessages.length
+    : 0;
+  const pending = session.pendingUserTurnCount ?? 0;
+  return pending > 0 ? accepted - pending + 1 : accepted;
 };
 
 export const hasActiveClaudeBackgroundTools = (session: ClaudeBackgroundWorkSession): boolean => {
@@ -124,22 +136,6 @@ export const claudeSubagentEventSession = (
   return childSession;
 };
 
-const findClaudeToolOwnerSession = (
-  session: ClaudeEventSession,
-  toolUseId: string,
-): ClaudeEventSession | null => {
-  if (session.toolNamesByCallId.has(toolUseId)) {
-    return session;
-  }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
-    const owner = findClaudeToolOwnerSession(childSession, toolUseId);
-    if (owner) {
-      return owner;
-    }
-  }
-  return null;
-};
-
 export type ClaudeSubagentOwner = {
   session: ClaudeEventSession;
   toolUseId: string;
@@ -201,20 +197,6 @@ export const findClaudeSubagentTaskSession = (
   return session.backgroundToolTasksById?.get(taskId)?.toolUseId ? session : null;
 };
 
-const acceptedUserTurnCount = (session: ClaudeEventSession): number => {
-  return Array.isArray(session.acceptedUserMessages) ? session.acceptedUserMessages.length : 0;
-};
-
-const pendingUserTurnCount = (session: ClaudeEventSession): number => {
-  return session.pendingUserTurnCount ?? 0;
-};
-
-const activeAssistantTurnIndex = (session: ClaudeEventSession): number => {
-  const acceptedTurns = acceptedUserTurnCount(session);
-  const pendingTurns = pendingUserTurnCount(session);
-  return pendingTurns > 0 ? acceptedTurns - pendingTurns + 1 : acceptedTurns;
-};
-
 export const rememberAssistantTextForCurrentTurn = (
   session: ClaudeEventSession,
   text: string,
@@ -234,7 +216,7 @@ export const rememberAssistantTextForCurrentTurn = (
   } else {
     delete session.lastAssistantTextModel;
   }
-  session.lastAssistantTextTurnIndex = activeAssistantTurnIndex(session);
+  session.lastAssistantTextTurnIndex = userTurnIndex(session);
 };
 
 export const streamAssistantMessageId = (
@@ -250,7 +232,7 @@ export const streamAssistantMessageId = (
   }
   const messageId =
     session.streamAssistantResponseId ??
-    `claude-stream:${session.externalSessionId}:${activeAssistantTurnIndex(
+    `claude-stream:${session.externalSessionId}:${userTurnIndex(
       session,
     )}:${session.streamAssistantMessageOrdinal}:${blockIndex}`;
   session.streamAssistantMessageIdsByBlockIndex.set(blockIndex, messageId);
@@ -264,4 +246,20 @@ export const advanceStreamAssistantMessageIdentity = (session: ClaudeEventSessio
   }
   delete session.streamAssistantResponseId;
   session.streamReasoningByBlockIndex?.clear();
+};
+
+const findClaudeToolOwnerSession = (
+  session: ClaudeEventSession,
+  toolUseId: string,
+): ClaudeEventSession | null => {
+  if (session.toolNamesByCallId.has(toolUseId)) {
+    return session;
+  }
+  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const owner = findClaudeToolOwnerSession(childSession, toolUseId);
+    if (owner) {
+      return owner;
+    }
+  }
+  return null;
 };

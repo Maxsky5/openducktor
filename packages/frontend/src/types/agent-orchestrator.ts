@@ -4,6 +4,7 @@ import type {
   AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
   AgentSessionWorkflowScope,
+  AgentSessionUsageLimit,
   AgentToolData,
   FileContent,
   FileDiff,
@@ -114,6 +115,7 @@ export type AgentChatMessageMeta =
       reason: "session_error";
       title: string;
       attentionId?: string;
+      usageLimit?: AgentSessionUsageLimit;
     }
   | {
       kind: "session_notice";

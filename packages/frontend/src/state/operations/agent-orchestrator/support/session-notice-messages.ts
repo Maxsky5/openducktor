@@ -1,4 +1,5 @@
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
+import type { AgentSessionUsageLimit } from "@openducktor/contracts";
 
 type SessionNoticeMeta = Extract<AgentChatMessage["meta"], { kind: "session_notice" }>;
 
@@ -38,6 +39,7 @@ export const buildSessionErrorNoticeMessage = (
   timestamp: string,
   message: string,
   id?: string,
+  usageLimit?: AgentSessionUsageLimit,
 ): AgentChatMessage => {
   const input: Parameters<typeof buildSessionNoticeMessage>[0] = {
     timestamp,
@@ -51,6 +53,9 @@ export const buildSessionErrorNoticeMessage = (
   };
   if (id) {
     input.id = id;
+  }
+  if (usageLimit && input.meta.reason === "session_error") {
+    input.meta.usageLimit = usageLimit;
   }
   return buildSessionNoticeMessage(input);
 };

@@ -1,4 +1,5 @@
 import { type AgentEvent, type AgentModelSelection, type AgentStreamPart } from "@openducktor/core";
+import type { ErrorState } from "./claude-agent-sdk-errors";
 import {
   clearClaudeManualCompaction,
   settleClaudeManualCompactionResult,
@@ -7,6 +8,7 @@ import {
   type ClaudeBackgroundWorkSession,
   type ClaudeEventSession,
   hasActiveClaudeBackgroundWork,
+  userTurnIndex,
 } from "./claude-agent-sdk-event-session";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
@@ -15,37 +17,36 @@ import {
 } from "./claude-agent-sdk-result-lifecycle";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
-import type {
-  ClaudeManualCompactionState,
-  ClaudeSessionActivity,
-  ClaudeToolInput,
-} from "./claude-agent-sdk-types";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
 
-type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
-  acceptedUserMessages?: ClaudeEventSession["acceptedUserMessages"];
-  activeManualCompaction?: ClaudeManualCompactionState;
-  activity: ClaudeSessionActivity;
-  assistantTurnOriginKind?: string;
-  externalSessionId: string;
-  pendingUserTurnCount?: number;
-  lastAssistantTextMessageId?: string;
-  lastAssistantText?: string;
-  lastAssistantTextFinal?: boolean;
-  lastAssistantTextModel?: AgentModelSelection;
-  lastAssistantTextTurnIndex?: number;
-  lastSuccessfulResultTurnIndex?: number;
-  model?: AgentModelSelection | undefined;
-  streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
-  toolInputsByCallId: Map<string, ClaudeToolInput>;
-  toolMessageIdsByCallId: Map<string, string>;
-  toolNamesByCallId: Map<string, string>;
-  toolStartedAtMsByCallId: Map<string, number>;
-};
+type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
+  ErrorState & {
+    streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
+  } & Pick<
+    ClaudeEventSession,
+    | "acceptedUserMessages"
+    | "activeManualCompaction"
+    | "activity"
+    | "assistantTurnOriginKind"
+    | "externalSessionId"
+    | "pendingUserTurnCount"
+    | "lastAssistantTextMessageId"
+    | "lastAssistantText"
+    | "lastAssistantTextFinal"
+    | "lastAssistantTextModel"
+    | "lastAssistantTextTurnIndex"
+    | "lastSuccessfulResultTurnIndex"
+    | "model"
+    | "toolInputsByCallId"
+    | "toolMessageIdsByCallId"
+    | "toolNamesByCallId"
+    | "toolStartedAtMsByCallId"
+  >;
 
 type ClaudeResultEventInput = {
   emit: (event: AgentEvent) => void;
@@ -73,7 +74,7 @@ export const handleClaudeResultMessage = ({
   session,
   timestamp,
 }: ClaudeResultEventInput): void => {
-  const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
+  const completedUserTurnIndex = userTurnIndex(session);
   const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
   const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
@@ -97,18 +98,22 @@ export const handleClaudeResultMessage = ({
   if (failed) {
     clearClaudeManualCompaction(session);
     const errors = message.subtype === "success" ? [] : message.errors;
-    const resultMessage = message.subtype === "success" ? message.result.trim() : "";
     const terminalReason = message.subtype === "success" ? undefined : message.terminal_reason;
-    emit({
+    const lastError =
+      session.lastError?.turnIndex === completedUserTurnIndex ? session.lastError : undefined;
+    const turnError: Extract<AgentEvent, { type: "turn_error" }> = {
       type: "turn_error",
       externalSessionId: session.externalSessionId,
       timestamp,
-      messageId: message.uuid,
+      messageId: lastError?.messageId ?? message.uuid,
       message:
         errors.length > 0
           ? errors.join("\n")
-          : resultMessage || `Claude Agent SDK result failed: ${terminalReason ?? message.subtype}`,
-    });
+          : resultText || `Claude Agent SDK result failed: ${terminalReason ?? message.subtype}`,
+    };
+    if (lastError?.usageLimit) turnError.usageLimit = lastError.usageLimit;
+    if (lastError) lastError.message = turnError.message;
+    emit(turnError);
     applyClaudeLifecycleEvent({
       emit,
       session,
@@ -126,20 +131,6 @@ export const handleClaudeResultMessage = ({
       outcome: lifecycleOutcome,
     },
   });
-};
-
-const pendingUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return session.pendingUserTurnCount ?? 0;
-};
-
-const acceptedUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return session.acceptedUserMessages?.length ?? 0;
-};
-
-const nextCompletedUserTurnIndex = (session: ClaudeResultEventSession): number => {
-  const acceptedTurns = acceptedUserTurnCount(session);
-  const pendingTurns = pendingUserTurnCount(session);
-  return pendingTurns > 0 ? acceptedTurns - pendingTurns + 1 : acceptedTurns;
 };
 
 const streamedTextMessageIds = (session: ClaudeResultEventSession): string[] =>
