@@ -22,6 +22,30 @@ export type MutableAssistantHistoryMessage = Extract<
   { role: "assistant" }
 >;
 
+type SystemMessage = Extract<AgentSessionHistoryMessage, { role: "system" }>;
+type ErrorNotice = SystemMessage & {
+  notice: Extract<NonNullable<SystemMessage["notice"]>, { reason: "session_error" }>;
+};
+
+export const toAssistantErrorNotice = (
+  entry: ClaudeHistoryMessage,
+  timestamp: string,
+): ErrorNotice | null => {
+  const error = readStringProp(entry, "error");
+  if (entry.type !== "assistant" || !error) return null;
+  const assistant = parseClaudeHistoryAssistantEntry(entry).message;
+  const message: ErrorNotice = {
+    messageId: readStringProp(assistant, "id") ?? entry.uuid,
+    role: "system",
+    timestamp,
+    text: historyMessageText(assistant) || `Claude API error: ${error}`,
+    notice: { tone: "error", reason: "session_error", title: "Error" },
+    parts: [],
+  };
+  if (error === "rate_limit") message.notice.usageLimit = {};
+  return message;
+};
+
 /** Tool-call maps retain this object, so merge snapshots without replacing its identity. */
 export const updateClaudeHistoryAssistantSnapshot = (
   current: MutableAssistantHistoryMessage,

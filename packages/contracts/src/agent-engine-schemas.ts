@@ -2,6 +2,7 @@ import { z } from "zod";
 import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
 import {
   agentSessionTodoItemSchema,
+  agentSessionUsageLimitSchema,
   agentStreamPartSchema,
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
@@ -96,6 +97,7 @@ const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
       tone: z.literal("error"),
       reason: z.literal("session_error"),
       title: nonEmptyStringSchema,
+      usageLimit: agentSessionUsageLimitSchema.optional(),
     })
     .strict(),
 ]);

@@ -1,4 +1,5 @@
 import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
+import type { ErrorState } from "./claude-agent-sdk-errors";
 import type {
   PermissionResult,
   Query,
@@ -105,46 +106,47 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "setModel"
   >;
 
-export type ClaudeSession = ClaudeBackgroundToolState & {
-  appliedPermissionMode?: string;
-  requestedPermissionMode?: string;
-  acceptedUserMessages: ClaudeAcceptedUserMessage[];
-  activeBackgroundSubagentTaskIds?: Set<string>;
-  activeManualCompaction?: ClaudeManualCompactionState;
-  activeSdkUserTurnCount: number;
-  abortController: AbortController;
-  activity: ClaudeSessionActivity;
-  externalSessionId: string;
-  input: ClaudeSessionInput;
-  lastAssistantTextMessageId?: string;
-  lastAssistantText?: string;
-  lastAssistantTextFinal?: boolean;
-  lastAssistantTextTurnIndex?: number;
-  lastSuccessfulResultTurnIndex?: number;
-  model: AgentModelSelection | undefined;
-  modelAfterQueuedTurns?: AgentModelSelection | null;
-  parentExternalSessionId?: string;
-  pendingApprovals: Map<string, PendingApproval>;
-  pendingQuestions: Map<string, PendingQuestion>;
-  sdkInitiatedTurnActive?: boolean;
-  sdkState?: "idle" | "requires_action" | "running";
-  queuedSdkMessages: SDKUserMessage[];
-  pendingUserTurnCount: number;
-  query: ClaudeSessionQuery;
-  queue: AsyncInputQueue<SDKUserMessage>;
-  runtimeId: string;
-  startedAt: string;
-  summary: AgentSessionSummary;
-  streamAssistantMessageOrdinal: number;
-  streamAssistantMessageIdsByBlockIndex: Map<number, string>;
-  hiddenSubagentTaskIds?: Set<string>;
-  subagentMessageIdsByTaskId: Map<string, string>;
-  subagentAgentIdsByToolUseId?: Map<string, string>;
-  subagentTaskIdsByToolUseId: Map<string, string>;
-  toolEndedAtMsByCallId: Map<string, number>;
-  toolStartedAtMsByCallId: Map<string, number>;
-  todosById: Map<string, AgentSessionTodoItem>;
-};
+export type ClaudeSession = ClaudeBackgroundToolState &
+  ErrorState & {
+    appliedPermissionMode?: string;
+    requestedPermissionMode?: string;
+    acceptedUserMessages: ClaudeAcceptedUserMessage[];
+    activeBackgroundSubagentTaskIds?: Set<string>;
+    activeManualCompaction?: ClaudeManualCompactionState;
+    activeSdkUserTurnCount: number;
+    abortController: AbortController;
+    activity: ClaudeSessionActivity;
+    externalSessionId: string;
+    input: ClaudeSessionInput;
+    lastAssistantTextMessageId?: string;
+    lastAssistantText?: string;
+    lastAssistantTextFinal?: boolean;
+    lastAssistantTextTurnIndex?: number;
+    lastSuccessfulResultTurnIndex?: number;
+    model: AgentModelSelection | undefined;
+    modelAfterQueuedTurns?: AgentModelSelection | null;
+    parentExternalSessionId?: string;
+    pendingApprovals: Map<string, PendingApproval>;
+    pendingQuestions: Map<string, PendingQuestion>;
+    sdkInitiatedTurnActive?: boolean;
+    sdkState?: "idle" | "requires_action" | "running";
+    queuedSdkMessages: SDKUserMessage[];
+    pendingUserTurnCount: number;
+    query: ClaudeSessionQuery;
+    queue: AsyncInputQueue<SDKUserMessage>;
+    runtimeId: string;
+    startedAt: string;
+    summary: AgentSessionSummary;
+    streamAssistantMessageOrdinal: number;
+    streamAssistantMessageIdsByBlockIndex: Map<number, string>;
+    hiddenSubagentTaskIds?: Set<string>;
+    subagentMessageIdsByTaskId: Map<string, string>;
+    subagentAgentIdsByToolUseId?: Map<string, string>;
+    subagentTaskIdsByToolUseId: Map<string, string>;
+    toolEndedAtMsByCallId: Map<string, number>;
+    toolStartedAtMsByCallId: Map<string, number>;
+    todosById: Map<string, AgentSessionTodoItem>;
+  };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;
 

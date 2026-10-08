@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentSessionUsageLimit, RuntimeDescriptor } from "@openducktor/contracts";
 import { runtimeSupportsCapability } from "./agent-runtime";
 import { isAgentSessionActivityActive } from "./agent-session-activity-state";
 import type { OptionalAgentSessionActivityState } from "@/types/agent-session-activity";
@@ -32,6 +32,22 @@ export const hasUnfinishedLatestTurn = (messages: readonly AgentChatMessage[]): 
  */
 export const hasSettledLatestTurn = (messages: readonly AgentChatMessage[]): boolean =>
   messages.length > 0 && !hasUnfinishedLatestTurn(messages);
+
+export const latestTurnUsageLimit = (
+  messages: readonly AgentChatMessage[],
+): AgentSessionUsageLimit | undefined => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message) continue;
+    if (message.role === "user" || (message.meta?.kind === "assistant" && message.meta.isFinal)) {
+      return undefined;
+    }
+    if (message.meta?.kind === "session_notice" && message.meta.reason === "session_error") {
+      return message.meta.usageLimit;
+    }
+  }
+  return undefined;
+};
 
 export const canResumeInterruptedTurn = ({
   activityState,

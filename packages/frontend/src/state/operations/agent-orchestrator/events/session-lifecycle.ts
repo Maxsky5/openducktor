@@ -370,7 +370,7 @@ export const handleTurnError = (
     const current = recordImageGenerationEnd(previous, event.timestamp, "runtime_failure");
     return {
       ...current,
-      messages: appendSessionMessage(
+      messages: upsertSessionMessage(
         {
           externalSessionId: current.externalSessionId,
           messages: removeRunningSessionCompactionNotices(
@@ -380,7 +380,7 @@ export const handleTurnError = (
             }),
           ),
         },
-        buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
+        buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId, event.usageLimit),
       ),
     };
   });

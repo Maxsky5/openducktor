@@ -151,6 +151,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionApprovalMutationSchema",
   "agentSessionApprovalRequestSchema",
   "agentSessionContextUsageSchema",
+  "agentSessionUsageLimitSchema",
   "agentSessionControlForkInputSchema",
   "agentSessionControlReleaseInputSchema",
   "agentSessionControlResumeInputSchema",

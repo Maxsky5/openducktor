@@ -7,6 +7,7 @@ import {
   type MutableAssistantHistoryMessage,
   moveNestedResultToEnd,
   projectClaudeHistoryAssistantMessage,
+  toAssistantErrorNotice,
   removeClaudeHistoryFinishStep,
   updateClaudeHistoryAssistantSnapshot,
 } from "./claude-agent-sdk-history-assistant";
@@ -117,6 +118,7 @@ export const toClaudeHistoryMessages = (
   const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options, liveUserMessages);
   const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
+  let lastError: ReturnType<typeof toAssistantErrorNotice> = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantText: string | undefined;
   let lastFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
@@ -138,6 +140,7 @@ export const toClaudeHistoryMessages = (
     return existingMessage;
   };
   const resetCurrentUserTurnAssistantTracking = () => {
+    lastError = null;
     lastAssistantMessage = null;
     lastAssistantTextMessage = null;
     lastAssistantText = undefined;
@@ -193,13 +196,12 @@ export const toClaudeHistoryMessages = (
     if (!entry) {
       continue;
     }
-    const entryValue = entry;
-    removeRetractedMessages(retractedHistoryMessageIds(entryValue));
+    removeRetractedMessages(retractedHistoryMessageIds(entry));
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
     if (entry.type === "user") {
-      const originKind = readClaudeTurnOriginKind(entryValue);
+      const originKind = readClaudeTurnOriginKind(entry);
       if (originKind !== undefined) {
         if (originKind !== "human" && lastAutonomousFinalAssistantMessage) {
           removeClaudeHistoryFinishStep(lastAutonomousFinalAssistantMessage);
@@ -211,7 +213,7 @@ export const toClaudeHistoryMessages = (
       }
     }
     const timestamp = readHistoryTimestamp(entry, now);
-    const taskNotifications = readClaudeTaskNotifications(entryValue);
+    const taskNotifications = readClaudeTaskNotifications(entry);
     if (taskNotifications.length > 0) {
       for (const notification of taskNotifications) {
         appendClaudeHistorySubagentSystemMessage({
@@ -291,6 +293,14 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "assistant") {
+      const errorMessage = toAssistantErrorNotice(entry, timestamp);
+      if (errorMessage) {
+        removeRetractedMessages([errorMessage.messageId]);
+        lastError = errorMessage;
+        history.push(errorMessage);
+        continue;
+      }
+      lastError = null;
       const projection = projectClaudeHistoryAssistantMessage({
         entry,
         timestamp,
@@ -371,7 +381,7 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "result") {
-      const resultOriginKind = readClaudeTurnOriginKind(entryValue) ?? assistantTurnOriginKind;
+      const resultOriginKind = readClaudeTurnOriginKind(entry) ?? assistantTurnOriginKind;
       const shouldFinalize = shouldFinalizeClaudeTurn(
         resultOriginKind,
         hasBackgroundWork(entryIndex, toolResultState) ? 1 : 0,
@@ -410,6 +420,11 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       if (isFailedClaudeResult(entry)) {
+        if (lastError) {
+          lastError.text = failedClaudeResultText(entry);
+          lastError.timestamp = timestamp;
+          continue;
+        }
         history.push({
           messageId: entry.uuid ?? `claude-result-error:${history.length}`,
           role: "system",
