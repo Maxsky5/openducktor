@@ -39,8 +39,7 @@ export const createGitConflictActionsModel = ({
     },
   };
   if (onAsk) {
-    let label =
-      recipientLabel === "agent" ? "Ask agent" : getGitConflictCopy(operation).askBuilderLabel;
+    let label = "Resolve conflicts";
     if (conflictAction === "ask_builder")
       label = isStarting ? "Starting agent..." : `Sending to ${recipientLabel}...`;
     actions.help = {

@@ -212,20 +212,20 @@ test("conflict assistance follows the selected chat after switching away and bac
         })
       }
     >
-      Ask agent
+      Resolve conflicts
     </button>
   ));
   const queryClient = newQueryClient();
   const view = renderClosedSession(queryClient, "main", undefined, record, null, undefined, true);
   try {
-    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve conflicts" }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     const other = { ...record, id: "other", externalSessionId: "native-other" };
     view.setSession(other, null);
-    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve conflicts" }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     view.setSession(record, null);
-    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve conflicts" }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(3));
     expect(send.mock.calls.map(([id]) => id)).toEqual(["chat", "other", "chat"]);
   } finally {
