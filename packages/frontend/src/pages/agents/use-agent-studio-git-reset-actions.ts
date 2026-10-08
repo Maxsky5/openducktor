@@ -1,4 +1,4 @@
-import type { GitResetWorktreeSelection } from "@openducktor/contracts";
+import type { GitResetSnapshot, GitResetWorktreeSelection } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
@@ -49,6 +49,15 @@ export function useAgentStudioGitResetActions({
   const request = pending?.scopeKey === scopeKey ? pending.request : null;
   const pendingReset = request?.selection ?? null;
 
+  if (
+    request !== null &&
+    !isDiffDataLoading &&
+    isSnapshotStale(request.snapshot, hashVersion, statusHash, diffHash)
+  ) {
+    setPending(null);
+    setResetError(null);
+  }
+
   const [lastSnapshot, setLastSnapshot] = useState({ scopeKey, key: worktreeStatusSnapshotKey });
   if (lastSnapshot.scopeKey !== scopeKey || lastSnapshot.key !== worktreeStatusSnapshotKey) {
     setLastSnapshot({ scopeKey, key: worktreeStatusSnapshotKey });
@@ -58,7 +67,6 @@ export function useAgentStudioGitResetActions({
       worktreeStatusSnapshotKey !== null
     ) {
       setResetError(null);
-      if (request) setPending(null);
     }
   }
 
@@ -221,4 +229,20 @@ export function useAgentStudioGitResetActions({
     confirmReset,
     cancelReset,
   };
+}
+
+function isSnapshotStale(
+  snapshot: GitResetSnapshot,
+  hashVersion: number | null,
+  statusHash: string | null,
+  diffHash: string | null,
+): boolean {
+  return (
+    hashVersion !== null &&
+    statusHash !== null &&
+    diffHash !== null &&
+    (snapshot.hashVersion !== hashVersion ||
+      snapshot.statusHash !== statusHash ||
+      snapshot.diffHash !== diffHash)
+  );
 }

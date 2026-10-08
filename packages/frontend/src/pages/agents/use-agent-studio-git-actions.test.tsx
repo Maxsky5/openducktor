@@ -437,6 +437,8 @@ describe("useAgentStudioGitActions", () => {
     const harness = createHookHarness(
       createBaseArgs({
         worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbb",
+        statusHash: "aaaaaaaaaaaaaaaa",
+        diffHash: "bbbbbbbbbbbbbbbb",
       }),
     );
 
@@ -457,6 +459,8 @@ describe("useAgentStudioGitActions", () => {
       await harness.update(
         createBaseArgs({
           worktreeStatusSnapshotKey: "1:cccccccccccccccc:dddddddddddddddd",
+          statusHash: "cccccccccccccccc",
+          diffHash: "dddddddddddddddd",
         }),
       );
 
@@ -1439,6 +1443,17 @@ test.each(["repository", "directory", "branch", "target"] as const)(
       expect(harness.getLatest().pendingReset).toBeNull();
       await harness.run((state) => state.confirmReset());
       expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
+      await harness.update({
+        ...original,
+        hashVersion: null,
+        statusHash: null,
+        diffHash: null,
+        worktreeStatusSnapshotKey: null,
+        isDiffDataLoading: true,
+      });
+      expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
+      await harness.run((state) => state.confirmReset());
+      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
       await harness.update(original);
       expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
       await harness.run((state) => state.confirmReset());
@@ -1449,6 +1464,61 @@ test.each(["repository", "directory", "branch", "target"] as const)(
         targetBranch: "origin/main",
         snapshot: { hashVersion: 1, statusHash: "0123456789abcdef", diffHash: "fedcba9876543210" },
       });
+    } finally {
+      await harness.unmount();
+    }
+  },
+);
+
+test.each(["file", "hunk"] as const)(
+  "drops a %s reset confirmation when its scope returns with new content",
+  async (kind) => {
+    const original = createBaseArgs({
+      workingDir: "/repo/a",
+      worktreeStatusSnapshotKey: "1:0123456789abcdef",
+    });
+    const harness = createHookHarness(original);
+    const selection =
+      kind === "file"
+        ? { kind, filePath: "src/main.ts" }
+        : { kind, filePath: "src/main.ts", hunkIndex: 2 };
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        if (kind === "file") state.requestFileReset("src/main.ts");
+        else state.requestHunkReset("src/main.ts", 2);
+      });
+      expect(harness.getLatest().pendingReset).toEqual(selection);
+
+      await harness.update({
+        ...original,
+        workingDir: "/repo/b",
+        statusHash: "aaaaaaaaaaaaaaaa",
+        diffHash: "bbbbbbbbbbbbbbbb",
+        worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa",
+      });
+      expect(harness.getLatest().pendingReset).toBeNull();
+      await harness.run((state) => state.confirmReset());
+      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...original,
+        hashVersion: null,
+        statusHash: null,
+        diffHash: null,
+        worktreeStatusSnapshotKey: null,
+        isDiffDataLoading: true,
+      });
+      expect(harness.getLatest().pendingReset).toEqual(selection);
+      await harness.run((state) => state.confirmReset());
+      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
+
+      // Content can change while the file status and its snapshot key stay the same.
+      await harness.update({ ...original, diffHash: "cccccccccccccccc" });
+      expect(harness.getLatest().pendingReset).toBeNull();
+      expect(harness.getLatest().resetError).toBeNull();
+      await harness.run((state) => state.confirmReset());
+      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
