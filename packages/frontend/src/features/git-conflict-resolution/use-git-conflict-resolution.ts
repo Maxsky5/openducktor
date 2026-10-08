@@ -123,11 +123,11 @@ export function useGitConflictResolution({
         initialStartMode: defaultBuilder ? "reuse" : "fresh",
         initialSourceSession: defaultBuilder ? toAgentSessionIdentity(defaultBuilder) : null,
         targetWorkingDirectory: git.workingDirectory,
-        assertCanSubmit: (recipient) => {
+        assertCanSubmit: (recipient, ownsStart) => {
           assertCurrent?.();
           if (normalizeWorkingDirectory(recipient.workingDirectory) !== workingDirectory)
             throw new Error("Select a Builder in the conflict directory before sending.");
-          assertCanSubmit?.(recipient);
+          assertCanSubmit?.(recipient, ownsStart);
         },
       });
 

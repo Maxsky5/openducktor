@@ -148,9 +148,9 @@ export function useAgentStudioRebaseConflictResolution({
             );
           },
         },
-        (session) => {
+        (session, ownsStart) => {
           assertCurrent();
-          assertSessionCanSend(session);
+          assertSessionCanSend(session, ownsStart);
         },
         assertCurrent,
       );

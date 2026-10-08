@@ -12,6 +12,7 @@ import type {
   AgentSessionIdentity,
 } from "@/types/agent-orchestrator";
 import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
+import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { FEEDBACK_MESSAGE_REQUIRED_ERROR } from "./session-start-prompt-context";
 import { resolveSessionStartKickoff } from "./session-start-kickoff";
@@ -132,6 +133,7 @@ export const startSessionWorkflow = async ({
     throw new Error("Post-start message is unavailable.");
   }
 
+  const ownsStart = intent.startMode === "reuse" ? null : createAgentMessageStartOwner(session);
   let postStartMessageReceipt: AgentMessageSendReceipt | null = null;
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
@@ -142,7 +144,10 @@ export const startSessionWorkflow = async ({
         },
       ];
       const sendOptions: AgentMessageSendOptions = {};
-      if (intent.assertCanSubmit) sendOptions.assertCanSubmit = intent.assertCanSubmit;
+      if (intent.assertCanSubmit) {
+        sendOptions.assertCanSubmit = intent.assertCanSubmit;
+        if (ownsStart) sendOptions.ownsStart = ownsStart;
+      }
       if (intent.postStartAction === "kickoff" && intent.kickoffPrompt !== undefined) {
         sendOptions.preserveTextWhitespace = true;
       }

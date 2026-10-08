@@ -243,12 +243,14 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
       options?.sessionScope,
     );
+    const heldStart = options?.ownsStart?.(currentSession) ? currentSession : null;
     const assertCanSubmit = (session: AgentSessionState): void => {
       try {
-        options?.assertCanSubmit?.(session);
+        options?.assertCanSubmit?.(session, options?.ownsStart?.(session) ?? false);
       } catch (cause) {
-        // A rejected post-start message must release its held session, not a newer episode.
-        settleLoadedStartingSession(currentSession, "idle", dependencies.updateSession);
+        if (heldStart) {
+          settleLoadedStartingSession(heldStart, "idle", dependencies.updateSession);
+        }
         throw cause;
       }
     };

@@ -9,6 +9,7 @@ import { useInterruptedTurnResume } from "@/components/features/agents/agent-cha
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
+import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
@@ -135,15 +136,17 @@ export function useWorkspaceSessionChatActions(
           throw new GitConflictRequestCancelled();
       };
       assertCurrent();
-      const receipt = await operations.sendAgentMessage(identity, parts, {
+      const sendOptions: AgentMessageSendOptions = {
         sessionScope: { kind: "repository" },
-        assertCanSubmit: (session) => {
+        assertCanSubmit: (session, ownsStart) => {
           assertCurrent();
           if (!matchesAgentSessionIdentity(session, identity))
             throw new GitConflictRequestCancelled();
-          options.assertCanSubmit?.(session);
+          options.assertCanSubmit?.(session, ownsStart);
         },
-      });
+      };
+      if (ownedStartup.current) sendOptions.ownsStart = createAgentMessageStartOwner(identity);
+      const receipt = await operations.sendAgentMessage(identity, parts, sendOptions);
       if (!receipt)
         throw new Error(
           "The agent did not accept a conflict message. Reopen the chat and try again.",
@@ -225,11 +228,13 @@ export function useWorkspaceSessionChatActions(
       const identity = await ensureSession();
       if (!isMounted() || !isCurrentWorkspace())
         throw new Error("The original chat is no longer available. Reopen it to send your draft.");
-      if (options.assertCanSubmit)
-        await operations.sendAgentMessage(identity, parts, {
+      if (options.assertCanSubmit) {
+        const sendOptions: AgentMessageSendOptions = {
           assertCanSubmit: options.assertCanSubmit,
-        });
-      else await operations.sendAgentMessage(identity, parts);
+        };
+        if (ownedStartup.current) sendOptions.ownsStart = createAgentMessageStartOwner(identity);
+        await operations.sendAgentMessage(identity, parts, sendOptions);
+      } else await operations.sendAgentMessage(identity, parts);
       return true;
     } catch (cause) {
       const message = errorMessage(cause);

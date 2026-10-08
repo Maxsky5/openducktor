@@ -1,8 +1,9 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
 import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
+import { matchesAgentSessionIdentity } from "./agent-session-identity";
 
 export const getBusyAgentMessageBlockedReason = (
   isWorking: boolean,
@@ -48,4 +49,14 @@ export const getAgentMessageSendBlockedReason = (input: {
   if (input.session.status === "starting" && !input.allowStarting)
     return "Wait for the session to finish starting.";
   return getBusyAgentMessageBlockedReason(input.session.status === "running", input.runtime);
+};
+
+/** A first-message retry must keep its original session and execution episode. */
+export const createAgentMessageStartOwner = (identity: AgentSessionIdentity) => {
+  let start: AgentSessionState | null = null;
+  return (session: AgentSessionState): boolean => {
+    if (!matchesAgentSessionIdentity(session, identity)) return false;
+    start ??= session;
+    return session.executionEpisodeId === start.executionEpisodeId;
+  };
 };

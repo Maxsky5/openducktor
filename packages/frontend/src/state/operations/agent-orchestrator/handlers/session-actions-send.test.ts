@@ -5,6 +5,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
   findSessionMessageForTest,
@@ -60,6 +61,22 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     expect(sends).toBe(0);
   });
 
+  test("a rejected request does not release another request's held start", async () => {
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
+    const actions = createSessionActions({ sessionsRef });
+    await expect(
+      actions.sendAgentMessage(
+        getSession(sessionsRef),
+        [{ kind: "text", text: "Resolve conflict" }],
+        {
+          assertCanSubmit: () => {
+            throw new Error("Wait for the session to finish starting.");
+          },
+        },
+      ),
+    ).rejects.toThrow("finish starting");
+    expect(getSession(sessionsRef).status).toBe("starting");
+  });
   test.each([
     ["idle", "after preparation", "same"],
     ["starting", "before preparation", "same"],
@@ -91,6 +108,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         getSession(sessionsRef),
         [{ kind: "text", text: "Resolve conflict" }],
         {
+          ownsStart: createAgentMessageStartOwner(getSession(sessionsRef)),
           assertCanSubmit: () => {
             if (!current) throw new Error("Selection changed");
           },
