@@ -35,6 +35,7 @@ function MainChatPreview() {
   const model: AgentsPageLayoutModel = {
     activeWorkspace: { workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" },
     navigationPersistenceError: null,
+    navigationPersistenceOperation: "load",
     chatSettingsLoadError: null,
     gitProviderContextLoadError: null,
     onRetryNavigationPersistence: () => {},

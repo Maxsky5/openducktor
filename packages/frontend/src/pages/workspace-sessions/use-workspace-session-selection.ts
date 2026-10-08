@@ -1,19 +1,157 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type SessionNavigationRecovery,
+  useSessionNavigationRecovery,
+} from "@/features/session-navigation/use-session-navigation-recovery";
 import { errorMessage } from "@/lib/errors";
 import { scheduleTask } from "@/lib/scheduling";
+
+export function useWorkspaceSessionSelection({
+  workspaceId,
+  sessions,
+  requestedSessionId,
+}: {
+  workspaceId: string;
+  sessions: WorkspaceSession[] | undefined;
+  requestedSessionId: string | null | undefined;
+}): WorkspaceSessionSelection {
+  const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
+  const [lastSelection, setLastSelection] = useState(() => ({
+    workspaceId,
+    ...readSelection(storageKey),
+  }));
+  const savedSelection = useRef({ workspaceId, sessionId: lastSelection.sessionId });
+  const [failure, setFailure] = useState<{
+    workspaceId: string;
+    sessionId: string | null;
+    error: Error;
+  } | null>(null);
+  let currentSelection = lastSelection;
+  if (lastSelection.workspaceId !== workspaceId) {
+    currentSelection = { workspaceId, ...readSelection(storageKey) };
+    setLastSelection(currentSelection);
+  }
+  const selected = currentSelection.error
+    ? null
+    : selectSession(sessions, requestedSessionId, currentSelection.sessionId);
+  const selectedId = selected?.id ?? null;
+  const hasLoadedSessions = sessions !== undefined;
+  const missingSessionId =
+    currentSelection.error === null &&
+    hasLoadedSessions &&
+    requestedSessionId != null &&
+    selected === null
+      ? requestedSessionId
+      : null;
+
+  const save = useCallback((): void => {
+    try {
+      writeSelection(storageKey, selectedId);
+      savedSelection.current = { workspaceId, sessionId: selectedId };
+      setFailure((current) => (current?.workspaceId === workspaceId ? null : current));
+    } catch (cause) {
+      setFailure({
+        workspaceId,
+        sessionId: selectedId,
+        error: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+      });
+    }
+  }, [selectedId, storageKey, workspaceId]);
+  const retryRead = useCallback((): void => {
+    const selection = readSelection(storageKey);
+    if (selection.error === null) {
+      savedSelection.current = { workspaceId, sessionId: selection.sessionId };
+    }
+    setLastSelection({ workspaceId, ...selection });
+  }, [storageKey, workspaceId]);
+  const recovery = useSessionNavigationRecovery({
+    scopeKey: `${workspaceId}:${selectedId ?? ""}`,
+    readError: currentSelection.error,
+    writeError:
+      failure?.workspaceId === workspaceId && failure.sessionId === selectedId
+        ? failure.error
+        : null,
+    retryRead,
+    retryWrite: save,
+  });
+
+  // The old workspace flushes before these effects run. Track this read before checking for edits.
+  useEffect(() => {
+    if (currentSelection.error === null && savedSelection.current.workspaceId !== workspaceId) {
+      savedSelection.current = { workspaceId, sessionId: currentSelection.sessionId };
+    }
+  }, [currentSelection.error, currentSelection.sessionId, workspaceId]);
+
+  useEffect(() => {
+    if (
+      currentSelection.error !== null ||
+      !hasLoadedSessions ||
+      missingSessionId !== null ||
+      (workspaceId === savedSelection.current.workspaceId &&
+        selectedId === savedSelection.current.sessionId)
+    )
+      return;
+    setLastSelection({ workspaceId, sessionId: selectedId, error: null });
+    let pending = true;
+    let cancel = () => {};
+    const flush = (): void => {
+      if (!pending) return;
+      pending = false;
+      cancel();
+      save();
+    };
+    // Defer storage I/O so tabs can switch first. Flush on exit to keep the final selection.
+    cancel = scheduleTask(flush, 0);
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flush();
+    };
+  }, [currentSelection.error, hasLoadedSessions, missingSessionId, save, selectedId, workspaceId]);
+
+  return { selected, missingSessionId, ...recovery };
+}
+
+export type WorkspaceSessionSelection = {
+  selected: WorkspaceSession | null;
+  /** The requested chat ID when the loaded chats do not contain it. */
+  missingSessionId: string | null;
+} & SessionNavigationRecovery;
 
 export const workspaceSessionSelectionStorageKey = (workspaceId: string): string =>
   `openducktor:workspace-sessions:selection:${workspaceId}`;
 
-const readSelection = (storageKey: string): string | null => {
+function selectSession(
+  sessions: WorkspaceSession[] | undefined,
+  requestedId: string | null | undefined,
+  savedId: string | null,
+): WorkspaceSession | null {
+  const preferredId = requestedId === undefined ? savedId : requestedId;
+  const selected = sessions?.find((session) => session.id === preferredId) ?? null;
+  // Never show another chat in place of a missing requested chat.
+  if (selected || requestedId !== undefined) return selected;
+  return sessions?.[0] ?? null;
+}
+
+type SelectionRead = { sessionId: string | null; error: Error | null };
+
+const readSelection = (storageKey: string): SelectionRead => {
   try {
-    return globalThis.localStorage.getItem(storageKey);
+    return { sessionId: globalThis.localStorage.getItem(storageKey), error: null };
   } catch (cause) {
-    throw new Error(
-      `Failed to read workspace session selection "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
+    return {
+      sessionId: null,
+      error: new Error(
+        `Failed to read workspace session selection "${storageKey}": ${errorMessage(cause)}`,
+        { cause },
+      ),
+    };
   }
 };
 
@@ -28,85 +166,3 @@ const writeSelection = (storageKey: string, sessionId: string | null): void => {
     );
   }
 };
-
-export type WorkspaceSessionSelection = {
-  selected: WorkspaceSession | null;
-  /** The requested chat ID when the loaded chats do not contain it. */
-  missingSessionId: string | null;
-};
-
-export function useWorkspaceSessionSelection({
-  workspaceId,
-  sessions,
-  requestedSessionId,
-}: {
-  workspaceId: string;
-  sessions: WorkspaceSession[] | undefined;
-  requestedSessionId: string | null | undefined;
-}): WorkspaceSessionSelection {
-  const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
-  const [lastSelection, setLastSelection] = useState(() => ({
-    workspaceId,
-    sessionId: readSelection(storageKey),
-  }));
-  const persistedSelection = useRef(lastSelection);
-  const [persistenceError, setPersistenceError] = useState<Error | null>(null);
-  let currentSelection = lastSelection;
-  if (lastSelection.workspaceId !== workspaceId) {
-    currentSelection = { workspaceId, sessionId: readSelection(storageKey) };
-    setLastSelection(currentSelection);
-    setPersistenceError(null);
-  }
-  const preferredId =
-    requestedSessionId === undefined ? currentSelection.sessionId : requestedSessionId;
-  // Only a restored selection falls back to the first chat. A requested chat that is missing
-  // stays unselected, so another conversation is never shown in its place.
-  const selected =
-    sessions?.find((session) => session.id === preferredId) ??
-    (requestedSessionId === undefined ? (sessions?.[0] ?? null) : null);
-  const selectedId = selected?.id ?? null;
-  const hasLoadedSessions = sessions !== undefined;
-  const missingSessionId =
-    hasLoadedSessions && requestedSessionId != null && selected === null
-      ? requestedSessionId
-      : null;
-
-  useEffect(() => {
-    if (
-      !hasLoadedSessions ||
-      missingSessionId !== null ||
-      (workspaceId === persistedSelection.current.workspaceId &&
-        selectedId === persistedSelection.current.sessionId)
-    )
-      return;
-    setLastSelection({ workspaceId, sessionId: selectedId });
-    let pending = true;
-    let cancel = () => {};
-    const flush = (): void => {
-      if (!pending) return;
-      pending = false;
-      cancel();
-      try {
-        writeSelection(storageKey, selectedId);
-        persistedSelection.current = { workspaceId, sessionId: selectedId };
-      } catch (cause) {
-        setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
-      }
-    };
-    // Keep storage I/O out of tab selection, and retain the final selection on exit.
-    cancel = scheduleTask(flush, 0);
-    const onVisibilityChange = (): void => {
-      if (document.visibilityState === "hidden") flush();
-    };
-    window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      flush();
-    };
-  }, [hasLoadedSessions, missingSessionId, selectedId, storageKey, workspaceId]);
-
-  if (persistenceError && lastSelection.workspaceId === workspaceId) throw persistenceError;
-  return { selected, missingSessionId };
-}

@@ -7,6 +7,7 @@ import type {
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createQueryClient } from "@/lib/query-client";
+import { useSessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import {
   createHookHarness as createSharedHookHarness,
@@ -57,6 +58,17 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement =>
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioWorkspaceStateSave, initialProps, { wrapper });
+
+const useTaskNavigationPersistence = (props: HookArgs) => {
+  const persistence = useAgentStudioWorkspaceStateSave(props);
+  return useSessionNavigationRecovery({
+    scopeKey: props.workspaceId ?? "",
+    readError: null,
+    writeError: persistence.saveError,
+    retryRead: () => {},
+    retryWrite: persistence.retrySave,
+  });
+};
 
 describe("useAgentStudioWorkspaceStateSave", () => {
   test("does not rewrite the loaded snapshot", async () => {
@@ -322,12 +334,16 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.unmount();
   });
 
-  test("ignores a save error from the prior workspace", async () => {
+  test("keeps a prior workspace failure available after visiting an unchanged workspace", async () => {
     const workspaceASave = createDeferred<RepoConfig>();
     const workspaceAState = { openTaskIds: ["task-a"] };
     const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
     const workspaceBState = { openTaskIds: ["task-b"] };
-    const workspaceReplaceAgentStudioState = mock(async () => workspaceASave.promise);
+    let writeCount = 0;
+    const workspaceReplaceAgentStudioState = mock(async () => {
+      writeCount += 1;
+      return writeCount === 1 ? workspaceASave.promise : createRepoConfig(workspaceANextState);
+    });
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
     const harness = createHookHarness({
       workspaceId: "repo-a",
@@ -353,6 +369,182 @@ describe("useAgentStudioWorkspaceStateSave", () => {
 
     expect(harness.getLatest().saveError).toBeNull();
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
+    await harness.update({
+      workspaceId: "repo-a",
+      loadedState: workspaceAState,
+      state: workspaceANextState,
+      enabled: true,
+      hostClient,
+    });
+
+    expect(harness.getLatest().saveError?.message).toBe("workspace A failed");
+    await harness.run((result) => result.retrySave());
+    await harness.waitFor((result) => result.saveError === null);
+    expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(2);
     await harness.unmount();
   });
+
+  test.each(["before switching", "after returning"] as const)(
+    "ignores an older save failure that arrives %s when the same snapshot is saved again",
+    async (failureTime) => {
+      const firstASave = createDeferred<RepoConfig>();
+      const nextASave = createDeferred<RepoConfig>();
+      const workspaceAState = { openTaskIds: ["task-a"] };
+      const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
+      const workspaceBState = { openTaskIds: ["task-b"] };
+      const workspaceBNextState = { openTaskIds: ["task-b", "task-b-2"] };
+      let writesA = 0;
+      let writesB = 0;
+      const write = mock(async (workspaceId: string, state: WorkspaceAgentStudioState) => {
+        if (workspaceId === "repo-a") {
+          writesA += 1;
+          return writesA === 1 ? firstASave.promise : nextASave.promise;
+        }
+        writesB += 1;
+        return { ...createRepoConfig(state), workspaceId: "repo-b" };
+      });
+      const hostClient = asApplyHost(write);
+      const harness = createHookHarness({
+        workspaceId: "repo-a",
+        loadedState: workspaceAState,
+        state: workspaceANextState,
+        enabled: true,
+        hostClient,
+      });
+      const failFirstSave = () =>
+        harness.run(async () => {
+          firstASave.reject(new Error("older A write failed"));
+          await firstASave.promise.catch(() => {});
+        });
+
+      try {
+        await harness.mount();
+        await harness.waitFor(() => writesA === 1);
+        if (failureTime === "before switching") {
+          await failFirstSave();
+          await harness.waitFor((result) => result.saveError?.message === "older A write failed");
+        }
+        await harness.update({
+          workspaceId: "repo-b",
+          loadedState: workspaceBState,
+          state: workspaceBNextState,
+          enabled: true,
+          hostClient,
+        });
+        await harness.waitFor(() => writesB === 1);
+        await harness.update({
+          workspaceId: "repo-a",
+          loadedState: workspaceAState,
+          state: workspaceANextState,
+          enabled: true,
+          hostClient,
+        });
+        if (failureTime === "after returning") {
+          await failFirstSave();
+        }
+        await harness.waitFor(() => writesA === 2);
+        expect(harness.getLatest().saveError).toBeNull();
+
+        await harness.run(async () => {
+          nextASave.resolve(createRepoConfig(workspaceANextState));
+          await nextASave.promise;
+        });
+        expect(harness.getLatest().saveError).toBeNull();
+        expect(writesA).toBe(2);
+      } finally {
+        firstASave.resolve(createRepoConfig(workspaceANextState));
+        nextASave.resolve(createRepoConfig(workspaceANextState));
+        await harness.unmount();
+      }
+    },
+  );
+
+  test.each(["initial write", "explicit retry"] as const)(
+    "retains the active workspace failure after a prior workspace %s rejects",
+    async (priorWrite) => {
+      const pendingASave = createDeferred<RepoConfig>();
+      const workspaceAState = { openTaskIds: ["task-a"] };
+      const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
+      const workspaceBState = { openTaskIds: ["task-b"] };
+      const workspaceBNextState: WorkspaceAgentStudioState = {
+        openTaskIds: ["task-b", "task-b-2"],
+        activeTask: { taskId: "task-b-2", role: "planner", externalSessionId: "session-b-2" },
+      };
+      let writesA = 0;
+      let writesB = 0;
+      const write = mock(async (workspaceId: string, state: WorkspaceAgentStudioState) => {
+        if (workspaceId === "repo-a") {
+          writesA += 1;
+          if (priorWrite === "explicit retry" && writesA === 1) {
+            throw new Error("A write denied");
+          }
+          return pendingASave.promise;
+        }
+        writesB += 1;
+        if (writesB === 1) {
+          throw new Error("B write denied");
+        }
+        return { ...createRepoConfig(state), workspaceId: "repo-b" };
+      });
+      const hostClient = asApplyHost(write);
+      const queryClient = createQueryClient();
+      const harness = createSharedHookHarness(
+        useTaskNavigationPersistence,
+        {
+          workspaceId: "repo-a",
+          loadedState: workspaceAState,
+          state: workspaceANextState,
+          enabled: true,
+          hostClient,
+        },
+        { queryClient },
+      );
+
+      try {
+        await harness.mount();
+        await harness.waitFor(() => writesA === 1);
+        if (priorWrite === "explicit retry") {
+          await harness.waitFor(
+            (result) => result.navigationPersistenceError?.message === "A write denied",
+          );
+          await harness.run((result) => result.retryNavigationPersistence());
+          await harness.waitFor(() => writesA === 2);
+          expect(harness.getLatest().isRetryingNavigationPersistence).toBe(true);
+        }
+
+        await harness.update({
+          workspaceId: "repo-b",
+          loadedState: workspaceBState,
+          state: workspaceBNextState,
+          enabled: true,
+          hostClient,
+        });
+        await harness.waitFor(
+          (result) => result.navigationPersistenceError?.message === "B write denied",
+        );
+        await harness.run(async () => {
+          pendingASave.reject(new Error("A late write denied"));
+          await pendingASave.promise.catch(() => {});
+        });
+
+        expect(harness.getLatest().navigationPersistenceError?.message).toBe("B write denied");
+        expect(harness.getLatest().isRetryingNavigationPersistence).toBe(false);
+        await harness.run((result) => result.retryNavigationPersistence());
+        await harness.waitFor(
+          (result) =>
+            result.navigationPersistenceError === null && !result.isRetryingNavigationPersistence,
+        );
+        expect(write.mock.calls.slice(-2)).toEqual([
+          ["repo-b", workspaceBNextState],
+          ["repo-b", workspaceBNextState],
+        ]);
+        expect(
+          queryClient.getQueryData<RepoConfig>(workspaceQueryKeys.repoConfig("repo-b"))
+            ?.agentStudioState,
+        ).toEqual(workspaceBNextState);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });

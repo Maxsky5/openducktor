@@ -1,3 +1,4 @@
+import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import {
@@ -194,6 +195,8 @@ export type AgentsPageLayoutModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
+  navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
+  isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -223,6 +226,8 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     chatFileLinkOwner,
     activeWorkspace,
     navigationPersistenceError,
+    navigationPersistenceOperation,
+    isRetryingNavigationPersistence,
     chatSettingsLoadError,
     gitProviderContextLoadError,
     onRetryNavigationPersistence,
@@ -395,6 +400,8 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <AgentsPageShell
         activeWorkspace={activeWorkspace}
         navigationPersistenceError={navigationPersistenceError}
+        navigationPersistenceOperation={navigationPersistenceOperation}
+        isRetryingNavigationPersistence={isRetryingNavigationPersistence ?? false}
         chatSettingsLoadError={chatSettingsLoadError}
         gitProviderContextLoadError={gitProviderContextLoadError}
         onRetryNavigationPersistence={onRetryNavigationPersistence}

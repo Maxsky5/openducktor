@@ -1,3 +1,4 @@
+import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
 import { useMemo } from "react";
@@ -29,6 +30,8 @@ type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ReturnType<typeof useWorkspaceBranchState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
+  navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
+  isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -217,6 +220,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   return {
     activeWorkspace,
     navigationPersistenceError,
+    navigationPersistenceOperation: routeSession.navigationPersistenceOperation,
+    isRetryingNavigationPersistence: routeSession.isRetryingNavigationPersistence,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
     gitProviderContextLoadError: gitProvider.error,
     onRetryNavigationPersistence: retryNavigationPersistence,

@@ -1,11 +1,68 @@
+import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import { AlertTriangle, RefreshCcw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
+import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
 import { Button } from "@/components/ui/button";
 import type { ActiveWorkspace } from "@/types/state-slices";
+
+export function AgentsPageShell({
+  activeWorkspace,
+  navigationPersistenceError,
+  navigationPersistenceOperation,
+  isRetryingNavigationPersistence = false,
+  chatSettingsLoadError,
+  gitProviderContextLoadError,
+  onRetryNavigationPersistence,
+  onRetryChatSettingsLoad,
+  onRetryGitProviderContext,
+  workspace,
+  modalContent = null,
+}: AgentsPageShellProps): ReactElement {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  if (navigationPersistenceError) {
+    return (
+      <SessionNavigationError
+        scopeLabel="Task sessions"
+        repositoryPath={workspaceRepoPath}
+        error={navigationPersistenceError}
+        operation={navigationPersistenceOperation}
+        onRetry={onRetryNavigationPersistence}
+        isPending={isRetryingNavigationPersistence}
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card">
+      {chatSettingsLoadError ? (
+        <LoadErrorBanner
+          error={chatSettingsLoadError}
+          onRetry={onRetryChatSettingsLoad}
+          repositoryPath={workspaceRepoPath}
+          retryLabel="Retry load"
+          title="Task sessions couldn't load chat settings."
+        />
+      ) : null}
+      {gitProviderContextLoadError ? (
+        <LoadErrorBanner
+          error={gitProviderContextLoadError}
+          onRetry={onRetryGitProviderContext}
+          repositoryPath={workspaceRepoPath}
+          retryLabel="Retry provider load"
+          title="Task sessions couldn't load Git provider features."
+        />
+      ) : null}
+      <div className="min-h-0 flex-1 bg-card">{workspace}</div>
+      {modalContent}
+    </div>
+  );
+}
 
 type AgentsPageShellProps = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
+  navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
+  isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -15,21 +72,13 @@ type AgentsPageShellProps = {
   modalContent?: ReactNode;
 };
 
-type AgentStudioLoadErrorBannerProps = {
-  error: Error;
-  onRetry: () => void;
-  repositoryPath: string | null;
-  retryLabel: string;
-  title: string;
-};
-
-function AgentStudioLoadErrorBanner({
+function LoadErrorBanner({
   error,
   onRetry,
   repositoryPath,
   retryLabel,
   title,
-}: AgentStudioLoadErrorBannerProps): ReactElement {
+}: LoadErrorBannerProps): ReactElement {
   return (
     <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted">
       <div className="flex min-w-0 items-start gap-2">
@@ -54,71 +103,10 @@ function AgentStudioLoadErrorBanner({
   );
 }
 
-export function AgentsPageShell({
-  activeWorkspace,
-  navigationPersistenceError,
-  chatSettingsLoadError,
-  gitProviderContextLoadError,
-  onRetryNavigationPersistence,
-  onRetryChatSettingsLoad,
-  onRetryGitProviderContext,
-  workspace,
-  modalContent = null,
-}: AgentsPageShellProps): ReactElement {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  if (navigationPersistenceError) {
-    return (
-      <div className="flex h-full min-h-0 items-center justify-center bg-card p-4">
-        <div className="flex w-full max-w-2xl flex-col gap-4 rounded-xl border border-destructive-border bg-destructive-surface p-4 text-sm text-destructive-muted">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-            <div className="min-w-0 space-y-2">
-              <p className="font-medium text-destructive">
-                Task sessions couldn&apos;t restore the saved navigation context.
-              </p>
-              {workspaceRepoPath ? <p>{`Repository: ${workspaceRepoPath}`}</p> : null}
-              <p className="break-words font-mono text-xs">{navigationPersistenceError.message}</p>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-              onClick={onRetryNavigationPersistence}
-            >
-              <RefreshCcw className="size-3.5" />
-              Retry restore
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card">
-      {chatSettingsLoadError ? (
-        <AgentStudioLoadErrorBanner
-          error={chatSettingsLoadError}
-          onRetry={onRetryChatSettingsLoad}
-          repositoryPath={workspaceRepoPath}
-          retryLabel="Retry load"
-          title="Task sessions couldn't load chat settings."
-        />
-      ) : null}
-      {gitProviderContextLoadError ? (
-        <AgentStudioLoadErrorBanner
-          error={gitProviderContextLoadError}
-          onRetry={onRetryGitProviderContext}
-          repositoryPath={workspaceRepoPath}
-          retryLabel="Retry provider load"
-          title="Task sessions couldn't load Git provider features."
-        />
-      ) : null}
-      <div className="min-h-0 flex-1 bg-card">{workspace}</div>
-      {modalContent}
-    </div>
-  );
-}
+type LoadErrorBannerProps = {
+  error: Error;
+  onRetry: () => void;
+  repositoryPath: string | null;
+  retryLabel: string;
+  title: string;
+};
