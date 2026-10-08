@@ -21,7 +21,10 @@ export function useWorkspaceSessionTranscript({
 }: {
   repoPath: string;
   state: ReturnType<typeof projectWorkspaceSessionChatState>;
-  presentation: Pick<ReturnType<typeof useAgentChatPresentation>, "transcriptSession" | "runtimeBlockedAction">;
+  presentation: Pick<
+    ReturnType<typeof useAgentChatPresentation>,
+    "transcriptSession" | "runtimeBlockedAction"
+  >;
   fault: AgentSessionTransientFault | null;
   runtimeReadiness: RuntimeReadiness;
   readModel: AgentSessionReadModelStateContextValue;
