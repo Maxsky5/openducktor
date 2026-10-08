@@ -9,9 +9,7 @@ import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openduckto
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
-import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
-import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
@@ -42,6 +40,7 @@ import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
+import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
@@ -201,16 +200,14 @@ export function WorkspaceSessionChat({
     sessionAgentColors: picker.agentAccentColorsByProfileId,
     runtimeReadiness,
   });
-  const readiness = deriveAgentChatReadiness({
-    transcriptState: chatState.transcriptState,
+  const { readiness, transcript, retryError } = useWorkspaceSessionTranscript({
+    repoPath: workspace.repoPath,
+    state: chatState,
+    presentation,
+    fault,
     runtimeReadiness,
-    runtimeBlockedAction: presentation.runtimeBlockedAction,
-    failedTranscriptAction: {
-      label: "Retry",
-      onAction: () => {
-        if (identity) void operations.loadAgentSessionHistory(identity);
-      },
-    },
+    readModel,
+    loadHistory: operations.loadAgentSessionHistory,
   });
   const canResumeSession = canResumeWorkspaceSession({
     identity,
@@ -240,28 +237,13 @@ export function WorkspaceSessionChat({
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
   });
-  const transcript = resolveAgentChatTranscriptPresentation({
-    repoPath: workspace.repoPath,
-    sessionKey: chatState.sessionKey,
-    session: presentation.transcriptSession,
-    target: chatState.transcriptTarget,
-    state: chatState.transcriptState,
-    notice: chatState.targetFault
-      ? {
-          kind: "session_failed",
-          severity: "error",
-          title: "Workspace Session target mismatch",
-          description: chatState.targetFault.message,
-          action: { label: "Retry", onAction: readModel.reloadSessionReadModel },
-        }
-      : readiness.transcriptNotice,
-  });
   const surface = useAgentChatSurfaceModel({
     transcript,
     chatSettings,
     modelCatalog,
     sessionAuxiliaryError:
       [
+        retryError,
         actions.error,
         recordsError,
         fault?.message,

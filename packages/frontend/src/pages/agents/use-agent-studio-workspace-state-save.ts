@@ -7,21 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { host } from "@/state/operations/host";
 import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
-type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
-
-type SaveRequest = {
-  workspaceId: string;
-  key: string;
-  action: WorkspaceAgentStudioStateAction;
-};
-
-type SaveFailure = {
-  request: SaveRequest;
-  error: Error;
-};
-
-const toStateKey = (state: WorkspaceAgentStudioState): string => JSON.stringify(state);
-
 export function useAgentStudioWorkspaceStateSave({
   workspaceId,
   loadedState,
@@ -36,53 +21,51 @@ export function useAgentStudioWorkspaceStateSave({
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
-  const lastSaveRef = useRef<{
-    workspaceId: string;
-    key: string;
-    actionType: WorkspaceAgentStudioStateAction["type"];
-  } | null>(null);
+  const lastSaveRef = useRef<SaveRequest | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
-  const loadedKey = loadedState ? toStateKey(loadedState) : null;
-  const nextKey = toStateKey(state);
+  const loadedKey = loadedState ? JSON.stringify(loadedState) : null;
+  const stateKey = JSON.stringify(state);
   const save = useCallback(
-    (request: SaveRequest): void => {
-      void applyWorkspaceAgentStudioStateAction({
+    (request: SaveRequest): Promise<void> => {
+      return applyWorkspaceAgentStudioStateAction({
         queryClient,
         workspaceId: request.workspaceId,
         action: request.action,
         hostClient,
       }).then(
         () => setFailure((current) => (current?.request === request ? null : current)),
-        (cause: unknown) =>
+        (cause: unknown) => {
+          const lastSave = lastSaveRef.current;
+          // A late failure must not replace the error for a newer save.
+          if (lastSave?.workspaceId !== request.workspaceId || lastSave.key !== request.key) {
+            return;
+          }
           setFailure({
             request,
             error: cause instanceof Error ? cause : new Error(String(cause)),
-          }),
+          });
+        },
       );
     },
     [hostClient, queryClient],
   );
-  const saveFailedForCurrentState = Boolean(
+  const currentFailure =
     failure &&
     failure.request.workspaceId === workspaceId &&
-    failure.request.key === nextKey &&
-    loadedKey !== nextKey,
-  );
-  const saveError = saveFailedForCurrentState ? (failure?.error ?? null) : null;
+    failure.request.key === stateKey &&
+    loadedKey !== stateKey
+      ? failure
+      : null;
 
   useEffect(() => {
     if (!enabled || !workspaceId || !loadedState) {
       return;
     }
     const lastSave = lastSaveRef.current;
-    if (
-      lastSave?.workspaceId === workspaceId &&
-      lastSave.key === nextKey &&
-      lastSave.actionType === "sync_snapshot"
-    ) {
+    if (lastSave?.workspaceId === workspaceId && lastSave.key === stateKey) {
       return;
     }
-    if (loadedKey === nextKey && lastSave?.workspaceId !== workspaceId) {
+    if (loadedKey === stateKey && lastSave?.workspaceId !== workspaceId) {
       return;
     }
 
@@ -93,23 +76,31 @@ export function useAgentStudioWorkspaceStateSave({
       activeTask: state.activeTask ?? null,
     };
 
-    const request = { workspaceId, key: nextKey, action };
-    lastSaveRef.current = { workspaceId, key: nextKey, actionType: action.type };
-    save(request);
-  }, [enabled, loadedKey, loadedState, nextKey, save, state, workspaceId]);
+    const request = { workspaceId, key: stateKey, action };
+    lastSaveRef.current = request;
+    void save(request);
+  }, [enabled, loadedKey, loadedState, save, state, stateKey, workspaceId]);
 
-  const retrySave = useCallback((): void => {
-    if (!saveFailedForCurrentState || !failure) {
-      return;
+  const retrySave = useCallback((): Promise<void> => {
+    if (!currentFailure) {
+      return Promise.resolve();
     }
-    setFailure(null);
-    lastSaveRef.current = {
-      workspaceId: failure.request.workspaceId,
-      key: failure.request.key,
-      actionType: failure.request.action.type,
-    };
-    save(failure.request);
-  }, [failure, save, saveFailedForCurrentState]);
+    lastSaveRef.current = currentFailure.request;
+    return save(currentFailure.request);
+  }, [currentFailure, save]);
 
-  return { saveError, retrySave };
+  return { saveError: currentFailure?.error ?? null, retrySave };
 }
+
+type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
+
+type SaveRequest = {
+  workspaceId: string;
+  key: string;
+  action: WorkspaceAgentStudioStateAction;
+};
+
+type SaveFailure = {
+  request: SaveRequest;
+  error: Error;
+};

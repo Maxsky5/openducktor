@@ -16,6 +16,7 @@ import { useDialogPresence } from "@/components/ui/dialog";
 import type { TerminalPanelModel } from "@/features/terminals";
 import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
 import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
@@ -68,7 +69,13 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   useLayoutEffect(() => {
     workspaceIdRef.current = workspace.workspaceId;
   }, [workspace.workspaceId]);
-  const { selected: requestedSelected, missingSessionId } = useWorkspaceSessionSelection({
+  const {
+    selected: requestedSelected,
+    missingSessionId,
+    navigationPersistenceError,
+    retryNavigationPersistence,
+    isRetryingNavigationPersistence,
+  } = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
     sessions: records.data,
     requestedSessionId: sessionId,
@@ -98,9 +105,21 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     selectedId,
   );
   useEffect(() => {
-    if (records.data && missingSessionId === null && sessionId !== requestedSelectedId)
+    if (
+      !navigationPersistenceError &&
+      records.data &&
+      missingSessionId === null &&
+      sessionId !== requestedSelectedId
+    )
       updateNavigation({ sessionId: requestedSelectedId });
-  }, [missingSessionId, records.data, requestedSelectedId, sessionId, updateNavigation]);
+  }, [
+    navigationPersistenceError,
+    missingSessionId,
+    records.data,
+    requestedSelectedId,
+    sessionId,
+    updateNavigation,
+  ]);
   const visibleTarget = useMemo<SessionNavigationTarget | null>(
     () =>
       selectedId === null
@@ -109,7 +128,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     [selectedId, workspace.workspaceId],
   );
   usePublishVisibleSessionTarget(
-    visibleTarget,
+    navigationPersistenceError ? null : visibleTarget,
     selected ? workspaceSessionIdentity(selected) : null,
   );
   const { archive, archiveTarget, setArchiveTarget, beginArchive } = useWorkspaceSessionArchive({
@@ -125,6 +144,16 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     setCreateWorkspaceId(open ? workspace.workspaceId : null);
     if (!open && creating) updateNavigation({ creating: false });
   };
+  if (navigationPersistenceError)
+    return (
+      <SessionNavigationError
+        scopeLabel="Workspace sessions"
+        repositoryPath={workspace.repoPath}
+        error={navigationPersistenceError}
+        onRetry={retryNavigationPersistence}
+        isPending={isRetryingNavigationPersistence}
+      />
+    );
   if (records.isPending)
     return (
       <p role="status" className="p-6 text-muted-foreground">

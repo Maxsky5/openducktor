@@ -2,6 +2,10 @@ import {
   notificationRouteSessionIdentity,
   notificationRouteStateSchema,
 } from "@/features/notifications/notification-route-state";
+import {
+  type SessionNavigationRecovery,
+  useSessionNavigationRecovery,
+} from "@/features/session-navigation/use-session-navigation-recovery";
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -35,9 +39,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   isLoadingRepoSettings: boolean;
 };
 
-export type AgentsPageRouteSessionModel = {
-  navigationPersistenceError: Error | null;
-  retryNavigationPersistence: () => void;
+export type AgentsPageRouteSessionModel = SessionNavigationRecovery & {
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
@@ -184,19 +186,13 @@ export function useAgentsPageRouteSessionModel({
         !isRoutePending &&
         selection.view.selectedTask !== null,
     });
-  const retryNavigationPersistence = useCallback((): void => {
-    if (navigationPersistenceError) {
-      retryAgentStudioStateLoad();
-    }
-    if (stateSaveError) {
-      retryAgentStudioStateSave();
-    }
-  }, [
-    navigationPersistenceError,
-    retryAgentStudioStateLoad,
-    retryAgentStudioStateSave,
-    stateSaveError,
-  ]);
+  const navigationRecovery = useSessionNavigationRecovery({
+    scopeKey: `${activeWorkspaceId}:${selection.view.taskId}`,
+    readError: navigationPersistenceError,
+    writeError: stateSaveError,
+    retryRead: retryAgentStudioStateLoad,
+    retryWrite: retryAgentStudioStateSave,
+  });
 
   useEffect(() => {
     if (isRoutePending || !selection.queryUpdate) {
@@ -223,11 +219,12 @@ export function useAgentsPageRouteSessionModel({
         }
       : { kind: "task", workspaceId: activeWorkspaceId, taskId: visibleTaskId, role: visibleRole };
   }, [activeWorkspaceId, visibleIdentity, visibleRole, visibleTaskId]);
-  usePublishVisibleSessionTarget(visibleTarget);
+  usePublishVisibleSessionTarget(
+    navigationRecovery.navigationPersistenceError ? null : visibleTarget,
+  );
 
   return {
-    navigationPersistenceError: navigationPersistenceError ?? stateSaveError,
-    retryNavigationPersistence,
+    ...navigationRecovery,
     scheduleQueryUpdate,
     selection,
     selectAgentStudioSelection,

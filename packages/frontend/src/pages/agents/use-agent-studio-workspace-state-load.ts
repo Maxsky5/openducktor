@@ -65,8 +65,8 @@ export function useAgentStudioWorkspaceStateLoad({
     ],
   );
   const refetchAgentStudioState = repoConfigQuery.refetch;
-  const retry = useCallback((): void => {
-    void refetchAgentStudioState();
+  const retry = useCallback(async (): Promise<void> => {
+    await refetchAgentStudioState();
   }, [refetchAgentStudioState]);
 
   return {

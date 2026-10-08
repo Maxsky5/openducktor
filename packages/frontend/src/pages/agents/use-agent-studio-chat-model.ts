@@ -9,6 +9,7 @@ import type {
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import { useFailedTranscriptAction } from "@/components/features/agents/agent-chat/use-failed-transcript-action";
 import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
@@ -236,46 +237,17 @@ export function useAgentStudioChatModel({
       sessionActions.startLaunchKickoff,
     ],
   );
-  const failedTranscriptAction = useMemo(() => {
-    const historyLoadFailed =
-      (selectedSessionTranscriptState.kind === "failed" &&
-        selectedSessionTranscriptState.historyFailure != null) ||
-      (selectedSessionTranscriptState.kind === "visible" &&
-        selectedSessionTranscriptState.historyFailure != null);
-    if (
-      historyLoadFailed &&
-      selectedSessionIdentity !== null &&
-      selectedSessionState.loadedSession !== null
-    ) {
-      return {
-        label: "Retry",
-        onAction: () => {
-          void loadAgentSessionHistory(selectedSessionIdentity);
-        },
-      };
-    }
-
-    if (
-      selectedSessionTranscriptState.kind !== "failed" ||
-      selectedSessionState.loadedSession !== null ||
-      (sessionReadModelLoadState.kind !== "failed" && selectedSessionAuxiliaryError === null)
-    ) {
-      return null;
-    }
-
-    return {
-      label: "Retry",
-      onAction: reloadSessionReadModel,
-    };
-  }, [
-    reloadSessionReadModel,
-    selectedSessionIdentity,
-    selectedSessionState.loadedSession,
-    selectedSessionAuxiliaryError,
-    selectedSessionTranscriptState,
-    loadAgentSessionHistory,
-    sessionReadModelLoadState.kind,
-  ]);
+  const transcriptRecovery = useFailedTranscriptAction({
+    scopeKey: `${repoPath}:${selectedSession.taskId}`,
+    transcriptState: selectedSessionTranscriptState,
+    identity: selectedSessionIdentity,
+    hasLoadedSession: selectedSessionState.loadedSession !== null,
+    observationFailed:
+      sessionReadModelLoadState.kind === "failed" || selectedSessionAuxiliaryError !== null,
+    loadHistory: loadAgentSessionHistory,
+    reloadReadModel: reloadSessionReadModel,
+  });
+  const failedTranscriptAction = transcriptRecovery.action;
   const chatReadiness = useMemo(
     () =>
       deriveAgentChatReadiness({
@@ -494,6 +466,7 @@ export function useAgentStudioChatModel({
     transcript,
     chatSettings,
     sessionAuxiliaryError:
+      transcriptRecovery.error ??
       selectedSessionAuxiliaryError ??
       selectedSessionRuntimeData.contextError ??
       selectedSessionRuntimeData.runtimePolicyError ??

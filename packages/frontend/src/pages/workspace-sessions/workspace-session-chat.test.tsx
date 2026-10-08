@@ -55,7 +55,13 @@ function QueryStatus() {
   );
 }
 
-type WorkspaceChatScenario = "retry" | "streaming" | "draft" | "record-failure" | "switch-return";
+type WorkspaceChatScenario =
+  | "retry"
+  | "streaming"
+  | "draft"
+  | "record-failure"
+  | "switch-return"
+  | "observation-failure";
 
 type WorkspaceChatCounters = {
   runtimeReads: number;
@@ -135,24 +141,40 @@ const createWorkspaceChatHarness = ({
     loadRepoRuntimeFileSearch: async () => [],
   };
   let completeObservation = (): void => {};
+  let failObservation = (): void => {};
+  let observationRetries = 0;
 
   function Harness({ children }: { children?: ReactNode }): ReactElement {
     const [phase, setPhase] = useState<"fault" | "loading" | "ready">(
-      scenario === "retry" || scenario === "record-failure" ? "fault" : "ready",
+      scenario === "retry" || scenario === "record-failure" || scenario === "observation-failure"
+        ? "fault"
+        : "ready",
     );
     completeObservation = () => setPhase("ready");
+    failObservation = () => setPhase("fault");
     const readModel: AgentSessionReadModelStateContextValue = {
       workspaceSessionRecordsError:
         scenario === "record-failure" && phase !== "ready" ? "Chat records failed" : null,
-      sessionReadModelLoadState: {
-        kind: phase === "loading" ? "loading" : "ready",
-        workspaceRepoPath: "/repo",
-      },
+      sessionReadModelLoadState:
+        scenario === "observation-failure" && phase === "fault"
+          ? {
+              kind: "failed",
+              workspaceRepoPath: "/repo",
+              source: "live-stream",
+              message: "Observation failed",
+            }
+          : {
+              kind: phase === "loading" ? "loading" : "ready",
+              workspaceRepoPath: "/repo",
+            },
       getSessionFault: () =>
         phase === "fault" && scenario === "retry"
           ? { source: "workspace-target", message: "Runtime directory mismatch" }
           : null,
-      reloadSessionReadModel: () => setPhase("loading"),
+      reloadSessionReadModel: () => {
+        observationRetries += 1;
+        setPhase("loading");
+      },
     };
     return (
       <QueryProvider useIsolatedClient>
@@ -192,7 +214,14 @@ const createWorkspaceChatHarness = ({
     );
   }
 
-  return { Harness, operations, definitions, completeObservation: () => completeObservation() };
+  return {
+    Harness,
+    operations,
+    definitions,
+    observationRetries: () => observationRetries,
+    completeObservation: () => completeObservation(),
+    failObservation: () => failObservation(),
+  };
 };
 
 const createPresentationScenario = (
@@ -453,6 +482,76 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
   }
   // The full chat render waits for the deferred runtime check and catalog reads.
 }, 5000);
+
+test("a missing workspace session retries observation, keeps failure visible, and restores its own transcript", async () => {
+  const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
+  const entry: WorkspaceSession = {
+    id: "missing-session",
+    runtimeKind: "opencode",
+    externalSessionId: "missing-native",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    createdAt: 1000,
+    updatedAt: 1000,
+    archivedAt: null,
+  };
+  const session = createAgentSessionFixture({
+    runtimeKind: "opencode",
+    externalSessionId: "missing-native",
+    workingDirectory: "/repo",
+    sessionAssociation: { kind: "repository" },
+    historyLoadState: "loaded",
+    status: "idle",
+    messages: [buildMessage("user", "Intended conversation", { id: "intended" })],
+  });
+  const unrelated = createAgentSessionFixture({
+    externalSessionId: "unrelated-native",
+    workingDirectory: "/repo",
+    historyLoadState: "loaded",
+    messages: [buildMessage("user", "Unrelated conversation", { id: "unrelated" })],
+  });
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(unrelated);
+  const h = createWorkspaceChatHarness({
+    workspace,
+    entry,
+    session,
+    store,
+    scenario: "observation-failure",
+    counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+  });
+  const history = spyOn(h.operations, "loadAgentSessionHistory");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const view = render(<h.Harness />);
+  try {
+    await view.findByText("Observation failed");
+    fireEvent.click(view.getByRole("button", { name: "Retry" }));
+    expect(h.observationRetries()).toBe(1);
+    expect(history).not.toHaveBeenCalled();
+    await act(async () => h.failObservation());
+    expect(view.getByText("Observation failed")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Retry" }));
+    expect(h.observationRetries()).toBe(2);
+    await act(async () => {
+      store.replaceSession(session);
+      h.completeObservation();
+    });
+    await view.findByText("Intended conversation");
+    expect(view.queryByText("Unrelated conversation")).toBeNull();
+    expect(store.getSessionSnapshot(unrelated)).toBe(unrelated);
+  } finally {
+    view.unmount();
+    history.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
 
 test("returning to a retained chat expands requests without clearing drafts, while a preview keeps collapse choices", async () => {
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };

@@ -596,6 +596,7 @@ const registerModuleMocks = (): void => {
   shellModelSpies = [
     spyOn(routeSessionModule, "useAgentsPageRouteSessionModel").mockImplementation(() => ({
       navigationPersistenceError: querySyncState.navigationPersistenceError,
+      isRetryingNavigationPersistence: false,
       retryNavigationPersistence: querySyncState.retryNavigationPersistence,
       scheduleQueryUpdate: querySyncState.updateQuery,
       selection: selectionState,

@@ -194,6 +194,7 @@ export type AgentsPageLayoutModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
+  isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -223,6 +224,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     chatFileLinkOwner,
     activeWorkspace,
     navigationPersistenceError,
+    isRetryingNavigationPersistence,
     chatSettingsLoadError,
     gitProviderContextLoadError,
     onRetryNavigationPersistence,
@@ -395,6 +397,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <AgentsPageShell
         activeWorkspace={activeWorkspace}
         navigationPersistenceError={navigationPersistenceError}
+        isRetryingNavigationPersistence={isRetryingNavigationPersistence ?? false}
         chatSettingsLoadError={chatSettingsLoadError}
         gitProviderContextLoadError={gitProviderContextLoadError}
         onRetryNavigationPersistence={onRetryNavigationPersistence}

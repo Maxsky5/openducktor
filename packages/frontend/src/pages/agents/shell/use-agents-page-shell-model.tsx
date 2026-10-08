@@ -29,6 +29,7 @@ type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ReturnType<typeof useWorkspaceBranchState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
+  isRetryingNavigationPersistence?: boolean;
   chatSettingsLoadError: Error | null;
   gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -217,6 +218,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   return {
     activeWorkspace,
     navigationPersistenceError,
+    isRetryingNavigationPersistence: routeSession.isRetryingNavigationPersistence,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
     gitProviderContextLoadError: gitProvider.error,
     onRetryNavigationPersistence: retryNavigationPersistence,
