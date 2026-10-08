@@ -10,6 +10,7 @@ export function useFailedTranscriptAction({
   identity,
   hasLoadedSession,
   observationFailed,
+  observationPending,
   targetMismatch = false,
   loadHistory,
   reloadReadModel,
@@ -19,6 +20,7 @@ export function useFailedTranscriptAction({
   identity: AgentSessionIdentity | null;
   hasLoadedSession: boolean;
   observationFailed: boolean;
+  observationPending: boolean;
   targetMismatch?: boolean;
   loadHistory: (identity: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   reloadReadModel: () => void;
@@ -43,13 +45,16 @@ export function useFailedTranscriptAction({
     `${scopeKey}:${identity ? agentSessionIdentityKey(identity) : "sessionless"}:${source}`,
     retry,
   );
+  const isPending = source === "observation" ? observationPending : recovery.isPending;
   return {
     action: retry
       ? {
           label: "Retry",
-          onAction: recovery.retry,
-          disabled: recovery.isPending,
-          isPending: recovery.isPending,
+          onAction: () => {
+            if (!isPending) recovery.retry();
+          },
+          disabled: isPending,
+          isPending,
         }
       : null,
     error: recovery.error?.message ?? null,

@@ -244,6 +244,7 @@ export function useAgentStudioChatModel({
     hasLoadedSession: selectedSessionState.loadedSession !== null,
     observationFailed:
       sessionReadModelLoadState.kind === "failed" || selectedSessionAuxiliaryError !== null,
+    observationPending: sessionReadModelLoadState.kind === "loading",
     loadHistory: loadAgentSessionHistory,
     reloadReadModel: reloadSessionReadModel,
   });

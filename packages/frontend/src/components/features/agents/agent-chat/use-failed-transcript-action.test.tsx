@@ -14,6 +14,7 @@ const input = (overrides: Partial<Input> = {}): Input => ({
   transcriptState: { kind: "failed", message: "Observation failed" },
   hasLoadedSession: false,
   observationFailed: true,
+  observationPending: false,
   loadHistory: mock(async () => null),
   reloadReadModel: mock(() => undefined),
   ...overrides,
@@ -169,3 +170,29 @@ test.each([
     }
   },
 );
+
+test("a target mismatch keeps Retry pending until the read model finishes reloading", () => {
+  const args = input({
+    transcriptState: { kind: "visible", historyFailure },
+    hasLoadedSession: true,
+    targetMismatch: true,
+  });
+  const h = renderHook((props: Input) => useFailedTranscriptAction(props), { initialProps: args });
+  try {
+    act(() => h.result.current.action?.onAction());
+    expect(args.reloadReadModel).toHaveBeenCalledTimes(1);
+    h.rerender({ ...args, observationPending: true });
+    expect(h.result.current.action?.disabled).toBe(true);
+    expect(h.result.current.action?.isPending).toBe(true);
+    act(() => h.result.current.action?.onAction());
+    expect(args.reloadReadModel).toHaveBeenCalledTimes(1);
+    h.rerender(args);
+    expect(h.result.current.action?.disabled).toBe(false);
+    act(() => h.result.current.action?.onAction());
+    expect(args.reloadReadModel).toHaveBeenCalledTimes(2);
+    h.rerender({ ...args, targetMismatch: false, observationPending: true });
+    expect(h.result.current.action?.disabled).toBe(false);
+  } finally {
+    h.unmount();
+  }
+});

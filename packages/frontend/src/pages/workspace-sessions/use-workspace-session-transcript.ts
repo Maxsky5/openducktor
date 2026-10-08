@@ -34,6 +34,7 @@ export function useWorkspaceSessionTranscript({
     identity,
     hasLoadedSession: state.transcriptSession !== null,
     observationFailed: readModel.sessionReadModelLoadState.kind === "failed" || fault !== null,
+    observationPending: readModel.sessionReadModelLoadState.kind === "loading",
     targetMismatch: state.targetFault !== null,
     loadHistory,
     reloadReadModel: readModel.reloadSessionReadModel,
