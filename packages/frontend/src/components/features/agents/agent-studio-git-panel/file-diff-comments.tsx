@@ -21,7 +21,9 @@ export const NewCommentForm = ({
   onChange,
   onCancel,
   onSave,
+  placeholder = "Add a comment for the Builder",
 }: {
+  placeholder?: string | undefined;
   value: string;
   onChange: (value: string) => void;
   onCancel: () => void;
@@ -35,7 +37,7 @@ export const NewCommentForm = ({
       <CommentMeta status="pending" />
       <Textarea
         value={value}
-        placeholder="Add a comment for the Builder"
+        placeholder={placeholder}
         className="mt-3 min-h-24"
         onChange={(event) => onChange(event.currentTarget.value)}
       />

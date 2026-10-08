@@ -1,4 +1,5 @@
 import type { DevServerOwner } from "@openducktor/contracts";
+import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import { GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
@@ -10,7 +11,7 @@ import { SharedToolsPanel, type SharedToolsPanelModel } from "./shared-tools-pan
 import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
 export function WorkspaceSessionGitTools({
-  subjectKey,
+  commentOwner,
   repoPath,
   devServerOwner,
   actions,
@@ -33,7 +34,9 @@ export function WorkspaceSessionGitTools({
   const model: AgentStudioGitPanelModel = {
     ...diffData,
     ...actions,
-    subjectKey,
+    subjectKey: JSON.stringify([commentOwner.workspaceId, commentOwner.sessionId]),
+    commentOwner,
+    commentPlaceholder: "Add a comment for this chat",
     refresh,
     isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
     contextMode,
@@ -54,6 +57,10 @@ export function WorkspaceSessionGitTools({
             error: null,
           },
         },
+    loadedScopesByScope: {
+      ...diffData.loadedScopesByScope,
+      target: resolvedTarget !== null && diffData.loadedScopesByScope.target,
+    },
     rebaseOntoTarget: resolvedTarget ? actions.rebaseOntoTarget : undefined,
     askBuilderToResolveGitConflict: undefined,
     openInTargetPath: workingDirectory,
@@ -76,7 +83,7 @@ export function WorkspaceSessionGitTools({
 }
 
 type WorkspaceSessionGitToolsProps = {
-  subjectKey: string;
+  commentOwner: Extract<InlineCommentOwner, { kind: "workspace_session" }>;
   repoPath: string;
   devServerOwner: DevServerOwner;
   tools: SharedToolsPanelModel<WorkspaceToolsTabId>;

@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CHAT_SETTINGS,
@@ -15,6 +15,8 @@ import * as modelPickerModel from "@/components/features/agents/model-picker/mod
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   AgentOperationsContext,
@@ -55,6 +57,123 @@ function QueryStatus() {
   );
 }
 
+test.each(["local_repo_root", "local_worktree"] as const)(
+  "sends both diff scopes from a %s draft chat before runtime startup",
+  async (kind) => {
+    const workspace = {
+      workspaceId: `comment-chat-${kind}`,
+      workspaceName: "Test",
+      repoPath: "/repo",
+    };
+    const executionTarget: WorkspaceSession["executionTarget"] =
+      kind === "local_repo_root"
+        ? { kind, workingDirectory: "/repo" }
+        : {
+            kind,
+            workingDirectory: "/repo/worktrees/comments",
+            branchName: "comments",
+            worktreeState: "present",
+          };
+    const entry: WorkspaceSession = {
+      id: "draft-comments",
+      runtimeKind: "opencode",
+      externalSessionId: null,
+      executionTarget,
+      selectedModel: null,
+      roleSnapshot: null,
+      generatedTitle: null,
+      manualTitle: null,
+      createdAt: 1000,
+      updatedAt: 1000,
+      archivedAt: null,
+    };
+    const session = createAgentSessionFixture({
+      runtimeKind: entry.runtimeKind,
+      externalSessionId: "native-comments",
+      workingDirectory: executionTarget.workingDirectory,
+      sessionAssociation: { kind: "repository" },
+      historyLoadState: "loaded",
+      status: "idle",
+    });
+    const store = createAgentSessionsStore(workspace.repoPath);
+    const sends: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[] = [];
+    const start = mock(async () => ({
+      session: { ...entry, externalSessionId: session.externalSessionId },
+      runtimeSession: null,
+    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+          workspaceSessionStart: start,
+        },
+      }),
+    );
+    const ownerKey = toInlineCommentDraftStorageKey({
+      workspaceId: workspace.workspaceId,
+      workspaceSessionId: entry.id,
+    });
+    for (const diffScope of ["uncommitted", "target"] as const) {
+      useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+        filePath: "draft.ts",
+        diffScope,
+        side: "new",
+        startLine: 1,
+        endLine: 1,
+        text: `Review ${diffScope}`,
+        codeContext: [{ lineNumber: 1, text: "const draft = true;", isSelected: true }],
+        language: "ts",
+      });
+    }
+    const { Harness } = createWorkspaceChatHarness({
+      workspace,
+      entry,
+      session,
+      store,
+      scenario: "draft",
+      counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+      sendAgentMessage: async (identity, parts) => {
+        sends.push([identity, parts]);
+      },
+    });
+    const view = render(<Harness />);
+    try {
+      const send = await view.findByRole("button", { name: "Send message" });
+      await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false));
+      expect(start).toHaveBeenCalledTimes(0);
+      await act(async () => {
+        fireEvent.click(send);
+      });
+      await waitFor(() => expect(sends).toHaveLength(1));
+      expect(start).toHaveBeenCalledWith({
+        workspaceId: workspace.workspaceId,
+        sessionId: entry.id,
+      });
+      expect(sends[0]?.[0]).toEqual({
+        runtimeKind: entry.runtimeKind,
+        externalSessionId: session.externalSessionId,
+        workingDirectory: executionTarget.workingDirectory,
+      });
+      expect(sends[0]?.[1]).toEqual([
+        { kind: "text", text: expect.stringContaining("Review uncommitted") },
+      ]);
+      expect(sends[0]?.[1][0]).toMatchObject({
+        text: expect.stringContaining("Review target"),
+      });
+      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+    } finally {
+      view.unmount();
+      for (const draft of useInlineCommentDraftStore.getState().draftsByOwner[ownerKey] ?? []) {
+        useInlineCommentDraftStore.getState().removeDraft(ownerKey, draft.id);
+      }
+      useInlineCommentDraftStore.getState().flush();
+      createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, entry.id).clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5000,
+);
+
 type WorkspaceChatScenario =
   | "retry"
   | "streaming"
@@ -76,6 +195,9 @@ const createWorkspaceChatHarness = ({
   store,
   scenario,
   counters,
+  sendAgentMessage = async () => {
+    throw new Error("Unexpected message send");
+  },
 }: {
   workspace: ActiveWorkspace;
   entry: WorkspaceSession;
@@ -83,6 +205,7 @@ const createWorkspaceChatHarness = ({
   store: ReturnType<typeof createAgentSessionsStore>;
   scenario: WorkspaceChatScenario;
   counters: WorkspaceChatCounters;
+  sendAgentMessage?: AgentOperationsContextValue["sendAgentMessage"];
 }) => {
   const operations: AgentOperationsContextValue = {
     describeGeneratedImages: async () => {
@@ -112,9 +235,7 @@ const createWorkspaceChatHarness = ({
     startAgentSession: async () => {
       throw new Error("Unexpected session startup");
     },
-    sendAgentMessage: async () => {
-      throw new Error("Unexpected message send");
-    },
+    sendAgentMessage,
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => {},

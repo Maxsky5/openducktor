@@ -262,6 +262,7 @@ function AgentStudioGitDiff({
           fileDiffs={view.displayedFileDiffs}
           diffScope={view.diffScope}
           ownerKey={commentOwnerKey}
+          commentPlaceholder={model.commentPlaceholder}
           conflictedFiles={view.conflictedFiles}
           diffStyle={view.diffStyle}
           setDiffStyle={view.setDiffStyle}

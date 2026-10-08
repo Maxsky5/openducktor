@@ -21,7 +21,7 @@ import { FileDiffEntryWithMemo } from "./file-diff-entry";
 import { FileListDirectoryRow } from "./file-list-directory-row";
 import { FileListHeader } from "./file-list-header";
 import { buildFileTree, buildListRows, type FileListRow, flattenFileTree } from "./file-list-rows";
-import { searchFiles } from "./file-list-search";
+import { type FileSearchMatch, searchFiles } from "./file-list-search";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { rowKeyAttributes, useFileListScrollAnchor } from "./use-file-list-scroll-anchor";
 import type { FileListState } from "./use-file-list-state";
@@ -31,6 +31,124 @@ import {
   type FileDiffAnnotationState,
   fileDiffAnnotationReducer,
 } from "./use-file-diff-comment-annotations";
+
+export const FileDiffList = memo(function FileDiffList({
+  fileDiffs,
+  diffScope,
+  ownerKey,
+  commentPlaceholder,
+  conflictedFiles,
+  diffStyle,
+  setDiffStyle,
+  viewMode,
+  onViewModeChange,
+  listState,
+  expandedFiles,
+  onToggleFile,
+  preloadLimit,
+  canResetFiles,
+  isResetDisabled,
+  resetDisabledReason,
+  onRequestFileReset,
+  onRequestHunkReset,
+}: FileDiffListProps): ReactElement {
+  const { query } = listState;
+  const { matches, rows, totals } = useFileListRows({ fileDiffs, viewMode, listState });
+  // Preload the files that the list shows, in their order. A search or a closed directory hides the others.
+  const shownFileDiffs = useMemo(
+    () => rows.flatMap((row) => (row.kind === "file" ? [row.diff] : [])),
+    [rows],
+  );
+  const inlineCommentDrafts = useInlineCommentDraftStore((store) =>
+    ownerKey === null
+      ? EMPTY_INLINE_COMMENTS
+      : (store.draftsByOwner[ownerKey] ?? EMPTY_INLINE_COMMENTS),
+  );
+  const inlineCommentsByFile = useMemo(
+    () => groupInlineCommentsByFile(inlineCommentDrafts, diffScope),
+    [diffScope, inlineCommentDrafts],
+  );
+  const reserveConflictSlot = conflictedFiles.size > 0;
+  const scopeKey = JSON.stringify([ownerKey, diffScope]);
+  const { editorStateByFile, onAnnotationAction } = useFileEditorStates(scopeKey, fileDiffs);
+
+  const { listRef, rowHeight, onMeasureRow, onRowsRendered, onScroll } = useFileListScrollAnchor({
+    rows,
+    measurementKey: scopeKey,
+    // A new search, and a cleared search, start at the top.
+    scrollResetKey: query,
+  });
+  const rowProps: FileListRowProps = {
+    rows,
+    diffScope,
+    ownerKey,
+    commentPlaceholder,
+    conflictedFiles,
+    diffStyle,
+    expandedFiles,
+    onToggleFile,
+    onToggleDirectory: listState.toggleDirectory,
+    canResetFiles,
+    isResetDisabled,
+    resetDisabledReason,
+    onRequestFileReset,
+    onRequestHunkReset,
+    inlineCommentsByFile,
+    reserveConflictSlot,
+    editorStateByFile,
+    onAnnotationAction,
+    onMeasureRow,
+    measurementKey: scopeKey,
+  };
+
+  return (
+    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
+      <FileListHeader
+        fileCount={fileDiffs.length}
+        matchCount={query === "" ? null : matches.length}
+        totalAdditions={totals.additions}
+        totalDeletions={totals.deletions}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        diffStyle={diffStyle}
+        onDiffStyleChange={setDiffStyle}
+        searchText={listState.searchText}
+        onSearchTextChange={listState.setSearchText}
+      />
+
+      <DiffPreloadQueue
+        fileDiffs={shownFileDiffs}
+        expandedFiles={expandedFiles}
+        limit={preloadLimit}
+      />
+
+      {rows.length === 0 ? (
+        <p
+          className="px-3 py-4 text-xs break-words text-muted-foreground"
+          data-testid="agent-studio-git-no-file-matches"
+        >
+          No files match "{listState.appliedSearchText.trim()}"
+        </p>
+      ) : (
+        <List
+          aria-label="Changed files"
+          tabIndex={0}
+          className="h-0 min-h-0 flex-1 overflow-x-hidden"
+          defaultHeight={400}
+          listRef={listRef}
+          rowComponent={FileListRowView}
+          rowCount={rows.length}
+          rowHeight={rowHeight}
+          rowKey={listRowKey}
+          rowProps={rowProps}
+          overscanCount={3}
+          onRowsRendered={onRowsRendered}
+          onScroll={onScroll}
+        />
+      )}
+    </div>
+  );
+});
 
 const EMPTY_INLINE_COMMENTS: InlineCommentDraft[] = [];
 
@@ -57,6 +175,7 @@ type FileDiffListProps = {
   fileDiffs: FileDiff[];
   diffScope: DiffScope;
   ownerKey: string | null;
+  commentPlaceholder?: string | undefined;
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
   setDiffStyle: (style: PierreDiffStyle) => void;
@@ -84,43 +203,43 @@ type FileEditorStates = {
   onAnnotationAction: FileAnnotationDispatch;
 };
 
-function useFileEditorStates(
-  ownerKey: string | null,
-  diffScope: DiffScope,
-  fileDiffs: FileDiff[],
-): FileEditorStates {
-  const [editorStateByFile, setEditorStateByFile] = useState<Map<string, FileEditorState>>(
-    () => new Map(),
+function useFileEditorStates(scopeKey: string, fileDiffs: FileDiff[]): FileEditorStates {
+  const [editors, setEditors] = useState(() => ({
+    scopeKey,
+    entries: new Map<string, FileEditorState>(),
+  }));
+  const editorStateByFile = useMemo(
+    () => (editors.scopeKey === scopeKey ? editors.entries : new Map<string, FileEditorState>()),
+    [editors, scopeKey],
   );
-  const onAnnotationAction = useCallback<FileAnnotationDispatch>((filePath, diffText, action) => {
-    setEditorStateByFile((current) => {
-      const entry = current.get(filePath);
-      const state = entry?.diffText === diffText ? entry.state : EMPTY_FILE_DIFF_ANNOTATION_STATE;
-      const next = new Map(current);
-      next.set(filePath, { diffText, state: fileDiffAnnotationReducer(state, action) });
-      return next;
-    });
-  }, []);
+  const onAnnotationAction = useCallback<FileAnnotationDispatch>(
+    (filePath, diffText, action) => {
+      setEditors((current) => {
+        const entries =
+          current.scopeKey === scopeKey ? current.entries : new Map<string, FileEditorState>();
+        const entry = entries.get(filePath);
+        const state = entry?.diffText === diffText ? entry.state : EMPTY_FILE_DIFF_ANNOTATION_STATE;
+        const next = new Map(entries);
+        next.set(filePath, { diffText, state: fileDiffAnnotationReducer(state, action) });
+        return { scopeKey, entries: next };
+      });
+    },
+    [scopeKey],
+  );
 
   useEffect(() => {
-    setEditorStateByFile((current) => (current.size === 0 ? current : new Map()));
-  }, [ownerKey, diffScope]);
-
-  useEffect(() => {
-    setEditorStateByFile((current) => {
-      if (current.size === 0) {
-        return current;
+    setEditors((current) => {
+      if (current.scopeKey !== scopeKey)
+        return { scopeKey, entries: new Map<string, FileEditorState>() };
+      if (current.entries.size === 0) return current;
+      const diffs = new Map(fileDiffs.map((diff) => [diff.file, diff.diff]));
+      const next = new Map(current.entries);
+      for (const [filePath, entry] of current.entries) {
+        if (diffs.get(filePath) !== entry.diffText) next.delete(filePath);
       }
-      const currentDiffs = new Map(fileDiffs.map((diff) => [diff.file, diff.diff]));
-      const next = new Map(current);
-      for (const [filePath, entry] of current) {
-        if (currentDiffs.get(filePath) !== entry.diffText) {
-          next.delete(filePath);
-        }
-      }
-      return next.size === current.size ? current : next;
+      return next.size === current.entries.size ? current : { scopeKey, entries: next };
     });
-  }, [fileDiffs]);
+  }, [fileDiffs, scopeKey]);
 
   return { editorStateByFile, onAnnotationAction };
 }
@@ -129,6 +248,7 @@ type FileListRowProps = Pick<
   FileDiffListProps,
   | "diffScope"
   | "ownerKey"
+  | "commentPlaceholder"
   | "conflictedFiles"
   | "diffStyle"
   | "expandedFiles"
@@ -156,6 +276,7 @@ function FileListRowView({
   rows,
   diffScope,
   ownerKey,
+  commentPlaceholder,
   conflictedFiles,
   diffStyle,
   expandedFiles,
@@ -210,6 +331,7 @@ function FileListRowView({
         row={row}
         diffScope={diffScope}
         ownerKey={ownerKey}
+        commentPlaceholder={commentPlaceholder}
         fileComments={inlineCommentsByFile.get(diff.file) ?? EMPTY_INLINE_COMMENTS}
         annotationState={
           editor?.diffText === diff.diff ? editor.state : EMPTY_FILE_DIFF_ANNOTATION_STATE
@@ -250,11 +372,17 @@ const listRowKey = (index: number, { rows }: FileListRowProps): string => {
   return row.key;
 };
 
+type FileListRows = {
+  matches: FileSearchMatch[];
+  rows: readonly FileListRow[];
+  totals: { additions: number; deletions: number };
+};
+
 function useFileListRows({
   fileDiffs,
   viewMode,
   listState: { query, closedDirectories },
-}: Pick<FileDiffListProps, "fileDiffs" | "viewMode" | "listState">) {
+}: Pick<FileDiffListProps, "fileDiffs" | "viewMode" | "listState">): FileListRows {
   const matches = useMemo(() => searchFiles(fileDiffs, query), [fileDiffs, query]);
   const tree = useMemo(
     () => (viewMode === "tree" ? buildFileTree(matches) : null),
@@ -275,123 +403,3 @@ function useFileListRows({
   }, [matches]);
   return { matches, rows, totals };
 }
-
-export const FileDiffList = memo(function FileDiffList({
-  fileDiffs,
-  diffScope,
-  ownerKey,
-  conflictedFiles,
-  diffStyle,
-  setDiffStyle,
-  viewMode,
-  onViewModeChange,
-  listState,
-  expandedFiles,
-  onToggleFile,
-  preloadLimit,
-  canResetFiles,
-  isResetDisabled,
-  resetDisabledReason,
-  onRequestFileReset,
-  onRequestHunkReset,
-}: FileDiffListProps): ReactElement {
-  const { query } = listState;
-  const { matches, rows, totals } = useFileListRows({ fileDiffs, viewMode, listState });
-  // Preload the files that the list shows, in their order. A search or a closed directory hides the others.
-  const shownFileDiffs = useMemo(
-    () => rows.flatMap((row) => (row.kind === "file" ? [row.diff] : [])),
-    [rows],
-  );
-  const inlineCommentDrafts = useInlineCommentDraftStore((store) =>
-    ownerKey === null
-      ? EMPTY_INLINE_COMMENTS
-      : (store.draftsByOwner[ownerKey] ?? EMPTY_INLINE_COMMENTS),
-  );
-  const inlineCommentsByFile = useMemo(
-    () => groupInlineCommentsByFile(inlineCommentDrafts, diffScope),
-    [diffScope, inlineCommentDrafts],
-  );
-  const reserveConflictSlot = conflictedFiles.size > 0;
-  const { editorStateByFile, onAnnotationAction } = useFileEditorStates(
-    ownerKey,
-    diffScope,
-    fileDiffs,
-  );
-
-  const measurementKey = JSON.stringify([ownerKey, diffScope]);
-  const { listRef, rowHeight, onMeasureRow, onRowsRendered, onScroll } = useFileListScrollAnchor({
-    rows,
-    measurementKey,
-    // A new search, and a cleared search, start at the top.
-    scrollResetKey: query,
-  });
-  const rowProps: FileListRowProps = {
-    rows,
-    diffScope,
-    ownerKey,
-    conflictedFiles,
-    diffStyle,
-    expandedFiles,
-    onToggleFile,
-    onToggleDirectory: listState.toggleDirectory,
-    canResetFiles,
-    isResetDisabled,
-    resetDisabledReason,
-    onRequestFileReset,
-    onRequestHunkReset,
-    inlineCommentsByFile,
-    reserveConflictSlot,
-    editorStateByFile,
-    onAnnotationAction,
-    onMeasureRow,
-    measurementKey,
-  };
-
-  return (
-    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
-      <FileListHeader
-        fileCount={fileDiffs.length}
-        matchCount={query === "" ? null : matches.length}
-        totalAdditions={totals.additions}
-        totalDeletions={totals.deletions}
-        viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
-        diffStyle={diffStyle}
-        onDiffStyleChange={setDiffStyle}
-        searchText={listState.searchText}
-        onSearchTextChange={listState.setSearchText}
-      />
-
-      <DiffPreloadQueue
-        fileDiffs={shownFileDiffs}
-        expandedFiles={expandedFiles}
-        limit={preloadLimit}
-      />
-
-      {rows.length === 0 ? (
-        <p
-          className="px-3 py-4 text-xs break-words text-muted-foreground"
-          data-testid="agent-studio-git-no-file-matches"
-        >
-          No files match "{listState.appliedSearchText.trim()}"
-        </p>
-      ) : (
-        <List
-          aria-label="Changed files"
-          tabIndex={0}
-          className="h-0 min-h-0 flex-1 overflow-x-hidden"
-          defaultHeight={400}
-          listRef={listRef}
-          rowComponent={FileListRowView}
-          rowCount={rows.length}
-          rowHeight={rowHeight}
-          rowKey={listRowKey}
-          rowProps={rowProps}
-          overscanCount={3}
-          onRowsRendered={onRowsRendered}
-          onScroll={onScroll}
-        />
-      )}
-    </div>
-  );
-});

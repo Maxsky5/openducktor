@@ -1,3 +1,4 @@
+import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type { PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
 import type { ReactNode } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -17,7 +18,8 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   /** A repository-root branch switcher shown in repository mode. */
   repositoryBranchControl?: ReactNode;
   comparisonUnavailableReason?: string | null;
-  commentOwner?: { workspaceId: string; taskId: string } | null;
+  commentOwner?: InlineCommentOwner | null;
+  commentPlaceholder?: string;
   pullRequest?: PullRequest | null;
   openInTargetPath?: string | null;
   openInDisabledReason?: string | null;

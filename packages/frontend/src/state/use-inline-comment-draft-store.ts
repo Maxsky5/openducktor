@@ -1,9 +1,11 @@
 import { create } from "zustand";
+import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type { DiffScope } from "@/features/agent-studio-git";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import {
   type PersistedInlineCommentDraft,
-  readAllInlineCommentDraftsFromStorage,
+  pruneInlineCommentDraftsFromStorage,
+  readInlineCommentDraftsFromStorage,
   toInlineCommentDraftStorageKey,
   writeInlineCommentDraftsToStorage,
 } from "./inline-comment-draft-storage";
@@ -53,8 +55,7 @@ export type AddInlineCommentDraftInput = {
 export type InlineCommentDraftStore = {
   draftsByOwner: Record<string, InlineCommentDraft[]>;
   persistenceWarningsByOwner: Record<string, InlineCommentPersistenceWarning>;
-  isHydrated: boolean;
-  isStorageUnavailable: boolean;
+  hydratedOwners: Record<string, boolean>;
   addDraft: (ownerKey: string, draft: AddInlineCommentDraftInput) => string;
   updateDraft: (ownerKey: string, id: string, text: string) => void;
   removeDraft: (ownerKey: string, id: string) => void;
@@ -77,8 +78,316 @@ export type InlineCommentDraftStore = {
   getPersistenceWarning: (ownerKey: string) => InlineCommentPersistenceWarning | null;
   formatBatchMessage: (drafts: InlineCommentDraft[]) => string;
   formatPendingBatchMessage: (ownerKey: string) => string;
-  hydrate: () => void;
+  hydrate: (ownerKey: string) => void;
   flush: () => void;
+};
+
+export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
+  draftsByOwner: {},
+  persistenceWarningsByOwner: {},
+  hydratedOwners: {},
+
+  addDraft: (ownerKey, draft) => {
+    const text = draft.text.trim();
+    if (text.length === 0) {
+      throw new Error("Inline comments cannot be empty.");
+    }
+
+    const id = generateId();
+    const { startLine, endLine } = orderLines(draft.startLine, draft.endLine);
+    const newDraft: InlineCommentDraft = {
+      id,
+      filePath: draft.filePath,
+      diffScope: draft.diffScope,
+      startLine,
+      endLine,
+      side: draft.side,
+      text,
+      codeContext: draft.codeContext,
+      language: draft.language ?? null,
+      revision: generateRevision(),
+      submissionId: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "pending",
+    };
+    set((state) => ({
+      draftsByOwner: {
+        ...state.draftsByOwner,
+        [ownerKey]: [...(state.draftsByOwner[ownerKey] ?? []), newDraft],
+      },
+    }));
+    markOwnerChanged(ownerKey);
+    return id;
+  },
+
+  updateDraft: (ownerKey, id, text) => {
+    const trimmedText = text.trim();
+    if (trimmedText.length === 0) {
+      throw new Error("Inline comments cannot be empty.");
+    }
+    const draft = readOwnerDrafts(ownerKey).find((candidate) => candidate.id === id);
+    if (draft?.status === "submitting") {
+      throw new Error("Cannot edit a git diff comment while it is being sent.");
+    }
+
+    set((state) => ({
+      draftsByOwner: {
+        ...state.draftsByOwner,
+        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).map((currentDraft) =>
+          currentDraft.id === id && currentDraft.status === "pending"
+            ? {
+                ...currentDraft,
+                text: trimmedText,
+                revision: generateRevision(),
+                submissionId: null,
+                updatedAt: Date.now(),
+              }
+            : currentDraft,
+        ),
+      },
+    }));
+    markOwnerChanged(ownerKey);
+  },
+
+  removeDraft: (ownerKey, id) => {
+    const draft = readOwnerDrafts(ownerKey).find((candidate) => candidate.id === id);
+    if (draft?.status === "submitting") {
+      throw new Error("Cannot remove a git diff comment while it is being sent.");
+    }
+
+    set((state) => ({
+      draftsByOwner: {
+        ...state.draftsByOwner,
+        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).filter(
+          (currentDraft) => currentDraft.id !== id,
+        ),
+      },
+    }));
+    markOwnerChanged(ownerKey);
+  },
+
+  getPendingDrafts: (ownerKey) =>
+    readOwnerDrafts(ownerKey)
+      .filter((draft) => draft.status === "pending")
+      .sort(compareDrafts),
+
+  beginSubmittingDrafts: (ownerKey, drafts) => {
+    if (drafts.length === 0) {
+      return null;
+    }
+
+    const submissionId = generateSubmissionId();
+    let didTransition = false;
+    set((state) => ({
+      draftsByOwner: {
+        ...state.draftsByOwner,
+        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).map((draft) => {
+          if (
+            draft.status === "pending" &&
+            drafts.some((snapshot) => matchesRevision(draft, snapshot))
+          ) {
+            didTransition = true;
+            return {
+              ...draft,
+              status: "submitting",
+              submissionId,
+            };
+          }
+          return draft;
+        }),
+      },
+    }));
+    return didTransition ? submissionId : null;
+  },
+
+  restoreSubmittingDrafts: (submissionId) => {
+    if (submissionId.length === 0) {
+      return;
+    }
+
+    const missingDrafts = missingDraftsBySubmission.get(submissionId) ?? [];
+    missingDraftsBySubmission.delete(submissionId);
+    const changedOwnerKeys: string[] = [];
+    set((state) => {
+      let didChange = false;
+      const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
+      for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
+        const nextDrafts: InlineCommentDraft[] = [];
+        for (const draft of drafts) {
+          if (draft.status !== "submitting" || draft.submissionId !== submissionId) {
+            nextDrafts.push(draft);
+            continue;
+          }
+          didChange = true;
+          if (
+            !missingDrafts.some(
+              (snapshot) => snapshot.ownerKey === ownerKey && matchesRevision(draft, snapshot),
+            )
+          ) {
+            nextDrafts.push({ ...draft, status: "pending", submissionId: null });
+          }
+        }
+        if (nextDrafts.length !== drafts.length) changedOwnerKeys.push(ownerKey);
+        draftsByOwner[ownerKey] = nextDrafts;
+      }
+      return didChange ? { draftsByOwner } : state;
+    });
+    for (const ownerKey of changedOwnerKeys) markOwnerChangedNow(ownerKey);
+  },
+
+  completeSubmittingDrafts: (submissionId) => {
+    if (submissionId.length === 0) {
+      return;
+    }
+
+    missingDraftsBySubmission.delete(submissionId);
+    const state = get();
+    const changedOwnerKeys: string[] = [];
+    const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
+    let didChange = false;
+    for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
+      const nextDrafts = drafts.filter(
+        (draft) => !(draft.status === "submitting" && draft.submissionId === submissionId),
+      );
+      didChange = didChange || nextDrafts.length !== drafts.length;
+      if (nextDrafts.length !== drafts.length) {
+        changedOwnerKeys.push(ownerKey);
+      }
+      draftsByOwner[ownerKey] = nextDrafts;
+    }
+    if (!didChange) {
+      return;
+    }
+
+    set({ draftsByOwner });
+    for (const ownerKey of changedOwnerKeys) {
+      markOwnerChangedNow(ownerKey);
+    }
+  },
+
+  dropDraftsForMissingFiles: (ownerKey, diffScope, presentFilePaths) => {
+    const validationKey = `${ownerKey}\u0000${diffScope}`;
+    if (validatedOwnerScopes.has(validationKey)) {
+      return;
+    }
+    validatedOwnerScopes.add(validationKey);
+
+    const drafts = readOwnerDrafts(ownerKey);
+    if (drafts.length === 0) {
+      return;
+    }
+
+    const nextDrafts = drafts.filter((draft) => {
+      if (draft.diffScope !== diffScope || presentFilePaths.has(draft.filePath)) return true;
+      if (draft.status !== "submitting") return false;
+      // Keep the batch locked until Send settles, then drop only these missing revisions.
+      if (draft.submissionId !== null) {
+        const missingDrafts = missingDraftsBySubmission.get(draft.submissionId) ?? [];
+        missingDrafts.push({ ownerKey, id: draft.id, revision: draft.revision });
+        missingDraftsBySubmission.set(draft.submissionId, missingDrafts);
+      }
+      return true;
+    });
+    if (nextDrafts.length === drafts.length) {
+      return;
+    }
+
+    set((state) => ({
+      draftsByOwner: { ...state.draftsByOwner, [ownerKey]: nextDrafts },
+    }));
+    markOwnerChangedNow(ownerKey);
+  },
+
+  getDraftCount: (ownerKey) => get().getPendingDrafts(ownerKey).length,
+
+  getFileDraftCount: (ownerKey, filePath, diffScope) =>
+    readOwnerDrafts(ownerKey).filter(
+      (draft) =>
+        draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
+    ).length,
+
+  getDraftsForFile: (ownerKey, filePath, diffScope) =>
+    readOwnerDrafts(ownerKey)
+      .filter(
+        (draft) =>
+          draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
+      )
+      .sort(compareDrafts),
+
+  getPersistenceWarning: (ownerKey) => get().persistenceWarningsByOwner[ownerKey] ?? null,
+
+  formatBatchMessage: (drafts) => {
+    if (drafts.length === 0) {
+      return "";
+    }
+
+    const sections = drafts.map((draft, index) => {
+      const { startLine, endLine } = orderLines(draft.startLine, draft.endLine);
+      return [
+        `### Comment ${index + 1}`,
+        `File: \`${draft.filePath}\``,
+        `Diff: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
+        `Change: ${mapCommentSideToChange(draft.side)}`,
+        `Lines: ${formatLineRange(startLine, endLine)}`,
+        formatSelectedContextBlock(draft.codeContext, draft.language),
+        `Instruction: ${draft.text}`,
+      ].join("\n");
+    });
+
+    return ["## Git Diff Comments", ...sections].join("\n\n");
+  },
+
+  formatPendingBatchMessage: (ownerKey) => {
+    return get().formatBatchMessage(get().getPendingDrafts(ownerKey));
+  },
+
+  hydrate: (ownerKey) => {
+    if (get().hydratedOwners[ownerKey]) return;
+    try {
+      const storage = getStorage();
+      const result = readInlineCommentDraftsFromStorage({
+        storage,
+        ownerKey,
+        now: new Date(),
+      });
+      if (result.status === "restored" && !get().draftsByOwner[ownerKey]) {
+        const updatedAt = Date.parse(result.updatedAt);
+        set((state) => ({
+          draftsByOwner: {
+            ...state.draftsByOwner,
+            [ownerKey]: result.comments.map((comment) => toRestoredDraft(comment, updatedAt)),
+          },
+        }));
+        getOrCreateOwnerEntry(ownerKey);
+      }
+      startCleanup(storage);
+    } catch (error) {
+      setPersistenceWarning(ownerKey, "storage_unavailable");
+      reportPersistenceError(error);
+    }
+    set((state) => ({ hydratedOwners: { ...state.hydratedOwners, [ownerKey]: true } }));
+  },
+
+  flush: () => {
+    for (const ownerKey of Object.keys(get().draftsByOwner)) {
+      const entry = readOwnerEntry(ownerKey);
+      if (entry && entry.version !== entry.persistedVersion) {
+        flushOwner(ownerKey);
+      }
+    }
+  },
+}));
+
+export const toInlineCommentDraftOwnerKey = (owner: InlineCommentOwner | null): string | null => {
+  if (!owner || !owner.workspaceId.trim()) return null;
+  const id = owner.kind === "task" ? owner.taskId : owner.sessionId;
+  if (!id.trim()) return null;
+  return toInlineCommentDraftStorageKey(
+    owner.kind === "task"
+      ? { workspaceId: owner.workspaceId, taskId: id }
+      : { workspaceId: owner.workspaceId, workspaceSessionId: id },
+  );
 };
 
 type InlineCommentDraftStorage = Pick<
@@ -100,10 +409,15 @@ const TRAILING_WAIT_MS = 1_000;
 
 const ownerEntries = new Map<string, OwnerPersistenceEntry>();
 const validatedOwnerScopes = new Set<string>();
+const missingDraftsBySubmission = new Map<
+  string,
+  Array<InlineCommentDraftSnapshot & { ownerKey: string }>
+>();
 
 let storageOverride: InlineCommentDraftStorage | null = null;
-let scheduleFlushTask: ScheduleTask = scheduleTask;
-let didRunHydration = false;
+let schedule: ScheduleTask = scheduleTask;
+let cleanupStarted = false;
+let cancelCleanup: (() => void) | null = null;
 let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
   console.error(error);
 };
@@ -116,13 +430,11 @@ const generateId = (): string => `draft-${Date.now()}-${++nextId}`;
 const generateRevision = (): number => ++nextRevision;
 const generateSubmissionId = (): string => `submission-${Date.now()}-${++nextSubmissionId}`;
 
-const normalizeLineRange = (startLine: number, endLine: number): InlineCommentLineRange => {
+const orderLines = (startLine: number, endLine: number): InlineCommentLineRange => {
   return startLine <= endLine ? { startLine, endLine } : { startLine: endLine, endLine: startLine };
 };
 
-const normalizeDraftText = (text: string): string => text.trim();
-
-const isDraftSnapshotMatch = (
+const matchesRevision = (
   draft: InlineCommentDraft,
   snapshot: InlineCommentDraftSnapshot,
 ): boolean => draft.id === snapshot.id && draft.revision === snapshot.revision;
@@ -171,21 +483,7 @@ const DIFF_SCOPE_LABELS = {
   target: "branch changes",
 } satisfies Record<DiffScope, string>;
 
-export const toInlineCommentDraftOwnerKey = ({
-  workspaceId,
-  taskId,
-}: {
-  workspaceId: string | null;
-  taskId: string | null;
-}): string | null => {
-  if (!workspaceId || !taskId) {
-    return null;
-  }
-
-  return toInlineCommentDraftStorageKey({ workspaceId, taskId });
-};
-
-const getInlineCommentStorage = (): InlineCommentDraftStorage => {
+const getStorage = (): InlineCommentDraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
@@ -197,6 +495,25 @@ const getInlineCommentStorage = (): InlineCommentDraftStorage => {
 
 const reportPersistenceError = (cause: unknown): void => {
   persistenceErrorReporter(cause instanceof Error ? cause : new Error(String(cause)));
+};
+
+const startCleanup = (storage: InlineCommentDraftStorage): void => {
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  const cleanup = pruneInlineCommentDraftsFromStorage({ storage });
+  const run = (): void => {
+    cancelCleanup = null;
+    try {
+      if (!cleanup.next().done) cancelCleanup = schedule(run, 0);
+    } catch (error) {
+      reportPersistenceError(
+        new Error("Failed to clean up saved Git diff comments. Check access to local storage.", {
+          cause: error,
+        }),
+      );
+    }
+  };
+  cancelCleanup = schedule(run, 0);
 };
 
 const toPersistedDraft = (draft: InlineCommentDraft): PersistedInlineCommentDraft => ({
@@ -272,15 +589,9 @@ const setPersistenceWarning = (
 const readOwnerDrafts = (ownerKey: string): InlineCommentDraft[] =>
   useInlineCommentDraftStore.getState().draftsByOwner[ownerKey] ?? [];
 
-const clearStorageUnavailable = (): void => {
-  useInlineCommentDraftStore.setState((state) =>
-    state.isStorageUnavailable ? { isStorageUnavailable: false } : state,
-  );
-};
-
 const persistOwner = (ownerKey: string): InlineCommentPersistenceWarning | null => {
   const result = writeInlineCommentDraftsToStorage({
-    storage: getInlineCommentStorage(),
+    storage: getStorage(),
     ownerKey,
     comments: readOwnerDrafts(ownerKey).map(toPersistedDraft),
     updatedAt: new Date().toISOString(),
@@ -298,7 +609,6 @@ const flushOwner = (ownerKey: string): void => {
   const version = entry.version;
   try {
     setPersistenceWarning(ownerKey, persistOwner(ownerKey));
-    clearStorageUnavailable();
     entry.persistedVersion = version;
   } catch (error) {
     setPersistenceWarning(ownerKey, "storage_unavailable");
@@ -309,13 +619,13 @@ const flushOwner = (ownerKey: string): void => {
 const scheduleOwnerFlush = (ownerKey: string): void => {
   const entry = getOrCreateOwnerEntry(ownerKey);
   if (entry.cancelMaxFlush === null) {
-    entry.cancelMaxFlush = scheduleFlushTask(() => {
+    entry.cancelMaxFlush = schedule(() => {
       flushOwner(ownerKey);
     }, MAX_WAIT_MS);
   }
 
   entry.cancelTrailingFlush?.();
-  entry.cancelTrailingFlush = scheduleFlushTask(() => {
+  entry.cancelTrailingFlush = schedule(() => {
     flushOwner(ownerKey);
   }, TRAILING_WAIT_MS);
 };
@@ -332,297 +642,6 @@ const markOwnerChangedNow = (ownerKey: string): void => {
   flushOwner(ownerKey);
 };
 
-export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
-  draftsByOwner: {},
-  persistenceWarningsByOwner: {},
-  isHydrated: false,
-  isStorageUnavailable: false,
-
-  addDraft: (ownerKey, draft) => {
-    const text = normalizeDraftText(draft.text);
-    if (text.length === 0) {
-      throw new Error("Inline comments cannot be empty.");
-    }
-
-    const id = generateId();
-    const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
-    const newDraft: InlineCommentDraft = {
-      id,
-      filePath: draft.filePath,
-      diffScope: draft.diffScope,
-      startLine,
-      endLine,
-      side: draft.side,
-      text,
-      codeContext: draft.codeContext,
-      language: draft.language ?? null,
-      revision: generateRevision(),
-      submissionId: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      status: "pending",
-    };
-    set((state) => ({
-      draftsByOwner: {
-        ...state.draftsByOwner,
-        [ownerKey]: [...(state.draftsByOwner[ownerKey] ?? []), newDraft],
-      },
-    }));
-    markOwnerChanged(ownerKey);
-    return id;
-  },
-
-  updateDraft: (ownerKey, id, text) => {
-    const normalizedText = normalizeDraftText(text);
-    if (normalizedText.length === 0) {
-      throw new Error("Inline comments cannot be empty.");
-    }
-    const draft = readOwnerDrafts(ownerKey).find((candidate) => candidate.id === id);
-    if (draft?.status === "submitting") {
-      throw new Error("Cannot edit a git diff comment while it is being sent.");
-    }
-
-    set((state) => ({
-      draftsByOwner: {
-        ...state.draftsByOwner,
-        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).map((currentDraft) =>
-          currentDraft.id === id && currentDraft.status === "pending"
-            ? {
-                ...currentDraft,
-                text: normalizedText,
-                revision: generateRevision(),
-                submissionId: null,
-                updatedAt: Date.now(),
-              }
-            : currentDraft,
-        ),
-      },
-    }));
-    markOwnerChanged(ownerKey);
-  },
-
-  removeDraft: (ownerKey, id) => {
-    const draft = readOwnerDrafts(ownerKey).find((candidate) => candidate.id === id);
-    if (draft?.status === "submitting") {
-      throw new Error("Cannot remove a git diff comment while it is being sent.");
-    }
-
-    set((state) => ({
-      draftsByOwner: {
-        ...state.draftsByOwner,
-        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).filter(
-          (currentDraft) => currentDraft.id !== id,
-        ),
-      },
-    }));
-    markOwnerChanged(ownerKey);
-  },
-
-  getPendingDrafts: (ownerKey) =>
-    readOwnerDrafts(ownerKey)
-      .filter((draft) => draft.status === "pending")
-      .sort(compareDrafts),
-
-  beginSubmittingDrafts: (ownerKey, drafts) => {
-    if (drafts.length === 0) {
-      return null;
-    }
-
-    const submissionId = generateSubmissionId();
-    let didTransition = false;
-    set((state) => ({
-      draftsByOwner: {
-        ...state.draftsByOwner,
-        [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).map((draft) => {
-          if (
-            draft.status === "pending" &&
-            drafts.some((snapshot) => isDraftSnapshotMatch(draft, snapshot))
-          ) {
-            didTransition = true;
-            return {
-              ...draft,
-              status: "submitting",
-              submissionId,
-            };
-          }
-          return draft;
-        }),
-      },
-    }));
-    return didTransition ? submissionId : null;
-  },
-
-  restoreSubmittingDrafts: (submissionId) => {
-    if (submissionId.length === 0) {
-      return;
-    }
-
-    set((state) => {
-      let didChange = false;
-      const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
-      for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
-        const nextDrafts = drafts.map((draft) =>
-          draft.status === "submitting" && draft.submissionId === submissionId
-            ? { ...draft, status: "pending" as const, submissionId: null }
-            : draft,
-        );
-        didChange = didChange || nextDrafts.some((draft, index) => draft !== drafts[index]);
-        draftsByOwner[ownerKey] = nextDrafts;
-      }
-      return didChange ? { draftsByOwner } : state;
-    });
-  },
-
-  completeSubmittingDrafts: (submissionId) => {
-    if (submissionId.length === 0) {
-      return;
-    }
-
-    const state = get();
-    const changedOwnerKeys: string[] = [];
-    const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
-    let didChange = false;
-    for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
-      const nextDrafts = drafts.filter(
-        (draft) => !(draft.status === "submitting" && draft.submissionId === submissionId),
-      );
-      didChange = didChange || nextDrafts.length !== drafts.length;
-      if (nextDrafts.length !== drafts.length) {
-        changedOwnerKeys.push(ownerKey);
-      }
-      draftsByOwner[ownerKey] = nextDrafts;
-    }
-    if (!didChange) {
-      return;
-    }
-
-    set({ draftsByOwner });
-    for (const ownerKey of changedOwnerKeys) {
-      markOwnerChangedNow(ownerKey);
-    }
-  },
-
-  dropDraftsForMissingFiles: (ownerKey, diffScope, presentFilePaths) => {
-    const validationKey = `${ownerKey}\u0000${diffScope}`;
-    if (validatedOwnerScopes.has(validationKey)) {
-      return;
-    }
-    validatedOwnerScopes.add(validationKey);
-
-    const drafts = readOwnerDrafts(ownerKey);
-    if (drafts.length === 0) {
-      return;
-    }
-
-    const nextDrafts = drafts.filter(
-      (draft) => draft.diffScope !== diffScope || presentFilePaths.has(draft.filePath),
-    );
-    if (nextDrafts.length === drafts.length) {
-      return;
-    }
-
-    set((state) => ({
-      draftsByOwner: { ...state.draftsByOwner, [ownerKey]: nextDrafts },
-    }));
-    markOwnerChangedNow(ownerKey);
-  },
-
-  getDraftCount: (ownerKey) => get().getPendingDrafts(ownerKey).length,
-
-  getFileDraftCount: (ownerKey, filePath, diffScope) =>
-    readOwnerDrafts(ownerKey).filter(
-      (draft) =>
-        draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
-    ).length,
-
-  getDraftsForFile: (ownerKey, filePath, diffScope) =>
-    readOwnerDrafts(ownerKey)
-      .filter(
-        (draft) =>
-          draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
-      )
-      .sort(compareDrafts),
-
-  getPersistenceWarning: (ownerKey) => {
-    const state = get();
-    return (
-      state.persistenceWarningsByOwner[ownerKey] ??
-      (state.isStorageUnavailable ? "storage_unavailable" : null)
-    );
-  },
-
-  formatBatchMessage: (drafts) => {
-    if (drafts.length === 0) {
-      return "";
-    }
-
-    const sections = drafts.map((draft, index) => {
-      const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
-      return [
-        `### Comment ${index + 1}`,
-        `File: \`${draft.filePath}\``,
-        `Diff: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
-        `Change: ${mapCommentSideToChange(draft.side)}`,
-        `Lines: ${formatLineRange(startLine, endLine)}`,
-        formatSelectedContextBlock(draft.codeContext, draft.language),
-        `Instruction: ${draft.text}`,
-      ].join("\n");
-    });
-
-    return ["## Git Diff Comments", ...sections].join("\n\n");
-  },
-
-  formatPendingBatchMessage: (ownerKey) => {
-    return get().formatBatchMessage(get().getPendingDrafts(ownerKey));
-  },
-
-  hydrate: () => {
-    if (didRunHydration) {
-      return;
-    }
-    didRunHydration = true;
-
-    const restoredByOwner: Record<string, InlineCommentDraft[]> = {};
-    let isStorageUnavailable = false;
-    try {
-      const entries = readAllInlineCommentDraftsFromStorage({
-        storage: getInlineCommentStorage(),
-        now: new Date(),
-      });
-      const currentDraftsByOwner = get().draftsByOwner;
-      for (const entry of entries) {
-        if (currentDraftsByOwner[entry.ownerKey]) {
-          continue;
-        }
-
-        const updatedAt = Date.parse(entry.updatedAt);
-        restoredByOwner[entry.ownerKey] = entry.comments.map((comment) =>
-          toRestoredDraft(comment, updatedAt),
-        );
-        getOrCreateOwnerEntry(entry.ownerKey);
-      }
-    } catch (error) {
-      isStorageUnavailable = true;
-      reportPersistenceError(error);
-    }
-
-    set((state) => ({
-      draftsByOwner: { ...state.draftsByOwner, ...restoredByOwner },
-      isHydrated: true,
-      isStorageUnavailable: state.isStorageUnavailable || isStorageUnavailable,
-    }));
-  },
-
-  flush: () => {
-    for (const ownerKey of Object.keys(get().draftsByOwner)) {
-      const entry = readOwnerEntry(ownerKey);
-      if (entry && entry.version !== entry.persistedVersion) {
-        flushOwner(ownerKey);
-      }
-    }
-  },
-}));
-
 export const setInlineCommentDraftStorageForTests = (
   storage: InlineCommentDraftStorage | null,
 ): void => {
@@ -636,25 +655,27 @@ export const setInlineCommentDraftPersistenceErrorReporter = (
 };
 
 export const setInlineCommentDraftScheduleTaskForTests = (scheduler: ScheduleTask | null): void => {
-  scheduleFlushTask = scheduler ?? scheduleTask;
+  schedule = scheduler ?? scheduleTask;
 };
 
 export const resetInlineCommentDraftStoreForTests = (): void => {
+  cancelCleanup?.();
+  cancelCleanup = null;
+  cleanupStarted = false;
   for (const entry of ownerEntries.values()) {
     clearOwnerTimers(entry);
   }
   ownerEntries.clear();
   validatedOwnerScopes.clear();
+  missingDraftsBySubmission.clear();
   storageOverride = null;
-  scheduleFlushTask = scheduleTask;
-  didRunHydration = false;
+  schedule = scheduleTask;
   persistenceErrorReporter = (error) => {
     console.error(error);
   };
   useInlineCommentDraftStore.setState({
     draftsByOwner: {},
     persistenceWarningsByOwner: {},
-    isHydrated: false,
-    isStorageUnavailable: false,
+    hydratedOwners: {},
   });
 };

@@ -63,6 +63,7 @@ type FileDiffEntryProps = {
   row: FileRow;
   diffScope: DiffScope;
   ownerKey: string | null;
+  commentPlaceholder?: string | undefined;
   fileComments: InlineCommentDraft[];
   annotationState: FileDiffAnnotationState;
   onAnnotationAction: (
@@ -230,6 +231,7 @@ function FileDiffEntryBody({
   diff,
   diffScope,
   ownerKey,
+  commentPlaceholder,
   fileComments,
   annotationState,
   dispatchAnnotation,
@@ -244,6 +246,7 @@ function FileDiffEntryBody({
   diff: FileDiff;
   diffScope: DiffScope;
   ownerKey: string | null;
+  commentPlaceholder?: string | undefined;
   fileComments: InlineCommentDraft[];
   annotationState: FileDiffAnnotationState;
   dispatchAnnotation: (action: FileDiffAnnotationAction) => void;
@@ -263,6 +266,7 @@ function FileDiffEntryBody({
     renderAnnotation,
   } = useFileDiffCommentAnnotations({
     ownerKey,
+    commentPlaceholder,
     diff,
     diffScope,
     fileComments,
@@ -317,6 +321,7 @@ function FileDiffEntry({
   row,
   diffScope,
   ownerKey,
+  commentPlaceholder,
   fileComments,
   annotationState,
   onAnnotationAction,
@@ -372,6 +377,7 @@ function FileDiffEntry({
         diff={diff}
         diffScope={diffScope}
         ownerKey={ownerKey}
+        commentPlaceholder={commentPlaceholder}
         fileComments={fileComments}
         annotationState={annotationState}
         dispatchAnnotation={dispatchAnnotation}
@@ -393,6 +399,7 @@ export const FileDiffEntryWithMemo = memo(
     previous.viewState.isExpanded === next.viewState.isExpanded &&
     previous.diffScope === next.diffScope &&
     previous.ownerKey === next.ownerKey &&
+    previous.commentPlaceholder === next.commentPlaceholder &&
     previous.viewState.isConflicted === next.viewState.isConflicted &&
     previous.viewState.reserveConflictSlot === next.viewState.reserveConflictSlot &&
     previous.diffStyle === next.diffStyle &&

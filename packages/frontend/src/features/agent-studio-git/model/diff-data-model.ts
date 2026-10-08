@@ -157,7 +157,7 @@ const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): 
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   upstreamStatus: source.upstreamStatus,
-  error: source.error,
+  error: base.error ?? source.error,
   hashVersion: source.hashVersion,
   statusHash: source.statusHash,
 });
@@ -173,7 +173,7 @@ const mergeSharedSummaryFields = (
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   upstreamStatus: source.upstreamStatus,
-  error: source.error,
+  error: base.error ?? source.error,
   hashVersion: source.hashVersion,
   statusHash: source.statusHash,
 });
@@ -222,6 +222,8 @@ export const applySummarySnapshot = ({
   const nextFetchedScopeSnapshot: ScopeSnapshot = {
     ...previousSummarySnapshot,
     ...summaryFields,
+    // A summary cannot recover a failed full diff read.
+    error: previousSummarySnapshot.error ?? summaryFields.error,
   };
 
   if (!scopeSnapshotEqual(previousSummarySnapshot, nextFetchedScopeSnapshot)) {

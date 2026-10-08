@@ -77,6 +77,7 @@ const mapCommentSideToAnnotationSide = (
 
 type UseFileDiffCommentAnnotationsArgs = {
   ownerKey: string | null;
+  commentPlaceholder?: string | undefined;
   diff: FileDiff;
   diffScope: DiffScope;
   fileComments: InlineCommentDraft[];
@@ -94,6 +95,7 @@ type FileDiffCommentAnnotations = {
 
 export function useFileDiffCommentAnnotations({
   ownerKey,
+  commentPlaceholder,
   diff,
   diffScope,
   fileComments,
@@ -211,6 +213,7 @@ export function useFileDiffCommentAnnotations({
         return (
           <DiffAnnotationShell>
             <NewCommentForm
+              placeholder={commentPlaceholder}
               value={newCommentText}
               onChange={(text) => dispatchAnnotation({ type: "newCommentTextChanged", text })}
               onCancel={clearPendingSelection}
@@ -242,6 +245,7 @@ export function useFileDiffCommentAnnotations({
     },
     [
       clearPendingSelection,
+      commentPlaceholder,
       dispatchAnnotation,
       commentsById,
       activeEditingCommentId,

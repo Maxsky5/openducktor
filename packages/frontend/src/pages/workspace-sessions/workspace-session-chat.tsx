@@ -1,4 +1,5 @@
 import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
+import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
@@ -6,8 +7,7 @@ import {
 } from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
@@ -31,14 +31,10 @@ import { useSelectedSessionContextLoad } from "@/state/operations/agent-orchestr
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import {
-  resolveRuntimeCatalogSurface,
-  retryRuntimeCatalog,
-  runtimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import { useWorkspaceSessionModelCatalog } from "./use-workspace-session-model-catalog";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
@@ -74,7 +70,6 @@ export function WorkspaceSessionChat({
   const operations = useAgentOperations();
   const readModel = useAgentSessionReadModelState();
   const runtime = useRuntimeAvailabilityContext();
-  const queryClient = useQueryClient();
   const runtimeReadiness = useRuntimeReadiness({
     hasWorkspace: true,
     runtimeTarget: runtimeReadinessTargetForRuntime(record.runtimeKind),
@@ -116,31 +111,18 @@ export function WorkspaceSessionChat({
     }),
     [record.executionTarget.workingDirectory, record.runtimeKind, workspace.repoPath],
   );
-  const catalogQuery = useQuery({
-    ...runtimeCatalogQueryOptions(runtimeRef, runtime.loadRepoRuntimeCatalog),
-    enabled: runtimeReadiness.state === "ready",
-  });
-  const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, catalogQuery.error);
-  const modelCatalog = modelSurface.catalog;
-  const catalogError = modelSurface.error;
-  const isLoadingModelCatalog = catalogQuery.isFetching;
-  useSelectedSessionHistoryLoad({
+  const {
+    catalog: modelCatalog,
+    error: catalogError,
+    isLoading: isLoadingModelCatalog,
+    retry: retryModelCatalog,
+  } = useWorkspaceSessionModelCatalog(runtimeRef, runtimeReadiness.state);
+  const sessionLoad = {
     session: isStarting ? null : session,
     runtimeReadinessState: runtimeReadiness.state,
-  });
-  const contextError = useSelectedSessionContextLoad({
-    session: isStarting ? null : session,
-    runtimeReadinessState: runtimeReadiness.state,
-  });
-  const retryModelCatalog = useCallback(
-    () =>
-      retryRuntimeCatalog({
-        queryClient,
-        runtimeRef,
-        loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
-      }),
-    [queryClient, runtime.loadRepoRuntimeCatalog, runtimeRef],
-  );
+  };
+  useSelectedSessionHistoryLoad(sessionLoad);
+  const contextError = useSelectedSessionContextLoad(sessionLoad);
   const modelTarget = useMemo(
     () => ({
       identity,
@@ -237,6 +219,16 @@ export function WorkspaceSessionChat({
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
   });
+  const reviewComments = useReviewCommentComposer({
+    owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
+    onSend: (draft) =>
+      actions.sendDraft(draft, {
+        canSend: canInteract,
+        reusablePrompts,
+        selectedModelDescriptor: picker.selectedModelEntry,
+        supportsAttachments: support.supportsAttachments,
+      }),
+  });
   const surface = useAgentChatSurfaceModel({
     transcript,
     chatSettings,
@@ -282,9 +274,7 @@ export function WorkspaceSessionChat({
             error: actions.resumeSessionError,
             usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
             onResume: () => {
-              if (identity) {
-                actions.resumeInterruptedTurn(identity);
-              }
+              if (identity) actions.resumeInterruptedTurn(identity);
             },
           }
         : undefined,
@@ -302,13 +292,8 @@ export function WorkspaceSessionChat({
       isReadOnly: chatState.isReadOnly,
       readOnlyReason: chatState.readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
-      onSend: (draft) =>
-        actions.sendDraft(draft, {
-          canSend: canInteract,
-          reusablePrompts,
-          selectedModelDescriptor: picker.selectedModelEntry,
-          supportsAttachments: support.supportsAttachments,
-        }),
+      onSend: reviewComments.onSend,
+      pendingSendItems: reviewComments.pendingSendItems ?? undefined,
       isSending,
       isStarting,
       contextUsage,
