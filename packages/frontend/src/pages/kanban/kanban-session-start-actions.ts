@@ -1,3 +1,4 @@
+import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
@@ -37,7 +38,7 @@ export const startKanbanSessionFlow = async ({
   humanRequestChangesTask,
   setTaskTargetBranch,
   openSessionInAgentStudio,
-}: StartKanbanSessionFlowInput): Promise<AgentSessionIdentity> => {
+}: StartKanbanSessionFlowInput): Promise<SessionStartWorkflowResult> => {
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
   const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
     request,
@@ -60,7 +61,9 @@ export const startKanbanSessionFlow = async ({
       description: workflow.postStartActionError.message,
     });
   }
-  if (!startInBackground) {
+  const conflictContextChanged =
+    request.launchActionId === "build_rebase_conflict_resolution" && isCurrent && !isCurrent();
+  if (!startInBackground && !conflictContextChanged) {
     openSessionInAgentStudio(request, workflow);
   }
 

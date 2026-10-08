@@ -2,7 +2,9 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, memo, type ReactElement, useEffect, useState } from "react";
+import { act, memo, type ReactElement, useEffect, useLayoutEffect, useState } from "react";
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { workspaceConflictChatKey } from "./workspace-git-conflict-assistance";
 import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
 import {
@@ -27,6 +29,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
 import * as toolsModule from "@/components/features/agents/use-workspace-session-tools";
 import * as sessionChat from "./workspace-session-chat";
+import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
 import { buildQuestionRequest } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
@@ -168,6 +171,70 @@ function renderClosedSession(
     ) => view.rerender(content(name, nextRevision, isSwitchingBranch)),
   };
 }
+
+test("conflict assistance follows the selected chat after switching away and back", async () => {
+  const send = mock(
+    async (id: string, _parts: Parameters<WorkspaceConflictChatActions["send"]>[0]) =>
+      createAgentMessageSendReceipt({
+        runtimeKind: "opencode",
+        externalSessionId: `native-${id}`,
+        workingDirectory: "/repo",
+      }),
+  );
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ workspace, record, onActionsReady }) => {
+      useLayoutEffect(() => {
+        const key = workspaceConflictChatKey(workspace.workspaceId, record.id);
+        onActionsReady?.(key, {
+          workspace,
+          record,
+          send: async (parts) => send(record.id, parts),
+          assertCanSubmit: () => {},
+          blockedReason: null,
+          isStarting: false,
+        });
+        return () => onActionsReady?.(key, null);
+      }, [onActionsReady, record, workspace]);
+      return <div>Chat: {record.id}</div>;
+    },
+  );
+  const tools = mockTools((props) => (
+    <button
+      disabled={Boolean(props.conflictAssistanceBlockedReason)}
+      onClick={() =>
+        void props.onResolveGitConflict?.({
+          operation: "rebase",
+          currentBranch: "feature",
+          targetBranch: "main",
+          conflictedFiles: ["file.ts"],
+          output: "Conflict",
+          workingDir: props.workingDirectory,
+        })
+      }
+    >
+      Ask agent
+    </button>
+  ));
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main", undefined, record, null, undefined, true);
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    const other = { ...record, id: "other", externalSessionId: "native-other" };
+    view.setSession(other, null);
+    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    view.setSession(record, null);
+    fireEvent.click(screen.getByRole("button", { name: "Ask agent" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+    expect(send.mock.calls.map(([id]) => id)).toEqual(["chat", "other", "chat"]);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    tools.mockRestore();
+    chat.mockRestore();
+  }
+});
 
 test("switching chats keeps the tools and chat drafts and resets the file owner", () => {
   const preview = mockFilePreview(({ model }) => (

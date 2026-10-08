@@ -1,7 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import {
+  GitConflictRequestCancelled,
+  type GitConflictAssistanceResult,
+} from "@/features/git-conflict-resolution/conflict-assistance";
 import { errorMessage } from "@/lib/errors";
 import type {
   TaskApprovalOpenOptions,
@@ -16,14 +20,16 @@ interface TaskApprovalGitConflictState {
   open: boolean;
   taskId: string | null;
   conflict: GitConflict | null;
-  isHandlingConflict: boolean;
   conflictAction: GitConflictAction;
 }
 
 type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
 
 type UseTaskApprovalGitConflictFlowArgs = {
-  onResolveGitConflict: (conflict: GitConflict, taskId: string) => Promise<boolean>;
+  onResolveGitConflict: (
+    conflict: GitConflict,
+    taskId: string,
+  ) => Promise<GitConflictAssistanceResult>;
   openTaskApproval: OpenTaskApproval;
   reset: () => void;
   workspaceRepoPath: string | null;
@@ -33,7 +39,6 @@ const INITIAL_GIT_CONFLICT_STATE: TaskApprovalGitConflictState = {
   open: false,
   taskId: null,
   conflict: null,
-  isHandlingConflict: false,
   conflictAction: null,
 };
 
@@ -44,6 +49,8 @@ export function useTaskApprovalGitConflictFlow({
   workspaceRepoPath,
 }: UseTaskApprovalGitConflictFlowArgs) {
   const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
+  const isHandlingConflict = gitConflictState.conflictAction !== null;
+  const reservation = useRef(false);
 
   const closeGitConflict = useCallback(() => {
     setGitConflictState(INITIAL_GIT_CONFLICT_STATE);
@@ -54,22 +61,21 @@ export function useTaskApprovalGitConflictFlow({
       open: true,
       taskId,
       conflict,
-      isHandlingConflict: false,
       conflictAction: null,
     });
   }, []);
 
   const abortGitConflict = useCallback((): void => {
-    if (!workspaceRepoPath || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
+    if (!workspaceRepoPath || !gitConflictState.conflict || reservation.current) {
       return;
     }
 
     const conflict = gitConflictState.conflict;
     const taskId = gitConflictState.taskId;
+    reservation.current = true;
     void (async () => {
       setGitConflictState((current) => ({
         ...current,
-        isHandlingConflict: true,
         conflictAction: "abort",
       }));
       try {
@@ -88,56 +94,58 @@ export function useTaskApprovalGitConflictFlow({
         });
         setGitConflictState((current) => ({
           ...current,
-          isHandlingConflict: false,
           conflictAction: null,
         }));
+      } finally {
+        reservation.current = false;
       }
     })();
   }, [workspaceRepoPath, closeGitConflict, gitConflictState, openTaskApproval]);
 
   const askBuilderToResolveGitConflict = useCallback((): void => {
-    if (
-      !gitConflictState.conflict ||
-      !gitConflictState.taskId ||
-      gitConflictState.isHandlingConflict
-    ) {
+    if (!gitConflictState.conflict || !gitConflictState.taskId || reservation.current) {
       return;
     }
 
     const conflict = gitConflictState.conflict;
     const taskId = gitConflictState.taskId;
+    reservation.current = true;
     void (async () => {
       setGitConflictState((current) => ({
         ...current,
-        isHandlingConflict: true,
         conflictAction: "ask_builder",
       }));
       try {
-        const wasHandled = await askBuilderToResolveTaskApprovalGitConflict(
+        const receipt = await askBuilderToResolveTaskApprovalGitConflict(
           conflict,
           taskId,
           onResolveGitConflict,
         );
-        if (!wasHandled) {
+        if (!receipt) {
           setGitConflictState((current) => ({
             ...current,
-            isHandlingConflict: false,
             conflictAction: null,
           }));
           return;
         }
+        if (receipt.postAcceptanceFailure)
+          toast.error("Message accepted by Builder; host step failed", {
+            description: receipt.postAcceptanceFailure,
+          });
         closeGitConflict();
         reset();
       } catch (error) {
         const description = errorMessage(error);
-        toast.error(getGitConflictCopy(conflict.operation).builderFailureMessage, {
-          description,
-        });
+        if (!(error instanceof GitConflictRequestCancelled))
+          toast.error(getGitConflictCopy(conflict.operation).builderFailureMessage, {
+            description,
+          });
         setGitConflictState((current) => ({
           ...current,
-          isHandlingConflict: false,
           conflictAction: null,
         }));
+      } finally {
+        reservation.current = false;
       }
     })();
   }, [closeGitConflict, gitConflictState, onResolveGitConflict, reset]);
@@ -146,10 +154,10 @@ export function useTaskApprovalGitConflictFlow({
     ? {
         open: gitConflictState.open,
         conflict: gitConflictState.conflict,
-        isHandlingConflict: gitConflictState.isHandlingConflict,
+        isHandlingConflict,
         conflictAction: gitConflictState.conflictAction,
         onOpenChange: (open: boolean) => {
-          if (!open && !gitConflictState.isHandlingConflict) {
+          if (!open && !isHandlingConflict) {
             closeGitConflict();
           }
         },

@@ -60,6 +60,62 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     expect(sends).toBe(0);
   });
 
+  test.each([
+    ["idle", "after preparation", "same"],
+    ["starting", "before preparation", "same"],
+    ["starting", "after preparation", "same"],
+    ["starting", "after preparation", "newer"],
+  ] as const)(
+    "rejects a stale request for a %s session %s with the %s episode",
+    async (status, phase, episode) => {
+      const prepared = Promise.withResolvers<void>();
+      const preparing = Promise.withResolvers<void>();
+      let submissions = 0;
+      let current = phase === "after preparation";
+      const adapter = createTestOpencodeSdkAdapter();
+      adapter.sendUserMessage = async (input) => {
+        submissions += 1;
+        return acceptedUserMessage(input);
+      };
+      const sessionsRef = createSessionsRef([buildSession({ status })]);
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        loadRepoPromptOverrides: async () => {
+          preparing.resolve();
+          await prepared.promise;
+          return {};
+        },
+      });
+      const send = actions.sendAgentMessage(
+        getSession(sessionsRef),
+        [{ kind: "text", text: "Resolve conflict" }],
+        {
+          assertCanSubmit: () => {
+            if (!current) throw new Error("Selection changed");
+          },
+        },
+      );
+      if (phase === "after preparation") {
+        await preparing.promise;
+        current = false;
+        if (episode === "newer") {
+          sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+            ...getSession(sessionsRef),
+            executionEpisodeId: "newer-start",
+          });
+        }
+      }
+      prepared.resolve();
+      await expect(send).rejects.toThrow("Selection changed");
+      expect(submissions).toBe(0);
+      expect(getSession(sessionsRef).status).toBe(episode === "newer" ? "starting" : "idle");
+      current = true;
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Retry" }]);
+      expect(submissions).toBe(1);
+      expect(getSession(sessionsRef).status).toBe("running");
+    },
+  );
   test("an old send failure does not change a newer execution episode or its pending input", async () => {
     const entered = Promise.withResolvers<void>();
     const rejected = Promise.withResolvers<never>();

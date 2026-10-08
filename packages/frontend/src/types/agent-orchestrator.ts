@@ -146,6 +146,13 @@ export type AgentMessageSendOptions = {
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
   sessionScope?: AgentSessionScope;
+  assertCanSubmit?: (session: AgentSessionState) => void;
+};
+
+export type AgentMessageSendReceipt = {
+  recipient: AgentSessionIdentity;
+  acceptedMessage: import("@openducktor/core").AcceptedAgentUserMessage;
+  postAcceptanceFailure: string | null;
 };
 
 export type SessionMessagesState = {

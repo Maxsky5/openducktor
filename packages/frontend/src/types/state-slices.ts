@@ -41,6 +41,7 @@ import type {
 } from "@openducktor/core";
 import type {
   AgentMessageSendOptions,
+  AgentMessageSendReceipt,
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionContextLoadTarget,
@@ -274,7 +275,7 @@ export type AgentOperationsContextValue = {
     session: AgentSessionIdentity,
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
-  ) => Promise<void>;
+  ) => Promise<AgentMessageSendReceipt | null>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (

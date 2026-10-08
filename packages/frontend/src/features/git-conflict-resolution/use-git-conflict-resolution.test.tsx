@@ -1,3 +1,4 @@
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -9,6 +10,8 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
 import { useGitConflictResolution } from "./use-git-conflict-resolution";
+import { GitConflictRequestCancelled } from "./conflict-assistance";
+import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
 
 const buildSession = (
   overrides: AgentSessionFixtureOverrides & { externalSessionId: string; workingDirectory: string },
@@ -40,6 +43,12 @@ const sessionIdentity = (
   externalSessionId,
   runtimeKind: "opencode" as const,
   workingDirectory,
+  postStartActionError: null,
+  postStartMessageReceipt: createAgentMessageSendReceipt({
+    externalSessionId,
+    runtimeKind: "opencode",
+    workingDirectory,
+  }),
 });
 
 type GitConflictOverrides = Partial<GitConflict>;
@@ -55,6 +64,45 @@ const createConflict = (overrides: GitConflictOverrides = {}) => ({
 });
 
 describe("useGitConflictResolution", () => {
+  test.each([false, true])(
+    "a started Builder with a failed message reports no delivery, cancelled=%s",
+    async (cancelled) => {
+      const error = cancelled
+        ? new GitConflictRequestCancelled()
+        : new Error("Transport rejected the message");
+      const { postStartMessageReceipt: _receipt, ...identity } = sessionIdentity("build-new");
+      const started = {
+        ...identity,
+        postStartActionError: new SessionStartWorkflowError(error, true),
+      };
+      const startConflictResolutionSession = mock(async () => started);
+      const opened = mock(() => {});
+      const harness = createHookHarness(useGitConflictResolution, {
+        workspaceId: "workspace-repo",
+        startConflictResolutionSession,
+        loadPromptOverrides: async () => ({}),
+      });
+      try {
+        await harness.mount();
+        const result = harness.getLatest().handleResolveGitConflict(createConflict(), {
+          taskId: "task-1",
+          task: null,
+          builderSessions: [],
+          currentViewSession: null,
+          onOpenSession: opened,
+        });
+        if (cancelled) {
+          expect(await result).toBe(false);
+          expect(opened).not.toHaveBeenCalled();
+        } else {
+          await expect(result).rejects.toThrow("Transport rejected");
+          expect(opened).toHaveBeenCalledTimes(1);
+        }
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
     const startConflictResolutionSession = mock(async () =>
       sessionIdentity("external-build-1", "/repo/worktrees/task-1"),
@@ -88,7 +136,9 @@ describe("useGitConflictResolution", () => {
         },
       });
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: "task-1",
@@ -143,7 +193,9 @@ describe("useGitConflictResolution", () => {
         onOpenSession: () => undefined,
       });
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
@@ -179,7 +231,9 @@ describe("useGitConflictResolution", () => {
         onOpenSession: () => undefined,
       });
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "fresh",
@@ -211,7 +265,9 @@ describe("useGitConflictResolution", () => {
         onOpenSession: () => undefined,
       });
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(loadPromptOverrides).toHaveBeenCalledWith("workspace-repo");
     } finally {
       await harness.unmount();

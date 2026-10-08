@@ -43,7 +43,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/session-started",
     }),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => {},

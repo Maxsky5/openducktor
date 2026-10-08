@@ -3,15 +3,10 @@ import { getGitConflictCopy } from "./conflict-copy";
 
 export type GitConflictActionsModel = {
   isDisabled: boolean;
-  abort: {
-    isPending: boolean;
-    label: string;
-    onClick: () => void;
-  };
-  askBuilder?: {
-    isPending: boolean;
-    label: string;
-    onClick: () => void;
+  abort: ActionControl;
+  help?: ActionControl & {
+    recipientLabel: "Builder" | "agent";
+    blockedReason: string | null;
   };
 };
 
@@ -20,31 +15,52 @@ export const createGitConflictActionsModel = ({
   isHandlingConflict,
   conflictAction,
   onAbort,
-  onAskBuilder,
+  onAsk,
+  recipientLabel = "Builder",
+  blockedReason = null,
+  isStarting = false,
 }: {
-  operation: GitConflictOperation;
+  operation: GitConflictOperation | null;
   isHandlingConflict: boolean;
   conflictAction: GitConflictAction | undefined;
   onAbort: () => void;
-  onAskBuilder?: (() => void) | undefined;
+  onAsk?: (() => void) | undefined;
+  recipientLabel?: "Builder" | "agent" | undefined;
+  blockedReason?: string | null | undefined;
+  isStarting?: boolean | undefined;
 }): GitConflictActionsModel => {
   const actions: GitConflictActionsModel = {
     isDisabled: isHandlingConflict,
     abort: {
+      isDisabled: isHandlingConflict || operation === null,
       isPending: conflictAction === "abort",
       label: conflictAction === "abort" ? "Aborting..." : getGitConflictCopy(operation).abortLabel,
       onClick: onAbort,
     },
   };
-  if (onAskBuilder) {
-    actions.askBuilder = {
+  if (onAsk) {
+    let label =
+      recipientLabel === "agent" ? "Ask agent" : getGitConflictCopy(operation).askBuilderLabel;
+    if (conflictAction === "ask_builder")
+      label = isStarting ? "Starting agent..." : `Sending to ${recipientLabel}...`;
+    actions.help = {
+      isDisabled: isHandlingConflict || blockedReason !== null || operation === null,
+      recipientLabel,
+      blockedReason:
+        operation === null
+          ? "Git did not report the conflict operation. Restore the operation information before asking for assistance."
+          : blockedReason,
       isPending: conflictAction === "ask_builder",
-      label:
-        conflictAction === "ask_builder"
-          ? "Sending to Builder..."
-          : getGitConflictCopy(operation).askBuilderLabel,
-      onClick: onAskBuilder,
+      label,
+      onClick: onAsk,
     };
   }
   return actions;
+};
+
+type ActionControl = {
+  isDisabled: boolean;
+  isPending: boolean;
+  label: string;
+  onClick: () => void;
 };

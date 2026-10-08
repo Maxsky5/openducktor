@@ -62,7 +62,6 @@ export function WorkspaceSessionGitTools({
       target: resolvedTarget !== null && diffData.loadedScopesByScope.target,
     },
     rebaseOntoTarget: resolvedTarget ? actions.rebaseOntoTarget : undefined,
-    askBuilderToResolveGitConflict: undefined,
     openInTargetPath: workingDirectory,
     openInDisabledReason: workingDirectory
       ? null

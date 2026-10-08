@@ -89,7 +89,7 @@ describe("Workspace Session metadata UI", () => {
         expect(open.closest("header")).toBe(
           view.getByRole("heading", { name: "My session" }).closest("header"),
         );
-        const directory = kind === "local_repo_root" ? "/repo" : "/repo/worktrees/chat";
+        const directory = session.executionTarget.workingDirectory;
         expect(open.closest("header")?.textContent).not.toContain(directory);
         expect(open.closest("header")?.textContent).not.toContain("Reviewer");
         const role = view.queryByRole("img", { name: "Custom role" });

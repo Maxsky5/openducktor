@@ -32,6 +32,25 @@ const createStatus = (overrides: Partial<GitWorktreeStatus> = {}): GitWorktreeSt
 });
 
 describe("diff-normalization", () => {
+  test("uses the status read's exact directory without treating its comparison branch as conflict evidence", () => {
+    const result = toScopeSnapshot(
+      createStatus({
+        gitConflict: {
+          operation: "rebase",
+          currentBranch: "feature/task-10",
+          targetBranch: "unrelated-comparison",
+          conflictedFiles: ["src/main.ts"],
+          output: "interactive rebase in progress",
+        },
+      }),
+    );
+    expect(result.gitConflict).toMatchObject({
+      workingDir: "/repo/.worktrees/task-10",
+      targetBranch: "",
+      operation: "rebase",
+      conflictedFiles: ["src/main.ts"],
+    });
+  });
   test("normalizes dirty worktree snapshots without querying or scheduled refresh state", () => {
     const snapshot = toScopeSnapshot(createStatus());
 

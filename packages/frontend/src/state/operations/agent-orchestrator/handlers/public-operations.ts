@@ -14,6 +14,7 @@ import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentMessageSendOptions,
+  AgentMessageSendReceipt,
   AgentSessionContextLoadTarget,
   AgentSessionIdentity,
   AgentSessionState,
@@ -27,7 +28,7 @@ type SessionActions = {
     session: AgentSessionIdentity,
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
-  ) => Promise<void>;
+  ) => Promise<AgentMessageSendReceipt | null>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
@@ -95,7 +96,7 @@ export const createOrchestratorPublicOperations = ({
     session,
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
-  ): Promise<void> => {
+  ): Promise<AgentMessageSendReceipt | null> => {
     return sessionActions.sendAgentMessage(session, parts, options);
   },
   stopAgentSession: (session): Promise<void> =>

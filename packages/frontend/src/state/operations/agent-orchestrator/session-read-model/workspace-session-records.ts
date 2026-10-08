@@ -24,12 +24,9 @@ export const workspaceSessionTitle = (record: WorkspaceSession): string =>
   record.manualTitle ?? record.generatedTitle ?? "Untitled session";
 
 export const workspaceSessionWorkingDirectory = (
-  workspace: Pick<ActiveWorkspace, "repoPath">,
+  _workspace: Pick<ActiveWorkspace, "repoPath">,
   record: WorkspaceSession,
-): string | null =>
-  (record.executionTarget.kind === "local_repo_root"
-    ? workspace.repoPath
-    : record.executionTarget.workingDirectory) || null;
+): string | null => record.executionTarget.workingDirectory || null;
 
 export const workspaceSessionTargetFaultKey = (
   repoPath: string,

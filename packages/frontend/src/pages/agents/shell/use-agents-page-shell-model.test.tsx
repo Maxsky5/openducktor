@@ -84,7 +84,7 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
 const retryChatSettingsLoad = mock(() => {});
 const retryGitProviderContext = mock(() => {});
-const handleResolveRebaseConflict = mock(async () => true);
+const handleResolveRebaseConflict = mock(async () => false as const);
 
 type QuerySyncState = {
   taskIdParam: string;
@@ -280,7 +280,7 @@ let agentOperations: AgentOperationsContextValue = {
   loadAgentSessionHistory: mock(async () => null),
   loadAgentSessionContext: mock(async () => undefined),
   startAgentSession: mock(async () => sessionIdentity("session-1")),
-  sendAgentMessage: mock(async () => undefined),
+  sendAgentMessage: mock(async () => null),
   stopAgentSession: mock(async () => undefined),
   continueInterruptedTurn: mock(async () => undefined),
   updateAgentSessionModel: mock(async () => undefined),
@@ -753,7 +753,7 @@ beforeEach(async () => {
     loadAgentSessionHistory: mock(async () => null),
     loadAgentSessionContext: mock(async () => undefined),
     startAgentSession: mock(async () => sessionIdentity("session-1")),
-    sendAgentMessage: mock(async () => undefined),
+    sendAgentMessage: mock(async () => null),
     stopAgentSession: mock(async () => undefined),
     continueInterruptedTurn: mock(async () => undefined),
     updateAgentSessionModel: mock(async () => undefined),

@@ -1,3 +1,4 @@
+import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { CommitsAheadBehind } from "@openducktor/contracts";
 import { useCallback, useMemo } from "react";
 import type {
@@ -31,6 +32,9 @@ type AgentStudioGitActionState = {
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
   gitConflict: GitConflict | null;
+  conflictRecipientLabel: "Builder" | "agent";
+  conflictAssistanceBlockedReason: string | null;
+  conflictAssistanceIsStarting: boolean;
   pendingForcePush: AgentStudioPendingForcePush | null;
   pendingPullRebase: AgentStudioPendingPullRebase | null;
   pendingReset: AgentStudioPendingReset | null;
@@ -70,7 +74,11 @@ type UseAgentStudioGitActionsInput = {
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: GitDiffRefresh;
   isDiffDataLoading?: boolean;
-  onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;
+  onResolveGitConflict?: ResolveGitConflict | undefined;
+  assistanceContextKey?: string;
+  conflictRecipientLabel?: "Builder" | "agent";
+  conflictAssistanceBlockedReason?: string | null | undefined;
+  conflictAssistanceIsStarting?: boolean | undefined;
 };
 
 export function useAgentStudioGitActions({
@@ -90,6 +98,10 @@ export function useAgentStudioGitActions({
   refreshDiffData,
   isDiffDataLoading = false,
   onResolveGitConflict,
+  assistanceContextKey = "",
+  conflictRecipientLabel = "Builder",
+  conflictAssistanceBlockedReason = null,
+  conflictAssistanceIsStarting = false,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {
   const {
     commitError,
@@ -112,6 +124,9 @@ export function useAgentStudioGitActions({
     refreshDiffData,
     clearActionErrors,
     setRebaseError,
+    assistanceContextKey,
+    conflictRecipientLabel,
+    conflictAssistanceBlockedReason,
   };
   if (onResolveGitConflict) {
     conflictControllerInput.onResolveGitConflict = onResolveGitConflict;
@@ -233,6 +248,13 @@ export function useAgentStudioGitActions({
       isGitActionsLocked,
       gitActionsLockReason,
       gitConflict: activeGitConflict,
+      conflictRecipientLabel,
+      conflictAssistanceBlockedReason:
+        conflictAssistanceBlockedReason ??
+        (activeGitConflict && !activeGitConflict.workingDir
+          ? "Restore the Git conflict directory before asking for assistance."
+          : null),
+      conflictAssistanceIsStarting,
       pendingForcePush,
       pendingPullRebase,
       pendingReset,
@@ -270,6 +292,9 @@ export function useAgentStudioGitActions({
       isGitActionsLocked,
       gitActionsLockReason,
       activeGitConflict,
+      conflictRecipientLabel,
+      conflictAssistanceBlockedReason,
+      conflictAssistanceIsStarting,
       pendingForcePush,
       pendingPullRebase,
       pendingReset,

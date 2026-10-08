@@ -1,3 +1,4 @@
+import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
 import { useMemo } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
@@ -117,8 +118,10 @@ export function useAgentsPageOrchestrationShellModel({
     },
   });
 
+  const assertSessionCanSend = useAgentMessageSendPolicy();
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     workspaceId: activeWorkspaceId,
+    assertSessionCanSend,
     selection,
     scheduleQueryUpdate,
     startSessionRequest: orchestration.startSessionRequest,

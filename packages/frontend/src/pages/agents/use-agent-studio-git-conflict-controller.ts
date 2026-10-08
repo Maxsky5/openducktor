@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import {
+  GitConflictRequestCancelled,
+  type ResolveGitConflict,
+} from "@/features/git-conflict-resolution/conflict-assistance";
 import { host } from "@/state/operations/shared/host";
 import {
   CONFLICT_LOCK_REASON,
@@ -9,22 +13,21 @@ import {
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
 
-type GitConflictControllerState = {
+type ConflictState = {
   localConflict: GitConflict | null;
   /** The repository and working directory where the local conflict happened. */
-  localConflictWorktreeKey: string | null;
-  gitConflictSnapshotKey: string | null;
-  isHandlingGitConflict: boolean;
-  gitConflictAction: GitConflictAction;
-  gitConflictAutoOpenNonce: number;
-  gitConflictCloseNonce: number;
+  directoryKey: string | null;
+  snapshotKey: string | null;
+  action: GitConflictAction;
+  openNonce: number;
+  closeNonce: number;
 };
 
-type GitConflictControllerAction =
+type ConflictEvent =
   | {
       type: "capture_conflict";
       conflict: GitConflict;
-      worktreeKey: string;
+      directoryKey: string;
       snapshotKey: string | null;
     }
   | {
@@ -63,106 +66,11 @@ type UseAgentStudioGitConflictControllerArgs = {
   refreshDiffData: RefreshGitDiffData;
   clearActionErrors: () => void;
   setRebaseError: (message: string | null) => void;
-  onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;
+  onResolveGitConflict?: ResolveGitConflict;
+  assistanceContextKey?: string;
+  conflictRecipientLabel?: "Builder" | "agent";
+  conflictAssistanceBlockedReason?: string | null;
 };
-
-const initialState: GitConflictControllerState = {
-  localConflict: null,
-  localConflictWorktreeKey: null,
-  gitConflictSnapshotKey: null,
-  isHandlingGitConflict: false,
-  gitConflictAction: null,
-  gitConflictAutoOpenNonce: 0,
-  gitConflictCloseNonce: 0,
-};
-
-const haveSameConflictedFiles = (left: string[], right: string[]): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  const sortedLeft = left.toSorted();
-  const sortedRight = right.toSorted();
-
-  return (
-    sortedLeft.length === sortedRight.length &&
-    sortedLeft.every((filePath, index) => filePath === sortedRight[index])
-  );
-};
-
-const haveSameConflictMetadata = (left: GitConflict, right: GitConflict): boolean => {
-  return (
-    left.operation === right.operation &&
-    left.currentBranch === right.currentBranch &&
-    left.targetBranch === right.targetBranch &&
-    left.output === right.output &&
-    left.workingDir === right.workingDir &&
-    haveSameConflictedFiles(left.conflictedFiles, right.conflictedFiles)
-  );
-};
-
-function gitConflictControllerReducer(
-  state: GitConflictControllerState,
-  action: GitConflictControllerAction,
-): GitConflictControllerState {
-  switch (action.type) {
-    case "capture_conflict":
-      return {
-        ...state,
-        localConflict: action.conflict,
-        localConflictWorktreeKey: action.worktreeKey,
-        gitConflictSnapshotKey: action.snapshotKey,
-        gitConflictAutoOpenNonce: state.gitConflictAutoOpenNonce + 1,
-      };
-    case "replace_conflicted_files":
-      if (state.localConflict == null) {
-        return state;
-      }
-      return {
-        ...state,
-        localConflict: {
-          ...state.localConflict,
-          conflictedFiles: action.conflictedFiles,
-        },
-        gitConflictSnapshotKey: action.snapshotKey,
-      };
-    case "replace_conflict":
-      return {
-        ...state,
-        localConflict: action.conflict,
-        gitConflictSnapshotKey: action.snapshotKey,
-      };
-    case "mark_snapshot_seen":
-      return {
-        ...state,
-        gitConflictSnapshotKey: action.snapshotKey,
-      };
-    case "clear_local_conflict":
-      return {
-        ...state,
-        localConflict: null,
-        localConflictWorktreeKey: null,
-        gitConflictSnapshotKey: null,
-        gitConflictCloseNonce: action.closeModal
-          ? state.gitConflictCloseNonce + 1
-          : state.gitConflictCloseNonce,
-      };
-    case "start_action":
-      return {
-        ...state,
-        isHandlingGitConflict: true,
-        gitConflictAction: action.action,
-      };
-    case "finish_action":
-      return {
-        ...state,
-        isHandlingGitConflict: false,
-        gitConflictAction: null,
-      };
-    default:
-      return state;
-  }
-}
 
 export function useAgentStudioGitConflictController({
   repoPath,
@@ -175,22 +83,45 @@ export function useAgentStudioGitConflictController({
   clearActionErrors,
   setRebaseError,
   onResolveGitConflict,
+  assistanceContextKey = "",
+  conflictRecipientLabel = "Builder",
+  conflictAssistanceBlockedReason = null,
 }: UseAgentStudioGitConflictControllerArgs) {
-  const [state, dispatch] = useReducer(gitConflictControllerReducer, initialState);
-  // The local conflict belongs to the worktree where the rebase or pull ran, so other worktrees do not show it.
-  const worktreeKey = JSON.stringify([repoPath, workingDir]);
-  const localConflict = state.localConflictWorktreeKey === worktreeKey ? state.localConflict : null;
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const isHandlingGitConflict = state.action !== null;
+  // Keep a command's conflict in the directory where it ran.
+  const directoryKey = JSON.stringify([repoPath, workingDir]);
+  const reservation = useRef(false);
+  const selection = useRef({ key: "", version: 0, mounted: true });
+  const selectionKey = JSON.stringify([directoryKey, assistanceContextKey]);
+  useLayoutEffect(() => {
+    if (selection.current.key !== selectionKey) {
+      selection.current = {
+        key: selectionKey,
+        version: selection.current.version + 1,
+        mounted: true,
+      };
+    }
+  }, [selectionKey]);
+  useLayoutEffect(() => {
+    selection.current.mounted = true;
+    return () => {
+      selection.current.mounted = false;
+      selection.current.version += 1;
+    };
+  }, []);
+  const localConflict = state.directoryKey === directoryKey ? state.localConflict : null;
 
   const fallbackDetectedConflict = useMemo(
     () =>
       detectedConflictedFiles.length > 0
         ? ({
-            operation: "rebase",
+            operation: null,
             currentBranch: branch,
-            targetBranch: "current rebase target",
+            targetBranch: "",
             conflictedFiles: detectedConflictedFiles,
             output:
-              "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.",
+              "Git did not report the conflict operation. Restore the operation information before asking for assistance or aborting.",
             workingDir,
           } satisfies GitConflict)
         : null,
@@ -205,25 +136,37 @@ export function useAgentStudioGitConflictController({
   const showLockReasonBanner = isGitActionsLocked;
 
   useEffect(() => {
-    if (localConflict == null || state.isHandlingGitConflict || worktreeStatusSnapshotKey == null) {
+    if (localConflict == null || isHandlingGitConflict || worktreeStatusSnapshotKey == null) {
       return;
     }
 
-    if (state.gitConflictSnapshotKey === worktreeStatusSnapshotKey) {
+    if (state.snapshotKey === worktreeStatusSnapshotKey) {
       return;
     }
 
     if ((effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles).length > 0) {
-      if (detectedConflict != null && !haveSameConflictMetadata(localConflict, detectedConflict)) {
+      // A status read can report a generic rebase and omit the original command's details.
+      const refreshedConflict =
+        detectedConflict && effectiveDetectedConflict
+          ? {
+              ...effectiveDetectedConflict,
+              operation: localConflict.operation ?? effectiveDetectedConflict.operation,
+              currentBranch: localConflict.currentBranch ?? effectiveDetectedConflict.currentBranch,
+              targetBranch: localConflict.targetBranch || effectiveDetectedConflict.targetBranch,
+              output: localConflict.output || effectiveDetectedConflict.output,
+              workingDir: localConflict.workingDir ?? effectiveDetectedConflict.workingDir,
+            }
+          : null;
+      if (refreshedConflict != null && !sameConflict(localConflict, refreshedConflict)) {
         dispatch({
           type: "replace_conflict",
-          conflict: detectedConflict,
+          conflict: refreshedConflict,
           snapshotKey: worktreeStatusSnapshotKey,
         });
         return;
       }
 
-      const conflictedFilesChanged = !haveSameConflictedFiles(
+      const conflictedFilesChanged = !sameFiles(
         localConflict.conflictedFiles,
         effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles,
       );
@@ -250,8 +193,8 @@ export function useAgentStudioGitConflictController({
     detectedConflict,
     effectiveDetectedConflict,
     localConflict,
-    state.gitConflictSnapshotKey,
-    state.isHandlingGitConflict,
+    state.snapshotKey,
+    isHandlingGitConflict,
     worktreeStatusSnapshotKey,
   ]);
 
@@ -260,15 +203,15 @@ export function useAgentStudioGitConflictController({
       dispatch({
         type: "capture_conflict",
         conflict,
-        worktreeKey,
+        directoryKey,
         snapshotKey: worktreeStatusSnapshotKey,
       });
     },
-    [worktreeKey, worktreeStatusSnapshotKey],
+    [directoryKey, worktreeStatusSnapshotKey],
   );
 
   const abortGitConflict = useCallback(async (): Promise<void> => {
-    if (!activeGitConflict || state.isHandlingGitConflict) {
+    if (!activeGitConflict || reservation.current) {
       return;
     }
 
@@ -277,92 +220,221 @@ export function useAgentStudioGitConflictController({
       return;
     }
 
+    if (!activeGitConflict.operation || !activeGitConflict.workingDir) {
+      setRebaseError("Restore the Git conflict operation and directory before aborting.");
+      return;
+    }
+    reservation.current = true;
+    const version = selection.current.version;
     dispatch({ type: "start_action", action: "abort" });
     try {
       await host.gitAbortConflict(
         repoPath,
         activeGitConflict.operation,
-        activeGitConflict.workingDir ?? workingDir ?? undefined,
+        activeGitConflict.workingDir,
       );
-      clearActionErrors();
-      dispatch({ type: "clear_local_conflict", closeModal: true });
-      toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
+      if (selection.current.version === version && selection.current.mounted) {
+        clearActionErrors();
+        dispatch({ type: "clear_local_conflict", closeModal: true });
+        toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
+      }
 
       try {
         await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(error, "Git conflict was aborted, but diff refresh failed.");
-        setRebaseError(message);
-        toast.error("Conflict aborted but refresh failed", {
-          description: message,
-        });
+        if (selection.current.version === version && selection.current.mounted) {
+          setRebaseError(message);
+          toast.error("Conflict aborted but refresh failed", { description: message });
+        }
       }
     } catch (error) {
       const message = toErrorMessage(error, "Failed to abort the git conflict.");
-      setRebaseError(message);
-      toast.error(getGitConflictCopy(activeGitConflict.operation).abortFailureTitle, {
-        description: message,
-      });
+      if (selection.current.version === version && selection.current.mounted) {
+        setRebaseError(message);
+        toast.error(getGitConflictCopy(activeGitConflict.operation).abortFailureTitle, {
+          description: message,
+        });
+      }
     } finally {
+      reservation.current = false;
       dispatch({ type: "finish_action" });
     }
-  }, [
-    activeGitConflict,
-    clearActionErrors,
-    refreshDiffData,
-    repoPath,
-    setRebaseError,
-    state.isHandlingGitConflict,
-    workingDir,
-  ]);
+  }, [activeGitConflict, clearActionErrors, refreshDiffData, repoPath, setRebaseError]);
 
-  const askBuilderToResolveGitConflict = useCallback(async (): Promise<void> => {
-    if (!activeGitConflict || state.isHandlingGitConflict) {
+  const askForHelp = useCallback(async (): Promise<void> => {
+    if (!activeGitConflict || reservation.current) {
       return;
     }
 
     if (!onResolveGitConflict) {
-      setRebaseError("Cannot send conflict resolution request to Builder.");
+      setRebaseError(
+        `Cannot contact ${conflictRecipientLabel}. Select a saved chat and try again.`,
+      );
       return;
     }
 
+    if (
+      conflictAssistanceBlockedReason ||
+      !activeGitConflict.operation ||
+      !activeGitConflict.workingDir
+    ) {
+      setRebaseError(
+        conflictAssistanceBlockedReason ??
+          "Restore the Git conflict operation and directory before asking for assistance.",
+      );
+      return;
+    }
+    reservation.current = true;
+    const version = selection.current.version;
+    const assertCurrent = () => {
+      if (!selection.current.mounted || selection.current.version !== version)
+        throw new GitConflictRequestCancelled();
+    };
     dispatch({ type: "start_action", action: "ask_builder" });
     try {
-      const wasHandled = await onResolveGitConflict(activeGitConflict);
-      if (!wasHandled) {
-        return;
-      }
+      const receipt = await onResolveGitConflict(activeGitConflict, assertCurrent);
+      assertCurrent();
+      if (!receipt) return;
       clearActionErrors();
-      toast.success(getGitConflictCopy(activeGitConflict.operation).builderSuccessTitle);
+      if (receipt.postAcceptanceFailure) {
+        setRebaseError(
+          `The agent accepted the message, but a later host step failed: ${receipt.postAcceptanceFailure}`,
+        );
+        toast.error(`Message accepted by ${conflictRecipientLabel}; host step failed`, {
+          description: receipt.postAcceptanceFailure,
+        });
+      } else {
+        toast.success(
+          receipt.acceptedMessage.state === "queued"
+            ? `Queued git conflict resolution request for ${conflictRecipientLabel}`
+            : `Sent git conflict resolution request to ${conflictRecipientLabel}`,
+        );
+      }
     } catch (error) {
+      if (
+        error instanceof GitConflictRequestCancelled ||
+        selection.current.version !== version ||
+        !selection.current.mounted
+      )
+        return;
       const message = toErrorMessage(
         error,
-        getGitConflictCopy(activeGitConflict.operation).builderFailureMessage,
+        `Failed to contact ${conflictRecipientLabel}. Reopen the chat and try again.`,
       );
       setRebaseError(message);
-      toast.error("Failed to contact Builder", { description: message });
+      toast.error(`Failed to contact ${conflictRecipientLabel}`, { description: message });
     } finally {
+      reservation.current = false;
       dispatch({ type: "finish_action" });
     }
   }, [
     activeGitConflict,
     clearActionErrors,
     onResolveGitConflict,
+    conflictAssistanceBlockedReason,
+    conflictRecipientLabel,
     setRebaseError,
-    state.isHandlingGitConflict,
   ]);
 
   return {
     activeGitConflict,
-    isHandlingGitConflict: state.isHandlingGitConflict,
-    gitConflictAction: state.gitConflictAction,
-    gitConflictAutoOpenNonce: state.gitConflictAutoOpenNonce,
-    gitConflictCloseNonce: state.gitConflictCloseNonce,
+    isHandlingGitConflict,
+    gitConflictAction: state.action,
+    gitConflictAutoOpenNonce: state.openNonce,
+    gitConflictCloseNonce: state.closeNonce,
     isGitActionsLocked,
     gitActionsLockReason,
     showLockReasonBanner,
     captureFreshConflict,
     abortGitConflict,
-    askBuilderToResolveGitConflict,
+    askBuilderToResolveGitConflict: askForHelp,
   };
+}
+
+const initialState: ConflictState = {
+  localConflict: null,
+  directoryKey: null,
+  snapshotKey: null,
+  action: null,
+  openNonce: 0,
+  closeNonce: 0,
+};
+
+const sameFiles = (left: string[], right: string[]): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const sortedLeft = left.toSorted();
+  const sortedRight = right.toSorted();
+
+  return sortedLeft.every((filePath, index) => filePath === sortedRight[index]);
+};
+
+const sameConflict = (left: GitConflict, right: GitConflict): boolean => {
+  return (
+    left.operation === right.operation &&
+    left.currentBranch === right.currentBranch &&
+    left.targetBranch === right.targetBranch &&
+    left.output === right.output &&
+    left.workingDir === right.workingDir &&
+    sameFiles(left.conflictedFiles, right.conflictedFiles)
+  );
+};
+
+function reducer(state: ConflictState, event: ConflictEvent): ConflictState {
+  switch (event.type) {
+    case "capture_conflict":
+      return {
+        ...state,
+        localConflict: event.conflict,
+        directoryKey: event.directoryKey,
+        snapshotKey: event.snapshotKey,
+        openNonce: state.openNonce + 1,
+      };
+    case "replace_conflicted_files":
+      if (state.localConflict == null) {
+        return state;
+      }
+      return {
+        ...state,
+        localConflict: {
+          ...state.localConflict,
+          conflictedFiles: event.conflictedFiles,
+        },
+        snapshotKey: event.snapshotKey,
+      };
+    case "replace_conflict":
+      return {
+        ...state,
+        localConflict: event.conflict,
+        snapshotKey: event.snapshotKey,
+      };
+    case "mark_snapshot_seen":
+      return {
+        ...state,
+        snapshotKey: event.snapshotKey,
+      };
+    case "clear_local_conflict":
+      return {
+        ...state,
+        localConflict: null,
+        directoryKey: null,
+        snapshotKey: null,
+        closeNonce: event.closeModal ? state.closeNonce + 1 : state.closeNonce,
+      };
+    case "start_action":
+      return {
+        ...state,
+        action: event.action,
+      };
+    case "finish_action":
+      return {
+        ...state,
+        action: null,
+      };
+    default:
+      return state;
+  }
 }

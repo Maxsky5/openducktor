@@ -76,7 +76,7 @@ export type GitConflictOperation =
 export type GitConflictAction = "abort" | "ask_builder" | null;
 
 export type GitConflict = {
-  operation: GitConflictOperation;
+  operation: GitConflictOperation | null;
   currentBranch: string | null;
   targetBranch: string;
   conflictedFiles: string[];

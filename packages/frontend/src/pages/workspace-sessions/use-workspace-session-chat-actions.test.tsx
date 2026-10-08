@@ -12,7 +12,7 @@ import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentMessageSendReceipt, AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { createSendAgentMessage } from "@/state/operations/agent-orchestrator/handlers/send-agent-message";
@@ -27,6 +27,138 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import * as sessionChat from "./workspace-session-chat";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
+import { requestWorkspaceGitConflictAssistance } from "./workspace-git-conflict-assistance";
+import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+
+test.each(["local_repo_root", "local_worktree"] as const)(
+  "conflict assistance sends to the selected saved %s chat",
+  async (kind) => {
+    const directory = kind === "local_repo_root" ? "/repo" : "/repo/saved-worktree/";
+    const record: WorkspaceSession = {
+      ...createWorkspaceSessionRecord(),
+      externalSessionId: "selected-chat",
+      executionTarget:
+        kind === "local_repo_root"
+          ? { kind, workingDirectory: directory }
+          : { kind, workingDirectory: directory, branchName: "work", worktreeState: "present" },
+    };
+    const identity = workspaceSessionIdentity(record)!;
+    const receipt = createAgentMessageSendReceipt(identity);
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(async () => receipt);
+    const view = renderChatPanes(
+      record,
+      async () => {
+        throw new Error("Unexpected draft startup");
+      },
+      createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+    );
+    const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+    try {
+      let accepted: AgentMessageSendReceipt | false | undefined;
+      await act(async () => {
+        accepted = await requestWorkspaceGitConflictAssistance({
+          workspace,
+          record,
+          actions: {
+            workspace,
+            record,
+            send: view.actions.sendStandaloneMessage,
+            assertCanSubmit: () => {},
+            blockedReason: null,
+            isStarting: false,
+          },
+          conflict: {
+            operation: "direct_merge_squash",
+            workingDir: directory,
+            currentBranch: "work",
+            targetBranch: "main",
+            conflictedFiles: ["src/file.ts"],
+            output: "CONFLICT in src/file.ts",
+          },
+          assertCurrent: () => {},
+        });
+      });
+      expect(accepted).toEqual(receipt);
+      const parts = send.mock.calls[0]?.[1];
+      const text = parts?.[0]?.kind === "text" ? parts[0].text : "";
+      expect(text).toContain(`Working directory: ${directory}`);
+      expect(text).toContain("direct squash merge");
+      expect(text).toContain("src/file.ts");
+      expect(send).toHaveBeenCalledWith(
+        identity,
+        expect.any(Array),
+        expect.objectContaining({
+          sessionScope: { kind: "repository" },
+          assertCanSubmit: expect.any(Function),
+        }),
+      );
+    } finally {
+      view.dispose();
+    }
+  },
+);
+
+test.each([false, true])(
+  "a late draft startup remains saved without sending after context changes, workspace changed=%s",
+  async (workspaceChanged) => {
+    const record = createWorkspaceSessionRecord();
+    const bound = { ...record, externalSessionId: "started-draft" };
+    const startup = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const send = mock(async () => createAgentMessageSendReceipt(workspaceSessionIdentity(bound)!));
+    const view = renderChatPanes(
+      record,
+      async () => {
+        entered.resolve();
+        await startup.promise;
+        return { session: bound, runtimeSession: null };
+      },
+      createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+    );
+    let current = true;
+    let outcome: unknown;
+    let pending!: Promise<void>;
+    try {
+      act(() => {
+        pending = view.actions
+          .sendStandaloneMessage([{ kind: "text", text: "Resolve conflict" }], {
+            assertCurrent: () => {
+              if (!current) throw new GitConflictRequestCancelled();
+            },
+          })
+          .then(
+            () => {},
+            (cause) => {
+              outcome = cause;
+            },
+          );
+      });
+      await entered.promise;
+      current = false;
+      view.select({ ...record, id: "other-chat" });
+      if (workspaceChanged) view.store.resetWorkspace("/other");
+      await act(async () => {
+        startup.resolve();
+        await pending;
+      });
+      expect(outcome).toBeInstanceOf(GitConflictRequestCancelled);
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        view.queryClient.getQueryData<WorkspaceSession[]>(
+          workspaceSessionQueryKeys.list("workspace", false),
+        ),
+      ).toEqual([bound]);
+      expect(view.store.listSessionSnapshots().map((session) => session.externalSessionId)).toEqual(
+        workspaceChanged ? [] : ["started-draft"],
+      );
+    } finally {
+      startup.resolve();
+      view.dispose();
+    }
+  },
+);
 
 const createWorkspaceSessionRecord = (): WorkspaceSession => ({
   id: "draft",
@@ -103,7 +235,7 @@ test.each([
     session: { ...record, externalSessionId: "native" },
     runtimeSession: null,
   }));
-  const send = mock(async () => {});
+  const send = mock(async () => null);
   const view = renderChatPanes(
     record,
     start,
@@ -161,6 +293,7 @@ test.each([
   });
   const send = mock(async () => {
     if (phase === "send") await pending.promise;
+    return null;
   });
   const failure = spyOn(toast, "error").mockImplementation(() => "failure");
   const view = renderChatPanes(
@@ -235,7 +368,10 @@ test.each([
     async () => {
       throw new Error("Unexpected start");
     },
-    createOperations({ sendAgentMessage: async () => {}, continueInterruptedTurn: resume }),
+    createOperations({
+      sendAgentMessage: async () => null,
+      continueInterruptedTurn: resume,
+    }),
   );
   try {
     act(() =>
@@ -320,6 +456,7 @@ test.each([
     const operations = createOperations({
       sendAgentMessage: async () => {
         if (action !== "start") await pending.promise;
+        return null;
       },
       continueInterruptedTurn: async () => {},
     });
@@ -384,13 +521,11 @@ test.each([
       expect(actions.isSending).toBe(false);
       expect(actions.isStarting).toBe(false);
       expect(actions.isSavingModel).toBe(false);
-      expect(actions.error).toBe(
-        workspaceChanged
-          ? "Workspace changed while starting the chat. Reopen the chat to send your draft."
-          : outcome === "rejected"
-            ? "Request failed"
-            : null,
-      );
+      if (workspaceChanged)
+        expect(actions.error).toBe(
+          "The original chat is no longer available. Reopen it to send your draft.",
+        );
+      else expect(actions.error).toBe(outcome === "rejected" ? "Request failed" : null);
       if (action !== "model")
         expect(await sendResult).toBe(outcome === "accepted" && !workspaceChanged);
       if (workspaceChanged) expect(store.listSessionSnapshots()).toEqual([]);
@@ -572,7 +707,7 @@ test("blocks a second resume selection before the first one settles", async () =
   let resolveContinuation = (): void => {};
   let continuations = 0;
   const operations = createOperations({
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: () => {
       continuations += 1;
       return new Promise<void>((resolve) => {
@@ -644,7 +779,7 @@ test("shows the host reason and next action when a continuation is refused", asy
   const store = createAgentSessionsStore("/repo");
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const operations = createOperations({
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => {
       throw failure;
     },
@@ -704,7 +839,7 @@ test("keeps an unconfirmed continuation failure after the Resume action settles"
   const store = createAgentSessionsStore("/repo");
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const operations = createOperations({
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => {
       throw failure;
     },
@@ -788,7 +923,7 @@ test("clears an unconfirmed continuation failure when the transcript settles", a
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const operations = createOperations({
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => {
       throw failure;
     },

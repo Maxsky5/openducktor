@@ -1826,7 +1826,7 @@ describe("useTaskApprovalFlow", () => {
         workingDir: "/repo/.worktrees/task-1",
       }),
     );
-    const onResolveGitConflictMock = mock(async () => false);
+    const onResolveGitConflictMock = mock(async () => false as const);
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(

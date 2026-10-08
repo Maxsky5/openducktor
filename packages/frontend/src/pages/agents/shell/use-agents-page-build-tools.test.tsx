@@ -27,7 +27,7 @@ const snapshotMock = mock<BuildToolsSnapshotModule["useAgentStudioBuildToolsWork
 const gitActionsMock = mock<GitActionsModule["useAgentStudioGitActions"]>(
   () => gitActionsState.current,
 );
-const resolveGitConflict = mock(async () => true);
+const resolveGitConflict = mock(async () => false as const);
 
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: { workspaceId: "workspace-repo", workspaceName: "Repo", repoPath: "/repo" },

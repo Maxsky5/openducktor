@@ -55,7 +55,7 @@ const createRunSessionStartWorkflow = (
     queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     ...overrides,
   });
 
@@ -821,7 +821,7 @@ describe("useKanbanSessionStartFlow", () => {
   test("human review feedback opens the shared start modal with reuse selected by default when builder sessions exist", async () => {
     const humanRequestChangesTask = mock(async () => {});
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       humanRequestChangesTask,

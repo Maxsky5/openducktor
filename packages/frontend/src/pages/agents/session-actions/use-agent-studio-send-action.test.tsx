@@ -117,7 +117,7 @@ const createBaseArgs = (): HookArgs => ({
   isStarting: false,
   selectedModelDescriptor,
   supportsAttachments: true,
-  sendAgentMessage: async () => {},
+  sendAgentMessage: async () => null,
   startSession: async () => sessionWorkflowResult("session-new"),
 });
 
@@ -134,7 +134,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("guard rejection does not start a session or send a message", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
@@ -156,7 +156,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("rejects stale system compaction before starting a new session", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       selectedSessionIdentity: null,
@@ -177,7 +177,7 @@ describe("useAgentStudioSendAction", () => {
   });
 
   test("sends system compaction to an existing Claude session", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const claudeSession = {
       externalSessionId: "claude-session",
       runtimeKind: "claude" as const,
@@ -205,7 +205,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("reports a reserved custom compact prompt without starting a repository session", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       selectedSessionIdentity: null,
@@ -228,7 +228,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("uses parent start policy only when a new session would be started", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
@@ -267,7 +267,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("blocks sends while the selected session model is not sendable", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       prepareSelectedSessionModelForSend: async () => false,
@@ -294,6 +294,7 @@ describe("useAgentStudioSendAction", () => {
     });
     const sendAgentMessage = mock(async () => {
       calls.push("send message");
+      return null;
     });
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
@@ -317,7 +318,7 @@ describe("useAgentStudioSendAction", () => {
   test("tracks a new-session send across draft and target session contexts", async () => {
     const sendDeferred = createDeferred<void>();
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
@@ -358,7 +359,7 @@ describe("useAgentStudioSendAction", () => {
   test("tracks a new-session send before session start resolves", async () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionWorkflowResult>>();
     const startSession = mock(() => startDeferred.promise);
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
@@ -391,7 +392,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("blocks concurrent sends in the same context before a render updates state", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
@@ -429,9 +430,9 @@ describe("useAgentStudioSendAction", () => {
     const firstSendDeferred = createDeferred<void>();
     const sendAgentMessage = mock((session: AgentSessionIdentity) => {
       if (session.externalSessionId === "session-existing") {
-        return firstSendDeferred.promise;
+        return firstSendDeferred.promise.then(() => null);
       }
-      return Promise.resolve();
+      return Promise.resolve(null);
     });
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const harness = createHookHarness(useAgentStudioSendAction, {
@@ -487,7 +488,7 @@ describe("useAgentStudioSendAction", () => {
   });
 
   test("attachment staging failures clear in-flight send state", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     hostClient.workspaceStageLocalAttachment = async () => {
       throw new Error("staging failed");
     };
@@ -514,7 +515,7 @@ describe("useAgentStudioSendAction", () => {
       const stage = mock(() => staged.promise);
       hostClient.workspaceStageLocalAttachment = stage;
       const startSession = mock(async () => sessionWorkflowResult("never"));
-      const sendAgentMessage = mock(async () => {});
+      const sendAgentMessage = mock(async () => null);
       const args: HookArgs = {
         ...createBaseArgs(),
         selectedSessionIdentity: null,

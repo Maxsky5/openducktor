@@ -116,9 +116,18 @@ describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
         adapter,
         sessionsRef,
       });
-      await expect(
-        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Hello" }]),
-      ).resolves.toBeUndefined();
+      const receipt = await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "Hello" },
+      ]);
+      expect(receipt).toMatchObject({
+        recipient: {
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        acceptedMessage: { messageId: "accepted-user-message", message: "Hello" },
+        postAcceptanceFailure: "The runtime accepted the message, but the session update failed.",
+      });
       const current = getSession(sessionsRef);
       expect(sends).toBe(1);
       expect(current).toMatchObject({

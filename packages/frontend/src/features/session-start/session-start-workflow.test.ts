@@ -14,7 +14,7 @@ type SendAgentMessage = NonNullable<Parameters<typeof startSessionWorkflow>[0]["
 const createSendAgentMessageMock = () =>
   mock(
     async (_session: Parameters<SendAgentMessage>[0], _segments: Parameters<SendAgentMessage>[1]) =>
-      undefined,
+      null,
   );
 
 const BUILD_SELECTION = {
@@ -50,6 +50,7 @@ test("registers a fresh Codex session before sending its kickoff", async () => {
   });
   const sendAgentMessage = mock(async () => {
     order.push("kickoff");
+    return null;
   });
 
   await startSessionWorkflow({
@@ -657,7 +658,7 @@ describe("session-start-workflow", () => {
     });
     const sendAgentMessage = mock(async () => {
       resolveSendStarted();
-      return sendFinished;
+      return sendFinished.then(() => null);
     });
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
@@ -957,6 +958,7 @@ test("retry sends the retained kickoff to the created session without another st
   const start = mock(async () => sessionIdentity("kept"));
   const send = mock<SendAgentMessage>(async () => {
     if (fail) throw new Error("failed");
+    return null;
   });
   const result = await startSessionWorkflow({
     queryClient: new QueryClient(),

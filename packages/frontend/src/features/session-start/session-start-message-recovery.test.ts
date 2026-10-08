@@ -126,6 +126,7 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
     let failSend = true;
     const send = mock(async () => {
       if (failSend) throw new Error("First message failed");
+      return null;
     });
     const runSessionStartWorkflow = createSessionStartWorkflowRunner({
       queryClient: new QueryClient(),

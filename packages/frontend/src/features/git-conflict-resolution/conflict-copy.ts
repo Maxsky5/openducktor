@@ -70,8 +70,20 @@ const COPY_BY_OPERATION = {
   },
 } satisfies Record<GitConflictOperation, GitConflictCopy>;
 
-export const getGitConflictCopy = (operation: GitConflictOperation): GitConflictCopy =>
-  COPY_BY_OPERATION[operation];
+export const getGitConflictCopy = (operation: GitConflictOperation | null): GitConflictCopy =>
+  operation === null
+    ? {
+        title: "Git conflict operation unavailable",
+        inProgressLabel: "Git conflict detected",
+        operationLabel: "unidentified Git operation",
+        abortLabel: "Abort unavailable",
+        askBuilderLabel: "Ask Builder to resolve",
+        abortedToastTitle: "Git operation aborted",
+        abortFailureTitle: "Failed to abort Git operation",
+        builderSuccessTitle: "Sent git conflict resolution request to Builder",
+        builderFailureMessage: "Failed to contact Builder for git conflict resolution.",
+      }
+    : COPY_BY_OPERATION[operation];
 
 export const getGitConflictTitle = (conflict: GitConflict): string =>
   getGitConflictCopy(conflict.operation).title;

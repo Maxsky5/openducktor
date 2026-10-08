@@ -1,17 +1,21 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { useCallback } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import {
   type StartGitConflictResolutionSessionInput,
   useGitConflictResolution,
 } from "@/features/git-conflict-resolution";
+import {
+  GitConflictRequestCancelled,
+  type ResolveGitConflict,
+} from "@/features/git-conflict-resolution/conflict-assistance";
 import type {
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
 import {
@@ -29,6 +33,7 @@ type AgentStudioRebaseConflictResolutionSelectionContext = {
 
 type UseAgentStudioRebaseConflictResolutionArgs = {
   workspaceId: string | null;
+  assertSessionCanSend: NonNullable<AgentMessageSendOptions["assertCanSubmit"]>;
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   startSessionRequest: (
@@ -46,11 +51,12 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
-  handleResolveRebaseConflict: (conflict: GitConflict) => Promise<boolean>;
+  handleResolveRebaseConflict: ResolveGitConflict;
 };
 
 export function useAgentStudioRebaseConflictResolution({
   workspaceId,
+  assertSessionCanSend,
   selection,
   scheduleQueryUpdate,
   startSessionRequest,
@@ -73,6 +79,7 @@ export function useAgentStudioRebaseConflictResolution({
       if (request.initialSourceSession !== undefined) {
         input.initialSourceSession = request.initialSourceSession;
       }
+      if (request.assertCanSubmit) input.assertCanSubmit = request.assertCanSubmit;
       return startSessionRequest(input);
     },
     [startSessionRequest],
@@ -84,9 +91,30 @@ export function useAgentStudioRebaseConflictResolution({
     loadPromptOverrides,
   });
   const { view } = selection;
+  const selectionKey = JSON.stringify([workspaceId, view.taskId, view.selectedSession.identity]);
+  const current = useRef({ key: selectionKey, version: 0 });
+  const opening = useRef<{ key: string; request: { version: number } } | null>(null);
+  useLayoutEffect(() => {
+    if (current.current.key === selectionKey) return;
+    const version = current.current.version + 1;
+    // Only the request that opens this Builder can keep its failed-message retry.
+    if (
+      opening.current?.key === selectionKey &&
+      opening.current.request.version === current.current.version
+    ) {
+      opening.current.request.version = version;
+    }
+    opening.current = null;
+    current.current = { key: selectionKey, version };
+  }, [selectionKey]);
 
   const handleResolveRebaseConflict = useCallback(
-    async (conflict: GitConflict): Promise<boolean> => {
+    async (conflict: GitConflict, ownerGuard = () => {}) => {
+      const request = { version: current.current.version };
+      const assertCurrent = () => {
+        ownerGuard();
+        if (current.current.version !== request.version) throw new GitConflictRequestCancelled();
+      };
       if (!view.taskId) {
         throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
@@ -97,25 +125,37 @@ export function useAgentStudioRebaseConflictResolution({
       });
       const defaultBuilderSession = builderSessions[0] ?? null;
 
-      return handleResolveGitConflict(conflict, {
-        taskId: view.taskId,
-        task: view.selectedTask,
-        builderSessions,
-        currentViewSession: view.role === "build" ? view.selectedSession.identity : null,
-        onOpenSession: (session) => {
-          const builderSession =
-            builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
-          scheduleQueryUpdate(
-            buildAgentStudioSelectionQueryUpdate({
-              taskId: view.taskId,
-              session: toAgentSessionIdentity(session),
-              role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
-            }),
-          );
+      return handleResolveGitConflict(
+        conflict,
+        {
+          taskId: view.taskId,
+          task: view.selectedTask,
+          builderSessions,
+          currentViewSession: view.role === "build" ? view.selectedSession.identity : null,
+          onOpenSession: (session) => {
+            assertCurrent();
+            const identity = toAgentSessionIdentity(session);
+            const key = JSON.stringify([workspaceId, view.taskId, identity]);
+            opening.current = key === current.current.key ? null : { key, request };
+            const builderSession =
+              builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
+            scheduleQueryUpdate(
+              buildAgentStudioSelectionQueryUpdate({
+                taskId: view.taskId,
+                session: identity,
+                role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
+              }),
+            );
+          },
         },
-      });
+        (session) => {
+          assertCurrent();
+          assertSessionCanSend(session);
+        },
+        assertCurrent,
+      );
     },
-    [handleResolveGitConflict, scheduleQueryUpdate, view],
+    [handleResolveGitConflict, scheduleQueryUpdate, view, assertSessionCanSend, workspaceId],
   );
 
   return {

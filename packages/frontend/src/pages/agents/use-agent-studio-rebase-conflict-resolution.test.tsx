@@ -1,6 +1,16 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, type Mock, mock, test } from "bun:test";
+import { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@/features/agent-studio-git";
+import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
+import {
+  type SendAgentMessage,
+  type SessionStartWorkflowIntent,
+  type SessionStartWorkflowResult,
+  startSessionWorkflow,
+} from "@/features/session-start/session-start-workflow";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createAgentSessionSummaryFixture,
@@ -22,6 +32,11 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
   postStartActionError: null,
+  postStartMessageReceipt: createAgentMessageSendReceipt({
+    externalSessionId,
+    runtimeKind: "opencode",
+    workingDirectory: `/repo/worktrees/${externalSessionId}`,
+  }),
 });
 
 const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
@@ -92,6 +107,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
 
   return {
     workspaceId: "workspace-repo",
+    assertSessionCanSend: () => {},
     selection: {
       view: {
         taskId: "task-1",
@@ -115,6 +131,171 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
 };
 
 describe("useAgentStudioRebaseConflictResolution", () => {
+  test("retries a failed conflict message after opening its Builder", async () => {
+    const retry = createRetryHarness();
+    try {
+      await retry.harness.mount();
+      const workflow = await retry.start();
+      const builder = toAgentSessionIdentity(workflow);
+      expect(retry.args.scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-1",
+        session: builder.externalSessionId,
+        runtimeKind: builder.runtimeKind,
+        workingDirectory: "/repo/worktrees/task-1",
+        agent: "build",
+      });
+
+      await retry.select(builder);
+      await workflow.retryPostStartMessage?.();
+
+      expect(retry.send).toHaveBeenCalledTimes(2);
+      expect(retry.send.mock.calls[1]).toEqual(retry.send.mock.calls[0]);
+      expect(retry.send.mock.calls[1]?.[0]).toEqual(builder);
+      expect(retry.send.mock.calls[1]?.[1]).toEqual([
+        { kind: "text", text: expect.stringContaining("src/conflict.ts") },
+      ]);
+    } finally {
+      await retry.close();
+    }
+  });
+
+  const changes: {
+    name: string;
+    apply: (args: HookArgs, builder: AgentSessionIdentity) => HookArgs;
+  }[] = [
+    { name: "workspace", apply: (args) => ({ ...args, workspaceId: "other-workspace" }) },
+    {
+      name: "task",
+      apply: (args) => ({
+        ...args,
+        selection: { view: { ...args.selection.view, taskId: "other-task" } },
+      }),
+    },
+    ...(
+      [
+        { name: "chat", identity: { externalSessionId: "other-builder" } },
+        { name: "runtime", identity: { runtimeKind: "claude" as const } },
+        { name: "directory", identity: { workingDirectory: "/repo/worktrees/other" } },
+        { name: "missing chat", identity: null },
+      ] as const
+    ).map(({ name, identity }) => ({
+      name,
+      apply: (args: HookArgs, builder: AgentSessionIdentity): HookArgs => ({
+        ...args,
+        selection: {
+          view: {
+            ...args.selection.view,
+            selectedSession: createSelectedSession({
+              identity: identity ? { ...builder, ...identity } : null,
+            }),
+          },
+        },
+      }),
+    })),
+  ];
+  test.each(
+    changes.flatMap((change) =>
+      [false, true].map((opened) => ({
+        ...change,
+        opened,
+        when: opened ? "after" : "before",
+      })),
+    ),
+  )("stops retry after a $name change $when opening the Builder", async ({ apply, opened }) => {
+    const retry = createRetryHarness();
+    try {
+      await retry.harness.mount();
+      const workflow = await retry.start();
+      const builder = toAgentSessionIdentity(workflow);
+      if (opened) await retry.select(builder);
+
+      await retry.harness.update(
+        apply(
+          {
+            ...retry.args,
+            selection: {
+              view: {
+                ...retry.args.selection.view,
+                role: "build",
+                selectedSession: createSelectedSession({ identity: builder }),
+              },
+            },
+          },
+          builder,
+        ),
+      );
+      await retry.select(builder);
+      await expect(workflow.retryPostStartMessage?.()).rejects.toBeInstanceOf(
+        GitConflictRequestCancelled,
+      );
+      expect(retry.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await retry.close();
+    }
+  });
+
+  test("a later Builder request does not restore an older retry", async () => {
+    const retry = createRetryHarness();
+    try {
+      await retry.harness.mount();
+      const first = await retry.start();
+      await retry.select(toAgentSessionIdentity(first));
+      const second = await retry.start();
+      await retry.select(toAgentSessionIdentity(second));
+
+      await expect(first.retryPostStartMessage?.()).rejects.toBeInstanceOf(
+        GitConflictRequestCancelled,
+      );
+      expect(retry.send).toHaveBeenCalledTimes(2);
+      await second.retryPostStartMessage?.();
+      expect(retry.send).toHaveBeenCalledTimes(3);
+      expect(retry.send.mock.calls[2]?.[0]).toEqual(toAgentSessionIdentity(second));
+    } finally {
+      await retry.close();
+    }
+  });
+
+  test("checks the live send policy on retry after opening the Builder", async () => {
+    const denied = new Error("Answer the Builder question before sending.");
+    let blocked = false;
+    const retry = createRetryHarness({
+      assertSessionCanSend: () => {
+        if (blocked) throw denied;
+      },
+    });
+    try {
+      await retry.harness.mount();
+      const workflow = await retry.start();
+      await retry.select(toAgentSessionIdentity(workflow));
+      blocked = true;
+
+      await expect(workflow.retryPostStartMessage?.()).rejects.toThrow(denied);
+      expect(retry.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await retry.close();
+    }
+  });
+
+  test("checks the conflict owner on retry after opening the Builder", async () => {
+    const retry = createRetryHarness();
+    let cancelled = false;
+    try {
+      await retry.harness.mount();
+      const workflow = await retry.start(() => {
+        if (cancelled) throw new GitConflictRequestCancelled();
+      });
+      await retry.select(toAgentSessionIdentity(workflow));
+      cancelled = true;
+
+      await expect(workflow.retryPostStartMessage?.()).rejects.toBeInstanceOf(
+        GitConflictRequestCancelled,
+      );
+      expect(retry.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await retry.close();
+    }
+  });
+
   test("routes conflict resolution through the shared session-start request", async () => {
     const args = createBaseArgs({
       startSessionRequest: mock(async () => sessionWorkflowResult("build-1")),
@@ -126,7 +307,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: "task-1",
@@ -179,7 +362,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           existingSessionOptions: [
@@ -228,7 +413,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
@@ -271,7 +458,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "fresh",
@@ -363,7 +552,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      expect(resolved).toBe(true);
+      expect(resolved).toEqual(
+        expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
+      );
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
@@ -401,3 +592,98 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     }
   });
 });
+
+type RetryHarness = {
+  args: HookArgs;
+  harness: ReturnType<typeof createHookHarness>;
+  send: Mock<SendAgentMessage>;
+  start: (ownerGuard?: () => void) => Promise<SessionStartWorkflowResult>;
+  select: (identity: AgentSessionIdentity) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+function createRetryHarness(
+  overrides: Partial<Pick<HookArgs, "assertSessionCanSend">> = {},
+): RetryHarness {
+  const queryClient = new QueryClient();
+  const failure = new Error("Transport rejected the first message");
+  const failed = new Set<string>();
+  const send = mock<SendAgentMessage>(async (session) => {
+    const key = agentSessionIdentityKey(session);
+    if (!failed.has(key)) {
+      failed.add(key);
+      throw failure;
+    }
+    return createAgentMessageSendReceipt(session);
+  });
+  const workflows: SessionStartWorkflowResult[] = [];
+  const base = createBaseArgs();
+  const args = createBaseArgs({
+    ...overrides,
+    selection: { view: { ...base.selection.view, sessionsForTask: [] } },
+    startSessionRequest: async (request) => {
+      const builder = createAgentSessionFixture({
+        externalSessionId: `build-new-${workflows.length + 1}`,
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "idle",
+      });
+      const intent: SessionStartWorkflowIntent = {
+        taskId: request.taskId,
+        role: request.role,
+        launchActionId: request.launchActionId,
+        startMode: request.initialStartMode ?? "fresh",
+        sourceSession: request.initialSourceSession ?? null,
+        targetWorkingDirectory: request.targetWorkingDirectory ?? null,
+        postStartAction: request.postStartAction,
+        message: request.message,
+      };
+      if (request.assertCanSubmit) intent.assertCanSubmit = request.assertCanSubmit;
+      const workflow = await startSessionWorkflow({
+        queryClient,
+        workspaceId: args.workspaceId,
+        task: args.selection.view.selectedTask,
+        selection: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+        intent,
+        startAgentSession: async () => toAgentSessionIdentity(builder),
+        sendAgentMessage: async (session, parts, options) => {
+          options?.assertCanSubmit?.(builder);
+          return send(session, parts);
+        },
+      });
+      workflows.push(workflow);
+      return workflow;
+    },
+  });
+  const harness = createHookHarness(args);
+  return {
+    args,
+    harness,
+    send,
+    start: async (ownerGuard?: () => void): Promise<SessionStartWorkflowResult> => {
+      await expect(
+        harness.getLatest().handleResolveRebaseConflict(createConflict(), ownerGuard),
+      ).rejects.toThrow(failure);
+      const workflow = workflows.at(-1);
+      if (!workflow?.retryPostStartMessage) throw new Error("Message retry is missing");
+      return workflow;
+    },
+    select: async (identity: AgentSessionIdentity): Promise<void> => {
+      await harness.update({
+        ...args,
+        selection: {
+          view: {
+            ...args.selection.view,
+            role: "build",
+            selectedSession: createSelectedSession({ identity }),
+          },
+        },
+      });
+    },
+    close: async (): Promise<void> => {
+      await harness.unmount();
+      queryClient.clear();
+    },
+  };
+}

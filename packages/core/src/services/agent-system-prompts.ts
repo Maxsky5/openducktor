@@ -3,6 +3,7 @@ import {
   type AgentPromptPlaceholder,
   type AgentPromptTemplateId,
   type GitTargetBranch,
+  type GitConflictOperation,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
@@ -58,6 +59,76 @@ export type AgentPromptGitContext = {
   targetBranch?: string;
   conflictedFiles?: string[];
   conflictOutput?: string;
+};
+
+export type GitConflictRequestContext = {
+  operation: GitConflictOperation;
+  workingDirectory: string;
+  currentBranch: string | null;
+  targetBranch: string | null;
+  conflictedFiles: readonly string[];
+  conflictOutput: string | null;
+};
+
+const GIT_CONFLICT_INSTRUCTIONS = [
+  "Resolve the conflicts below and finish the interrupted git operation.",
+  "Before editing, inspect the live git state and relevant history. Understand the intent of both sides, preserve compatible changes, and avoid unrelated edits.",
+  "Make only the changes needed to resolve the conflicts, then run the relevant checks. If you cannot finish safely, explain the blocker and stop. Do not abort the git operation unless explicitly asked.",
+  "When finished, summarize what you resolved and which checks passed.",
+].join("\n\n");
+
+const GIT_CONFLICT_OPERATION_LABELS = {
+  rebase: "rebase",
+  pull_rebase: "pull with rebase",
+  direct_merge_merge_commit: "direct merge with a merge commit",
+  direct_merge_squash: "direct squash merge",
+  direct_merge_rebase: "direct merge with rebase",
+} satisfies Record<GitConflictOperation, string>;
+
+/** Required facts stay outside custom task text so overrides cannot drop the target. */
+export const buildGitConflictAssistancePrompt = (input: {
+  git: GitConflictRequestContext;
+  task?: { context: BuildAgentMessagePromptInput["task"]; overrides: RepoPromptOverrides };
+}): string => {
+  const { git, task } = input;
+  if (!git.operation || !git.workingDirectory.trim()) {
+    throw new Error(
+      "Restore the Git conflict operation and working directory before asking for assistance.",
+    );
+  }
+  const operationLabel = GIT_CONFLICT_OPERATION_LABELS[git.operation];
+  const available = (value: string | null) => value?.trim() || "Unavailable";
+  const instructions = task
+    ? buildAgentMessagePrompt({
+        role: "build",
+        templateId: "message.build_rebase_conflict_resolution",
+        task: task.context,
+        overrides: task.overrides,
+        git: {
+          operationLabel,
+          currentBranch: available(git.currentBranch),
+          targetBranch: available(git.targetBranch),
+          conflictedFiles: [...git.conflictedFiles],
+          conflictOutput: available(git.conflictOutput),
+        },
+      })
+    : GIT_CONFLICT_INSTRUCTIONS;
+  return [
+    instructions,
+    [
+      "Git conflict context",
+      `- Operation: ${operationLabel}`,
+      `- Working directory: ${git.workingDirectory}`,
+      `- Current branch: ${available(git.currentBranch)}`,
+      `- Target branch: ${available(git.targetBranch)}`,
+      "- Conflicted files:",
+      git.conflictedFiles.length
+        ? git.conflictedFiles.map((path) => `  - ${path}`).join("\n")
+        : "  Unavailable",
+      "Git output:",
+      available(git.conflictOutput),
+    ].join("\n"),
+  ].join("\n\n");
 };
 
 export type AgentMessageTemplateId = Extract<AgentPromptTemplateId, `message.${string}`>;
@@ -440,9 +511,9 @@ const AGENT_PROMPT_DEFINITIONS = {
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template: joinPromptBlocks(
-      "Resolve the conflicts below and finish the interrupted git operation.",
+      GIT_CONFLICT_INSTRUCTIONS,
       lineSection("Git context", [
         "- Operation: {{git.operationLabel}}",
         "- Current branch: {{git.currentBranch}}",
@@ -450,9 +521,6 @@ const AGENT_PROMPT_DEFINITIONS = {
         "- Conflicted files:",
         "{{git.conflictedFiles}}",
       ]),
-      "Before editing, inspect the live git state and relevant history. Understand the intent of both sides, preserve compatible changes, and avoid unrelated edits.",
-      "Make only the changes needed to resolve the conflicts, then run the relevant checks. If you cannot finish safely, explain the blocker and stop. Do not abort the git operation unless explicitly asked.",
-      "When finished, summarize what you resolved and which checks passed.",
       "Use taskId {{task.id}} for any task-bound odt_* tool calls.",
     ),
   },
@@ -730,35 +798,13 @@ export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): st
 export const buildAgentMessagePromptBundle = (
   input: BuildAgentMessagePromptInput,
 ): BuiltAgentPrompt => {
-  if (input.templateId === "message.build_rebase_conflict_resolution") {
-    const currentBranch = input.git?.currentBranch?.trim();
-    const operationLabel = input.git?.operationLabel?.trim();
-    const targetBranch = input.git?.targetBranch?.trim();
-    const conflictedFiles = input.git?.conflictedFiles;
-    const conflictOutput = input.git?.conflictOutput?.trim();
-    const missingFields: string[] = [];
-
-    if (!operationLabel) {
-      missingFields.push("operationLabel");
-    }
-    if (!currentBranch) {
-      missingFields.push("currentBranch");
-    }
-    if (!targetBranch) {
-      missingFields.push("targetBranch");
-    }
-    if (!Array.isArray(conflictedFiles) || conflictedFiles.length === 0) {
-      missingFields.push("conflictedFiles");
-    }
-    if (!conflictOutput) {
-      missingFields.push("conflictOutput");
-    }
-
-    if (missingFields.length > 0) {
-      throw new Error(
-        `Missing required git conflict context for "message.build_rebase_conflict_resolution": ${missingFields.join(", ")}.`,
-      );
-    }
+  if (
+    input.templateId === "message.build_rebase_conflict_resolution" &&
+    !input.git?.operationLabel?.trim()
+  ) {
+    throw new Error(
+      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel.',
+    );
   }
 
   const promptInput: Parameters<typeof buildPromptFromTemplates>[0] = {

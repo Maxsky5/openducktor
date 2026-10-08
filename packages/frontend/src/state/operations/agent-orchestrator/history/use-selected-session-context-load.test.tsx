@@ -59,7 +59,7 @@ describe("useSelectedSessionContextLoad", () => {
       startAgentSession: async () => {
         throw new Error("Not configured");
       },
-      sendAgentMessage: async () => undefined,
+      sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: async () => undefined,
@@ -116,7 +116,7 @@ describe("useSelectedSessionContextLoad", () => {
       startAgentSession: async () => {
         throw new Error("Not configured");
       },
-      sendAgentMessage: async () => undefined,
+      sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: async () => undefined,
@@ -170,7 +170,7 @@ describe("useSelectedSessionContextLoad", () => {
       startAgentSession: async () => {
         throw new Error("Not configured");
       },
-      sendAgentMessage: async () => undefined,
+      sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: async () => undefined,
@@ -226,7 +226,7 @@ describe("useSelectedSessionContextLoad", () => {
         startAgentSession: async () => {
           throw new Error("Not configured");
         },
-        sendAgentMessage: async () => undefined,
+        sendAgentMessage: async () => null,
         stopAgentSession: async () => undefined,
         continueInterruptedTurn: async () => undefined,
         updateAgentSessionModel: async () => undefined,
@@ -282,7 +282,7 @@ describe("useSelectedSessionContextLoad", () => {
       startAgentSession: async () => {
         throw new Error("Not configured");
       },
-      sendAgentMessage: async () => undefined,
+      sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: async () => undefined,

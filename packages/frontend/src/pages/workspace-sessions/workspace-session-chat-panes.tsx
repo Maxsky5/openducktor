@@ -1,14 +1,24 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
+import {
+  Activity,
+  memo,
+  type ReactElement,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 
 type ChatPane = {
@@ -17,6 +27,9 @@ type ChatPane = {
   workingDirectory: string | null;
   branchKey: string;
   onToolRefresh: () => void;
+  onActionsReady?:
+    | ((ownerKey: string, actions: WorkspaceConflictChatActions | null) => void)
+    | undefined;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
 };
 
@@ -24,7 +37,7 @@ type ChatPane = {
 export function WorkspaceSessionChatPanes({
   sessionIds,
   ...current
-}: ChatPane & { sessionIds: readonly string[] }) {
+}: ChatPane & { sessionIds: readonly string[] }): ReactElement {
   const [panes, setPanes] = useState<ChatPane[]>([]);
   const ids = new Set(sessionIds);
   const currentKey = chatPaneKey(current);
@@ -46,6 +59,7 @@ export function WorkspaceSessionChatPanes({
     last.workingDirectory !== current.workingDirectory ||
     last.branchKey !== current.branchKey ||
     last.onToolRefresh !== current.onToolRefresh ||
+    last.onActionsReady !== current.onActionsReady ||
     last.onSelectFile !== current.onSelectFile
   ) {
     setPanes(shown);
@@ -68,7 +82,7 @@ export function WorkspaceSessionChatPanes({
 const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   mode,
   ...pane
-}: ChatPane & { mode: "visible" | "hidden" }) {
+}: ChatPane & { mode: "visible" | "hidden" }): ReactElement {
   const [visit, setVisit] = useState({ mode, key: 0 });
   if (visit.mode !== mode) {
     setVisit({ mode, key: visit.key + (mode === "visible" ? 1 : 0) });
@@ -91,10 +105,6 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   );
 });
 
-function chatPaneKey(pane: ChatPane): string {
-  return `${pane.workspace.workspaceId}:${pane.record.id}`;
-}
-
 const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneContent({
   workspace,
   record,
@@ -104,7 +114,8 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
   branchKey,
   isMounted,
   visitKey,
-}: ChatPane & { isMounted: () => boolean; visitKey: number }) {
+  onActionsReady,
+}: ChatPane & { isMounted: () => boolean; visitKey: number }): ReactElement {
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
@@ -139,7 +150,12 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
         onToolRefresh={onToolRefresh}
         isMounted={isMounted}
         visitKey={visitKey}
+        onActionsReady={onActionsReady}
       />
     </ChatFileLinkProvider>
   );
 });
+
+function chatPaneKey(pane: ChatPane): string {
+  return `${pane.workspace.workspaceId}:${pane.record.id}`;
+}

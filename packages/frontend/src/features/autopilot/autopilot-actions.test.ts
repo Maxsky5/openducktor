@@ -635,6 +635,7 @@ describe("autopilot feature helpers", () => {
           firstKickoffStarted.resolve();
           await releaseFirstKickoff.promise;
         }
+        return null;
       },
     });
 

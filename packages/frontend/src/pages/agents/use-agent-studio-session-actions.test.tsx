@@ -149,7 +149,7 @@ const createRunSessionStartWorkflow = (
     queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     ...overrides,
   });
 
@@ -380,7 +380,7 @@ const createBaseArgs = (): HookArgs => {
       agentDefaults: { spec: null, planner: null, build: null, qa: null },
     },
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => undefined,
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
@@ -589,7 +589,7 @@ describe("useAgentStudioSessionActions", () => {
     const scheduleQueryUpdate = mock(() => {});
     const selectAgentStudioSelection = mock(() => {});
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       scheduleQueryUpdate,
@@ -723,7 +723,7 @@ describe("useAgentStudioSessionActions", () => {
       calls.push("start-session");
       return sessionIdentity("builder-rework-session");
     });
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
@@ -816,7 +816,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend starts session and sends trimmed message", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const draft = createComposerDraft("  hello world  ");
 
@@ -864,7 +864,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend reuses loaded session when one exists", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
@@ -893,7 +893,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend targets the selected session while the session state has not loaded it yet", async () => {
     const selectedSessionIdentity = sessionIdentity("session-selected");
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  selected-session follow-up  ");
 
@@ -921,7 +921,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend allows slash-command-only drafts without relying on serialized text", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
@@ -950,7 +950,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend expands reusable prompt slash commands to normal text with arguments", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
@@ -987,7 +987,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend appends reusable prompt arguments when no placeholder is present", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
@@ -1024,7 +1024,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend reports when a reusable prompt command is stale", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
@@ -1054,7 +1054,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend allows file-reference-only drafts without relying on serialized text", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
@@ -1083,7 +1083,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend allows busy follow-ups when the runtime supports queued user messages", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1124,7 +1124,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend allows queued follow-ups while a starting loaded session is being prepared", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1164,7 +1164,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend blocks busy follow-ups when the runtime does not support queued user messages", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1204,7 +1204,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend does not block busy follow-ups when runtime support must be resolved from definitions", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1231,7 +1231,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend blocks busy follow-ups when runtime support cannot be resolved", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1258,7 +1258,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend re-enables busy follow-ups when queued-message support becomes available", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1312,7 +1312,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend uses loaded session runtime support for busy follow-ups", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1353,7 +1353,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend does not send while the loaded session is waiting for answers", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
@@ -1397,7 +1397,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend marks the context as sending until the send settles", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
@@ -1426,7 +1426,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend clears sending state when send fails", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
@@ -1452,7 +1452,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend allows path-backed attachments when the selected model descriptor supports them", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       ...selectedSessionArgs({ externalSessionId: "session-existing" }),
@@ -1508,7 +1508,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend blocks path-backed attachments when the selected model descriptor rejects them", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       ...selectedSessionArgs({ externalSessionId: "session-existing" }),
@@ -1553,7 +1553,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("resets transient sending state when switching task context", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const taskOneDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
@@ -1604,7 +1604,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("restores the in-flight send state after switching away and back", async () => {
     const firstSendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => firstSendDeferred.promise);
+    const sendAgentMessage = mock(() => firstSendDeferred.promise.then(() => null));
     const firstDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
@@ -1661,7 +1661,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("blocks overlapping sends after returning to an in-flight session", async () => {
     const firstSendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => firstSendDeferred.promise);
+    const sendAgentMessage = mock(() => firstSendDeferred.promise.then(() => null));
     const firstDraft = createComposerDraft("  hello world  ");
     const secondDraft = createComposerDraft("second send");
     const taskOneSession = createSession({
@@ -1723,7 +1723,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("blocks fresh session creation while a loaded session send is in flight", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const loadedSession = createSession({
       externalSessionId: "session-existing",
@@ -1771,7 +1771,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("keeps sending state while a newly created session becomes selected", async () => {
     const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
@@ -1822,7 +1822,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend reuses loaded session when available", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const draft = createComposerDraft("  hello world  ");
     const existingSpecSession = createSession({
@@ -1987,7 +1987,7 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
     const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(async () => deferredStart.promise);
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -2165,7 +2165,7 @@ describe("direct prepared submission", () => {
     ["qa", "qa_review"],
   ] as const)("ignores an unrelated target branch error for %s", async (role, launchActionId) => {
     const start = mock(async () => sessionIdentity("direct"));
-    const send = mock(async () => {});
+    const send = mock(async () => null);
     const persist = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -2203,7 +2203,7 @@ describe("direct prepared submission", () => {
     ["qa", "qa_review"],
   ] as const)("starts %s without unrelated repository settings", async (role, launchActionId) => {
     const start = mock(async () => sessionIdentity("direct"));
-    const send = mock(async () => {});
+    const send = mock(async () => null);
     const persist = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -2237,7 +2237,7 @@ describe("direct prepared submission", () => {
 
   test("rejects an invalid target branch for a prepared Builder", async () => {
     const start = mock(async () => sessionIdentity("never"));
-    const send = mock(async () => {});
+    const send = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
@@ -2263,7 +2263,7 @@ describe("direct prepared submission", () => {
 
   test("rejects missing repository settings for a prepared Builder", async () => {
     const start = mock(async () => sessionIdentity("never"));
-    const send = mock(async () => {});
+    const send = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
@@ -2296,7 +2296,7 @@ describe("direct prepared submission", () => {
     "starts %s fresh with the exact selection and no modal",
     async (role, launchActionId) => {
       const start = mock(async () => sessionIdentity("direct"));
-      const send = mock(async () => {});
+      const send = mock(async () => null);
       const args = {
         ...createBaseArgs(),
         role,
@@ -2375,7 +2375,7 @@ describe("direct prepared submission", () => {
     await harness.update({
       ...args,
       selectedSession: selectedSessionFromIdentity(sessionIdentity("kept")),
-      sendAgentMessage: async () => {},
+      sendAgentMessage: async () => null,
       continueInterruptedTurn: async () => undefined,
     });
     await harness.run(async (state) => {
@@ -2391,7 +2391,7 @@ describe("prepared composer catalog refresh", () => {
     "rejects an explicit %s removed after selection without repair or a modal",
     async (removed) => {
       const start = mock(async () => sessionIdentity("never"));
-      const send = mock(async () => {});
+      const send = mock(async () => null);
       const args = {
         ...createBaseArgs(),
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
@@ -2481,7 +2481,7 @@ describe("direct submission context isolation", () => {
   test("keeps a newer selected session when direct startup completes", async () => {
     const creation = createDeferred<AgentSessionIdentity>();
     const start = mock(() => creation.promise);
-    const send = mock(async () => {});
+    const send = mock(async () => null);
     const navigation = mock(() => {});
     const args = {
       ...createBaseArgs(),
@@ -2522,7 +2522,7 @@ describe("direct submission context isolation", () => {
       const creation = createDeferred<AgentSessionIdentity>();
       const sending = createDeferred<void>();
       const start = mock(() => creation.promise);
-      const send = mock(() => sending.promise);
+      const send = mock(() => sending.promise.then(() => null));
       const navigation = mock(() => {});
       const args = {
         ...createBaseArgs(),

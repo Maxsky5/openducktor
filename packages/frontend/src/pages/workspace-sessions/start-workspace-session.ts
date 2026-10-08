@@ -16,10 +16,6 @@ export const startWorkspaceSession = async (
   start: typeof host.workspaceSessionStart = host.workspaceSessionStart,
 ) => {
   const result = await start(input);
-  if (!isCurrent())
-    throw new Error(
-      "Workspace changed while starting the chat. Reopen the chat to send your draft.",
-    );
   if (
     result.session.id !== record.id ||
     result.session.runtimeKind !== record.runtimeKind ||
@@ -33,6 +29,9 @@ export const startWorkspaceSession = async (
   const identity = workspaceSessionIdentity(result.session);
   if (!identity)
     throw new Error("The host did not bind a runtime session. Retry sending your draft.");
+  if (result.session.id !== input.sessionId)
+    throw new Error("The host started a different saved chat. Reload session data before sending.");
+  if (!isCurrent()) return { ...result, identity };
   if (!result.runtimeSession) {
     store.commitSessionCollection((current) => ({
       collection: applyWorkspaceSessionRecords(current, [result.session]),

@@ -6,6 +6,7 @@ type UpstreamState = Pick<ScopeSummaryFields, "upstreamAheadBehind" | "upstreamS
 
 const toGitConflict = (
   conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
+  effectiveWorkingDir: string,
 ): GitConflict | null => {
   if (!conflict) {
     return null;
@@ -14,10 +15,11 @@ const toGitConflict = (
   return {
     operation: conflict.operation,
     currentBranch: conflict.currentBranch ?? null,
-    targetBranch: conflict.targetBranch,
+    // Git status supplies the comparison target, not the interrupted operation's target.
+    targetBranch: "",
     conflictedFiles: conflict.conflictedFiles,
     output: conflict.output,
-    workingDir: conflict.workingDir ?? null,
+    workingDir: conflict.workingDir ?? effectiveWorkingDir,
   };
 };
 
@@ -59,7 +61,7 @@ export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
   );
   return {
     branch: snapshot.currentBranch.name ?? null,
-    gitConflict: toGitConflict(snapshot.gitConflict),
+    gitConflict: toGitConflict(snapshot.gitConflict, snapshot.snapshot.effectiveWorkingDir),
     fileDiffs: snapshot.fileDiffs,
     fileStatuses: snapshot.fileStatuses,
     uncommittedFileCount: snapshot.fileStatuses.length,
@@ -79,7 +81,7 @@ export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSu
   );
   return {
     branch: summary.currentBranch.name ?? null,
-    gitConflict: toGitConflict(summary.gitConflict),
+    gitConflict: toGitConflict(summary.gitConflict, summary.snapshot.effectiveWorkingDir),
     uncommittedFileCount: summary.fileStatusCounts.total,
     commitsAheadBehind: summary.targetAheadBehind,
     upstreamAheadBehind,

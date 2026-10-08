@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import { runtimeSupportsCapability } from "@/lib/agent-runtime";
+import { getBusyAgentMessageBlockedReason } from "@/lib/agent-message-send-policy";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
@@ -27,23 +27,17 @@ export function deriveAgentStudioSessionActionState({
     runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind) ?? null;
   const selectedRuntimeDescriptor =
     currentRuntimeDescriptor ?? selectedSession.runtimeData.modelCatalog?.runtime ?? null;
-  const supportsQueuedUserMessages = selectedRuntimeDescriptor
-    ? runtimeSupportsCapability(
-        selectedRuntimeDescriptor,
-        "sessionLifecycle.supportsQueuedUserMessages",
-      )
-    : false;
+  const supportsQueuedUserMessages =
+    selectedRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages ?? false;
   const isSessionWorking = isAgentSessionActivityWorking(selectedSession.activityState);
   const isWaitingInput = selectedSession.loadedSession
     ? isAgentSessionBlockedOnInput(selectedSession.loadedSession)
     : false;
   const canQueueBusyFollowups = isSessionWorking && supportsQueuedUserMessages;
-  const selectedRuntimeLabel =
-    selectedRuntimeDescriptor?.label ?? selectedRuntimeKind ?? "Current runtime";
-  const busySendBlockedReason =
-    selectedSession.identity !== null && isSessionWorking && !supportsQueuedUserMessages
-      ? `${selectedRuntimeLabel} does not support queued messages while the session is working.`
-      : null;
+  const busySendBlockedReason = getBusyAgentMessageBlockedReason(
+    isSessionWorking,
+    selectedRuntimeDescriptor,
+  );
   const canResumeSession =
     selectedSession.identity !== null &&
     canResumeInterruptedTurn({
