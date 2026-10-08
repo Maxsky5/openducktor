@@ -13,10 +13,14 @@ export function useSessionNavigationRecovery({
   retryRead: () => void | Promise<void>;
   retryWrite: () => void | Promise<void>;
 }): SessionNavigationRecovery {
-  const recovery = useSessionRecoveryAction(scopeKey, readError ? retryRead : retryWrite);
+  const operation = readError ? "load" : "save";
+  const recovery = useSessionRecoveryAction(
+    `${scopeKey}:${operation}`,
+    readError ? retryRead : retryWrite,
+  );
   return {
     navigationPersistenceError: readError ?? writeError ?? recovery.error,
-    navigationPersistenceOperation: readError ? "load" : "save",
+    navigationPersistenceOperation: operation,
     retryNavigationPersistence: recovery.retry,
     isRetryingNavigationPersistence: recovery.isPending,
   };
