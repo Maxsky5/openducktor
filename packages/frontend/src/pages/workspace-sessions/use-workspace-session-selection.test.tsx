@@ -128,33 +128,60 @@ test("keeps a missing requested chat unselected and keeps the saved selection", 
   }
 });
 
-test("restores each workspace's saved chat when the page stays mounted", () => {
-  const workspaceA = crypto.randomUUID();
-  const workspaceB = crypto.randomUUID();
-  const keyA = workspaceSessionSelectionStorageKey(workspaceA);
-  const keyB = workspaceSessionSelectionStorageKey(workspaceB);
-  localStorage.setItem(keyA, "First");
-  localStorage.setItem(keyB, "Second");
-  const sessions = [record("First"), record("Second")];
-  const h = renderHook(
-    (workspaceId: string) =>
-      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined }),
-    { initialProps: workspaceA },
-  );
-  try {
-    h.rerender(workspaceB);
-    expect(h.result.current.selected?.id).toBe("Second");
-    act(() => window.dispatchEvent(new Event("pagehide")));
-    expect(localStorage.getItem(keyA)).toBe("First");
-    expect(localStorage.getItem(keyB)).toBe("Second");
-    h.rerender(workspaceA);
-    expect(h.result.current.selected?.id).toBe("First");
-  } finally {
-    h.unmount();
-    localStorage.removeItem(keyA);
-    localStorage.removeItem(keyB);
-  }
-});
+test.each(["idle", "pending"])(
+  "restores a saved workspace chat without rewriting it; previous save %s",
+  (saveState) => {
+    const pendingSave = saveState === "pending";
+    const workspaceA = crypto.randomUUID();
+    const workspaceB = crypto.randomUUID();
+    const keyA = workspaceSessionSelectionStorageKey(workspaceA);
+    const keyB = workspaceSessionSelectionStorageKey(workspaceB);
+    const storage = localStorage;
+    storage.setItem(keyA, "First");
+    storage.setItem(keyB, "Second");
+    let writes = 0;
+    overrideStorage({
+      setItem: (key, value) => {
+        if (key === keyB) {
+          writes += 1;
+          throw new Error("Write denied");
+        }
+        storage.setItem(key, value);
+      },
+    });
+    const sessions = [record("First"), record("Second")];
+    const h = renderHook(
+      ({
+        workspaceId,
+        requestedSessionId,
+      }: {
+        workspaceId: string;
+        requestedSessionId: string | undefined;
+      }) => useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId }),
+      {
+        initialProps: {
+          workspaceId: workspaceA,
+          requestedSessionId: pendingSave ? "Second" : undefined,
+        },
+      },
+    );
+    try {
+      h.rerender({ workspaceId: workspaceB, requestedSessionId: undefined });
+      expect(h.result.current.selected?.id).toBe("Second");
+      act(() => window.dispatchEvent(new Event("pagehide")));
+      expect(h.result.current.navigationPersistenceError).toBeNull();
+      expect(writes).toBe(0);
+      expect(storage.getItem(keyA)).toBe(pendingSave ? "Second" : "First");
+      expect(storage.getItem(keyB)).toBe("Second");
+      h.rerender({ workspaceId: workspaceA, requestedSessionId: undefined });
+      expect(h.result.current.selected?.id).toBe(pendingSave ? "Second" : "First");
+    } finally {
+      h.unmount();
+      storage.removeItem(keyA);
+      storage.removeItem(keyB);
+    }
+  },
+);
 
 test.each([undefined, "Second", "First"])(
   "keeps storage failures scoped and retries the intended selection with request %s",

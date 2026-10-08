@@ -76,6 +76,13 @@ export function useWorkspaceSessionSelection({
     retryWrite: save,
   });
 
+  // The old workspace flushes before these effects run. Track this read before checking for edits.
+  useEffect(() => {
+    if (currentSelection.error === null && savedSelection.current.workspaceId !== workspaceId) {
+      savedSelection.current = { workspaceId, sessionId: currentSelection.sessionId };
+    }
+  }, [currentSelection.error, currentSelection.sessionId, workspaceId]);
+
   useEffect(() => {
     if (
       currentSelection.error !== null ||
