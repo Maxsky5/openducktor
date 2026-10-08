@@ -19,7 +19,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
-import { GitTargetBranchPanel, type GitTargetBranchPanelProps } from "./git-target-branch-panel";
+import {
+  GitTargetBranchControl,
+  type GitTargetBranchControlProps,
+} from "./git-target-branch-control";
 import type { AgentStudioGitPanelModel } from "./types";
 
 type GitInfoHeaderProps = Pick<
@@ -142,11 +145,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   return (
     <div className="@container/git-header flex flex-col border-b border-border">
       <GitBranchContextRow
-        key={JSON.stringify([
-          branch,
-          targetBranchSelectionValue,
-          targetBranchEditable ?? state.canEditTargetBranch,
-        ])}
+        key={String(targetBranchEditable ?? state.canEditTargetBranch)}
         control={{
           targetBranchHelpText,
           targetBranchesPending,
@@ -301,7 +300,7 @@ function GitActionIconButton({
 }
 
 type GitBranchContextRowProps = {
-  control: GitTargetBranchPanelProps["control"];
+  control: GitTargetBranchControlProps["control"];
   currentBranchLabel: string;
   repositoryBranchControl: ReactNode;
   branchState: {
@@ -357,54 +356,50 @@ function GitBranchContextRow({
   }
   return (
     <div
-      className="my-2 grid gap-2 px-3 @min-[32rem]/git-header:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] @min-[32rem]/git-header:items-center"
+      className="flex min-w-0 items-center gap-2 px-3 py-1.5"
       data-testid="agent-studio-git-branch-context-row"
     >
       {isRepositoryMode && repositoryBranchControl ? (
-        <div className="min-w-0">{repositoryBranchControl}</div>
+        <div className="min-w-0 max-w-[50%]">{repositoryBranchControl}</div>
       ) : (
-        <div className="rounded-lg border border-border bg-card px-3 py-2">
-          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            Current branch
-          </p>
-          <div
-            className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-            data-testid="agent-studio-git-current-branch-display-row"
+        <div
+          className="flex h-6 min-w-0 max-w-[50%] items-center gap-1.5"
+          data-testid="agent-studio-git-current-branch-display-row"
+        >
+          <span className="sr-only">Current branch</span>
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className="min-w-0 truncate font-mono text-xs text-foreground"
+            title={currentBranchLabel}
+            data-testid="agent-studio-git-current-branch"
           >
-            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-              data-testid="agent-studio-git-current-branch"
-            >
-              {currentBranchLabel}
-            </span>
-          </div>
+            {currentBranchLabel}
+          </span>
         </div>
       )}
-
-      <div className="relative flex items-center justify-center gap-2" aria-hidden="true">
-        <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
-          <ArrowRight className="size-3.5" />
-        </span>
+      <ArrowRight className="size-3 shrink-0 text-muted-foreground" aria-label="Compare with" />
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <GitTargetBranchControl
+            branch={currentBranchLabel}
+            control={control}
+            canEditTargetBranch={canEditTargetBranch}
+            targetBranchLabel={targetBranchLabel}
+            targetBranchOptions={targetBranchOptions}
+            targetBranchSelectionValue={targetBranchSelectionValue}
+            onUpdateTargetBranch={onUpdateTargetBranch}
+          />
+        </div>
         {hasTargetAhead ? (
           <span
-            className="pointer-events-none text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400 @min-[32rem]/git-header:absolute @min-[32rem]/git-header:-top-4 @min-[32rem]/git-header:left-1/2 @min-[32rem]/git-header:-translate-x-1/2"
+            className="shrink-0 text-[11px] font-medium tabular-nums text-emerald-600 dark:text-emerald-400"
+            title="Commits ahead of the comparison branch"
             data-testid="agent-studio-git-target-ahead-count"
           >
-            {targetAheadCount}
+            +{targetAheadCount}
           </span>
         ) : null}
       </div>
-
-      <GitTargetBranchPanel
-        key={targetBranchSelectionValue}
-        control={control}
-        canEditTargetBranch={canEditTargetBranch}
-        targetBranchLabel={targetBranchLabel}
-        targetBranchOptions={targetBranchOptions}
-        targetBranchSelectionValue={targetBranchSelectionValue}
-        onUpdateTargetBranch={onUpdateTargetBranch}
-      />
     </div>
   );
 }

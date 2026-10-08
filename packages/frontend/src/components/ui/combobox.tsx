@@ -50,6 +50,9 @@ type ComboboxProps = {
   searchable?: boolean;
   popoverSide?: "top" | "bottom";
   onOpenChange?: (open: boolean) => void;
+  open?: boolean;
+  footer?: ReactNode;
+  trigger?: ReactElement;
 };
 
 type RenderGroup = {
@@ -81,7 +84,7 @@ const comboboxTriggerValueVariants = cva("min-w-0 flex-1 pr-2 text-left", {
   },
 });
 
-const comboboxOptionItemVariants = cva("justify-between", {
+const comboboxOptionItemVariants = cva("group/option justify-between", {
   variants: {
     wrap: {
       true: "items-start",
@@ -108,14 +111,17 @@ const comboboxOptionLabelTextVariants = cva("", {
   },
 });
 
-const comboboxOptionDescriptionVariants = cva("text-xs text-muted-foreground", {
-  variants: {
-    wrap: {
-      true: "whitespace-normal break-all",
-      false: "truncate",
+const comboboxOptionDescriptionVariants = cva(
+  "text-xs text-muted-foreground group-data-[selected=true]/option:text-accent-foreground",
+  {
+    variants: {
+      wrap: {
+        true: "whitespace-normal break-all",
+        false: "truncate",
+      },
     },
   },
-});
+);
 
 const normalizeSearchTerms = (query: string): string[] => {
   return query
@@ -195,7 +201,7 @@ function ComboboxOptionItem({
         ) : null}
       </div>
       {option.secondaryLabel ? (
-        <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
+        <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground group-data-[selected=true]/option:text-accent-foreground">
           {option.secondaryLabel}
         </span>
       ) : null}
@@ -229,8 +235,12 @@ export function Combobox({
   searchable = true,
   popoverSide = "bottom",
   onOpenChange,
+  open: controlledOpen,
+  footer,
+  trigger,
 }: ComboboxProps): ReactElement {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const [searchQuery, setSearchQuery] = useState("");
   const commandListRef = useRef<HTMLDivElement | null>(null);
 
@@ -301,7 +311,7 @@ export function Combobox({
   }, [matchAllSearchTerms, resolvedGroups, resolvedOptions, searchTerms]);
 
   const handleOpenChange = (nextOpen: boolean): void => {
-    setOpen(nextOpen);
+    if (controlledOpen === undefined) setOpen(nextOpen);
     if (!nextOpen) {
       setSearchQuery("");
     }
@@ -320,34 +330,38 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          aria-labelledby={triggerAriaLabelledBy}
-          aria-describedby={triggerAriaDescribedBy}
-          className={cn(
-            "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent",
-            triggerClassName,
-          )}
-        >
-          <span className={comboboxTriggerValueVariants({ wrap: shouldWrapTriggerLabel })}>
-            {selected ? (
-              <ComboboxOptionLabel option={selected} shouldWrap={shouldWrapTriggerLabel} />
-            ) : (
-              placeholder
+        {trigger ?? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            aria-labelledby={triggerAriaLabelledBy}
+            aria-describedby={triggerAriaDescribedBy}
+            className={cn(
+              "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent",
+              triggerClassName,
             )}
-          </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
-        </Button>
+          >
+            <span className={comboboxTriggerValueVariants({ wrap: shouldWrapTriggerLabel })}>
+              {selected ? (
+                <ComboboxOptionLabel option={selected} shouldWrap={shouldWrapTriggerLabel} />
+              ) : (
+                placeholder
+              )}
+            </span>
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent
+        aria-labelledby={triggerAriaLabelledBy}
         portalContainer={portalContainer}
         side={popoverSide}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
         <Command shouldFilter={searchable && !matchAllSearchTerms}>
           <CommandInput
+            disabled={disabled}
             visuallyHidden={!searchable}
             placeholder={searchPlaceholder}
             value={searchQuery}
@@ -371,6 +385,7 @@ export function Combobox({
             ))}
           </CommandList>
         </Command>
+        {footer}
       </PopoverContent>
     </Popover>
   );

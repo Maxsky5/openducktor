@@ -204,7 +204,7 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
     expect(countByTestId(root, "agent-studio-git-target-status-row")).toBe(0);
     const targetAheadCount = findByTestId(root, "agent-studio-git-target-ahead-count");
-    expect(targetAheadCount.children.join("")).toBe("2");
+    expect(targetAheadCount.children.join("")).toBe("+2");
     expect(targetAheadCount.props.className).toContain("text-emerald-600");
     expect(targetAheadCount.props.className).toContain("dark:text-emerald-400");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
@@ -319,37 +319,15 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    let root = getRoot(renderer);
-    expect(
-      findByTestId(root, "agent-studio-git-current-branch-display-row").props.className,
-    ).toContain("h-7");
-    expect(
-      findByTestId(root, "agent-studio-git-target-branch-display-row").props.className,
-    ).toContain("h-7");
     await act(async () => {
-      findByTestId(root, "agent-studio-git-target-branch-edit").props.onClick();
+      fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    });
+    fireEvent.click(await screen.findByRole("option", { name: /origin\/beta/ }));
+    await act(async () => {
       await flush();
     });
-
-    root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(1);
-    expect(countByTestId(root, "agent-studio-git-target-branch-save")).toBe(0);
-    expect(countByTestId(root, "agent-studio-git-target-branch-cancel")).toBe(1);
-    expect(findByTestId(root, "agent-studio-git-target-branch-editor").props.className).toContain(
-      "h-7",
-    );
-    expect(
-      findByTestId(root, "mock-branch-selector").element.getAttribute("data-popover-class"),
-    ).toBe("w-[min(28rem,calc(100vw-2rem))] p-0");
-
-    await act(async () => {
-      findByTestId(root, "mock-branch-selector").props.onClick();
-      await flush();
-    });
-
     expect(updateTargetBranch).toHaveBeenCalledWith("refs/remotes/origin/beta");
-    root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(0);
+    expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

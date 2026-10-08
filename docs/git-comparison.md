@@ -2,7 +2,9 @@
 
 ## Choose a comparison branch
 
-Use the Target branch control in the Git panel to choose a local or remote-tracking branch. This changes comparison diffs, comparison counts, file-tree markers, and the Rebase destination. It does not change checkout, branch tracking, the repository default, or the upstream used by Pull and Push.
+Use the Compare with control in the Git panel to choose a local or remote-tracking branch. This changes comparison diffs, comparison counts, file-tree markers, and the Rebase destination. It does not change checkout, branch tracking, the repository default, or the upstream used by Pull and Push.
+
+The Git header shows both branch names as text on one line. Use the pencil beside the comparison branch to search for another branch. In repository-root sessions, the pencil beside the current branch opens checkout choices. Worktree checkout rules stay the same. The comparison menu shows choice ownership, reset rules, loading, and retry actions. It closes when the choice succeeds or the user cancels.
 
 | Session context | Initial comparison | Choice owner |
 | --- | --- | --- |

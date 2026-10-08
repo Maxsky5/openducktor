@@ -183,11 +183,12 @@ export function sessionComparisonOptions(
   allowUpstream = false,
 ) {
   const selection = target ? targetBranchSelectionValue(target) : "";
+  const label = target ? canonicalTargetBranch(target) : selection;
   const included = selection
     ? [
         {
           value: selection,
-          label: target ? canonicalTargetBranch(target) : selection,
+          label: selection === "@{upstream}" ? "Tracked upstream" : label,
           secondaryLabel: "selected",
         },
       ]
