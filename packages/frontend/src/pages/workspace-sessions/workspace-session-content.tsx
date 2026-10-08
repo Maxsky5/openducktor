@@ -1,3 +1,4 @@
+import { useWorkspaceComparisonChoice } from "@/state/workspace-comparison-choices";
 import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -122,15 +123,20 @@ export function WorkspaceSessionContent({
     media.addEventListener("change", updateLayout);
     return () => media.removeEventListener("change", updateLayout);
   }, []);
+  const choice = useWorkspaceComparisonChoice({
+    workspaceId: workspace.workspaceId,
+    sessionId: record.id,
+  });
   const target: GitTargetBranch | null = useMemo(
     () =>
-      record.executionTarget.kind === "local_repo_root"
+      choice.target ??
+      (record.executionTarget.kind === "local_repo_root"
         ? { branch: "@{upstream}" }
-        : (repoConfig.data?.defaultTargetBranch ?? null),
-    [record.executionTarget.kind, repoConfig.data?.defaultTargetBranch],
+        : (repoConfig.data?.defaultTargetBranch ?? null)),
+    [choice.target, record.executionTarget.kind, repoConfig.data?.defaultTargetBranch],
   );
   const targetError =
-    record.executionTarget.kind === "local_worktree" && repoConfig.isError
+    !choice.target && record.executionTarget.kind === "local_worktree" && repoConfig.isError
       ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
       : null;
   const refreshAfterChange = useCallback(
@@ -223,6 +229,10 @@ export function WorkspaceSessionContent({
     repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
     branchKey,
     branchReady,
+    branchError: (isWorktree ? branch.worktreeBranch : branch.rootBranch).isError
+      ? errorMessage((isWorktree ? branch.worktreeBranch : branch.rootBranch).error)
+      : null,
+    applyTarget: choice.applyTarget,
     target,
     targetError,
     readBranch,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type RepositoryGitProviderContext } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
@@ -29,7 +29,6 @@ import {
 import type {
   AgentOperationsContextValue,
   ChecksStateContextValue,
-  RepoSettingsInput,
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
@@ -56,16 +55,7 @@ import {
   createAgentStudioHeaderModelFixture,
 } from "./use-agents-page-shell-model.test-support";
 
-interface RepoSettingsStateContract {
-  repoSettings: RepoSettingsInput | null;
-  gitProvider: {
-    context: RepositoryGitProviderContext | undefined;
-    error: Error | null;
-    load: () => Promise<RepositoryGitProviderContext>;
-    retry: () => void;
-  };
-  isLoadingRepoSettings: boolean;
-}
+type RepoSettingsStateContract = ReturnType<typeof repoSettingsModule.useAgentStudioRepoSettings>;
 
 enableReactActEnvironment();
 
@@ -249,6 +239,10 @@ let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
+  repoSettingsError: null,
+  loadRepoSettings: async () => {
+    throw new Error("Unexpected repository settings read.");
+  },
   gitProvider: {
     context: null,
     error: null,
@@ -728,6 +722,10 @@ beforeEach(async () => {
   syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
+    repoSettingsError: null,
+    loadRepoSettings: async () => {
+      throw new Error("Unexpected repository settings read.");
+    },
     gitProvider: {
       context: null,
       error: null,

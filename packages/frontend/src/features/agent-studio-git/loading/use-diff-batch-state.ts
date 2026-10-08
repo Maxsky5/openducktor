@@ -13,6 +13,7 @@ import {
 } from "../model/diff-data-model";
 
 export type LoadRequestContext = {
+  requestContextKey: string;
   repoPath: string;
   targetBranch: string;
   workingDir: string | null;
@@ -40,12 +41,6 @@ type ApplyFullResultArgs = {
   clearScopeInvalidation: (scope: DiffScope) => void;
 };
 
-type ApplyCachedFullResultArgs = {
-  scope: DiffScope;
-  snapshot: ScopeSnapshot;
-  clearScopeInvalidation: (scope: DiffScope) => void;
-};
-
 type ApplyScopeLoadErrorArgs = {
   scope: DiffScope;
   mode: LoadDataMode;
@@ -62,7 +57,6 @@ type UseAgentStudioDiffBatchStateResult = {
   pendingFullReload: LoadRequestContext | null;
   state: DiffBatchState;
   statusSnapshotKey: string | null;
-  applyCachedFullResult: (args: ApplyCachedFullResultArgs) => void;
   applyFullResult: (args: ApplyFullResultArgs) => void;
   applyScopeLoadError: (args: ApplyScopeLoadErrorArgs) => void;
   applySummaryResult: (args: ApplySummaryResultArgs) => void;
@@ -78,6 +72,7 @@ const createInitialControllerState = (): DiffControllerState => ({
 });
 
 const sameLoadRequestContext = (left: LoadRequestContext, right: LoadRequestContext): boolean =>
+  left.requestContextKey === right.requestContextKey &&
   left.repoPath === right.repoPath &&
   left.scope === right.scope &&
   left.targetBranch === right.targetBranch &&
@@ -216,18 +211,6 @@ export function useAgentStudioDiffBatchState({
     [commitControllerState],
   );
 
-  const applyCachedFullResult = useCallback(
-    ({ clearScopeInvalidation, scope, snapshot }: ApplyCachedFullResultArgs): void => {
-      applyFullSnapshotResult({
-        clearScopeInvalidation,
-        requestSequence: controllerStateRef.current.latestSharedSequence,
-        scope,
-        snapshot,
-      });
-    },
-    [applyFullSnapshotResult],
-  );
-
   const applyScopeLoadError = useCallback(
     ({ error, mode, scope }: ApplyScopeLoadErrorArgs): void => {
       const previousState = controllerStateRef.current;
@@ -279,7 +262,6 @@ export function useAgentStudioDiffBatchState({
     pendingFullReload,
     state: controllerState.batchState,
     statusSnapshotKey,
-    applyCachedFullResult,
     applyFullResult: applyFullSnapshotResult,
     applyScopeLoadError,
     applySummaryResult,

@@ -121,6 +121,7 @@ export type GitPort = {
     worktreePath: string,
   ): Effect.Effect<boolean, GitPortError>;
   listWorktrees(repoPath: string): Effect.Effect<GitWorktreeSummary[], GitPortError>;
+  getTrackedUpstreamReference(workingDir: string): Effect.Effect<string | null, GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listRemoteEndpoints(workingDir: string): Effect.Effect<GitRemoteEndpoint[], GitPortError>;

@@ -12,30 +12,27 @@ export type LoadDataContext = {
   targetBranch: string;
   workingDir: string | null;
   scope: DiffScope;
-  requestContextKey?: string | null;
+  requestContextKey: string | null;
   mode?: LoadDataMode;
   force?: boolean;
-  hydrateCachedFullLoad?: boolean;
   replayIfInFlight?: boolean;
 };
 
 export type InFlightRequestContext = LoadRequestContext & {
-  mode: LoadDataMode;
-  requestKey: string;
-  requestContextKey: string | null;
   requestSequence: number;
   version: number;
 };
 
 export type DiffRefreshScopeContext = Pick<
   LoadDataContext,
-  "repoPath" | "targetBranch" | "workingDir" | "scope"
+  "repoPath" | "targetBranch" | "workingDir" | "scope" | "requestContextKey"
 >;
 
 export type DiffBatchStateController = ReturnType<typeof useAgentStudioDiffBatchState>;
 export type DiffRequestController = ReturnType<typeof useAgentStudioDiffRequestController>;
 
 export type DiffLoadRefs = {
+  requestContextKeyRef: CurrentRef<string | null>;
   repoPathRef: CurrentRef<string | null>;
   targetBranchRef: CurrentRef<string>;
   workingDirRef: CurrentRef<string | null>;
@@ -44,7 +41,6 @@ export type DiffLoadRefs = {
 
 export type UseAgentStudioDiffLoaderArgs = DiffLoadRefs & {
   shouldBlockDiffLoading: boolean;
-  applyCachedFullResult: DiffBatchStateController["applyCachedFullResult"];
   applyFullResult: DiffBatchStateController["applyFullResult"];
   applyScopeLoadError: DiffBatchStateController["applyScopeLoadError"];
   applySummaryResult: DiffBatchStateController["applySummaryResult"];
@@ -64,12 +60,7 @@ export type UseAgentStudioDiffLoaderResult = {
 };
 
 export type DiffLoadRunner = {
-  hasLoadContextChanged: (
-    path: string,
-    nextTargetBranch: string,
-    nextWorkingDir: string | null,
-  ) => boolean;
-  hydrateCachedFullLoad: (context: LoadRequestContext) => boolean;
+  isStale: (context: LoadRequestContext) => boolean;
   runFullLoad: (context: InFlightRequestContext & { force?: boolean }) => Promise<void>;
   runSummaryLoad: (context: InFlightRequestContext) => Promise<void>;
 };

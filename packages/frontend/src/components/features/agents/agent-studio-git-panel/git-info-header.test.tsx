@@ -1,7 +1,7 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ComponentProps } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/lib/query-provider";
@@ -165,7 +165,7 @@ describe("GitInfoHeader", () => {
       rendered?.rerender(
         <QueryProvider useIsolatedClient>
           <TooltipProvider>
-            <GitInfoHeader {...editableProps} targetBranchOptions={[]} />
+            <GitInfoHeader {...editableProps} targetBranchEditable={false} />
           </TooltipProvider>
         </QueryProvider>,
       );
@@ -187,3 +187,51 @@ describe("GitInfoHeader", () => {
     expect(screen.getByTestId("agent-studio-git-target-branch-display-row")).toBeTruthy();
   });
 });
+
+test.each(["light", "dark"] as const)(
+  "workspace comparison editor retains a failed choice in %s theme",
+  async (theme) => {
+    document.documentElement.classList.add(theme);
+    const failure = Promise.withResolvers<void>();
+    const update = mock(() => failure.promise);
+    const view = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        contextMode: "repository",
+        targetBranchEditable: true,
+        targetBranchHelpText:
+          "This choice applies only to this session. It resets on app reload or successful archive.",
+        targetBranchOptions: [
+          { value: "refs/remotes/origin/main", label: "origin/main" },
+          { value: "refs/heads/release", label: "release", secondaryLabel: "local" },
+        ],
+        targetBranchSelectionValue: "refs/remotes/origin/main",
+        onUpdateTargetBranch: update,
+      }),
+    );
+    try {
+      fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-edit"));
+      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
+      fireEvent.click(await screen.findByRole("option", { name: /release/ }));
+      expect(update).toHaveBeenCalledWith("refs/heads/release");
+      expect(
+        screen.getByTestId("agent-studio-git-target-branch-cancel").hasAttribute("disabled"),
+      ).toBe(true);
+      await act(async () => {
+        failure.reject(new Error("Could not save the target. Try again."));
+        await failure.promise.catch(() => {});
+      });
+      await waitFor(() =>
+        expect(screen.getByText("Could not save the target. Try again.")).toBeTruthy(),
+      );
+      expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
+        "release",
+      );
+      expect(screen.getByText(/This choice applies only to this session/)).toBeTruthy();
+      fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-cancel"));
+      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    } finally {
+      view.unmount();
+      document.documentElement.classList.remove(theme);
+    }
+  },
+);

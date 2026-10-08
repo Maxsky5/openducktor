@@ -4,10 +4,6 @@ import {
   resolveBuildToolsSelectedTaskId,
 } from "@/features/agent-studio-build-tools/agent-studio-build-tools-worktree-snapshot";
 import type { DiffDataState } from "@/features/agent-studio-git";
-import {
-  INVALID_TASK_TARGET_BRANCH_LABEL,
-  resolveTaskTargetBranchState,
-} from "@/lib/target-branch";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
 import {
@@ -102,7 +98,6 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: "/repo/.worktrees/task-24",
         isWorktreeResolving: false,
         worktreeError: null,
-        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: "/repo/.worktrees/task-24", unavailableReason: null });
   });
@@ -115,7 +110,6 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: null,
         isWorktreeResolving: true,
         worktreeError: null,
-        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: null, unavailableReason: "Resolving task worktree..." });
   });
@@ -128,24 +122,8 @@ describe("resolveTaskExecutionFileExplorerRoot", () => {
         worktreePath: "/repo/.worktrees/task-24",
         isWorktreeResolving: false,
         worktreeError: null,
-        targetBranchValidationError: null,
       }),
     ).toEqual({ rootPath: "/repo", unavailableReason: null });
-  });
-
-  test("surfaces invalid task target branches before resolving a worktree", () => {
-    const validationError = "Invalid openducktor.targetBranch metadata.";
-
-    expect(
-      resolveTaskExecutionFileExplorerRoot({
-        workspaceRepoPath: "/repo",
-        contextMode: "worktree",
-        worktreePath: "/repo/.worktrees/task-24",
-        isWorktreeResolving: false,
-        worktreeError: null,
-        targetBranchValidationError: validationError,
-      }),
-    ).toEqual({ rootPath: null, unavailableReason: validationError });
   });
 });
 
@@ -348,17 +326,11 @@ describe("resolveBuildToolsOpenInTarget", () => {
 describe("buildAgentsPageDiffModel", () => {
   const createPullRequestDetectionArgs = () => ({
     subjectKey: "task-24",
-    branches: [],
     buildToolsSnapshot: {
       diffData: createDiffData(),
       gitPanelContextMode: "repository" as const,
       openInTarget: { path: "/repo", disabledReason: null },
       resolvedGitPanelBranch: "main",
-      targetBranchState: resolveTaskTargetBranchState({
-        taskTargetBranch: null,
-        taskTargetBranchError: null,
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-      }),
     },
     gitActions: createGitActions(),
     selectedTask: createTaskCardFixture({
@@ -431,21 +403,15 @@ describe("buildAgentsPageDiffModel", () => {
     expect(diffModel.onDetectPullRequest).toBeUndefined();
   });
 
-  test("locks git actions from snapshot target-branch validation", () => {
+  test("keeps unrelated Git actions available for invalid comparison metadata", () => {
     const validationError = "Invalid openducktor.targetBranch metadata: missing field `branch`.";
     const diffModel = buildAgentsPageDiffModel({
       subjectKey: "task-24",
-      branches: [],
       buildToolsSnapshot: {
         diffData: createDiffData(),
         gitPanelContextMode: "repository",
         openInTarget: { path: "/repo", disabledReason: null },
         resolvedGitPanelBranch: "main",
-        targetBranchState: resolveTaskTargetBranchState({
-          taskTargetBranch: null,
-          taskTargetBranchError: validationError,
-          defaultTargetBranch: null,
-        }),
       },
       gitActions: createGitActions(),
       selectedTask: createTaskCardFixture({
@@ -456,9 +422,9 @@ describe("buildAgentsPageDiffModel", () => {
       onDetectPullRequest: () => {},
     });
 
-    expect(diffModel.targetBranch).toBe(INVALID_TASK_TARGET_BRANCH_LABEL);
-    expect(diffModel.isGitActionsLocked).toBe(true);
-    expect(diffModel.gitActionsLockReason).toBe(validationError);
-    expect(diffModel.showLockReasonBanner).toBe(true);
+    expect(diffModel.targetBranch).toBe("origin/main");
+    expect(diffModel.isGitActionsLocked).toBe(false);
+    expect(diffModel.gitActionsLockReason).toBeNull();
+    expect(diffModel.showLockReasonBanner).toBe(false);
   });
 });

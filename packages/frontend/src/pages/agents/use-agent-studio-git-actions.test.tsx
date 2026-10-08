@@ -143,6 +143,50 @@ beforeEach(() => {
 });
 
 describe("useAgentStudioGitActions", () => {
+  test("retains the original rebase request and operation lock after target selection changes", async () => {
+    const deferred = createDeferred<GitRebaseResult>();
+    gitRebaseBranchMock.mockImplementationOnce(() => deferred.promise);
+    const harness = createHookHarness(
+      createBaseArgs({
+        contextKey: "first",
+        workingDir: "/repo/task",
+        targetBranch: "refs/heads/release",
+      }),
+    );
+    let running: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        running = state.rebaseOntoTarget();
+      });
+      await harness.update(
+        createBaseArgs({
+          contextKey: "second",
+          workingDir: "/repo/task",
+          targetBranch: "refs/remotes/origin/main",
+        }),
+      );
+      expect(harness.getLatest().isRebasing).toBe(true);
+      await harness.run(async (state) => {
+        await state.pushBranch();
+        await state.rebaseOntoTarget();
+      });
+      expect(gitRebaseBranchMock).toHaveBeenCalledTimes(1);
+      expect(gitRebaseBranchMock).toHaveBeenCalledWith("/repo", "refs/heads/release", "/repo/task");
+      expect(gitPushBranchMock).not.toHaveBeenCalled();
+      await harness.run(async () => {
+        deferred.resolve({ outcome: "rebased", output: "done" });
+        await running;
+      });
+      expect(harness.getLatest().isRebasing).toBe(false);
+      expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      deferred.resolve({ outcome: "rebased", output: "done" });
+      await running;
+      await harness.unmount();
+    }
+  });
+
   test("tracks commit action lifecycle and rejects blank commit messages", async () => {
     const refreshDiffData = mock(async () => {});
     const commitDeferred = createDeferred<GitCommitResult>();
@@ -512,6 +556,39 @@ describe("useAgentStudioGitActions", () => {
       );
       expect(harness.getLatest().resetError).toBeNull();
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not show a reset refresh failure after the session changes", async () => {
+    const refresh = createDeferred<void>();
+    const refreshDiffData = mock(() => refresh.promise);
+    const args = createBaseArgs({
+      contextKey: "session-a",
+      workingDir: "/repo/a",
+      refreshDiffData,
+    });
+    const harness = createHookHarness(args);
+    let running: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.run((state) => state.requestFileReset("src/main.ts"));
+      await harness.run((state) => {
+        running = state.confirmReset();
+      });
+      await harness.waitFor(() => refreshDiffData.mock.calls.length === 1);
+      await harness.update({ ...args, contextKey: "session-b", workingDir: "/repo/b" });
+      await harness.run(async () => {
+        refresh.reject(new Error("Session A refresh failed."));
+        await running;
+      });
+      expect(harness.getLatest().resetError).toBeNull();
+      expect(toastErrorMock).not.toHaveBeenCalled();
+      expect(gitResetWorktreeSelectionMock.mock.calls[0]?.[0].workingDir).toBe("/repo/a");
+      expect(harness.getLatest().isResetting).toBe(false);
+    } finally {
+      refresh.resolve();
+      await running;
       await harness.unmount();
     }
   });
@@ -1186,20 +1263,13 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  test("reuses the originally rejected target when confirming force push", async () => {
-    gitPushBranchMock
-      .mockImplementationOnce(async () => ({
-        outcome: "rejected_non_fast_forward",
-        remote: "origin",
-        branch: "feature/task-10",
-        output: "non-fast-forward",
-      }))
-      .mockImplementationOnce(async () => ({
-        outcome: "pushed",
-        remote: "origin",
-        branch: "feature/task-10",
-        output: "done",
-      }));
+  test("discards a force push confirmation after the branch changes", async () => {
+    gitPushBranchMock.mockImplementationOnce(async () => ({
+      outcome: "rejected_non_fast_forward",
+      remote: "origin",
+      branch: "feature/task-10",
+      output: "non-fast-forward",
+    }));
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -1228,11 +1298,8 @@ describe("useAgentStudioGitActions", () => {
         await state.confirmForcePush();
       });
 
-      expect(gitPushBranchMock).toHaveBeenNthCalledWith(2, "/repo", "feature/task-10", {
-        setUpstream: true,
-        forceWithLease: true,
-        workingDir: "/tmp/worktree/task-10",
-      });
+      expect(gitPushBranchMock).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().pendingForcePush).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1270,13 +1337,7 @@ describe("useAgentStudioGitActions", () => {
       expect(gitPushBranchMock).toHaveBeenCalledTimes(1);
 
       await harness.update(firstTaskArgs);
-      expect(harness.getLatest().pendingForcePush).toEqual({
-        remote: "origin",
-        branch: "feature/task-10",
-        output: "non-fast-forward",
-        repoPath: "/repo",
-        workingDir: "/tmp/worktree/task-10",
-      });
+      expect(harness.getLatest().pendingForcePush).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1309,14 +1370,7 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().isGitActionsLocked).toBe(false);
 
       await harness.update(firstTaskArgs);
-      expect(harness.getLatest().gitConflict).toEqual({
-        operation: "rebase",
-        currentBranch: "feature/task-10",
-        targetBranch: "origin/main",
-        conflictedFiles: ["src/main.ts"],
-        output: "CONFLICT (content): Merge conflict in src/main.ts",
-        workingDir: "/tmp/worktree/task-10",
-      });
+      expect(harness.getLatest().gitConflict).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1467,11 +1521,12 @@ test.each(["repository", "directory", "branch", "target"] as const)(
         worktreeStatusSnapshotKey: null,
         isDiffDataLoading: true,
       });
-      expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
+      expect(harness.getLatest().pendingReset).toBeNull();
       await harness.run((state) => state.confirmReset());
       expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
       await harness.update(original);
-      expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
+      expect(harness.getLatest().pendingReset).toBeNull();
+      await harness.run((state) => state.requestFileReset("src/main.ts"));
       await harness.run((state) => state.confirmReset());
       expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(1);
       expect(gitResetWorktreeSelectionMock.mock.calls[0]?.[0]).toMatchObject({
@@ -1525,7 +1580,7 @@ test.each(["file", "hunk"] as const)(
         worktreeStatusSnapshotKey: null,
         isDiffDataLoading: true,
       });
-      expect(harness.getLatest().pendingReset).toEqual(selection);
+      expect(harness.getLatest().pendingReset).toBeNull();
       await harness.run((state) => state.confirmReset());
       expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
 
@@ -1562,7 +1617,8 @@ test.each(["repository", "directory", "branch"] as const)(
       await harness.run((state) => state.confirmPullRebase());
       expect(gitPullBranchMock).not.toHaveBeenCalled();
       await harness.update(original);
-      expect(harness.getLatest().pendingPullRebase?.branch).toBe("feature/task-10");
+      expect(harness.getLatest().pendingPullRebase).toBeNull();
+      await harness.run((state) => state.pullFromUpstream());
       await harness.run((state) => state.confirmPullRebase());
       expect(gitPullBranchMock).toHaveBeenCalledWith("/repo", "/repo/a");
       expect(gitPullBranchMock).toHaveBeenCalledTimes(1);
@@ -1572,7 +1628,7 @@ test.each(["repository", "directory", "branch"] as const)(
   },
 );
 
-test("keeps a late commit error in its original directory", async () => {
+test("drops a late commit error after the directory changes", async () => {
   const completed = createDeferred<GitCommitResult>();
   gitCommitAllMock.mockImplementationOnce(() => completed.promise);
   const original = createBaseArgs({ workingDir: "/repo/a" });
@@ -1594,7 +1650,7 @@ test("keeps a late commit error in its original directory", async () => {
     await harness.waitFor((state) => !state.isCommitting);
     expect(harness.getLatest().commitError).toBeNull();
     await harness.update(original);
-    expect(harness.getLatest().commitError).toBe("commit hook failed");
+    expect(harness.getLatest().commitError).toBeNull();
   } finally {
     completed.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
     await harness.unmount();

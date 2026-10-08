@@ -11,6 +11,7 @@ import {
 } from "./use-agent-studio-git-action-utils";
 
 type UseAgentStudioGitRebaseActionsArgs = {
+  isCurrentContext: () => boolean;
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
@@ -25,6 +26,7 @@ type UseAgentStudioGitRebaseActionsArgs = {
 };
 
 export function useAgentStudioGitRebaseActions({
+  isCurrentContext,
   repoPath,
   workingDir,
   branch,
@@ -87,6 +89,10 @@ export function useAgentStudioGitRebaseActions({
       try {
         const result = await host.gitPullBranch(repoPath, workingDir ?? undefined);
 
+        if (!isCurrentContext()) {
+          await refreshDiffData("soft");
+          return;
+        }
         if (result.outcome === "conflicts") {
           if (isConfirmedPullRebase) {
             setPending(null);
@@ -122,6 +128,7 @@ export function useAgentStudioGitRebaseActions({
         await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(error, "Pull failed.");
+        if (!isCurrentContext()) return;
         setRebaseError(message);
         setPending(null);
         toast.error("Pull failed", { description: message });
@@ -130,6 +137,7 @@ export function useAgentStudioGitRebaseActions({
       }
     },
     [
+      isCurrentContext,
       branch,
       captureFreshConflict,
       clearActionErrors,
@@ -169,6 +177,10 @@ export function useAgentStudioGitRebaseActions({
       setRebaseError(null);
       try {
         const result = await host.gitRebaseBranch(repoPath, trimmedTarget, workingDir ?? undefined);
+        if (!isCurrentContext()) {
+          await refreshDiffData("soft");
+          return;
+        }
         if (result.outcome === "conflicts") {
           const conflict: GitConflict = {
             operation: "rebase",
@@ -188,12 +200,13 @@ export function useAgentStudioGitRebaseActions({
         clearActionErrors();
         await refreshDiffData("soft");
       } catch (error) {
-        setRebaseError(toErrorMessage(error, fallbackError));
+        if (isCurrentContext()) setRebaseError(toErrorMessage(error, fallbackError));
       } finally {
         setIsRebasing(false);
       }
     },
     [
+      isCurrentContext,
       branch,
       captureFreshConflict,
       clearActionErrors,

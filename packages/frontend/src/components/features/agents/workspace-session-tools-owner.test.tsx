@@ -17,6 +17,220 @@ function ToolsOwner(props: Parameters<typeof useWorkspaceSessionTools>[0]) {
   return props.isVisible ? toolsContent : null;
 }
 
+test("returning to a session checks fresh comparison data while its previous read is pending", async () => {
+  const pending = Promise.withResolvers<GitWorktreeStatus>();
+  let currentBranch = "branch-a";
+  let currentFile = "original-a.txt";
+  let targetCalls = 0;
+  const status = (target: string, scope: "target" | "uncommitted"): GitWorktreeStatus => ({
+    currentBranch: { name: currentBranch, detached: false },
+    fileStatuses: [],
+    fileDiffs:
+      scope === "target"
+        ? [{ file: currentFile, type: "modified", additions: 1, deletions: 0, diff: "@@ -1 +1 @@" }]
+        : [],
+    targetAheadBehind: { ahead: currentFile === "original-a.txt" ? 9 : 1, behind: 0 },
+    upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+    snapshot: {
+      effectiveWorkingDir: "/repo",
+      targetBranch: target,
+      diffScope: scope,
+      observedAtMs: 1,
+      hashVersion: 1,
+      statusHash: currentFile,
+      diffHash: currentFile,
+    },
+  });
+  const oldStatus = status("refs/heads/main", "target");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetBranches: async () => [],
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
+          if (scope === "target" && ++targetCalls === 1) return pending.promise;
+          return status(target, scope);
+        },
+      },
+    }),
+  );
+  const args: Parameters<typeof useWorkspaceSessionTools>[0] = {
+    isVisible: true,
+    repoPath: "/repo",
+    workspaceId: "workspace",
+    sessionId: "session-a",
+    workingDirectory: "/repo",
+    contextMode: "worktree",
+    branchKey: "branch-a",
+    branchReady: true,
+    target: { branch: "main" },
+    targetError: null,
+    applyTarget: async () => {},
+    retryTarget: async () => {},
+    readBranch: async () => currentBranch,
+    activeTabId: "git",
+    onActiveTabChange: () => {},
+    selectedFile: null,
+    onSelectFile: () => {},
+  };
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture(),
+  );
+  const panel = (props: typeof args) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <SettingsModalProvider>
+          <ToolsOwner {...props} />
+        </SettingsModalProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel(args));
+  try {
+    await waitFor(() => expect(targetCalls).toBe(1));
+    currentBranch = "branch-b";
+    currentFile = "session-b.txt";
+    view.rerender(panel({ ...args, sessionId: "session-b", branchKey: currentBranch }));
+    await waitFor(() => expect(targetCalls).toBe(2));
+    currentBranch = "branch-a";
+    currentFile = "fresh-a.txt";
+    view.rerender(panel(args));
+    await waitFor(() => expect(targetCalls).toBe(3));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-git-diff-scope-target").hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), { button: 0 });
+    await waitFor(() => expect(screen.getByText("fresh-a.txt")).toBeDefined());
+    await act(async () => {
+      pending.resolve(oldStatus);
+      await pending.promise;
+    });
+    expect(screen.queryByText("original-a.txt")).toBeNull();
+    expect(screen.getByText("fresh-a.txt")).toBeDefined();
+    expect(targetCalls).toBe(3);
+  } finally {
+    pending.resolve(oldStatus);
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("keeps a rebase lock and captured target while the panel closes and reopens", async () => {
+  const pending = Promise.withResolvers<{
+    outcome: "rebased";
+    conflictedFiles: string[];
+    output: string;
+  }>();
+  const rebase = mock(async () => pending.promise);
+  const status = (target: string, scope: "target" | "uncommitted"): GitWorktreeStatus => ({
+    currentBranch: { name: "feature", detached: false },
+    fileStatuses: [],
+    fileDiffs: [],
+    targetAheadBehind: { ahead: 0, behind: 3 },
+    upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+    snapshot: {
+      effectiveWorkingDir: "/repo/a",
+      targetBranch: target,
+      diffScope: scope,
+      observedAtMs: 1,
+      hashVersion: 1,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    },
+  });
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        devServerGetState: async (_repoPath, owner) => buildState({ owner, scripts: [] }),
+        gitGetComparisonTarget: async (_repo, _dir, target) => ({
+          kind: "available",
+          reference: `refs/heads/${target.branch}`,
+        }),
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => status(target, scope),
+        gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => ({
+          currentBranch: status(target, scope).currentBranch,
+          fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+          targetAheadBehind: status(target, scope).targetAheadBehind,
+          upstreamAheadBehind: status(target, scope).upstreamAheadBehind,
+          snapshot: status(target, scope).snapshot,
+        }),
+        gitGetBranches: async () => [],
+        gitRebaseBranch: rebase,
+      },
+      bridge: {
+        subscribeDevServerEvents: async () => ({ transportEpoch: "test:1", unsubscribe: () => {} }),
+      },
+    }),
+  );
+  const queryClient = createQueryClient();
+  const panel = (isOpen: boolean, target = "release") => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <SettingsModalProvider>
+          <ToolsOwner
+            isVisible={isOpen}
+            repoPath="/repo"
+            workspaceId="workspace"
+            sessionId="session"
+            workingDirectory="/repo/a"
+            contextMode="worktree"
+            branchKey="feature"
+            branchReady={true}
+            target={{ branch: target }}
+            targetError={null}
+            applyTarget={async () => {}}
+            retryTarget={async () => {}}
+            readBranch={async () => "feature"}
+            activeTabId="git"
+            onActiveTabChange={() => {}}
+            selectedFile={null}
+            onSelectFile={() => {}}
+          />
+        </SettingsModalProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const rendered = render(panel(true));
+  try {
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-rebase-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+    await act(async () => fireEvent.click(screen.getByTestId("agent-studio-git-rebase-button")));
+    expect(rebase).toHaveBeenCalledWith("/repo", "refs/heads/release", "/repo/a");
+    rendered.rerender(panel(false, "next"));
+    expect(screen.queryByTestId("agent-studio-git-rebase-button")).toBeNull();
+    rendered.rerender(panel(true, "next"));
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain("next"),
+    );
+    expect(screen.getByTestId("agent-studio-git-rebase-button").hasAttribute("disabled")).toBe(
+      true,
+    );
+    fireEvent.click(screen.getByTestId("agent-studio-git-rebase-button"));
+    expect(rebase).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.resolve({ outcome: "rebased", conflictedFiles: [], output: "" });
+      await pending.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-rebase-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+  } finally {
+    rendered.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test.each(["directory", "branch"] as const)(
   "scopes a pending Git confirmation when its %s changes",
   async (change) => {
@@ -86,6 +300,7 @@ test.each(["directory", "branch"] as const)(
           <SettingsModalProvider>
             <ToolsOwner
               isVisible={isVisible}
+              applyTarget={async () => {}}
               repoPath="/repo"
               workspaceId="workspace"
               sessionId={sessionId}
@@ -113,7 +328,9 @@ test.each(["directory", "branch"] as const)(
           false,
         ),
       );
-      fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
+      });
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
       rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "file_explorer"));
       rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
@@ -125,7 +342,7 @@ test.each(["directory", "branch"] as const)(
       rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
       rendered.rerender(panel("session-b", "/repo/a", "branch:feature"));
-      expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
       const nextDirectory = change === "directory" ? "/repo/b" : "/repo/a";
       const nextBranchKey = change === "branch" ? "branch:other" : "branch:feature";
       rendered.rerender(panel("session-c", nextDirectory, nextBranchKey));
@@ -138,7 +355,9 @@ test.each(["directory", "branch"] as const)(
           false,
         ),
       );
-      fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
+      });
       await act(async () =>
         fireEvent.click(screen.getByRole("button", { name: "Pull with rebase" })),
       );

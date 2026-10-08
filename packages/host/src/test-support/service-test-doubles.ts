@@ -83,6 +83,7 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   deleteLocalBranch: unexpectedEffectCall("Git port", "deleteLocalBranch"),
   deleteReference: unexpectedEffectCall("Git port", "deleteReference"),
   fetchRemote: unexpectedEffectCall("Git port", "fetchRemote"),
+  getTrackedUpstreamReference: unexpectedEffectCall("Git port", "getTrackedUpstreamReference"),
   getCurrentBranch: unexpectedEffectCall("Git port", "getCurrentBranch"),
   getDiff: unexpectedEffectCall("Git port", "getDiff"),
   getRepositoryRoot: unexpectedEffectCall("Git port", "getRepositoryRoot"),

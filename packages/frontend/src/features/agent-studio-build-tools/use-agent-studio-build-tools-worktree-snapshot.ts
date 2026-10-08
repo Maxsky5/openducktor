@@ -1,5 +1,12 @@
-import type { DevServerOwner } from "@openducktor/contracts";
-import { useMemo } from "react";
+import type { DevServerOwner, GitTargetBranch } from "@openducktor/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
+import { useAgentStudioDiffVisibilityRefresh } from "../agent-studio-git/refresh/use-diff-visibility-refresh";
+import { worktreeBranchQueryOptions } from "@/state/queries/git";
+import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
+import { buildComparisonView } from "../agent-studio-git/session-comparison-view";
 import { hostClient } from "@/lib/host-client";
 import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
@@ -7,7 +14,7 @@ import {
   resolveAgentStudioGitPanelBranch,
 } from "@/pages/agents/right-panel/agents-page-git-panel";
 import type { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
-import type { useAgentStudioOrchestrationController } from "@/pages/agents/use-agent-studio-orchestration-controller";
+import type { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type { useWorkspaceState } from "@/state/app-state-provider";
 import type { TaskWorktreeQueryHost } from "@/state/queries/build-runtime";
 import type {
@@ -38,7 +45,9 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   selectedView: BuildToolsSelectedView;
   isGitTabActive: boolean;
   isRightPanelOpen: boolean;
-  repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
+  repoSettings: ReturnType<typeof useAgentStudioRepoSettings>["repoSettings"];
+  repoSettingsError: ReturnType<typeof useAgentStudioRepoSettings>["repoSettingsError"];
+  loadRepoSettings: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"];
 };
 
 type AgentStudioBuildToolsWorktreeSnapshotDependencies = {
@@ -63,12 +72,25 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
   resolvedGitPanelBranch: string | null;
   repositoryBranchIdentityKey: string | null;
   worktree: BuildToolsWorktreeSnapshotState;
-  diffData: DiffDataState;
+  diffData: DiffDataState & {
+    comparisonUnavailableReason?: string | null;
+    comparisonReference?: string | null;
+  };
+  comparison?: ReturnType<typeof useSessionComparison>;
   /** The right panel reads the dev server for this target. */
   devServerTarget: AgentStudioDevServerTarget;
   openInTarget: BuildToolsOpenInTarget;
   refreshWorktree: GitDiffRefresh;
 };
+
+export function useAgentStudioBuildToolsWorktreeSnapshot(
+  args: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
+): AgentStudioBuildToolsWorktreeSnapshot {
+  return useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
+    args,
+    DEFAULT_SNAPSHOT_DEPENDENCIES,
+  );
+}
 
 const DEFAULT_SNAPSHOT_DEPENDENCIES: AgentStudioBuildToolsWorktreeSnapshotDependencies = {
   taskWorktreeHost: hostClient,
@@ -83,6 +105,8 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     isGitTabActive,
     isRightPanelOpen,
     repoSettings,
+    repoSettingsError,
+    loadRepoSettings,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
@@ -123,15 +147,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       selectedView.selectedTask?.targetBranchError,
     ],
   );
-  const worktreeDiffPreconditionError =
-    gitPanelContextMode === "worktree" ? taskTargetBranchState.validationError : null;
-  const diffComparisonTarget = useMemo(
-    () =>
-      gitPanelContextMode === "repository"
-        ? { branch: UPSTREAM_TARGET_BRANCH }
-        : taskTargetBranchState.effectiveTargetBranch,
-    [gitPanelContextMode, taskTargetBranchState.effectiveTargetBranch],
-  );
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const hasGitContext = buildToolsBootstrap.repoPath != null && hasSelectedTask;
   const repoPath = hasGitContext ? buildToolsBootstrap.repoPath : null;
@@ -164,6 +179,19 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     taskWorktreeVersion,
   });
 
+  const directory = gitPanelContextMode === "repository" ? repoPath : worktree.path;
+  const { comparison, refreshBranch, retryDefault } = useTaskSessionComparison({
+    repoPath,
+    directory,
+    viewKey: JSON.stringify([repoPath, taskId, selectedView.selectedSession.identity]),
+    contextMode: gitPanelContextMode,
+    savedTarget: selectedView.selectedTask?.targetBranch,
+    repoSettings,
+    repoSettingsError,
+    loadRepoSettings,
+    targetState: taskTargetBranchState,
+    branchKey: repositoryBranchIdentityKey,
+  });
   const diffDataInput: UseAgentStudioDiffDataInput = {
     repoPath,
     worktreePath: worktree.path,
@@ -172,14 +200,17 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     isWorktreeResolutionResolving: worktree.isResolving,
     worktreeResolutionError: worktree.error,
     retryWorktreeResolution: worktree.retry,
-    defaultTargetBranch: diffComparisonTarget,
-    branchIdentityKey: repositoryBranchIdentityKey,
-    enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
+    comparisonReference: comparison.resolvedTarget ?? "HEAD",
+    defaultTargetBranch: { branch: comparison.resolvedTarget ?? "HEAD" },
+    branchIdentityKey: comparison.contextKey,
+    enableScheduledRefresh: false,
   };
-  if (worktreeDiffPreconditionError) {
-    diffDataInput.preconditionError = worktreeDiffPreconditionError;
-  }
-  const diffData = dependencies.useDiffData(diffDataInput);
+  const reads = dependencies.useDiffData(diffDataInput);
+  const diffData = buildComparisonView(
+    reads,
+    comparison,
+    taskComparisonLabel(gitPanelContextMode, comparison.target, taskTargetBranchState),
+  );
   const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
     contextMode: gitPanelContextMode,
     workspaceActiveBranch: activeBranch,
@@ -205,6 +236,16 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     ],
   );
 
+  const refreshWorktree = useTaskComparisonRefresh({
+    comparison,
+    refreshBranch,
+    refreshReads: reads.refreshAllScopes,
+    retryDefault,
+    enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
+    repoPath,
+    shouldBlockDiffLoading: worktree.shouldBlockDiffLoading,
+  });
+
   return useMemo(
     () => ({
       isEnabled,
@@ -222,11 +263,14 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       repositoryBranchIdentityKey,
       worktree,
       diffData,
+      comparison,
       devServerTarget,
       openInTarget,
-      refreshWorktree: diffData.refresh,
+      refreshWorktree,
     }),
     [
+      comparison,
+      refreshWorktree,
       buildToolsBootstrap.sessionWorkingDirectory,
       devServerTarget,
       diffData,
@@ -246,13 +290,128 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   );
 }
 
-export function useAgentStudioBuildToolsWorktreeSnapshot(
-  args: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
-): AgentStudioBuildToolsWorktreeSnapshot {
-  return useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
-    args,
-    DEFAULT_SNAPSHOT_DEPENDENCIES,
+function useTaskComparisonRefresh({
+  comparison,
+  refreshBranch,
+  refreshReads,
+  retryDefault,
+  enableScheduledRefresh,
+  repoPath,
+  shouldBlockDiffLoading,
+}: {
+  comparison: ReturnType<typeof useSessionComparison>;
+  refreshBranch: ReturnType<typeof useTaskSessionComparison>["refreshBranch"];
+  refreshReads: ReturnType<typeof useAgentStudioDiffData>["refreshAllScopes"];
+  retryDefault: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"] | null;
+  enableScheduledRefresh: boolean;
+  repoPath: string | null;
+  shouldBlockDiffLoading: boolean;
+}) {
+  useEffect(() => {
+    if (comparison.resolvedTarget) void refreshReads();
+  }, [comparison.resolvedTarget, refreshReads]);
+  const refreshComparison = comparison.refreshComparison;
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    async (mode = "hard") => {
+      // Keep uncommitted reads available when the comparison check fails.
+      try {
+        if (mode === "hard" && retryDefault) {
+          await retryDefault();
+          // The settings Query starts a new comparison with the loaded default.
+        } else {
+          await refreshComparison(mode);
+        }
+        // Reading the branch changes the comparison context. Fetch its captured target first.
+        const branch = await refreshBranch();
+        if (branch.isError) throw branch.error;
+      } finally {
+        await refreshReads(mode === "scheduled" ? "summary" : "full");
+      }
+    },
+    [refreshBranch, refreshComparison, refreshReads, retryDefault],
   );
+  useAgentStudioDiffVisibilityRefresh({
+    enableScheduledRefresh,
+    repoPath,
+    shouldBlockDiffLoading,
+    refresh: () => {
+      void refreshWorktree("scheduled").catch((error) =>
+        toast.error("Could not refresh Git changes", { description: errorMessage(error) }),
+      );
+    },
+  });
+  return refreshWorktree;
+}
+
+function taskComparisonLabel(
+  contextMode: AgentStudioGitPanelContextMode,
+  target: GitTargetBranch | null,
+  targetState: ReturnType<typeof resolveTaskTargetBranchState>,
+) {
+  if (contextMode === "repository") return UPSTREAM_TARGET_BRANCH;
+  return target || targetState.validationError
+    ? targetState.displayTargetBranch
+    : "Repository default";
+}
+
+type TaskComparisonInput = {
+  repoPath: string | null;
+  directory: string | null;
+  viewKey: string;
+  contextMode: AgentStudioGitPanelContextMode;
+  savedTarget: GitTargetBranch | undefined;
+  repoSettings: UseAgentStudioBuildToolsWorktreeSnapshotArgs["repoSettings"];
+  repoSettingsError: UseAgentStudioBuildToolsWorktreeSnapshotArgs["repoSettingsError"];
+  loadRepoSettings: UseAgentStudioBuildToolsWorktreeSnapshotArgs["loadRepoSettings"];
+  targetState: ReturnType<typeof resolveTaskTargetBranchState>;
+  branchKey: string | null;
+};
+
+function useTaskSessionComparison(input: TaskComparisonInput) {
+  const branch = useQuery({
+    ...worktreeBranchQueryOptions(
+      input.repoPath ?? "__no_repo__",
+      input.directory ?? "__no_directory__",
+    ),
+    enabled: input.directory !== null,
+  });
+  const { target, targetError, retryDefault } = taskComparisonTarget(input);
+  const comparison = useSessionComparison({
+    enabled: true,
+    viewKey: input.viewKey,
+    repoPath: input.repoPath ?? "__no_repo__",
+    workingDirectory: input.directory,
+    target,
+    targetError,
+    branchError: branch.isError ? errorMessage(branch.error) : null,
+    branchKey: JSON.stringify([input.branchKey, branch.data]),
+    branchReady: branch.data !== undefined && !branch.isFetching && !branch.isError,
+  });
+  return {
+    comparison,
+    refreshBranch: branch.refetch,
+    retryDefault,
+  };
+}
+
+function taskComparisonTarget(input: TaskComparisonInput) {
+  if (input.contextMode === "repository") {
+    return { target: { branch: UPSTREAM_TARGET_BRANCH }, targetError: null, retryDefault: null };
+  }
+  if (input.savedTarget || input.repoSettings !== null) {
+    return {
+      target: input.targetState.effectiveTargetBranch,
+      targetError: input.targetState.validationError,
+      retryDefault: null,
+    };
+  }
+  return {
+    target: null,
+    targetError:
+      input.targetState.validationError ??
+      (input.repoSettingsError ? errorMessage(input.repoSettingsError) : null),
+    retryDefault: input.loadRepoSettings,
+  };
 }
 
 function buildDevServerTarget(

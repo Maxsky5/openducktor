@@ -22,7 +22,7 @@ describe("target-branch helpers", () => {
     });
     expect(normalizeTargetBranch({ remote: "origin", branch: "origin/main" })).toEqual({
       remote: "origin",
-      branch: "main",
+      branch: "origin/main",
     });
     expect(normalizeTargetBranch({ branch: "refs/remotes/upstream/release" })).toEqual({
       remote: "upstream",

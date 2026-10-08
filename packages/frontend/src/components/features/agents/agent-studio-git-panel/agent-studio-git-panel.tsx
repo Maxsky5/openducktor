@@ -164,7 +164,7 @@ function AgentStudioGitPanelHeader({
   const headerProps = getGitInfoHeaderProps(model, view);
   return (
     <>
-      <GitInfoHeader {...headerProps} />
+      <GitInfoHeader key={model.subjectKey} {...headerProps} />
       {model.resetError ? (
         <div
           role="alert"
@@ -196,14 +196,16 @@ function getGitInfoHeaderProps(
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
     comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
+    comparisonReference: model.comparisonReference ?? null,
     pullRequest: model.pullRequest ?? null,
     branch: view.displayedScopeState.branch,
     targetBranch: model.targetBranch,
     diffScope: view.diffScope,
     uncommittedFileCount: view.displayedUncommittedFileCount,
-    commitsAheadBehind: view.displayedScopeState.commitsAheadBehind,
+    commitsAheadBehind: model.commitsAheadBehind,
     upstreamAheadBehind: view.displayedScopeState.upstreamAheadBehind ?? null,
     upstreamStatus: view.displayedScopeState.upstreamStatus,
+    upstreamError: view.displayedScopeState.upstreamError ?? null,
     isLoading: model.isLoading,
     isCommitting: model.isCommitting ?? false,
     isPushing: model.isPushing ?? false,
@@ -220,6 +222,11 @@ function getGitInfoHeaderProps(
     rebaseOntoTarget: model.rebaseOntoTarget ?? null,
     pullFromUpstream: model.pullFromUpstream ?? null,
     onDetectPullRequest: model.onDetectPullRequest ?? null,
+    targetBranchEditable: model.targetBranchEditable,
+    targetBranchHelpText: model.targetBranchHelpText,
+    targetBranchesPending: model.targetBranchesPending,
+    targetBranchesError: model.targetBranchesError,
+    retryTargetBranches: model.retryTargetBranches,
     targetBranchOptions: model.targetBranchOptions ?? [],
     targetBranchSelectionValue: model.targetBranchSelectionValue ?? "",
     setDiffScope: view.handleDiffScopeChange,
@@ -285,6 +292,7 @@ function AgentStudioGitDiff({
   return (
     <ScrollArea className="min-h-0 flex-1">
       <EmptyDiffState
+        targetBranch={model.targetBranch}
         isLoading={view.displayedIsInitialLoading}
         contextMode={model.contextMode ?? "worktree"}
         diffScope={view.diffScope}

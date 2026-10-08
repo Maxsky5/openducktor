@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { issueItemsQueryKeys } from "@/state/queries/issue-items";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
@@ -16,7 +17,7 @@ const createQueryClient = (): QueryClient =>
 
 const createHostPort = (): TaskMutationCommandHostPort => ({
   taskCreate: async () => undefined,
-  taskUpdate: async () => undefined,
+  taskUpdate: async () => createTaskCardFixture(),
   taskDelete: async () => undefined,
   taskClose: async () => undefined,
   taskTransition: async () => undefined,
@@ -40,6 +41,39 @@ const createCacheImpact = (): TaskMutationCommandCacheImpact => ({
 });
 
 describe("createTaskMutationCommands", () => {
+  test("publishes the saved task target before a later view refresh fails", async () => {
+    const client = createQueryClient();
+    const previous = createTaskCardFixture({ id: "task-1", targetBranch: { branch: "main" } });
+    const saved = { ...previous, targetBranch: { branch: "release" } };
+    const commands = createTaskMutationCommands({
+      activeRepoPath: "/repo",
+      activeWorkspaceId: "workspace-1",
+      tasks: [previous],
+      queryClient: client,
+      hostPort: { ...createHostPort(), taskUpdate: async () => saved },
+      runTaskMutation: async (options) => {
+        await options.run("/repo");
+        throw new Error("View refresh failed after save.");
+      },
+      cacheImpact: createCacheImpact(),
+      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
+    });
+    try {
+      let failure: unknown;
+      try {
+        await commands.setTaskTargetBranch("task-1", saved.targetBranch);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(client.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))).toEqual({
+        tasks: [saved],
+      });
+    } finally {
+      client.clear();
+    }
+  });
+
   test("normalizes a nonblank title before creating the task", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const taskCreate = mock(async () => undefined);
@@ -226,7 +260,7 @@ describe("createTaskMutationCommands", () => {
   test("forwards staged description assets through create and update", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const taskCreate = mock(async () => undefined);
-    const taskUpdate = mock(async () => undefined);
+    const taskUpdate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",

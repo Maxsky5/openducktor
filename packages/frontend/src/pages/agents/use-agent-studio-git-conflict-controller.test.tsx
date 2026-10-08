@@ -28,6 +28,7 @@ let useAgentStudioGitConflictController: UseAgentStudioGitConflictControllerHook
 type HookArgs = Parameters<UseAgentStudioGitConflictControllerHook>[0];
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  isCurrentContext: () => true,
   repoPath: "/repo",
   workingDir: null,
   branch: "feature/task-10",
@@ -107,49 +108,53 @@ describe("useAgentStudioGitConflictController", () => {
       await harness.unmount();
     }
   });
-  test("reserves assistance synchronously and cancels a request after switching away and back", async () => {
-    const prepared = createDeferred<void>();
-    let submissions = 0;
-    const onResolveGitConflict: NonNullable<HookArgs["onResolveGitConflict"]> = async (
-      _conflict,
-      assertCurrent,
-    ) => {
-      await prepared.promise;
-      assertCurrent?.();
-      submissions += 1;
-      return createAgentMessageSendReceipt();
-    };
-    const original = createBaseArgs({
-      workingDir: "/tmp/worktree/task-10",
-      detectedConflict: createConflict(),
-      assistanceContextKey: "chat-one",
-      onResolveGitConflict,
-    });
-    const harness = createHookHarness(useAgentStudioGitConflictController, original);
-    try {
-      await harness.mount();
-      let pending!: Promise<void>;
-      await harness.run((state) => {
-        pending = state.askBuilderToResolveGitConflict();
-        void state.askBuilderToResolveGitConflict();
-        void state.abortGitConflict();
+  test.each(["assistanceContextKey", "contextKey"] as const)(
+    "reserves assistance synchronously and cancels a request after switching $contextKey away and back",
+    async (contextKey) => {
+      const prepared = createDeferred<void>();
+      let submissions = 0;
+      const onResolveGitConflict: NonNullable<HookArgs["onResolveGitConflict"]> = async (
+        _conflict,
+        assertCurrent,
+      ) => {
+        await prepared.promise;
+        assertCurrent?.();
+        submissions += 1;
+        return createAgentMessageSendReceipt();
+      };
+      const original = createBaseArgs({
+        workingDir: "/tmp/worktree/task-10",
+        detectedConflict: createConflict(),
+        assistanceContextKey: "chat-one",
+        contextKey: "comparison-one",
+        onResolveGitConflict,
       });
-      await harness.update({ ...original, assistanceContextKey: "chat-two" });
-      await harness.update(original);
-      await harness.run(async () => {
+      const harness = createHookHarness(useAgentStudioGitConflictController, original);
+      try {
+        await harness.mount();
+        let pending!: Promise<void>;
+        await harness.run((state) => {
+          pending = state.askBuilderToResolveGitConflict();
+          void state.askBuilderToResolveGitConflict();
+          void state.abortGitConflict();
+        });
+        await harness.update({ ...original, [contextKey]: "other" });
+        await harness.update(original);
+        await harness.run(async () => {
+          prepared.resolve();
+          await pending;
+        });
+        expect(submissions).toBe(0);
+        expect(gitAbortConflictMock).not.toHaveBeenCalled();
+        expect(toastSuccessMock).not.toHaveBeenCalled();
+        expect(toastErrorMock).not.toHaveBeenCalled();
+        expect(harness.getLatest().activeGitConflict).toEqual(createConflict());
+      } finally {
         prepared.resolve();
-        await pending;
-      });
-      expect(submissions).toBe(0);
-      expect(gitAbortConflictMock).not.toHaveBeenCalled();
-      expect(toastSuccessMock).not.toHaveBeenCalled();
-      expect(toastErrorMock).not.toHaveBeenCalled();
-      expect(harness.getLatest().activeGitConflict).toEqual(createConflict());
-    } finally {
-      prepared.resolve();
-      await harness.unmount();
-    }
-  });
+        await harness.unmount();
+      }
+    },
+  );
   test("hydrates persisted conflicts without auto-opening the modal", async () => {
     const harness = createHookHarness(
       useAgentStudioGitConflictController,

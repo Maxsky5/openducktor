@@ -521,7 +521,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("shows a clear no-upstream message in repository compare mode", async () => {
+  test("keeps an explicit comparison independent from untracked upstream state", async () => {
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -540,12 +540,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(hasVisibleText(root, "No upstream branch yet")).toBe(true);
+    expect(hasVisibleText(root, "No changes against origin/main")).toBe(true);
     expect(
-      hasVisibleText(
-        root,
-        "This branch is not tracking an upstream branch yet. Push it first to create one, then its branch changes will appear here.",
-      ),
+      hasVisibleText(root, "Changes since this branch diverged from origin/main appear here."),
     ).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-pull-button").props.disabled)).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(false);

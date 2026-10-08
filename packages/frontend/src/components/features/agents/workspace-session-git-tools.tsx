@@ -11,10 +11,11 @@ import { SharedToolsPanel, type SharedToolsPanelModel } from "./shared-tools-pan
 import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
 export function WorkspaceSessionGitTools({
+  actions,
   commentOwner,
   repoPath,
   devServerOwner,
-  actions,
+  control,
   diffData,
   contextMode,
   repositoryBranchControl,
@@ -37,12 +38,14 @@ export function WorkspaceSessionGitTools({
     subjectKey: JSON.stringify([commentOwner.workspaceId, commentOwner.sessionId]),
     commentOwner,
     commentPlaceholder: "Add a comment for this chat",
+    ...control,
     refresh,
     isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
     contextMode,
     repositoryBranchControl,
-    targetBranch: resolvedTarget ?? "",
+    targetBranch: diffData.targetBranch,
     comparisonUnavailableReason: unavailableReason,
+    comparisonReference: resolvedTarget,
     diffScope: resolvedTarget ? diffData.diffScope : "uncommitted",
     commitsAheadBehind: resolvedTarget ? diffData.commitsAheadBehind : null,
     scopeStatesByScope: resolvedTarget
@@ -82,11 +85,14 @@ export function WorkspaceSessionGitTools({
 }
 
 type WorkspaceSessionGitToolsProps = {
+  actions: ReturnType<typeof useAgentStudioGitActions>;
   commentOwner: Extract<InlineCommentOwner, { kind: "workspace_session" }>;
   repoPath: string;
   devServerOwner: DevServerOwner;
   tools: SharedToolsPanelModel<WorkspaceToolsTabId>;
-  actions: ReturnType<typeof useAgentStudioGitActions>;
+  control: ReturnType<
+    typeof import("@/features/agent-studio-git/use-session-comparison").useSessionComparisonControl
+  >;
   diffData: DiffDataState;
   contextMode: "repository" | "worktree";
   repositoryBranchControl?: ReactNode;

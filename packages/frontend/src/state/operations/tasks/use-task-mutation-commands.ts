@@ -13,6 +13,7 @@ import {
   type AgentSessionReadPort,
   removeAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
+import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { invalidateRepoIssueItemsQueries } from "@/state/queries/issue-items";
 import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
@@ -63,7 +64,7 @@ export type TaskMutationCommandHostPort = {
     taskId: string,
     patch: TaskUpdatePatch,
     assets?: TaskAssetDescriptionMutation,
-  ) => Promise<void>;
+  ) => Promise<TaskCard>;
   taskDelete: (repoPath: string, taskId: string, deleteSubtasks: boolean) => Promise<void>;
   taskClose: (repoPath: string, taskId: string) => Promise<void>;
   taskTransition: (
@@ -80,9 +81,7 @@ const productionTaskMutationHostPort: TaskMutationCommandHostPort = {
   taskCreate: async (...args) => {
     await host.taskCreate(...args);
   },
-  taskUpdate: async (...args) => {
-    await host.taskUpdate(...args);
-  },
+  taskUpdate: (...args) => host.taskUpdate(...args),
   taskDelete: async (...args) => {
     await host.taskDelete(...args);
   },
@@ -169,7 +168,17 @@ export const createTaskMutationCommands = ({
     await runTaskMutation({
       refreshStrategy: { kind: "task", taskId },
       run: async (repoPath) => {
-        await hostPort.taskUpdate(repoPath, taskId, { targetBranch });
+        const saved = await hostPort.taskUpdate(repoPath, taskId, { targetBranch });
+        const queryKey = taskQueryKeys.repoData(repoPath);
+        await queryClient.cancelQueries({ queryKey, exact: true }, { silent: true });
+        queryClient.setQueryData<RepoTaskData>(queryKey, (current) => {
+          const list = current?.tasks ?? tasks;
+          return {
+            tasks: list.some((task) => task.id === saved.id)
+              ? list.map((task) => (task.id === saved.id ? saved : task))
+              : [...list, saved],
+          };
+        });
       },
       successDescription: taskId,
       failureTitle: "Failed to update task target branch",

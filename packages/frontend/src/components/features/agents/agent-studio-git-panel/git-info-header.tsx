@@ -5,13 +5,10 @@ import {
   GitBranch,
   Link2,
   LoaderCircle,
-  Pencil,
   RefreshCw,
   Target,
-  X,
 } from "lucide-react";
-import { memo, type ReactElement, type ReactNode, useState } from "react";
-import { BranchSelector } from "@/components/features/repository/branch-selector";
+import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   segmentedControlRootClassName,
@@ -22,20 +19,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
+import { GitTargetBranchPanel, type GitTargetBranchPanelProps } from "./git-target-branch-panel";
 import type { AgentStudioGitPanelModel } from "./types";
-
-const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
 
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
+  | "targetBranchEditable"
+  | "targetBranchHelpText"
+  | "targetBranchesPending"
+  | "targetBranchesError"
+  | "retryTargetBranches"
   | "contextMode"
   | "comparisonUnavailableReason"
+  | "comparisonReference"
   | "pullRequest"
   | "branch"
   | "targetBranch"
   | "commitsAheadBehind"
   | "upstreamAheadBehind"
   | "upstreamStatus"
+  | "upstreamError"
   | "diffScope"
   | "isLoading"
   | "isCommitting"
@@ -63,6 +66,165 @@ type GitInfoHeaderProps = Pick<
   /** Replaces the read-only branch label in repository mode with a branch switcher. */
   repositoryBranchControl?: ReactNode;
 };
+
+export const GitInfoHeader = memo(function GitInfoHeader({
+  contextMode = "worktree",
+  comparisonUnavailableReason,
+  comparisonReference,
+  pullRequest,
+  branch,
+  targetBranch,
+  commitsAheadBehind,
+  upstreamAheadBehind,
+  upstreamStatus,
+  upstreamError,
+  diffScope,
+  uncommittedFileCount,
+  isLoading,
+  isCommitting,
+  isPushing,
+  isRebasing,
+  isResetting,
+  isDetectingPullRequest,
+  detectPullRequestDisabledReason,
+  isGitActionsLocked,
+  gitActionsLockReason,
+  showLockReasonBanner,
+  pushError,
+  rebaseError,
+  pushBranch,
+  rebaseOntoTarget,
+  pullFromUpstream,
+  onDetectPullRequest,
+  setDiffScope,
+  onRefresh,
+  targetBranchOptions = [],
+  targetBranchSelectionValue = "",
+  onUpdateTargetBranch,
+  repositoryBranchControl = null,
+  targetBranchEditable,
+  targetBranchHelpText,
+  targetBranchesPending,
+  targetBranchesError,
+  retryTargetBranches,
+}: GitInfoHeaderProps): ReactElement {
+  const state = getGitInfoHeaderState({
+    contextMode,
+    pullRequest,
+    branch,
+    targetBranch,
+    commitsAheadBehind,
+    upstreamAheadBehind,
+    upstreamStatus,
+    uncommittedFileCount,
+    isLoading,
+    isCommitting,
+    isPushing,
+    isRebasing,
+    isResetting,
+    isGitActionsLocked,
+    gitActionsLockReason,
+    pushBranch,
+    rebaseOntoTarget,
+    pullFromUpstream,
+    onDetectPullRequest,
+    targetBranchOptions,
+    onUpdateTargetBranch,
+  });
+
+  const handleScopeChange = (scope: DiffScope): void => {
+    if (diffScope === scope) {
+      return;
+    }
+    setDiffScope(scope);
+  };
+
+  return (
+    <div className="@container/git-header flex flex-col border-b border-border">
+      <GitBranchContextRow
+        key={JSON.stringify([
+          branch,
+          targetBranchSelectionValue,
+          targetBranchEditable ?? state.canEditTargetBranch,
+        ])}
+        control={{
+          targetBranchHelpText,
+          targetBranchesPending,
+          targetBranchesError,
+          retryTargetBranches,
+        }}
+        currentBranchLabel={state.currentBranchLabel}
+        repositoryBranchControl={repositoryBranchControl}
+        branchState={{
+          hasTargetAhead: state.hasTargetAhead,
+          isRepositoryMode: state.isRepositoryMode,
+        }}
+        canEditTargetBranch={targetBranchEditable ?? state.canEditTargetBranch}
+        targetAheadCount={state.targetAheadCount}
+        targetBranchLabel={state.targetBranchLabel}
+        targetBranchOptions={targetBranchOptions}
+        targetBranchSelectionValue={targetBranchSelectionValue}
+        onUpdateTargetBranch={onUpdateTargetBranch}
+      />
+
+      <GitActionRow
+        actionState={{
+          canPull: state.canPull,
+          canPush: state.canPush,
+          canRebase: state.canRebase,
+          canRefresh: state.canRefresh,
+          isDetectingPullRequest: Boolean(isDetectingPullRequest),
+          isLoading,
+          isPushing: Boolean(isPushing),
+          isRepositoryMode: state.isRepositoryMode,
+          showDetectPullRequest: state.showDetectPullRequest,
+          detectPullRequestDisabledReason: detectPullRequestDisabledReason ?? null,
+        }}
+        onDetectPullRequest={onDetectPullRequest}
+        onRefresh={onRefresh}
+        pullFromUpstream={pullFromUpstream}
+        pullTooltip={state.pullTooltip}
+        pushAheadCount={state.pushAheadCount}
+        pushBehindCount={state.pushBehindCount}
+        pushBranch={pushBranch}
+        pushTooltip={state.pushTooltip}
+        rebaseBehindCount={state.rebaseBehindCount}
+        rebaseOntoTarget={rebaseOntoTarget}
+        rebaseTooltip={`${state.rebaseTooltip}: ${comparisonReference ?? targetBranch}`}
+      />
+
+      {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
+        <div
+          className="border-y border-border bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+          data-testid="agent-studio-git-lock-reason"
+        >
+          {gitActionsLockReason}
+        </div>
+      ) : null}
+
+      {upstreamStatus === "error" ? (
+        <p role="alert" className="px-3 py-2 text-xs text-destructive">
+          Upstream status is unavailable. {upstreamError} Fetch the tracked remote or fix branch
+          tracking settings.
+        </p>
+      ) : null}
+      {comparisonUnavailableReason ? (
+        <p
+          role="status"
+          className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
+        >
+          {comparisonUnavailableReason}
+        </p>
+      ) : null}
+      <GitDiffScopeTabs
+        diffScope={diffScope}
+        onScopeChange={handleScopeChange}
+        comparisonUnavailableReason={comparisonUnavailableReason ?? null}
+      />
+      <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
+    </div>
+  );
+});
 
 type GitActionIconButtonProps = {
   testId: string;
@@ -139,6 +301,7 @@ function GitActionIconButton({
 }
 
 type GitBranchContextRowProps = {
+  control: GitTargetBranchPanelProps["control"];
   currentBranchLabel: string;
   repositoryBranchControl: ReactNode;
   branchState: {
@@ -153,159 +316,8 @@ type GitBranchContextRowProps = {
   onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
 };
 
-type TargetBranchEditorState =
-  | { mode: "display" }
-  | {
-      mode: "editing";
-      draft: string;
-      isSaving: boolean;
-    };
-
-type GitTargetBranchPanelProps = {
-  canEditTargetBranch: boolean;
-  targetBranchLabel: string;
-  targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
-  targetBranchSelectionValue: string;
-  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
-};
-
-function GitTargetBranchPanel({
-  canEditTargetBranch,
-  targetBranchLabel,
-  targetBranchOptions,
-  targetBranchSelectionValue,
-  onUpdateTargetBranch,
-}: GitTargetBranchPanelProps): ReactElement {
-  const [editorState, setEditorState] = useState<TargetBranchEditorState>({ mode: "display" });
-  const isEditorOpen = canEditTargetBranch && editorState.mode === "editing";
-  const isSavingTargetBranch = isEditorOpen ? editorState.isSaving : false;
-  const displayedSelectionValue = isEditorOpen ? editorState.draft : targetBranchSelectionValue;
-
-  const handleEditTargetBranch = (): void => {
-    if (!canEditTargetBranch || isSavingTargetBranch) {
-      return;
-    }
-
-    setEditorState({
-      mode: "editing",
-      draft: targetBranchSelectionValue,
-      isSaving: false,
-    });
-  };
-
-  const handleCancelTargetBranchEdit = (): void => {
-    if (isSavingTargetBranch) {
-      return;
-    }
-
-    setEditorState({ mode: "display" });
-  };
-
-  const handleSelectTargetBranch = (selection: string): void => {
-    if (!onUpdateTargetBranch || editorState.mode !== "editing" || editorState.isSaving) {
-      return;
-    }
-
-    if (selection === targetBranchSelectionValue) {
-      setEditorState({ mode: "display" });
-      return;
-    }
-
-    setEditorState({
-      mode: "editing",
-      draft: selection,
-      isSaving: true,
-    });
-
-    void onUpdateTargetBranch(selection).then(
-      () => {
-        setEditorState({ mode: "display" });
-      },
-      () => {
-        // Task operations already surface actionable errors.
-        setEditorState({
-          mode: "editing",
-          draft: selection,
-          isSaving: false,
-        });
-      },
-    );
-  };
-
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2">
-      <p
-        id={TARGET_BRANCH_LABEL_ID}
-        className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
-      >
-        Target branch
-      </p>
-      {isEditorOpen ? (
-        <div
-          className="mt-1 flex h-7 min-w-0 items-center gap-2"
-          data-testid="agent-studio-git-target-branch-editor"
-        >
-          <div className="min-w-0 flex-1">
-            <BranchSelector
-              value={displayedSelectionValue}
-              options={targetBranchOptions}
-              triggerAriaLabelledBy={TARGET_BRANCH_LABEL_ID}
-              className="w-full"
-              popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
-              triggerClassName="h-7 text-xs"
-              disabled={isSavingTargetBranch}
-              onValueChange={handleSelectTargetBranch}
-            />
-          </div>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            aria-label="Cancel target branch edit"
-            onClick={handleCancelTargetBranchEdit}
-            disabled={isSavingTargetBranch}
-            data-testid="agent-studio-git-target-branch-cancel"
-          >
-            {isSavingTargetBranch ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <X className="size-3.5" />
-            )}
-          </Button>
-        </div>
-      ) : (
-        <div
-          className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-          data-testid="agent-studio-git-target-branch-display-row"
-        >
-          <Target className="size-3.5 shrink-0 text-muted-foreground" />
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-            data-testid="agent-studio-git-target-branch"
-          >
-            {targetBranchLabel}
-          </span>
-          {canEditTargetBranch ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="ml-auto size-7 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Edit target branch"
-              onClick={handleEditTargetBranch}
-              data-testid="agent-studio-git-target-branch-edit"
-            >
-              <Pencil className="size-3.5" />
-            </Button>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function GitBranchContextRow({
+  control,
   currentBranchLabel,
   repositoryBranchControl,
   branchState,
@@ -317,14 +329,14 @@ function GitBranchContextRow({
   onUpdateTargetBranch,
 }: GitBranchContextRowProps): ReactElement {
   const { hasTargetAhead, isRepositoryMode } = branchState;
-  if (isRepositoryMode && repositoryBranchControl) {
+  if (isRepositoryMode && !canEditTargetBranch && repositoryBranchControl) {
     return (
       <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
         {repositoryBranchControl}
       </div>
     );
   }
-  if (isRepositoryMode) {
+  if (isRepositoryMode && !canEditTargetBranch) {
     return (
       <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
         <div
@@ -345,34 +357,38 @@ function GitBranchContextRow({
   }
   return (
     <div
-      className="my-2 grid gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+      className="my-2 grid gap-2 px-3 @min-[32rem]/git-header:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] @min-[32rem]/git-header:items-center"
       data-testid="agent-studio-git-branch-context-row"
     >
-      <div className="rounded-lg border border-border bg-card px-3 py-2">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Current branch
-        </p>
-        <div
-          className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-          data-testid="agent-studio-git-current-branch-display-row"
-        >
-          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-            data-testid="agent-studio-git-current-branch"
+      {isRepositoryMode && repositoryBranchControl ? (
+        <div className="min-w-0">{repositoryBranchControl}</div>
+      ) : (
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            Current branch
+          </p>
+          <div
+            className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
+            data-testid="agent-studio-git-current-branch-display-row"
           >
-            {currentBranchLabel}
-          </span>
+            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
+              data-testid="agent-studio-git-current-branch"
+            >
+              {currentBranchLabel}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="relative flex items-center justify-center" aria-hidden="true">
+      <div className="relative flex items-center justify-center gap-2" aria-hidden="true">
         <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
           <ArrowRight className="size-3.5" />
         </span>
         {hasTargetAhead ? (
           <span
-            className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+            className="pointer-events-none text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400 @min-[32rem]/git-header:absolute @min-[32rem]/git-header:-top-4 @min-[32rem]/git-header:left-1/2 @min-[32rem]/git-header:-translate-x-1/2"
             data-testid="agent-studio-git-target-ahead-count"
           >
             {targetAheadCount}
@@ -381,7 +397,8 @@ function GitBranchContextRow({
       </div>
 
       <GitTargetBranchPanel
-        key={canEditTargetBranch ? "editable" : "readonly"}
+        key={targetBranchSelectionValue}
+        control={control}
         canEditTargetBranch={canEditTargetBranch}
         targetBranchLabel={targetBranchLabel}
         targetBranchOptions={targetBranchOptions}
@@ -840,10 +857,7 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
   };
 
   return {
-    canEditTargetBranch:
-      !isRepositoryMode &&
-      props.onUpdateTargetBranch != null &&
-      props.targetBranchOptions.length > 0,
+    canEditTargetBranch: !isRepositoryMode && props.onUpdateTargetBranch != null,
     canPull,
     canPush,
     canRebase,
@@ -877,138 +891,3 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
     targetBranchLabel: hasTargetBranch ? props.targetBranch : "No comparison target",
   };
 };
-
-export const GitInfoHeader = memo(function GitInfoHeader({
-  contextMode = "worktree",
-  comparisonUnavailableReason,
-  pullRequest,
-  branch,
-  targetBranch,
-  commitsAheadBehind,
-  upstreamAheadBehind,
-  upstreamStatus,
-  diffScope,
-  uncommittedFileCount,
-  isLoading,
-  isCommitting,
-  isPushing,
-  isRebasing,
-  isResetting,
-  isDetectingPullRequest,
-  detectPullRequestDisabledReason,
-  isGitActionsLocked,
-  gitActionsLockReason,
-  showLockReasonBanner,
-  pushError,
-  rebaseError,
-  pushBranch,
-  rebaseOntoTarget,
-  pullFromUpstream,
-  onDetectPullRequest,
-  setDiffScope,
-  onRefresh,
-  targetBranchOptions = [],
-  targetBranchSelectionValue = "",
-  onUpdateTargetBranch,
-  repositoryBranchControl = null,
-}: GitInfoHeaderProps): ReactElement {
-  const state = getGitInfoHeaderState({
-    contextMode,
-    pullRequest,
-    branch,
-    targetBranch,
-    commitsAheadBehind,
-    upstreamAheadBehind,
-    upstreamStatus,
-    uncommittedFileCount,
-    isLoading,
-    isCommitting,
-    isPushing,
-    isRebasing,
-    isResetting,
-    isGitActionsLocked,
-    gitActionsLockReason,
-    pushBranch,
-    rebaseOntoTarget,
-    pullFromUpstream,
-    onDetectPullRequest,
-    targetBranchOptions,
-    onUpdateTargetBranch,
-  });
-
-  const handleScopeChange = (scope: DiffScope): void => {
-    if (diffScope === scope) {
-      return;
-    }
-    setDiffScope(scope);
-  };
-
-  return (
-    <div className="flex flex-col border-b border-border">
-      <GitBranchContextRow
-        currentBranchLabel={state.currentBranchLabel}
-        repositoryBranchControl={repositoryBranchControl}
-        branchState={{
-          hasTargetAhead: state.hasTargetAhead,
-          isRepositoryMode: state.isRepositoryMode,
-        }}
-        canEditTargetBranch={state.canEditTargetBranch}
-        targetAheadCount={state.targetAheadCount}
-        targetBranchLabel={state.targetBranchLabel}
-        targetBranchOptions={targetBranchOptions}
-        targetBranchSelectionValue={targetBranchSelectionValue}
-        onUpdateTargetBranch={onUpdateTargetBranch}
-      />
-
-      <GitActionRow
-        actionState={{
-          canPull: state.canPull,
-          canPush: state.canPush,
-          canRebase: state.canRebase,
-          canRefresh: state.canRefresh,
-          isDetectingPullRequest: Boolean(isDetectingPullRequest),
-          isLoading,
-          isPushing: Boolean(isPushing),
-          isRepositoryMode: state.isRepositoryMode,
-          showDetectPullRequest: state.showDetectPullRequest,
-          detectPullRequestDisabledReason: detectPullRequestDisabledReason ?? null,
-        }}
-        onDetectPullRequest={onDetectPullRequest}
-        onRefresh={onRefresh}
-        pullFromUpstream={pullFromUpstream}
-        pullTooltip={state.pullTooltip}
-        pushAheadCount={state.pushAheadCount}
-        pushBehindCount={state.pushBehindCount}
-        pushBranch={pushBranch}
-        pushTooltip={state.pushTooltip}
-        rebaseBehindCount={state.rebaseBehindCount}
-        rebaseOntoTarget={rebaseOntoTarget}
-        rebaseTooltip={state.rebaseTooltip}
-      />
-
-      {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
-        <div
-          className="border-y border-border bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-          data-testid="agent-studio-git-lock-reason"
-        >
-          {gitActionsLockReason}
-        </div>
-      ) : null}
-
-      {comparisonUnavailableReason ? (
-        <p
-          role="status"
-          className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
-        >
-          {comparisonUnavailableReason}
-        </p>
-      ) : null}
-      <GitDiffScopeTabs
-        diffScope={diffScope}
-        onScopeChange={handleScopeChange}
-        comparisonUnavailableReason={comparisonUnavailableReason ?? null}
-      />
-      <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
-    </div>
-  );
-});

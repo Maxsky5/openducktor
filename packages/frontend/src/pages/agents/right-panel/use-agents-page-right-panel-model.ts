@@ -1,9 +1,5 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import type {
-  GitBranch,
-  RepositoryGitProviderContext,
-  SystemOpenInToolId,
-} from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, SystemOpenInToolId } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import type {
@@ -11,7 +7,7 @@ import type {
   TaskExecutionSelectedFile,
 } from "@/components/features/agents";
 import { useGitCommentDraftValidation } from "@/components/features/agents/agent-studio-git-panel/use-git-comment-draft-validation";
-import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { useSessionComparisonControl } from "@/features/agent-studio-git/use-session-comparison";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
@@ -19,7 +15,6 @@ import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-s
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
-import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState } from "@/state";
 import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
@@ -34,7 +29,6 @@ import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools"
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  branches?: GitBranch[];
   /** The page shell owns the git state, so the chat header can read the same git conflict. */
   buildTools: AgentsPageBuildTools;
   selectedView: BuildToolsSelectedView;
@@ -55,21 +49,15 @@ export type UseAgentsPageRightPanelModelArgs = {
 
 type BuildAgentsPageDiffModelSnapshot = Pick<
   AgentStudioBuildToolsWorktreeSnapshot,
-  | "diffData"
-  | "gitPanelContextMode"
-  | "openInTarget"
-  | "resolvedGitPanelBranch"
-  | "targetBranchState"
+  "diffData" | "gitPanelContextMode" | "openInTarget" | "resolvedGitPanelBranch"
 >;
 
 type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   subjectKey: string;
-  branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
   commentOwner?: InlineCommentOwner | null;
-  setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
@@ -79,13 +67,9 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
 
 type BuildAgentsPageDiffOptionalModel = {
   openDirectoryInTool?: (toolId: SystemOpenInToolId) => Promise<void>;
-  targetBranch?: BuildAgentsPageDiffModelSnapshot["targetBranchState"]["displayTargetBranch"];
   isDetectingPullRequest?: true;
   onDetectPullRequest?: () => void;
   detectPullRequestDisabledReason?: string;
-  isGitActionsLocked?: true;
-  gitActionsLockReason?: string;
-  showLockReasonBanner?: true;
 };
 
 type FileExplorerRoot = {
@@ -112,21 +96,18 @@ function toGitPanelSubjectKey({
 
 export function buildAgentsPageDiffModel<GitActions extends object>({
   subjectKey,
-  branches,
   buildToolsSnapshot,
   gitActions,
   selectedTask,
   commentOwner = null,
-  setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
   openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
 }: BuildAgentsPageDiffModelArgs<GitActions>) {
-  const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
+  const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch } =
     buildToolsSnapshot;
-  const targetBranchValidationError = targetBranchState.validationError;
   const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
   const pullRequestDetectionTask =
     (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
@@ -138,41 +119,10 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
       : null;
   const detectPullRequestDisabledReason =
     gitProviderReadError ?? pullRequestHealthError(gitProviderContext);
-  let targetBranchUpdateModel = {};
-  if (gitPanelContextMode === "worktree" && selectedTask && setTaskTargetBranch) {
-    const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
-    const targetBranchOptions = toBranchSelectorOptions(branches, {
-      valueFormat: "full_ref",
-      includeOptions: configuredTargetBranch
-        ? [
-            {
-              value: targetBranchState.selectionValue,
-              label: configuredTargetBranch,
-              secondaryLabel: "configured",
-              searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
-            },
-          ]
-        : [],
-    });
-    targetBranchUpdateModel = {
-      targetBranchOptions,
-      targetBranchSelectionValue: targetBranchState.selectionValue,
-      onUpdateTargetBranch: async (selection: string) => {
-        await setTaskTargetBranch(selectedTask.id, targetBranchFromSelection(selection));
-      },
-    };
-  }
-
   const openInTargetPath = openInTarget.path;
   const optionalModel: BuildAgentsPageDiffOptionalModel = {};
   if (openInTargetPath) {
     optionalModel.openDirectoryInTool = (toolId) => openDirectoryInTool(openInTargetPath, toolId);
-  }
-  if (targetBranchValidationError) {
-    optionalModel.targetBranch = targetBranchState.displayTargetBranch;
-    optionalModel.isGitActionsLocked = true;
-    optionalModel.gitActionsLockReason = targetBranchValidationError;
-    optionalModel.showLockReasonBanner = true;
   }
   if (selectedTask && detectingPullRequestTaskId === selectedTask.id) {
     optionalModel.isDetectingPullRequest = true;
@@ -193,7 +143,6 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
     openInTargetPath: openInTarget.path,
     openInDisabledReason: openInTarget.disabledReason,
     pullRequest: selectedTask?.pullRequest ?? null,
-    ...targetBranchUpdateModel,
     ...gitActions,
     ...optionalModel,
   };
@@ -205,19 +154,14 @@ export const resolveTaskExecutionFileExplorerRoot = ({
   worktreePath,
   isWorktreeResolving,
   worktreeError,
-  targetBranchValidationError,
 }: {
   workspaceRepoPath: string | null;
   contextMode: AgentStudioBuildToolsWorktreeSnapshot["gitPanelContextMode"];
   worktreePath: string | null;
   isWorktreeResolving: boolean;
   worktreeError: string | null;
-  targetBranchValidationError: string | null;
 }): FileExplorerRoot => {
   if (contextMode === "worktree") {
-    if (targetBranchValidationError) {
-      return { rootPath: null, unavailableReason: targetBranchValidationError };
-    }
     if (worktreePath) {
       return { rootPath: worktreePath, unavailableReason: null };
     }
@@ -256,7 +200,7 @@ export const resolveTaskExecutionFileExplorerTargetBranch = ({
   hasLoadedRepositoryStatus: boolean;
   targetBranchValidationError: string | null;
 }): string | null => {
-  if (targetBranchValidationError) {
+  if (contextMode === "worktree" && targetBranchValidationError) {
     return null;
   }
   if (contextMode === "repository") {
@@ -269,7 +213,6 @@ export const resolveTaskExecutionFileExplorerTargetBranch = ({
 
 export function useAgentsPageRightPanelModel({
   activeWorkspace,
-  branches = [],
   buildTools,
   selectedView,
   tabs,
@@ -287,6 +230,19 @@ export function useAgentsPageRightPanelModel({
   gitProviderReadError = null,
 }: UseAgentsPageRightPanelModelArgs) {
   const queryClient = useQueryClient();
+  const taskTargetControl = useSessionComparisonControl({
+    repoPath: activeWorkspace?.repoPath ?? "__no_repo__",
+    target: buildTools.buildToolsSnapshot.comparison?.target ?? null,
+    editable:
+      buildTools.buildToolsSnapshot.gitPanelContextMode === "worktree" &&
+      !!setTaskTargetBranch &&
+      !!selectedView.selectedTask,
+    applyTarget: async (target) => {
+      if (!setTaskTargetBranch || !selectedView.selectedTask)
+        throw new Error("The task target is unavailable. Select the task again.");
+      await setTaskTargetBranch(selectedView.selectedTask.id, target);
+    },
+  });
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { buildToolsSnapshot, gitActions } = buildTools;
   const { diffData } = buildToolsSnapshot;
@@ -316,20 +272,18 @@ export function useAgentsPageRightPanelModel({
         worktreePath: buildToolsSnapshot.worktree.path,
         isWorktreeResolving: buildToolsSnapshot.worktree.isResolving,
         worktreeError: buildToolsSnapshot.worktree.error,
-        targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
       }),
     [
       buildToolsSnapshot.gitPanelContextMode,
       buildToolsSnapshot.worktree.error,
       buildToolsSnapshot.worktree.isResolving,
       buildToolsSnapshot.worktree.path,
-      buildToolsSnapshot.targetBranchState.validationError,
       workspaceRepoPath,
     ],
   );
   const fileExplorerTargetBranch = resolveTaskExecutionFileExplorerTargetBranch({
     contextMode: buildToolsSnapshot.gitPanelContextMode,
-    targetBranch: diffData.targetBranch ?? null,
+    targetBranch: diffData.comparisonReference ?? null,
     upstreamStatus: diffData.upstreamStatus,
     hasLoadedRepositoryStatus: diffData.loadedScopesByScope[diffData.diffScope],
     targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
@@ -468,7 +422,6 @@ export function useAgentsPageRightPanelModel({
   const diffModel = useMemo(() => {
     const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
       subjectKey: gitPanelSubjectKey,
-      branches,
       buildToolsSnapshot,
       gitActions,
       selectedTask: selectedView.selectedTask,
@@ -478,14 +431,17 @@ export function useAgentsPageRightPanelModel({
       gitProviderContext,
       gitProviderReadError,
     };
-    if (setTaskTargetBranch) {
-      input.setTaskTargetBranch = setTaskTargetBranch;
-    }
-    return { ...buildAgentsPageDiffModel(input), refresh: refreshWorktree };
+    return {
+      ...buildAgentsPageDiffModel(input),
+      ...taskTargetControl,
+      rebaseOntoTarget: diffData.comparisonReference ? gitActions.rebaseOntoTarget : undefined,
+      refresh: refreshWorktree,
+    };
   }, [
     buildToolsSnapshot,
+    diffData.comparisonReference,
+    taskTargetControl,
     refreshWorktree,
-    branches,
     commentOwner,
     gitActions,
     onDetectPullRequest,
@@ -493,7 +449,6 @@ export function useAgentsPageRightPanelModel({
     gitProviderReadError,
     gitPanelSubjectKey,
     detectingPullRequestTaskId,
-    setTaskTargetBranch,
     selectedView.selectedTask,
   ]);
   useGitCommentDraftValidation(diffModel);

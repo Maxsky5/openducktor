@@ -61,7 +61,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo-b",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );

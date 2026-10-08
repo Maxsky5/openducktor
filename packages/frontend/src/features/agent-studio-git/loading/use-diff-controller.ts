@@ -1,17 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DiffScope } from "../contracts";
 import {
+  createInitialDiffBatchState,
   type DiffBatchState,
   type ScopeSnapshot,
   toStatusSnapshotKey,
 } from "../model/diff-data-model";
-import {
-  createVisibleDiffBatchStateFromCachedFullLoad,
-  readCachedFullLoadSnapshot,
-} from "./cached-full-load";
 import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
-import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
+import { useAgentStudioDiffLoader } from "./use-diff-loader";
+import type { UseAgentStudioDiffLoaderResult } from "./load-types";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
 
 type UseAgentStudioDiffControllerArgs = {
@@ -29,12 +26,8 @@ type UseAgentStudioDiffControllerResult = {
   setDiffScope: (scope: DiffScope) => void;
   state: DiffBatchState;
   statusSnapshotKey: string | null;
-  refreshActiveScope: (
-    context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-  ) => Promise<void>;
-  refreshActiveScopeSummary: (
-    context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-  ) => Promise<void>;
+  refreshActiveScope: UseAgentStudioDiffLoaderResult["refreshActiveScope"];
+  refreshActiveScopeSummary: UseAgentStudioDiffLoaderResult["refreshActiveScopeSummary"];
 };
 
 export function useAgentStudioDiffController({
@@ -45,34 +38,42 @@ export function useAgentStudioDiffController({
   shouldBlockDiffLoading,
   onLoadApplied,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
-  const queryClient = useQueryClient();
-  const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
-  const requestContextKeyRef = useRef<string | null>(null);
+  const [scopeSelection, setScopeSelection] = useState<{
+    contextKey: string | null;
+    scope: DiffScope;
+  }>({ contextKey: requestContextKey, scope: "uncommitted" });
+  const diffScope =
+    scopeSelection.contextKey === requestContextKey ? scopeSelection.scope : "uncommitted";
+  const setDiffScope = useCallback(
+    (scope: DiffScope) => setScopeSelection({ contextKey: requestContextKey, scope }),
+    [requestContextKey],
+  );
+  const controllerContextKeyRef = useRef<string | null>(null);
+  const requestContextKeyRef = useRef(requestContextKey);
   const {
     beginRequest,
     clearScopeInvalidation,
     finishRequest,
     isScopeInvalidated,
     markScopeInvalidated,
-    resetRequestTracking: resetRequestLifecycle,
+    resetRequestTracking,
     shouldApplyResult,
   } = useAgentStudioDiffRequestController();
 
   const repoPathRef = useRef(repoPath);
-  repoPathRef.current = repoPath;
   const targetBranchRef = useRef(targetBranch);
-  targetBranchRef.current = targetBranch;
   const diffScopeRef = useRef(diffScope);
-  diffScopeRef.current = diffScope;
   const workingDirRef = useRef(workingDir);
-  workingDirRef.current = workingDir;
-
-  const resetRequestTracking = useCallback((): void => {
-    resetRequestLifecycle();
-  }, [resetRequestLifecycle]);
+  // Late reads must fail these guards when the new view commits, before passive effects run.
+  useLayoutEffect(() => {
+    requestContextKeyRef.current = requestContextKey;
+    repoPathRef.current = repoPath;
+    targetBranchRef.current = targetBranch;
+    diffScopeRef.current = diffScope;
+    workingDirRef.current = workingDir;
+  }, [requestContextKey, repoPath, targetBranch, diffScope, workingDir]);
 
   const {
-    applyCachedFullResult,
     applyFullResult,
     applyScopeLoadError,
     applySummaryResult,
@@ -86,22 +87,13 @@ export function useAgentStudioDiffController({
     resetRequestTracking,
   });
 
-  const resetToDefaultScope = useCallback((): void => {
-    if (diffScopeRef.current === "uncommitted") {
-      return;
-    }
-
-    diffScopeRef.current = "uncommitted";
-    setDiffScope("uncommitted");
-  }, []);
-
   const { loadData, refreshActiveScope, refreshActiveScopeSummary } = useAgentStudioDiffLoader({
+    requestContextKeyRef,
     repoPathRef,
     targetBranchRef,
     workingDirRef,
     diffScopeRef,
     shouldBlockDiffLoading,
-    applyCachedFullResult,
     applyFullResult,
     applyScopeLoadError,
     applySummaryResult,
@@ -122,6 +114,7 @@ export function useAgentStudioDiffController({
     consumePendingFullReload(pendingFullReload);
 
     void loadData(false, {
+      requestContextKey: pendingFullReload.requestContextKey,
       repoPath: pendingFullReload.repoPath,
       targetBranch: pendingFullReload.targetBranch,
       workingDir: pendingFullReload.workingDir,
@@ -131,28 +124,25 @@ export function useAgentStudioDiffController({
     });
   }, [consumePendingFullReload, loadData, pendingFullReload]);
 
-  const syncDiffRequestContext = useCallback(() => {
-    const previousContextKey = requestContextKeyRef.current;
+  const loadCurrentContext = useCallback(() => {
+    const previousContextKey = controllerContextKeyRef.current;
     const hasContextChanged =
       previousContextKey !== null && previousContextKey !== requestContextKey;
-    requestContextKeyRef.current = requestContextKey;
+    controllerContextKeyRef.current = requestContextKey;
 
     if (!repoPath) {
       if (previousContextKey !== null) {
-        resetToDefaultScope();
         resetControllerState();
       }
-      requestContextKeyRef.current = null;
+      controllerContextKeyRef.current = null;
       return;
     }
 
     if (hasContextChanged) {
-      resetToDefaultScope();
       resetControllerState();
     }
 
     const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
-    const shouldHydrateFromCache = previousContextKey === null || hasContextChanged;
 
     if (!shouldBlockDiffLoading) {
       void loadData(true, {
@@ -162,7 +152,6 @@ export function useAgentStudioDiffController({
         scope,
         requestContextKey,
         force: hasContextChanged,
-        hydrateCachedFullLoad: shouldHydrateFromCache,
       });
     }
   }, [
@@ -170,12 +159,11 @@ export function useAgentStudioDiffController({
     repoPath,
     requestContextKey,
     resetControllerState,
-    resetToDefaultScope,
     shouldBlockDiffLoading,
     targetBranch,
     workingDir,
   ]);
-  useEffect(syncDiffRequestContext, [syncDiffRequestContext]);
+  useEffect(loadCurrentContext, [loadCurrentContext]);
 
   useEffect(() => {
     if (!repoPath || shouldBlockDiffLoading) {
@@ -208,37 +196,18 @@ export function useAgentStudioDiffController({
     workingDir,
   ]);
 
-  const isRenderContextStale = requestContextKeyRef.current !== requestContextKey;
+  const isRenderContextStale = controllerContextKeyRef.current !== requestContextKey;
   const visibleDiffScope = isRenderContextStale ? "uncommitted" : diffScope;
   const visibleState = useMemo<DiffBatchState>(() => {
     if (!isRenderContextStale) {
       return state;
     }
 
-    const cachedRenderSnapshot =
-      repoPath === null
-        ? null
-        : readCachedFullLoadSnapshot(queryClient, {
-            repoPath,
-            targetBranch,
-            workingDir,
-            scope: visibleDiffScope,
-          });
-    return createVisibleDiffBatchStateFromCachedFullLoad({
-      scope: visibleDiffScope,
-      snapshot: cachedRenderSnapshot,
-      isLoadingWhenMissing: repoPath !== null && !shouldBlockDiffLoading,
-    });
-  }, [
-    isRenderContextStale,
-    queryClient,
-    repoPath,
-    shouldBlockDiffLoading,
-    state,
-    targetBranch,
-    visibleDiffScope,
-    workingDir,
-  ]);
+    return {
+      ...createInitialDiffBatchState(),
+      isLoading: repoPath !== null && !shouldBlockDiffLoading,
+    };
+  }, [isRenderContextStale, repoPath, shouldBlockDiffLoading, state]);
   const visibleActiveScopeState = visibleState.byScope[visibleDiffScope];
   const visibleStatusSnapshotKey = useMemo(
     () => toStatusSnapshotKey(visibleActiveScopeState),

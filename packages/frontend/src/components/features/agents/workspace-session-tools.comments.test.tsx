@@ -49,6 +49,7 @@ function ToolsOwner({
     branchReady: true,
     target: { branch: "main", remote: "origin" },
     targetError: null,
+    applyTarget: async () => {},
     retryTarget: async () => {},
     readBranch: async () => "feature",
     activeTabId: "file_explorer",

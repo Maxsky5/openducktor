@@ -7,12 +7,12 @@ import { useAgentStudioDiffLoadData } from "./use-diff-load-data";
 import { useAgentStudioDiffLoadRunner } from "./use-diff-load-runner";
 
 export function useAgentStudioDiffLoader({
+  requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
   workingDirRef,
   diffScopeRef,
   shouldBlockDiffLoading,
-  applyCachedFullResult,
   applyFullResult,
   applyScopeLoadError,
   applySummaryResult,
@@ -25,16 +25,17 @@ export function useAgentStudioDiffLoader({
   shouldApplyResult,
 }: UseAgentStudioDiffLoaderArgs): UseAgentStudioDiffLoaderResult {
   const refs = {
+    requestContextKeyRef,
     repoPathRef,
     targetBranchRef,
     workingDirRef,
     diffScopeRef,
   };
   const runner = useAgentStudioDiffLoadRunner({
+    requestContextKeyRef,
     repoPathRef,
     targetBranchRef,
     workingDirRef,
-    applyCachedFullResult,
     applyFullResult,
     applySummaryResult,
     clearScopeInvalidation,

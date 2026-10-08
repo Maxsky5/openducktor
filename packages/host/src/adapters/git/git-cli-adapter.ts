@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
+import { resolveTrackedUpstreamReference } from "../../infrastructure/git/git-upstream";
 import {
   HostOperationError,
   HostValidationError,
@@ -246,6 +247,13 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     listWorktrees(repoPath) {
       return listWorktrees(runner, repoPath);
+    },
+    getTrackedUpstreamReference(workingDir) {
+      return Effect.gen(function* () {
+        const branch = yield* getCurrentBranchUnchecked(runner, workingDir);
+        const reference = yield* resolveTrackedUpstreamReference(runner, workingDir, branch.name);
+        return reference ?? null;
+      });
     },
     referenceExists(workingDir, reference) {
       return referenceExists(runner, workingDir, reference);

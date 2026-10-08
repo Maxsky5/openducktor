@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { CommitsAheadBehind, FileStatus, GitCurrentBranch } from "@openducktor/contracts";
+import type { FileStatus, GitCurrentBranch } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -90,42 +90,19 @@ export const resolveFallbackRemoteRefForBranch = (
     }
     return matches.length === 1 ? matches[0] : undefined;
   });
-export const resolveUpstreamTargetForBranch = (
+export const resolveTrackedUpstreamReference = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  branchName: string | undefined,
+  branch: string | undefined,
 ) =>
   Effect.gen(function* () {
-    if (!branchName) {
-      return undefined;
-    }
-    const remoteResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "config",
-      "--get",
-      `branch.${branchName}.remote`,
-    ]);
-    if (!remoteResult.ok || !remoteResult.stdout.trim()) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    const mergeResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "config",
-      "--get",
-      `branch.${branchName}.merge`,
-    ]);
-    if (!mergeResult.ok || !mergeResult.stdout.trim()) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    const upstreamRef = resolveUpstreamRef(remoteResult.stdout.trim(), mergeResult.stdout.trim());
-    const existsResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      upstreamRef,
-    ]);
-    if (!existsResult.ok) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    return upstreamRef;
+    if (!branch) return undefined;
+    const ref = (yield* runGit(runner, workingDirectory, [
+      "for-each-ref",
+      "--format=%(upstream)",
+      `refs/heads/${branch}`,
+    ])).trim();
+    return ref || undefined;
   });
 export const resolveUpstreamTargetConfigForBranch = (
   runner: GitCommandRunner,
@@ -198,11 +175,10 @@ export const resolveUpstreamAheadBehind = (
   runner: GitCommandRunner,
   workingDirectory: string,
   upstreamTarget: string | undefined,
-  targetAheadBehind: CommitsAheadBehind,
 ) =>
   Effect.gen(function* () {
     if (!upstreamTarget) {
-      return { outcome: "untracked" as const, ahead: targetAheadBehind.ahead };
+      return { outcome: "untracked" as const, ahead: 0 };
     }
     const result = yield* commitsAgainstTargetOrDefault(
       runner,

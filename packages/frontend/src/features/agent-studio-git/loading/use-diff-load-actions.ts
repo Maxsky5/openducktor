@@ -11,6 +11,7 @@ type UseDiffLoadActionsArgs = DiffLoadRefs & {
 };
 
 export const useAgentStudioDiffLoadActions = ({
+  requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
   workingDirRef,
@@ -21,6 +22,7 @@ export const useAgentStudioDiffLoadActions = ({
   const refreshActiveScope = useCallback(
     async (context?: DiffRefreshScopeContext): Promise<void> => {
       const refreshContext = context ?? {
+        requestContextKey: requestContextKeyRef.current,
         repoPath: repoPathRef.current,
         targetBranch: targetBranchRef.current,
         workingDir: workingDirRef.current,
@@ -32,6 +34,7 @@ export const useAgentStudioDiffLoadActions = ({
       }
 
       await loadData(true, {
+        requestContextKey: refreshContext.requestContextKey,
         repoPath: refreshContext.repoPath,
         targetBranch: refreshContext.targetBranch,
         workingDir: refreshContext.workingDir,
@@ -40,12 +43,21 @@ export const useAgentStudioDiffLoadActions = ({
         replayIfInFlight: true,
       });
     },
-    [diffScopeRef, loadData, repoPathRef, shouldBlockDiffLoading, targetBranchRef, workingDirRef],
+    [
+      requestContextKeyRef,
+      diffScopeRef,
+      loadData,
+      repoPathRef,
+      shouldBlockDiffLoading,
+      targetBranchRef,
+      workingDirRef,
+    ],
   );
 
   const refreshActiveScopeSummary = useCallback(
     async (context?: DiffRefreshScopeContext): Promise<void> => {
       const refreshContext = context ?? {
+        requestContextKey: requestContextKeyRef.current,
         repoPath: repoPathRef.current,
         targetBranch: targetBranchRef.current,
         workingDir: workingDirRef.current,
@@ -57,6 +69,7 @@ export const useAgentStudioDiffLoadActions = ({
       }
 
       await loadData(false, {
+        requestContextKey: refreshContext.requestContextKey,
         repoPath: refreshContext.repoPath,
         targetBranch: refreshContext.targetBranch,
         workingDir: refreshContext.workingDir,
@@ -64,7 +77,15 @@ export const useAgentStudioDiffLoadActions = ({
         mode: "summary",
       });
     },
-    [diffScopeRef, loadData, repoPathRef, shouldBlockDiffLoading, targetBranchRef, workingDirRef],
+    [
+      requestContextKeyRef,
+      diffScopeRef,
+      loadData,
+      repoPathRef,
+      shouldBlockDiffLoading,
+      targetBranchRef,
+      workingDirRef,
+    ],
   );
 
   return {

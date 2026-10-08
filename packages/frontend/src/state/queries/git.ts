@@ -46,6 +46,7 @@ export const gitQueryKeys = {
     targetBranch: string,
     diffScope: "target" | "uncommitted",
     workingDir: string | null,
+    branchKey = "",
   ) =>
     [
       ...gitQueryKeys.all,
@@ -54,12 +55,14 @@ export const gitQueryKeys = {
       targetBranch,
       diffScope,
       workingDir ?? "",
+      branchKey,
     ] as const,
   worktreeStatusSummary: (
     repoPath: string,
     targetBranch: string,
     diffScope: "target" | "uncommitted",
     workingDir: string | null,
+    branchKey = "",
   ) =>
     [
       ...gitQueryKeys.all,
@@ -68,6 +71,7 @@ export const gitQueryKeys = {
       targetBranch,
       diffScope,
       workingDir ?? "",
+      branchKey,
     ] as const,
 };
 
@@ -151,9 +155,10 @@ const worktreeStatusQueryOptions = (
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
   hostClient: GitWorktreeStatusQueryHost = host,
+  branchKey = "",
 ) =>
   queryOptions({
-    queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
+    queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir, branchKey),
     queryFn: ({ client }): Promise<GitWorktreeStatus> => {
       const args: Parameters<GitWorktreeStatusQueryHost["gitGetWorktreeStatus"]> = [
         repoPath,
@@ -174,9 +179,16 @@ const worktreeStatusSummaryQueryOptions = (
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
   hostClient: GitWorktreeStatusSummaryQueryHost = host,
+  branchKey = "",
 ) =>
   queryOptions({
-    queryKey: gitQueryKeys.worktreeStatusSummary(repoPath, targetBranch, diffScope, workingDir),
+    queryKey: gitQueryKeys.worktreeStatusSummary(
+      repoPath,
+      targetBranch,
+      diffScope,
+      workingDir,
+      branchKey,
+    ),
     queryFn: ({ client }): Promise<GitWorktreeStatusSummary> => {
       const args: Parameters<GitWorktreeStatusSummaryQueryHost["gitGetWorktreeStatusSummary"]> = [
         repoPath,
@@ -232,31 +244,35 @@ export const loadWorktreeStatusFromQuery = (
   workingDir: string | null,
   options?: {
     force?: boolean;
+    branchKey?: string;
   },
   hostClient?: GitWorktreeStatusQueryHost,
 ): Promise<GitWorktreeStatus> => {
-  const queryKey = gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir);
+  const branchKey = options?.branchKey ?? "";
+  const queryKey = gitQueryKeys.worktreeStatus(
+    repoPath,
+    targetBranch,
+    diffScope,
+    workingDir,
+    branchKey,
+  );
 
   if (options?.force === true) {
     void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
   }
 
   return queryClient.fetchQuery({
-    ...worktreeStatusQueryOptions(repoPath, targetBranch, diffScope, workingDir, hostClient),
+    ...worktreeStatusQueryOptions(
+      repoPath,
+      targetBranch,
+      diffScope,
+      workingDir,
+      hostClient,
+      branchKey,
+    ),
     staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
   });
 };
-
-export const getCachedWorktreeStatusFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  targetBranch: string,
-  diffScope: "target" | "uncommitted",
-  workingDir: string | null,
-): GitWorktreeStatus | undefined =>
-  queryClient.getQueryData(
-    gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
-  );
 
 export const loadWorktreeStatusSummaryFromQuery = (
   queryClient: QueryClient,
@@ -266,14 +282,17 @@ export const loadWorktreeStatusSummaryFromQuery = (
   workingDir: string | null,
   options?: {
     force?: boolean;
+    branchKey?: string;
   },
   hostClient?: GitWorktreeStatusSummaryQueryHost,
 ): Promise<GitWorktreeStatusSummary> => {
+  const branchKey = options?.branchKey ?? "";
   const queryKey = gitQueryKeys.worktreeStatusSummary(
     repoPath,
     targetBranch,
     diffScope,
     workingDir,
+    branchKey,
   );
 
   if (options?.force === true) {
@@ -281,7 +300,14 @@ export const loadWorktreeStatusSummaryFromQuery = (
   }
 
   return queryClient.fetchQuery({
-    ...worktreeStatusSummaryQueryOptions(repoPath, targetBranch, diffScope, workingDir, hostClient),
+    ...worktreeStatusSummaryQueryOptions(
+      repoPath,
+      targetBranch,
+      diffScope,
+      workingDir,
+      hostClient,
+      branchKey,
+    ),
     staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
   });
 };
