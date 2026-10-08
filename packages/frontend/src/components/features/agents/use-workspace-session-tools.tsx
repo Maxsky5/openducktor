@@ -209,7 +209,7 @@ export function useWorkspaceSessionTools({
   const toolsContent = (
     <WorkspaceSessionGitTools
       key={JSON.stringify([repoPath, workingDirectory, branchKey])}
-      subjectKey={JSON.stringify([workspaceId, sessionId])}
+      commentOwner={{ kind: "workspace_session", workspaceId, sessionId }}
       repoPath={repoPath}
       devServerOwner={devServerOwner}
       actions={actions}

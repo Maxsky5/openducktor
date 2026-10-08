@@ -83,20 +83,24 @@ export function useWorkspaceSessionChatActions(
     setError(null);
     try {
       const parts = await resolveAgentStudioSendDraftParts({ ...options, draft });
-      if (!parts || !isMounted() || !isCurrentWorkspace()) return false;
+      if (!parts) return false;
+      if (!isMounted() || !isCurrentWorkspace())
+        throw new Error("The original chat is no longer available. Reopen it to send your draft.");
       let identity = workspaceSessionIdentity(record);
       if (!identity) {
         setStarting(true);
         // Keep an accepted start in the store even if the pane closes while the host works.
         const started = await startWorkspaceSession(
           { workspaceId: workspace.workspaceId, sessionId: record.id },
+          record,
           store,
           isCurrentWorkspace,
         );
         updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, started.session);
         identity = started.identity;
       }
-      if (!isMounted() || !isCurrentWorkspace()) return false;
+      if (!isMounted() || !isCurrentWorkspace())
+        throw new Error("The original chat is no longer available. Reopen it to send your draft.");
       await operations.sendAgentMessage(identity, parts);
       return true;
     } catch (cause) {

@@ -31,6 +31,7 @@ test("a newly started chat has a known empty baseline without a history read", a
   const store = createAgentSessionsStore("/repo");
   const result = await startWorkspaceSession(
     { workspaceId: "workspace", sessionId: "chat" },
+    startedResult().session,
     store,
     () => true,
     async () => startedResult(),
@@ -56,6 +57,7 @@ test("start response keeps transcript events that arrived before the response", 
   store.replaceSession(current);
   const result = await startWorkspaceSession(
     { workspaceId: "workspace", sessionId: "chat" },
+    startedResult().session,
     store,
     () => true,
     async () => startedResult(),
@@ -70,6 +72,7 @@ test("an already-bound chat enters the shared store without a fabricated history
   const store = createAgentSessionsStore("/repo");
   const result = await startWorkspaceSession(
     { workspaceId: "workspace", sessionId: "chat" },
+    startedResult().session,
     store,
     () => true,
     async () => ({ ...startedResult(), runtimeSession: null }),
@@ -87,6 +90,7 @@ test("a late start response cannot seed another workspace", async () => {
   await expect(
     startWorkspaceSession(
       { workspaceId: "workspace", sessionId: "chat" },
+      startedResult().session,
       store,
       () => false,
       async () => startedResult(),
@@ -102,12 +106,14 @@ test("concurrent fresh and already-bound starts keep the same live session and t
   const ref = { workspaceId: "workspace", sessionId: "chat" };
   const first = startWorkspaceSession(
     ref,
+    startedResult().session,
     store,
     () => true,
     () => fresh.promise,
   );
   const second = startWorkspaceSession(
     ref,
+    startedResult().session,
     store,
     () => true,
     () => bound.promise,
@@ -130,3 +136,32 @@ test("concurrent fresh and already-bound starts keep the same live session and t
   expect(saved?.status).toBe("running");
   expect(saved?.historyLoadState).toBe("loaded");
 });
+
+test.each(["record", "runtime", "directory", "execution-kind"] as const)(
+  "rejects a mismatched startup %s before registering a chat",
+  async (field) => {
+    const expected = startedResult().session;
+    const result = startedResult();
+    if (field === "record") result.session.id = "other-chat";
+    if (field === "runtime") result.session.runtimeKind = "opencode";
+    if (field === "directory") result.session.executionTarget.workingDirectory = "/other";
+    if (field === "execution-kind")
+      result.session.executionTarget = {
+        kind: "local_worktree",
+        workingDirectory: "/repo",
+        branchName: "test-branch",
+        worktreeState: "present",
+      };
+    const store = createAgentSessionsStore("/repo");
+    await expect(
+      startWorkspaceSession(
+        { workspaceId: "workspace", sessionId: expected.id },
+        expected,
+        store,
+        () => true,
+        async () => result,
+      ),
+    ).rejects.toThrow("different chat target");
+    expect(store.listSessionSnapshots()).toEqual([]);
+  },
+);

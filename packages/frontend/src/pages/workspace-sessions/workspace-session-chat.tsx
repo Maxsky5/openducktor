@@ -1,4 +1,5 @@
 import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
+import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
@@ -124,14 +125,12 @@ export function WorkspaceSessionChat({
   const modelCatalog = modelSurface.catalog;
   const catalogError = modelSurface.error;
   const isLoadingModelCatalog = catalogQuery.isFetching;
-  useSelectedSessionHistoryLoad({
+  const sessionLoad = {
     session: isStarting ? null : session,
     runtimeReadinessState: runtimeReadiness.state,
-  });
-  const contextError = useSelectedSessionContextLoad({
-    session: isStarting ? null : session,
-    runtimeReadinessState: runtimeReadiness.state,
-  });
+  };
+  useSelectedSessionHistoryLoad(sessionLoad);
+  const contextError = useSelectedSessionContextLoad(sessionLoad);
   const retryModelCatalog = useCallback(
     () =>
       retryRuntimeCatalog({
@@ -237,6 +236,16 @@ export function WorkspaceSessionChat({
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
   });
+  const reviewComments = useReviewCommentComposer({
+    owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
+    onSend: (draft) =>
+      actions.sendDraft(draft, {
+        canSend: canInteract,
+        reusablePrompts,
+        selectedModelDescriptor: picker.selectedModelEntry,
+        supportsAttachments: support.supportsAttachments,
+      }),
+  });
   const surface = useAgentChatSurfaceModel({
     transcript,
     chatSettings,
@@ -282,9 +291,7 @@ export function WorkspaceSessionChat({
             error: actions.resumeSessionError,
             usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
             onResume: () => {
-              if (identity) {
-                actions.resumeInterruptedTurn(identity);
-              }
+              if (identity) actions.resumeInterruptedTurn(identity);
             },
           }
         : undefined,
@@ -302,13 +309,8 @@ export function WorkspaceSessionChat({
       isReadOnly: chatState.isReadOnly,
       readOnlyReason: chatState.readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
-      onSend: (draft) =>
-        actions.sendDraft(draft, {
-          canSend: canInteract,
-          reusablePrompts,
-          selectedModelDescriptor: picker.selectedModelEntry,
-          supportsAttachments: support.supportsAttachments,
-        }),
+      onSend: reviewComments.onSend,
+      pendingSendItems: reviewComments.pendingSendItems ?? undefined,
       isSending,
       isStarting,
       contextUsage,

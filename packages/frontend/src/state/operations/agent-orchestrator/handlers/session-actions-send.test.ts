@@ -1,6 +1,7 @@
+import { toast } from "sonner";
 import { QueryClient } from "@tanstack/react-query";
 import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -30,6 +31,35 @@ import {
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
+  test("rejects when the exact session disappears during send preparation", async () => {
+    const preparing = Promise.withResolvers<void>();
+    const finishPreparation = Promise.withResolvers<void>();
+    let sends = 0;
+    const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
+    adapter.sendUserMessage = async (input) => {
+      sends += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      loadRepoPromptOverrides: async () => {
+        preparing.resolve();
+        await finishPreparation.promise;
+        return {};
+      },
+    });
+    const sending = actions.sendAgentMessage(getSession(sessionsRef), [
+      { kind: "text", text: "Keep my draft" },
+    ]);
+    await preparing.promise;
+    sessionsRef.current = createSessionsRef().current;
+    finishPreparation.resolve();
+    await expect(sending).rejects.toThrow("Reopen the chat");
+    expect(sends).toBe(0);
+  });
+
   test("an old send failure does not change a newer execution episode or its pending input", async () => {
     const entered = Promise.withResolvers<void>();
     const rejected = Promise.withResolvers<never>();
@@ -65,6 +95,44 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       pendingQuestions: [{ requestId: "new-question", questions: [] }],
     });
   });
+  test("keeps native acceptance when a later frontend update fails", async () => {
+    let accepted = false;
+    let sends = 0;
+    const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());
+    adapter.sendUserMessage = async (input) => {
+      sends += 1;
+      accepted = true;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      updateSession: (_identity, updater) => {
+        if (accepted) throw new Error("Frontend update failed after acceptance");
+        const current = getSession(sessionsRef);
+        const next = updater(current);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, next);
+        return next;
+      },
+    });
+    const report = spyOn(toast, "error").mockImplementation(() => "reported");
+    const log = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "Accepted text" },
+      ]);
+      expect(sends).toBe(1);
+      expect(report).toHaveBeenCalledWith(
+        "Message sent to 'session-1', but the chat update failed",
+        { description: "Frontend update failed after acceptance" },
+      );
+    } finally {
+      report.mockRestore();
+      log.mockRestore();
+    }
+  });
+
   test("delivers confirmed kickoff whitespace through the real sender to the adapter", async () => {
     const text = "\n\n  Custom instruction\n{{task.title}}\n ";
     const adapter = createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter());

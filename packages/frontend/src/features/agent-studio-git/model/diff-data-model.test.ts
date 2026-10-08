@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
 import {
+  applyFullSnapshot,
   applySummarySnapshot,
   createInitialDiffBatchState,
   getSummaryReloadDecision,
@@ -46,6 +47,48 @@ const createScopeSummaryFields = (
 });
 
 describe("diff-data-model", () => {
+  test.each(["full", "summary"] as const)(
+    "keeps upstream errors shared by a %s read until each scope's own full recovery",
+    (mode) => {
+      const upstreamError = "Upstream status unavailable: failed to read upstream.";
+      const args = {
+        state: createInitialDiffBatchState(),
+        scope: "uncommitted" as const,
+        requestSequence: 1,
+        latestSharedSequence: 0,
+      };
+      const failedUpstream = { upstreamStatus: "error" as const, error: upstreamError };
+      const loaded =
+        mode === "full"
+          ? applyFullSnapshot({ ...args, snapshot: createScopeSnapshot(failedUpstream) })
+          : applySummarySnapshot({
+              ...args,
+              summaryFields: createScopeSummaryFields(failedUpstream),
+            });
+      expect(loaded.nextState.byScope.target.error).toBe(upstreamError);
+
+      const recoveredUncommitted = applyFullSnapshot({
+        ...args,
+        state: loaded.nextState,
+        snapshot: createScopeSnapshot(),
+        requestSequence: 2,
+        latestSharedSequence: loaded.nextLatestSharedSequence,
+      });
+      expect(recoveredUncommitted.nextState.byScope.uncommitted.error).toBeNull();
+      expect(recoveredUncommitted.nextState.byScope.target.error).toBe(upstreamError);
+
+      const recoveredTarget = applyFullSnapshot({
+        ...args,
+        state: recoveredUncommitted.nextState,
+        scope: "target",
+        snapshot: createScopeSnapshot(),
+        requestSequence: 3,
+        latestSharedSequence: recoveredUncommitted.nextLatestSharedSequence,
+      });
+      expect(recoveredTarget.nextState.byScope.target.error).toBeNull();
+    },
+  );
+
   test("does not request a full reload when the active scope is not loaded", () => {
     const state = createInitialDiffBatchState();
     state.byScope.target = createScopeSnapshot();

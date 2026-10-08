@@ -204,6 +204,10 @@ test.each([
       expect(failure).toHaveBeenCalledWith('Could not send to "Test chat"', {
         description: "Request failed. Reopen the chat to retry.",
       });
+    } else if (phase === "start") {
+      expect(failure).toHaveBeenCalledWith('Could not send to "Test chat"', {
+        description: "The original chat is no longer available. Reopen it to send your draft.",
+      });
     } else expect(failure).not.toHaveBeenCalled();
   } finally {
     view.dispose();

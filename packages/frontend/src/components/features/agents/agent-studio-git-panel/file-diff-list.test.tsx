@@ -38,11 +38,17 @@ const LIST_VIEW_PROPS = {
 
 function FileDiffListHarness({
   file = "src/example.ts",
+  ownerKey = OWNER_KEY,
+  diffScope = "uncommitted",
+  commentPlaceholder,
   canResetFiles = false,
   isResetDisabled = false,
   onRequestFileReset,
 }: {
   file?: string;
+  ownerKey?: string;
+  diffScope?: "uncommitted" | "target";
+  commentPlaceholder?: string;
   canResetFiles?: boolean;
   isResetDisabled?: boolean;
   onRequestFileReset?: (filePath: string) => void;
@@ -62,8 +68,9 @@ function FileDiffListHarness({
             diff: "@@ -1 +1 @@\n-old\n+new\n",
           },
         ]}
-        diffScope="uncommitted"
-        ownerKey={OWNER_KEY}
+        diffScope={diffScope}
+        ownerKey={ownerKey}
+        commentPlaceholder={commentPlaceholder}
         conflictedFiles={new Set()}
         diffStyle="unified"
         setDiffStyle={() => {}}
@@ -147,7 +154,12 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
 
   return (
     <TooltipProvider>
-      <button type="button" onClick={() => setOwnerKey(OTHER_OWNER_KEY)}>
+      <button
+        type="button"
+        onClick={() =>
+          setOwnerKey((current) => (current === OWNER_KEY ? OTHER_OWNER_KEY : OWNER_KEY))
+        }
+      >
         Switch owner
       </button>
       <FileDiffList
@@ -615,6 +627,59 @@ describe("FileDiffList", () => {
     expect(viewerMock.mock.calls[0]?.[0]).not.toHaveProperty("hunkSeparators");
   });
 
+  test.each(["uncommitted", "target"] as const)(
+    "adds, edits, cancels, and removes workspace comments in %s diffs",
+    (scope) => {
+      const ownerKey = toInlineCommentDraftStorageKey({
+        workspaceId: "workspace-1",
+        workspaceSessionId: "task-1",
+      });
+      render(
+        <FileDiffListHarness
+          ownerKey={ownerKey}
+          diffScope={scope}
+          commentPlaceholder="Add a comment for this chat"
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
+      fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+      fireEvent.change(screen.getByPlaceholderText("Add a comment for this chat"), {
+        target: { value: "   " },
+      });
+      expect(
+        screen.getByRole("button", { name: "Comment" }).getAttribute("disabled"),
+      ).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+      fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+      fireEvent.change(screen.getByPlaceholderText("Add a comment for this chat"), {
+        target: { value: "Workspace note" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      fireEvent.change(screen.getByDisplayValue("Workspace note"), {
+        target: { value: "Cancelled edit" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.getByText("Workspace note")).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      fireEvent.change(screen.getByDisplayValue("Workspace note"), {
+        target: { value: "Saved edit" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(useInlineCommentDraftStore.getState().getPendingDrafts(ownerKey)[0]).toMatchObject({
+        text: "Saved edit",
+        diffScope: scope,
+        startLine: 2,
+        endLine: 3,
+        side: "new",
+      });
+      expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER_KEY)).toBe(0);
+      fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+    },
+  );
+
   test("creates inline comments, updates file counters, and clears them after send success", () => {
     render(<FileDiffListHarness />);
 
@@ -709,6 +774,8 @@ describe("FileDiffList", () => {
     fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
     expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
 
+    fireEvent.click(screen.getByRole("button", { name: "Switch owner" }));
+    expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Switch owner" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
   });

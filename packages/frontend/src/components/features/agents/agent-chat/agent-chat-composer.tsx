@@ -805,6 +805,7 @@ export function AgentChatComposer({
     if (latestSendDisabledRef.current) {
       return;
     }
+    const submitDraft = latestOnSendRef.current;
     const submittedDraft = latestDraftRef.current;
     const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
     clearSubmittedDraft(submittedSnapshot);
@@ -812,7 +813,7 @@ export function AgentChatComposer({
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
-      const result = await latestOnSendRef.current(submittedDraft);
+      const result = await submitDraft(submittedDraft);
       if (result !== true && result !== false) {
         restoreSubmittedDraft(submittedSnapshot, result);
         toast.error("Unable to send message", { description: result.error.message });

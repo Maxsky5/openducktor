@@ -6,7 +6,6 @@ import {
   isInlineCommentDraftStorageKey,
   parseInlineCommentDraftStorageKey,
   parseInlineCommentDraftsPayload,
-  readAllInlineCommentDraftsFromStorage,
   readInlineCommentDraftsFromStorage,
   serializeInlineCommentDraftsPayload,
   toInlineCommentDraftStorageKey,
@@ -32,15 +31,6 @@ const createMemoryStorage = (): TestStorage => {
   };
 };
 
-const OWNER = toInlineCommentDraftStorageKey({
-  workspaceId: "workspace:one",
-  taskId: "task/one",
-});
-const OTHER_OWNER = toInlineCommentDraftStorageKey({
-  workspaceId: "workspace:one",
-  taskId: "task/two",
-});
-
 const buildComment = (
   overrides: Partial<PersistedInlineCommentDraft> = {},
 ): PersistedInlineCommentDraft => ({
@@ -60,7 +50,15 @@ const buildComment = (
   ...overrides,
 });
 
-describe("inline comment draft storage", () => {
+describe.each([
+  { workspaceId: "workspace:one", taskId: "task/one" },
+  { workspaceId: "workspace:one", workspaceSessionId: "task/one" },
+])("inline comment draft storage for %j", (identity) => {
+  const OWNER = toInlineCommentDraftStorageKey(identity);
+  const OTHER_OWNER = toInlineCommentDraftStorageKey({
+    ...identity,
+    workspaceId: "other-workspace",
+  });
   test("round-trips comments under an encoded workspace and task key", () => {
     const storage = createMemoryStorage();
     const comments = [buildComment()];
@@ -75,10 +73,7 @@ describe("inline comment draft storage", () => {
 
     expect(result.status).toBe("serialized");
     expect(isInlineCommentDraftStorageKey(OWNER)).toBe(true);
-    expect(parseInlineCommentDraftStorageKey(OWNER)).toEqual({
-      workspaceId: "workspace:one",
-      taskId: "task/one",
-    });
+    expect(parseInlineCommentDraftStorageKey(OWNER)).toEqual(identity);
     expect(storage.getItem(OWNER)).not.toBeNull();
     expect(
       readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER, now: new Date(updatedAt) }),
@@ -125,10 +120,7 @@ describe("inline comment draft storage", () => {
 
     expect(parseInlineCommentDraftStorageKey(`${OWNER}:extra`)).toBeNull();
     expect(parseInlineCommentDraftStorageKey("openducktor:other:v1:a:b")).toBeNull();
-    expect(parseInlineCommentDraftStorageKey(OWNER)).toEqual({
-      workspaceId: "workspace:one",
-      taskId: "task/one",
-    });
+    expect(parseInlineCommentDraftStorageKey(OWNER)).toEqual(identity);
   });
 
   test("removes an empty stored value", () => {
@@ -147,8 +139,7 @@ describe("inline comment draft storage", () => {
     const payloadFor = (comment: PersistedInlineCommentDraft): string =>
       JSON.stringify({
         version: 1,
-        workspaceId: "workspace:one",
-        taskId: "task/one",
+        ...identity,
         updatedAt,
         comments: [comment],
       });
@@ -209,8 +200,7 @@ describe("inline comment draft storage", () => {
       parseInlineCommentDraftsPayload({
         raw: JSON.stringify({
           version: 1,
-          workspaceId: "workspace:one",
-          taskId: "task/one",
+          ...identity,
           updatedAt: new Date(updatedAt.getTime() + 60_000).toISOString(),
           comments: [buildComment()],
         }),
@@ -258,45 +248,49 @@ describe("inline comment draft storage", () => {
     ).toEqual({ status: "empty" });
     expect(storage.getItem(OWNER)).toBeNull();
   });
+});
 
-  test("reads all valid owners and removes invalid, expired, and oversized entries", () => {
-    const storage = createMemoryStorage();
-    const now = new Date("2026-09-18T10:00:00.000Z");
-    const updatedAt = now.toISOString();
-
-    writeInlineCommentDraftsToStorage({
-      storage,
-      ownerKey: OWNER,
-      comments: [buildComment()],
-      updatedAt,
-    });
-    writeInlineCommentDraftsToStorage({
-      storage,
-      ownerKey: OTHER_OWNER,
-      comments: [buildComment({ id: "comment-2", filePath: "packages/frontend/src/beta.ts" })],
-      updatedAt,
-    });
-    const expiredOwner = toInlineCommentDraftStorageKey({
-      workspaceId: "workspace:one",
-      taskId: "task/expired",
-    });
-    writeInlineCommentDraftsToStorage({
-      storage,
-      ownerKey: expiredOwner,
-      comments: [buildComment({ id: "comment-3" })],
-      updatedAt: new Date(now.getTime() - INLINE_COMMENT_DRAFT_STORAGE_TTL_MS).toISOString(),
-    });
-    storage.setItem("openducktor:git-diff-comments:v1:broken", "{");
-
-    expect(readAllInlineCommentDraftsFromStorage({ storage, now })).toEqual([
-      { ownerKey: OWNER, comments: [buildComment()], updatedAt },
-      {
-        ownerKey: OTHER_OWNER,
-        comments: [buildComment({ id: "comment-2", filePath: "packages/frontend/src/beta.ts" })],
-        updatedAt,
-      },
-    ]);
-    expect(storage.getItem(expiredOwner)).toBeNull();
-    expect(storage.getItem("openducktor:git-diff-comments:v1:broken")).toBeNull();
+test("keeps legacy task records separate from workspace sessions with matching IDs", () => {
+  const taskKey = "openducktor:git-diff-comments:v1:workspace%3Aone:task%2Fone";
+  const workspaceKey =
+    "openducktor:git-diff-comments:workspace-session:v1:workspace%3Aone:task%2Fone";
+  const updatedAt = "2026-10-08T00:00:00.000Z";
+  const legacy = JSON.stringify({
+    version: 1,
+    workspaceId: "workspace:one",
+    taskId: "task/one",
+    updatedAt,
+    comments: [buildComment()],
   });
+  expect(
+    parseInlineCommentDraftsPayload({ raw: legacy, ownerKey: taskKey, now: new Date(updatedAt) })
+      .status,
+  ).toBe("restored");
+  expect(
+    parseInlineCommentDraftsPayload({
+      raw: legacy,
+      ownerKey: workspaceKey,
+      now: new Date(updatedAt),
+    }).status,
+  ).toBe("invalid");
+  const workspaceRecord = serializeInlineCommentDraftsPayload({
+    ownerKey: workspaceKey,
+    comments: [buildComment()],
+    updatedAt,
+  });
+  if (workspaceRecord.status !== "serialized") throw new Error("Expected workspace record");
+  expect(JSON.parse(workspaceRecord.payload)).toEqual({
+    version: 1,
+    workspaceId: "workspace:one",
+    workspaceSessionId: "task/one",
+    updatedAt,
+    comments: [buildComment()],
+  });
+  expect(
+    parseInlineCommentDraftsPayload({
+      raw: workspaceRecord.payload,
+      ownerKey: taskKey,
+      now: new Date(updatedAt),
+    }).status,
+  ).toBe("invalid");
 });

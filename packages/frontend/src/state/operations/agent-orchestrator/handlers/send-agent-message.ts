@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import {
   type AgentEnginePort,
   type AgentUserMessagePart,
@@ -298,7 +299,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           dependencies.readSessionSnapshot,
           dependencies.updateSession,
         );
-        return;
+        throw new Error(
+          `Session '${externalSessionId}' is no longer available. Reopen the chat to send your draft.`,
+        );
       }
       rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
     }
@@ -314,6 +317,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           .map((request) => request.requestId)
       : undefined;
 
+    let sentMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>> | null = null;
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
         requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
@@ -334,6 +338,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         sendInput.systemPrompt = preparedSend.systemPrompt;
       }
       const acceptedUserMessage = await dependencies.adapter.sendUserMessage(sendInput);
+      sentMessage = acceptedUserMessage;
       if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(
           readySession,
@@ -344,30 +349,38 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       }
     } catch (error) {
       const acceptedMessage =
-        error instanceof HostInvokeError
+        sentMessage ??
+        (error instanceof HostInvokeError
           ? getAcceptedMessageAfterSendFailure(error, {
               repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
               runtimeKind: readySession.runtimeKind,
               workingDirectory: readySession.workingDirectory,
               externalSessionId,
             })
-          : null;
+          : null);
       if (acceptedMessage) {
-        if (!isManualCompactionSend) {
-          upsertAcceptedUserMessage(
+        try {
+          if (!sentMessage && !isManualCompactionSend) {
+            upsertAcceptedUserMessage(
+              readySession,
+              acceptedMessage,
+              resolvedQuestionRequestIds,
+              dependencies.updateSession,
+            );
+          }
+          appendSendFailureNotice(
             readySession,
-            acceptedMessage,
-            resolvedQuestionRequestIds,
+            errorMessage(error),
             dependencies.updateSession,
+            false,
+            options?.errorAttentionId,
           );
+        } catch (updateError) {
+          console.error(updateError);
+          toast.error(`Message sent to '${externalSessionId}', but the chat update failed`, {
+            description: errorMessage(error),
+          });
         }
-        appendSendFailureNotice(
-          readySession,
-          errorMessage(error),
-          dependencies.updateSession,
-          false,
-          options?.errorAttentionId,
-        );
         return;
       }
       let settledOwnAttempt = false;

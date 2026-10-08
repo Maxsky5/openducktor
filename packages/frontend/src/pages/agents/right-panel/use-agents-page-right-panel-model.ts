@@ -1,3 +1,4 @@
+import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type {
   GitBranch,
   RepositoryGitProviderContext,
@@ -12,7 +13,7 @@ import type {
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import type { DiffScope, GitDiffRefresh } from "@/features/agent-studio-git";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
@@ -25,10 +26,6 @@ import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
 } from "@/state/queries/pull-request-review";
-import {
-  toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { buildTaskExecutionPanelModel } from "./use-agent-studio-right-panel";
@@ -70,7 +67,7 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
-  commentOwner?: { workspaceId: string; taskId: string } | null;
+  commentOwner?: InlineCommentOwner | null;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -94,8 +91,6 @@ type FileExplorerRoot = {
   rootPath: string | null;
   unavailableReason: string | null;
 };
-
-const COMMENT_VALIDATION_SCOPES: readonly DiffScope[] = ["uncommitted", "target"];
 
 /** Identifies the task and session that the git panel shows. */
 function toGitPanelSubjectKey({
@@ -299,43 +294,14 @@ export function useAgentsPageRightPanelModel({
   const commentOwner = useMemo(
     () =>
       activeWorkspace
-        ? { workspaceId: activeWorkspace.workspaceId, taskId: selectedView.taskId }
+        ? {
+            kind: "task" as const,
+            workspaceId: activeWorkspace.workspaceId,
+            taskId: selectedView.taskId,
+          }
         : null,
     [activeWorkspace, selectedView.taskId],
   );
-  const commentOwnerKey = useMemo(
-    () => (commentOwner ? toInlineCommentDraftOwnerKey(commentOwner) : null),
-    [commentOwner],
-  );
-  const isCommentStoreHydrated = useInlineCommentDraftStore((store) => store.isHydrated);
-  const dropDraftsForMissingFiles = useInlineCommentDraftStore(
-    (store) => store.dropDraftsForMissingFiles,
-  );
-
-  useEffect(() => {
-    if (commentOwnerKey === null || !isCommentStoreHydrated) {
-      return;
-    }
-
-    for (const diffScope of COMMENT_VALIDATION_SCOPES) {
-      if (!diffData.loadedScopesByScope[diffScope]) {
-        continue;
-      }
-      const scopeState = diffData.scopeStatesByScope[diffScope];
-      if (scopeState.error !== null) {
-        continue;
-      }
-      const presentFilePaths = new Set(scopeState.fileDiffs.map((fileDiff) => fileDiff.file));
-      dropDraftsForMissingFiles(commentOwnerKey, diffScope, presentFilePaths);
-    }
-  }, [
-    commentOwnerKey,
-    diffData.loadedScopesByScope,
-    diffData.scopeStatesByScope,
-    dropDraftsForMissingFiles,
-    isCommentStoreHydrated,
-  ]);
-
   const gitPanelSubjectKey = toGitPanelSubjectKey({
     workspaceId: activeWorkspace?.workspaceId ?? null,
     taskId: selectedView.taskId,

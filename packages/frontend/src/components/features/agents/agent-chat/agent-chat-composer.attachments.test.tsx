@@ -3,7 +3,7 @@ import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-d
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createRef, useState } from "react";
+import { useState } from "react";
 import { AgentChatComposer } from "./agent-chat-composer";
 import {
   type AgentChatDraftSessionIdentity,
@@ -20,114 +20,11 @@ import {
   setAgentChatDraftAttachmentStagerForTests,
   setAgentChatDraftStorageForTests,
 } from "./agent-chat-draft-store";
-import { buildModelSelection } from "./agent-chat-test-fixtures";
-
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
-
-const SHARED_CALLBACKS = {
-  onSend: async () => true,
-  onSelectAgent: () => {},
-  onSelectVariant: () => {},
-  onStopSession: () => {},
-  onComposerEditorInput: () => {},
-};
-
-const buildModel = () => ({
-  displayedSessionKey: "session-1",
-  isInteractionEnabled: true,
-  isReadOnly: false,
-  readOnlyReason: null,
-  busySendBlockedReason: null,
-  draftScope: {
-    key: "draft-1",
-    persistence: null,
-  },
-  onSend: SHARED_CALLBACKS.onSend,
-  isSending: false,
-  isStarting: false,
-  isSessionWorking: false,
-  isWaitingInput: false,
-  waitingInputPlaceholder: null,
-  isModelSelectionPending: false,
-  selectedModelSelection: buildModelSelection(),
-  selectedModelDescriptor: null,
-  isSelectionCatalogLoading: false,
-  supportsAttachments: true,
-  supportsSlashCommands: true,
-  supportsFileSearch: true,
-  supportsSkillReferences: false,
-  supportsSubagentReferences: false,
-  slashCommandCatalog: { commands: [] },
-  slashCommands: [],
-  slashCommandsError: null,
-  isSlashCommandsLoading: false,
-  skillCatalog: null,
-  skills: [],
-  skillsError: null,
-  isSkillsLoading: false,
-  subagentCatalog: null,
-  subagents: [],
-  subagentsError: null,
-  isSubagentsLoading: false,
-  retrySlashCommands: null,
-  retrySkills: null,
-  retrySubagents: null,
-  onAgentSelectorOpen: () => {},
-  onVariantSelectorOpen: () => {},
-  onCatalogMenuOpen: () => {},
-  searchFiles: async () => [],
-  agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
-  modelPicker: {
-    runtimes: [],
-    value: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
-    selectionPolicy: { kind: "editable" as const },
-    favoriteState: {
-      favorites: [],
-      isLoading: false,
-      readError: null,
-      isMutationPending: false,
-      mutationError: null,
-      canMutate: true,
-      toggleFavorite: () => {},
-      retryRead: () => {},
-      retryMutation: () => {},
-    },
-    onValueChange: () => {},
-    onOpenChange: () => {},
-  },
-  variantOptions: [{ value: "high", label: "high" }],
-  onSelectAgent: SHARED_CALLBACKS.onSelectAgent,
-  onSelectVariant: SHARED_CALLBACKS.onSelectVariant,
-  accentColor: undefined,
-  contextUsage: null,
-  canStopSession: false,
-  isResumingSession: false,
-  onStopSession: SHARED_CALLBACKS.onStopSession,
-  composerFormRef: createRef<HTMLFormElement>(),
-  composerEditorRef: createRef<HTMLDivElement>(),
-  onComposerEditorInput: SHARED_CALLBACKS.onComposerEditorInput,
-  scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
-});
-
-const createMemoryStorage = (spies?: { getItem?: (key: string) => void }): TestStorage => {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    getItem: (key) => {
-      spies?.getItem?.(key);
-      return store.get(key) ?? null;
-    },
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-  };
-};
+import {
+  buildModel,
+  createMemoryStorage,
+  typeIntoComposer,
+} from "./agent-chat-composer-test-helpers";
 
 const sessionIdentity = (
   externalSessionId: string,
@@ -171,32 +68,6 @@ const getEditorRoot = (container: HTMLElement): HTMLElement => {
   }
 
   return editorRoot;
-};
-
-const getLastTextSegment = (container: HTMLElement): HTMLElement => {
-  const textSegments = Array.from(container.querySelectorAll("[data-text-segment-id]"));
-  const editable = textSegments.at(-1);
-  if (!(editable instanceof HTMLElement)) {
-    throw new Error("Expected editable composer text segment");
-  }
-
-  return editable;
-};
-
-const typeIntoComposer = (container: HTMLElement, value: string): void => {
-  const editable = getLastTextSegment(container);
-  editable.textContent = value;
-  const textNode = editable.firstChild;
-  if (textNode) {
-    const range = document.createRange();
-    range.setStart(textNode, value.length);
-    range.collapse(true);
-    const selection = globalThis.getSelection?.();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }
-
-  fireEvent.input(editable);
 };
 
 const createClipboardData = ({ itemFile, files }: { itemFile?: File; files?: File[] }) => ({

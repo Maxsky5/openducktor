@@ -480,10 +480,10 @@ describe("use-inline-comment-draft-store", () => {
         buildInput({ filePath: "packages/frontend/src/local.ts", text: "Local note" }),
       );
 
-    expect(useInlineCommentDraftStore.getState().isHydrated).toBe(false);
-    useInlineCommentDraftStore.getState().hydrate();
+    expect(useInlineCommentDraftStore.getState().hydratedOwners[OWNER] ?? false).toBe(false);
+    useInlineCommentDraftStore.getState().hydrate(OWNER);
 
-    expect(useInlineCommentDraftStore.getState().isHydrated).toBe(true);
+    expect(useInlineCommentDraftStore.getState().hydratedOwners[OWNER]).toBe(true);
     const hydrated = useInlineCommentDraftStore.getState().draftsByOwner[OWNER]?.[0];
     expect(hydrated).toMatchObject({
       id: "stored-comment",
@@ -501,6 +501,7 @@ describe("use-inline-comment-draft-store", () => {
       status: "pending",
     });
     expect(requireDraftRevision(OWNER, 0)).toBeGreaterThan(0);
+    useInlineCommentDraftStore.getState().hydrate(OTHER_OWNER);
     expect(
       useInlineCommentDraftStore.getState().draftsByOwner[OTHER_OWNER]?.map((draft) => draft.text),
     ).toEqual(["Local note"]);
@@ -577,9 +578,9 @@ describe("use-inline-comment-draft-store", () => {
   test("reports storage unavailability when hydration fails", () => {
     setInlineCommentDraftStorageForTests(createThrowingStorage());
 
-    useInlineCommentDraftStore.getState().hydrate();
+    useInlineCommentDraftStore.getState().hydrate(OWNER);
 
-    expect(useInlineCommentDraftStore.getState().isHydrated).toBe(true);
+    expect(useInlineCommentDraftStore.getState().hydratedOwners[OWNER]).toBe(true);
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe(
       "storage_unavailable",
     );
@@ -588,7 +589,7 @@ describe("use-inline-comment-draft-store", () => {
 
   test("clears the storage unavailability warning after a successful write", () => {
     setInlineCommentDraftStorageForTests(createThrowingStorage());
-    useInlineCommentDraftStore.getState().hydrate();
+    useInlineCommentDraftStore.getState().hydrate(OWNER);
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe(
       "storage_unavailable",
     );
@@ -599,5 +600,47 @@ describe("use-inline-comment-draft-store", () => {
 
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBeNull();
     expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER)).toBe(1);
+  });
+  test("isolates owner hydration failures and successful saves across tasks, sessions, and workspaces", () => {
+    const workspaceOwner = toInlineCommentDraftStorageKey({
+      workspaceId: "workspace-1",
+      workspaceSessionId: "task-1",
+    });
+    const otherWorkspace = toInlineCommentDraftStorageKey({
+      workspaceId: "workspace-2",
+      workspaceSessionId: "task-1",
+    });
+    const storage = createMemoryStorage();
+    const read = storage.getItem;
+    storage.getItem = (key) => {
+      if (key === OWNER) throw new Error("Task storage failed");
+      return read(key);
+    };
+    setInlineCommentDraftStorageForTests(storage);
+    const store = useInlineCommentDraftStore.getState();
+    store.hydrate(OWNER);
+    expect(useInlineCommentDraftStore.getState().hydratedOwners[workspaceOwner]).toBeUndefined();
+    store.hydrate(workspaceOwner);
+    store.hydrate(otherWorkspace);
+    store.addDraft(workspaceOwner, buildInput({ text: "Workspace comment" }));
+    store.addDraft(otherWorkspace, buildInput({ text: "Other workspace comment" }));
+    store.flush();
+    expect(store.getPersistenceWarning(OWNER)).toBe("storage_unavailable");
+    expect(store.getPersistenceWarning(workspaceOwner)).toBeNull();
+    expect(store.getPersistenceWarning(otherWorkspace)).toBeNull();
+    expect(store.getDraftCount(OWNER)).toBe(0);
+    expect(store.getPendingDrafts(workspaceOwner).map((draft) => draft.text)).toEqual([
+      "Workspace comment",
+    ]);
+    resetInlineCommentDraftStoreForTests();
+    setInlineCommentDraftStorageForTests(storage);
+    useInlineCommentDraftStore.getState().hydrate(workspaceOwner);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .getPendingDrafts(workspaceOwner)
+        .map((draft) => draft.text),
+    ).toEqual(["Workspace comment"]);
+    expect(useInlineCommentDraftStore.getState().getDraftCount(otherWorkspace)).toBe(0);
   });
 });
