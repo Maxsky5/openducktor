@@ -5,19 +5,13 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskExecutionDocument } from "@/components/features/agents";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   getAgentSessionWaitingInputPlaceholder,
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
 } from "@/lib/agent-session-waiting-input";
-import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type {
-  AgentApprovalRequest,
-  AgentQuestionRequest,
-  AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
   buildActiveDocumentForRole,
@@ -26,11 +20,8 @@ import {
 } from "../use-agent-studio-page-model-builders";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
 const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze(new Array<AgentQuestionRequest>());
-type PendingInputRequest = AgentApprovalRequest | AgentQuestionRequest;
 
 type SelectedSessionPendingQuestionsContext = {
   canSubmit: boolean;
@@ -55,8 +46,6 @@ export type SelectedSessionPendingInputContext = {
   pendingQuestionRequests: readonly AgentQuestionRequest[];
   pendingQuestions: SelectedSessionPendingQuestionsContext;
   approvals: SelectedSessionApprovalsContext;
-  subagentPendingApprovalCountBySessionKey: Record<string, number>;
-  subagentPendingQuestionCountBySessionKey: Record<string, number>;
 };
 
 export type AgentStudioSelectedSessionContext = {
@@ -75,7 +64,6 @@ export type AgentStudioSelectedSessionContextInput = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  allSessionSummaries: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
   documents: AgentStudioDocumentsContext;
   sessionActions: {
@@ -91,66 +79,11 @@ export type AgentStudioSelectedSessionContextInput = {
   gitProviderReadError?: string | null;
 };
 
-const resolvePendingInputChildSession = (
-  selectedSessionIdentity: AgentSessionIdentity | null,
-  request: PendingInputRequest,
-): AgentSessionIdentity | null => {
-  if (request.source?.kind !== "subagent") {
-    return null;
-  }
-  if (request.responseSession) {
-    return request.responseSession;
-  }
-  if (!selectedSessionIdentity) {
-    return null;
-  }
-
-  return resolveAgentPendingInputParticipants(selectedSessionIdentity, request)
-    .subagentChildSession;
-};
-
-const buildSubagentPendingInputCountBySessionKey = (
-  sessions: AgentSessionSummary[],
-  readPendingInputCount: (session: AgentSessionSummary) => number,
-  selectedSessionIdentity: AgentSessionIdentity | null,
-  pendingRequests: readonly PendingInputRequest[],
-  emptyCounts: Record<string, number>,
-): Record<string, number> => {
-  const next: Record<string, number> = {};
-  const setMaxCount = (key: string, count: number): void => {
-    next[key] = Math.max(next[key] ?? 0, count);
-  };
-
-  for (const session of sessions) {
-    const count = readPendingInputCount(session);
-    if (count > 0) {
-      setMaxCount(agentSessionIdentityKey(session), count);
-    }
-  }
-
-  const projectedCountsBySessionKey = new Map<string, number>();
-  for (const request of pendingRequests) {
-    const responseSession = resolvePendingInputChildSession(selectedSessionIdentity, request);
-    if (!responseSession) {
-      continue;
-    }
-    const sessionKey = agentSessionIdentityKey(responseSession);
-    const count = projectedCountsBySessionKey.get(sessionKey) ?? 0;
-    projectedCountsBySessionKey.set(sessionKey, count + 1);
-  }
-  for (const [sessionKey, count] of projectedCountsBySessionKey) {
-    setMaxCount(sessionKey, count);
-  }
-
-  return Object.keys(next).length > 0 ? next : emptyCounts;
-};
-
 export const buildAgentStudioSelectedSessionContext = ({
   taskId,
   role,
   selectedTask,
   sessionsForTask,
-  allSessionSummaries,
   selectedSession,
   documents,
   sessionActions,
@@ -217,20 +150,6 @@ export const buildAgentStudioSelectedSessionContext = ({
         errorByRequestId: sessionActions.approvalReplyErrorByRequestId,
         onReply: sessionActions.onReplyApproval,
       },
-      subagentPendingApprovalCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
-        allSessionSummaries,
-        (session) => session.pendingApprovalCount,
-        selectedSessionIdentity,
-        pendingApprovalRequests,
-        EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-      ),
-      subagentPendingQuestionCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
-        allSessionSummaries,
-        (session) => session.pendingQuestionCount,
-        selectedSessionIdentity,
-        pendingQuestionRequests,
-        EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
-      ),
     },
   };
 };

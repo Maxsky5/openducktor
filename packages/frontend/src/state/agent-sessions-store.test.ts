@@ -428,6 +428,7 @@ describe("createAgentSessionsStore repository retention", () => {
       workspaceRepoPath: "/repo-b",
       sessions: [],
       repositorySessions: [],
+      pendingInputSessions: [],
     });
 
     replaceStoreSessions(store, [sessionB]);
@@ -684,6 +685,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       workspaceRepoPath: "/repo-b",
       sessions: [],
       repositorySessions: [],
+      pendingInputSessions: [],
     });
   });
 });

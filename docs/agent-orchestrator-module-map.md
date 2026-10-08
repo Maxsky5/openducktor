@@ -31,6 +31,8 @@ Owns `waiting_input`, `starting`, `running`, `idle`, `stopped`, and `error`.
 
 Pending questions or approvals take priority over raw starting, running, or idle status. Session navigation, Kanban, actions, and transcripts use this shared rule. Summaries contain `activityState` and pending counts. Full pending payloads remain on `AgentSessionState`.
 
+The same activity snapshot exposes `pendingInputSessions` for every session with pending input, including workspace sessions and children. This count projection uses full session identity and keeps unchanged entries across transcript updates. Navigation summaries still include only their owned roots.
+
 ## Host live projection
 
 Files: `session-read-model/agent-session-live-projection.ts`, `session-read-model/agent-session-workflow-records.ts`, `session-read-model/source-session-loader.ts`, `session-read-model/use-task-session-records.ts`, and `hooks/use-repo-session-read-model.ts`.
@@ -221,6 +223,12 @@ Rules:
 The selected view reads runtime, check, and read-model contexts. Do not pass those values through page shells. `AgentSessionReadModelStateContext` exposes one `sessionReadModelLoadState` and `reloadSessionReadModel`.
 
 The repository read model key is repository plus task ID set. Task title, status, order, or document changes do not restart it. Durable records prove durable existence. The host snapshot proves live existence. Only a local `starting` session can exist for a short time without either source.
+
+### Shared chat presentation
+
+File: `components/features/agents/agent-chat/use-agent-chat-presentation.ts`.
+
+Task and workspace wrappers use this hook for Claude skill mentions, child pending-input counts, runtime Recheck feedback, and the selected session accent. Child counts combine the activity snapshot with parent-visible requests and keep explicit child response identity. The task wrapper owns workflow notices, documents, and launch actions. Composer layout and transcript windowing stay with their existing owners.
 
 ### Rendered transcript cache
 

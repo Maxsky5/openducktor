@@ -2,7 +2,6 @@ import type { AgentChatSendResult } from "@/components/features/agents/agent-cha
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
-import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import type {
   AgentChatInterruptedTurnResumeModel,
   AgentChatModel,
@@ -13,7 +12,7 @@ import type { AgentChatDraftScope } from "@/components/features/agents/agent-cha
 import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
-import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
+import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -142,48 +141,43 @@ export function useAgentStudioChatModel({
 }: UseAgentStudioChatModelArgs): AgentChatModel {
   const repoPath = useActiveWorkspace()?.repoPath ?? null;
   const { loadAgentSessionHistory } = sessionActions;
-  const subagentPendingApprovalCountBySessionKey =
-    selectedSession.pendingInput.subagentPendingApprovalCountBySessionKey;
-  const subagentPendingQuestionCountBySessionKey =
-    selectedSession.pendingInput.subagentPendingQuestionCountBySessionKey;
   const selectedSessionState = selectedSession.selectedSession;
   const { sessionReadModelLoadState, reloadSessionReadModel } = useAgentSessionReadModelState();
   const selectedSessionIdentity = selectedSessionState.identity;
   const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
-  const transcriptSession = useMemo(() => {
-    const session = toAgentStudioTranscriptSession({
-      identity: selectedSessionIdentity,
-      activityState: selectedSessionState.activityState,
-      loadedSession: selectedSessionState.loadedSession,
-    });
-    return session
-      ? {
-          ...withClaudeSkillMentions(session, modelSelection.skills),
-          skillReferences: modelSelection.skills,
-        }
-      : null;
-  }, [
-    modelSelection.skills,
-    selectedSessionIdentity,
-    selectedSessionState.activityState,
-    selectedSessionState.loadedSession,
-  ]);
-  const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
-  const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
-  const sessionAccentColor = useMemo(
+  const rawTranscriptSession = useMemo(
     () =>
-      resolveAgentSessionAccentColor({
-        agentName: selectedSessionModel?.profileId,
-        agentColors: modelSelection.agentAccentColorsByProfileId,
-        runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
+      toAgentStudioTranscriptSession({
+        identity: selectedSessionIdentity,
+        activityState: selectedSessionState.activityState,
+        loadedSession: selectedSessionState.loadedSession,
       }),
     [
-      modelSelection.agentAccentColorsByProfileId,
-      selectedSessionIdentity?.runtimeKind,
-      selectedSessionModel?.profileId,
+      selectedSessionIdentity,
+      selectedSessionState.activityState,
+      selectedSessionState.loadedSession,
     ],
   );
+  const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
+  const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
+  const {
+    transcriptSession,
+    sessionAccentColor,
+    runtimeBlockedAction,
+    subagentPendingApprovalCountBySessionKey,
+    subagentPendingQuestionCountBySessionKey,
+  } = useAgentChatPresentation({
+    session: rawTranscriptSession,
+    sessionIdentity: selectedSessionIdentity,
+    pendingApprovals: pendingApprovalRequests,
+    pendingQuestions: pendingQuestionRequests,
+    skills: modelSelection.skills,
+    profileId: selectedSessionModel?.profileId,
+    runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
+    sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
+    runtimeReadiness: selectedSessionState.runtimeReadiness,
+  });
   const chatContextUsage = useMemo(
     () => toChatContextUsage(modelSelection.selectedSessionContextUsage),
     [modelSelection.selectedSessionContextUsage],
@@ -191,7 +185,6 @@ export function useAgentStudioChatModel({
   const selectedSessionTranscriptState = selectedSessionState.transcriptState;
   const selectedSessionAuxiliaryError = selectedSessionState.sessionAuxiliaryError;
   const runtimeReadiness = selectedSessionState.runtimeReadiness;
-  const { refreshChecks: refreshRuntimeChecks } = runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
   const selectedSessionKey = selectedSessionIdentity
@@ -283,17 +276,6 @@ export function useAgentStudioChatModel({
     loadAgentSessionHistory,
     sessionReadModelLoadState.kind,
   ]);
-  const runtimeBlockedAction = useMemo(
-    () => ({
-      label: "Recheck",
-      onAction: () => {
-        void refreshRuntimeChecks();
-      },
-      disabled: runtimeReadiness.isLoadingChecks,
-      isPending: runtimeReadiness.isLoadingChecks,
-    }),
-    [refreshRuntimeChecks, runtimeReadiness.isLoadingChecks],
-  );
   const chatReadiness = useMemo(
     () =>
       deriveAgentChatReadiness({
