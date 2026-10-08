@@ -296,6 +296,8 @@ Rules:
 
 `pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
 
+Deferred refreshes check the current view before each read. Branch and settings refreshes wait while tools are hidden. A repository, directory, or branch change discards work for the previous view.
+
 Dynamic tabs in `openduckto-k0u1t` must keep this hook in the session shell. Closing or hiding the Git tab must only unmount its view. Conflict assistance must use the same controller and keep task workflow policy in the task adapter.
 
 ## Composer

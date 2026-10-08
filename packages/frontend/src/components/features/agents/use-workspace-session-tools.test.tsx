@@ -104,8 +104,10 @@ function PanelHarness({
   initialTabId = "git",
   onRefreshReady = () => {},
   isVisible = true,
+  workingDirectory = "/repo",
 }: {
   isVisible?: boolean;
+  workingDirectory?: string;
   sessionId?: string;
   branchKey?: string;
   branchReady?: boolean;
@@ -123,7 +125,7 @@ function PanelHarness({
     repoPath: "/repo",
     workspaceId: "workspace-1",
     sessionId: sessionId,
-    workingDirectory: "/repo",
+    workingDirectory,
     contextMode: contextMode,
     branchKey: branchKey,
     branchReady: branchReady,
@@ -1000,6 +1002,143 @@ test("manual refresh reads a new branch before refreshing its comparison", async
   } finally {
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test.each(
+  (["branch", "settings", "fetch", "comparison"] as const).flatMap((stage) =>
+    (["hide", "directory", "branch"] as const)
+      .filter(
+        (change) =>
+          (change !== "branch" || stage !== "settings") &&
+          (change !== "directory" || stage !== "fetch"),
+      )
+      .map((change) => ({ stage, change })),
+  ),
+)("stops old refresh reads after $change during $stage", async ({ stage, change }) => {
+  const hidden = change === "hide" || (change === "branch" && stage === "branch");
+  const released = createDeferred<void>();
+  const reads: string[] = [];
+  let holdRead = false;
+  let readStarted = false;
+  const waitAt = async (step: typeof stage) => {
+    if (step !== stage || !holdRead) return;
+    holdRead = false;
+    readStarted = true;
+    await released.promise;
+  };
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async (_repo, directory) => {
+          reads.push(`comparison:${directory}`);
+          await waitAt("comparison");
+          return stage === "fetch" || stage === "settings"
+            ? { kind: "unavailable", reason: "Remote target is missing." }
+            : { kind: "available", reference: targetReference };
+        },
+        gitFetchRemote: async (_repo, _target, directory) => {
+          reads.push(`fetch:${directory}`);
+          await waitAt("fetch");
+          return { outcome: "fetched", output: "" };
+        },
+        gitGetWorktreeStatus: async (_repo, target, _scope, directory) => {
+          reads.push(`status:${directory}`);
+          return worktreeStatus(target);
+        },
+        gitGetWorktreeStatusSummary: async (_repo, target, directory) => {
+          reads.push(`summary:${directory}`);
+          return worktreeSummary(target);
+        },
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  function RefreshPanel({
+    isVisible,
+    workingDirectory,
+    branch,
+  }: {
+    isVisible: boolean;
+    workingDirectory: string;
+    branch: string | null;
+  }) {
+    const [branchKey, setBranchKey] = useState("feature");
+    const [targetError, setTargetError] = useState<string | null>(
+      stage === "settings" ? "Could not read repository settings" : null,
+    );
+    return (
+      <PanelHarness
+        isVisible={isVisible}
+        workingDirectory={workingDirectory}
+        branchKey={branch ?? branchKey}
+        targetError={targetError}
+        readBranch={async () => {
+          await waitAt("branch");
+          const next = stage === "branch" && hidden ? "other" : branchKey;
+          setBranchKey(next);
+          return next;
+        }}
+        retryTarget={async () => {
+          await waitAt("settings");
+          setTargetError(null);
+        }}
+      />
+    );
+  }
+  const queryClient = createToolsQueryClient();
+  const panel = (isVisible = true, workingDirectory = "/repo", branch: string | null = null) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RefreshPanel isVisible={isVisible} workingDirectory={workingDirectory} branch={branch} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel());
+  try {
+    await waitFor(() => expect(reads.some((read) => read.startsWith("status:"))).toBe(true));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    holdRead = true;
+    await act(async () => fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button")));
+    await waitFor(() => expect(readStarted).toBe(true));
+    reads.length = 0;
+    const nextDirectory = change === "directory" ? "/other" : "/repo";
+    await act(async () =>
+      view.rerender(panel(!hidden, nextDirectory, change === "branch" && !hidden ? "other" : null)),
+    );
+    if (!hidden) {
+      await waitFor(() => expect(reads).toContain(`status:${nextDirectory}`));
+    }
+    reads.length = 0;
+    await act(async () => released.resolve());
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    if (change !== "directory") {
+      expect(reads).toEqual([]);
+    } else {
+      // Settings may enable reads in the new view, but the old refresh must stop.
+      expect(reads.filter((read) => read.endsWith(":/repo") || read.startsWith("fetch:"))).toEqual(
+        [],
+      );
+    }
+    if (hidden) {
+      await act(async () =>
+        view.rerender(panel(true, "/repo", change === "branch" ? "third" : null)),
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+        false,
+      );
+      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(true);
+      if (change === "branch") expect(reads.some((read) => read.startsWith("fetch:"))).toBe(false);
+    }
+  } finally {
+    released.resolve();
+    await act(async () => {
+      view.unmount();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    });
     configureShellBridge(createUnavailableShellBridge());
   }
 });

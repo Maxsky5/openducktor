@@ -3,6 +3,7 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { FolderTree } from "lucide-react";
 import {
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -56,6 +57,13 @@ type WorkspaceSessionToolsProps = {
   repositoryBranchControl?: ReactNode;
 };
 
+type WorkspaceToolsView = {
+  isVisible: boolean;
+  directoryKey: string;
+  branchKey: string;
+  refresh: WorkspaceRefresh["refresh"];
+};
+
 /** The session shell owns this hook even when the tools view unmounts. */
 export function useWorkspaceSessionTools({
   isVisible,
@@ -76,6 +84,8 @@ export function useWorkspaceSessionTools({
   onSelectFile,
   repositoryBranchControl,
 }: WorkspaceSessionToolsProps) {
+  const directoryKey = JSON.stringify([repoPath, workingDirectory]);
+  const viewRef = useRef<WorkspaceToolsView | null>(null);
   const devServerOwner = useMemo<DevServerOwner>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
@@ -104,6 +114,8 @@ export function useWorkspaceSessionTools({
     enableScheduledRefresh: false,
   });
   const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
+    isVisible,
+    viewRef,
     branchKey,
     branchReady,
     diffData,
@@ -116,6 +128,9 @@ export function useWorkspaceSessionTools({
     repoPath,
   });
   const { manualRefresh, isWaitingForBranch } = useManualBranchRefresh({
+    isVisible,
+    directoryKey,
+    viewRef,
     branchKey,
     branchReady,
     readBranch,
@@ -138,10 +153,12 @@ export function useWorkspaceSessionTools({
     };
   }, [isVisible, workingDirectory]);
   const queryClient = useQueryClient();
-  const viewRef = useRef({ isVisible, repoPath, workingDirectory, branchKey, refresh });
   useLayoutEffect(() => {
-    viewRef.current = { isVisible, repoPath, workingDirectory, branchKey, refresh };
-  }, [isVisible, repoPath, workingDirectory, branchKey, refresh]);
+    viewRef.current = { isVisible, directoryKey, branchKey, refresh };
+    return () => {
+      viewRef.current = null;
+    };
+  }, [isVisible, directoryKey, branchKey, refresh]);
   const refreshDiffData = useCallback(async () => {
     // Completion invalidates the original directory. Only the current visible view reads again.
     if (workingDirectory) {
@@ -149,14 +166,13 @@ export function useWorkspaceSessionTools({
     }
     const current = viewRef.current;
     if (
-      current.isVisible &&
-      current.repoPath === repoPath &&
-      current.workingDirectory === workingDirectory &&
+      current?.isVisible &&
+      current.directoryKey === directoryKey &&
       current.branchKey === branchKey
     ) {
       await current.refresh("soft");
     }
-  }, [branchKey, queryClient, repoPath, workingDirectory]);
+  }, [branchKey, directoryKey, queryClient, repoPath, workingDirectory]);
   const conflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
@@ -270,6 +286,8 @@ type WorkspaceRefresh = {
 };
 
 function useWorkspaceSessionRefresh({
+  isVisible,
+  viewRef,
   branchKey,
   branchReady,
   diffData,
@@ -281,6 +299,8 @@ function useWorkspaceSessionRefresh({
   workingDirectory,
   repoPath,
 }: {
+  isVisible: boolean;
+  viewRef: RefObject<WorkspaceToolsView | null>;
   branchKey: string;
   branchReady: boolean;
   diffData: ReturnType<typeof useAgentStudioDiffData>;
@@ -292,14 +312,21 @@ function useWorkspaceSessionRefresh({
   workingDirectory: string | null;
   repoPath: string;
 }): WorkspaceRefresh {
+  const directoryKey = JSON.stringify([repoPath, workingDirectory]);
+  const scopeKey = JSON.stringify([repoPath, workingDirectory, branchKey]);
   const queryClient = useQueryClient();
   const { refresh: refreshDiff, refreshInactiveScope, refreshAllScopes } = diffData;
   const [isFetchingTarget, setIsFetchingTarget] = useState(false);
-  const [retryRun, setRetryRun] = useState(0);
-  const handledRetry = useRef(0);
+  const [retry, setRetry] = useState<{ scopeKey: string } | null>(null);
+  const handledRetry = useRef<typeof retry>(null);
   const refresh = useCallback(
     async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
-      if (!branchReady) return;
+      // Recheck the live view after each read, since it can close or change while we wait.
+      const canRead = () =>
+        viewRef.current?.isVisible === true &&
+        viewRef.current.directoryKey === directoryKey &&
+        viewRef.current.branchKey === branchKey;
+      if (!branchReady || !canRead()) return;
       const fetchTarget =
         mode === "hard" &&
         !!workingDirectory &&
@@ -308,7 +335,12 @@ function useWorkspaceSessionRefresh({
       try {
         if (mode === "hard" && targetError) {
           await retryTarget();
-          setRetryRun((run) => run + 1);
+          if (
+            viewRef.current?.directoryKey === directoryKey &&
+            viewRef.current.branchKey === branchKey
+          ) {
+            setRetry({ scopeKey });
+          }
           return;
         }
         await refreshWorkspaceSessionData({
@@ -328,6 +360,7 @@ function useWorkspaceSessionRefresh({
           repoPath,
           mode,
           includeFiles,
+          canRead,
         });
       } catch (error) {
         toast.error("Could not refresh Git changes", { description: errorMessage(error) });
@@ -350,14 +383,22 @@ function useWorkspaceSessionRefresh({
       retryTarget,
       workingDirectory,
       repoPath,
+      scopeKey,
+      directoryKey,
+      viewRef,
     ],
   );
   useEffect(() => {
-    if (retryRun === handledRetry.current || targetError) return;
+    if (retry === null || retry === handledRetry.current) return;
+    if (retry.scopeKey !== scopeKey) {
+      handledRetry.current = retry;
+      return;
+    }
+    if (!isVisible || targetError) return;
     // Use the target from the render after the settings read succeeds.
-    handledRetry.current = retryRun;
+    handledRetry.current = retry;
     void refresh("hard");
-  }, [refresh, retryRun, targetError]);
+  }, [isVisible, refresh, retry, scopeKey, targetError]);
   return { refresh, isFetchingTarget };
 }
 
@@ -367,46 +408,67 @@ type ManualBranchRefresh = {
 };
 
 function useManualBranchRefresh({
+  isVisible,
+  directoryKey,
+  viewRef,
   branchKey,
   branchReady,
   readBranch,
   refresh,
 }: {
+  isVisible: boolean;
+  directoryKey: string;
+  viewRef: RefObject<WorkspaceToolsView | null>;
   branchKey: string;
   branchReady: boolean;
   readBranch: () => Promise<string>;
   refresh: WorkspaceRefresh["refresh"];
 }): ManualBranchRefresh {
-  const [pendingBranchKey, setPendingBranchKey] = useState<string | null>(null);
-  const activeRefresh = useRef<string | null>(null);
+  const [pending, setPending] = useState<{ directoryKey: string; branchKey: string } | null>(null);
+  const activeRefresh = useRef<typeof pending>(null);
+  const lastBranch = useRef(branchKey);
   const manualRefresh = useCallback(async () => {
+    if (!viewRef.current?.isVisible || viewRef.current.directoryKey !== directoryKey) return;
     try {
       const nextBranchKey = await readBranch();
-      if (nextBranchKey !== branchKey) {
-        setPendingBranchKey(nextBranchKey);
+      const current = viewRef.current;
+      if (current?.directoryKey !== directoryKey) return;
+      if (current.branchKey !== branchKey && current.branchKey !== nextBranchKey) return;
+      if (nextBranchKey !== branchKey || !current.isVisible) {
+        setPending({ directoryKey, branchKey: nextBranchKey });
         return;
       }
       await refresh("hard");
     } catch (error) {
       toast.error("Could not refresh Git changes", { description: errorMessage(error) });
     }
-  }, [branchKey, readBranch, refresh]);
+  }, [branchKey, directoryKey, readBranch, refresh, viewRef]);
   useEffect(() => {
+    const branchChanged = lastBranch.current !== branchKey;
+    lastBranch.current = branchKey;
+    if (pending === null) return;
     if (
-      !pendingBranchKey ||
+      pending.directoryKey !== directoryKey ||
+      (branchChanged && pending.branchKey !== branchKey)
+    ) {
+      setPending(null);
+      return;
+    }
+    if (
+      !isVisible ||
       !branchReady ||
-      pendingBranchKey !== branchKey ||
-      activeRefresh.current === pendingBranchKey
+      pending.branchKey !== branchKey ||
+      activeRefresh.current === pending
     )
       return;
     // The branch query changes the comparison key on the next render.
-    activeRefresh.current = pendingBranchKey;
+    activeRefresh.current = pending;
     void refresh("hard", false).finally(() => {
-      activeRefresh.current = null;
-      setPendingBranchKey(null);
+      if (activeRefresh.current === pending) activeRefresh.current = null;
+      setPending((current) => (current === pending ? null : current));
     });
-  }, [branchKey, branchReady, pendingBranchKey, refresh]);
-  return { manualRefresh, isWaitingForBranch: pendingBranchKey !== null };
+  }, [isVisible, directoryKey, branchKey, branchReady, pending, refresh]);
+  return { manualRefresh, isWaitingForBranch: pending?.directoryKey === directoryKey };
 }
 
 function comparisonUnavailableReason(input: {
@@ -437,6 +499,7 @@ async function refreshWorkspaceSessionData(input: {
   repoPath: string;
   mode: WorkspaceRefreshMode;
   includeFiles: boolean;
+  canRead: () => boolean;
 }): Promise<void> {
   const {
     queryClient,
@@ -450,7 +513,9 @@ async function refreshWorkspaceSessionData(input: {
     repoPath,
     mode,
     includeFiles,
+    canRead,
   } = input;
+  if (!canRead()) return;
   if (workingDirectory && target && !targetError) {
     if (mode === "hard" && !resolvedTarget) {
       try {
@@ -459,7 +524,9 @@ async function refreshWorkspaceSessionData(input: {
         toast.error("Could not refresh Git changes", { description: errorMessage(error) });
       }
     }
+    if (!canRead()) return;
     const checkedComparison = await refetchComparison();
+    if (!canRead()) return;
     const checkedTarget =
       !checkedComparison.isError && checkedComparison.data?.kind === "available"
         ? checkedComparison.data.reference
@@ -481,12 +548,14 @@ async function refreshWorkspaceSessionData(input: {
     }
   }
   const refreshGit = async () => {
+    if (!canRead()) return;
     if (!resolvedTarget) {
       await diffData.refresh("soft");
       return;
     }
     if (mode === "hard") {
       await diffData.refresh("hard");
+      if (!canRead()) return;
       await diffData.refreshInactiveScope();
       return;
     }
