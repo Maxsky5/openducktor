@@ -226,10 +226,8 @@ const sessionLiveFactsOf = (
   const key = agentSessionIdentityKey(identity);
   const facts = live.sessions.get(key) ?? null;
   const ownFault = live.faults.get(key);
-  // A kept snapshot carries its read failure; a session without one relies on the fault.
-  let statusFailure: string | null = null;
-  if (facts) statusFailure = facts.statusUnavailableReason;
-  else if (ownFault?.statusUnavailable) statusFailure = ownFault.message;
+  const statusFailure =
+    facts?.statusUnavailableReason ?? (ownFault?.statusUnavailable ? ownFault.message : null);
   return {
     facts,
     fault: facts?.fault ?? ownFault?.message ?? null,
@@ -322,10 +320,10 @@ const taskEntries = (
       isBlocked &&
       live.kind === "ready" &&
       read.data.some((record) => {
-        const facts = live.sessions.get(agentSessionIdentityKey(record));
+        const { facts, statusFailure } = sessionLiveFactsOf(live, toAgentSessionIdentity(record));
         return (
-          facts !== undefined &&
-          facts.statusUnavailableReason === null &&
+          facts !== null &&
+          statusFailure === null &&
           isAgentSessionActivityActive(facts.activityState)
         );
       });

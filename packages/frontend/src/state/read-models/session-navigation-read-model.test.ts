@@ -159,6 +159,10 @@ describe("Task grouping", () => {
         facts({ activityState: "running", statusUnavailableReason: "Session refresh failed." }),
       ],
     ]),
+    liveReady(
+      [[key("older"), facts({ activityState: "running" })]],
+      [[key("older"), statusReadFailure("Session refresh failed.")]],
+    ),
   ] satisfies WorkspaceSessionLiveState[])(
     "keeps blocked attention when active status is unconfirmed: %j",
     (live) => {
@@ -184,6 +188,48 @@ describe("Task grouping", () => {
       });
     },
   );
+
+  test("restores confirmed activity after a status fault clears", () => {
+    const input = sources({
+      tasks: [createTaskCardFixture({ id: "task-1", status: "blocked" })],
+      sessionsByTask: { "task-1": ready([record("busy")]) },
+      live: liveReady(
+        [[key("busy"), facts({ activityState: "running" })]],
+        [[key("busy"), statusReadFailure("Session refresh failed.")]],
+      ),
+    });
+    const failed = buildSessionNavigationModel([input], "task");
+    expect(groupsOf(failed)).toEqual({
+      needs_you: [`task_session:alpha:${key("busy")}`],
+      running: [],
+      recent: [],
+    });
+    expect(failed.groups[0]?.entries[0]?.status).toEqual({
+      kind: "unavailable",
+      reason: "Session refresh failed.",
+    });
+
+    for (const faults of [
+      [],
+      [[key("busy"), { message: "Title update failed.", statusUnavailable: false }]],
+    ] satisfies [string, WorkspaceSessionFault][][]) {
+      const recovered = buildSessionNavigationModel(
+        [
+          {
+            ...input,
+            live: liveReady([[key("busy"), facts({ activityState: "running" })]], faults),
+          },
+        ],
+        "task",
+      );
+      expect(groupsOf(recovered)).toEqual({
+        needs_you: [],
+        running: [`task_session:alpha:${key("busy")}`],
+        recent: [],
+      });
+      expect(recovered.groups[1]?.entries[0]?.status).toEqual({ kind: "running" });
+    }
+  });
 
   test("uses stored activity to pick an older role session after restart", () => {
     const input = sources({
