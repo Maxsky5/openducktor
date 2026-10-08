@@ -11,6 +11,7 @@ import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support"
 import {
   claudeHistoryMessageFixtures,
   claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
 } from "./claude-agent-sdk-test-messages";
 
 const rateLimitEvent = (info: SDKRateLimitInfo): SDKRateLimitEvent => ({
@@ -101,6 +102,74 @@ describe("Claude usage-limit recovery", () => {
     );
     expect(events.find((event) => event.type === "turn_error")).toMatchObject({ usageLimit: {} });
   });
+
+  test.each(["rate_limit", "server_error"] as const)(
+    "replaces same-ID history snapshots with one %s notice",
+    (error) => {
+      const timestamp = "2026-10-08T00:24:06.000Z";
+      const user = claudeSdkMessageFixture({
+        type: "user",
+        uuid: claudeSdkMessageUuidFixture("user"),
+        message: { content: "Build" },
+      });
+      const kept = claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("kept"),
+        message: {
+          id: "kept-response",
+          content: [{ type: "text", text: "Keep this output" }],
+        },
+      });
+      const snapshots = ["Partial output", "More partial output"].map((text, index) =>
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`snapshot-${index}`),
+          message: { id: "shared-response", content: [{ type: "text", text }] },
+        }),
+      );
+      const errors = ["First error", "Updated error"].map((text, index) =>
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`error-${index}`),
+          error,
+          message: {
+            id: "shared-response",
+            model: "<synthetic>",
+            content: [{ type: "text", text }],
+            stop_reason: "end_turn",
+          },
+        }),
+      );
+      const result = claudeSdkMessageFixture({
+        type: "result",
+        subtype: "error_during_execution",
+        uuid: claudeSdkMessageUuidFixture("result"),
+        errors: ["The turn failed. Try again."],
+      });
+      const history = toClaudeHistoryMessages(
+        claudeHistoryMessageFixtures([user, kept, ...snapshots, ...errors, result]),
+        () => timestamp,
+      );
+
+      expect(history.map((message) => message.messageId)).toEqual([
+        user.uuid,
+        "kept-response",
+        "shared-response",
+      ]);
+      expect(history[1]).toMatchObject({ role: "assistant", text: "Keep this output" });
+      const notice = history.at(-1);
+      expect(notice).toMatchObject({
+        role: "system",
+        text: "The turn failed. Try again.",
+        parts: [],
+        notice: { reason: "session_error" },
+      });
+      if (error === "rate_limit") {
+        expect(notice).toMatchObject({ notice: { usageLimit: {} } });
+      }
+      expect(decideClaudePersistedContinuation(history, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
 
   test.each(["claude-sonnet-4-6", "<synthetic>"])(
     "keeps Resume available after a session-limit error from %s, live and after history restore",
