@@ -42,7 +42,7 @@ export const handleAssistantError = ({
   emitError({ emit, session, timestamp });
 };
 
-/** Reset data can arrive before the error or after its result, so keep it with the turn. */
+/** The SDK can send reset data after a result advances the prompt queue. */
 export const updateRateLimit = ({
   info,
   session,
@@ -63,7 +63,7 @@ export const updateRateLimit = ({
     session.usageReset = { turnIndex, resetsAtEpochMs };
   }
   const error = session.lastError;
-  if (error?.usageLimit && error.turnIndex === turnIndex) {
+  if (error?.usageLimit) {
     error.usageLimit = session.usageReset
       ? { resetsAtEpochMs: session.usageReset.resetsAtEpochMs }
       : {};
