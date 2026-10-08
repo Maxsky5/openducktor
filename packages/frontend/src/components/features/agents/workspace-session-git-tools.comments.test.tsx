@@ -1,7 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { render, screen, waitFor } from "@testing-library/react";
 import { Folder } from "lucide-react";
-import { createBuildToolsSnapshotFixture } from "@/pages/agents/shell/agents-page-build-tools.test-support";
+import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import { QueryProvider } from "@/lib/query-provider";
+import {
+  createBuildToolsSnapshotFixture,
+  createGitActionsFixture,
+} from "@/pages/agents/shell/agents-page-build-tools.test-support";
 import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
 import {
   resetInlineCommentDraftStoreForTests,
@@ -64,6 +70,8 @@ for (const contextMode of ["repository", "worktree"] as const) {
       const view = render(
         <WorkspaceSessionGitTools
           commentOwner={commentOwner}
+          devServerOwner={commentOwner}
+          actions={createGitActionsFixture(null)}
           repoPath="/repo"
           workingDirectory={contextMode === "repository" ? "/repo" : "/repo/worktree"}
           contextMode={contextMode}
@@ -72,7 +80,6 @@ for (const contextMode of ["repository", "worktree"] as const) {
           unavailableReason={null}
           isFetchingTarget={false}
           refresh={async () => {}}
-          refreshDiffData={async () => {}}
           diffData={{ ...diffData, loadedScopesByScope: { uncommitted: true, target: true } }}
           tools={{
             activeTabId: "file_explorer",
@@ -90,6 +97,15 @@ for (const contextMode of ["repository", "worktree"] as const) {
             ],
           }}
         />,
+        {
+          wrapper: ({ children }) => (
+            <QueryProvider useIsolatedClient>
+              <ThemeProvider>
+                <SettingsModalProvider>{children}</SettingsModalProvider>
+              </ThemeProvider>
+            </QueryProvider>
+          ),
+        },
       );
       try {
         expect(screen.getByText("Files")).toBeTruthy();
