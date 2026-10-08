@@ -1,10 +1,15 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import { classifySystemSlashCommandInvocation } from "@openducktor/core";
 import { toast } from "sonner";
 import { setInlineCommentDraftPersistenceErrorReporter } from "@/state/use-inline-comment-draft-store";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import {
+  type AgentChatComposerDraft,
+  createSlashCommandSegment,
   createTextSegment,
   draftToSerializedText,
+  resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
@@ -122,6 +127,81 @@ describe("useReviewCommentComposer", () => {
     expect(storage.getItem(OWNER_KEY)).not.toBeNull();
     expect(rendered.result.current.pendingSendItems?.count).toBe(1);
     rendered.unmount();
+  });
+  test.each([
+    ["task", "compact"],
+    ["workspace_session", "compact"],
+    ["task", "other"],
+    ["workspace_session", "other"],
+  ] as const)("keeps %s comments pending for system command %s", async (kind, trigger) => {
+    const owner: InlineCommentOwner =
+      kind === "task"
+        ? { kind, workspaceId: "workspace-1", taskId: "task-1" }
+        : { kind, workspaceId: "workspace-1", sessionId: "chat-1" };
+    const ownerKey = toInlineCommentDraftStorageKey(
+      kind === "task"
+        ? { workspaceId: "workspace-1", taskId: "task-1" }
+        : { workspaceId: "workspace-1", workspaceSessionId: "chat-1" },
+    );
+    const command =
+      trigger === "compact"
+        ? { ...MANUAL_SESSION_COMPACTION_SLASH_COMMAND }
+        : {
+            id: "system:other",
+            trigger,
+            title: "Other command",
+            source: "system" as const,
+            hints: [],
+          };
+    const draft = { segments: [createSlashCommandSegment(command)] };
+    const sent: AgentChatComposerDraft[] = [];
+    let accepted = false;
+    const view = renderHook(() =>
+      useReviewCommentComposer({
+        owner,
+        onSend: async (message) => {
+          sent.push(message);
+          if (trigger === "compact" && sent.length <= 2) {
+            const parts = await resolveDraftToUserMessageParts(message, async () => "");
+            expect(classifySystemSlashCommandInvocation(parts).kind).toBe(
+              "manual_session_compaction",
+            );
+          }
+          return accepted;
+        },
+      }),
+    );
+    act(() => {
+      useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+        filePath: "src/a.ts",
+        diffScope: "uncommitted",
+        startLine: 1,
+        endLine: 1,
+        side: "new",
+        text: "Pending instruction",
+        codeContext: [],
+      });
+    });
+    for (const outcome of [false, true]) {
+      accepted = outcome;
+      await act(async () => {
+        expect(await view.result.current.onSend(draft)).toBe(outcome);
+      });
+      expect(sent.at(-1)).toEqual(draft);
+      expect(view.result.current.pendingSendItems?.count).toBe(1);
+      expect(useInlineCommentDraftStore.getState().getPendingDrafts(ownerKey)[0]?.text).toBe(
+        "Pending instruction",
+      );
+    }
+    await act(async () => {
+      expect(
+        await view.result.current.onSend({ segments: [createTextSegment("Review these changes")] }),
+      ).toBe(true);
+    });
+    expect(draftToSerializedText(sent[2]!)).toContain("Review these changes");
+    expect(draftToSerializedText(sent[2]!)).toContain("Instruction: Pending instruction");
+    expect(view.result.current.pendingSendItems).toBeNull();
+    view.unmount();
   });
   test.each(["task", "workspace_session"] as const)(
     "settles the captured %s owner after selection changes",

@@ -8,6 +8,8 @@ The Git panel shares annotation actions for both owner kinds. The task and works
 
 Known message acceptance clears the captured batch once. A rejected send restores valid comments in that batch. The normal composer draft store recovers the original text and attachments without the comment appendix, and keeps newer edits. A session that disappears during preparation rejects the send with an error. A later update or save failure cannot change known acceptance.
 
+System slash commands with `source: "system"`, including `/compact`, pass to normal Send without a comment appendix. Their outcome does not reserve or clear comments. Comments stay pending for the next regular user message. Runtime slash commands that send user messages still include pending comments.
+
 ## Local storage compatibility
 
 The approved plan for `openduckto-c046l` permits the workspace-session namespace and record below. This change does not migrate task records or change SQLite or saved session fields.

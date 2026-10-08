@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createEmptyComposerDraft,
+  createSlashCommandSegment,
   draftToSerializedText,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type {
@@ -123,6 +124,37 @@ const createStore = (initialDrafts: InlineCommentDraft[]): TestStore => {
 };
 
 describe("sendReviewComments", () => {
+  test("includes comments in runtime slash commands that send user messages", async () => {
+    const store = createStore([buildComment("first-comment", 1, "Review this branch.")]);
+    const draft = {
+      segments: [
+        createSlashCommandSegment({
+          id: "review",
+          trigger: "review",
+          title: "Review",
+          source: "command",
+          hints: [],
+        }),
+      ],
+    };
+    let sentText = "";
+
+    const didSend = await sendReviewComments(
+      OWNER,
+      draft,
+      async (message) => {
+        sentText = draftToSerializedText(message);
+        return true;
+      },
+      store.getStore,
+    );
+
+    expect(didSend).toBe(true);
+    expect(sentText).toContain("/review");
+    expect(sentText).toContain("Instruction: Review this branch.");
+    expect(store.getStore().getPendingDrafts(OWNER)).toEqual([]);
+  });
+
   test("formats pending comments and sends them when the typed draft is empty", async () => {
     const store = createStore([buildComment("first-comment", 1, "Keep this branch explicit.")]);
     let sentText = "";

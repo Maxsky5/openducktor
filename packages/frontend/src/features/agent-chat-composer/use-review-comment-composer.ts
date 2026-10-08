@@ -93,14 +93,19 @@ export function useReviewCommentComposer({
   );
 }
 
-/** Reserve the captured revisions before Send; clear them only after known acceptance. */
+/** System commands leave comments pending. Other sends reserve revisions until known acceptance. */
 export async function sendReviewComments(
   ownerKey: string | null,
   draft: AgentChatComposerDraft,
   onSend: AgentChatComposerModel["onSend"],
   getStore: () => ReviewCommentStore,
 ): Promise<AgentChatSendResult> {
-  if (ownerKey === null) {
+  if (
+    ownerKey === null ||
+    draft.segments.some(
+      (segment) => segment.kind === "slash_command" && segment.command.source === "system",
+    )
+  ) {
     return onSend(draft);
   }
 
