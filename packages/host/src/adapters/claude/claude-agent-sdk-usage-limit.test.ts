@@ -23,13 +23,15 @@ const rateLimitEvent = (info: SDKRateLimitInfo): SDKRateLimitEvent => ({
 
 describe("Claude usage-limit recovery", () => {
   test.each([
-    ["before_error", 1],
-    ["after_result", 1],
-    ["before_error", 2],
-    ["after_result", 2],
+    ["before_error", 1, {}],
+    ["after_result", 1, {}],
+    ["before_error", 2, {}],
+    ["after_result", 2, {}],
+    ["before_error", 1, { isUsingOverage: true }],
+    ["after_result", 1, { overageInUse: true }],
   ] as const)(
-    "uses the SDK reset timestamp when the rate-limit event arrives %s with %i prompts",
-    (order, prompts) => {
+    "keeps the reset when its event arrives %s with %i prompts and %j",
+    (order, prompts, overage) => {
       const timestamp = "2026-10-08T00:24:06.000Z";
       const session = createClaudeSession({
         activity: "running",
@@ -50,29 +52,36 @@ describe("Claude usage-limit recovery", () => {
           emit: (event) => events.push(event),
           modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
         });
-      const error = claudeSdkMessageFixture({
-        type: "assistant",
-        session_id: "session-1",
-        error: "rate_limit",
-        message: {
-          id: "limit-response",
-          content: [{ type: "text", text: "Session limit" }],
-          stop_reason: "end_turn",
-        },
-      });
-      const result = claudeSdkMessageFixture({
-        type: "result",
-        subtype: "error_during_execution",
-        session_id: "session-1",
-        errors: ["Session limit. Wait for usage to reset."],
-      });
+      const error = (id: string) =>
+        claudeSdkMessageFixture({
+          type: "assistant",
+          session_id: "session-1",
+          uuid: claudeSdkMessageUuidFixture(id),
+          error: "rate_limit",
+          message: {
+            id,
+            content: [{ type: "text", text: "Session limit" }],
+            stop_reason: "end_turn",
+          },
+        });
+      const result = (id: string) =>
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "error_during_execution",
+          session_id: "session-1",
+          uuid: claudeSdkMessageUuidFixture(id),
+          errors: ["Session limit. Wait for usage to reset."],
+        });
       const rateLimit = rateLimitEvent({
         status: "rejected",
         rateLimitType: "five_hour",
         resetsAt: 1791430800,
+        ...overage,
       });
       const messages =
-        order === "before_error" ? [rateLimit, error, result] : [error, result, rateLimit];
+        order === "before_error"
+          ? [rateLimit, error("limit-response"), result("limit-result")]
+          : [error("limit-response"), result("limit-result"), rateLimit];
       for (const message of messages) {
         handle(message);
       }
@@ -87,6 +96,25 @@ describe("Claude usage-limit recovery", () => {
         prompts === 1 ? "allow" : "reject",
       );
       if (prompts === 2) {
+        handle(error("queued-limit-response"));
+        expect(events.filter((event) => event.type === "turn_error").at(-1)?.usageLimit).toEqual(
+          {},
+        );
+        handle(result("queued-result"));
+        handle(
+          rateLimitEvent({ status: "rejected", rateLimitType: "five_hour", resetsAt: 1791434400 }),
+        );
+        const queuedErrors = events.filter((event) => event.type === "turn_error");
+        expect(queuedErrors.at(-1)).toMatchObject({
+          messageId: "queued-limit-response",
+          usageLimit: { resetsAtEpochMs: 1791434400000 },
+        });
+        expect(
+          queuedErrors.findLast((event) => event.messageId === "limit-response"),
+        ).toMatchObject({
+          usageLimit: { resetsAtEpochMs: 1791430800000 },
+        });
+        expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
         for (const message of [
           claudeSdkMessageFixture({
             type: "assistant",
@@ -99,7 +127,9 @@ describe("Claude usage-limit recovery", () => {
         ]) {
           handle(message);
         }
-        expect(events.filter((event) => event.type === "turn_error")).toHaveLength(errors.length);
+        expect(events.filter((event) => event.type === "turn_error")).toHaveLength(
+          queuedErrors.length,
+        );
       }
     },
   );
@@ -108,7 +138,6 @@ describe("Claude usage-limit recovery", () => {
     { status: "allowed", resetsAt: 1791430800 },
     { status: "allowed_warning", resetsAt: 1791430800 },
     { status: "rejected" },
-    { status: "rejected", resetsAt: 1791430800, isUsingOverage: true },
   ] satisfies SDKRateLimitInfo[])("does not invent a reset time from %j", (info) => {
     const session = createClaudeSession();
     const events: AgentEvent[] = [];

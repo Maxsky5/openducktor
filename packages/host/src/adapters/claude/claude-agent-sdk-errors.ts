@@ -42,7 +42,7 @@ export const handleAssistantError = ({
   emitError({ emit, session, timestamp });
 };
 
-/** The SDK can send reset data after a result advances the prompt queue. */
+/** A result can advance the queue before its failed turn receives reset data. */
 export const updateRateLimit = ({
   info,
   session,
@@ -55,14 +55,14 @@ export const updateRateLimit = ({
   timestamp: string;
 }): void => {
   delete session.usageReset;
-  if (info.status !== "rejected" || info.isUsingOverage || info.overageInUse) return;
-  const turnIndex = userTurnIndex(session);
+  if (info.status !== "rejected") return;
+  const error = session.lastError;
+  const turnIndex = error?.usageLimit ? error.turnIndex : userTurnIndex(session);
   // SDK reset times use Unix seconds.
   const resetsAtEpochMs = info.resetsAt === undefined ? undefined : info.resetsAt * 1000;
   if (resetsAtEpochMs !== undefined && Number.isFinite(resetsAtEpochMs) && resetsAtEpochMs >= 0) {
     session.usageReset = { turnIndex, resetsAtEpochMs };
   }
-  const error = session.lastError;
   if (error?.usageLimit) {
     error.usageLimit = session.usageReset
       ? { resetsAtEpochMs: session.usageReset.resetsAtEpochMs }
