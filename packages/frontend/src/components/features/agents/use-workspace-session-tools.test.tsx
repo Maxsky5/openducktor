@@ -921,6 +921,7 @@ test("manual refresh retains data when branch and comparison identity stay uncha
   );
   try {
     const diff = await screen.findByText("draft.txt");
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
     expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
     await waitFor(() =>
       expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(

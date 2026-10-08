@@ -60,7 +60,10 @@ export function GitTargetBranchControl({
       ...option,
       disabled: disableOptions || option.disabled === true,
     }));
-  const label = options.find((option) => option.value === value)?.label ?? targetBranchLabel;
+  const label =
+    value === targetBranchSelectionValue
+      ? targetBranchLabel
+      : (options.find((option) => option.value === value)?.label ?? targetBranchLabel);
 
   const edit = (): void => {
     if (!canEditTargetBranch || saving.current) {
@@ -123,7 +126,7 @@ export function GitTargetBranchControl({
 
   return (
     <div
-      className="flex h-6 min-w-0 items-center gap-1"
+      className="flex h-6 min-w-0 items-center gap-1.5"
       data-testid="agent-studio-git-target-branch-display-row"
     >
       <span id={labelId} className="sr-only">

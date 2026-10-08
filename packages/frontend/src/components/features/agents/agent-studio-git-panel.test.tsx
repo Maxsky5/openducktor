@@ -205,8 +205,6 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-target-status-row")).toBe(0);
     const targetAheadCount = findByTestId(root, "agent-studio-git-target-ahead-count");
     expect(targetAheadCount.children.join("")).toBe("+2");
-    expect(targetAheadCount.props.className).toContain("text-emerald-600");
-    expect(targetAheadCount.props.className).toContain("dark:text-emerald-400");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
     expect(
@@ -455,7 +453,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("renders repository mode without target branch or rebase action", async () => {
+  test("shows the repository comparison without a target edit or rebase action", async () => {
     const refresh = mock(async () => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     const commitAll = mock(async (_message: string) => true);
@@ -482,9 +480,10 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(hasVisibleText(root, "Repository context")).toBe(false);
-    expect(hasVisibleText(root, "Repository branch")).toBe(true);
-    expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(0);
-    expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-current-branch")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(1);
+    expect(screen.queryByRole("button", { name: "Edit target branch" })).toBeNull();
+    expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(1);
     expect(countByTestId(root, "agent-studio-git-rebase-button")).toBe(0);
     expect(findByTestId(root, "agent-studio-git-pull-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();

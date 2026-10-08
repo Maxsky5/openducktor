@@ -95,12 +95,11 @@ describe("GitInfoHeader", () => {
     );
 
     const row = screen.getByTestId("agent-studio-git-branch-context-row");
-    const label = screen.getByText("Repository branch");
     const branch = screen.getByTestId("agent-studio-git-current-branch");
-    expect(label.parentElement).toBe(branch.parentElement);
-    expect(row.classList.contains("grid")).toBe(false);
     expect(branch.textContent).toBe("beta");
-    expect(screen.queryByTestId("agent-studio-git-target-branch-display-row")).toBeNull();
+    expect(row.contains(screen.getByTestId("agent-studio-git-target-branch"))).toBe(true);
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    expect(screen.queryByRole("button", { name: "Edit target branch" })).toBeNull();
   });
 
   test("replaces the repository branch label with the repository branch control", () => {
@@ -113,8 +112,26 @@ describe("GitInfoHeader", () => {
     );
 
     const row = screen.getByTestId("agent-studio-git-branch-context-row");
-    expect(row.textContent).toBe("Switch repository branch");
+    expect(row.contains(screen.getByRole("button", { name: "Switch repository branch" }))).toBe(
+      true,
+    );
+    expect(row.contains(screen.getByTestId("agent-studio-git-target-branch"))).toBe(true);
     expect(screen.queryByTestId("agent-studio-git-current-branch")).toBeNull();
+  });
+
+  test("shows the resolved upstream branch while keeping the upstream rule in the menu", async () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        targetBranchEditable: true,
+        targetBranchSelectionValue: "@{upstream}",
+        targetBranchOptions: [{ value: "@{upstream}", label: "Tracked upstream" }],
+        onUpdateTargetBranch: async () => {},
+      }),
+    );
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    expect(await screen.findByRole("option", { name: /Tracked upstream/ })).toBeTruthy();
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
   });
 
   test("keeps the worktree branch rows when a repository branch control is available", () => {

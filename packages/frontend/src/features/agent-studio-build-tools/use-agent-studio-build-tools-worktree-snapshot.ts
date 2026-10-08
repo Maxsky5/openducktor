@@ -385,7 +385,7 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     targetError,
     branchError: branch.isError ? errorMessage(branch.error) : null,
     branchKey: JSON.stringify([input.branchKey, branch.data]),
-    branchReady: branch.data !== undefined && !branch.isFetching && !branch.isError,
+    branchReady: branch.data !== undefined && !branch.isError,
   });
   return {
     comparison,

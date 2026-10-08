@@ -328,42 +328,16 @@ function GitBranchContextRow({
   onUpdateTargetBranch,
 }: GitBranchContextRowProps): ReactElement {
   const { hasTargetAhead, isRepositoryMode } = branchState;
-  if (isRepositoryMode && !canEditTargetBranch && repositoryBranchControl) {
-    return (
-      <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
-        {repositoryBranchControl}
-      </div>
-    );
-  }
-  if (isRepositoryMode && !canEditTargetBranch) {
-    return (
-      <div className="my-2 min-w-0 px-3" data-testid="agent-studio-git-branch-context-row">
-        <div
-          className="flex min-w-0 items-center gap-2 py-1.5"
-          data-testid="agent-studio-git-current-branch-display-row"
-        >
-          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="shrink-0 text-xs text-muted-foreground">Repository branch</span>
-          <span
-            className="min-w-0 truncate font-mono text-xs text-foreground"
-            data-testid="agent-studio-git-current-branch"
-          >
-            {currentBranchLabel}
-          </span>
-        </div>
-      </div>
-    );
-  }
   return (
     <div
-      className="flex min-w-0 items-center gap-2 px-3 py-1.5"
+      className="grid min-w-0 grid-cols-[minmax(0,2fr)_auto_minmax(0,3fr)] items-center gap-2 px-3 py-1.5"
       data-testid="agent-studio-git-branch-context-row"
     >
       {isRepositoryMode && repositoryBranchControl ? (
-        <div className="min-w-0 max-w-[50%]">{repositoryBranchControl}</div>
+        <div className="min-w-0">{repositoryBranchControl}</div>
       ) : (
         <div
-          className="flex h-6 min-w-0 max-w-[50%] items-center gap-1.5"
+          className="flex h-6 min-w-0 items-center gap-1.5"
           data-testid="agent-studio-git-current-branch-display-row"
         >
           <span className="sr-only">Current branch</span>
@@ -392,7 +366,7 @@ function GitBranchContextRow({
         </div>
         {hasTargetAhead ? (
           <span
-            className="shrink-0 text-[11px] font-medium tabular-nums text-emerald-600 dark:text-emerald-400"
+            className="shrink-0 text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-400"
             title="Commits ahead of the comparison branch"
             data-testid="agent-studio-git-target-ahead-count"
           >

@@ -1,3 +1,8 @@
+import {
+  canonicalTargetBranch,
+  targetBranchFromSelection,
+  UPSTREAM_TARGET_BRANCH,
+} from "@/lib/target-branch";
 import type { DiffDataState } from "./contracts";
 import type { useSessionComparison } from "./use-session-comparison";
 
@@ -8,12 +13,18 @@ export function buildComparisonView<T extends DiffDataState>(
   label: string,
 ) {
   const target = data.scopeStatesByScope.target;
+  const targetLabel =
+    comparison.target?.branch === UPSTREAM_TARGET_BRANCH
+      ? comparison.resolvedTarget
+        ? canonicalTargetBranch(targetBranchFromSelection(comparison.resolvedTarget))
+        : "Upstream"
+      : label;
   const unavailableReason =
     comparison.unavailableReason ??
     target.error ??
     (comparison.resolvedTarget &&
     (!data.loadedScopesByScope.target || !data.loadedScopesByScope.uncommitted)
-      ? `Loading comparison ${label}...`
+      ? `Loading comparison ${targetLabel}...`
       : null);
   const reference = unavailableReason ? null : comparison.resolvedTarget;
   const uncommitted = data.scopeStatesByScope.uncommitted;
@@ -23,7 +34,7 @@ export function buildComparisonView<T extends DiffDataState>(
     ...data,
     ...active,
     diffScope,
-    targetBranch: label,
+    targetBranch: targetLabel,
     comparisonUnavailableReason: unavailableReason,
     commitsAheadBehind: reference ? target.commitsAheadBehind : null,
     hashVersion: uncommitted.hashVersion,
