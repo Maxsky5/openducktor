@@ -31,38 +31,35 @@ export function SessionNavigationError({
               ? "We couldn't load your saved selection. Try again to open your conversation."
               : "We couldn't save which conversation you selected. Try again to save your choice and continue."}
           </p>
-          <Collapsible className="mt-4">
-            <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            className="mt-4 h-auto min-h-9 max-w-full whitespace-normal"
+            disabled={isPending}
+            onClick={onRetry}
+          >
+            {isPending ? (
+              <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
+            ) : (
+              <RefreshCcw aria-hidden="true" className="size-4" />
+            )}
+            {isPending ? "Trying again…" : "Try again"}
+          </Button>
+          <Collapsible className="mt-5 border-t border-destructive-border pt-3">
+            <CollapsibleTrigger asChild>
               <Button
-                type="button"
-                variant="outline"
-                className="h-auto min-h-9 max-w-full whitespace-normal"
-                disabled={isPending}
-                onClick={onRetry}
+                variant="ghost"
+                size="sm"
+                className="group h-auto min-h-8 max-w-full justify-start whitespace-normal px-0 text-sm text-destructive-surface-foreground hover:bg-transparent hover:underline"
               >
-                {isPending ? (
-                  <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-                ) : (
-                  <RefreshCcw aria-hidden="true" className="size-4" />
-                )}
-                {isPending ? "Trying again…" : "Try again"}
+                Error details
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-3.5 group-data-[state=open]:rotate-180"
+                />
               </Button>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="group h-auto min-h-8 max-w-full whitespace-normal text-sm text-destructive-surface-foreground hover:bg-destructive-accent/10"
-                >
-                  Error details
-                  <ChevronDown
-                    aria-hidden="true"
-                    className="size-3.5 group-data-[state=open]:rotate-180"
-                  />
-                </Button>
-              </CollapsibleTrigger>
-            </div>
+            </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="mt-4 space-y-3 border-t border-destructive-border pt-3 text-xs leading-5">
+              <div className="mt-3 space-y-3 text-xs leading-5">
                 <p>{scopeLabel}</p>
                 <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{error.message}</p>
                 {repositoryPath ? (
