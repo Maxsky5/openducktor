@@ -35,9 +35,8 @@ export function useAgentStudioWorkspaceStateSave({
       }).then(
         () => setFailure((current) => (current?.request === request ? null : current)),
         (cause: unknown) => {
-          const lastSave = lastSaveRef.current;
           // A late failure must not replace the error for a newer save.
-          if (lastSave?.workspaceId !== request.workspaceId || lastSave.key !== request.key) {
+          if (lastSaveRef.current !== request) {
             return;
           }
           setFailure({
@@ -78,6 +77,7 @@ export function useAgentStudioWorkspaceStateSave({
 
     const request = { workspaceId, key: stateKey, action };
     lastSaveRef.current = request;
+    setFailure(null);
     void save(request);
   }, [enabled, loadedKey, loadedState, save, state, stateKey, workspaceId]);
 

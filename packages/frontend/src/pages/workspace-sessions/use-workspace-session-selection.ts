@@ -59,7 +59,11 @@ export function useWorkspaceSessionSelection({
     }
   }, [selectedId, storageKey, workspaceId]);
   const retryRead = useCallback((): void => {
-    setLastSelection({ workspaceId, ...readSelection(storageKey) });
+    const selection = readSelection(storageKey);
+    if (selection.error === null) {
+      savedSelection.current = { workspaceId, sessionId: selection.sessionId };
+    }
+    setLastSelection({ workspaceId, ...selection });
   }, [storageKey, workspaceId]);
   const recovery = useSessionNavigationRecovery({
     scopeKey: `${workspaceId}:${selectedId ?? ""}`,

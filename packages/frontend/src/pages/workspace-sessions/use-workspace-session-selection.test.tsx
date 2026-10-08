@@ -156,18 +156,27 @@ test("restores each workspace's saved chat when the page stays mounted", () => {
   }
 });
 
-test.each([undefined, "Second"])(
-  "keeps a denied storage read scoped and retries the intended selection with request %s",
+test.each([undefined, "Second", "First"])(
+  "keeps storage failures scoped and retries the intended selection with request %s",
   (requestedSessionId) => {
     const workspaceId = crypto.randomUUID();
     const key = workspaceSessionSelectionStorageKey(workspaceId);
     localStorage.setItem(key, "Second");
     const getItem = localStorage.getItem.bind(localStorage);
+    const setItem = localStorage.setItem.bind(localStorage);
     let denied = true;
+    let writes = 0;
     overrideStorage({
       getItem: (storageKey) => {
         if (storageKey === key && denied) throw new Error("Storage denied");
         return getItem(storageKey);
+      },
+      setItem: (storageKey, value) => {
+        if (storageKey === key) {
+          writes += 1;
+          throw new Error("Write denied");
+        }
+        setItem(storageKey, value);
       },
     });
     const h = renderHook(() =>
@@ -184,8 +193,16 @@ test.each([undefined, "Second"])(
       expect(h.result.current.navigationPersistenceError?.message).toContain("Storage denied");
       denied = false;
       act(() => h.result.current.retryNavigationPersistence());
-      expect(h.result.current.navigationPersistenceError).toBeNull();
-      expect(h.result.current.selected?.id).toBe("Second");
+      act(() => window.dispatchEvent(new Event("pagehide")));
+      expect(h.result.current.selected?.id).toBe(requestedSessionId ?? "Second");
+      expect(getItem(key)).toBe("Second");
+      if (requestedSessionId === "First") {
+        expect(writes).toBe(1);
+        expect(h.result.current.navigationPersistenceError?.message).toContain("Write denied");
+      } else {
+        expect(writes).toBe(0);
+        expect(h.result.current.navigationPersistenceError).toBeNull();
+      }
     } finally {
       h.unmount();
       localStorage.removeItem(key);

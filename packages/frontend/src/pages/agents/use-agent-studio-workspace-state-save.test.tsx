@@ -384,6 +384,81 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.unmount();
   });
 
+  test.each(["before switching", "after returning"] as const)(
+    "ignores an older save failure that arrives %s when the same snapshot is saved again",
+    async (failureTime) => {
+      const firstASave = createDeferred<RepoConfig>();
+      const nextASave = createDeferred<RepoConfig>();
+      const workspaceAState = { openTaskIds: ["task-a"] };
+      const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
+      const workspaceBState = { openTaskIds: ["task-b"] };
+      const workspaceBNextState = { openTaskIds: ["task-b", "task-b-2"] };
+      let writesA = 0;
+      let writesB = 0;
+      const write = mock(async (workspaceId: string, state: WorkspaceAgentStudioState) => {
+        if (workspaceId === "repo-a") {
+          writesA += 1;
+          return writesA === 1 ? firstASave.promise : nextASave.promise;
+        }
+        writesB += 1;
+        return { ...createRepoConfig(state), workspaceId: "repo-b" };
+      });
+      const hostClient = asApplyHost(write);
+      const harness = createHookHarness({
+        workspaceId: "repo-a",
+        loadedState: workspaceAState,
+        state: workspaceANextState,
+        enabled: true,
+        hostClient,
+      });
+      const failFirstSave = () =>
+        harness.run(async () => {
+          firstASave.reject(new Error("older A write failed"));
+          await firstASave.promise.catch(() => {});
+        });
+
+      try {
+        await harness.mount();
+        await harness.waitFor(() => writesA === 1);
+        if (failureTime === "before switching") {
+          await failFirstSave();
+          await harness.waitFor((result) => result.saveError?.message === "older A write failed");
+        }
+        await harness.update({
+          workspaceId: "repo-b",
+          loadedState: workspaceBState,
+          state: workspaceBNextState,
+          enabled: true,
+          hostClient,
+        });
+        await harness.waitFor(() => writesB === 1);
+        await harness.update({
+          workspaceId: "repo-a",
+          loadedState: workspaceAState,
+          state: workspaceANextState,
+          enabled: true,
+          hostClient,
+        });
+        if (failureTime === "after returning") {
+          await failFirstSave();
+        }
+        await harness.waitFor(() => writesA === 2);
+        expect(harness.getLatest().saveError).toBeNull();
+
+        await harness.run(async () => {
+          nextASave.resolve(createRepoConfig(workspaceANextState));
+          await nextASave.promise;
+        });
+        expect(harness.getLatest().saveError).toBeNull();
+        expect(writesA).toBe(2);
+      } finally {
+        firstASave.resolve(createRepoConfig(workspaceANextState));
+        nextASave.resolve(createRepoConfig(workspaceANextState));
+        await harness.unmount();
+      }
+    },
+  );
+
   test.each(["initial write", "explicit retry"] as const)(
     "retains the active workspace failure after a prior workspace %s rejects",
     async (priorWrite) => {
