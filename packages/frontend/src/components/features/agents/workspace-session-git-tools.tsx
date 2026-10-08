@@ -1,15 +1,19 @@
+import type { DevServerOwner } from "@openducktor/contracts";
 import { GitBranch } from "lucide-react";
-import { memo, type ReactElement, type ReactNode, useMemo } from "react";
-import { collectUnmergedFilePaths, type DiffDataState } from "@/features/agent-studio-git";
-import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
+import { memo, type ReactElement, type ReactNode } from "react";
+import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
+import type { DiffDataState } from "@/features/agent-studio-git";
+import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import { SharedToolsPanel, type SharedToolsPanelModel } from "./shared-tools-panel";
-import type { WorkspaceToolsTabId } from "./workspace-session-tools-panel";
+import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
 export function WorkspaceSessionGitTools({
   subjectKey,
   repoPath,
+  devServerOwner,
+  actions,
   diffData,
   contextMode,
   repositoryBranchControl,
@@ -19,28 +23,12 @@ export function WorkspaceSessionGitTools({
   workingDirectory,
   isFetchingTarget,
   refresh,
-  refreshDiffData,
   tools,
 }: WorkspaceSessionGitToolsProps): ReactElement {
-  const conflictedFiles = useMemo(
-    () => collectUnmergedFilePaths(diffData.fileStatuses),
-    [diffData.fileStatuses],
-  );
-  const actions = useAgentStudioGitActions({
-    repoPath: workingDirectory ? repoPath : null,
-    workingDir: workingDirectory,
-    branch: diffData.branch,
-    targetBranch: resolvedTarget ?? "",
-    resetTargetBranch: resolvedTarget ?? "HEAD",
-    hashVersion: diffData.hashVersion,
-    statusHash: diffData.statusHash,
-    diffHash: diffData.diffHash,
-    upstreamAheadBehind: diffData.upstreamAheadBehind,
-    detectedConflict: diffData.gitConflict ?? null,
-    detectedConflictedFiles: conflictedFiles,
-    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
-    refreshDiffData,
-    isDiffDataLoading: diffData.isLoading,
+  const devServerModel = useAgentStudioDevServerPanel({
+    repoPath,
+    owner: devServerOwner,
+    enabled: true,
   });
   const model: AgentStudioGitPanelModel = {
     ...diffData,
@@ -77,6 +65,7 @@ export function WorkspaceSessionGitTools({
     <SharedToolsPanel
       model={{
         ...tools,
+        devServerModel,
         tabs: [
           { id: "git", label: "Git", icon: GitBranch, content: <GitPanel {...model} /> },
           ...tools.tabs,
@@ -88,8 +77,10 @@ export function WorkspaceSessionGitTools({
 
 type WorkspaceSessionGitToolsProps = {
   subjectKey: string;
-  tools: SharedToolsPanelModel<WorkspaceToolsTabId>;
   repoPath: string;
+  devServerOwner: DevServerOwner;
+  tools: SharedToolsPanelModel<WorkspaceToolsTabId>;
+  actions: ReturnType<typeof useAgentStudioGitActions>;
   diffData: DiffDataState;
   contextMode: "repository" | "worktree";
   repositoryBranchControl?: ReactNode;
@@ -99,7 +90,6 @@ type WorkspaceSessionGitToolsProps = {
   workingDirectory: string | null;
   isFetchingTarget: boolean;
   refresh: () => Promise<void>;
-  refreshDiffData: () => Promise<void>;
 };
 
 // Keep dev-server updates from redrawing unchanged Git data.

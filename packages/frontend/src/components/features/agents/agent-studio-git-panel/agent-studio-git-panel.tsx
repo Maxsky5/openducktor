@@ -165,6 +165,14 @@ function AgentStudioGitPanelHeader({
   return (
     <>
       <GitInfoHeader {...headerProps} />
+      {model.resetError ? (
+        <div
+          role="alert"
+          className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          {model.resetError}
+        </div>
+      ) : null}
       {view.displayedError ? (
         <div className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {view.displayedError}
@@ -200,6 +208,7 @@ function getGitInfoHeaderProps(
     isCommitting: model.isCommitting ?? false,
     isPushing: model.isPushing ?? false,
     isRebasing: model.isRebasing ?? false,
+    isResetting: model.isResetting ?? false,
     isDetectingPullRequest: model.isDetectingPullRequest ?? false,
     detectPullRequestDisabledReason: model.detectPullRequestDisabledReason ?? null,
     isGitActionsLocked: model.isGitActionsLocked ?? false,
@@ -301,6 +310,7 @@ function AgentStudioGitCommit({
       isCommitting={model.isCommitting ?? false}
       isPushing={model.isPushing ?? false}
       isRebasing={model.isRebasing ?? false}
+      isResetting={model.isResetting ?? false}
       isGitActionsLocked={model.isGitActionsLocked ?? false}
       gitActionsLockReason={model.gitActionsLockReason ?? null}
       commitError={model.commitError ?? null}

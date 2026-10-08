@@ -25,7 +25,7 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
-import * as toolsPanel from "@/components/features/agents/workspace-session-tools-panel";
+import * as toolsModule from "@/components/features/agents/use-workspace-session-tools";
 import * as sessionChat from "./workspace-session-chat";
 import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
@@ -35,6 +35,15 @@ import {
   WorkspaceSessionReadModelNotice,
   type WorkspaceSessionPanelState,
 } from "./workspace-session-content";
+
+function mockTools(
+  renderTools: (props: Parameters<typeof toolsModule.useWorkspaceSessionTools>[0]) => ReactElement,
+) {
+  return spyOn(toolsModule, "useWorkspaceSessionTools").mockImplementation((props) => ({
+    toolsContent: renderTools(props),
+    refresh: null,
+  }));
+}
 
 const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
 const record = {
@@ -164,16 +173,14 @@ test("switching chats keeps the tools and chat drafts and resets the file owner"
   const preview = mockFilePreview(({ model }) => (
     <div>Preview: {model.selectedFile?.relativePath}</div>
   ));
-  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
-    ({ onSelectFile }) => (
-      <div>
-        <input aria-label="Tools input" />
-        <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
-          Open next file
-        </button>
-      </div>
-    ),
-  );
+  const tools = mockTools(({ onSelectFile }) => (
+    <div>
+      <input aria-label="Tools input" />
+      <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+        Open next file
+      </button>
+    </div>
+  ));
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
     <input aria-label="Chat input" />
   ));
@@ -283,9 +290,7 @@ test("opening and closing tools preserves question drafts, tabs, and collapse ch
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
     <AgentSessionQuestionCard request={request} onSubmit={async () => {}} />
   ));
-  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
-    <div>Workspace tools</div>
-  ));
+  const tools = mockTools(() => <div>Workspace tools</div>);
   const queryClient = newQueryClient();
   queryClient.setQueryData(
     repoConfigQueryOptions(workspace.workspaceId).queryKey,
@@ -434,13 +439,11 @@ test("a failed switch keeps the dirty draft guarded until a new file opens", asy
       {model.hasPendingDiscard ? <button onClick={model.onDiscard}>Discard draft</button> : null}
     </>
   ));
-  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
-    ({ onSelectFile }) => (
-      <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
-        Open next file
-      </button>
-    ),
-  );
+  const tools = mockTools(({ onSelectFile }) => (
+    <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+      Open next file
+    </button>
+  ));
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
   const queryClient = newQueryClient();
   const view = renderClosedSession(
@@ -602,13 +605,11 @@ test("a guarded workspace change locks the preview and file selection until it f
     });
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div />);
   const preview = mockFilePreview(() => <input aria-label="File draft" />);
-  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(
-    ({ onSelectFile }) => (
-      <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
-        Open next file
-      </button>
-    ),
-  );
+  const tools = mockTools(({ onSelectFile }) => (
+    <button onClick={() => onSelectFile({ rootPath: "/repo", relativePath: "next.ts" })}>
+      Open next file
+    </button>
+  ));
   const queryClient = newQueryClient();
   queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
     name: "main",
@@ -648,9 +649,7 @@ test("a guarded workspace change locks the preview and file selection until it f
 
 test("the tools panel stays beside the chat", () => {
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <div>Chat</div>);
-  const tools = spyOn(toolsPanel, "WorkspaceSessionToolsPanel").mockImplementation(() => (
-    <div>Tools</div>
-  ));
+  const tools = mockTools(() => <div>Tools</div>);
   const queryClient = newQueryClient();
   queryClient.setQueryData(
     repoConfigQueryOptions(workspace.workspaceId).queryKey,

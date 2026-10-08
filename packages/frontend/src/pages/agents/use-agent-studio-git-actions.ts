@@ -58,6 +58,7 @@ type UseAgentStudioGitActionsInput = {
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
+  branchIdentityKey?: string | null;
   targetBranch: string;
   resetTargetBranch?: string;
   hashVersion: number | null;
@@ -76,6 +77,7 @@ export function useAgentStudioGitActions({
   repoPath,
   workingDir,
   branch,
+  branchIdentityKey = branch,
   targetBranch,
   resetTargetBranch = targetBranch,
   hashVersion,
@@ -99,7 +101,7 @@ export function useAgentStudioGitActions({
     setRebaseError,
     setResetError,
     clearActionErrors,
-  } = useAgentStudioGitActionErrors();
+  } = useAgentStudioGitActionErrors(JSON.stringify([repoPath, workingDir]));
   const conflictControllerInput: Parameters<typeof useAgentStudioGitConflictController>[0] = {
     repoPath,
     workingDir,
@@ -161,6 +163,7 @@ export function useAgentStudioGitActions({
   } = useAgentStudioGitResetActions({
     repoPath,
     workingDir,
+    branchIdentityKey,
     targetBranch: resetTargetBranch,
     hashVersion,
     statusHash,
@@ -204,6 +207,7 @@ export function useAgentStudioGitActions({
     repoPath,
     workingDir,
     branch,
+    branchIdentityKey,
     targetBranch,
     upstreamAheadBehind,
     refreshDiffData,

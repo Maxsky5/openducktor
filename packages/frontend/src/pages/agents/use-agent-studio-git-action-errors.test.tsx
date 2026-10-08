@@ -6,7 +6,7 @@ import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-err
 enableReactActEnvironment();
 
 const createHookHarness = () =>
-  createCoreHookHarness(() => useAgentStudioGitActionErrors(), undefined);
+  createCoreHookHarness(() => useAgentStudioGitActionErrors("/repo"), undefined);
 
 describe("useAgentStudioGitActionErrors", () => {
   test("keeps error buckets isolated, clears them together, and remains writable after clear", async () => {

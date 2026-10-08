@@ -41,6 +41,7 @@ type GitInfoHeaderProps = Pick<
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
+  | "isResetting"
   | "isDetectingPullRequest"
   | "detectPullRequestDisabledReason"
   | "isGitActionsLocked"
@@ -775,6 +776,7 @@ type GitInfoHeaderStateInput = {
   isLoading: boolean;
   isPushing: boolean | undefined;
   isRebasing: boolean | undefined;
+  isResetting: boolean | undefined;
   onDetectPullRequest: GitInfoHeaderProps["onDetectPullRequest"];
   onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
   pullFromUpstream: GitInfoHeaderProps["pullFromUpstream"];
@@ -807,7 +809,7 @@ const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
   const isGitActionsLocked = Boolean(props.isGitActionsLocked);
   const isPushing = Boolean(props.isPushing);
   const isRebasing = Boolean(props.isRebasing);
-  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const isAnyActionInFlight = isCommitting || isPushing || isRebasing || Boolean(props.isResetting);
   const canRefresh = !props.isLoading && !isAnyActionInFlight;
   const canRebase =
     !isRepositoryMode &&
@@ -891,6 +893,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   isCommitting,
   isPushing,
   isRebasing,
+  isResetting,
   isDetectingPullRequest,
   detectPullRequestDisabledReason,
   isGitActionsLocked,
@@ -922,6 +925,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
     isCommitting,
     isPushing,
     isRebasing,
+    isResetting,
     isGitActionsLocked,
     gitActionsLockReason,
     pushBranch,

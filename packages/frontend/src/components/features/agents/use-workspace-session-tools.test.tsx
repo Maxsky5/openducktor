@@ -1,3 +1,4 @@
+import type { HostClient } from "@openducktor/host-client";
 import { expect, mock, spyOn, test } from "bun:test";
 import type {
   DevServerGroupState,
@@ -11,12 +12,14 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { createShellBridgeFixture as createBaseShellBridgeFixture } from "@/test-utils/focused-fixture";
@@ -26,12 +29,16 @@ import {
   buildState,
   createDeferred,
 } from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
-import {
-  WorkspaceSessionToolsPanel,
-  type WorkspaceToolsTabId,
-} from "./workspace-session-tools-panel";
+import { useWorkspaceSessionTools, type WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
+type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
 const targetReference = "origin/main";
+
+const createToolsQueryClient = (settings = createSettingsSnapshotFixture()) => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settings);
+  return queryClient;
+};
 
 const createShellBridgeFixture = (
   options: Parameters<typeof createBaseShellBridgeFixture>[0] = {},
@@ -96,7 +103,11 @@ function PanelHarness({
   contextMode = "repository",
   initialTabId = "git",
   onRefreshReady = () => {},
+  isVisible = true,
+  workingDirectory = "/repo",
 }: {
+  isVisible?: boolean;
+  workingDirectory?: string;
   sessionId?: string;
   branchKey?: string;
   branchReady?: boolean;
@@ -106,39 +117,46 @@ function PanelHarness({
   readBranch?: () => Promise<string>;
   contextMode?: "repository" | "worktree";
   initialTabId?: WorkspaceToolsTabId;
-  onRefreshReady?: Parameters<typeof WorkspaceSessionToolsPanel>[0]["onRefreshReady"];
+  onRefreshReady?: (refresh: ReturnType<typeof useWorkspaceSessionTools>["refresh"]) => void;
 }) {
   const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>(initialTabId);
-  return (
-    <SettingsModalProvider>
-      <WorkspaceSessionToolsPanel
-        repoPath="/repo"
-        workspaceId="workspace-1"
-        sessionId={sessionId}
-        workingDirectory="/repo"
-        contextMode={contextMode}
-        branchKey={branchKey}
-        branchReady={branchReady}
-        target={target}
-        targetError={targetError}
-        retryTarget={retryTarget}
-        readBranch={readBranch}
-        activeTabId={activeTabId}
-        onActiveTabChange={setActiveTabId}
-        selectedFile={null}
-        onSelectFile={() => {}}
-        onRefreshReady={onRefreshReady}
-      />
-    </SettingsModalProvider>
-  );
+  const { toolsContent, refresh } = useWorkspaceSessionTools({
+    isVisible,
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    sessionId: sessionId,
+    workingDirectory,
+    contextMode: contextMode,
+    branchKey: branchKey,
+    branchReady: branchReady,
+    target: target,
+    targetError: targetError,
+    retryTarget: retryTarget,
+    readBranch: readBranch,
+    activeTabId: activeTabId,
+    onActiveTabChange: setActiveTabId,
+    selectedFile: null,
+    onSelectFile: () => {},
+  });
+  useEffect(() => {
+    onRefreshReady(refresh);
+  }, [onRefreshReady, refresh]);
+  return <SettingsModalProvider>{isVisible ? toolsContent : null}</SettingsModalProvider>;
 }
 
 test("keeps each session's dev-server layout while its tab reloads", async () => {
+  const reload = createDeferred<DevServerGroupState>();
+  let holdReload = false;
+  let reloadRequested = false;
   configureShellBridge(
     createShellBridgeFixture({
       client: {
-        devServerGetState: async (_repoPath, owner) =>
-          buildState({
+        devServerGetState: async (_repoPath, owner) => {
+          if (holdReload && owner.kind === "workspace_session" && owner.sessionId === "session-1") {
+            reloadRequested = true;
+            return reload.promise;
+          }
+          return buildState({
             owner,
             workingDirectory: "/repo",
             scripts: [
@@ -146,33 +164,51 @@ test("keeps each session's dev-server layout while its tab reloads", async () =>
                 ? buildScript({ status: "stopped", pid: null })
                 : buildScript({ status: "running", pid: 4242 }),
             ],
-          }),
+          });
+        },
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const panel = (sessionId: string) => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <PanelHarness key={sessionId} sessionId={sessionId} branchReady={false} />
+        <PanelHarness
+          key={sessionId}
+          sessionId={sessionId}
+          branchReady={false}
+          initialTabId="file_explorer"
+        />
       </ThemeProvider>
     </QueryClientProvider>
   );
   const view = render(panel("session-1"));
   try {
-    await waitFor(() => expect(screen.getByTestId("agent-studio-dev-server-expanded-panel")));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-dev-server-expanded-panel").getAttribute("aria-busy"),
+      ).toBe("false"),
+    );
     view.rerender(panel("session-2"));
     expect(screen.queryByTestId("agent-studio-dev-server-compact-panel")).toBeNull();
     expect(screen.queryByTestId("agent-studio-dev-server-tab-frontend")).toBeNull();
-    await waitFor(() => expect(screen.getByTestId("agent-studio-dev-server-expanded-panel")));
-    view.rerender(panel("session-3"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-dev-server-expanded-panel").getAttribute("aria-busy"),
+      ).toBe("false"),
+    );
+    await act(async () => view.rerender(panel("session-3")));
     await waitFor(() =>
       expect(
         screen.getByTestId("agent-studio-dev-server-start-button").getAttribute("aria-busy"),
       ).toBe("false"),
     );
-    queryClient.removeQueries({ queryKey: devServerQueryKeys.all });
-    view.rerender(panel("session-1"));
+    holdReload = true;
+    await act(async () => {
+      queryClient.removeQueries({ queryKey: devServerQueryKeys.all });
+      view.rerender(panel("session-1"));
+    });
+    await waitFor(() => expect(reloadRequested).toBe(true));
     expect(screen.queryByTestId("agent-studio-dev-server-compact-panel")).toBeNull();
     expect(
       screen.getByTestId("agent-studio-dev-server-expanded-panel").getAttribute("aria-busy"),
@@ -183,6 +219,15 @@ test("keeps each session's dev-server layout while its tab reloads", async () =>
     expect(
       screen.getByTestId("agent-studio-dev-server-restart-button").hasAttribute("disabled"),
     ).toBe(true);
+    await act(async () =>
+      reload.resolve(
+        buildState({
+          owner: { kind: "workspace_session", workspaceId: "workspace-1", sessionId: "session-1" },
+          workingDirectory: "/repo",
+          scripts: [buildScript({ status: "running", pid: 4242 })],
+        }),
+      ),
+    );
     await waitFor(() =>
       expect(
         screen.getByTestId("agent-studio-dev-server-expanded-panel").getAttribute("aria-busy"),
@@ -191,9 +236,15 @@ test("keeps each session's dev-server layout while its tab reloads", async () =>
     view.rerender(panel("session-3"));
     expect(screen.queryByTestId("agent-studio-dev-server-expanded-panel")).toBeNull();
     expect(screen.getByTestId("agent-studio-dev-server-compact-panel")).toBeTruthy();
+    expect(
+      screen.getByTestId("agent-studio-dev-server-start-button").getAttribute("aria-busy"),
+    ).toBe("true");
   } finally {
-    view.unmount();
-    queryClient.clear();
+    await act(async () => {
+      view.unmount();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    });
     configureShellBridge(createUnavailableShellBridge());
   }
 });
@@ -218,7 +269,7 @@ test("shows a live session server when repository settings are unavailable", asy
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -238,7 +289,7 @@ test("shows a live session server when repository settings are unavailable", asy
 
 test("keeps the repository settings hint on the start control when the session has no scripts", async () => {
   configureShellBridge(createShellBridgeFixture());
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -265,12 +316,13 @@ test("keeps the repository settings hint on the start control when the session h
 
 test("shows a failed dev-server read after loading", async () => {
   const state = createDeferred<DevServerGroupState>();
+  const readState = mock(() => state.promise);
   configureShellBridge(
     createShellBridgeFixture({
-      client: { devServerGetState: () => state.promise },
+      client: { devServerGetState: readState },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -280,6 +332,7 @@ test("shows a failed dev-server read after loading", async () => {
   );
   try {
     await waitFor(() => {
+      expect(readState).toHaveBeenCalledTimes(1);
       const button = screen.getByTestId("agent-studio-dev-server-start-button");
       expect(button.textContent).toContain("Start dev servers");
       expect(button.hasAttribute("disabled")).toBe(true);
@@ -322,7 +375,7 @@ test("waits for the comparison target before reading Git status", async () => {
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -366,7 +419,7 @@ test.each([
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const panel = (branchKey: string, branchReady: boolean) => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -440,7 +493,7 @@ test.each(["available", "unavailable", "error"] as const)(
         },
       }),
     );
-    const queryClient = createQueryClient();
+    const queryClient = createToolsQueryClient();
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -519,7 +572,7 @@ test("a save refresh reads Git without reading the file tree again", async () =>
     }),
   );
   let refresh: ((scope: "git" | "all") => Promise<void>) | null = null;
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -573,7 +626,7 @@ test.each(["repository settings", "comparison"] as const)(
         },
       }),
     );
-    const queryClient = createQueryClient();
+    const queryClient = createToolsQueryClient();
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -649,7 +702,7 @@ test.each(["recovers", "fails"] as const)(
         />
       );
     }
-    const queryClient = createQueryClient();
+    const queryClient = createToolsQueryClient();
     const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
     const textKey = filesystemQueryKeys.textFile("/repo", "draft.txt");
     queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
@@ -719,7 +772,7 @@ test("rechecks a root chat target when its branch changes", async () => {
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const panel = (branchKey: string) => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -766,7 +819,7 @@ test("manual refresh fetches before it reloads Git changes", async () => {
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -858,7 +911,7 @@ test("manual refresh keeps the branch and diff through branch and status reads",
       </>
     );
   }
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -926,7 +979,7 @@ test("manual refresh reads a new branch before refreshing its comparison", async
       />
     );
   }
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -949,6 +1002,143 @@ test("manual refresh reads a new branch before refreshing its comparison", async
   } finally {
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test.each(
+  (["branch", "settings", "fetch", "comparison"] as const).flatMap((stage) =>
+    (["hide", "directory", "branch"] as const)
+      .filter(
+        (change) =>
+          (change !== "branch" || stage !== "settings") &&
+          (change !== "directory" || stage !== "fetch"),
+      )
+      .map((change) => ({ stage, change })),
+  ),
+)("stops old refresh reads after $change during $stage", async ({ stage, change }) => {
+  const hidden = change === "hide" || (change === "branch" && stage === "branch");
+  const released = createDeferred<void>();
+  const reads: string[] = [];
+  let holdRead = false;
+  let readStarted = false;
+  const waitAt = async (step: typeof stage) => {
+    if (step !== stage || !holdRead) return;
+    holdRead = false;
+    readStarted = true;
+    await released.promise;
+  };
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async (_repo, directory) => {
+          reads.push(`comparison:${directory}`);
+          await waitAt("comparison");
+          return stage === "fetch" || stage === "settings"
+            ? { kind: "unavailable", reason: "Remote target is missing." }
+            : { kind: "available", reference: targetReference };
+        },
+        gitFetchRemote: async (_repo, _target, directory) => {
+          reads.push(`fetch:${directory}`);
+          await waitAt("fetch");
+          return { outcome: "fetched", output: "" };
+        },
+        gitGetWorktreeStatus: async (_repo, target, _scope, directory) => {
+          reads.push(`status:${directory}`);
+          return worktreeStatus(target);
+        },
+        gitGetWorktreeStatusSummary: async (_repo, target, directory) => {
+          reads.push(`summary:${directory}`);
+          return worktreeSummary(target);
+        },
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  function RefreshPanel({
+    isVisible,
+    workingDirectory,
+    branch,
+  }: {
+    isVisible: boolean;
+    workingDirectory: string;
+    branch: string | null;
+  }) {
+    const [branchKey, setBranchKey] = useState("feature");
+    const [targetError, setTargetError] = useState<string | null>(
+      stage === "settings" ? "Could not read repository settings" : null,
+    );
+    return (
+      <PanelHarness
+        isVisible={isVisible}
+        workingDirectory={workingDirectory}
+        branchKey={branch ?? branchKey}
+        targetError={targetError}
+        readBranch={async () => {
+          await waitAt("branch");
+          const next = stage === "branch" && hidden ? "other" : branchKey;
+          setBranchKey(next);
+          return next;
+        }}
+        retryTarget={async () => {
+          await waitAt("settings");
+          setTargetError(null);
+        }}
+      />
+    );
+  }
+  const queryClient = createToolsQueryClient();
+  const panel = (isVisible = true, workingDirectory = "/repo", branch: string | null = null) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RefreshPanel isVisible={isVisible} workingDirectory={workingDirectory} branch={branch} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel());
+  try {
+    await waitFor(() => expect(reads.some((read) => read.startsWith("status:"))).toBe(true));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    holdRead = true;
+    await act(async () => fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button")));
+    await waitFor(() => expect(readStarted).toBe(true));
+    reads.length = 0;
+    const nextDirectory = change === "directory" ? "/other" : "/repo";
+    await act(async () =>
+      view.rerender(panel(!hidden, nextDirectory, change === "branch" && !hidden ? "other" : null)),
+    );
+    if (!hidden) {
+      await waitFor(() => expect(reads).toContain(`status:${nextDirectory}`));
+    }
+    reads.length = 0;
+    await act(async () => released.resolve());
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    if (change !== "directory") {
+      expect(reads).toEqual([]);
+    } else {
+      // Settings may enable reads in the new view, but the old refresh must stop.
+      expect(reads.filter((read) => read.endsWith(":/repo") || read.startsWith("fetch:"))).toEqual(
+        [],
+      );
+    }
+    if (hidden) {
+      await act(async () =>
+        view.rerender(panel(true, "/repo", change === "branch" ? "third" : null)),
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+        false,
+      );
+      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(true);
+      if (change === "branch") expect(reads.some((read) => read.startsWith("fetch:"))).toBe(false);
+    }
+  } finally {
+    released.resolve();
+    await act(async () => {
+      view.unmount();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    });
     configureShellBridge(createUnavailableShellBridge());
   }
 });
@@ -981,7 +1171,7 @@ test("manual refresh fetches a missing comparison target before checking it agai
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -1028,7 +1218,7 @@ test("a missing target fetch failure tells the user what failed", async () => {
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
@@ -1077,7 +1267,7 @@ test("returning to the app rechecks the target and file tree", async () => {
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const treeKey = filesystemQueryKeys.tree("/repo", targetReference, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
@@ -1151,7 +1341,7 @@ test("refresh recovers local Git and file reads when the comparison target disap
       },
     }),
   );
-  const queryClient = createQueryClient();
+  const queryClient = createToolsQueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -1199,6 +1389,255 @@ test("refresh recovers local Git and file reads when the comparison target disap
       staleFileTreeReads,
     );
   } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test.each(
+  (["commit", "push", "rebase", "reset"] as const).flatMap((kind) =>
+    (["light", "dark"] as const).map((theme) => ({ kind, theme })),
+  ),
+)(
+  "retains $kind busy and failure state when workspace tools close in $theme theme",
+  async ({ kind, theme }) => {
+    const completed = createDeferred<void>();
+    const operation = mock(async () => {
+      await completed.promise;
+      throw new Error(`${kind} write failed`);
+    });
+    const readStatus = mock(async (_repo: string, target: string) => ({
+      ...worktreeStatus(target),
+      targetAheadBehind: { ahead: 0, behind: 2 },
+      upstreamAheadBehind: { outcome: "tracking" as const, ahead: 2, behind: 0 },
+      fileStatuses: kind === "rebase" ? [] : worktreeStatus(target).fileStatuses,
+      fileDiffs:
+        kind === "rebase"
+          ? []
+          : [
+              {
+                file: "draft.txt",
+                type: "modified" as const,
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+    }));
+    const comparison = mock(async () => ({
+      kind: "available" as const,
+      reference: targetReference,
+    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitGetComparisonTarget: comparison,
+          gitGetWorktreeStatus: readStatus,
+          gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
+          [{
+            commit: "gitCommitAll",
+            push: "gitPushBranch",
+            rebase: "gitRebaseBranch",
+            reset: "gitResetWorktreeSelection",
+          }[kind]]: operation,
+        },
+      }),
+    );
+    const queryClient = createToolsQueryClient(createSettingsSnapshotFixture({ theme }));
+    const panel = (isVisible: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <PanelHarness isVisible={isVisible} contextMode="worktree" />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(panel(true));
+    const pushButton = () => screen.getByTestId("agent-studio-git-push-button");
+    try {
+      await waitFor(() => expect(pushButton().hasAttribute("disabled")).toBe(false));
+      if (kind === "commit") {
+        fireEvent.change(screen.getByTestId("agent-studio-git-commit-message-input"), {
+          target: { value: "fix: retain operation" },
+        });
+        fireEvent.click(screen.getByTestId("agent-studio-git-commit-submit-button"));
+      } else if (kind === "reset") {
+        fireEvent.click(screen.getByTestId("agent-studio-git-reset-file-button"));
+        view.rerender(panel(false));
+        view.rerender(panel(true));
+        expect(screen.getByRole("dialog", { name: "Confirm file reset" })).toBeTruthy();
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("agent-studio-git-reset-file-button").hasAttribute("disabled"),
+          ).toBe(false),
+        );
+        fireEvent.click(screen.getByTestId("agent-studio-git-confirm-reset-button"));
+      } else {
+        fireEvent.click(screen.getByTestId(`agent-studio-git-${kind}-button`));
+      }
+      await waitFor(() => expect(operation).toHaveBeenCalledTimes(1));
+      view.rerender(panel(false));
+      expect(screen.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+      view.rerender(panel(true));
+      const busyButton =
+        kind === "reset"
+          ? screen.getByTestId("agent-studio-git-confirm-reset-button")
+          : pushButton();
+      expect(busyButton.hasAttribute("disabled")).toBe(true);
+      expect(pushButton().hasAttribute("disabled")).toBe(true);
+      expect(
+        screen.getByTestId("agent-studio-git-commit-message-input").hasAttribute("disabled"),
+      ).toBe(true);
+      fireEvent.click(busyButton);
+      expect(operation).toHaveBeenCalledTimes(1);
+      view.rerender(panel(false));
+      const reads = readStatus.mock.calls.length;
+      const comparisons = comparison.mock.calls.length;
+      await act(async () => {
+        globalThis.dispatchEvent(new Event("focus"));
+        document.dispatchEvent(new Event("visibilitychange"));
+        completed.resolve();
+      });
+      expect(readStatus).toHaveBeenCalledTimes(reads);
+      expect(comparison).toHaveBeenCalledTimes(comparisons);
+      view.rerender(panel(true));
+      await waitFor(() => expect(screen.getByText(`${kind} write failed`)).toBeTruthy());
+      await waitFor(() => expect(pushButton().hasAttribute("disabled")).toBe(false));
+      expect(operation).toHaveBeenCalledTimes(1);
+      expect(document.documentElement.classList.contains(theme)).toBe(true);
+    } finally {
+      completed.resolve();
+      view.unmount();
+      queryClient.clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
+
+test("retains a force-push confirmation when the rejected push finishes with tools hidden", async () => {
+  const completed = createDeferred<GitPushResult>();
+  const push = mock(async () => completed.promise);
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+        gitGetWorktreeStatus: async (_repo, target) => ({
+          ...worktreeStatus(target),
+          upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
+        }),
+        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
+        gitPushBranch: push,
+      },
+    }),
+  );
+  const queryClient = createToolsQueryClient();
+  const panel = (isVisible: boolean) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness isVisible={isVisible} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel(true));
+  try {
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-push-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByTestId("agent-studio-git-push-button"));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    view.rerender(panel(false));
+    await act(async () =>
+      completed.resolve({
+        outcome: "rejected_non_fast_forward",
+        branch: "feature",
+        remote: "origin",
+        output: "non-fast-forward",
+      }),
+    );
+    view.rerender(panel(true));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Confirm force push" })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByTestId("agent-studio-git-confirm-force-push-button"));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(2));
+    expect(push).toHaveBeenLastCalledWith("/repo", "feature", {
+      setUpstream: true,
+      forceWithLease: true,
+      workingDir: "/repo",
+    });
+  } finally {
+    completed.resolve({ outcome: "pushed", remote: "origin", branch: "feature", output: "done" });
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("invalidates a completed hidden commit without reading Git until tools reopen", async () => {
+  const completed = createDeferred<void>();
+  const commit = mock(async () => {
+    await completed.promise;
+    return { outcome: "committed" as const, commitHash: "abc123", output: "committed" };
+  });
+  const readStatus = mock(async (_repo: string, target: string) => worktreeStatus(target));
+  const comparison = mock(async () => ({ kind: "available" as const, reference: targetReference }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitGetWorktreeStatus: readStatus,
+        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
+        gitCommitAll: commit,
+      },
+    }),
+  );
+  const queryClient = createToolsQueryClient();
+  const panel = (isVisible: boolean) => (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <PanelHarness isVisible={isVisible} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel(true));
+  try {
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-git-commit-message-input").hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.change(screen.getByTestId("agent-studio-git-commit-message-input"), {
+      target: { value: "fix: retain commit" },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-git-commit-submit-button").hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByTestId("agent-studio-git-commit-submit-button"));
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    view.rerender(panel(false));
+    const reads = readStatus.mock.calls.length;
+    const comparisons = comparison.mock.calls.length;
+    await act(async () => {
+      completed.resolve();
+      globalThis.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(readStatus).toHaveBeenCalledTimes(reads);
+    expect(comparison).toHaveBeenCalledTimes(comparisons);
+    view.rerender(panel(true));
+    await waitFor(() => expect(readStatus.mock.calls.length).toBeGreaterThan(reads));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-studio-git-commit-message-input").hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    expect(commit).toHaveBeenCalledTimes(1);
+  } finally {
+    completed.resolve();
     view.unmount();
     queryClient.clear();
     configureShellBridge(createUnavailableShellBridge());

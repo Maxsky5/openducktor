@@ -14,6 +14,7 @@ type UseAgentStudioGitRebaseActionsArgs = {
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
+  branchIdentityKey: string | null;
   targetBranch: string;
   upstreamAheadBehind: CommitsAheadBehind | null;
   refreshDiffData: RefreshGitDiffData;
@@ -27,6 +28,7 @@ export function useAgentStudioGitRebaseActions({
   repoPath,
   workingDir,
   branch,
+  branchIdentityKey,
   targetBranch,
   upstreamAheadBehind,
   refreshDiffData,
@@ -36,9 +38,12 @@ export function useAgentStudioGitRebaseActions({
   captureFreshConflict,
 }: UseAgentStudioGitRebaseActionsArgs) {
   const [isRebasing, setIsRebasing] = useState(false);
-  const [pendingPullRebase, setPendingPullRebase] = useState<AgentStudioPendingPullRebase | null>(
-    null,
-  );
+  const scopeKey = JSON.stringify([repoPath, workingDir, branchIdentityKey]);
+  const [pending, setPending] = useState<{
+    scopeKey: string;
+    confirmation: AgentStudioPendingPullRebase;
+  } | null>(null);
+  const pendingPullRebase = pending?.scopeKey === scopeKey ? pending.confirmation : null;
 
   const pullFromUpstreamInternal = useCallback(
     async (options?: {
@@ -70,10 +75,9 @@ export function useAgentStudioGitRebaseActions({
         options?.skipRebaseConfirmation === true && willRebaseLocalCommits;
 
       if (willRebaseLocalCommits && !options?.skipRebaseConfirmation) {
-        setPendingPullRebase({
-          branch,
-          localAhead,
-          upstreamBehind: upstreamBehindCount,
+        setPending({
+          scopeKey,
+          confirmation: { branch, localAhead, upstreamBehind: upstreamBehindCount },
         });
         return;
       }
@@ -85,7 +89,7 @@ export function useAgentStudioGitRebaseActions({
 
         if (result.outcome === "conflicts") {
           if (isConfirmedPullRebase) {
-            setPendingPullRebase(null);
+            setPending(null);
           }
           const conflict: GitConflict = {
             operation: "pull_rebase",
@@ -104,7 +108,7 @@ export function useAgentStudioGitRebaseActions({
 
         clearActionErrors();
         if (isConfirmedPullRebase) {
-          setPendingPullRebase(null);
+          setPending(null);
         }
         if (result.outcome === "up_to_date") {
           toast.success("Already up to date");
@@ -119,7 +123,7 @@ export function useAgentStudioGitRebaseActions({
       } catch (error) {
         const message = toErrorMessage(error, "Pull failed.");
         setRebaseError(message);
-        setPendingPullRebase(null);
+        setPending(null);
         toast.error("Pull failed", { description: message });
       } finally {
         setIsRebasing(false);
@@ -133,6 +137,7 @@ export function useAgentStudioGitRebaseActions({
       isRebasing,
       refreshDiffData,
       repoPath,
+      scopeKey,
       setRebaseError,
       upstreamAheadBehind?.ahead,
       upstreamAheadBehind?.behind,
@@ -218,7 +223,7 @@ export function useAgentStudioGitRebaseActions({
   }, [pendingPullRebase, pullFromUpstreamInternal]);
 
   const cancelPullRebase = useCallback((): void => {
-    setPendingPullRebase(null);
+    setPending(null);
     setRebaseError(null);
   }, [setRebaseError]);
 
