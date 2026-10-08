@@ -27,7 +27,7 @@ The OpenDucktor page for starting, resuming, and inspecting **Task-bound Session
 _Avoid_: Task Workflows page, Chats page, Agent Studio, Agents page
 
 **Session List**:
-The sidebar list of saved **Task-bound Sessions** and **Workspace Sessions**, in the groups Needs you, Running, and Recent. Needs you contains sessions with a pending question or permission request, the latest session of a **Blocked** task, and a **Blocked** task that has no saved session. Running contains sessions that are starting or running. Recent contains the other sessions, newest activity first. The list shows the active **Workspace** or all open **Workspaces**.
+The sidebar list of saved **Task-bound Sessions** and **Workspace Sessions**, in the groups Needs you, Running, and Recent. Needs you contains sessions with a pending question or permission request. It also contains the latest session of a **Blocked** task when the task has no confirmed active session, or the task itself when it has no saved session. A session counts as active when it is starting, running, or waiting for input. Running contains sessions that are starting or running. Recent contains the other sessions, newest activity first. The list shows the active **Workspace** or all open **Workspaces**.
 _Avoid_: activity card, chat list, workflow list
 
 **Kanban**:

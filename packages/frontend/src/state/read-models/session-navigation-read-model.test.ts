@@ -74,7 +74,7 @@ const ready = <Data>(data: Data): SessionNavigationRead<Data> => ({
 const liveReady = (
   entries: [string, WorkspaceSessionLiveFacts][] = [],
   faults: [string, WorkspaceSessionFault][] = [],
-): WorkspaceSessionLiveState => ({
+): Extract<WorkspaceSessionLiveState, { kind: "ready" }> => ({
   kind: "ready",
   sessions: new Map(entries),
   faults: new Map(faults),
@@ -111,6 +111,80 @@ const groupsOf = (model: ReturnType<typeof buildSessionNavigationModel>) =>
   Object.fromEntries(model.groups.map((group) => [group.id, groupKeys(group.entries)]));
 
 describe("Task grouping", () => {
+  test.each([
+    { activityState: "starting", needs: [], running: ["older"] },
+    { activityState: "running", needs: [], running: ["older"] },
+    { activityState: "waiting_input", needs: ["older"], running: [] },
+    { activityState: "idle", needs: ["latest"], running: [] },
+    { activityState: "stopped", needs: ["latest"], running: [] },
+    { activityState: "error", needs: ["latest"], running: [] },
+  ] as const)(
+    "shows blocked attention only without active task sessions: $activityState",
+    ({ activityState, needs, running }) => {
+      const input = sources({
+        tasks: [createTaskCardFixture({ id: "task-1", status: "blocked" })],
+        sessionsByTask: {
+          "task-1": ready([
+            record("older", { startedAt: "2026-09-29T08:00:00.000Z" }),
+            record("latest", { role: "qa" }),
+          ]),
+        },
+        live: liveReady([
+          [
+            key("older"),
+            facts({ activityState, pendingQuestion: activityState === "waiting_input" }),
+          ],
+        ]),
+      });
+      const model = buildSessionNavigationModel([input], "task");
+      expect(groupsOf(model)).toEqual({
+        needs_you: needs.map((id) => `task_session:alpha:${key(id)}`),
+        running: running.map((id) => `task_session:alpha:${key(id)}`),
+        recent: [],
+      });
+      expect(model.entryCount).toBe(1);
+    },
+  );
+
+  test.each([
+    { kind: "unknown" },
+    {
+      ...liveReady([[key("older"), facts({ activityState: "running" })]]),
+      kind: "unavailable",
+      reason: "Live stream closed.",
+    },
+    liveReady([
+      [
+        key("older"),
+        facts({ activityState: "running", statusUnavailableReason: "Session refresh failed." }),
+      ],
+    ]),
+  ] satisfies WorkspaceSessionLiveState[])(
+    "keeps blocked attention when active status is unconfirmed: %j",
+    (live) => {
+      const model = buildSessionNavigationModel(
+        [
+          sources({
+            tasks: [createTaskCardFixture({ id: "task-1", status: "blocked" })],
+            sessionsByTask: {
+              "task-1": ready([
+                record("older", { startedAt: "2026-09-29T08:00:00.000Z" }),
+                record("latest", { role: "qa" }),
+              ]),
+            },
+            live,
+          }),
+        ],
+        "task",
+      );
+      expect(groupsOf(model)).toEqual({
+        needs_you: [`task_session:alpha:${key("latest")}`],
+        running: [],
+        recent: [],
+      });
+    },
+  );
+
   test("uses stored activity to pick an older role session after restart", () => {
     const input = sources({
       tasks: [createTaskCardFixture({ id: "task-1", status: "human_review" })],
@@ -397,7 +471,7 @@ describe("buildSessionNavigationModel", () => {
     );
   });
 
-  test("marks only the latest started session of a blocked task and keeps all its reasons", () => {
+  test("keeps permission attention without blocked attention while a task session is active", () => {
     const task = createTaskCardFixture({ id: "task-1", status: "blocked" });
     const model = buildSessionNavigationModel(
       [
@@ -420,7 +494,7 @@ describe("buildSessionNavigationModel", () => {
     expect(model.groups[0]?.entries).toEqual([
       expect.objectContaining({
         key: `task_session:alpha:${key("latest")}`,
-        attention: ["permission", "blocked"],
+        attention: ["permission"],
       }),
     ]);
     expect(groupsOf(model).recent).toEqual([`task_session:alpha:${key("older")}`]);

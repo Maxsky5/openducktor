@@ -15,7 +15,10 @@ import type {
   WorkspaceSessionLiveFacts,
   WorkspaceSessionLiveState,
 } from "@/features/workspace-activity/workspace-activity-state";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import {
+  isAgentSessionActivityActive,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
 import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
@@ -265,7 +268,7 @@ const taskSessionTime = (record: AgentSessionRecord): SessionNavigationTime => {
   return startedAt === null ? { kind: "none" } : { kind: "started", at: startedAt };
 };
 
-/** The latest started saved session carries the Blocked reason of its task. */
+/** Select the latest started saved session, with a stable identity tie-breaker. */
 const latestStartedRecord = (records: readonly AgentSessionRecord[]): AgentSessionRecord | null => {
   let latest: AgentSessionRecord | null = null;
   for (const record of records) {
@@ -315,7 +318,18 @@ const taskEntries = (
       }
       continue;
     }
-    const blockedRecord = isBlocked ? latestStartedRecord(read.data) : null;
+    const hasActiveSession =
+      isBlocked &&
+      live.kind === "ready" &&
+      read.data.some((record) => {
+        const facts = live.sessions.get(agentSessionIdentityKey(record));
+        return (
+          facts !== undefined &&
+          facts.statusUnavailableReason === null &&
+          isAgentSessionActivityActive(facts.activityState)
+        );
+      });
+    const blockedRecord = isBlocked && !hasActiveSession ? latestStartedRecord(read.data) : null;
     let latest: SessionNavigationEntry | null = null;
     let needsInput = false;
     for (const record of read.data) {

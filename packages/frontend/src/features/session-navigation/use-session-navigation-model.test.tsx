@@ -167,7 +167,7 @@ test("joins session sources across workspaces and changes grouping without more 
   });
   const [needsYou, running, recent] = result.current.groups;
   expect(needsYou?.entries.map((entry) => [entry.title, entry.attention])).toEqual([
-    ["Resolve CI", ["question", "blocked"]],
+    ["Resolve CI", ["question"]],
   ]);
   expect(running?.entries.map((entry) => entry.title)).toEqual(["Chat running"]);
   expect(recent?.entries.map((entry) => entry.title)).toEqual([
