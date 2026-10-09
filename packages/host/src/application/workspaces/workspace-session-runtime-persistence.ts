@@ -29,9 +29,10 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
-  syncCodexTitleAfterTurn,
-  type CodexTitleSyncState,
-} from "./workspace-session-codex-title-sync";
+  titleSyncNeedsTurn,
+  syncTitleAfterTurn,
+  type TitleSyncState,
+} from "./workspace-session-runtime-title-sync";
 import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
@@ -46,19 +47,6 @@ type AcceptedMessagePlan = {
   input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0];
   runtimeRename: AgentSessionControlUpdateTitleInput | null;
 };
-
-const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
-  effect.pipe(
-    Effect.mapError((cause) =>
-      isHostError(cause)
-        ? cause
-        : new HostOperationError({
-            operation: "workspaceSession.persist",
-            message: cause.message,
-            cause,
-          }),
-    ),
-  );
 
 export const createWorkspaceSessionRuntimePersistence = ({
   store,
@@ -81,8 +69,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
     recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<boolean, HostError>;
-    isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
-    markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
+    isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+    markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
     /** Stops background renames and title syncs before their runtime and store close. */
     shutdown: () => Effect.Effect<void>;
   } => {
@@ -91,8 +79,9 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const jobs = Effect.runSync(Scope.provide(FiberSet.make<void>(), jobsScope));
   const startJob = (job: Effect.Effect<void>) => FiberSet.run(jobs, job).pipe(Effect.asVoid);
   const sendsInFlight = new Set<string>();
-  const codexTitleSync: CodexTitleSyncState = new Map();
-  const saveCodexMessage = (
+  const titleSync: TitleSyncState = new Map();
+  /** Saves locally and leaves the native title write until a completed turn. */
+  const saveMessage = (
     runtimeRef: AgentSessionLiveRef,
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     input: AcceptedMessagePlan["input"],
@@ -101,10 +90,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const saved = yield* storeEffect(store.recordAcceptedMessage(input));
       if (known.session.generatedTitle === null) {
         const key = agentSessionRefKey(runtimeRef);
-        const state = codexTitleSync.get(key);
+        const state = titleSync.get(key);
         const titleAdded = runtimeTitle(known.session) === null && input.generatedTitle !== null;
         if (state === undefined || (state !== "pending" && titleAdded))
-          codexTitleSync.set(key, "pending");
+          titleSync.set(key, "pending");
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
@@ -195,7 +184,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
-      if (runtimeRef.runtimeKind === "codex") return { input, runtimeRename: null };
+      if (titleSyncNeedsTurn(runtimeRef.runtimeKind)) return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
         ...known.session,
@@ -238,8 +227,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const { input, runtimeRename } = plan;
-        if (runtimeRef.runtimeKind === "codex")
-          return yield* restore(saveCodexMessage(runtimeRef, known, input));
+        if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
+          return yield* restore(saveMessage(runtimeRef, known, input));
         // Rename before saving so a failed native rename leaves the saved title alone.
         if (runtimeRename !== null) {
           const renamed = yield* Effect.result(restore(renameRuntimeTitle(runtimeRename)));
@@ -303,8 +292,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
-      if (runtimeRef.runtimeKind === "codex")
-        return yield* saveCodexMessage(runtimeRef, known, plan.input);
+      if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
+        return yield* saveMessage(runtimeRef, known, plan.input);
       // Defer observed renames because a manual rename can hold the gate during live publication.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
       const saved = yield* storeEffect(
@@ -352,11 +341,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
   return {
     shutdown: () => Scope.close(jobsScope, Exit.void),
     recordActivity,
-    markCodexTitleSyncPending: (ref) => {
-      codexTitleSync.set(agentSessionRefKey(ref), "pending");
+    markTitleSyncPending: (ref) => {
+      titleSync.set(agentSessionRefKey(ref), "pending");
     },
-    isCodexTitleSyncPending: (ref) => {
-      const state = codexTitleSync.get(agentSessionRefKey(ref));
+    isTitleSyncPending: (ref) => {
+      const state = titleSync.get(agentSessionRefKey(ref));
       return state === "pending" || state === "queued";
     },
     run: (runtimeRef, operation, effect) => {
@@ -364,14 +353,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
         return runOperation(runtimeRef, effect);
       return Effect.suspend(() => {
         const key = agentSessionRefKey(runtimeRef);
-        const previous = codexTitleSync.get(key);
+        const previous = titleSync.get(key);
         return runOperation(runtimeRef, effect).pipe(
           Effect.onExit((exit) =>
             Exit.isFailure(exit)
               ? Effect.sync(() => {
-                  if (codexTitleSync.get(key) !== "pending") return;
-                  if (previous === undefined) codexTitleSync.delete(key);
-                  else codexTitleSync.set(key, previous);
+                  if (titleSync.get(key) !== "pending") return;
+                  if (previous === undefined) titleSync.delete(key);
+                  else titleSync.set(key, previous);
                 })
               : Effect.void,
           ),
@@ -400,15 +389,15 @@ export const createWorkspaceSessionRuntimePersistence = ({
           prepared.runtimeKind === "codex" &&
           prepared.sessionScope.kind === "repository" &&
           prepared.resumeMode !== "continue_interrupted_turn" &&
-          codexTitleSync.get(agentSessionRefKey(prepared)) !== "queued"
+          titleSync.get(agentSessionRefKey(prepared)) !== "queued"
         )
-          codexTitleSync.set(agentSessionRefKey(prepared), "pending");
+          titleSync.set(agentSessionRefKey(prepared), "pending");
         return {
           input: prepared,
           save: (summary: AgentSessionSummary) =>
             Effect.sync(() => {
               if (prepared.runtimeKind === "codex" && summary.firstTurnCompleted === true)
-                codexTitleSync.set(agentSessionRefKey(prepared), "handled");
+                titleSync.set(agentSessionRefKey(prepared), "handled");
             }),
         };
       }),
@@ -449,7 +438,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         if (provenance === "baseline") return;
         if (envelope.type === "session_removed") {
           const key = agentSessionRefKey(envelope.ref);
-          codexTitleSync.delete(key);
+          titleSync.delete(key);
           return;
         }
         if (envelope.type !== "transcript_event") return;
@@ -457,24 +446,33 @@ export const createWorkspaceSessionRuntimePersistence = ({
         if (event.type === "user_message") {
           yield* recordObservedMessage(event.sessionRef, event);
         } else if (
-          event.type === "session_idle" ||
-          (event.type === "session_status" && event.status.type === "idle")
+          event.type === "session_idle" &&
+          event.turnCompleted === true &&
+          titleSyncNeedsTurn(event.sessionRef.runtimeKind)
         ) {
-          if (
-            event.type === "session_idle" &&
-            event.turnCompleted === true &&
-            event.sessionRef.runtimeKind === "codex"
-          )
-            yield* syncCodexTitleAfterTurn(event.sessionRef, {
-              state: codexTitleSync,
-              find,
-              findActive,
-              gate: sessionTitleGate,
-              updateTitle: updateRuntimeSessionTitle,
-              reportFailure: reportRenameFailure,
-              startJob,
-            });
+          yield* syncTitleAfterTurn(event.sessionRef, {
+            state: titleSync,
+            find,
+            findActive,
+            gate: sessionTitleGate,
+            updateTitle: updateRuntimeSessionTitle,
+            reportFailure: reportRenameFailure,
+            startJob,
+          });
         }
       }),
   };
 };
+
+const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
+  effect.pipe(
+    Effect.mapError((cause) =>
+      isHostError(cause)
+        ? cause
+        : new HostOperationError({
+            operation: "workspaceSession.persist",
+            message: cause.message,
+            cause,
+          }),
+    ),
+  );

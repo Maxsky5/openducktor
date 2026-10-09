@@ -40,13 +40,14 @@ import {
 } from "./workspace-session-worktree-lifecycle";
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
 
 export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies & {
   lifecycle: TaskSessionLifecycleCoordinator;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
-  isCodexTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
-  markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
+  isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+  markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
@@ -184,7 +185,7 @@ export const createWorkspaceSessionService = (
               }
               const plannedRename =
                 planRuntimeTitleRename(session, nextTitle) ??
-                (session.runtimeKind === "codex" &&
+                (titleSyncNeedsTurn(session.runtimeKind) &&
                 session.externalSessionId !== null &&
                 nextTitle !== null
                   ? { externalSessionId: session.externalSessionId, title: nextTitle }
@@ -197,8 +198,8 @@ export const createWorkspaceSessionService = (
               if (saved._tag === "Failure") return yield* Effect.fail(saved.failure);
               if (plannedRename === null) return saved.success;
               if (
-                session.runtimeKind === "codex" &&
-                dependencies.isCodexTitleSyncPending({
+                titleSyncNeedsTurn(session.runtimeKind) &&
+                dependencies.isTitleSyncPending({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,
                   externalSessionId: plannedRename.externalSessionId,

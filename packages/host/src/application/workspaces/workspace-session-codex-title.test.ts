@@ -127,7 +127,7 @@ describe("Codex Workspace Session title sync", () => {
 
     await waitFor(() => h.titleAttempts.length === 1);
     expect(h.titleAttempts).toEqual(["Saved title"]);
-    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(false);
+    expect(h.persistence.isTitleSyncPending(h.ref)).toBe(false);
   });
 
   test("clears a reattach gate when the runtime resume fails", async () => {
@@ -135,7 +135,7 @@ describe("Codex Workspace Session title sync", () => {
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "Saved title" }));
     let pendingDuringResume = false;
     h.state.beforeControl = Effect.sync(() => {
-      pendingDuringResume = h.persistence.isCodexTitleSyncPending(h.ref);
+      pendingDuringResume = h.persistence.isTitleSyncPending(h.ref);
     }).pipe(Effect.andThen(Effect.die(new Error("resume failed"))));
 
     await expect(
@@ -148,7 +148,7 @@ describe("Codex Workspace Session title sync", () => {
       ),
     ).rejects.toThrow("resume failed");
     expect(pendingDuringResume).toBe(true);
-    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(false);
+    expect(h.persistence.isTitleSyncPending(h.ref)).toBe(false);
   });
 
   test("syncs a later Codex title after a titleless completed turn", async () => {
@@ -161,7 +161,7 @@ describe("Codex Workspace Session title sync", () => {
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
     });
-    await waitFor(() => !h.persistence.isCodexTitleSyncPending(h.ref));
+    await waitFor(() => !h.persistence.isTitleSyncPending(h.ref));
     expect((await h.get()).generatedTitle).toBeNull();
     expect(h.titleAttempts).toEqual([]);
 
@@ -281,7 +281,7 @@ describe("Codex Workspace Session title sync", () => {
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
     });
-    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(true);
+    expect(h.persistence.isTitleSyncPending(h.ref)).toBe(true);
 
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await holdingGate;
@@ -309,14 +309,14 @@ describe("Codex Workspace Session title sync", () => {
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
     });
-    expect(h.persistence.isCodexTitleSyncPending(h.ref)).toBe(true);
+    expect(h.persistence.isTitleSyncPending(h.ref)).toBe(true);
 
     // Shutdown does not wait for the held gate: it interrupts the queued sync.
     await Effect.runPromise(h.persistence.shutdown());
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await holdingGate;
     // A sync that still ran would clear the pending state only after its title write.
-    await waitFor(() => !h.persistence.isCodexTitleSyncPending(h.ref));
+    await waitFor(() => !h.persistence.isTitleSyncPending(h.ref));
 
     expect(h.titleAttempts).toEqual([]);
     expect(h.renameFailures).toEqual([]);
@@ -370,7 +370,7 @@ describe("Codex Workspace Session title sync", () => {
 
   test("keeps a failed manual Codex rename for an explicit retry", async () => {
     const h = await createPersistenceHarness(database, "codex");
-    h.persistence.markCodexTitleSyncPending(h.ref);
+    h.persistence.markTitleSyncPending(h.ref);
     await h.emit({
       type: "session_idle",
       turnCompleted: true,
@@ -378,7 +378,7 @@ describe("Codex Workspace Session title sync", () => {
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
     });
-    await waitFor(() => !h.persistence.isCodexTitleSyncPending(h.ref));
+    await waitFor(() => !h.persistence.isTitleSyncPending(h.ref));
     h.state.failTitleAfterWrite = true;
     await expect(
       Effect.runPromise(

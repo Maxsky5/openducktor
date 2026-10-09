@@ -31,6 +31,20 @@ type ClaudeLifecycleEvent =
       outcome: ClaudeResultLifecycleOutcome;
     };
 
+export const applyClaudeLifecycleEvent = (
+  input: ClaudeLifecycleInput & { event: ClaudeLifecycleEvent },
+): void => {
+  if (input.event.kind === "sdk_state") {
+    applySdkStateLifecycleEvent({ ...input, state: input.event.state });
+    return;
+  }
+  if (input.event.kind === "sdk_turn_started") {
+    applySdkTurnStartedLifecycleEvent(input);
+    return;
+  }
+  applyResultLifecycleEvent({ ...input, outcome: input.event.outcome });
+};
+
 const hasPendingInput = (session: ClaudeLifecycleSession): boolean => {
   return (session.pendingApprovals?.size ?? 0) > 0 || (session.pendingQuestions?.size ?? 0) > 0;
 };
@@ -41,13 +55,20 @@ const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
   session.activeSdkUserTurnCount ?? 0;
 
-const publishSessionIdle = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
+const publishSessionIdle = ({
+  emit,
+  session,
+  timestamp,
+  turnCompleted,
+}: ClaudeLifecycleInput & { turnCompleted?: true }): void => {
   session.activity = "idle";
-  emit({
+  const event: Extract<AgentEvent, { type: "session_idle" }> = {
     type: "session_idle",
     externalSessionId: session.externalSessionId,
     timestamp,
-  });
+  };
+  if (turnCompleted) event.turnCompleted = turnCompleted;
+  emit(event);
 };
 
 const emitSessionIdle = (input: ClaudeLifecycleInput): void => {
@@ -178,21 +199,7 @@ const applyResultLifecycleEvent = (
     return;
   }
   input.session.sdkState = "idle";
-  // A finalized SDK-initiated turn can end while the renderer is running from
-  // transcript activity, so the settle signal must not depend on host activity.
-  publishSessionIdle(input);
-};
-
-export const applyClaudeLifecycleEvent = (
-  input: ClaudeLifecycleInput & { event: ClaudeLifecycleEvent },
-): void => {
-  if (input.event.kind === "sdk_state") {
-    applySdkStateLifecycleEvent({ ...input, state: input.event.state });
-    return;
-  }
-  if (input.event.kind === "sdk_turn_started") {
-    applySdkTurnStartedLifecycleEvent(input);
-    return;
-  }
-  applyResultLifecycleEvent({ ...input, outcome: input.event.outcome });
+  // Transcript activity can keep the renderer busy after the host goes idle.
+  // Send completion even when the host already marks this session idle.
+  publishSessionIdle({ ...input, turnCompleted: true });
 };

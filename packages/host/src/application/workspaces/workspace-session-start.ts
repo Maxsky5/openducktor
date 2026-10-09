@@ -10,6 +10,7 @@ import type { WorkspaceSessionServiceDependencies } from "./workspace-session-se
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
 import { validateWorkspaceSessionTarget } from "./workspace-session-target";
+import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
 
 export const createWorkspaceSessionStart = (
   dependencies: WorkspaceSessionServiceDependencies,
@@ -69,8 +70,8 @@ export const createWorkspaceSessionStart = (
               }),
             );
             if (Exit.isSuccess(saved)) {
-              if (session.runtimeKind === "codex")
-                dependencies.markCodexTitleSyncPending({
+              if (titleSyncNeedsTurn(session.runtimeKind))
+                dependencies.markTitleSyncPending({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,
                   externalSessionId: runtimeSession.externalSessionId,

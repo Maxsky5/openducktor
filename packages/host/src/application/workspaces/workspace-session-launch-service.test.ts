@@ -220,7 +220,7 @@ test.each(["opencode", "codex", "claude"] as const)(
       model: h.record.selectedModel,
       workingDirectory: h.ref.workingDirectory,
     });
-    expect((await h.get()).externalSessionId).toBe("native");
+    expect((await h.get()).externalSessionId).toBe(h.ref.externalSessionId);
   },
 );
 
