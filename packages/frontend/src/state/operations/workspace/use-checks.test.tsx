@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeCheck,
-  type TaskStoreCheck,
-} from "@openducktor/contracts";
+import { type GitCheck, type PathCheck, type TaskStoreCheck } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { ScheduleTask } from "@/lib/scheduling";
@@ -22,12 +18,16 @@ const reactActEnvironment: typeof globalThis & {
 } = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
-  pathOk: true,
-  gitOk: true,
-  gitVersion: "2.45.0",
-  runtimes: [{ kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "0.12.0" }],
-  errors: [],
+const makeGitCheck = (overrides: Partial<GitCheck> = {}): GitCheck => ({
+  ok: true,
+  executablePath: "/bin/git",
+  version: "git version 2.45.0",
+  error: null,
+  ...overrides,
+});
+const makePathCheck = (overrides: Partial<PathCheck> = {}): PathCheck => ({
+  ok: true,
+  error: null,
   ...overrides,
 });
 
@@ -42,10 +42,12 @@ const testToastApi: DiagnosticsToastApi = {
   error: (message, options) => toastError(message, options),
   dismiss: (toastId) => toastDismiss(toastId),
 };
-let runtimeCheckHandler = async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck();
+let pathCheckHandler = async (_force?: boolean): Promise<PathCheck> => makePathCheck();
+const pathCheckMock = mock((force?: boolean) => pathCheckHandler(force));
+let gitCheckHandler = async (): Promise<GitCheck> => makeGitCheck();
 let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =>
   makeTaskStoreCheck();
-const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
+const gitCheckMock = mock(() => gitCheckHandler());
 const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
 const refreshHostRuntimeStatusMock = mock(async () => {});
 
@@ -57,7 +59,10 @@ type HookHarnessArgs = Partial<HookArgs> & {
 };
 type ResolvedHookArgs = HookArgs &
   Required<
-    Pick<HookArgs, "runtimeCheck" | "taskStoreCheck" | "toastApi" | "refreshHostRuntimeStatus">
+    Pick<
+      HookArgs,
+      "pathCheck" | "gitCheck" | "taskStoreCheck" | "toastApi" | "refreshHostRuntimeStatus"
+    >
   >;
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
@@ -78,19 +83,14 @@ const buildHookArgs = (
           ? createActiveWorkspace(args.activeRepo)
           : null
         : previous?.activeWorkspace;
-  const runtimeDefinitions =
-    args.runtimeDefinitions !== undefined ? args.runtimeDefinitions : previous?.runtimeDefinitions;
-
-  if (activeWorkspace === undefined || runtimeDefinitions === undefined) {
-    throw new Error("Hook args must include activeWorkspace and runtimeDefinitions");
-  }
+  if (activeWorkspace === undefined) throw new Error("Hook args must include activeWorkspace");
 
   return {
     ...previous,
     ...args,
     activeWorkspace,
-    runtimeDefinitions,
-    runtimeCheck: args.runtimeCheck ?? previous?.runtimeCheck ?? runtimeCheckMock,
+    pathCheck: args.pathCheck ?? previous?.pathCheck ?? pathCheckMock,
+    gitCheck: args.gitCheck ?? previous?.gitCheck ?? gitCheckMock,
     taskStoreCheck: args.taskStoreCheck ?? previous?.taskStoreCheck ?? taskStoreCheckMock,
     toastApi: args.toastApi ?? previous?.toastApi ?? testToastApi,
     refreshHostRuntimeStatus:
@@ -156,17 +156,23 @@ type HookHarness = ReturnType<typeof createHookHarness>;
 const waitForInitialChecksToSettle = async (harness: HookHarness) => {
   await harness.mount();
   await harness.waitFor((value) => {
-    return value.runtimeCheck.data !== null && value.taskStoreCheck.data !== null;
+    return (
+      value.pathCheck.data !== null &&
+      value.gitCheck.data !== null &&
+      value.taskStoreCheck.data !== null
+    );
   });
 };
 
 beforeEach(async () => {
   toastError.mockClear();
   toastDismiss.mockClear();
-  runtimeCheckMock.mockClear();
+  pathCheckMock.mockClear();
+  gitCheckMock.mockClear();
   taskStoreCheckMock.mockClear();
   refreshHostRuntimeStatusMock.mockClear();
-  runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
+  pathCheckHandler = async () => makePathCheck();
+  gitCheckHandler = async () => makeGitCheck();
   taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
 });
 
@@ -174,19 +180,19 @@ describe("use-checks", () => {
   test("refreshChecks reruns host checks without a workspace", async () => {
     const harness = createHookHarness({
       activeRepo: null,
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
       await harness.mount();
-      await harness.waitFor((value) => value.runtimeCheck.data !== null);
-      runtimeCheckMock.mockClear();
+      await harness.waitFor((value) => value.gitCheck.data !== null);
+      gitCheckMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
 
       expect(refreshHostRuntimeStatusMock).toHaveBeenCalledTimes(1);
-      expect(runtimeCheckMock.mock.calls).toEqual([[true]]);
+      expect(pathCheckMock.mock.calls).toEqual([[false], [true]]);
+      expect(gitCheckMock).toHaveBeenCalledTimes(1);
       expect(taskStoreCheckMock).not.toHaveBeenCalled();
       expect(harness.getLatest().checksRepoPath).toBeNull();
       expect(harness.getLatest().isRefreshingChecks).toBe(false);
@@ -195,47 +201,109 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("refreshChecks runs a forced host check while an ordinary check is pending", async () => {
-    const ordinaryCheck = createDeferred<RuntimeCheck>();
+  test("refreshChecks forces PATH resolution after an ordinary read settles", async () => {
+    const ordinaryCheck = createDeferred<PathCheck>();
     const pathError = "Failed to resolve PATH: login shell timed out.";
-    runtimeCheckHandler = async (force) => (force ? makeRuntimeCheck() : ordinaryCheck.promise);
+    pathCheckHandler = async (force) => (force ? makePathCheck() : ordinaryCheck.promise);
     const harness = createHookHarness({
       activeRepo: null,
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
       await harness.mount();
-      await harness.waitFor(() => runtimeCheckMock.mock.calls.length === 1);
+      await harness.waitFor(() => pathCheckMock.mock.calls.length === 1);
       await harness.run(async (value) => {
         const refresh = value.refreshChecks();
-        ordinaryCheck.resolve(makeRuntimeCheck({ pathOk: false, errors: [pathError] }));
+        ordinaryCheck.resolve(makePathCheck({ ok: false, error: pathError }));
         await refresh;
       });
 
-      expect(runtimeCheckMock.mock.calls).toEqual([[false], [true]]);
-      expect(harness.getLatest().runtimeCheck.data?.pathOk).toBe(true);
-      expect(harness.getLatest().runtimeCheck.data?.errors).toEqual([]);
+      expect(pathCheckMock.mock.calls).toEqual([[false], [true]]);
+      expect(harness.getLatest().pathCheck.data?.ok).toBe(true);
+      expect(harness.getLatest().pathCheck.data?.error).toBeNull();
     } finally {
       await harness.unmount();
     }
   }, 5000);
 
+  test("Git refresh waits for PATH but not for runtime status or task storage", async () => {
+    const harness = createHookHarness({ activeRepo: "/repo-a" });
+    const runtime = createDeferred<void>();
+    const store = createDeferred<TaskStoreCheck>();
+    const path = createDeferred<PathCheck>();
+    let refreshed: Promise<void> | undefined;
+    try {
+      await waitForInitialChecksToSettle(harness);
+      await harness.updateArgs({ refreshHostRuntimeStatus: () => runtime.promise });
+      pathCheckHandler = async () => path.promise;
+      taskStoreCheckHandler = async () => store.promise;
+      gitCheckHandler = async () => makeGitCheck({ executablePath: "/new/bin/git" });
+      gitCheckMock.mockClear();
+      await harness.run((value) => {
+        refreshed = value.refreshChecks();
+      });
+      expect(gitCheckMock).not.toHaveBeenCalled();
+      await harness.run(() => {
+        path.resolve(makePathCheck());
+      });
+      await harness.waitFor((value) => value.gitCheck.data?.executablePath === "/new/bin/git");
+      expect(harness.getLatest().isRefreshingChecks).toBe(true);
+      expect(harness.getLatest().pathCheck.error).toBeNull();
+    } finally {
+      path.resolve(makePathCheck());
+      runtime.resolve();
+      store.resolve(makeTaskStoreCheck());
+      await harness.run(async () => {
+        await refreshed;
+      });
+      await harness.unmount();
+    }
+  });
+
+  test("a forced Git refresh does not reuse an older pending discovery", async () => {
+    const older = createDeferred<GitCheck>();
+    let calls = 0;
+    gitCheckHandler = async () =>
+      ++calls === 1 ? older.promise : makeGitCheck({ executablePath: "/new/bin/git" });
+    const harness = createHookHarness({ activeRepo: null });
+    let refreshed: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitCheckMock.mock.calls.length === 1);
+      await harness.run((value) => {
+        refreshed = value.refreshChecks();
+      });
+      await harness.waitFor(() => pathCheckMock.mock.calls.length === 2);
+      expect(gitCheckMock).toHaveBeenCalledTimes(1);
+      await harness.run(async () => {
+        older.resolve(makeGitCheck());
+        await refreshed;
+      });
+      expect(gitCheckMock).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().gitCheck.data?.executablePath).toBe("/new/bin/git");
+    } finally {
+      older.resolve(makeGitCheck());
+      await harness.run(async () => {
+        await refreshed;
+      });
+      await harness.unmount();
+    }
+  });
+
   test("refreshChecks reports each failed probe in its own state without throwing", async () => {
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
       await waitForInitialChecksToSettle(harness);
-      runtimeCheckHandler = async () => {
-        throw new Error("runtime down");
+      gitCheckHandler = async () => {
+        throw new Error("Git read failed");
       };
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
-      await harness.waitFor((value) => value.runtimeCheck.failureKind === "error");
+      await harness.waitFor((value) => value.gitCheck.failureKind === "error");
 
       expect(refreshHostRuntimeStatusMock).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().taskStoreCheck.data?.taskStoreOk).toBe(true);
@@ -248,19 +316,23 @@ describe("use-checks", () => {
   test("exposes each failed refresh error while it keeps the earlier observed result", async () => {
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
       await waitForInitialChecksToSettle(harness);
       const initial = harness.getLatest();
-      expect(initial.runtimeCheck.error).toBeNull();
+      expect(initial.pathCheck.error).toBeNull();
+      expect(initial.pathCheck.observedAt).not.toBeNull();
+      expect(initial.gitCheck.error).toBeNull();
       expect(initial.taskStoreCheck.error).toBeNull();
-      expect(initial.runtimeCheck.observedAt).not.toBeNull();
+      expect(initial.gitCheck.observedAt).not.toBeNull();
       expect(initial.taskStoreCheck.observedAt).not.toBeNull();
 
-      runtimeCheckHandler = async () => {
-        throw new Error("runtime down");
+      pathCheckHandler = async () => {
+        throw new Error("PATH read failed");
+      };
+      gitCheckHandler = async () => {
+        throw new Error("Git read failed");
       };
       taskStoreCheckHandler = async () => {
         throw new Error("task store down");
@@ -270,16 +342,20 @@ describe("use-checks", () => {
       });
       await harness.waitFor(
         (value) =>
-          value.runtimeCheck.error === "runtime down" &&
+          value.pathCheck.error === "PATH read failed" &&
+          value.gitCheck.error === "Git read failed" &&
           value.taskStoreCheck.error === "task store down",
       );
 
       const latest = harness.getLatest();
-      expect(latest.runtimeCheck.failureKind).toBe("error");
+      expect(latest.pathCheck.failureKind).toBe("error");
+      expect(latest.pathCheck.data).toEqual(makePathCheck());
+      expect(latest.pathCheck.observedAt).toBe(initial.pathCheck.observedAt);
+      expect(latest.gitCheck.failureKind).toBe("error");
       expect(latest.taskStoreCheck.failureKind).toBe("error");
-      expect(latest.runtimeCheck.data).toEqual(makeRuntimeCheck());
+      expect(latest.gitCheck.data).toEqual(makeGitCheck());
       expect(latest.taskStoreCheck.data).toEqual(makeTaskStoreCheck());
-      expect(latest.runtimeCheck.observedAt).toBe(initial.runtimeCheck.observedAt);
+      expect(latest.gitCheck.observedAt).toBe(initial.gitCheck.observedAt);
       expect(latest.taskStoreCheck.observedAt).toBe(initial.taskStoreCheck.observedAt);
     } finally {
       await harness.unmount();
@@ -297,7 +373,6 @@ describe("use-checks", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
@@ -346,20 +421,14 @@ describe("use-checks", () => {
       await harness.unmount();
     }
   }, 5000);
-  test("shows cli and task-store toasts for unhealthy successful payloads", async () => {
-    let runtimeCallCount = 0;
+  test("shows Git and task-store toasts for unhealthy successful payloads", async () => {
+    let gitCallCount = 0;
     let taskStoreCallCount = 0;
-    const runtimeCheck = mock(async (): Promise<RuntimeCheck> => {
-      runtimeCallCount += 1;
-      return runtimeCallCount === 1
-        ? makeRuntimeCheck()
-        : makeRuntimeCheck({
-            pathOk: true,
-            gitOk: false,
-            gitVersion: null,
-            runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
-            errors: ["git missing"],
-          });
+    const gitCheck = mock(async (): Promise<GitCheck> => {
+      gitCallCount += 1;
+      return gitCallCount === 1
+        ? makeGitCheck()
+        : makeGitCheck({ ok: false, executablePath: null, version: null, error: "git missing" });
     });
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
       taskStoreCallCount += 1;
@@ -379,12 +448,11 @@ describe("use-checks", () => {
           });
     });
 
-    runtimeCheckHandler = runtimeCheck;
+    gitCheckHandler = gitCheck;
     taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     });
 
     try {
@@ -396,9 +464,9 @@ describe("use-checks", () => {
       });
 
       expect(toastError).toHaveBeenCalledWith(
-        "CLI tools unavailable",
+        "Git unavailable",
         expect.objectContaining({
-          id: "diagnostics:cli-tools",
+          id: "diagnostics:git",
           description: "git missing",
         }),
       );
@@ -413,8 +481,9 @@ describe("use-checks", () => {
       await harness.unmount();
     }
   }, 5000);
-  test("projects runtime and task-store query timeouts into concrete states instead of leaving checks pending", async () => {
-    const runtimeDeferred = createDeferred<RuntimeCheck>();
+  test("keeps timed out reads unknown with separate errors", async () => {
+    const gitDeferred = createDeferred<GitCheck>();
+    const pathDeferred = createDeferred<PathCheck>();
     const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const scheduleTask = mock<ScheduleTask>((callback, delayMs) => {
       expect([15_000, 30_000]).toContain(delayMs);
@@ -429,12 +498,12 @@ describe("use-checks", () => {
       };
     });
 
-    runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
+    gitCheckHandler = mock(async () => gitDeferred.promise);
+    pathCheckHandler = mock(async () => pathDeferred.promise);
     taskStoreCheckHandler = mock(async () => taskStoreDeferred.promise);
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       scheduleTask,
     });
 
@@ -442,19 +511,24 @@ describe("use-checks", () => {
       await harness.mount();
       await harness.waitFor(
         (value) =>
-          value.runtimeCheck.data?.errors[0] === "Timed out after 30000ms" &&
-          value.taskStoreCheck.data?.taskStoreError === "Timed out after 15000ms" &&
-          value.runtimeCheck.failureKind === "timeout" &&
+          value.pathCheck.error === "Timed out after 30000ms" &&
+          value.gitCheck.error === "Timed out after 15000ms" &&
+          value.taskStoreCheck.error === "Timed out after 15000ms" &&
+          value.gitCheck.failureKind === "timeout" &&
           value.taskStoreCheck.failureKind === "timeout",
       );
 
+      expect(harness.getLatest().pathCheck.data).toBeNull();
+      expect(harness.getLatest().gitCheck.data).toBeNull();
+      expect(harness.getLatest().taskStoreCheck.data).toBeNull();
       // A timeout shows in the check state, not as an error toast.
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      void runtimeDeferred.promise.catch(() => {});
+      pathDeferred.resolve(makePathCheck());
+      void gitDeferred.promise.catch(() => {});
       void taskStoreDeferred.promise.catch(() => {});
-      runtimeDeferred.reject(new Error("cleanup"));
+      gitDeferred.reject(new Error("cleanup"));
       taskStoreDeferred.reject(new Error("cleanup"));
     }
   }, 5000);

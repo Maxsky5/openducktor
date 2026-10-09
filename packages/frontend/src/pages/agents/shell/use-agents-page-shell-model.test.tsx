@@ -506,7 +506,8 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
 });
 
 const checksStateValue = (): ChecksStateContextValue => ({
-  runtimeCheck: createObservedCheckFixture(),
+  pathCheck: createObservedCheckFixture(),
+  gitCheck: createObservedCheckFixture(),
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
   isRefreshingChecks: false,

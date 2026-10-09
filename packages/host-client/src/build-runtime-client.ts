@@ -14,17 +14,17 @@ import {
   devServerGroupStateSchema,
   type PullRequest,
   pullRequestSchema,
-  type RuntimeCheck,
+  type GitCheck,
+  type PathCheck,
   type RuntimeDescriptor,
   type RuntimeExecutableCheck,
   type RuntimeExecutableCheckInput,
   type RuntimeKind,
-  runtimeCheckSchema,
+  gitCheckSchema,
+  pathCheckSchema,
   runtimeDescriptorSchema,
   runtimeExecutableCheckInputSchema,
   runtimeExecutableCheckSchema,
-  type SystemCheck,
-  systemCheckSchema,
   type TaskApprovalContextLoadResult,
   type TaskCard,
   type TaskDirectMergeInput,
@@ -41,14 +41,6 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
-
-const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
-  return invokeFn("system_check", { repoPath }, systemCheckSchema);
-};
-
-const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeCheck> => {
-  return invokeFn("runtime_check", { force }, runtimeCheckSchema);
-};
 
 const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
   return invokeFn("task_store_check", { repoPath }, taskStoreCheckSchema);
@@ -284,12 +276,14 @@ const agentSessionStop = async (
 export class HostAgentClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  async systemCheck(repoPath: string): Promise<SystemCheck> {
-    return systemCheck(this.invokeFn, repoPath);
+  async pathCheck(force = false): Promise<PathCheck> {
+    const invoke = this.invokeFn;
+    return invoke("path_check", { force }, pathCheckSchema);
   }
 
-  async runtimeCheck(force = false): Promise<RuntimeCheck> {
-    return runtimeCheck(this.invokeFn, force);
+  async gitCheck(): Promise<GitCheck> {
+    const invoke = this.invokeFn;
+    return invoke("git_check", {}, gitCheckSchema);
   }
 
   async taskStoreCheck(repoPath: string): Promise<TaskStoreCheck> {

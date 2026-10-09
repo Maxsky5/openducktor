@@ -5,6 +5,7 @@ import {
   FolderTree,
   GitBranch,
   History,
+  Terminal,
   type LucideIcon,
 } from "lucide-react";
 import { type ReactElement, type ReactNode, useId } from "react";
@@ -153,6 +154,7 @@ export function DiagnosticsIconTile({
 }
 
 const CHECK_ICONS = {
+  path: Terminal,
   git: GitBranch,
   "mcp-bridge": Cable,
   "repository-setup": FolderTree,

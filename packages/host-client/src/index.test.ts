@@ -914,39 +914,25 @@ describe("HostClient", () => {
     ).rejects.toThrow("invalid args: input.markdown is required");
   });
 
-  test("runtimeCheck forwards force flag to IPC command", async () => {
+  test("PATH and Git checks use separate IPC commands", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "runtime_check") {
-        return {
-          pathOk: true,
-          gitOk: true,
-          gitVersion: "2.45.0",
-          runtimes: [
-            {
-              kind: "opencode",
-              ok: true,
-              executablePath: "/bin/opencode",
-              version: "0.12.0",
-            },
-          ],
-          errors: [],
-        };
-      }
+      if (command === "path_check") return { ok: true, error: null };
+      if (command === "git_check")
+        return { ok: true, executablePath: "/bin/git", version: "git version 2.45.0", error: null };
       throw new Error(`Unexpected command: ${command}`);
     });
-
-    await client.runtimeCheck();
-    await client.runtimeCheck(true);
-
+    await expect(client.pathCheck()).resolves.toEqual({ ok: true, error: null });
+    await client.pathCheck(true);
+    await expect(client.gitCheck()).resolves.toEqual({
+      ok: true,
+      executablePath: "/bin/git",
+      version: "git version 2.45.0",
+      error: null,
+    });
     expect(calls).toEqual([
-      {
-        command: "runtime_check",
-        args: { force: false },
-      },
-      {
-        command: "runtime_check",
-        args: { force: true },
-      },
+      { command: "path_check", args: { force: false } },
+      { command: "path_check", args: { force: true } },
+      { command: "git_check", args: {} },
     ]);
   });
 

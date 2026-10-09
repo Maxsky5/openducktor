@@ -28,9 +28,9 @@ export type CheckRead<T> = {
 
 /** A check read that also records the failure kind and the observation time. */
 export type ObservedCheck<T> = CheckRead<T> & {
-  /** The latest observed result, or a failure placeholder when no result was observed. */
+  /** The latest observed result. Null when no result was observed. */
   data: T | null;
   failureKind: DiagnosticsFailureKind;
-  /** ISO time of the observed `data`. Null for a failure placeholder. */
+  /** ISO time of the observed `data`. Null when no result was observed. */
   observedAt: string | null;
 };

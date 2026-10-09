@@ -86,13 +86,6 @@ export function DiagnosticsRuntimeRow({
           </DiagnosticsCallout>
         </div>
       ) : null}
-      {entry.executableWarning ? (
-        <div className="pl-12">
-          <DiagnosticsCallout tone="warning" title="Executable not found">
-            <p>{entry.executableWarning}</p>
-          </DiagnosticsCallout>
-        </div>
-      ) : null}
     </li>
   );
 }

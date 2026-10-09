@@ -66,7 +66,8 @@ A task event for an inactive workspace invalidates its task list and session lis
 
 | Data | Stale time |
 |---|---:|
-| Runtime check | 5 min |
+| PATH check | 5 min |
+| Git check | 5 min |
 | Task store check | 60 sec |
 | Directory listing | 1 sec |
 | Branches | 60 sec |

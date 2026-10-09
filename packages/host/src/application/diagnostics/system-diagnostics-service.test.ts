@@ -1,113 +1,20 @@
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type GlobalConfig,
-  type RepoStoreHealth,
-  RUNTIME_DESCRIPTORS_BY_KIND,
-  type RuntimeDescriptor,
-  type RuntimeHealth,
-} from "@openducktor/contracts";
-import { Deferred, Effect, Fiber } from "effect";
+import { describe, expect, test } from "bun:test";
+import type { RepoStoreHealth } from "@openducktor/contracts";
+import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
-import { createDefaultGlobalConfig } from "../../config/global-config";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import { ProcessEnvironmentError } from "../../infrastructure/process/process-environment";
-import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { createUserEnvironment } from "../../infrastructure/process/user-environment";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import { createUserEnvironment } from "../../infrastructure/process/user-environment";
 import type {
   UserEnvironmentPort,
   UserEnvironmentResolution,
 } from "../../ports/user-environment-port";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
-import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
-const runtimeDefinition = (kind: RuntimeDescriptor["kind"]): RuntimeDescriptor =>
-  RUNTIME_DESCRIPTORS_BY_KIND[kind];
-const runtimeHealth = (
-  kind: RuntimeHealth["kind"],
-  error: string | null = null,
-): RuntimeHealth => ({
-  kind,
-  enabled: true,
-  ok: error === null,
-  executablePath: `/bin/${kind}`,
-  version: error === null ? `${kind} 1.0.0` : null,
-  error,
-});
-const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =>
-  ({
-    readConfig: () =>
-      Effect.tryPromise({
-        try: async () => {
-          return config;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      }),
-    writeConfig: (_nextConfig: GlobalConfig) =>
-      Effect.tryPromise({
-        try: async () => {
-          return undefined;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      }),
-    defaultWorktreeBasePath: (workspaceId) => `/tmp/worktrees/${workspaceId}`,
-    defaultRepoWorktreeBasePath: (repoPath) =>
-      `/tmp/worktrees/${repoPath.split("/").at(-1) ?? "repo"}`,
-    resolveConfiguredPath: (rawPath) => rawPath,
-    canonicalizePath: (rawPath) =>
-      Effect.tryPromise({
-        try: async () => {
-          return rawPath;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      }),
-    pathExists: () => Effect.succeed(true),
-    join: (...paths) => paths.join("/"),
-  }) satisfies SettingsConfigPort;
-const createRuntimeDefinitions = (
-  kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
-): RuntimeDefinitionsService => ({
-  listRuntimeDefinitions: () => kinds.map(runtimeDefinition),
-});
-const createRuntimeHealthPort = (
-  healthByKind: Partial<Record<RuntimeHealth["kind"], RuntimeHealth>> = {},
-): RuntimeHealthPort => ({
-  readVersion: () => Effect.succeed(null),
-  getRuntimeHealth: (kind) =>
-    ({
-      getRuntimeHealth: () =>
-        Effect.tryPromise({
-          try: async () => {
-            return healthByKind[kind] ?? runtimeHealth(kind);
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        }),
-    }).getRuntimeHealth(),
-});
 const createSystemCommandPort = ({
   missingCommands = [],
   versionCalls = [],
@@ -202,11 +109,6 @@ const createRefreshableUserEnvironment = (
   );
   return { userEnvironment, refreshCount: () => refreshCount };
 };
-const createEnabledRuntimeSettings = () => {
-  const config = createDefaultGlobalConfig();
-  config.agentRuntimes.opencode.enabled = true;
-  return createSettingsConfig(config);
-};
 const createSystemDiagnosticsServiceForTest = (
   input: Omit<
     Parameters<typeof createSystemDiagnosticsService>[0],
@@ -222,370 +124,128 @@ const createSystemDiagnosticsServiceForTest = (
     userEnvironment: input.userEnvironment ?? userEnvironmentWith(),
   });
 describe("createSystemDiagnosticsService", () => {
-  test("runtimeCheck reports Git, runtime health, and config enablement", async () => {
-    const runtimeHealthCalls: RuntimeHealth["kind"][] = [];
-    const versionCommandCalls: Array<{
+  test("Git reports the discovered executable and bounded version probe", async () => {
+    const calls: Array<{
       command: string;
       args: string[];
       options: Parameters<SystemCommandPort["versionCommand"]>[2];
     }> = [];
     const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: {
-        readVersion: () => Effect.succeed(null),
-        getRuntimeHealth: (kind) => {
-          runtimeHealthCalls.push(kind);
-          return Effect.succeed(runtimeHealth(kind));
-        },
-      },
-      settingsConfig: createSettingsConfig({
-        ...createDefaultGlobalConfig(),
-        agentRuntimes: {
-          ...DEFAULT_AGENT_RUNTIMES,
-          opencode: {
-            ...DEFAULT_AGENT_RUNTIMES.opencode,
-            enabled: true,
-            executablePath: "/bin/opencode",
-          },
-          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-        },
-      }),
-      systemCommands: createSystemCommandPort({
-        versionCalls: versionCommandCalls,
-      }),
+      systemCommands: createSystemCommandPort({ versionCalls: calls }),
       repoStoreDiagnostics: createTaskStore(),
     });
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-    expect(check.pathOk).toBe(true);
-    expect(check.gitOk).toBe(true);
-    expect(check.runtimes).toEqual([
-      expect.objectContaining({ kind: "opencode", enabled: true, ok: true }),
-      expect.objectContaining({
-        kind: "codex",
-        enabled: false,
-        ok: false,
-        error: null,
-      }),
-    ]);
-    expect(runtimeHealthCalls).toEqual(["opencode"]);
-    expect(check.errors).toEqual([]);
-    expect(versionCommandCalls).toContainEqual(
-      expect.objectContaining({ command: "git", args: ["--version"] }),
-    );
-  });
-  test("runtimeCheck caches fresh results unless force refresh is requested", async () => {
-    let version = "1.0.0";
-    const systemCommands = createSystemCommandPort({
-      versionForCommand: (command) => `${command} version ${version}`,
+    expect(await Effect.runPromise(service.gitCheck())).toEqual({
+      ok: true,
+      executablePath: "git",
+      version: "git version 1.0.0",
+      error: null,
     });
+    expect(calls).toEqual([{ command: "git", args: ["--version"], options: { timeoutMs: 2000 } }]);
+  });
+  test("Git reports discovery failure without running a version probe", async () => {
+    const calls: Array<{
+      command: string;
+      args: string[];
+      options: Parameters<SystemCommandPort["versionCommand"]>[2];
+    }> = [];
     const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands,
-      toolDiscovery: createToolDiscoveryPort({
-        versionForCommand: (command) => `${command} version ${version}`,
-      }),
+      systemCommands: createSystemCommandPort({ versionCalls: calls }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["git"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
-    const first = await Effect.runPromise(service.runtimeCheck(true));
-    version = "2.0.0";
-    const cached = await Effect.runPromise(service.runtimeCheck(false));
-    const refreshed = await Effect.runPromise(service.runtimeCheck(true));
-    expect(first.gitVersion).toBe("git version 1.0.0");
-    expect(cached.gitVersion).toBe("git version 1.0.0");
-    expect(refreshed.gitVersion).toBe("git version 2.0.0");
+    const check = await Effect.runPromise(service.gitCheck());
+    expect(check).toMatchObject({ ok: false, executablePath: null, version: null });
+    expect(check.error).toContain("git not found");
+    expect(calls).toEqual([]);
   });
-  test("runtimeCheck probes independent runtimes concurrently", async () => {
-    const startedKinds: RuntimeHealth["kind"][] = [];
-    let releaseProbes!: () => void;
-    const probesStarted = new Promise<void>((resolve) => {
-      releaseProbes = resolve;
-    });
-    const runtimeHealthPort: RuntimeHealthPort = {
-      readVersion: () => Effect.succeed(null),
-      getRuntimeHealth: (kind) =>
-        Effect.tryPromise({
-          try: async () => {
-            startedKinds.push(kind);
-            if (startedKinds.length === 2) releaseProbes();
-            await probesStarted;
-            return runtimeHealth(kind);
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.runtimeHealth",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        }),
-    };
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode", "codex"]),
-      runtimeHealth: runtimeHealthPort,
-      settingsConfig: createSettingsConfig({
-        ...createDefaultGlobalConfig(),
-        agentRuntimes: {
-          ...DEFAULT_AGENT_RUNTIMES,
-          opencode: {
-            defaults: { rules: [] },
-            roleOverrides: {},
-            enabled: true,
-            executablePath: "/bin/opencode",
-          },
-          codex: {
-            ...DEFAULT_AGENT_RUNTIMES.codex,
-            enabled: true,
-            executablePath: "/bin/codex",
-          },
-        },
-      }),
-      systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(
-      service.runtimeCheck(true).pipe(
-        Effect.timeoutOrElse({
-          duration: "250 millis",
-          orElse: () =>
-            Effect.fail(
-              new HostOperationError({
-                operation: "test.runtimeHealth",
-                message: "Runtime probes did not start concurrently.",
-              }),
-            ),
-        }),
-      ),
-    );
-
-    expect(startedKinds).toEqual(["opencode", "codex"]);
-    expect(check.runtimes.map(({ kind }) => kind)).toEqual(["opencode", "codex"]);
-  });
-  test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort({
-        versionForCommand: (command) => (command === "git" ? null : undefined),
-      }),
-      toolDiscovery: createToolDiscoveryPort(),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(check.gitOk).toBe(false);
-    expect(check.gitVersion).toBeNull();
-    expect(check.errors).toEqual(["Failed reading git --version from git."]);
-  });
-  test("runtimeCheck includes the startup PATH diagnostic", async () => {
-    const processEnvironmentError = new ProcessEnvironmentError({
-      message:
-        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
-      reason: "timed_out",
-      shell: "/bin/zsh",
-    });
-    const service = createSystemDiagnosticsServiceForTest({
-      userEnvironment: userEnvironmentWith(processEnvironmentError.message),
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort(),
-      toolDiscovery: createToolDiscoveryPort(),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(check.pathOk).toBe(false);
-    expect(check.errors).toContain(processEnvironmentError.message);
-  });
-  test("runtimeCheck resolves PATH again only when the check is forced", async () => {
-    const pathError = "Failed to resolve PATH from the interactive login shell.";
-    const { userEnvironment, refreshCount } = createRefreshableUserEnvironment(pathError, [null]);
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(),
-      userEnvironment,
-    });
-
-    const cachedCheck = await Effect.runPromise(service.runtimeCheck(false));
-    const forcedCheck = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(cachedCheck.pathOk).toBe(false);
-    expect(cachedCheck.errors).toContain(pathError);
-    expect(refreshCount()).toBe(1);
-    expect(forcedCheck.pathOk).toBe(true);
-    expect(forcedCheck.errors).not.toContain(pathError);
-  });
-  test("runtimeCheck does not reuse a cached result after a refresh changes PATH and fails", async () => {
-    const pathError = "Failed to resolve PATH: login shell timed out.";
-    const { userEnvironment } = createRefreshableUserEnvironment(null, [pathError]);
-    let failHealth = false;
-    const runtimeHealthPort: RuntimeHealthPort = {
-      readVersion: () => Effect.succeed(null),
-      getRuntimeHealth: (kind) =>
-        failHealth
-          ? Effect.fail(
-              new HostOperationError({
-                operation: "test.runtimeHealth",
-                message: "Runtime health probe failed.",
-              }),
-            )
-          : Effect.succeed(runtimeHealth(kind)),
-    };
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: runtimeHealthPort,
-      settingsConfig: createEnabledRuntimeSettings(),
-      systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(),
-      userEnvironment,
-    });
-
-    const healthyCheck = await Effect.runPromise(service.runtimeCheck(false));
-    failHealth = true;
-    const forcedResult = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.result));
-    failHealth = false;
-    const nextCheck = await Effect.runPromise(service.runtimeCheck(false));
-
-    expect(healthyCheck.pathOk).toBe(true);
-    expect(forcedResult._tag).toBe("Failure");
-    expect(nextCheck.pathOk).toBe(false);
-    expect(nextCheck.errors).toContain(pathError);
-  });
-  test("runtimeCheck keeps the result of a newer PATH resolution over an older overlapping check", async () => {
-    const pathError = "Failed to resolve PATH: login shell timed out.";
-    const { userEnvironment } = createRefreshableUserEnvironment(pathError, [null]);
-    const program = Effect.gen(function* () {
-      const olderCheckStarted = yield* Deferred.make<void>();
-      const releaseOlderCheck = yield* Deferred.make<void>();
-      let healthCalls = 0;
-      const runtimeHealthPort: RuntimeHealthPort = {
-        readVersion: () => Effect.succeed(null),
-        getRuntimeHealth: (kind) =>
-          Effect.gen(function* () {
-            healthCalls += 1;
-            if (healthCalls === 1) {
-              yield* Deferred.succeed(olderCheckStarted, undefined);
-              yield* Deferred.await(releaseOlderCheck);
-            }
-            return runtimeHealth(kind);
-          }),
-      };
+  test.each(["empty version", "version error"])(
+    "Git reports %s at the discovered path",
+    async (failure) => {
       const service = createSystemDiagnosticsServiceForTest({
-        runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-        runtimeHealth: runtimeHealthPort,
-        settingsConfig: createEnabledRuntimeSettings(),
-        systemCommands: createSystemCommandPort(),
+        systemCommands: {
+          ...createSystemCommandPort(),
+          versionCommand: () =>
+            failure === "empty version"
+              ? Effect.succeed(null)
+              : Effect.fail(
+                  new HostPathAccessError({
+                    path: "git",
+                    operation: "git.version",
+                    message: "Permission denied.",
+                  }),
+                ),
+        },
         repoStoreDiagnostics: createTaskStore(),
-        userEnvironment,
       });
-
-      const olderCheck = yield* Effect.forkChild(service.runtimeCheck(false));
-      yield* Deferred.await(olderCheckStarted);
-      const forcedCheck = yield* service.runtimeCheck(true);
-      yield* Deferred.succeed(releaseOlderCheck, undefined);
-      const olderResult = yield* Fiber.join(olderCheck);
-      const nextCheck = yield* service.runtimeCheck(false);
-      return { forcedCheck, olderResult, nextCheck, healthCalls };
-    });
-
-    const { forcedCheck, olderResult, nextCheck, healthCalls } = await Effect.runPromise(program);
-
-    expect(olderResult.pathOk).toBe(false);
-    expect(forcedCheck.pathOk).toBe(true);
-    expect(nextCheck.pathOk).toBe(true);
-    expect(nextCheck.errors).toEqual([]);
-    // The next ordinary check reads the cached result of the forced check.
-    expect(healthCalls).toBe(2);
-  });
-  test("runtimeCheck reads config without initialization when PATH is unavailable", async () => {
-    const pathError = "Failed to resolve PATH from the interactive login shell.";
-    const readOptions: Array<Parameters<SettingsConfigPort["readConfig"]>[0]> = [];
-    const config = createDefaultGlobalConfig();
-    config.agentRuntimes.codex.enabled = true;
-    const settingsConfig = {
-      ...createSettingsConfig(null),
-      readConfig: (options?: Parameters<SettingsConfigPort["readConfig"]>[0]) => {
-        readOptions.push(options);
-        return Effect.succeed(config);
-      },
-    } satisfies SettingsConfigPort;
-    const service = createSystemDiagnosticsServiceForTest({
-      userEnvironment: userEnvironmentWith(pathError),
-      runtimeDefinitionsService: createRuntimeDefinitions(["codex"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig,
-      systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(readOptions).toEqual([{ initialize: false }]);
-    expect(check.pathOk).toBe(false);
-    expect(check.runtimes).toContainEqual(
-      expect.objectContaining({ kind: "codex", enabled: true }),
+      const check = await Effect.runPromise(service.gitCheck());
+      expect(check).toMatchObject({ ok: false, executablePath: "git", version: null });
+      expect(check.error).toContain("Failed reading git --version from git");
+      if (failure === "version error") expect(check.error).toContain("Permission denied.");
+    },
+  );
+  test("PATH refresh clears its own failure and Git discovers the new environment", async () => {
+    const error = "Failed to resolve PATH: login shell timed out.";
+    const userEnvironment = createUserEnvironment(
+      { ...resolutionOf(error), environment: { PATH: "/old/bin" } },
+      Effect.succeed({ ...resolutionOf(null), environment: { PATH: "/new/bin" } }),
     );
-    expect(check.errors).toContain(pathError);
-  });
-  test("runtimeCheck does not hide unrelated config failures", async () => {
-    const settingsError = new HostOperationError({
-      operation: "settingsConfig.readConfig",
-      message: "Failed to read settings.",
-    });
-    const settingsConfig = {
-      ...createSettingsConfig(null),
-      readConfig: () => Effect.fail(settingsError),
-    } satisfies SettingsConfigPort;
+    const systemCommands = {
+      ...createSystemCommandPort(),
+      resolveCommandPath: () => Effect.succeed(`${userEnvironment.current().environment.PATH}/git`),
+    };
+    const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
     const service = createSystemDiagnosticsServiceForTest({
-      userEnvironment: userEnvironmentWith(
-        "Failed to resolve PATH from the interactive login shell.",
-      ),
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig,
-      systemCommands: createSystemCommandPort(),
+      systemCommands,
+      userEnvironment,
+      toolDiscovery,
       repoStoreDiagnostics: createTaskStore(),
     });
-
-    const result = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.result));
-
-    expect(result._tag).toBe("Failure");
-    if (result._tag === "Failure") {
-      expect(result.failure).toBe(settingsError);
-    }
+    // Prime the normal tool cache. Diagnostics must still discover Git again after PATH changes.
+    await Effect.runPromise(toolDiscovery.resolveTool("git"));
+    expect(await Effect.runPromise(service.pathCheck())).toEqual({ ok: false, error });
+    expect(await Effect.runPromise(service.gitCheck())).toMatchObject({
+      ok: true,
+      executablePath: "/old/bin/git",
+    });
+    expect(await Effect.runPromise(service.pathCheck(true))).toEqual({ ok: true, error: null });
+    expect(await Effect.runPromise(service.gitCheck())).toMatchObject({
+      ok: true,
+      executablePath: "/new/bin/git",
+    });
   });
-  test("taskStoreCheck delegates active repo store readiness through the task store", async () => {
-    const blockingHealth: RepoStoreHealth = {
+  test("only a forced PATH check resolves the shell again", async () => {
+    const { userEnvironment, refreshCount } = createRefreshableUserEnvironment("Shell failed.", [
+      null,
+    ]);
+    const service = createSystemDiagnosticsServiceForTest({
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+      userEnvironment,
+    });
+    await Effect.runPromise(service.pathCheck());
+    await Effect.runPromise(service.gitCheck());
+    expect(refreshCount()).toBe(0);
+    expect(await Effect.runPromise(service.pathCheck(true))).toEqual({ ok: true, error: null });
+    expect(refreshCount()).toBe(1);
+  });
+  test("task store diagnostics keep workspace readiness and blocking details", async () => {
+    const health: RepoStoreHealth = {
+      ...healthyRepoStoreHealth,
       category: "database_unavailable",
       status: "blocking",
       isReady: false,
       detail: "SQLite task store database is unavailable",
-      databasePath: "/config/task-stores/workspace-1/database.sqlite",
     };
-    const calls: Array<{
-      repoPath: string;
-      prepare?: boolean;
-    }> = [];
+    const calls: Array<{ repoPath: string; prepare?: boolean }> = [];
     const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(blockingHealth, calls),
+      repoStoreDiagnostics: createTaskStore(health, calls),
     });
-    await expect(Effect.runPromise(service.taskStoreCheck("/repo"))).resolves.toEqual({
+    expect(await Effect.runPromise(service.taskStoreCheck("/repo"))).toEqual({
+      repoStoreHealth: health,
       taskStoreOk: false,
-      taskStorePath: "/config/task-stores/workspace-1/database.sqlite",
-      taskStoreError: "SQLite task store database is unavailable",
-      repoStoreHealth: blockingHealth,
+      taskStorePath: health.databasePath,
+      taskStoreError: health.detail,
     });
     expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
   });
