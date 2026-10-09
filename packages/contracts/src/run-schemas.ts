@@ -82,27 +82,23 @@ export const toolExecutableProvenanceSchema = z.object({
 });
 export type ToolExecutableProvenance = z.infer<typeof toolExecutableProvenanceSchema>;
 
-export const systemCheckSchema = z.object({
-  pathOk: z.boolean(),
-  gitOk: z.boolean(),
-  gitVersion: z.string().nullable(),
-  runtimes: z.array(runtimeHealthSchema).default([]),
-  repoStoreHealth: repoStoreHealthSchema,
-  taskStoreOk: z.boolean(),
-  taskStorePath: z.string().nullable(),
-  taskStoreError: z.string().nullable(),
-  errors: z.array(z.string()),
-});
-export type SystemCheck = z.infer<typeof systemCheckSchema>;
+export const pathCheckSchema = z
+  .object({
+    ok: z.boolean(),
+    error: z.string().nullable(),
+  })
+  .strict();
+export type PathCheck = z.infer<typeof pathCheckSchema>;
 
-export const runtimeCheckSchema = z.object({
-  pathOk: z.boolean(),
-  gitOk: z.boolean(),
-  gitVersion: z.string().nullable(),
-  runtimes: z.array(runtimeHealthSchema).default([]),
-  errors: z.array(z.string()),
-});
-export type RuntimeCheck = z.infer<typeof runtimeCheckSchema>;
+export const gitCheckSchema = z
+  .object({
+    ok: z.boolean(),
+    executablePath: z.string().nullable(),
+    version: z.string().nullable(),
+    error: z.string().nullable(),
+  })
+  .strict();
+export type GitCheck = z.infer<typeof gitCheckSchema>;
 
 export const taskStoreCheckSchema = z.object({
   repoStoreHealth: repoStoreHealthSchema,

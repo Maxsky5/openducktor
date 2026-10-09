@@ -152,7 +152,8 @@ function renderCreation(
       <WorkspaceStateContext value={workspaceState}>
         <ChecksStateContext
           value={{
-            runtimeCheck: createObservedCheckFixture(),
+            pathCheck: createObservedCheckFixture(),
+            gitCheck: createObservedCheckFixture(),
             checksRepoPath: null,
             taskStoreCheck: createObservedCheckFixture(),
             isRefreshingChecks: false,

@@ -1,7 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { HostRuntimeSnapshot, HostRuntimeStatus } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
+import { scheduleTask as defaultScheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import type { RuntimeChangeListener } from "@/lib/shell-bridge";
 import type { HostStatusSnapshot } from "@/types/diagnostics";
 import { hostRuntimeStatusQueryKeys } from "@/state/queries/host-runtime-status";
@@ -17,7 +18,22 @@ const snapshot = (
   mcpBridge = createHostMcpBridgeStatusFixture(),
 ): HostRuntimeSnapshot => ({ hostInstanceId, runtimes, mcpBridge });
 
-const createHarness = () => {
+const createDeadlineClock = () => {
+  const callbacks = new Set<() => void>();
+  const scheduleTask: ScheduleTask = (callback) => {
+    callbacks.add(callback);
+    return () => callbacks.delete(callback);
+  };
+  return {
+    scheduleTask,
+    expire: () => {
+      for (const callback of callbacks) callback();
+    },
+    pending: () => callbacks.size,
+  };
+};
+
+const createHarness = (scheduleTask: ScheduleTask = defaultScheduleTask) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const events: string[] = [];
   let listener: RuntimeChangeListener | null = null;
@@ -40,6 +56,7 @@ const createHarness = () => {
   );
   const owner = createHostRuntimeStatusOwner({
     queryClient,
+    scheduleTask,
     ports: { subscribeRuntimeChanges, runtimeStatus },
     onRuntimeGenerationChange,
   });
@@ -180,6 +197,7 @@ describe("createHostRuntimeStatusOwner", () => {
 
     expect(harness.owner.getConnection()).toEqual({
       streamError: null,
+      readError: null,
       hasBaseline: false,
       isRefreshing: true,
     });
@@ -194,6 +212,7 @@ describe("createHostRuntimeStatusOwner", () => {
     await waitFor(() =>
       expect(harness.owner.getConnection()).toEqual({
         streamError: null,
+        readError: null,
         hasBaseline: true,
         isRefreshing: false,
       }),
@@ -241,6 +260,7 @@ describe("createHostRuntimeStatusOwner", () => {
     await waitFor(() =>
       expect(owner.getConnection()).toEqual({
         streamError: null,
+        readError: null,
         hasBaseline: true,
         isRefreshing: false,
       }),
@@ -295,11 +315,195 @@ describe("createHostRuntimeStatusOwner", () => {
     expect(harness.subscribeRuntimeChanges).toHaveBeenCalledTimes(2);
     expect(harness.owner.getConnection()).toMatchObject({
       streamError: null,
+      readError: null,
       hasBaseline: true,
       isRefreshing: false,
     });
     harness.owner.stop();
   });
+
+  test.each(["initial read", "explicit refresh"])(
+    "a stuck %s reports a timeout, releases refresh, and ignores its late result",
+    async (mode) => {
+      const clock = createDeadlineClock();
+      const harness = createHarness(clock.scheduleTask);
+      let refresh: Promise<void> | undefined;
+      try {
+        harness.owner.start();
+        await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
+        if (mode === "explicit refresh") {
+          harness
+            .lastBaseline()
+            .resolve(
+              snapshot("host-1", [
+                createHostRuntimeStatusFixture({ kind: "opencode", revision: 1 }),
+              ]),
+            );
+          await waitFor(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
+          refresh = harness.owner.refresh();
+          await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
+          expect(harness.owner.getConnection().isRefreshing).toBe(true);
+        }
+        const stuck = harness.lastBaseline();
+        clock.expire();
+        await waitFor(() =>
+          expect(
+            harness.queryClient.getQueryState(hostRuntimeStatusQueryKeys.snapshot)?.error?.message,
+          ).toContain("Timed out"),
+        );
+        await refresh;
+        expect(harness.owner.getConnection()).toMatchObject({
+          hasBaseline: false,
+          isRefreshing: false,
+        });
+        if (mode === "explicit refresh")
+          expect(harness.readSnapshot()?.runtimes[0]?.revision).toBe(1);
+        else expect(harness.readSnapshot()).toBeUndefined();
+        harness.emit({
+          type: "runtime_changed",
+          hostInstanceId: "host-1",
+          status: createHostRuntimeStatusFixture({ kind: "opencode", revision: 2 }),
+        });
+        // A live event updates one row; it cannot prove that the full baseline read succeeded.
+        expect(
+          harness.queryClient.getQueryState(hostRuntimeStatusQueryKeys.snapshot)?.error,
+        ).toBeNull();
+        expect(harness.owner.getConnection()).toMatchObject({
+          hasBaseline: false,
+          readError: expect.stringContaining("Timed out"),
+        });
+        const recovered = harness.owner.refresh();
+        await waitFor(() =>
+          expect(harness.runtimeStatus).toHaveBeenCalledTimes(mode === "initial read" ? 2 : 3),
+        );
+        harness
+          .lastBaseline()
+          .resolve(
+            snapshot("host-1", [createHostRuntimeStatusFixture({ kind: "opencode", revision: 2 })]),
+          );
+        await recovered;
+        // A response from a timed-out request must not replace the successful current baseline.
+        stuck.resolve(
+          snapshot("old-host", [
+            createHostRuntimeStatusFixture({ kind: "opencode", revision: 99 }),
+          ]),
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        expect(harness.readSnapshot()?.hostInstanceId).toBe("host-1");
+        expect(harness.readSnapshot()?.runtimes[0]?.revision).toBe(2);
+        expect(harness.owner.getConnection()).toMatchObject({
+          hasBaseline: true,
+          readError: null,
+          isRefreshing: false,
+        });
+        expect(
+          harness.queryClient.getQueryState(hostRuntimeStatusQueryKeys.snapshot)?.error,
+        ).toBeNull();
+        expect(clock.pending()).toBe(0);
+      } finally {
+        harness.owner.stop();
+        harness.queryClient.clear();
+      }
+    },
+  );
+
+  test.each(["after recovery", "with timeout"])(
+    "cleans up a timed-out subscription that registers %s",
+    async (when) => {
+      const clock = createDeadlineClock();
+      const harness = createHarness(clock.scheduleTask);
+      const registered = Promise.withResolvers<() => void>();
+      const stopLateSubscription = mock(() => {});
+      let staleListener: RuntimeChangeListener | undefined;
+      try {
+        harness.owner.start();
+        await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
+        harness.lastBaseline().resolve(snapshot("host-1", []));
+        await waitFor(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
+        harness.emit({ __openducktorBrowserLive: true, kind: "stream-warning", message: "Lost." });
+        harness.subscribeRuntimeChanges.mockImplementationOnce((listener) => {
+          staleListener = listener;
+          return registered.promise;
+        });
+        const refresh = harness.owner.refresh();
+        await waitFor(() => expect(harness.subscribeRuntimeChanges).toHaveBeenCalledTimes(2));
+        clock.expire();
+        if (when === "with timeout") registered.resolve(stopLateSubscription);
+        await waitFor(() =>
+          expect(harness.owner.getConnection().streamError).toContain("Timed out"),
+        );
+        await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
+        harness.lastBaseline().resolve(snapshot("host-1", []));
+        await refresh;
+        expect(harness.owner.getConnection().isRefreshing).toBe(false);
+        const recovered = harness.owner.refresh();
+        await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(3));
+        harness.lastBaseline().resolve(snapshot("host-1", []));
+        await recovered;
+        if (when === "after recovery") registered.resolve(stopLateSubscription);
+        await waitFor(() => expect(stopLateSubscription).toHaveBeenCalledTimes(1));
+        staleListener?.({
+          __openducktorBrowserLive: true,
+          kind: "stream-warning",
+          message: "Stale failure.",
+        });
+        expect(harness.owner.getConnection()).toEqual({
+          streamError: null,
+          readError: null,
+          hasBaseline: true,
+          isRefreshing: false,
+        });
+        expect(clock.pending()).toBe(0);
+      } finally {
+        registered.resolve(stopLateSubscription);
+        harness.owner.stop();
+        harness.queryClient.clear();
+      }
+    },
+  );
+
+  test.each(["reading", "canceling an earlier read"])(
+    "stop releases a refresh while %s",
+    async (phase) => {
+      const clock = createDeadlineClock();
+      const harness = createHarness(clock.scheduleTask);
+      const cancel = Promise.withResolvers<void>();
+      let cancelQueries: ReturnType<typeof spyOn> | undefined;
+      try {
+        harness.owner.start();
+        await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
+        harness.lastBaseline().resolve(snapshot("host-1", []));
+        await waitFor(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
+        if (phase === "canceling an earlier read") {
+          cancelQueries = spyOn(harness.queryClient, "cancelQueries").mockImplementationOnce(
+            () => cancel.promise,
+          );
+        }
+        const refresh = harness.owner.refresh();
+        await waitFor(() =>
+          phase === "reading"
+            ? expect(harness.runtimeStatus).toHaveBeenCalledTimes(2)
+            : expect(cancelQueries).toHaveBeenCalledTimes(1),
+        );
+        harness.owner.stop();
+        cancel.resolve();
+        await refresh;
+        expect(clock.pending()).toBe(0);
+        expect(harness.runtimeStatus).toHaveBeenCalledTimes(phase === "reading" ? 2 : 1);
+        if (phase === "reading") {
+          harness.lastBaseline().resolve(snapshot("old-host", []));
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+        expect(harness.readSnapshot()?.hostInstanceId).toBe("host-1");
+        expect(harness.owner.getConnection().isRefreshing).toBe(false);
+      } finally {
+        cancel.resolve();
+        cancelQueries?.mockRestore();
+        harness.owner.stop();
+        harness.queryClient.clear();
+      }
+    },
+  );
 
   test("reports a runtime generation change once per kind", async () => {
     const harness = createHarness();

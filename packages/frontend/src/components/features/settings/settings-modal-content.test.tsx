@@ -46,7 +46,6 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   snapshotDraft: snapshot,
   runtimeDefinitions: [],
   availableRuntimeDefinitions: [],
-  runtimeCheck: null,
   getCatalogForRuntime: () => null,
   getCatalogErrorForRuntime: () => null,
   isCatalogLoadingForRuntime: () => false,

@@ -7,7 +7,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { errorMessage } from "@/lib/errors";
 import { hostBridge, hostClient } from "@/lib/host-client";
 import {
   createHostRuntimeStatusOwner,
@@ -60,7 +59,7 @@ export function HostRuntimeStatusProvider({
     enabled: false,
   });
   const snapshot = snapshotQuery.data;
-  const readError = snapshotQuery.error ? errorMessage(snapshotQuery.error) : null;
+  const readError = connection.readError;
 
   const value = useMemo(
     (): HostRuntimeStatusContextValue => ({

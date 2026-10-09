@@ -574,7 +574,8 @@ export const createObservedCheckFixture = <T>(
 export const createChecksStateFixture = (
   overrides: Partial<ChecksStateContextValue> = {},
 ): ChecksStateContextValue => ({
-  runtimeCheck: createObservedCheckFixture(),
+  pathCheck: createObservedCheckFixture(),
+  gitCheck: createObservedCheckFixture(),
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture(),
   isRefreshingChecks: false,

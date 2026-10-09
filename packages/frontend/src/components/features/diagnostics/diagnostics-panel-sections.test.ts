@@ -33,7 +33,8 @@ const renderSections = (workspace: ModelInput["workspace"], overrides: Partial<M
           isLoading: true,
           isCurrent: false,
         }),
-        runtimeCheck: createObservedCheckFixture(),
+        pathCheck: createObservedCheckFixture(),
+        gitCheck: createObservedCheckFixture(),
         workspace,
         checksRepoPath: workspace?.repoPath ?? null,
         taskStoreCheck: createObservedCheckFixture(),
@@ -52,6 +53,7 @@ describe("DiagnosticsPanelSections", () => {
       "Shared by all workspaces",
       "Agent runtimes",
       "Tools and services",
+      "PATH",
       "Git",
       "OpenDucktor MCP bridge",
       "Select a workspace to view workspace checks.",
@@ -85,13 +87,12 @@ describe("DiagnosticsPanelSections", () => {
 
   test("labels values kept after a failed refresh as an earlier result", () => {
     const html = renderSections(null, {
-      runtimeCheck: createObservedCheckFixture({
+      gitCheck: createObservedCheckFixture({
         data: {
-          pathOk: true,
-          gitOk: true,
-          gitVersion: "git version 2.50.1",
-          runtimes: [],
-          errors: [],
+          ok: true,
+          executablePath: "/bin/git",
+          version: "git version 2.50.1",
+          error: null,
         },
         error: "Git check failed.",
         failureKind: "error",
@@ -101,7 +102,9 @@ describe("DiagnosticsPanelSections", () => {
 
     expect(html).toContain("Showing the result from ");
     expect(html).toContain("It may be out of date.");
-    expect(html).toContain("Git check failed: Git check failed. Select Refresh to try again.");
+    expect(html).toContain(
+      "Git check could not be read: Git check failed. Select Refresh to try again.",
+    );
   });
 
   test("maps each check health to a pill tone, with a spinner while work runs", () => {

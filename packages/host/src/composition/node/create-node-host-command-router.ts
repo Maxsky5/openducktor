@@ -150,9 +150,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
-    runtimeDefinitionsService,
-    runtimeHealth,
-    settingsConfig,
     systemCommands,
     toolDiscovery,
     repoStoreDiagnostics: taskStore,

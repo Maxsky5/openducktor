@@ -1,5 +1,6 @@
 import type {
-  RuntimeCheck,
+  GitCheck,
+  PathCheck,
   RuntimeDescriptor,
   RuntimeKind,
   TaskStoreCheck,
@@ -109,7 +110,7 @@ export type DiagnosticsDetailModel = {
   isPath: boolean;
 };
 
-export type DiagnosticsCheckKey = "git" | "mcp-bridge" | "repository-setup" | "task-store";
+export type DiagnosticsCheckKey = "path" | "git" | "mcp-bridge" | "repository-setup" | "task-store";
 
 /** One check in a group list. */
 export type DiagnosticsCheckModel = {
@@ -145,8 +146,6 @@ export type DiagnosticsRuntimeEntryModel = {
   executablePath: string | null;
   /** The executable in use, when it differs from the configured one. */
   effectiveExecutablePath: string | null;
-  /** The executable check could not find the executable of an enabled runtime. */
-  executableWarning: string | null;
   progress: string | null;
   failure: DiagnosticsRuntimeFailureModel | null;
   action: DiagnosticsRuntimeAction | null;
@@ -161,7 +160,7 @@ export type DiagnosticsRuntimesModel = {
 
 export type DiagnosticsHostModel = {
   runtimes: DiagnosticsRuntimesModel;
-  /** Git and the OpenDucktor MCP bridge. */
+  /** PATH, Git, and the OpenDucktor MCP bridge. */
   tools: DiagnosticsCheckModel[];
 };
 
@@ -206,7 +205,8 @@ export type BuildDiagnosticsPanelModelInput = {
     HostRuntimeStatusContextValue,
     "snapshot" | "statusByKind" | "isCurrent" | "isLoading" | "readError" | "streamError"
   >;
-  runtimeCheck: ObservedCheck<RuntimeCheck>;
+  pathCheck: ObservedCheck<PathCheck>;
+  gitCheck: ObservedCheck<GitCheck>;
   workspace: WorkspaceRecord | null;
   /** The repository that the task store check below describes. */
   checksRepoPath: string | null;

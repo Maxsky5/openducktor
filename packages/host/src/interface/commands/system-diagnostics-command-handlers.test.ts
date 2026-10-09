@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RuntimeCheck, SystemCheck, TaskStoreCheck } from "@openducktor/contracts";
+import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import {
@@ -13,13 +13,13 @@ import { createSystemDiagnosticsCommandHandlers } from "./system-diagnostics-com
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const runtimeCheckResult = {
-  pathOk: true,
-  gitOk: true,
-  gitVersion: "2.50.0",
-  runtimes: [],
-  errors: [],
-} satisfies RuntimeCheck;
+const pathCheckResult = { ok: true, error: null } satisfies PathCheck;
+const gitCheckResult = {
+  ok: true,
+  executablePath: "/bin/git",
+  version: "git version 2.50.0",
+  error: null,
+} satisfies GitCheck;
 
 const taskStoreCheckResult = {
   repoStoreHealth: {
@@ -34,26 +34,12 @@ const taskStoreCheckResult = {
   taskStoreError: null,
 } satisfies TaskStoreCheck;
 
-const systemCheckResult = {
-  ...runtimeCheckResult,
-  ...taskStoreCheckResult,
-} satisfies SystemCheck;
-
 const createDiagnosticsService = () => {
-  const runtimeCheck = mock((_forceRefresh?: boolean) => Effect.succeed(runtimeCheckResult));
+  const pathCheck = mock((_forceRefresh?: boolean) => Effect.succeed(pathCheckResult));
+  const gitCheck = mock(() => Effect.succeed(gitCheckResult));
   const taskStoreCheck = mock((_repoPath: string) => Effect.succeed(taskStoreCheckResult));
-  const systemCheck = mock((_repoPath: string) => Effect.succeed(systemCheckResult));
-  const service = {
-    runtimeCheck,
-    taskStoreCheck,
-    systemCheck,
-  } satisfies SystemDiagnosticsService;
-  return {
-    runtimeCheck,
-    service,
-    systemCheck,
-    taskStoreCheck,
-  };
+  const service = { pathCheck, gitCheck, taskStoreCheck } satisfies SystemDiagnosticsService;
+  return { service, pathCheck, gitCheck, taskStoreCheck };
 };
 describe("createSystemDiagnosticsCommandHandlers", () => {
   test("routes diagnostics commands to the service", async () => {
@@ -61,18 +47,14 @@ describe("createSystemDiagnosticsCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createSystemDiagnosticsCommandHandlers(diagnostics.service),
     });
-    await expect(router.invoke("runtime_check", { force: true })).resolves.toEqual(
-      runtimeCheckResult,
-    );
+    await expect(router.invoke("path_check", { force: true })).resolves.toEqual(pathCheckResult);
     await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toEqual(
       taskStoreCheckResult,
     );
-    await expect(router.invoke("system_check", { repoPath: "/repo" })).resolves.toEqual(
-      systemCheckResult,
-    );
-    expect(diagnostics.runtimeCheck).toHaveBeenCalledWith(true);
+    await expect(router.invoke("git_check", {})).resolves.toEqual(gitCheckResult);
+    expect(diagnostics.pathCheck).toHaveBeenCalledWith(true);
     expect(diagnostics.taskStoreCheck).toHaveBeenCalledWith("/repo");
-    expect(diagnostics.systemCheck).toHaveBeenCalledWith("/repo");
+    expect(diagnostics.gitCheck).toHaveBeenCalledWith();
   });
   test("requires repoPath for repo-scoped diagnostics", async () => {
     const diagnostics = createDiagnosticsService();
@@ -80,8 +62,8 @@ describe("createSystemDiagnosticsCommandHandlers", () => {
       handlers: createSystemDiagnosticsCommandHandlers(diagnostics.service),
     });
     await expect(router.invoke("task_store_check", {})).rejects.toThrow("repoPath is required.");
-    await expect(router.invoke("system_check")).rejects.toThrow(
-      "system_check input must be an object.",
+    await expect(router.invoke("path_check", { force: "true" })).rejects.toThrow(
+      "path_check force must be a boolean when provided.",
     );
   });
 });

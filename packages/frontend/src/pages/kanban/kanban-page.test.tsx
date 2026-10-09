@@ -439,7 +439,8 @@ const createTasksStateValue = (
 });
 
 const createChecksStateValue = (): ChecksStateContextValue => ({
-  runtimeCheck: createObservedCheckFixture(),
+  pathCheck: createObservedCheckFixture(),
+  gitCheck: createObservedCheckFixture(),
   checksRepoPath: null,
   taskStoreCheck: createObservedCheckFixture({
     data: createTaskStoreCheckFixture(

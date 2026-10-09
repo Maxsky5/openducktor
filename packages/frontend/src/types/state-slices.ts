@@ -9,7 +9,8 @@ import type {
   RepoDevServerScript,
   RuntimeApprovalReplyOutcome,
   HostRuntimeEvent,
-  RuntimeCheck,
+  GitCheck,
+  PathCheck,
   RuntimeKind,
   SettingsRepoConfig,
   SettingsSnapshot,
@@ -158,7 +159,8 @@ export type WorkspacePresenceContextValue = {
 };
 
 export type ChecksStateContextValue = {
-  runtimeCheck: ObservedCheck<RuntimeCheck>;
+  pathCheck: ObservedCheck<PathCheck>;
+  gitCheck: ObservedCheck<GitCheck>;
   /** The selected workspace repository that the task store check below describes. */
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;

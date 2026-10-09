@@ -6,7 +6,6 @@ import {
   ChecksStateContext,
   useActiveWorkspaceContext,
   useHostRuntimeStatusContext,
-  useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations/workspace/use-checks";
 
@@ -14,10 +13,10 @@ type ChecksStateProviderProps = PropsWithChildren;
 
 export function ChecksStateProvider({ children }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const { refresh: refreshHostRuntimeStatus } = useHostRuntimeStatusContext();
   const {
-    runtimeCheck,
+    pathCheck,
+    gitCheck,
     checksRepoPath,
     taskStoreCheck,
     isRefreshingChecks,
@@ -25,20 +24,20 @@ export function ChecksStateProvider({ children }: ChecksStateProviderProps): Rea
     refreshChecks,
   } = useChecks({
     activeWorkspace,
-    runtimeDefinitions: availableRuntimeDefinitions,
     refreshHostRuntimeStatus,
   });
 
   const checksStateValue = useMemo(
     () =>
       buildChecksStateValue({
-        runtimeCheck,
+        pathCheck,
+        gitCheck,
         checksRepoPath,
         taskStoreCheck,
         isRefreshingChecks,
         refreshChecks,
       }),
-    [checksRepoPath, isRefreshingChecks, refreshChecks, runtimeCheck, taskStoreCheck],
+    [pathCheck, checksRepoPath, isRefreshingChecks, refreshChecks, gitCheck, taskStoreCheck],
   );
 
   const checksOperationsValue = useMemo<ChecksOperationsContextValue>(

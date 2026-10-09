@@ -2,21 +2,11 @@ import type {
   HostMcpBridgeStatus,
   HostRuntimeFailurePhase,
   HostRuntimeStatus,
-  RuntimeCheck,
   RuntimeKind,
 } from "@openducktor/contracts";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
 import { isHostRuntimeLifecycleBusy } from "@/lib/host-runtime-status";
-import {
-  getCliToolsCheckFailureDetail,
-  hasCliToolCheckFailure,
-} from "@/state/operations/workspace/check-diagnostics";
-import {
-  buildRefreshFailedCheck,
-  LOADING_STATUS,
-  refreshFailureMessage,
-  runtimeLabel,
-} from "./diagnostics-check-section";
+import { buildRefreshFailedCheck, LOADING_STATUS, runtimeLabel } from "./diagnostics-check-section";
 import type {
   BuildDiagnosticsPanelModelInput,
   DiagnosticsCheckBase,
@@ -29,6 +19,7 @@ import type {
   DiagnosticsStatus,
 } from "./diagnostics-panel-model";
 
+const PATH_TITLE = "PATH";
 const GIT_TITLE = "Git";
 const MCP_BRIDGE_TITLE = "OpenDucktor MCP bridge";
 
@@ -36,7 +27,7 @@ export type HostDiagnosticsState = { reasons: string[]; isLoading: boolean };
 
 export const buildHostModel = (input: BuildDiagnosticsPanelModelInput): DiagnosticsHostModel => ({
   runtimes: buildRuntimesModel(input),
-  tools: [buildGitCheck(input), buildMcpBridgeCheck(input)],
+  tools: [buildPathCheck(input), buildGitCheck(input), buildMcpBridgeCheck(input)],
 });
 
 export const collectHostState = (
@@ -58,16 +49,9 @@ export const collectHostState = (
     const summary = status.failure ? FAILURE_SUMMARIES[status.failure.phase] : "has an error";
     reasons.push(`The ${runtimeLabel(input.runtimeDefinitions, kind)} runtime ${summary}.`);
   }
-  // A failed refresh takes priority over a retained earlier result.
-  const { runtimeCheck } = input;
   const mcpBridge = input.runtimeStatus.snapshot?.mcpBridge ?? null;
-  if (runtimeCheck.error !== null) {
-    reasons.push(refreshFailureMessage(GIT_TITLE, runtimeCheck.error));
-  } else {
-    const cliDetail = getCliToolsCheckFailureDetail(runtimeCheck.data, null);
-    if (cliDetail !== null) {
-      reasons.push(cliDetail);
-    }
+  for (const check of host.tools) {
+    if (check.key === "path" || check.key === "git") reasons.push(...check.errors);
   }
   if (mcpBridge?.state === "failed") {
     reasons.push(mcpBridge.failure ?? "The OpenDucktor MCP bridge did not start.");
@@ -76,7 +60,7 @@ export const collectHostState = (
     input.isLoadingRuntimeDefinitions ||
     input.runtimeStatus.isLoading ||
     runtimes.entries.some((entry) => entry.status.health === "busy") ||
-    (runtimeCheck.data === null && runtimeCheck.error === null) ||
+    host.tools.some((check) => check.status.health === "loading") ||
     mcpBridge?.state === "starting";
   return { reasons, isLoading };
 };
@@ -95,34 +79,44 @@ const buildRuntimesModel = (input: BuildDiagnosticsPanelModelInput): Diagnostics
 
 const stripGitPrefix = (version: string): string => version.replace(/^git version\s+/i, "");
 
-const buildGitCheck = (input: BuildDiagnosticsPanelModelInput): DiagnosticsCheckModel => {
-  const { runtimeDefinitionsError } = input;
-  const { data: runtimeCheck, error, failureKind, observedAt } = input.runtimeCheck;
-  const definitionErrors = runtimeDefinitionsError ? [runtimeDefinitionsError] : [];
-  const base: DiagnosticsCheckBase = {
-    key: "git",
-    title: GIT_TITLE,
-    value: runtimeCheck?.gitVersion ? stripGitPrefix(runtimeCheck.gitVersion) : null,
-    details: [],
-  };
+const buildPathCheck = (input: BuildDiagnosticsPanelModelInput): DiagnosticsCheckModel => {
+  const { data, error, failureKind, observedAt } = input.pathCheck;
+  const base: DiagnosticsCheckBase = { key: "path", title: PATH_TITLE, value: null, details: [] };
   if (error !== null) {
-    return buildRefreshFailedCheck(base, { error, failureKind }, observedAt, definitionErrors);
+    return buildRefreshFailedCheck(base, { error, failureKind }, observedAt);
   }
-  if (runtimeCheck === null) {
-    return { ...base, status: LOADING_STATUS, notice: null, errors: definitionErrors };
-  }
-  const detail = getCliToolsCheckFailureDetail(runtimeCheck, null);
-  let status: DiagnosticsStatus = { health: "ok", label: "Available" };
-  if (!runtimeCheck.gitOk) {
-    status = { health: "failed", label: "Missing" };
-  } else if (hasCliToolCheckFailure(runtimeCheck)) {
-    status = { health: "failed", label: "Issue" };
+  if (data === null) {
+    return { ...base, status: LOADING_STATUS, notice: null, errors: [] };
   }
   return {
     ...base,
-    status,
+    status: data.ok ? { health: "ok", label: "Available" } : { health: "failed", label: "Issue" },
     notice: null,
-    errors: [...definitionErrors, ...(detail ? [detail] : [])],
+    errors: data.ok ? [] : [data.error ?? "The user PATH is unavailable."],
+  };
+};
+
+const buildGitCheck = (input: BuildDiagnosticsPanelModelInput): DiagnosticsCheckModel => {
+  const { data, error, failureKind, observedAt } = input.gitCheck;
+  const base: DiagnosticsCheckBase = {
+    key: "git",
+    title: GIT_TITLE,
+    value: data?.version ? stripGitPrefix(data.version) : null,
+    details: data?.executablePath
+      ? [{ label: "Executable", value: data.executablePath, isPath: true }]
+      : [],
+  };
+  if (error !== null) {
+    return buildRefreshFailedCheck(base, { error, failureKind }, observedAt);
+  }
+  if (data === null) {
+    return { ...base, status: LOADING_STATUS, notice: null, errors: [] };
+  }
+  return {
+    ...base,
+    status: data.ok ? { health: "ok", label: "Available" } : { health: "failed", label: "Issue" },
+    notice: null,
+    errors: data.ok ? [] : [data.error ?? "Git is unavailable."],
   };
 };
 
@@ -196,42 +190,28 @@ const buildRuntimeEntry = (
       version: null,
       executablePath: null,
       effectiveExecutablePath: null,
-      executableWarning: null,
       progress: null,
       failure: null,
       action: null,
       isLifecycleBusy: false,
     };
   }
-  const executable = input.runtimeCheck.data?.runtimes.find((entry) => entry.kind === kind);
   return {
     kind,
     label,
     status: HOST_RUNTIME_STATE_STATUSES[status.state],
-    version: status.version ?? (executable?.ok ? executable.version : null),
+    version: status.version,
     executablePath: status.configuredExecutablePath || null,
     effectiveExecutablePath:
       status.effectiveExecutablePath !== null &&
       status.effectiveExecutablePath !== status.configuredExecutablePath
         ? status.effectiveExecutablePath
         : null,
-    executableWarning: buildExecutableWarning(status, executable),
     progress: PROGRESS_MESSAGES[status.state],
     failure: buildRuntimeFailure(status),
     action: toRuntimeAction(status),
     isLifecycleBusy: isHostRuntimeLifecycleBusy(status.state),
   };
-};
-
-const buildExecutableWarning = (
-  status: HostRuntimeStatus,
-  executable: RuntimeCheck["runtimes"][number] | undefined,
-): string | null => {
-  // A ready runtime proves its executable. The check only explains a runtime that is not ready.
-  if (!status.enabled || status.state === "ready" || executable === undefined || executable.ok) {
-    return null;
-  }
-  return executable.error ?? "The executable check could not find this executable.";
 };
 
 const buildRuntimeFailure = (status: HostRuntimeStatus): DiagnosticsRuntimeFailureModel | null =>

@@ -1,4 +1,4 @@
-import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
+import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ScheduleTask } from "@/lib/scheduling";
@@ -6,35 +6,31 @@ import type { ObservedCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type ChecksQueryDependencies,
-  checksQueryKeys,
   classifyDiagnosticsQueryError,
-  loadRuntimeCheckFromQuery,
-  loadTaskStoreCheckFromQuery,
-  runtimeCheckQueryOptions,
+  gitCheckQueryOptions,
+  loadTaskStoreCheck,
+  pathCheckQueryOptions,
+  refreshPathAndGitChecks,
   taskStoreCheckQueryOptions,
 } from "../../queries/checks";
-import {
-  buildDiagnosticsToastIssues,
-  buildRuntimeCheckErrorState,
-  buildTaskStoreCheckErrorState,
-  type DiagnosticsToastIssue,
-} from "./check-diagnostics";
+import { buildDiagnosticsToastIssues } from "./check-diagnostics";
 import { type DiagnosticsToastApi, useDiagnosticsToasts } from "./use-check-diagnostics-effects";
 
 const DISABLED_REPO_PATH = "__disabled__";
 
 type UseChecksArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
   refreshHostRuntimeStatus: () => Promise<void>;
-  runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
+  pathCheck?: ChecksQueryDependencies["pathCheck"];
+  gitCheck?: ChecksQueryDependencies["gitCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
   scheduleTask?: ScheduleTask;
   toastApi?: DiagnosticsToastApi;
 };
 
 type UseChecksResult = {
-  runtimeCheck: ObservedCheck<RuntimeCheck>;
+  pathCheck: ObservedCheck<PathCheck>;
+  gitCheck: ObservedCheck<GitCheck>;
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
   isRefreshingChecks: boolean;
@@ -42,32 +38,11 @@ type UseChecksResult = {
   refreshChecks: () => Promise<void>;
 };
 
-const toObservedCheck = <T>(
-  data: T | undefined,
-  dataUpdatedAt: number,
-  error: Error | null,
-  buildFailurePlaceholder: (error: string) => T,
-): ObservedCheck<T> => {
-  const failure = error ? classifyDiagnosticsQueryError(error) : null;
-  let observedData: T | null = null;
-  if (data) {
-    observedData = data;
-  } else if (failure) {
-    observedData = buildFailurePlaceholder(failure.message);
-  }
-  return {
-    data: observedData,
-    error: failure?.message ?? null,
-    failureKind: failure?.failureKind ?? null,
-    observedAt: data === undefined ? null : new Date(dataUpdatedAt).toISOString(),
-  };
-};
-
 export function useChecks({
   activeWorkspace,
-  runtimeDefinitions,
   refreshHostRuntimeStatus,
-  runtimeCheck,
+  pathCheck,
+  gitCheck,
   taskStoreCheck,
   scheduleTask,
   toastApi,
@@ -75,8 +50,8 @@ export function useChecks({
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const queryClient = useQueryClient();
   const [isRefreshingChecks, setIsRefreshingChecks] = useState(false);
-  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck, scheduleTask));
-  // Workspace reads keep their repository key, so a switch never shows another workspace's data.
+  const pathCheckQuery = useQuery(pathCheckQueryOptions(false, pathCheck, scheduleTask));
+  const gitCheckQuery = useQuery(gitCheckQueryOptions(gitCheck, scheduleTask));
   const taskStoreCheckQuery = useQuery({
     ...taskStoreCheckQueryOptions(
       activeRepoPath ?? DISABLED_REPO_PATH,
@@ -86,82 +61,49 @@ export function useChecks({
     enabled: activeRepoPath !== null,
   });
 
-  const refreshRuntimeCheck = useCallback(
-    async (force = false): Promise<RuntimeCheck> => {
-      if (force) {
-        // fetchQuery reuses a pending request for the same key, and only a forced host check
-        // resolves the user PATH again. Let the pending check settle first. Its query state keeps
-        // its own result or failure.
-        if (queryClient.isFetching({ queryKey: checksQueryKeys.runtime(), exact: true }) > 0) {
-          await Promise.allSettled([
-            loadRuntimeCheckFromQuery(queryClient, runtimeCheck, scheduleTask),
-          ]);
-        }
-        await queryClient.invalidateQueries({
-          queryKey: checksQueryKeys.runtime(),
-          exact: true,
-          refetchType: "none",
-        });
-        return queryClient.fetchQuery(runtimeCheckQueryOptions(true, runtimeCheck, scheduleTask));
-      }
-
-      return loadRuntimeCheckFromQuery(queryClient, runtimeCheck, scheduleTask);
-    },
-    [queryClient, runtimeCheck, scheduleTask],
-  );
-
   const refreshTaskStoreCheckForRepo = useCallback(
-    async (repoPath: string, force = false): Promise<TaskStoreCheck> => {
-      if (force) {
-        await queryClient.invalidateQueries({
-          queryKey: checksQueryKeys.taskStore(repoPath),
-          exact: true,
-          refetchType: "none",
-        });
-      }
-
-      return force
-        ? queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck, scheduleTask))
-        : loadTaskStoreCheckFromQuery(queryClient, repoPath, taskStoreCheck, scheduleTask);
-    },
+    (repoPath: string, force = false): Promise<TaskStoreCheck> =>
+      loadTaskStoreCheck(queryClient, repoPath, taskStoreCheck, scheduleTask, force),
     [taskStoreCheck, queryClient, scheduleTask],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {
     setIsRefreshingChecks(true);
     try {
-      // Each check reports its own failure in its query state. One failure does not stop another.
-      await Promise.allSettled([
+      const checks: Promise<unknown>[] = [
         refreshHostRuntimeStatus(),
-        refreshRuntimeCheck(true),
-        ...(activeRepoPath === null ? [] : [refreshTaskStoreCheckForRepo(activeRepoPath, true)]),
-      ]);
+        refreshPathAndGitChecks(queryClient, pathCheck, gitCheck, scheduleTask),
+      ];
+      if (activeRepoPath !== null) {
+        checks.push(refreshTaskStoreCheckForRepo(activeRepoPath, true));
+      }
+      await Promise.allSettled(checks);
     } finally {
       setIsRefreshingChecks(false);
     }
-  }, [activeRepoPath, refreshHostRuntimeStatus, refreshRuntimeCheck, refreshTaskStoreCheckForRepo]);
+  }, [
+    activeRepoPath,
+    refreshHostRuntimeStatus,
+    queryClient,
+    pathCheck,
+    gitCheck,
+    scheduleTask,
+    refreshTaskStoreCheckForRepo,
+  ]);
 
-  const runtimeCheckState = useMemo(
-    (): ObservedCheck<RuntimeCheck> =>
-      toObservedCheck(
-        runtimeCheckQuery.data,
-        runtimeCheckQuery.dataUpdatedAt,
-        runtimeCheckQuery.error,
-        (error) => buildRuntimeCheckErrorState(runtimeDefinitions, error),
-      ),
-    [
-      runtimeCheckQuery.data,
-      runtimeCheckQuery.dataUpdatedAt,
-      runtimeCheckQuery.error,
-      runtimeDefinitions,
-    ],
+  const pathCheckState = useMemo(
+    () => toObservedCheck(pathCheckQuery.data, pathCheckQuery.dataUpdatedAt, pathCheckQuery.error),
+    [pathCheckQuery.data, pathCheckQuery.dataUpdatedAt, pathCheckQuery.error],
+  );
+  const gitCheckState = useMemo(
+    () => toObservedCheck(gitCheckQuery.data, gitCheckQuery.dataUpdatedAt, gitCheckQuery.error),
+    [gitCheckQuery.data, gitCheckQuery.dataUpdatedAt, gitCheckQuery.error],
   );
   const taskStoreCheckState = useMemo((): ObservedCheck<TaskStoreCheck> => {
     const check = toObservedCheck(
       taskStoreCheckQuery.data,
       taskStoreCheckQuery.dataUpdatedAt,
       taskStoreCheckQuery.error,
-      buildTaskStoreCheckErrorState,
     );
     return activeRepoPath === null ? { ...check, data: null } : check;
   }, [
@@ -171,19 +113,20 @@ export function useChecks({
     taskStoreCheckQuery.error,
   ]);
   const diagnosticsToastIssues = useMemo(
-    (): DiagnosticsToastIssue[] =>
+    () =>
       buildDiagnosticsToastIssues({
         activeWorkspace,
-        runtimeCheck: runtimeCheckState,
+        pathCheck: pathCheckState,
+        gitCheck: gitCheckState,
         taskStoreCheck: taskStoreCheckState,
       }),
-    [activeWorkspace, runtimeCheckState, taskStoreCheckState],
+    [activeWorkspace, pathCheckState, gitCheckState, taskStoreCheckState],
   );
-
   useDiagnosticsToasts(diagnosticsToastIssues, toastApi);
 
   return {
-    runtimeCheck: runtimeCheckState,
+    pathCheck: pathCheckState,
+    gitCheck: gitCheckState,
     checksRepoPath: activeRepoPath,
     taskStoreCheck: taskStoreCheckState,
     isRefreshingChecks,
@@ -191,3 +134,17 @@ export function useChecks({
     refreshChecks,
   };
 }
+
+const toObservedCheck = <T>(
+  data: T | undefined,
+  dataUpdatedAt: number,
+  error: Error | null,
+): ObservedCheck<T> => {
+  const failure = error ? classifyDiagnosticsQueryError(error) : null;
+  return {
+    data: data ?? null,
+    error: failure?.message ?? null,
+    failureKind: failure?.failureKind ?? null,
+    observedAt: data === undefined ? null : new Date(dataUpdatedAt).toISOString(),
+  };
+};

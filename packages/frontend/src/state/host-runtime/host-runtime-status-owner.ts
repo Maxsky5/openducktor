@@ -2,6 +2,7 @@ import type { HostRuntimeSnapshot, HostRuntimeStatus, RuntimeKind } from "@opend
 import type { QueryClient } from "@tanstack/react-query";
 import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@/lib/browser-live/constants";
 import { errorMessage } from "@/lib/errors";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import type { RuntimeChangeListener } from "@/lib/shell-bridge";
 import {
   applyHostStatusEvent,
@@ -11,6 +12,7 @@ import {
 import { invalidateRuntimeKindQueries } from "@/state/queries/runtime-query-invalidation";
 import type { HostStatusSnapshot } from "@/types/diagnostics";
 import type { HostRuntimeEventListener, HostRuntimeEvents } from "@/types/state-slices";
+import { withRuntimeStatusTimeout } from "./host-runtime-status-timeout";
 
 export type HostRuntimeStatusOwnerPorts = {
   subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
@@ -20,6 +22,8 @@ export type HostRuntimeStatusOwnerPorts = {
 export type HostRuntimeStatusConnection = {
   /** Live runtime updates are unavailable. Cached state is not current. */
   streamError: string | null;
+  /** Only a full read clears this error. Live row updates can clear the query error. */
+  readError: string | null;
   /** A baseline read succeeded after the last subscription, reconnect, or host change. */
   hasBaseline: boolean;
   isRefreshing: boolean;
@@ -43,31 +47,24 @@ export type HostRuntimeStatusOwner = HostRuntimeEvents & {
 
 type ObservedGeneration = { runtimeId: string | null; isReady: boolean };
 
-const invalidateForGeneration =
-  (queryClient: QueryClient): RuntimeGenerationChangeHandler =>
-  (runtimeKind, status) => {
-    void invalidateRuntimeKindQueries(
-      queryClient,
-      runtimeKind,
-      status.state === "ready" ? "ready" : "stopped",
-    );
-  };
-
 export const createHostRuntimeStatusOwner = ({
   queryClient,
   ports,
+  scheduleTask: scheduler = scheduleTask,
   onRuntimeGenerationChange = invalidateForGeneration(queryClient),
 }: {
   queryClient: QueryClient;
   ports: HostRuntimeStatusOwnerPorts;
+  scheduleTask?: ScheduleTask;
   onRuntimeGenerationChange?: RuntimeGenerationChangeHandler;
 }): HostRuntimeStatusOwner => {
-  const options = hostRuntimeStatusQueryOptions(ports.runtimeStatus);
+  const options = hostRuntimeStatusQueryOptions(ports.runtimeStatus, scheduler);
   const connectionListeners = new Set<() => void>();
   const eventListeners = new Set<HostRuntimeEventListener>();
   const observedGenerations = new Map<RuntimeKind, ObservedGeneration>();
   let connection: HostRuntimeStatusConnection = {
     streamError: null,
+    readError: null,
     hasBaseline: false,
     isRefreshing: false,
   };
@@ -76,6 +73,7 @@ export const createHostRuntimeStatusOwner = ({
   let isActive = false;
   let unsubscribe: (() => void) | null = null;
   let subscription: Promise<void> | null = null;
+  let streamController: AbortController | null = null;
   let observedHostInstanceId: string | null = null;
   // Each baseline read replaces the earlier one. Only the latest read can set the baseline.
   let baselineRead = 0;
@@ -116,8 +114,8 @@ export const createHostRuntimeStatusOwner = ({
   };
 
   // An explicit refresh ends when the latest baseline read settles, not when its own read does.
-  const settleBaseline = (hasBaseline: boolean): void => {
-    updateConnection({ hasBaseline, isRefreshing: false });
+  const settleBaseline = (readError: string | null): void => {
+    updateConnection({ hasBaseline: readError === null, readError, isRefreshing: false });
   };
 
   const readBaseline = async (readSession: number): Promise<void> => {
@@ -127,24 +125,24 @@ export const createHostRuntimeStatusOwner = ({
     const isLatest = () => readSession === session && read === baselineRead;
     // A baseline must start after the current subscription or reconnect.
     await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+    if (!isLatest()) return;
     try {
       const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
       // A canceled read can resolve with cached data. It is not the current baseline.
       if (!isLatest()) return;
       observedHostInstanceId = snapshot.hostInstanceId;
       observeGenerations();
-      settleBaseline(true);
-    } catch {
+      settleBaseline(null);
+    } catch (cause) {
       if (!isLatest()) return;
-      // The query keeps this failure next to the earlier data. That data is not current.
-      settleBaseline(false);
+      settleBaseline(errorMessage(cause));
     }
   };
 
   const createListener =
-    (listenerSession: number): RuntimeChangeListener =>
+    (listenerSession: number, signal: AbortSignal): RuntimeChangeListener =>
     (event) => {
-      if (listenerSession !== session) return;
+      if (listenerSession !== session || signal.aborted) return;
       if ("__openducktorBrowserLive" in event) {
         if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
           changeStream(null, { hasBaseline: false });
@@ -171,9 +169,12 @@ export const createHostRuntimeStatusOwner = ({
     };
 
   const subscribe = (): Promise<void> => {
+    streamController?.abort();
     unsubscribe?.();
     unsubscribe = null;
     const subscribeSession = session;
+    const controller = new AbortController();
+    streamController = controller;
     // The new subscription owns the stream state. A connection failure that the transport
     // reports while it subscribes must stay visible, so success does not clear it.
     const isRecovering = connection.streamError !== null;
@@ -185,18 +186,32 @@ export const createHostRuntimeStatusOwner = ({
       updateConnection({ streamError: null, hasBaseline: false });
     }
     const subscribeEpoch = streamEpoch;
-    subscription = ports.subscribeRuntimeChanges(createListener(subscribeSession)).then(
-      (stop) => {
-        if (subscribeSession !== session) {
-          stop();
-          return;
-        }
-        unsubscribe = stop;
+    subscription = withRuntimeStatusTimeout(
+      () =>
+        ports
+          .subscribeRuntimeChanges(createListener(subscribeSession, controller.signal))
+          .then((stop) => {
+            if (subscribeSession !== session || controller.signal.aborted) {
+              stop();
+              return;
+            }
+            // Keep cleanup even when registration and the deadline finish together.
+            unsubscribe = stop;
+          }),
+      "subscribing to runtime changes",
+      controller.signal,
+      scheduler,
+    ).then(
+      () => {
+        if (subscribeSession !== session || controller.signal.aborted) return;
         // Event listeners read again only when the new subscription is ready.
         if (isRecovering && streamEpoch === subscribeEpoch) changeStream(null);
       },
       (cause: unknown) => {
-        if (subscribeSession !== session) return;
+        if (subscribeSession !== session || controller.signal.aborted) return;
+        controller.abort();
+        unsubscribe?.();
+        unsubscribe = null;
         changeStream(errorMessage(cause));
       },
     );
@@ -215,9 +230,12 @@ export const createHostRuntimeStatusOwner = ({
     stop: () => {
       isActive = false;
       session += 1;
+      streamController?.abort();
+      streamController = null;
       unsubscribe?.();
       unsubscribe = null;
       subscription = null;
+      void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
       if (connection.isRefreshing) updateConnection({ isRefreshing: false });
     },
     refresh: async () => {
@@ -247,3 +265,13 @@ export const createHostRuntimeStatusOwner = ({
     },
   };
 };
+
+const invalidateForGeneration =
+  (queryClient: QueryClient): RuntimeGenerationChangeHandler =>
+  (runtimeKind, status) => {
+    void invalidateRuntimeKindQueries(
+      queryClient,
+      runtimeKind,
+      status.state === "ready" ? "ready" : "stopped",
+    );
+  };

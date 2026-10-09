@@ -8,7 +8,6 @@ import type {
   SettingsRepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
-  RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
   SettingsSnapshot,
@@ -21,7 +20,6 @@ import type { RuntimeImpactReviewState } from "@/components/features/runtimes/ru
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
-  ChecksStateContext,
   useRequiredContext,
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
@@ -83,7 +81,6 @@ export type SettingsModalController = {
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
   availableRuntimeDefinitions: RuntimeDescriptor[];
-  runtimeCheck: RuntimeCheck | null;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
@@ -196,7 +193,6 @@ export const useSettingsModalController = ({
   onRuntimeAvailabilityError,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
-  const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
   const {
     activeWorkspace,
     workspaces,
@@ -218,7 +214,6 @@ export const useSettingsModalController = ({
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,
   );
-  const runtimeCheck = checksState.runtimeCheck.data;
   const {
     allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
@@ -613,7 +608,6 @@ export const useSettingsModalController = ({
     snapshotDraft,
     runtimeDefinitions,
     availableRuntimeDefinitions,
-    runtimeCheck,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,

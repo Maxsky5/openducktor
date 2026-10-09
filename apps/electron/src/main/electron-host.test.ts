@@ -32,7 +32,11 @@ import {
   type TaskStorePort,
   type WorktreeFilePort,
 } from "@openducktor/host";
-import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
+import {
+  createElectronEffectHostCommandRouter,
+  createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
+} from "./electron-host";
+import { HostOperationError } from "../../../../packages/host/src/effect/host-errors";
 
 type ElectronHostCommandRouterInput = Parameters<
   typeof createProductionElectronHostCommandRouter
@@ -1145,7 +1149,7 @@ describe("createElectronHostCommandRouter", () => {
     expect(startCalls).toBe(0);
   });
 
-  test("resolves PATH again on a forced runtime check and then allows starts", async () => {
+  test("resolves PATH again on a forced PATH check and then allows starts", async () => {
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 15000 ms.",
@@ -1194,14 +1198,14 @@ describe("createElectronHostCommandRouter", () => {
         owner: { kind: "task", taskId: "task-1" },
       });
 
-    await expect(router.invoke("runtime_check", { force: false })).resolves.toMatchObject({
-      pathOk: false,
-      errors: [diagnostic.message],
+    await expect(router.invoke("path_check", { force: false })).resolves.toMatchObject({
+      ok: false,
+      error: diagnostic.message,
     });
     await expect(startDevServer()).rejects.toThrow(diagnostic.message);
-    await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
-      pathOk: true,
-      errors: [],
+    await expect(router.invoke("path_check", { force: true })).resolves.toMatchObject({
+      ok: true,
+      error: null,
     });
     await startDevServer();
 
@@ -1507,6 +1511,65 @@ describe("createElectronHostCommandRouter", () => {
     });
   });
 
+  test.each(["runtime failure", "runtime hang", "settings failure"] as const)(
+    "PATH and Git diagnostics do not depend on %s",
+    async (failure) => {
+      let settingsReads = 0;
+      let runtimeProbes = 0;
+      const unrelatedError = new HostOperationError({
+        operation: "test.runtime",
+        message: "OpenCode is unavailable.",
+      });
+      const router = await Effect.runPromise(
+        createElectronEffectHostCommandRouter({
+          isPackaged: false,
+          onBackgroundFailure: () => Effect.void,
+          processEnv: {
+            OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+            PATH: "/usr/bin:/bin",
+          },
+          runtimeDistribution: testRuntimeDistribution,
+          filesystem: createFilesystem(),
+          git: createGit(),
+          openInTools: createOpenInTools(),
+          settingsConfig: {
+            ...createSettingsConfig(globalConfig()),
+            readConfig: () => {
+              settingsReads += 1;
+              return failure === "settings failure"
+                ? Effect.fail(unrelatedError)
+                : Effect.succeed(globalConfig());
+            },
+          },
+          runtimeHealth: {
+            ...createRuntimeHealth(),
+            getRuntimeHealth: () => {
+              runtimeProbes += 1;
+              return failure === "runtime hang" ? Effect.never : Effect.fail(unrelatedError);
+            },
+          },
+          systemCommands: createSystemCommands(),
+        }),
+      );
+      const settingsReadsBeforeCheck = settingsReads;
+      try {
+        const check = await Effect.runPromise(
+          router.invoke("git_check", {}).pipe(Effect.timeout("250 millis")),
+        );
+        expect(check).toMatchObject({ ok: true });
+        expect(
+          await Effect.runPromise(
+            router.invoke("path_check", {}).pipe(Effect.timeout("250 millis")),
+          ),
+        ).toEqual({ ok: true, error: null });
+        expect(runtimeProbes).toBe(0);
+        expect(settingsReads).toBe(settingsReadsBeforeCheck);
+      } finally {
+        await Effect.runPromise(router.dispose());
+      }
+    },
+  );
+
   test("registers migrated diagnostics host commands", async () => {
     const processEnvironmentError = new ProcessEnvironmentError({
       message:
@@ -1524,15 +1587,9 @@ describe("createElectronHostCommandRouter", () => {
       systemCommands: createSystemCommands(),
     });
 
-    expect(await router.invoke("runtime_check", { force: true })).toMatchObject({
-      pathOk: false,
-      gitOk: true,
-      runtimes: [
-        { kind: "opencode", ok: false, enabled: false },
-        { kind: "codex", ok: false, enabled: false },
-        { kind: "claude", ok: false, enabled: false },
-      ],
-      errors: [processEnvironmentError.message],
+    expect(await router.invoke("path_check", { force: true })).toMatchObject({
+      ok: false,
+      error: processEnvironmentError.message,
     });
     expect(await router.invoke("task_store_check", { repoPath: "/repo" })).toMatchObject({
       taskStoreOk: false,
@@ -1581,8 +1638,9 @@ describe("createElectronHostCommandRouter", () => {
           systemCommands: createSystemCommands(),
         });
 
-        expect(await router.invoke("runtime_check", { force: true })).toMatchObject({
-          errors: expect.arrayContaining([processEnvironmentError.message]),
+        expect(await router.invoke("path_check", { force: true })).toMatchObject({
+          ok: false,
+          error: processEnvironmentError.message,
         });
         if (fixture.config) {
           expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ version: 2 });

@@ -94,7 +94,8 @@ describe("app-state-context-values", () => {
 
   test("returns identity for other context builders", () => {
     const checksValue: ChecksStateContextValue = {
-      runtimeCheck: createObservedCheckFixture(),
+      pathCheck: createObservedCheckFixture(),
+      gitCheck: createObservedCheckFixture(),
       checksRepoPath: null,
       taskStoreCheck: createObservedCheckFixture(),
       isRefreshingChecks: false,

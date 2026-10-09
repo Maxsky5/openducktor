@@ -15,21 +15,20 @@ export const buildRefreshFailedCheck = (
   check: DiagnosticsCheckBase,
   failure: RefreshFailure,
   observedAt: string | null,
-  otherErrors: string[] = [],
 ): DiagnosticsCheckModel => ({
   ...check,
   status: refreshFailureStatus(failure.failureKind),
   notice: observedAt === null ? null : earlierResultNotice(observedAt),
-  errors: [refreshFailureMessage(check.title, failure.error), ...otherErrors],
+  errors: [refreshFailureMessage(check.title, failure.error)],
 });
 
 const refreshFailureStatus = (failureKind: DiagnosticsFailureKind): DiagnosticsStatus => ({
   health: "failed",
-  label: failureKind === "timeout" ? "Timed out" : "Check failed",
+  label: failureKind === "timeout" ? "Timed out" : "Check unavailable",
 });
 
 export const refreshFailureMessage = (checkTitle: string, error: string): string =>
-  `${checkTitle} check failed: ${error} Select Refresh to try again.`;
+  `${checkTitle} check could not be read: ${error} Select Refresh to try again.`;
 
 const CHECK_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",

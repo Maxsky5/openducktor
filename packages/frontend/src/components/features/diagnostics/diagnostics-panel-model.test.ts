@@ -35,12 +35,11 @@ const createWorkspace = (overrides: Partial<WorkspaceRecord> = {}): WorkspaceRec
   ...overrides,
 });
 
-const CLI_TOOLS_CHECK = {
-  pathOk: true,
-  gitOk: true,
-  gitVersion: "git version 2.50.1",
-  runtimes: [],
-  errors: [],
+const GIT_CHECK = {
+  ok: true,
+  executablePath: "/bin/git",
+  version: "git version 2.50.1",
+  error: null,
 };
 
 const BRIDGE_FAILURE =
@@ -66,7 +65,8 @@ const createInput = (
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
   runtimeStatus: createHostRuntimeStatusContextValue(),
-  runtimeCheck: createObservedCheckFixture({ data: CLI_TOOLS_CHECK }),
+  pathCheck: createObservedCheckFixture({ data: { ok: true, error: null } }),
+  gitCheck: createObservedCheckFixture({ data: GIT_CHECK }),
   workspace: createWorkspace(),
   checksRepoPath: "/repo-a",
   taskStoreCheck: createObservedCheckFixture({ data: createTaskStoreCheckFixture() }),
@@ -267,48 +267,40 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.overview.tone).toBe("checking");
   });
 
-  test("warns about a missing executable only for an enabled runtime that is not ready", () => {
-    const runtime = { executablePath: null, version: null };
+  test("runtime and settings failures leave PATH and Git rows healthy", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
+        runtimeDefinitionsError: "Settings could not be read.",
         runtimeStatus: createHostRuntimeStatusContextValue({
-          statusByKind: {
-            opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
-            codex: failedStatus("codex"),
-            claude: createHostRuntimeStatusFixture({
-              kind: "claude",
-              enabled: false,
-              state: "disabled",
-              runtimeId: null,
-            }),
-          },
-        }),
-        runtimeCheck: createObservedCheckFixture({
-          data: {
-            ...CLI_TOOLS_CHECK,
-            runtimes: [
-              { ...runtime, kind: "opencode", enabled: true, ok: false, error: "Not found." },
-              { ...runtime, kind: "codex", enabled: true, ok: false, error: "codex: not found" },
-              { ...runtime, kind: "claude", enabled: false, ok: false, error: null },
-            ],
-          },
+          statusByKind: { opencode: failedStatus("opencode") },
         }),
       }),
     );
-
-    expect(model.host.runtimes.entries.map((entry) => entry.executableWarning)).toEqual([
-      null,
-      "codex: not found",
-      null,
-    ]);
+    expect(hostCheck(model, "path").status).toEqual({ health: "ok", label: "Available" });
+    expect(hostCheck(model, "git").status).toEqual({ health: "ok", label: "Available" });
+    expect(hostCheck(model, "git").errors).toEqual([]);
+    expect(model.host.runtimes.entries[0]?.version).toBeNull();
   });
 
-  test("shows failed CLI and task-store refreshes over cached successes as current failures", () => {
+  test("a PATH failure does not change the Git result", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
-        runtimeCheck: {
-          data: CLI_TOOLS_CHECK,
-          error: "Runtime check failed.",
+        pathCheck: createObservedCheckFixture({
+          data: { ok: false, error: "Shell startup failed." },
+        }),
+      }),
+    );
+    expect(hostCheck(model, "path").errors).toEqual(["Shell startup failed."]);
+    expect(hostCheck(model, "git").status.health).toBe("ok");
+    expect(hostCheck(model, "git").errors).toEqual([]);
+  });
+
+  test("shows failed Git and task-store reads with their earlier results", () => {
+    const model = buildDiagnosticsPanelModel(
+      createInput({
+        gitCheck: {
+          data: GIT_CHECK,
+          error: "Git read failed.",
           failureKind: "error",
           observedAt: "2026-02-22T07:00:00.000Z",
         },
@@ -322,18 +314,18 @@ describe("buildDiagnosticsPanelModel", () => {
     );
 
     const git = hostCheck(model, "git");
-    expect(git.status).toEqual({ health: "failed", label: "Check failed" });
+    expect(git.status).toEqual({ health: "failed", label: "Check unavailable" });
     expect(git.errors).toEqual([
-      "Git check failed: Runtime check failed. Select Refresh to try again.",
+      "Git check could not be read: Git read failed. Select Refresh to try again.",
     ]);
     expect(git.notice).toStartWith("Showing the result from ");
     expect(git.notice).toEndWith(". It may be out of date.");
     expect(git.value).toBe("2.50.1");
 
     const taskStore = workspaceCheck(model, "task-store");
-    expect(taskStore.status).toEqual({ health: "failed", label: "Check failed" });
+    expect(taskStore.status).toEqual({ health: "failed", label: "Check unavailable" });
     expect(taskStore.errors).toEqual([
-      "Task store check failed: Task store check failed. Select Refresh to try again.",
+      "Task store check could not be read: Task store check failed. Select Refresh to try again.",
     ]);
     expect(taskStore.notice).toEndWith(". It may be out of date.");
     // Each notice names the time of its own check.
@@ -349,14 +341,8 @@ describe("buildDiagnosticsPanelModel", () => {
   test("shows no earlier result when a failed check was never observed", () => {
     const model = buildDiagnosticsPanelModel(
       createInput({
-        runtimeCheck: {
-          data: {
-            pathOk: false,
-            gitOk: false,
-            gitVersion: null,
-            runtimes: [],
-            errors: ["Timed out."],
-          },
+        gitCheck: {
+          data: null,
           error: "Timed out.",
           failureKind: "timeout",
           observedAt: null,
