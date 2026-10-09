@@ -21,6 +21,7 @@ export function useAgentMessageSendPolicy(): NonNullable<
   return useCallback<NonNullable<AgentMessageSendOptions["assertCanSubmit"]>>(
     (session, ownsStart = false): void => {
       const { runtime, runtimeStatus, readModel } = current.current;
+      const fault = readModel.getSessionFault(session);
       const reason = getAgentMessageSendBlockedReason({
         session,
         runtime:
@@ -34,7 +35,7 @@ export function useAgentMessageSendPolicy(): NonNullable<
           runtimeTarget: runtimeReadinessTargetForRuntime(session.runtimeKind),
         }),
         readModel: readModel.sessionReadModelLoadState,
-        readOnlyReason: readModel.getSessionFault(session)?.message ?? null,
+        readOnlyReason: fault?.source === "workspace-target" ? fault.message : null,
         pending: false,
         allowStarting: ownsStart,
       });

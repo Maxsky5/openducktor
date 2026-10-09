@@ -107,10 +107,13 @@ const toConflictDescription = (conflict: GitConflict, recipient: string | undefi
 
   return (
     <>
-      The {operationLabel} onto{" "}
-      <code className={INLINE_CODE_CLASS_NAME}>
-        {conflict.targetBranch || "an unavailable target"}
-      </code>{" "}
+      The {operationLabel}
+      {conflict.targetBranch ? (
+        <>
+          {" "}
+          onto <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code>
+        </>
+      ) : null}{" "}
       stopped on conflicts.
       {" Abort the git operation"}
       {recipient ? ` or send the conflict to ${recipient} for resolution.` : "."}

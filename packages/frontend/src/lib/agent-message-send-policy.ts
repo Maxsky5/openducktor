@@ -4,6 +4,7 @@ import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-
 import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
 import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
 import { matchesAgentSessionIdentity } from "./agent-session-identity";
+import { deriveLoadedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export const getBusyAgentMessageBlockedReason = (
   isWorking: boolean,
@@ -40,10 +41,13 @@ export const getAgentMessageSendBlockedReason = (input: {
       : "The selected session is missing. Reload session data or restore the chat.";
   if (input.session.runtimeAvailability === "missing")
     return "The selected runtime session is unavailable. Restore the runtime and reload the chat.";
-  if (input.session.historyLoadState === "failed")
+  const transcriptState = deriveLoadedAgentSessionTranscriptState({
+    session: input.session,
+    runtimeReadinessState: input.readiness.state,
+  });
+  if (transcriptState.kind === "failed")
     return "Session history failed to load. Retry loading the transcript before sending.";
-  if (!["loaded", "stale", "refreshing"].includes(input.session.historyLoadState))
-    return "Wait for the session transcript to load.";
+  if (transcriptState.kind !== "visible") return "Wait for the session transcript to load.";
   if (isAgentSessionBlockedOnInput(input.session))
     return "Answer or reject the blocking approval or question before sending a message.";
   if (input.session.status === "starting" && !input.allowStarting)

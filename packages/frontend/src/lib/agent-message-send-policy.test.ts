@@ -73,3 +73,27 @@ test("a valid draft can start, while blocking input cannot send", () => {
   input.session.pendingQuestions[0]!.blocking = false;
   expect(getAgentMessageSendBlockedReason(input)).toBeNull();
 });
+
+test.each([true, false])(
+  "failed history keeps sending available with cached messages=%s",
+  (cached) => {
+    const input = ready();
+    input.session = createAgentSessionFixture({
+      status: "idle",
+      historyLoadState: "failed",
+      messages: cached
+        ? [
+            {
+              id: "cached",
+              role: "assistant",
+              content: "Saved output",
+              timestamp: "2026-10-08T00:00:00Z",
+            },
+          ]
+        : [],
+    });
+    const reason = getAgentMessageSendBlockedReason(input);
+    if (cached) expect(reason).toBeNull();
+    else expect(reason).toContain("Retry loading the transcript");
+  },
+);

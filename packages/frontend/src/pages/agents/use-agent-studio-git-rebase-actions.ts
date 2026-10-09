@@ -97,7 +97,7 @@ export function useAgentStudioGitRebaseActions({
             targetBranch: "tracked upstream branch",
             conflictedFiles: result.conflictedFiles,
             output: result.output,
-            workingDir,
+            workingDir: workingDir ?? repoPath,
           };
           const message = toConflictMessage(result.conflictedFiles, "pull_rebase");
           captureFreshConflict(conflict);
@@ -176,7 +176,7 @@ export function useAgentStudioGitRebaseActions({
             targetBranch: trimmedTarget,
             conflictedFiles: result.conflictedFiles,
             output: result.output,
-            workingDir,
+            workingDir: workingDir ?? repoPath,
           };
           const message = toConflictMessage(result.conflictedFiles, "rebase");
           captureFreshConflict(conflict);
