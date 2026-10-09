@@ -10,6 +10,7 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexUserMessageInput,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
@@ -182,6 +183,26 @@ describe("CodexAppServerAdapter history loading", () => {
       requestId: question.requestId,
       answers: [["Large"]],
     });
+
+    const liveHistory = await adapter.loadSessionHistory(ref);
+    expect(
+      liveHistory.filter(
+        (message) => message.messageId === `codex-question-${question.requestInstanceId}`,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        parts: [
+          expect.objectContaining({
+            kind: "tool",
+            status: "completed",
+            metadata: expect.objectContaining({
+              answers: { "pizza-size": { answers: ["Large"] } },
+            }),
+          }),
+        ],
+      }),
+    ]);
 
     const { adapter: reloadedAdapter } = createHarness({ questionHistory });
     const history = await reloadedAdapter.loadSessionHistory(ref);
@@ -837,324 +858,484 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("keeps fresh history and todos readable until the rollout materializes and live todos arrive", async () => {
+  test("recovers first-turn output after reattachment without reading a pending rollout", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const baseTransport = new RecordingTransport("runtime-live", false);
-    const materializedTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
-    const turnsRequested = createDeferred<void>();
-    const threadId = "thread/start-runtime-live";
-    const firstRolloutThread = {
-      id: threadId,
-      cwd: "/repo",
-      turns: [
-        {
-          id: "turn-first-record",
-          status: "completed",
-          items: [
-            codexDynamicToolCallFixture({
-              id: "todo-before-live-update",
-              namespace: "functions",
-              tool: "update_plan",
-              arguments: { plan: [{ step: "Stale rollout todo", status: "pending" }] },
+    const historyRequests: string[] = [];
+    const adapter = createAdapterWithTransport(
+      {
+        request: async (request) => {
+          if (["thread/read", "thread/turns/list"].includes(request.method)) {
+            historyRequests.push(request.method);
+            throw new Error("History must not read the pending first rollout.");
+          }
+          if (request.method === "turn/start") {
+            return { turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }) };
+          }
+          return baseTransport.request(request);
+        },
+      },
+      { subscribeEvents: runtimeStream.subscribeEvents },
+    );
+    const ref = codexSessionRef();
+    try {
+      await adapter.startSession(codexStartSessionInput());
+      const detach = await adapter.subscribeEvents(ref, () => undefined);
+      const accepted = await adapter.sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "Start the first turn." }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      );
+      await flushCodexAdapterWork();
+      detach();
+      for (const delta of ["Reply while ", "the renderer is away"]) {
+        runtimeStream.emitNotification({
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: ref.externalSessionId,
+            turnId: "turn-live",
+            itemId: "message-live",
+            delta,
+          },
+        });
+      }
+      await flushCodexAdapterWork();
+      const events: AgentEvent[] = [];
+      const reattach = await adapter.subscribeEvents(ref, (event) => events.push(event));
+      const history = await adapter.loadSessionHistory(ref);
+      expect(events.filter((event) => event.type === "assistant_delta")).toEqual([]);
+      expect(history).toContainEqual(
+        expect.objectContaining({
+          messageId: accepted.messageId,
+          role: "user",
+          text: "Start the first turn.",
+          state: "read",
+        }),
+      );
+      expect(history).toContainEqual(
+        expect.objectContaining({
+          messageId: "message-live",
+          role: "assistant",
+          text: "Reply while the renderer is away",
+        }),
+      );
+      runtimeStream.emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: codexAgentMessageItemFixture({
+            id: "message-live",
+            text: "Complete reply",
+            phase: "commentary",
+          }),
+        },
+      });
+      runtimeStream.emitNotification({
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          itemId: "reasoning-live",
+          summaryIndex: 0,
+          delta: "Check the ",
+        },
+      });
+      runtimeStream.emitNotification({
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          itemId: "reasoning-live",
+          summaryIndex: 0,
+          delta: "repo",
+        },
+      });
+      runtimeStream.emitNotification({
+        method: "item/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          startedAtMs: 1_777_766_419_650,
+          item: codexCommandExecutionItemFixture({
+            id: "tool-live",
+            command: "git status",
+            status: "inProgress",
+            exitCode: null,
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+      const runningHistory = await adapter.loadSessionHistory(ref);
+      expect(runningHistory).toContainEqual(
+        expect.objectContaining({
+          messageId: "reasoning-live",
+          parts: [
+            expect.objectContaining({
+              kind: "reasoning",
+              text: "Check the repo",
+              completed: false,
             }),
           ],
+        }),
+      );
+      expect(runningHistory).toContainEqual(
+        expect.objectContaining({
+          messageId: "tool-live",
+          parts: [expect.objectContaining({ kind: "tool", status: "running" })],
+        }),
+      );
+      runtimeStream.emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_420_650,
+          item: codexCommandExecutionItemFixture({
+            id: "tool-live",
+            command: "git status",
+            aggregatedOutput: "Clean worktree",
+          }),
         },
-      ],
-    };
-    let rolloutMaterialized = false;
-    const transport: CodexJsonRpcTransport = {
-      request: async (request: CodexJsonRpcRequest) => {
-        if (request.method === "thread/read") {
-          if (!rolloutMaterialized) {
-            throw codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+      });
+      runtimeStream.emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_420_650,
+          item: {
+            type: "reasoning",
+            id: "reasoning-live",
+            summary: ["Checked the repo"],
+            content: [],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+      const updatedHistory = await adapter.loadSessionHistory(ref);
+      expect(updatedHistory.filter((message) => message.messageId === "message-live")).toEqual([
+        expect.objectContaining({ text: "Complete reply", model: accepted.model, parts: [] }),
+      ]);
+      expect(updatedHistory.filter((message) => message.messageId === "tool-live")).toEqual([
+        expect.objectContaining({
+          parts: [
+            expect.objectContaining({
+              kind: "tool",
+              status: "completed",
+              output: "Clean worktree",
+            }),
+          ],
+        }),
+      ]);
+      expect(updatedHistory.filter((message) => message.messageId === "reasoning-live")).toEqual([
+        expect.objectContaining({
+          parts: [
+            expect.objectContaining({
+              kind: "reasoning",
+              text: "Checked the repo",
+              completed: true,
+            }),
+          ],
+        }),
+      ]);
+      expect(history).toContainEqual(
+        expect.objectContaining({
+          messageId: "message-live",
+          text: "Reply while the renderer is away",
+        }),
+      );
+      const recoveredTool = updatedHistory.find((message) => message.messageId === "tool-live");
+      expect(recoveredTool).toBeDefined();
+      recoveredTool!.parts.length = 0;
+      expect(await adapter.loadSessionHistory(ref)).toContainEqual(
+        expect.objectContaining({
+          messageId: "tool-live",
+          parts: [expect.objectContaining({ status: "completed" })],
+        }),
+      );
+      expect(historyRequests).toEqual([]);
+      reattach();
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+
+  test("uses the initial history and live todos through the first turn without reading disk", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const historyRequests: string[] = [];
+    const adapter = createAdapterWithTransport(
+      {
+        request: async (request) => {
+          if (["thread/read", "thread/turns/list"].includes(request.method)) {
+            historyRequests.push(request.method);
+            throw new Error("History must not read the pending first rollout.");
           }
-          return paginatedThreadReadResponse(firstRolloutThread);
-        }
-        if (request.method === "thread/turns/list") {
-          turnsRequested.resolve();
-          return materializedTurns.promise;
-        }
-        return baseTransport.request(request);
+          if (request.method === "turn/start") {
+            return { turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }) };
+          }
+          return baseTransport.request(request);
+        },
       },
+      { subscribeEvents: runtimeStream.subscribeEvents },
+    );
+    const ref = codexSessionRef();
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+
+    const assertInitialHistory = async () => {
+      await expect(adapter.loadSessionHistory(ref)).resolves.toEqual([
+        expect.objectContaining({
+          role: "system",
+          text: expect.stringContaining("Use the repo rules."),
+        }),
+      ]);
     };
-    const adapter = createAdapterWithTransport(transport, {
-      subscribeEvents: runtimeStream.subscribeEvents,
+    await assertInitialHistory();
+    await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([]);
+    runtimeStream.emitNotification({
+      method: "thread/status/changed",
+      params: { threadId: ref.externalSessionId, status: { type: "idle" } },
     });
+    await flushCodexAdapterWork();
+    await assertInitialHistory();
 
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Start the first turn." }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
+      },
     });
-
-    const ref = codexSessionRef(threadId);
-    const [history, todos] = await Promise.all([
-      adapter.loadSessionHistory(ref),
-      adapter.loadSessionTodos(ref),
-    ]);
-    expect(history).toEqual([expect.objectContaining({ role: "system" })]);
-    expect(todos).toEqual([]);
-
-    rolloutMaterialized = true;
-    const pendingTodos = adapter.loadSessionTodos(ref);
-    await turnsRequested.promise;
+    runtimeStream.emitNotification({
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        itemId: "message-live",
+        delta: "Live reply",
+      },
+    });
     runtimeStream.emitNotification({
       method: "turn/plan/updated",
       params: {
-        explanation: "The live event is authoritative.",
-        plan: [{ step: "Use live todo", status: "inProgress" }],
-        threadId,
+        threadId: ref.externalSessionId,
         turnId: "turn-live",
+        explanation: null,
+        plan: [{ step: "Use live todo", status: "inProgress" }],
+      },
+    });
+    runtimeStream.emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "another-turn", items: [], status: "completed" }),
       },
     });
     await flushCodexAdapterWork();
-    materializedTurns.resolve(paginatedTurnsListResponse(firstRolloutThread));
-
-    await expect(pendingTodos).resolves.toEqual([
+    const firstTurnHistory = await adapter.loadSessionHistory(ref);
+    expect(firstTurnHistory).toContainEqual(
+      expect.objectContaining({ role: "assistant", messageId: "message-live", text: "Live reply" }),
+    );
+    runtimeStream.emitNotification({
+      method: "item/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        completedAtMs: 1_777_766_419_650,
+        item: codexCollabAgentToolCallFixture({
+          id: "spawn-child",
+          tool: "spawnAgent",
+          status: "completed",
+          senderThreadId: ref.externalSessionId,
+          receiverThreadIds: ["child-thread"],
+          agentsStates: { "child-thread": { status: "running", message: null } },
+        }),
+      },
+    });
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification({
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "child-thread",
+        turnId: "child-turn",
+        itemId: "child-message",
+        delta: "Child progress",
+      },
+    });
+    await flushCodexAdapterWork();
+    const parentHistory = await adapter.loadSessionHistory(ref);
+    expect(
+      parentHistory.some((message) => message.parts.some((part) => part.kind === "subagent")),
+    ).toBe(true);
+    expect(
+      parentHistory.some(
+        (message) => message.messageId === "child-message" || message.text === "Child progress",
+      ),
+    ).toBe(false);
+    await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([
       expect.objectContaining({ content: "Use live todo", status: "in_progress" }),
     ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "assistant_delta", delta: "Live reply" }),
+    );
+    expect(historyRequests).toEqual([]);
+    unsubscribe();
   });
 
-  test.each(["thread/read", "thread/turns/list"] as const)(
-    "loads fresh history and todos when %s reports nested empty rollout metadata",
-    async (method) => {
-      const failure = codexRpcRequestError(method, -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
-      const adapter = createAdapterWithTransport(historyErrorTransport(method, failure));
+  test.each(["completed", "failed", "interrupted"] as const)(
+    "reads persisted history after the first turn is %s",
+    async (status) => {
+      const runtimeStream = createRuntimeStreamSubscription();
+      const { adapter, transports } = createHarness({
+        subscribeEvents: runtimeStream.subscribeEvents,
+      });
+      const ref = codexSessionRef();
+      await adapter.startSession(codexStartSessionInput());
+      runtimeStream.emitNotification({
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-first",
+          itemId: "live-first",
+          delta: "Live first-turn reply",
+        },
+      });
+      await flushCodexAdapterWork();
+      expect(await adapter.loadSessionHistory(ref)).toContainEqual(
+        expect.objectContaining({ messageId: "live-first", text: "Live first-turn reply" }),
+      );
+      runtimeStream.emitNotification({
+        method: "turn/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turn: codexTurnFixture({ id: "turn-first", items: [], status }),
+        },
+      });
+      await flushCodexAdapterWork();
 
-      await adapter.startSession(codexSessionRuntimeRef());
-      await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
-        expect.objectContaining({ role: "system" }),
-      ]);
-      await expect(adapter.loadSessionTodos(codexSessionRef())).resolves.toEqual([]);
+      const history = await adapter.loadSessionHistory(ref);
+      expect(history).toContainEqual(
+        expect.objectContaining({ role: "assistant", text: "Hello from history" }),
+      );
+      expect(history.some((message) => message.messageId === "live-first")).toBe(false);
+      expect(transports.get("runtime-live")?.calls.map(({ method }) => method)).toContain(
+        "thread/turns/list",
+      );
     },
   );
 
-  test("keeps the fresh guard after a failed todo turns read and prefers a newer live todo", async () => {
-    const runtimeStream = createRuntimeStreamSubscription();
-    const baseTransport = new RecordingTransport("runtime-live", false);
-    const turnsRequested = createDeferred<void>();
-    const pendingTurns = createDeferred<never>();
-    const thread = { id: "thread/start-runtime-live", cwd: "/repo", turns: [] };
-    const readFailure = codexRpcRequestError("thread/read", -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
-    const turnsFailure = codexRpcRequestError(
-      "thread/turns/list",
-      -32603,
-      NESTED_EMPTY_ROLLOUT_MESSAGE,
-    );
-    let readFails = false;
-    let turnsFail = true;
-    const transport: CodexJsonRpcTransport = {
-      request: async (request: CodexJsonRpcRequest) => {
-        if (request.method === "thread/read") {
-          if (readFails) throw readFailure;
-          return paginatedThreadReadResponse(thread);
-        }
-        if (request.method === "thread/turns/list") {
-          if (turnsFail) {
-            turnsRequested.resolve();
-            return pendingTurns.promise;
-          }
-          return paginatedTurnsListResponse(thread);
-        }
-        return baseTransport.request(request);
-      },
-    };
-    const adapter = createAdapterWithTransport(transport, {
-      subscribeEvents: runtimeStream.subscribeEvents,
-    });
-
-    await adapter.startSession(codexSessionRuntimeRef());
-    const pendingTodos = adapter.loadSessionTodos(codexSessionRef());
-    await turnsRequested.promise;
-    runtimeStream.emitNotification({
-      method: "turn/plan/updated",
-      params: {
-        explanation: "Use the new todo.",
-        plan: [{ step: "New live todo", status: "inProgress" }],
-        threadId: thread.id,
-        turnId: "turn-live",
-      },
-    });
-    await flushCodexAdapterWork();
-    pendingTurns.reject(turnsFailure);
-    await expect(pendingTodos).resolves.toEqual([
-      expect.objectContaining({ content: "New live todo", status: "in_progress" }),
-    ]);
-
-    readFails = true;
-    await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
-      expect.objectContaining({ role: "system" }),
-    ]);
-
-    readFails = false;
-    turnsFail = false;
-    await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
-      expect.objectContaining({ role: "system" }),
-    ]);
-    readFails = true;
-    await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(readFailure);
-  });
-
-  test("ends the fresh guard for a pending read after a parallel complete read", async () => {
-    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
-    const firstReadRequested = createDeferred<void>();
-    const firstRead = createDeferred<never>();
-    const thread = { id: "thread/start-runtime-live", cwd: "/repo", turns: [] };
-    const baseTransport = new RecordingTransport("runtime-live", false);
-    let readCount = 0;
-    const transport: CodexJsonRpcTransport = {
-      request: async (request: CodexJsonRpcRequest) => {
-        if (request.method === "thread/read") {
-          readCount += 1;
-          if (readCount === 1) {
-            firstReadRequested.resolve();
-            return firstRead.promise;
-          }
-          return paginatedThreadReadResponse(thread);
-        }
-        if (request.method === "thread/turns/list") {
-          return paginatedTurnsListResponse(thread);
-        }
-        return baseTransport.request(request);
-      },
-    };
-    const adapter = createAdapterWithTransport(transport);
-
-    await adapter.startSession(codexSessionRuntimeRef());
-    const pendingHistory = adapter.loadSessionHistory(codexSessionRef());
-    await firstReadRequested.promise;
-    await expect(adapter.loadSessionTodos(codexSessionRef())).resolves.toEqual([]);
-    firstRead.reject(failure);
-
-    await expect(pendingHistory).rejects.toBe(failure);
-  });
-
-  test.each([
-    ["thread/read", EMPTY_ROLLOUT_MESSAGE],
-    ["thread/turns/list", NESTED_EMPTY_ROLLOUT_MESSAGE],
-  ] as const)(
-    "rethrows the %s empty-rollout error after the session becomes idle",
-    async (method, message) => {
-      const failure = codexRpcRequestError(method, -32603, message);
+  test.each(["thread/read", "thread/turns/list"] as const)(
+    "propagates %s failure after the first completed turn",
+    async (method) => {
+      const failure = codexRpcRequestError(method, -32603, EMPTY_ROLLOUT_MESSAGE);
       const runtimeStream = createRuntimeStreamSubscription();
       const adapter = createAdapterWithTransport(historyErrorTransport(method, failure), {
         subscribeEvents: runtimeStream.subscribeEvents,
       });
-
-      await adapter.startSession(codexSessionRuntimeRef());
+      await adapter.startSession(codexStartSessionInput());
       runtimeStream.emitNotification({
-        method: "thread/status/changed",
-        params: { threadId: "thread/start-runtime-live", status: { type: "idle" } },
+        method: "turn/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turn: codexTurnFixture({ id: "turn-first", items: [], status: "completed" }),
+        },
       });
       await flushCodexAdapterWork();
-
       await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
-      await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
     },
   );
 
   test.each(["thread/read", "thread/turns/list"] as const)(
-    "rethrows an unrelated %s error for a fresh owned thread",
-    async (method) => {
-      const failure = codexRpcRequestError(method, -32603, "runtime database is unavailable");
-      const adapter = createAdapterWithTransport(historyErrorTransport(method, failure));
-
-      await adapter.startSession(codexSessionRuntimeRef());
-
-      await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
-      await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
-    },
-  );
-
-  test.each(["thread/read", "thread/turns/list"] as const)(
-    "rethrows the %s empty-rollout error for a resumed local session",
+    "propagates %s failure for a resumed session",
     async (method) => {
       const failure = codexRpcRequestError(method, -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
       const adapter = createAdapterWithTransport(
         historyErrorTransport(method, failure, "thread-idle"),
       );
-      const input = codexSessionRuntimeRef("thread-idle");
-
-      await adapter.resumeSession(input);
-
-      await expect(adapter.loadSessionHistory(input)).rejects.toBe(failure);
-      await expect(adapter.loadSessionTodos(input)).rejects.toBe(failure);
+      const ref = codexSessionRuntimeRef("thread-idle");
+      await adapter.resumeSession(ref);
+      await expect(adapter.loadSessionHistory(ref)).rejects.toBe(failure);
+      await expect(adapter.loadSessionTodos(ref)).rejects.toBe(failure);
     },
   );
 
-  test.each([
-    ["thread/read", EMPTY_ROLLOUT_MESSAGE],
-    ["thread/turns/list", NESTED_EMPTY_ROLLOUT_MESSAGE],
-  ] as const)(
-    "rethrows the %s empty-rollout error when the fresh session is released",
-    async (method, message) => {
-      const failure = codexRpcRequestError(method, -32603, message);
-      const requested = createDeferred<void>();
-      const result = createDeferred<never>();
-      const base = new RecordingTransport("runtime-live", false);
-      const transport: CodexJsonRpcTransport = {
+  test("drops the initial history and todo state when its session is released", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const adapter = createAdapterWithTransport(historyErrorTransport("thread/read", failure));
+    const ref = codexSessionRef();
+    await adapter.startSession(codexStartSessionInput());
+    await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([]);
+    await adapter.releaseSession(ref);
+    await expect(adapter.loadSessionHistory(ref)).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(ref)).rejects.toBe(failure);
+  });
+
+  test("prefers a live todo received during a restored history read", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const turnsRequested = createDeferred<void>();
+    const pendingTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
+    const adapter = createAdapterWithTransport(
+      {
         request: async (request) => {
-          if (request.method === method) {
-            requested.resolve();
-            return result.promise;
-          }
-          if (request.method === "thread/read") {
-            return paginatedThreadReadResponse({
-              id: "thread/start-runtime-live",
-              cwd: "/repo",
-              turns: [],
-            });
-          }
-          return base.request(request);
-        },
-      };
-      const adapter = createAdapterWithTransport(transport);
-
-      await adapter.startSession(codexSessionRuntimeRef());
-      const pendingHistory = adapter.loadSessionHistory(codexSessionRef());
-      await requested.promise;
-      await adapter.releaseSession(codexSessionRef());
-      result.reject(failure);
-
-      await expect(pendingHistory).rejects.toBe(failure);
-    },
-  );
-
-  test.each(["thread/read", "thread/turns/list"] as const)(
-    "rethrows a later %s empty-rollout error after a complete history read",
-    async (method) => {
-      const failure = codexRpcRequestError(method, -32603, NESTED_EMPTY_ROLLOUT_MESSAGE);
-      const thread = { id: "thread/start-runtime-live", cwd: "/repo", turns: [] };
-      let readFails = false;
-      const baseTransport = new RecordingTransport("runtime-live", false);
-      const transport: CodexJsonRpcTransport = {
-        request: async (request: CodexJsonRpcRequest) => {
-          if (readFails && request.method === method) throw failure;
-          if (request.method === "thread/read") {
-            return paginatedThreadReadResponse(thread);
-          }
           if (request.method === "thread/turns/list") {
-            return paginatedTurnsListResponse(thread);
+            turnsRequested.resolve();
+            return pendingTurns.promise;
           }
           return baseTransport.request(request);
         },
-      };
-      const adapter = createAdapterWithTransport(transport);
-
-      await adapter.startSession(codexSessionRuntimeRef());
-      await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
-        expect.objectContaining({ role: "system" }),
-      ]);
-
-      readFails = true;
-      await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
-      await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
-    },
-  );
+      },
+      { subscribeEvents: runtimeStream.subscribeEvents },
+    );
+    const ref = codexSessionRuntimeRef("thread-idle");
+    await adapter.resumeSession(ref);
+    const todos = adapter.loadSessionTodos(ref);
+    await turnsRequested.promise;
+    runtimeStream.emitNotification({
+      method: "turn/plan/updated",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        explanation: null,
+        plan: [{ step: "Use live todo", status: "inProgress" }],
+      },
+    });
+    await flushCodexAdapterWork();
+    pendingTurns.resolve(
+      paginatedTurnsListResponse({
+        id: ref.externalSessionId,
+        turns: [
+          {
+            id: "turn-old",
+            status: "completed",
+            items: [
+              codexDynamicToolCallFixture({
+                id: "todo-old",
+                namespace: "functions",
+                tool: "update_plan",
+                arguments: { plan: [{ step: "Old todo", status: "pending" }] },
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+    expect(await todos).toEqual([
+      expect.objectContaining({ content: "Use live todo", status: "in_progress" }),
+    ]);
+  });
 
   test("projects supplied prompt context for cold persisted history reads", async () => {
     const { adapter } = createHarness();

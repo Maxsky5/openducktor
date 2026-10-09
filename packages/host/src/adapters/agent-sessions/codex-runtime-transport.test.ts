@@ -1,12 +1,15 @@
 import { expect, mock, test } from "bun:test";
-import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
+import {
+  CodexAppServerAdapter,
+  type CodexAppServerAdapterOptions,
+} from "@openducktor/adapters-codex-app-server";
 import { DEFAULT_CODEX_RUNTIME_POLICY, type CodexAppServerThread } from "@openducktor/contracts";
-import { AgentRuntimeQueryError, workflowAgentSessionScope } from "@openducktor/core";
+import { AgentRuntimeQueryError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
-import { toRuntimeQueryError } from "./runtime-query-adapter";
+import { createRuntimeQueryAdapter, toRuntimeQueryError } from "./runtime-query-adapter";
 import { createCodexAppServerTransportRegistry } from "../codex/codex-app-server-transport-registry";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 
@@ -141,7 +144,7 @@ test("keeps a Codex RPC error isolated to the calling surface", async () => {
   await expect(transport.request({ method: "model/list", params: {} })).rejects.toBe(rpcError);
 });
 
-test("fresh history and todos accept the host-wrapped empty rollout error", async () => {
+const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns/list") => {
   const runtimeId = "runtime-live";
   const threadId = "thread/start-runtime-live";
   const thread: CodexAppServerThread = {
@@ -175,7 +178,7 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     name: null,
     turns: [],
   };
-  const scope = workflowAgentSessionScope("task-1", "build");
+  const scope = { kind: "repository" } as const;
   const runtimePolicy = {
     kind: "codex" as const,
     policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },
@@ -190,21 +193,20 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
   };
   const nativeMethods: string[] = [];
   const registry = createCodexAppServerTransportRegistry();
-  let failTurnsRead = true;
+  let failHistoryRead = true;
   const rpcError = new HostOperationError({
-    operation: "codexAppServerTransport.request.thread/turns/list",
-    message: "Codex app-server request thread/turns/list failed",
+    operation: `codexAppServerTransport.request.${method}`,
+    message: `Codex app-server request ${method} failed`,
     cause: {
       code: -32603,
-      message:
-        "failed to read thread: thread-store internal error: failed to read session metadata /repo/rollout.jsonl: thread-store internal error: failed to read session metadata /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
+      message: "runtime database is unavailable",
     },
-    details: { method: "thread/turns/list" },
+    details: { method },
   });
   registry.registerTransport(runtimeId, {
     request: (input) => {
       nativeMethods.push(input.method);
-      if (input.method === "thread/turns/list" && failTurnsRead) return Effect.fail(rpcError);
+      if (input.method === method && failHistoryRead) return Effect.fail(rpcError);
       if (input.method === "initialize") {
         return Effect.succeed({
           codexHome: "/tmp/codex-home",
@@ -274,6 +276,10 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     },
     respond: () => Effect.succeed(undefined),
   });
+  let streamListener:
+    | Parameters<NonNullable<CodexAppServerAdapterOptions["subscribeEvents"]>>[1]
+    | undefined;
+  const firstTurnCompleted = Promise.withResolvers<void>();
   const adapter = new CodexAppServerAdapter({
     runtime: {
       kind: "codex",
@@ -282,7 +288,19 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     },
     resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     transportFactory: () => createCodexRuntimeTransport(registry, runtimeId),
-    subscribeEvents: () => () => {},
+    subscribeEvents: (_runtimeId, listener) => {
+      streamListener = listener;
+      return () => {};
+    },
+    onLiveSessionMutation: (mutation) => {
+      if (
+        mutation.transcriptEvents.some(
+          (event) => event.type === "session_idle" && event.turnCompleted,
+        )
+      ) {
+        firstTurnCompleted.resolve();
+      }
+    },
     respondServerRequest: async () => {},
     onRuntimeEventQueueFailure: () => undefined,
   });
@@ -292,16 +310,48 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     systemPrompt: "Use the repo rules.",
     model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
   });
+  const queries = createRuntimeQueryAdapter(adapter);
+  await expect(Effect.runPromise(queries.loadSessionTodos(ref))).resolves.toEqual([]);
   await expect(adapter.loadSessionHistory(ref)).resolves.toEqual([
     expect.objectContaining({ role: "system" }),
   ]);
-  await expect(adapter.loadSessionTodos(ref)).resolves.toEqual([]);
-  expect(nativeMethods.filter((method) => method === "thread/read")).toHaveLength(2);
+  expect(nativeMethods.filter((method) => method === "thread/read")).toHaveLength(0);
+  expect(nativeMethods.filter((method) => method === "thread/turns/list")).toHaveLength(0);
 
-  failTurnsRead = false;
+  expect(streamListener).toBeDefined();
+  streamListener?.({
+    runtimeId,
+    kind: "notification",
+    receivedAt: new Date().toISOString(),
+    message: {
+      method: "turn/completed",
+      params: {
+        threadId,
+        turn: {
+          id: "turn-first",
+          items: [],
+          status: "completed",
+          error: null,
+          itemsView: "full",
+          startedAt: null,
+          completedAt: null,
+          durationMs: null,
+        },
+      },
+    },
+  });
+  await firstTurnCompleted.promise;
+  failHistoryRead = false;
   await adapter.loadSessionHistory(ref);
-  failTurnsRead = true;
+  expect(nativeMethods.filter((method) => method === "thread/read")).toHaveLength(1);
+  failHistoryRead = true;
+  const queryError = await Effect.runPromise(Effect.flip(queries.loadSessionHistory(ref)));
+  expect(queryError.failure.code).toBe("request_failed");
   const historyError = await adapter.loadSessionHistory(ref).catch((cause) => cause);
+  if (method === "thread/read") {
+    expect(historyError).toBe(rpcError);
+    return;
+  }
   expect(historyError).toBeInstanceOf(CodexSessionHistoryError);
   expect(historyError.cause).toBe(rpcError);
   expect(historyError.failure).toMatchObject({
@@ -309,4 +359,9 @@ test("fresh history and todos accept the host-wrapped empty rollout error", asyn
     method: "thread/turns/list",
     diagnosticId: expect.any(String),
   });
-});
+};
+
+test.each(["thread/read", "thread/turns/list"] as const)(
+  "fresh workspace queries skip disk until the first turn ends and then propagate %s failures",
+  assertFreshWorkspaceQueries,
+);

@@ -1,10 +1,6 @@
 import { AgentRuntimeQueryError } from "@openducktor/core";
 import type { CodexAppServerThreadListParams, CodexAppServerTurn } from "@openducktor/contracts";
 import {
-  isCodexEmptyRolloutError,
-  isCodexUnmaterializedThreadError,
-} from "./codex-app-server-shared";
-import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
   type CodexThreadStatusSnapshot,
@@ -13,13 +9,7 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
 
-export type CodexThreadReadGuard = {
-  getFreshThreadCwd?: (() => string | undefined) | undefined;
-  onThreadRead?: (() => void) | undefined;
-};
-
-type CodexThreadReadOptions = CodexThreadReadGuard & {
-  localThreadCwd?: string | undefined;
+type CodexThreadReadOptions = {
   expectedThreadCwd?: string | undefined;
 };
 
@@ -102,6 +92,69 @@ export class CodexThreadInventoryReader {
     return inventoryRead.promise;
   }
 
+  updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void {
+    const statusOverrides =
+      this.statusOverridesByRuntimeId.get(runtimeId) ??
+      new Map<string, CodexThreadStatusSnapshot>();
+    statusOverrides.set(threadId, status);
+    this.statusOverridesByRuntimeId.set(runtimeId, statusOverrides);
+  }
+
+  clearThreadStatus(runtimeId: string, threadId: string): void {
+    const statusOverrides = this.statusOverridesByRuntimeId.get(runtimeId);
+    if (!statusOverrides) {
+      return;
+    }
+    statusOverrides.delete(threadId);
+    if (statusOverrides.size === 0) {
+      this.statusOverridesByRuntimeId.delete(runtimeId);
+    }
+  }
+
+  async readThreadHistory(
+    client: CodexAppServerClient,
+    input: {
+      externalSessionId: string;
+      workingDirectory: string;
+    },
+  ): Promise<CodexThreadHistoryReadResponse> {
+    return this.readThreadWithTurns(client, input.externalSessionId, {
+      expectedThreadCwd: input.workingDirectory,
+    });
+  }
+
+  async readThreadWithTurns(
+    client: CodexAppServerClient,
+    threadId: string,
+    options: CodexThreadReadOptions = {},
+  ): Promise<CodexThreadHistoryReadResponse> {
+    const response = await client.threadRead({ threadId, includeTurns: false });
+    const { expectedThreadCwd } = options;
+    if (
+      expectedThreadCwd !== undefined &&
+      (response.thread.id !== threadId || response.thread.cwd !== expectedThreadCwd)
+    ) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        "The native session does not match the selected session and working directory. Select the matching session.",
+      );
+    }
+    const pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
+    return { ...response, thread: { ...response.thread, turns: pagedTurns } };
+  }
+
+  async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
+    const turnIds = new Set<string>();
+    for (const turn of await this.fetchThreadTurns(client, threadId, "summary")) {
+      const turnId = turn.id;
+      if (!turnId) {
+        throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
+      }
+      turnIds.add(turnId);
+    }
+    return turnIds;
+  }
+
   private startInventoryRead(
     client: CodexAppServerClient,
     runtimeId: string,
@@ -129,25 +182,6 @@ export class CodexThreadInventoryReader {
     return nextPending.promise;
   }
 
-  updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void {
-    const statusOverrides =
-      this.statusOverridesByRuntimeId.get(runtimeId) ??
-      new Map<string, CodexThreadStatusSnapshot>();
-    statusOverrides.set(threadId, status);
-    this.statusOverridesByRuntimeId.set(runtimeId, statusOverrides);
-  }
-
-  clearThreadStatus(runtimeId: string, threadId: string): void {
-    const statusOverrides = this.statusOverridesByRuntimeId.get(runtimeId);
-    if (!statusOverrides) {
-      return;
-    }
-    statusOverrides.delete(threadId);
-    if (statusOverrides.size === 0) {
-      this.statusOverridesByRuntimeId.delete(runtimeId);
-    }
-  }
-
   private withStatusOverrides(
     runtimeId: string,
     inventory: CodexThreadInventory,
@@ -173,93 +207,6 @@ export class CodexThreadInventoryReader {
       projected.threadsById.set(threadId, { ...thread, status });
     }
     return projected ?? inventory;
-  }
-
-  async readThreadHistory(
-    client: CodexAppServerClient,
-    input: {
-      externalSessionId: string;
-      workingDirectory: string;
-      allowUnmaterialized?: boolean;
-    } & CodexThreadReadGuard,
-  ): Promise<CodexThreadHistoryReadResponse> {
-    const response = await this.readThreadWithTurns(client, input.externalSessionId, {
-      localThreadCwd: input.allowUnmaterialized ? input.workingDirectory : undefined,
-      expectedThreadCwd: input.workingDirectory,
-      getFreshThreadCwd: input.getFreshThreadCwd,
-      onThreadRead: input.onThreadRead,
-    });
-    if (!response) {
-      throw new AgentRuntimeQueryError(
-        "request_failed",
-        "The session history is unavailable. Resume the session from its controls before reading it again.",
-      );
-    }
-    if (
-      response.thread.id !== input.externalSessionId ||
-      response.thread.cwd !== input.workingDirectory
-    ) {
-      throw new AgentRuntimeQueryError(
-        "scope_mismatch",
-        "The native session does not match the selected session and working directory. Select the matching session.",
-      );
-    }
-    return response;
-  }
-
-  async readThreadWithTurns(
-    client: CodexAppServerClient,
-    threadId: string,
-    options: CodexThreadReadOptions = {},
-  ): Promise<CodexThreadHistoryReadResponse | undefined> {
-    const { localThreadCwd, expectedThreadCwd, getFreshThreadCwd, onThreadRead } = options;
-    let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
-    let pagedTurns: CodexAppServerTurn[];
-    try {
-      response = await client.threadRead({ threadId, includeTurns: false });
-      if (
-        expectedThreadCwd !== undefined &&
-        (response.thread.id !== threadId || response.thread.cwd !== expectedThreadCwd)
-      ) {
-        throw new AgentRuntimeQueryError(
-          "scope_mismatch",
-          "The native session does not match the selected session and working directory. Select the matching session.",
-        );
-      }
-      pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
-      onThreadRead?.();
-    } catch (error) {
-      let emptyThreadCwd: string | undefined;
-      if (isCodexEmptyRolloutError(error, threadId)) {
-        emptyThreadCwd = getFreshThreadCwd?.();
-      } else if (isCodexUnmaterializedThreadError(error)) {
-        emptyThreadCwd = localThreadCwd;
-      }
-      if (emptyThreadCwd !== undefined) {
-        const thread: CodexThreadHistoryReadResponse["thread"] = {
-          id: threadId,
-          turns: [],
-          cwd: emptyThreadCwd,
-        };
-        return {
-          thread,
-        };
-      }
-      throw error;
-    }
-    return { ...response, thread: { ...response.thread, turns: pagedTurns } };
-  }
-
-  async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
-    const turnIds = new Set<string>();
-    for (const turn of await this.fetchThreadTurns(client, threadId, "summary")) {
-      const turnId = turn.id;
-      if (!turnId) {
-        throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
-      }
-      turnIds.add(turnId);
-    }
-    return turnIds;
   }
 
   private async fetch(

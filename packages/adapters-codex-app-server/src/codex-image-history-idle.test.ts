@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import {
   codexSessionRuntimeRef,
-  codexStartSessionInput,
   codexThreadFixture,
   codexTurnFixture,
   createDeferred,
@@ -35,7 +34,7 @@ test("idle without a local turn settles pending nullable-timestamp history and p
   const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
   const historyRead = createDeferred<void>();
   const releaseHistory = createDeferred<void>();
-  const ref = codexSessionRuntimeRef();
+  const ref = codexSessionRuntimeRef("thread-existing");
   const events: AgentSessionTranscriptEvent[] = [];
   let turns = [imageTurn("old-turn")];
   const { adapter } = createHarness({
@@ -65,7 +64,7 @@ test("idle without a local turn settles pending nullable-timestamp history and p
       };
     },
   });
-  await adapter.startSession(codexStartSessionInput());
+  await adapter.resumeSession(ref);
   try {
     const pending = adapter.loadSessionHistory(ref);
     await historyRead.promise;

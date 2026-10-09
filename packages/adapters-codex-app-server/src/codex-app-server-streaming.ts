@@ -866,6 +866,7 @@ export const handleCodexPendingNotifications = async (
         activeTurn.markTurnSettled();
       }
       if (!activeTurn || shouldSettleActiveTurn) {
+        delete session.firstTurnHistory;
         context.setSessionLiveStatus(session, {
           classification: "idle",
         });

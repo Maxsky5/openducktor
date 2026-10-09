@@ -9,7 +9,6 @@ import type {
   CodexAppServerSkillRecord,
   CodexAppServerSkillsListResponse,
   CodexAppServerInitializeParams,
-  CodexAppServerThread,
   CodexAppServerThreadForkResult,
   CodexAppServerThreadLoadedListResponse,
   CodexAppServerThreadLoadedListParams,
@@ -67,6 +66,7 @@ import type {
 } from "@openducktor/core";
 import type { CodexPolicyLogEntry } from "./codex-session-policy";
 import type { CodexQuestionHistory } from "./codex-question-history";
+import type { CodexFirstTurnHistory } from "./codex-first-turn-history";
 import type {
   CodexRuntimeNotification,
   CodexRuntimeServerRequest,
@@ -160,13 +160,7 @@ export type CodexThreadStartResult = CodexAppServerThreadStartResult;
 export type CodexThreadResumeResult = CodexAppServerThreadResumeResult;
 export type CodexThreadForkResult = CodexAppServerThreadForkResult;
 
-export type CodexUnmaterializedThread = Pick<CodexAppServerThread, "id" | "turns"> & {
-  cwd?: CodexAppServerThread["cwd"];
-};
-
-export type CodexThreadHistoryReadResponse = {
-  thread: CodexAppServerThread | CodexUnmaterializedThread;
-};
+export type CodexThreadHistoryReadResponse = CodexAppServerThreadReadResponse;
 
 export type CodexSessionState = {
   summary: AgentSessionSummary;
@@ -180,6 +174,7 @@ export type CodexSessionState = {
   workingDirectory: string;
   runtimePolicy: AgentSessionRuntimePolicy;
   preserveNativeSettings?: boolean;
+  firstTurnHistory?: CodexFirstTurnHistory;
   liveStatus?: {
     classification: AgentSessionActivity;
   };

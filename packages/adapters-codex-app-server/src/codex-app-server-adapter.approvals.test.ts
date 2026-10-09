@@ -547,6 +547,15 @@ describe("CodexAppServerAdapter approvals", () => {
     expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.pendingQuestions).toContainEqual(
       expect.objectContaining({ requestId }),
     );
+    const failedReplyHistory = await adapter.loadSessionHistory(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+    );
+    expect(failedReplyHistory).toContainEqual(
+      expect.objectContaining({
+        messageId: `codex-question-${question.requestInstanceId}`,
+        parts: [expect.objectContaining({ kind: "tool", status: "running" })],
+      }),
+    );
 
     await adapter.replyLiveQuestion(reply);
     expect(respondServerRequest).toHaveBeenCalledTimes(2);
