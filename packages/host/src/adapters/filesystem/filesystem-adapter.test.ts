@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { constants } from "node:fs";
 import {
   chmod,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   realpath,
   rename,
@@ -35,6 +37,53 @@ afterEach(async () => {
 });
 
 describe("createFilesystemAdapter file snapshots", () => {
+  for (const operation of ["read_snapshot", "replace"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `rejects a FIFO without waiting for a writer: ${operation}`,
+      async () => {
+        const filePath = await createTempFile(encoder.encode("original"));
+        const filesystem = createFilesystemAdapter();
+        const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+        await rename(filePath, `${filePath}.original`);
+        const mkfifo = Bun.spawnSync(["mkfifo", filePath]);
+        expect(mkfifo.exitCode).toBe(0);
+        const pending = Effect.runPromiseExit(
+          operation === "read_snapshot"
+            ? filesystem.readFileSnapshot(filePath, 1024)
+            : filesystem.replaceFileBytes({
+                canonicalRootPath: path.dirname(filePath),
+                path: filePath,
+                expectedRevision: original.revision,
+                bytes: encoder.encode("draft"),
+                maxCurrentBytes: 1024,
+              }),
+        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const exit = await Promise.race([
+            pending,
+            new Promise<null>((resolve) => {
+              timer = setTimeout(() => resolve(null), 500);
+            }),
+          ]);
+          expect(exit).not.toBeNull();
+          expect(exit?._tag).toBe("Failure");
+          if (exit?._tag === "Failure") {
+            const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
+            expect(failure).toMatchObject({ code: "unavailable_file", operation });
+          }
+          expect(await readFile(`${filePath}.original`, "utf8")).toBe("original");
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+          // Release a blocked reader if this regression returns; leave no pending I/O.
+          const writer = await open(filePath, constants.O_RDWR | constants.O_NONBLOCK);
+          await writer.close();
+          await pending;
+        }
+      },
+    );
+  }
+
   test("replaces exact bytes on the existing file and preserves its mode", async () => {
     const filePath = await createTempFile(encoder.encode("longer original"));
     await chmod(filePath, 0o640);
