@@ -11,53 +11,15 @@ import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runt
 import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {
-  errorsByWorkspaceId: Record<string, string[]>;
-  errorCountByWorkspaceId: Record<string, number>;
+  warningsByWorkspaceId: Record<string, string[]>;
   runtimeExecutableErrors: string[];
   totalErrorCount: number;
 };
 
 const EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE: RuntimeAvailabilityValidationState = {
-  errorsByWorkspaceId: {},
-  errorCountByWorkspaceId: {},
+  warningsByWorkspaceId: {},
   runtimeExecutableErrors: [],
   totalErrorCount: 0,
-};
-
-const unavailableRuntimeLabel = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeKind: RuntimeKind,
-): string => runtimeLabelFor({ runtimeDefinitions, runtimeKind });
-
-const buildRepoRuntimeAvailabilityErrors = ({
-  allRuntimeDefinitions,
-  availableRuntimeDefinitions,
-  repoConfig,
-}: {
-  allRuntimeDefinitions: RuntimeDescriptor[];
-  availableRuntimeDefinitions: RuntimeDescriptor[];
-  repoConfig: SettingsRepoConfig;
-}): string[] => {
-  const errors: string[] = [];
-  const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));
-  const defaultModelRuntimeKind = repoConfig.defaultModel?.runtimeKind;
-  if (defaultModelRuntimeKind && !availableKinds.has(defaultModelRuntimeKind)) {
-    errors.push(
-      `Default Model runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, defaultModelRuntimeKind)}" is disabled.`,
-    );
-  }
-  if (availableKinds.size === 0) return errors;
-
-  for (const { role, label } of ROLE_DEFAULTS) {
-    const runtimeKind = repoConfig.agentDefaults[role]?.runtimeKind;
-    if (!runtimeKind || availableKinds.has(runtimeKind)) {
-      continue;
-    }
-    errors.push(
-      `${label} agent runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, runtimeKind)}" is disabled.`,
-    );
-  }
-  return errors;
 };
 
 export const buildRuntimeAvailabilityValidationState = ({
@@ -79,24 +41,20 @@ export const buildRuntimeAvailabilityValidationState = ({
     runtimeDefinitions,
     agentRuntimes: snapshotDraft.agentRuntimes,
   });
-  let workspaceErrorCount = 0;
-  const errorsByWorkspaceId: Record<string, string[]> = {};
-  const errorCountByWorkspaceId: Record<string, number> = {};
+  const warningsByWorkspaceId: Record<string, string[]> = {};
   for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
-    const errors = buildRepoRuntimeAvailabilityErrors({
+    const warnings = getRepoWarnings({
       allRuntimeDefinitions: runtimeDefinitions,
       availableRuntimeDefinitions,
       repoConfig,
     });
-    if (errors.length === 0) {
+    if (warnings.length === 0) {
       continue;
     }
-    errorsByWorkspaceId[workspaceId] = errors;
-    errorCountByWorkspaceId[workspaceId] = errors.length;
-    workspaceErrorCount += errors.length;
+    warningsByWorkspaceId[workspaceId] = warnings;
   }
 
-  const checkingRuntimeKindSet = new Set(checkingRuntimeKinds);
+  const checkingKinds = new Set(checkingRuntimeKinds);
   const runtimeExecutableErrors = runtimeExecutableResults
     ? runtimeDefinitions.flatMap((definition) => {
         if (!snapshotDraft.agentRuntimes[definition.kind].enabled) return [];
@@ -105,16 +63,15 @@ export const buildRuntimeAvailabilityValidationState = ({
           snapshotDraft.agentRuntimes[definition.kind].executablePath,
           runtimeExecutableResults,
         );
-        if (!result && checkingRuntimeKindSet.has(definition.kind)) return [];
+        if (!result && checkingKinds.has(definition.kind)) return [];
         if (result?.ok) return [];
         return [result?.error ?? `${definition.label} needs a valid executable path.`];
       })
     : [];
   return {
-    errorsByWorkspaceId,
-    errorCountByWorkspaceId,
+    warningsByWorkspaceId,
     runtimeExecutableErrors,
-    totalErrorCount: workspaceErrorCount + runtimeExecutableErrors.length,
+    totalErrorCount: runtimeExecutableErrors.length,
   };
 };
 
@@ -133,15 +90,44 @@ export const useSettingsModalRuntimeValidation = ({
     if (!snapshotDraft) {
       return EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE;
     }
-    const validationInput: Parameters<typeof buildRuntimeAvailabilityValidationState>[0] = {
+    const input: Parameters<typeof buildRuntimeAvailabilityValidationState>[0] = {
       runtimeDefinitions,
       snapshotDraft,
     };
-    if (runtimeExecutableResults)
-      validationInput.runtimeExecutableResults = runtimeExecutableResults;
+    if (runtimeExecutableResults) input.runtimeExecutableResults = runtimeExecutableResults;
     if (checkingRuntimeKinds) {
-      validationInput.checkingRuntimeKinds = checkingRuntimeKinds;
+      input.checkingRuntimeKinds = checkingRuntimeKinds;
     }
-    return buildRuntimeAvailabilityValidationState(validationInput);
+    return buildRuntimeAvailabilityValidationState(input);
   }, [checkingRuntimeKinds, runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
+};
+
+const getRepoWarnings = ({
+  allRuntimeDefinitions,
+  availableRuntimeDefinitions,
+  repoConfig,
+}: {
+  allRuntimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
+  repoConfig: SettingsRepoConfig;
+}): string[] => {
+  const warnings: string[] = [];
+  const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));
+  const defaultModelRuntimeKind = repoConfig.defaultModel?.runtimeKind;
+  if (defaultModelRuntimeKind && !availableKinds.has(defaultModelRuntimeKind)) {
+    warnings.push(
+      `Default Model runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind: defaultModelRuntimeKind })}" is disabled.`,
+    );
+  }
+
+  for (const { role, label } of ROLE_DEFAULTS) {
+    const runtimeKind = repoConfig.agentDefaults[role]?.runtimeKind;
+    if (!runtimeKind || availableKinds.has(runtimeKind)) {
+      continue;
+    }
+    warnings.push(
+      `${label} agent runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind })}" is disabled.`,
+    );
+  }
+  return warnings;
 };

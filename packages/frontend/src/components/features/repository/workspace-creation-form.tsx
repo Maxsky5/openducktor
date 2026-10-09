@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Stepper, type StepperStep } from "@/components/ui/stepper";
 import type { WorkspaceCreationController, WorkspaceCreationStage } from "./use-workspace-creation";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
+import { getModelWarnings } from "./workspace-model-warnings";
 import { WorkspaceProviderFields } from "./workspace-provider-fields";
 
 const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
@@ -62,11 +63,11 @@ export function WorkspaceCreationFields({
         </Button>
       ) : null}
       {controller.error || (controller.stage === "information" && controller.validationError) ? (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="whitespace-pre-line break-words text-sm text-destructive" role="alert">
           {controller.error ?? controller.validationError}
         </p>
       ) : null}
-      {controller.stage === "models" && controller.error && !controller.committed ? (
+      {controller.stage === "models" && controller.error && controller.canRecoverCreation ? (
         <Button
           type="button"
           variant="outline"
@@ -105,10 +106,8 @@ export function WorkspaceCreationBackAction({
 
 export function WorkspaceCreationSubmitAction({
   controller,
-  modelSurface,
 }: {
   controller: WorkspaceCreationController;
-  modelSurface?: WorkspaceCreationModelSurface | undefined;
 }): ReactElement | null {
   if (controller.stage === "repository") {
     return controller.repoPath && !controller.pickerOpen ? (
@@ -160,7 +159,7 @@ export function WorkspaceCreationSubmitAction({
     <Button
       type="button"
       disabled={controller.busy || controller.validationError !== null}
-      onClick={() => void controller.submit(modelSurface)}
+      onClick={() => void controller.submit()}
     >
       {progressLabel}
     </Button>
@@ -278,7 +277,7 @@ function WorkspaceModelsFields({
           isSaving: controller.busy || controller.createdWorkspaceId !== null,
         }}
         runtimeDefinitionsError={null}
-        runtimeAvailabilityErrors={surface.errors}
+        modelWarnings={[...surface.errors, ...getModelWarnings(controller.modelDraft, surface)]}
         getCatalogForRuntime={surface.getCatalogForRuntime}
         isCatalogLoadingForRuntime={surface.isCatalogLoadingForRuntime}
         onUpdateSelectedRepoConfig={controller.updateModelDraft}

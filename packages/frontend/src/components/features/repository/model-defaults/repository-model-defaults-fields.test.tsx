@@ -83,7 +83,7 @@ test("role model pickers show only runtimes that support that role", async () =>
         isSaving: false,
       }}
       runtimeDefinitionsError={null}
-      runtimeAvailabilityErrors={[]}
+      modelWarnings={[]}
       getCatalogForRuntime={(kind) =>
         catalogs.find((catalog) => catalog.runtime?.kind === kind) ?? null
       }

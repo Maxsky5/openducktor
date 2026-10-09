@@ -2,7 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import { resolveModelSelectionForPair } from "@/features/model-selection/model-selection-state";
-import type { RuntimeBoundModelSelection } from "@/lib/repo-agent-defaults";
+import type { ModelDefaultDraft } from "@/lib/repo-agent-defaults";
 import type { ensureDraftAgentDefault } from "./model-defaults-model";
 
 export const resolveRepoAgentDefaultModelPickerSelection = ({
@@ -15,7 +15,7 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
   currentRuntimeKind: RuntimeKind | null;
   targetCatalog: AgentModelCatalog;
   value: ModelPickerValue;
-}): RuntimeBoundModelSelection | null => {
+}): ModelDefaultDraft | null => {
   let currentSelection: AgentModelSelection | null = null;
   if (currentValue && currentRuntimeKind) {
     currentSelection = {

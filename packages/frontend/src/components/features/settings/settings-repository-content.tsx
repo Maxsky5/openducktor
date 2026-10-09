@@ -197,7 +197,7 @@ export function SettingsRepositoryContent({
     promptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
-    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoModelWarnings,
     selectedRepoPromptRoleTabErrorCounts,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
@@ -297,7 +297,7 @@ export function SettingsRepositoryContent({
               isSaving,
             }}
             runtimeDefinitionsError={runtimeDefinitionsError}
-            runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
+            modelWarnings={selectedRepoModelWarnings}
             getCatalogForRuntime={controller.getCatalogForRuntime}
             isCatalogLoadingForRuntime={controller.isCatalogLoadingForRuntime}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

@@ -56,20 +56,19 @@ const createSnapshot = (): SettingsSnapshot =>
   });
 
 describe("settings runtime availability validation", () => {
-  test("reports repository references to disabled runtimes", () => {
+  test("warns about disabled optional defaults without blocking settings", () => {
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       snapshotDraft: createSnapshot(),
     });
 
-    expect(validation.errorsByWorkspaceId).toEqual({
+    expect(validation.warningsByWorkspaceId).toEqual({
       repo: [
         'Default Model runtime "Codex" is disabled.',
         'Builder agent runtime "Codex" is disabled.',
       ],
     });
-    expect(validation.errorCountByWorkspaceId).toEqual({ repo: 2 });
-    expect(validation.totalErrorCount).toBe(2);
+    expect(validation.totalErrorCount).toBe(0);
   });
 
   test("does not require a runtime while runtime definitions are unavailable", () => {
@@ -81,7 +80,7 @@ describe("settings runtime availability validation", () => {
     expect(validation.totalErrorCount).toBe(0);
   });
 
-  test("reports a disabled Default Model runtime when every runtime is disabled", () => {
+  test("warns about all disabled optional defaults when every runtime is disabled", () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.opencode.enabled = false;
 
@@ -90,10 +89,13 @@ describe("settings runtime availability validation", () => {
       snapshotDraft,
     });
 
-    expect(validation.errorsByWorkspaceId).toEqual({
-      repo: ['Default Model runtime "Codex" is disabled.'],
+    expect(validation.warningsByWorkspaceId).toEqual({
+      repo: [
+        'Default Model runtime "Codex" is disabled.',
+        'Builder agent runtime "Codex" is disabled.',
+      ],
     });
-    expect(validation.totalErrorCount).toBe(1);
+    expect(validation.totalErrorCount).toBe(0);
   });
 
   test("reports an enabled runtime whose saved executable path is invalid", () => {

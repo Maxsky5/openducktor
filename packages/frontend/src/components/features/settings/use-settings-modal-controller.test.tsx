@@ -9,6 +9,7 @@ import {
   type RuntimeKind,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
+  settingsSnapshotSaveInputSchema,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
@@ -663,6 +664,55 @@ describe("useSettingsModalController", () => {
         repeatedValidationByKind[kind].resolve({ runtimes: [] });
       }
       host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
+  test("saves unrelated settings while retaining defaults for a disabled runtime", async () => {
+    const defaultModel = { runtimeKind: "codex" as const, providerId: "openai", modelId: "o3" };
+    settingsSnapshotFactory = () => {
+      const snapshot = createSettingsSnapshot();
+      snapshot.agentRuntimes.codex.enabled = false;
+      snapshot.workspaces.repo!.defaultModel = defaultModel;
+      snapshot.workspaces.repo!.agentDefaults.build = defaultModel;
+      snapshot.workspaces["repo-two"]!.agentDefaults.qa = defaultModel;
+      return snapshot;
+    };
+    saveSettingsSnapshot = mock(async (input: SettingsSnapshotSaveInput) => {
+      settingsSnapshotSaveInputSchema.parse(input);
+      return savedSettingsResult();
+    });
+    const harness = createHookHarness(true);
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.snapshotDraft !== null && !state.isLoadingRuntimeExecutables,
+      );
+      await harness.run((state) =>
+        state.updateGlobalChatSettings((chat) => ({
+          ...chat,
+          showThinkingMessages: true,
+        })),
+      );
+      let didSave = false;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+      expect(didSave).toBe(true);
+      expect(harness.getLatest().selectedRepoModelWarnings).toEqual([
+        'Default Model runtime "Codex" is disabled.',
+        'Builder agent runtime "Codex" is disabled.',
+      ]);
+      expect(harness.getLatest().hasRuntimeAvailabilityErrors).toBe(false);
+      expect(harness.getLatest().settingsSectionErrorCountById.repositories).toBe(0);
+      expect(harness.getLatest().saveError).toBeNull();
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+      const saved = saveSettingsSnapshot.mock.calls[0]![0];
+      expect(saved.chat.showThinkingMessages).toBe(true);
+      expect(saved.workspaces.repo!.defaultModel).toEqual(defaultModel);
+      expect(saved.workspaces.repo!.agentDefaults.build).toEqual(defaultModel);
+      expect(saved.workspaces["repo-two"]!.agentDefaults.qa).toEqual(defaultModel);
+    } finally {
       await harness.unmount();
     }
   });

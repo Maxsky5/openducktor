@@ -14,7 +14,7 @@ import {
   type RepoAgentDefaultsInput,
   type RepoDefaultRole,
 } from "@/components/features/repository/model-defaults/model-defaults-model";
-import type { RepoAgentDefaultDraft, RuntimeBoundModelSelection } from "@/lib/repo-agent-defaults";
+import type { RepoAgentDefaultDraft, ModelDefaultDraft } from "@/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
 
 export {
@@ -57,7 +57,7 @@ export const updateRepoDefaultModel = (
   defaultModel: RepoAgentDefaultDraft | null | undefined,
   field: keyof RepoAgentDefaultInput,
   value: string,
-): RuntimeBoundModelSelection | null => {
+): ModelDefaultDraft | null => {
   const draft = ensureDraftAgentDefault(defaultModel);
   const runtimeKind = draft.runtimeKind;
   if (!runtimeKind) {
@@ -73,21 +73,6 @@ export const clearRoleDefault = (
   ...agentDefaults,
   [role]: null,
 });
-
-export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInput): string[] => {
-  return ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
-    const value = agentDefaults[role];
-    const hasRequiredDefault =
-      value &&
-      value.providerId.trim().length > 0 &&
-      value.modelId.trim().length > 0 &&
-      (value.profileId?.trim().length ?? 0) > 0;
-    if (!hasRequiredDefault) {
-      labels.push(label);
-    }
-    return labels;
-  }, []);
-};
 
 export const getNeededCatalogRuntimeKinds = (
   selectedRepoConfig: SettingsRepoConfig | null,

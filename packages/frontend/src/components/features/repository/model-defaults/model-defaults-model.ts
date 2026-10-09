@@ -1,20 +1,20 @@
-import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { pickRepoAgentDefault, type RepoAgentDefaultDraft } from "@/lib/repo-agent-defaults";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  RepoAgentDefaultInput,
+  RepoSettingsInput,
+  WorkspaceModelDefaultsDraft,
+} from "@/types/state-slices";
 
-export type ModelDefaultsValue = Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
 export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
-export type RepoAgentDefaultsInput = {
-  spec?: RepoAgentDefaultDraft | null | undefined;
-  planner?: RepoAgentDefaultDraft | null | undefined;
-  build?: RepoAgentDefaultDraft | null | undefined;
-  qa?: RepoAgentDefaultDraft | null | undefined;
-};
+export type RepoAgentDefaultsInput = Partial<
+  Record<RepoDefaultRole, RepoAgentDefaultDraft | null | undefined>
+>;
 
 export const ROLE_DEFAULTS: ReadonlyArray<{ role: RepoDefaultRole; label: string }> = [
   { role: "spec", label: AGENT_ROLE_LABELS.spec },
@@ -75,7 +75,7 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   runtimeDefinitions,
   role,
 }: {
-  selectedRepoConfig: ModelDefaultsValue;
+  selectedRepoConfig: WorkspaceModelDefaultsDraft;
   runtimeDefinitions: RuntimeDescriptor[];
   role: RepoDefaultRole;
 }): RuntimeKind | null => {
