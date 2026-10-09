@@ -309,7 +309,7 @@ describe("RepositoryBranchSwitcher", () => {
     try {
       expect(screen.getByTitle("Current branch: main").textContent).toBe("main");
       const edit = screen.getByRole("button", { name: "Edit repository branch" });
-      expect(edit.textContent).toBe("Edit");
+      expect(edit.textContent).toBe("");
       fireEvent.click(edit);
       expect(screen.getByRole("dialog", { name: "Repository branch" })).toBeTruthy();
       fireEvent.click(await screen.findByRole("option", { name: /release/ }));

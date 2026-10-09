@@ -2,9 +2,9 @@
 
 ## Choose a comparison branch
 
-Use Edit in the Compare row to choose a local or remote-tracking branch. This changes comparison diffs, comparison counts, file-tree markers, and the Rebase destination. It does not change checkout, branch tracking, the repository default, or the upstream used by Pull and Push.
+Use the Target branch editor in the Git panel to choose a local or remote-tracking branch. This changes comparison diffs, comparison counts, file-tree markers, and the Rebase destination. It does not change checkout, branch tracking, the repository default, or the upstream used by Pull and Push.
 
-The Git header uses aligned Branch, Compare, and Commits rows in task and workspace sessions. The Commits row counts commits against the comparison branch. Pull and Push show separate counts against the current branch's upstream. In repository-root sessions, Edit in the Branch row opens checkout choices. Worktree checkout rules stay the same. The comparison menu shows choice ownership, reset rules, loading, and retry actions. It closes when the choice succeeds or the user cancels.
+Task and workspace sessions use the original task Git panel layout. Current branch and Target branch appear in cards with the comparison count above the arrow. The action lane keeps the original icons, order, badges, spacing, and tooltips. The diff tabs, empty states, and commit form keep their original layout. The target pencil opens the inline editor; its branch selector opens the searchable choices. In repository-root sessions, the current-branch pencil opens checkout choices. Worktree checkout rules stay the same. Help, loading, errors, and retry actions appear only while the target editor is open.
 
 | Session context | Initial comparison | Choice owner |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The panel keeps the selected target visible when its comparison fails. Target di
 
 Uncommitted reads and reset snapshots use `HEAD`. File browsing, Commit, and conflict recovery remain available when their own prerequisites hold. Pull and Push use actual branch tracking, even when the comparison branch differs.
 
-A new task worktree can have upstream settings before its remote branch exists. A missing remote-tracking ref shows Publish instead of a Git revision error. Comparison with another available branch remains usable. Other Git read errors remain visible, with full command output in Details.
+A new task worktree can have upstream settings before its remote branch exists. A missing remote-tracking ref produces the untracked status, which permits the existing Push action to publish the branch. Comparison with another available branch remains usable. Other Git read errors remain visible.
 
 If a task has no saved target and repository settings fail to load, the panel shows the settings error. Refresh retries that read. A saved task target remains usable when settings cannot load.
 

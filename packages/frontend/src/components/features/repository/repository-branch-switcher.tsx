@@ -20,7 +20,7 @@ const LAYOUT_CLASSES = {
   },
   inline: {
     root: "space-y-1",
-    row: "flex h-7 min-w-0 items-center gap-2",
+    row: "flex h-7 min-w-0 items-center gap-1.5",
     label: "sr-only",
     selector: "shrink-0",
     trigger: "h-7 text-xs",
@@ -188,14 +188,13 @@ function RepositoryBranchRow({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  size="icon"
+                  className="size-7 shrink-0"
                   aria-label="Edit repository branch"
                   title="Switch repository branch"
                   disabled={disabled}
                 >
-                  <Pencil className="size-3" />
-                  Edit
+                  <Pencil className="size-3.5" />
                 </Button>
               ),
             }

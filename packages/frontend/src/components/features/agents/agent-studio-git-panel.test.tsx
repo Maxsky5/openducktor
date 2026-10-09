@@ -204,7 +204,7 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
     expect(countByTestId(root, "agent-studio-git-target-status-row")).toBe(0);
     const targetAheadCount = findByTestId(root, "agent-studio-git-target-ahead-count");
-    expect(targetAheadCount.children.join("")).toBe("2 ahead");
+    expect(targetAheadCount.children.join("")).toBe("2");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
     expect(
@@ -320,8 +320,8 @@ describe("AgentStudioGitPanel", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
     });
-    fireEvent.click(await screen.findByRole("option", { name: /origin\/beta/ }));
     await act(async () => {
+      fireEvent.click(screen.getByTestId("mock-branch-selector"));
       await flush();
     });
     expect(updateTargetBranch).toHaveBeenCalledWith("refs/remotes/origin/beta");
@@ -386,7 +386,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     const detectButton = findByTestId(root, "agent-studio-git-detect-pr-button");
-    expect(getNodeText(detectButton)).toContain("Find PR");
+    expect(getNodeText(detectButton)).toContain("Detect PR");
 
     await act(async () => {
       detectButton.props.onClick();

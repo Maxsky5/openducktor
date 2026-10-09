@@ -75,19 +75,32 @@ describe("GitInfoHeader", () => {
     }
   });
 
-  test("keeps git context controls without rendering a duplicate PR badge", () => {
-    rendered = renderGitInfoHeader(
-      createGitInfoHeaderProps({
-        pullRequest,
-        uncommittedFileCount: 3,
-      }),
-    );
+  test.each(["worktree", "repository"] as const)(
+    "keeps the task action lane in %s mode",
+    (contextMode) => {
+      rendered = renderGitInfoHeader(
+        createGitInfoHeaderProps({
+          contextMode,
+          pullRequest,
+          uncommittedFileCount: 3,
+        }),
+      );
 
-    expect(screen.queryByText("PR #42")).toBeNull();
-    expect(screen.queryByText("3 files changed")).toBeNull();
-    expect(screen.queryByTestId("agent-studio-git-open-in-actions")).toBeNull();
-    expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
-  });
+      const lane = screen.getByTestId("agent-studio-git-action-row");
+      const buttons = [...lane.querySelectorAll("button")];
+      expect(buttons.map((button) => button.querySelector(".sr-only")?.textContent)).toEqual(
+        contextMode === "worktree"
+          ? ["Refresh", "Rebase onto target", "Pull from upstream", "Push branch"]
+          : ["Refresh", "Pull from upstream", "Push branch"],
+      );
+      expect(screen.getByText("Current branch")).toBeTruthy();
+      expect(screen.getByText("Target branch")).toBeTruthy();
+      expect(screen.queryByText("PR #42")).toBeNull();
+      expect(screen.queryByText("3 files changed")).toBeNull();
+      expect(screen.queryByTestId("agent-studio-git-open-in-actions")).toBeNull();
+      expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
+    },
+  );
 
   test("does not report an unknown branch as detached while Git state loads", () => {
     rendered = renderGitInfoHeader(
@@ -98,50 +111,7 @@ describe("GitInfoHeader", () => {
     );
   });
 
-  test("names comparison counts separately from remote action counts", () => {
-    rendered = renderGitInfoHeader(
-      createGitInfoHeaderProps({
-        commitsAheadBehind: { ahead: 2, behind: 7 },
-        upstreamAheadBehind: { ahead: 5, behind: 3 },
-      }),
-    );
-    expect(screen.getByTestId("agent-studio-git-target-ahead-count").textContent).toBe("2 ahead");
-    expect(screen.getByTestId("agent-studio-git-behind-count").textContent).toBe("7 behind");
-    expect(screen.getByRole("button", { name: "Push branch" }).textContent).toBe("Push5");
-    expect(screen.getByRole("button", { name: "Pull from upstream" }).textContent).toBe("Pull3");
-  });
-
-  test("offers Publish for a branch without a remote branch", () => {
-    rendered = renderGitInfoHeader(
-      createGitInfoHeaderProps({
-        upstreamStatus: "untracked",
-        upstreamAheadBehind: { ahead: 0, behind: 0 },
-      }),
-    );
-    const publish = screen.getByRole("button", { name: "Push branch" });
-    expect(publish.textContent).toBe("Publish");
-    expect(publish.hasAttribute("disabled")).toBe(false);
-    expect(
-      screen.getByRole("button", { name: "Pull from upstream" }).hasAttribute("disabled"),
-    ).toBe(true);
-    expect(screen.getByText("No remote branch yet. Publish to share it.")).toBeTruthy();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  test("keeps Git output in closed details and shows a recovery step", () => {
-    rendered = renderGitInfoHeader(
-      createGitInfoHeaderProps({
-        upstreamStatus: "error",
-        upstreamError: "Command failed: git rev-list\nfatal: bad revision",
-      }),
-    );
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Refresh to fetch the remote");
-    expect(alert.querySelector("details")?.open).toBe(false);
-    expect(alert.querySelector("details")?.textContent).toContain("fatal: bad revision");
-  });
-
-  test("shows a repository branch in one compact row", () => {
+  test("shows the task branch cards in repository mode", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({ contextMode: "repository", branch: "beta" }),
     );
@@ -182,8 +152,11 @@ describe("GitInfoHeader", () => {
     );
     expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
     fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
     expect(await screen.findByRole("option", { name: /Tracked upstream/ })).toBeTruthy();
-    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
+      "Tracked upstream",
+    );
   });
 
   test("keeps the worktree branch rows when a repository branch control is available", () => {
@@ -208,13 +181,12 @@ describe("GitInfoHeader", () => {
     );
 
     const button = screen.getByTestId("agent-studio-git-detect-pr-button");
-    const error = document.getElementById(button.getAttribute("aria-describedby") ?? "");
+    const error = screen.getByText("Sign in to GitHub CLI.");
     expect(button.hasAttribute("disabled")).toBe(true);
-    expect(error?.textContent).toBe("Sign in to GitHub CLI.");
-    expect(screen.getByRole("alert").textContent).toContain("Sign in to GitHub CLI.");
+    expect(button.getAttribute("aria-describedby")).toBe(error.id);
   });
 
-  test("opens comparison choices in one click and closes when editing becomes unavailable", async () => {
+  test("opens the target editor and closes when editing becomes unavailable", async () => {
     const editableProps = createGitInfoHeaderProps({
       targetBranchOptions: [
         { value: "origin/main", label: "origin/main" },
@@ -229,9 +201,10 @@ describe("GitInfoHeader", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
     });
+    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
 
     expect(screen.getByTestId("agent-studio-git-target-branch-editor")).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "Edit target branch" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Target branch" })).toBeTruthy();
     expect(await screen.findByRole("option", { name: /origin\/release/ })).toBeTruthy();
 
     await act(async () => {
@@ -262,6 +235,7 @@ describe("GitInfoHeader", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
     const option = await screen.findByRole("option", { name: /origin\/main/ });
     expect(option.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(option);
@@ -292,6 +266,7 @@ describe("GitInfoHeader", () => {
     rendered = renderGitInfoHeader(props);
     try {
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       fireEvent.click(await screen.findByRole("option", { name: /origin\/release/ }));
       await act(async () => {
         rendered?.rerender(
@@ -328,8 +303,9 @@ describe("GitInfoHeader", () => {
         await save.promise.catch(() => {});
       });
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       expect(screen.queryByText("Old selection failed.")).toBeNull();
-      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain(
+      expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
         "origin/main",
       );
     } finally {
@@ -361,16 +337,17 @@ test.each(["light", "dark"] as const)(
     try {
       expect(screen.queryByText(/This choice applies only to this session/)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       fireEvent.click(await screen.findByRole("option", { name: /release/ }));
       expect(update).toHaveBeenCalledWith("refs/heads/release");
       expect(
         screen.getByTestId("agent-studio-git-target-branch-cancel").hasAttribute("disabled"),
       ).toBe(true);
-      expect(
-        screen.getByPlaceholderText("Find comparison branch...").hasAttribute("disabled"),
-      ).toBe(true);
+      expect(screen.getByRole("button", { name: "Target branch" }).hasAttribute("disabled")).toBe(
+        true,
+      );
       expect(screen.getByRole("status").textContent).toContain("Applying comparison...");
-      fireEvent.click(screen.getByRole("option", { name: /origin\/main/ }));
+      expect(screen.queryByRole("option", { name: /origin\/main/ })).toBeNull();
       expect(update).toHaveBeenCalledTimes(1);
       await act(async () => {
         failure.reject(new Error("Could not save the target. Try again."));
@@ -379,7 +356,9 @@ test.each(["light", "dark"] as const)(
       await waitFor(() =>
         expect(screen.getByText("Could not save the target. Try again.")).toBeTruthy(),
       );
-      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain("release");
+      expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
+        "release",
+      );
       expect(screen.getByText(/This choice applies only to this session/)).toBeTruthy();
       fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-cancel"));
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
