@@ -119,17 +119,9 @@ const claudeHistoryAssistantEntrySchema = z.object({
   message: claudeAssistantMessagePayloadSchema,
 });
 
-const claudeHistoryAttachmentSchema = z.object({
-  isMeta: z.boolean().optional(),
-  prompt: z.string().optional(),
-  timestamp: z.string().optional(),
-  type: z.string().min(1),
-});
-
-const claudeMetaQueuedCommandAttachmentSchema = claudeHistoryAttachmentSchema.extend({
-  isMeta: z.literal(true),
+const claudeMetaQueuedCommandAttachmentSchema = z.object({
   prompt: z.string().min(1),
-  type: z.literal("queued_command"),
+  timestamp: z.string().optional(),
 });
 
 const claudeTaskUsageSchema = z.object({
@@ -309,11 +301,6 @@ export const parseClaudeHistoryAssistantEntry = (
     claudeHistoryAssistantEntrySchema.safeParse(value),
     "claudeHistoryAssistantMessage",
   );
-
-export const parseClaudeHistoryAttachment = (
-  value: SessionStoreEntry[string],
-): z.output<typeof claudeHistoryAttachmentSchema> =>
-  parseClaudeIngress(claudeHistoryAttachmentSchema.safeParse(value), "claudeHistoryAttachment");
 
 export const parseClaudeMetaQueuedCommandAttachment = (
   value: SessionStoreEntry[string],

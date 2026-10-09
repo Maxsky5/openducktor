@@ -52,6 +52,8 @@ import {
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 
+const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
+
 export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
 };
@@ -483,7 +485,7 @@ function AgentChatComposerFormView({
             hasSlashAttachmentConflict={hasSlashAttachmentConflict}
             onRemoveAttachment={onRemoveAttachment}
           />
-          <AgentChatComposerEditor
+          <MemoizedAgentChatComposerEditor
             draft={draft}
             onDraftChange={onDraftChange}
             onAddFiles={onAddFiles}
@@ -803,9 +805,10 @@ export function AgentChatComposer({
   const hasBlockingAttachments = Object.keys(attachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+  const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
 
   const sendDisabled =
-    isSubmitting ||
+    isSendOrModelPending ||
     isComposerInputDisabled ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
@@ -818,7 +821,7 @@ export function AgentChatComposer({
     latestSendDisabledRef.current = sendDisabled;
   }, [draft, draftScope.key, onSend, sendDisabled]);
 
-  const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
+  const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
 
   const scheduleComposerFocus = useAgentChatComposerFocus({

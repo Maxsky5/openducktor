@@ -22,6 +22,7 @@ import {
 } from "@/lib/agent-session-waiting-input";
 import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
@@ -67,7 +68,7 @@ export function WorkspaceSessionChat({
   visitKey = 0,
   onActionsReady,
 }: WorkspaceSessionChatProps): ReactElement {
-  const identity = useMemo(() => workspaceSessionIdentity(record), [record]);
+  const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
@@ -199,7 +200,6 @@ export function WorkspaceSessionChat({
     observationReady: chatState.observationReady,
     recordsError,
     targetFault: chatState.targetFault,
-    isSavingModel,
   });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
@@ -267,6 +267,7 @@ export function WorkspaceSessionChat({
       canResumeSession && canInteract
         ? {
             isPending: actions.isResumingSession,
+            isDisabled: isSavingModel,
             error: actions.resumeSessionError,
             usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
             onResume: () => {
@@ -292,6 +293,7 @@ export function WorkspaceSessionChat({
       pendingSendItems: reviewComments.pendingSendItems ?? undefined,
       isSending,
       isStarting,
+      isSavingModel,
       contextUsage,
       selectedModelSelection: chatState.selectedModel,
       selectedModelDescriptor: picker.selectedModelEntry,

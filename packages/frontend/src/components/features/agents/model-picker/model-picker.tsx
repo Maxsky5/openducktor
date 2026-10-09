@@ -947,18 +947,16 @@ export function ModelPicker({
     <TooltipProvider>
       <Popover open={open} onOpenChange={handleOpenChange}>
         {readOnlyReason ? (
-          <>
-            <span id={readOnlyReasonId} className="sr-only">
-              {readOnlyReason}
-            </span>
-            <Tooltip>
-              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-              <TooltipContent>{readOnlyReason}</TooltipContent>
-            </Tooltip>
-          </>
-        ) : (
-          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        )}
+          <span id={readOnlyReasonId} className="sr-only">
+            {readOnlyReason}
+          </span>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+          </TooltipTrigger>
+          {readOnlyReason ? <TooltipContent>{readOnlyReason}</TooltipContent> : null}
+        </Tooltip>
         <PopoverContent
           portalContainer={portalContainer}
           className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"

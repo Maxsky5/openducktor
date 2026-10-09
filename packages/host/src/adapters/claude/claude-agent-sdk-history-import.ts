@@ -11,7 +11,6 @@ import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   parseClaudeHistoryAssistantEntry,
-  parseClaudeHistoryAttachment,
   parseClaudeHistoryConversationEntry,
   parseClaudeHistoryStoreEntry,
   parseClaudeHistorySubagentSystemMessageIngress,
@@ -19,7 +18,7 @@ import {
   type ClaudeHistorySubagentSystemMessageIngress,
 } from "./claude-agent-sdk-ingress-schemas";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
-import { readStringProp } from "./claude-agent-sdk-utils";
+import { readText } from "./claude-agent-sdk-utils";
 
 export type ClaudeHistoryResultMessage = SessionStoreEntry & {
   type: "result";
@@ -88,28 +87,27 @@ export type ClaudeHistoryEntryMetadata = {
   timestamp?: unknown;
 };
 
-const claudeHistoryStringSchema = z.string();
+const claudeHistoryBackgroundTasksSchema = z.array(
+  z.object({
+    task_id: z.string(),
+    task_type: z.string(),
+    description: z.string(),
+    ambient: z.boolean().optional(),
+  }),
+);
 
-const sessionStoreEntryValue = (entry: SessionStoreEntry): SessionStoreEntry => {
-  parseClaudeHistoryStoreEntry(entry);
-  return entry;
-};
-
+/* oxlint-disable anti-slop/no-runtime-typeof -- SDK entries are validated on import. Classify opaque variants before parsing the fields we consume. */
 const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHistoryMessage => {
-  const value = sessionStoreEntryValue(entry);
   if (entry.type === "queue-operation") {
-    return (
-      readStringProp(value, "operation") === "enqueue" &&
-      claudeHistoryStringSchema.safeParse(entry.content).success
-    );
+    return entry.operation === "enqueue" && typeof entry.content === "string";
   }
   if (entry.type === "assistant" || entry.type === "user" || entry.type === "system") {
-    const subtype = readStringProp(value, "subtype");
+    const subtype = entry.type === "system" ? readText(entry.subtype) : undefined;
     if (entry.type === "system" && subtype === "model_refusal_fallback") {
-      return claudeHistoryStringSchema.safeParse(entry.uuid).success;
+      return typeof entry.uuid === "string";
     }
     if (entry.type === "system" && subtype === "compact_boundary") {
-      return claudeHistoryStringSchema.safeParse(entry.uuid).success;
+      return typeof entry.uuid === "string";
     }
     if (
       entry.type === "system" &&
@@ -122,32 +120,20 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
       return true;
     }
     if (entry.type === "system" && subtype === "background_tasks_changed") {
-      return z
-        .array(
-          z.object({
-            task_id: z.string(),
-            task_type: z.string(),
-            description: z.string(),
-            ambient: z.boolean().optional(),
-          }),
-        )
-        .safeParse(entry.tasks).success;
+      return claudeHistoryBackgroundTasksSchema.safeParse(entry.tasks).success;
     }
     if (
       entry.type === "system" &&
       (subtype === "local_command" || subtype === "local_command_output")
     ) {
-      return (
-        claudeHistoryStringSchema.safeParse(entry.uuid).success &&
-        claudeHistoryStringSchema.safeParse(entry.content).success
-      );
+      return typeof entry.uuid === "string" && typeof entry.content === "string";
     }
     if (entry.type === "assistant") {
-      parseClaudeHistoryAssistantEntry(value);
+      parseClaudeHistoryAssistantEntry(entry);
     } else if (entry.type === "user") {
-      parseClaudeHistoryConversationEntry(value);
+      parseClaudeHistoryConversationEntry(entry);
     }
-    return claudeHistoryStringSchema.safeParse(entry.uuid).success && "message" in entry;
+    return typeof entry.uuid === "string" && "message" in entry;
   }
   return entry.type === "result";
 };
@@ -158,27 +144,38 @@ const queuedPromptKey = (
 ): string | null => (timestamp && prompt ? JSON.stringify([timestamp, prompt]) : null);
 
 const readMetaQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
-  const value = sessionStoreEntryValue(entry);
   if (entry.type !== "attachment") {
     return null;
   }
-  const attachment = parseClaudeHistoryAttachment(value.attachment);
-  if (attachment.type !== "queued_command" || attachment.isMeta !== true) {
+  const attachment = entry.attachment;
+  if (
+    typeof attachment !== "object" ||
+    attachment === null ||
+    !("type" in attachment) ||
+    attachment.type !== "queued_command" ||
+    !("isMeta" in attachment) ||
+    attachment.isMeta !== true
+  ) {
     return null;
   }
-  const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment(value.attachment);
-  return queuedPromptKey(
-    readStringProp(value, "timestamp") ?? metaQueuedCommand.timestamp,
-    metaQueuedCommand.prompt,
-  );
+  // Native content-block prompts have no string queue key and need no deduplication parse.
+  if ("prompt" in attachment && Array.isArray(attachment.prompt)) {
+    return null;
+  }
+  const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment({
+    prompt: "prompt" in attachment ? attachment.prompt : undefined,
+    timestamp:
+      readText(entry.timestamp) ?? ("timestamp" in attachment ? attachment.timestamp : undefined),
+  });
+  return queuedPromptKey(metaQueuedCommand.timestamp, metaQueuedCommand.prompt);
 };
+/* oxlint-enable anti-slop/no-runtime-typeof */
 
 const readQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
-  const value = sessionStoreEntryValue(entry);
-  if (entry.type !== "queue-operation" || readStringProp(value, "operation") !== "enqueue") {
+  if (entry.type !== "queue-operation" || entry.operation !== "enqueue") {
     return null;
   }
-  return queuedPromptKey(readStringProp(value, "timestamp"), readStringProp(value, "content"));
+  return queuedPromptKey(readText(entry.timestamp), readText(entry.content));
 };
 
 export const filterClaudeHistoryMessages = (
@@ -197,9 +194,8 @@ export const filterClaudeHistoryMessages = (
 export const isClaudeHistorySubagentSystemMessage = (
   entry: ClaudeHistoryMessage,
 ): entry is ClaudeHistorySubagentSystemMessage => {
-  const value = sessionStoreEntryValue(entry);
   if (entry.type !== "system") return false;
-  const subtype = readStringProp(value, "subtype");
+  const subtype = readText(entry.subtype);
   if (
     subtype !== "task_started" &&
     subtype !== "task_progress" &&
@@ -215,14 +211,12 @@ export const isClaudeHistorySubagentSystemMessage = (
 export const isClaudeHistoryBackgroundTasksChangedMessage = (
   entry: ClaudeHistoryMessage,
 ): entry is ClaudeHistoryBackgroundTasksChangedMessage =>
-  entry.type === "system" && readStringProp(entry, "subtype") === "background_tasks_changed";
+  entry.type === "system" && readText(entry.subtype) === "background_tasks_changed";
 
 export const isClaudeHistoryCompactBoundaryMessage = (
   entry: ClaudeHistoryMessage,
-): entry is ClaudeHistoryCompactBoundaryMessage => {
-  const value = sessionStoreEntryValue(entry);
-  return entry.type === "system" && readStringProp(value, "subtype") === "compact_boundary";
-};
+): entry is ClaudeHistoryCompactBoundaryMessage =>
+  entry.type === "system" && readText(entry.subtype) === "compact_boundary";
 
 const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: string }) => {
   const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>();
@@ -246,14 +240,13 @@ const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: s
 const readAgentToolUseIds = (entries: readonly SessionStoreEntry[]): Set<string> => {
   const toolUseIds = new Set<string>();
   for (const entry of entries) {
-    const value = sessionStoreEntryValue(entry);
     if (entry.type !== "assistant") {
       continue;
     }
-    const content = parseClaudeHistoryAssistantEntry(value).message.content;
+    const content = parseClaudeHistoryAssistantEntry(entry).message.content;
     for (const block of content) {
-      if (block.type === "tool_use" && readStringProp(block, "name") === "Agent") {
-        const toolUseId = readStringProp(block, "id");
+      if (block.type === "tool_use" && readText(block.name) === "Agent") {
+        const toolUseId = readText(block.id);
         if (toolUseId) {
           toolUseIds.add(toolUseId);
         }
@@ -280,7 +273,7 @@ export const readSubagentAgentIdsByToolUseId = (
     }
     const agentId = readSubagentAgentId(subpath);
     const parentToolUseId = entries
-      .map((entry) => readStringProp(sessionStoreEntryValue(entry), "parent_tool_use_id"))
+      .map((entry) => readText(entry.parent_tool_use_id))
       .find((value): value is string => Boolean(value));
     if (agentId && parentToolUseId && targetToolUseIds.has(parentToolUseId)) {
       agentIdsByToolUseId.set(parentToolUseId, agentId);

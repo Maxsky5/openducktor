@@ -347,6 +347,62 @@ describe("ModelPicker", () => {
     },
   );
 
+  test("keeps the model trigger mounted while saving a selection", async () => {
+    const runtimes = makeLargeRuntimes(2);
+    const favorites = favoriteState();
+    const onValueChange = mock(() => {});
+    let finishSave = (): void => {};
+
+    function Harness() {
+      const [selection, setSelection] = useState<AgentModelFavorite>({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "model-0",
+      });
+      const [isSaving, setSaving] = useState(false);
+      finishSave = () => setSaving(false);
+      return (
+        <ModelPicker
+          runtimes={runtimes}
+          value={selection}
+          favoriteState={favorites}
+          selectionPolicy={
+            isSaving
+              ? { kind: "read_only", reason: "Saving model selection." }
+              : { kind: "runtime_locked", runtimeKind: "opencode", reason: "Session runtime." }
+          }
+          onValueChange={(nextSelection) => {
+            onValueChange();
+            setSelection(nextSelection);
+            setSaving(true);
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const trigger = screen.getByRole("button", { name: "Select model, OpenCode, Model 0" });
+    await act(async () => {
+      trigger.focus();
+      fireEvent.click(trigger);
+    });
+    await act(async () => {
+      const model = screen.getByRole("button", { name: "Select Model 1 model" });
+      model.focus();
+      fireEvent.click(model);
+    });
+
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+    expect(trigger.isConnected).toBe(true);
+    expect(trigger.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+
+    await act(async () => finishSave());
+    expect(trigger.isConnected).toBe(true);
+    expect(trigger.getAttribute("aria-disabled")).toBe("false");
+    expect(trigger.getAttribute("aria-label")).toBe("Select model, OpenCode, Model 1");
+  });
+
   test("keeps cached models selectable while a refresh is in flight", async () => {
     const onValueChange = mock(() => {});
     const refreshingRuntimes: ModelPickerRuntime[] = [

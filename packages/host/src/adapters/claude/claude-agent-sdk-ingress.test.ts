@@ -21,6 +21,20 @@ describe("Claude SDK ingress", () => {
     });
   });
 
+  test.each([{ prompt: 123 }, { prompt: "Peer prompt", timestamp: 123 }])(
+    "rejects malformed consumed meta queue fields before history projection: %j",
+    (fields) => {
+      expect(() =>
+        filterClaudeHistoryMessages([
+          {
+            type: "attachment",
+            attachment: { type: "queued_command", isMeta: true, ...fields },
+          },
+        ]),
+      ).toThrow("Claude SDK sent an invalid claudeMetaQueuedCommandAttachment payload.");
+    },
+  );
+
   test("rejects malformed pre-tool input before authorization", async () => {
     const hook = createClaudePreToolUseHook({ session: createClaudeSession() });
     const malformedInput: Parameters<typeof hook>[0] = {
