@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -69,7 +69,7 @@ test("keeps exact comparison refs and actual upstream counts independent", async
     status = await Effect.runPromise(
       service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
     );
-    expect(status.upstreamAheadBehind.outcome).toBe("error");
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
     expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
     // Git owns refspec mapping, including nonstandard tracking namespaces.
     git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/custom/*");
@@ -79,7 +79,77 @@ test("keeps exact comparison refs and actual upstream counts independent", async
       kind: "available",
       reference: "refs/remotes/custom/main",
     });
+    status = await Effect.runPromise(
+      service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
+    );
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "tracking", ahead: 1, behind: 0 });
+    git("config", "branch.feature.remote", ".");
+    git("config", "branch.feature.merge", "refs/heads/missing");
+    status = await Effect.runPromise(
+      service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
+    );
+    expect(status.upstreamAheadBehind.outcome).toBe("error");
   } finally {
     await rm(repo, { recursive: true, force: true });
+  }
+}, 5000);
+
+// Worktree setup and fetch start real Git processes, including a local bare remote.
+test("keeps an unpublished task worktree usable after fetch prunes its tracking ref", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "git-task-start-"));
+  const repo = path.join(root, "repo");
+  const remote = path.join(root, "remote.git");
+  const worktree = path.join(root, "task");
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: repo,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+  const service = createGitService(adapter);
+  try {
+    await mkdir(repo);
+    git("init", "--initial-branch=main");
+    git("config", "user.name", "Task Startup Test");
+    git("config", "user.email", "startup@example.invalid");
+    git("config", "commit.gpgsign", "false");
+    await writeFile(path.join(repo, "base.txt"), "base\n");
+    git("add", ".");
+    git("commit", "-m", "base");
+    git("init", "--bare", remote);
+    git("remote", "add", "origin", remote);
+    git("push", "-u", "origin", "main");
+    await Effect.runPromise(
+      adapter.createWorktree(repo, worktree, "odt/new-task", true, "origin/main"),
+    );
+    await Effect.runPromise(
+      adapter.configureBranchUpstream(repo, worktree, "odt/new-task", "origin"),
+    );
+    await Effect.runPromise(adapter.fetchRemote(worktree, "origin/main"));
+    await writeFile(path.join(worktree, "base.txt"), "changed\n");
+    const input = {
+      repoPath: repo,
+      workingDir: worktree,
+      targetBranch: "refs/remotes/origin/main",
+      diffScope: "uncommitted" as const,
+    };
+    const status = await Effect.runPromise(service.getWorktreeStatus(input));
+    const summary = await Effect.runPromise(service.getWorktreeStatusSummary(input));
+    expect(status.currentBranch.name).toBe("odt/new-task");
+    expect(status.fileDiffs[0]?.file).toBe("base.txt");
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
+    expect(summary.upstreamAheadBehind).toEqual(status.upstreamAheadBehind);
+    expect(
+      await Effect.runPromise(
+        service.getComparisonTarget({
+          repoPath: repo,
+          workingDir: worktree,
+          target: { remote: "origin", branch: "main" },
+        }),
+      ),
+    ).toEqual({ kind: "available", reference: "refs/remotes/origin/main" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 }, 5000);

@@ -180,12 +180,26 @@ export const resolveUpstreamAheadBehind = (
     if (!upstreamTarget) {
       return { outcome: "untracked" as const, ahead: 0 };
     }
-    const result = yield* commitsAgainstTargetOrDefault(
-      runner,
-      workingDirectory,
-      upstreamTarget,
-    ).pipe(
-      Effect.map((counts) => ({ outcome: "counts" as const, counts })),
+    const result = yield* Effect.gen(function* () {
+      const ref = yield* runGitAllowFailure(runner, workingDirectory, [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        upstreamTarget,
+      ]);
+      // A new task branch can have tracking settings before its first push.
+      if (!ref.ok && ref.exitCode === 1 && upstreamTarget.startsWith("refs/remotes/")) {
+        return { outcome: "untracked" as const, ahead: 0 };
+      }
+      if (!ref.ok) {
+        return yield* gitOperationError(
+          `Cannot read upstream ${upstreamTarget}: ${combineOutput(ref.stdout, ref.stderr)}`,
+          "git.show-ref",
+        );
+      }
+      const counts = yield* commitsAgainstTargetOrDefault(runner, workingDirectory, upstreamTarget);
+      return { outcome: "tracking" as const, ahead: counts.ahead, behind: counts.behind };
+    }).pipe(
       Effect.catch((error) =>
         Effect.succeed({
           outcome: "error" as const,
@@ -193,14 +207,7 @@ export const resolveUpstreamAheadBehind = (
         }),
       ),
     );
-    if (result.outcome === "error") {
-      return result;
-    }
-    return {
-      outcome: "tracking" as const,
-      ahead: result.counts.ahead,
-      behind: result.counts.behind,
-    };
+    return result;
   });
 const resolveGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
   Effect.gen(function* () {
