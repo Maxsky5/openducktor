@@ -69,7 +69,9 @@ describe("handleClaudeSdkMessage result events", () => {
 
     expect(session.lastSuccessfulResultTurnIndex).toBe(1);
     expect(session.lastAssistantTextFinal).toBeUndefined();
-    expect(events).toContainEqual(expect.objectContaining({ type: "session_idle" }));
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "session_idle", turnCompleted: true }),
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -183,6 +185,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
+        turnCompleted: true,
       },
     ]);
   });
@@ -683,6 +686,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
+        turnCompleted: true,
       },
     ]);
   });

@@ -140,7 +140,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       startPoint: undefined as string | undefined,
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
-    const pendingCodexTitles = new Set<string>();
+    const pendingTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
@@ -150,9 +150,9 @@ describe("host-owned Workspace Session lifecycle", () => {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
-      isCodexTitleSyncPending: (ref) => pendingCodexTitles.has(ref.externalSessionId),
-      markCodexTitleSyncPending: (ref) => {
-        pendingCodexTitles.add(ref.externalSessionId);
+      isTitleSyncPending: (ref) => pendingTitles.has(ref.externalSessionId),
+      markTitleSyncPending: (ref) => {
+        pendingTitles.add(ref.externalSessionId);
       },
       store: {
         ...store,
@@ -373,22 +373,27 @@ describe("host-owned Workspace Session lifecycle", () => {
     };
   };
 
-  test("keeps a fresh Codex manual rename until the first turn ends", async () => {
-    const h = setup();
-    const draft = await Effect.runPromise(
-      h.service.create({
-        ...input(),
-        runtimeKind: "codex",
-        selectedModel: { ...input().selectedModel!, runtimeKind: "codex" },
-      }),
-    );
-    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
-    await Effect.runPromise(h.service.start(ref));
+  test.each(["codex", "claude"] as const)(
+    "keeps a fresh %s manual rename until the first turn ends",
+    async (runtimeKind) => {
+      const h = setup();
+      const draft = await Effect.runPromise(
+        h.service.create({
+          ...input(),
+          runtimeKind,
+          selectedModel: { ...input().selectedModel!, runtimeKind },
+        }),
+      );
+      const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+      await Effect.runPromise(h.service.start(ref));
 
-    const renamed = await Effect.runPromise(h.service.rename({ ...ref, manualTitle: "New title" }));
-    expect(renamed.manualTitle).toBe("New title");
-    expect(h.titles).toEqual([]);
-  });
+      const renamed = await Effect.runPromise(
+        h.service.rename({ ...ref, manualTitle: "New title" }),
+      );
+      expect(renamed.manualTitle).toBe("New title");
+      expect(h.titles).toEqual([]);
+    },
+  );
 
   test.each(["default target", "checkout"] as const)(
     "protects the %s branch when the stored worktree is missing",

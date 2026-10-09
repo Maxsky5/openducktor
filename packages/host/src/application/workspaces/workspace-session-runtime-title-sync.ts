@@ -1,4 +1,4 @@
-import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
+import type { AgentSessionLiveRef, RuntimeKind, WorkspaceSession } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
 import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
@@ -10,11 +10,10 @@ import type {
   WorkspaceSessionRuntimeTitleUpdater,
 } from "./workspace-session-persistence-callbacks";
 
-export type CodexTitleSyncState = Map<string, "pending" | "queued" | "handled">;
+export type TitleSyncState = Map<string, "pending" | "queued" | "handled">;
 
-type LocatedSession = { ref: WorkspaceSessionStoreRef; session: WorkspaceSession };
-
-export const syncCodexTitleAfterTurn = (
+/** Queues one native title write outside live publication and under the title gate. */
+export const syncTitleAfterTurn = (
   runtimeRef: AgentSessionLiveRef,
   {
     state,
@@ -25,7 +24,7 @@ export const syncCodexTitleAfterTurn = (
     reportFailure,
     startJob,
   }: {
-    state: CodexTitleSyncState;
+    state: TitleSyncState;
     find: (ref: AgentSessionLiveRef) => Effect.Effect<LocatedSession | null, HostError>;
     findActive: (ref: AgentSessionLiveRef) => Effect.Effect<LocatedSession | null, HostError>;
     gate: ReturnType<typeof createWorkspaceSessionOperationGate>;
@@ -36,6 +35,7 @@ export const syncCodexTitleAfterTurn = (
   },
 ) =>
   Effect.gen(function* () {
+    const runtimeLabel = runtimeRef.runtimeKind === "claude" ? "Claude" : "Codex";
     const key = agentSessionRefKey(runtimeRef);
     if (state.get(key) !== "pending") return;
     state.set(key, "queued");
@@ -57,8 +57,8 @@ export const syncCodexTitleAfterTurn = (
             const result = yield* updateTitle({ ...runtimeRef, title });
             if (result.status === "not_attached")
               return yield* new HostOperationError({
-                operation: "workspaceSession.codex-title.sync",
-                message: "Codex no longer holds this chat.",
+                operation: "workspaceSession.runtime-title.sync",
+                message: `${runtimeLabel} no longer holds this chat.`,
               });
           }),
         );
@@ -66,7 +66,7 @@ export const syncCodexTitleAfterTurn = (
         Effect.catch((failure) =>
           reportFailure(
             runtimeRef,
-            `Could not sync this Workspace Session title to Codex. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
+            `Could not sync this Workspace Session title to ${runtimeLabel}. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
             "workspaceSession.title.sync",
           ),
         ),
@@ -78,3 +78,8 @@ export const syncCodexTitleAfterTurn = (
       ),
     );
   });
+
+export const titleSyncNeedsTurn = (runtimeKind: RuntimeKind): boolean =>
+  runtimeKind === "codex" || runtimeKind === "claude";
+
+type LocatedSession = { ref: WorkspaceSessionStoreRef; session: WorkspaceSession };

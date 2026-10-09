@@ -9,15 +9,20 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionTranscriptEvent,
+  RuntimeKind,
   WorkspaceSession,
 } from "@openducktor/contracts";
+import { randomUUID } from "node:crypto";
 import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import type { SqliteTaskStoreTestHarness } from "../../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../../adapters/sqlite/sqlite-workspace-session-store";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
-import type { AgentSessionTitleUpdateOutcome } from "../../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionRuntimeAdapterPort,
+  AgentSessionTitleUpdateOutcome,
+} from "../../../ports/agent-session-live-adapter-port";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
@@ -48,13 +53,16 @@ export const waitFor = async (check: () => Promise<boolean> | boolean, timeoutMs
 
 export const createPersistenceHarness = async (
   database: SqliteTaskStoreTestHarness,
-  runtimeKind: "opencode" | "codex" | "claude" = "opencode",
+  runtimeKind: RuntimeKind = "opencode",
   draft = false,
+  createControls?: (
+    ref: AgentSessionLiveRef,
+  ) => Pick<AgentSessionRuntimeAdapterPort, "sendUserMessage" | "updateSessionTitle">,
 ) => {
   const ref: AgentSessionLiveRef = {
     repoPath: database.repoPath,
     runtimeKind,
-    externalSessionId: "native",
+    externalSessionId: runtimeKind === "claude" ? randomUUID() : "native",
     workingDirectory: `${database.repoPath}/session-worktree`,
   };
   const storeRef = {
@@ -65,7 +73,7 @@ export const createPersistenceHarness = async (
   const record: WorkspaceSession = {
     id: "session-1",
     runtimeKind,
-    externalSessionId: draft ? null : "native",
+    externalSessionId: draft ? null : ref.externalSessionId,
     executionTarget: {
       kind: "local_worktree",
       workingDirectory: ref.workingDirectory,
@@ -138,7 +146,7 @@ export const createPersistenceHarness = async (
     timestamp = "2026-09-07T10:00:00Z",
   ): AcceptedAgentUserMessage => ({
     type: "user_message",
-    externalSessionId: "native",
+    externalSessionId: ref.externalSessionId,
     sessionRef: ref,
     timestamp,
     messageId: "user-1",
@@ -267,7 +275,7 @@ export const createPersistenceHarness = async (
             starts.push(input);
             return {
               runtimeKind,
-              externalSessionId: "native",
+              externalSessionId: ref.externalSessionId,
               workingDirectory: ref.workingDirectory,
               startedAt: "2026-09-07T10:00:00Z",
               status: "idle" as const,
@@ -340,6 +348,7 @@ export const createPersistenceHarness = async (
               }),
             ),
           ),
+        ...createControls?.(ref),
       }),
     ),
   );
@@ -388,8 +397,8 @@ export const createPersistenceHarness = async (
     lifecycle: createTaskSessionLifecycleCoordinator(),
     operationGate,
     sessionTitleGate,
-    isCodexTitleSyncPending: persistence.isCodexTitleSyncPending,
-    markCodexTitleSyncPending: persistence.markCodexTitleSyncPending,
+    isTitleSyncPending: persistence.isTitleSyncPending,
+    markTitleSyncPending: persistence.markTitleSyncPending,
     store: {
       ...store,
       bindRuntimeSession: (input) =>

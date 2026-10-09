@@ -170,8 +170,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
       sessionTitleGate: createWorkspaceSessionOperationGate(),
-      isCodexTitleSyncPending: () => false,
-      markCodexTitleSyncPending: () => {},
+      isTitleSyncPending: () => false,
+      markTitleSyncPending: () => {},
       ...targetDependencies,
       store,
       settings: {
