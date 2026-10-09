@@ -55,9 +55,12 @@ export const getAgentMessageSendBlockedReason = (input: {
   return getBusyAgentMessageBlockedReason(input.session.status === "running", input.runtime);
 };
 
-/** A first-message retry must keep its original session and execution episode. */
-export const createAgentMessageStartOwner =
-  (start: AgentSessionState) =>
-  (session: AgentSessionState): boolean =>
-    matchesAgentSessionIdentity(session, start) &&
-    session.executionEpisodeId === start.executionEpisodeId;
+/** Registration can precede the first live episode. Bind once, then reject later episodes. */
+export const createAgentMessageStartOwner = (start: AgentSessionState) => {
+  let episode = start.executionEpisodeId;
+  return (session: AgentSessionState): boolean => {
+    if (!matchesAgentSessionIdentity(session, start)) return false;
+    episode ??= session.executionEpisodeId;
+    return session.executionEpisodeId === episode;
+  };
+};

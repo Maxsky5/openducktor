@@ -249,7 +249,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         options?.assertCanSubmit?.(session, options?.ownsStart?.(session) ?? false);
       } catch (cause) {
         if (heldStart) {
-          settleLoadedStartingSession(heldStart, "idle", dependencies.updateSession);
+          const current = dependencies.readSessionSnapshot(heldStart);
+          if (current && options?.ownsStart?.(current))
+            settleLoadedStartingSession(current, "idle", dependencies.updateSession);
         }
         throw cause;
       }

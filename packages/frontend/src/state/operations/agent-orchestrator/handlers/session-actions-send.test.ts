@@ -81,6 +81,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     ["idle", "after preparation", "same"],
     ["starting", "before preparation", "same"],
     ["starting", "after preparation", "same"],
+    ["starting", "after preparation", "first live"],
     ["starting", "after preparation", "newer"],
   ] as const)(
     "rejects a stale request for a %s session %s with the %s episode",
@@ -94,7 +95,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         submissions += 1;
         return acceptedUserMessage(input);
       };
-      const sessionsRef = createSessionsRef([buildSession({ status })]);
+      const session = buildSession({ status });
+      if (episode === "newer") session.executionEpisodeId = "first";
+      const sessionsRef = createSessionsRef([session]);
       const actions = createSessionActions({
         adapter,
         sessionsRef,
@@ -117,10 +120,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       if (phase === "after preparation") {
         await preparing.promise;
         current = false;
-        if (episode === "newer") {
+        if (episode === "newer" || episode === "first live") {
           sessionsRef.current = replaceAgentSession(sessionsRef.current, {
             ...getSession(sessionsRef),
-            executionEpisodeId: "newer-start",
+            executionEpisodeId: episode === "newer" ? "newer-start" : "first",
           });
         }
       }

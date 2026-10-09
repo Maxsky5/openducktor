@@ -20,14 +20,22 @@ import {
   createTestOpencodeSdkAdapter,
 } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 import { acceptedUserMessage } from "@/state/operations/agent-orchestrator/handlers/session-actions-send.test-support";
+import { projectSessionSnapshotActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { useAgentMessageSendPolicy } from "./use-agent-message-send-policy";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 
-test.each(["fresh", "fork"] as const)(
-  "only the launch owner can send first after coalesced %s starts",
-  async (startMode) => {
+test.each([
+  ["fresh", "unobserved"],
+  ["fork", "unobserved"],
+  ["fresh", "before send"],
+  ["fork", "before send"],
+  ["fresh", "during preparation"],
+  ["fork", "during preparation"],
+] as const)(
+  "only the launch owner can send first after coalesced %s starts, first episode %s",
+  async (startMode, episode) => {
     const launched = Promise.withResolvers<void>();
     const releaseLaunch = Promise.withResolvers<void>();
     const joined = Promise.withResolvers<void>();
@@ -90,10 +98,12 @@ test.each(["fresh", "fork"] as const)(
           message,
           assertCanSubmit: harness.getLatest(),
         },
-        startAgentSession: (input) => {
+        startAgentSession: async (input) => {
           const result = actions.startAgentSession(input);
           if (++requests === 2) joined.resolve();
-          return result;
+          const identity = await result;
+          if (episode === "before send") observeEpisode(sessionsRef, identity.externalSessionId);
+          return identity;
         },
         sendAgentMessage: actions.sendAgentMessage,
       });
@@ -103,7 +113,8 @@ test.each(["fresh", "fork"] as const)(
     try {
       await joined.promise;
       releaseLaunch.resolve();
-      await preparing.promise;
+      if (episode !== "before send") await preparing.promise;
+      if (episode === "during preparation") observeEpisode(sessionsRef, "started");
       const result = await second;
       expect(result.postStartActionError).toBeInstanceOf(Error);
       expect(result.postStartActionError?.message).toContain("finish starting");
@@ -117,18 +128,23 @@ test.each(["fresh", "fork"] as const)(
       queryClient.clear();
       await harness.unmount();
     }
+    expect((await first).postStartActionError).toBeNull();
     expect(sent).toEqual(["First prompt"]);
   },
 );
 
 test.each([
-  ["fresh", false],
-  ["fresh", true],
-  ["fork", false],
-  ["fork", true],
+  ["fresh", false, "known"],
+  ["fresh", true, "known"],
+  ["fork", false, "known"],
+  ["fork", true, "known"],
+  ["fresh", false, "during preparation"],
+  ["fresh", true, "during preparation"],
+  ["fork", false, "during preparation"],
+  ["fork", true, "during preparation"],
 ] as const)(
-  "%s first-message retry keeps its start, newer episode=%s",
-  async (startMode, newer) => {
+  "%s first-message retry keeps its start, newer episode=%s, first episode %s",
+  async (startMode, newer, episode) => {
     const preparing = Promise.withResolvers<void>();
     const prepared = Promise.withResolvers<void>();
     let current = true;
@@ -138,9 +154,9 @@ test.each([
       submissions += 1;
       return acceptedUserMessage(input);
     };
-    const sessionsRef = createSessionsRef([
-      buildSession({ status: "starting", historyLoadState: "loaded", executionEpisodeId: "first" }),
-    ]);
+    const session = buildSession({ status: "starting", historyLoadState: "loaded" });
+    if (episode === "known") session.executionEpisodeId = "first";
+    const sessionsRef = createSessionsRef([session]);
     const actions = createSessionActions({
       adapter,
       sessionsRef,
@@ -180,6 +196,8 @@ test.each([
     try {
       await preparing.promise;
       expect(getSession(sessionsRef).status).toBe("starting");
+      if (episode === "during preparation")
+        observeEpisode(sessionsRef, getSession(sessionsRef).externalSessionId);
       current = false;
       prepared.resolve();
       const result = await starting;
@@ -306,6 +324,22 @@ test.each([
     }
   },
 );
+
+function observeEpisode(
+  sessionsRef: ReturnType<typeof createSessionsRef>,
+  externalSessionId: string,
+) {
+  const session = getSession(sessionsRef, externalSessionId);
+  sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+    ...session,
+    ...projectSessionSnapshotActivity(session, {
+      activity: "idle",
+      executionEpisodeId: "first",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    }),
+  });
+}
 
 async function mountPolicy(fault: AgentSessionTransientFault | null = null) {
   const runtimes = createRuntimeDefinitionsContextValue();
