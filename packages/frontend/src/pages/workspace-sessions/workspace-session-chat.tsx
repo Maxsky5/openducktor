@@ -267,6 +267,7 @@ export function WorkspaceSessionChat({
       canResumeSession && canInteract
         ? {
             isPending: actions.isResumingSession,
+            isDisabled: isSavingModel,
             error: actions.resumeSessionError,
             usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
             onResume: () => {

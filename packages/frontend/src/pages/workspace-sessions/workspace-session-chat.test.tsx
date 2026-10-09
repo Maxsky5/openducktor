@@ -397,10 +397,12 @@ const createPresentationScenario = (
 };
 
 test.each(["model", "effort", "profile"] as const)(
-  "keeps the workspace draft editor active while saving %s",
+  "keeps the workspace draft editor active and gates Resume while saving %s",
   async (control) => {
     const { Harness, workspace, entry, session, operations, definitions } =
-      createPresentationScenario();
+      createPresentationScenario("opencode", [
+        buildMessage("user", "Continue the interrupted turn", { id: "interrupted-user" }),
+      ]);
     entry.selectedModel = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -440,6 +442,8 @@ test.each(["model", "effort", "profile"] as const)(
       },
     );
     operations.updateAgentSessionModel = updateModel;
+    const resumeTurn = mock<AgentOperationsContextValue["continueInterruptedTurn"]>(async () => {});
+    operations.continueInterruptedTurn = resumeTurn;
     function Chat() {
       const [record, setRecord] = useState(entry);
       updateRecord = setRecord;
@@ -467,6 +471,8 @@ test.each(["model", "effort", "profile"] as const)(
     try {
       await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
       const editor = view.getByRole("combobox", { name: "Message composer" });
+      const resume = view.getByRole("button", { name: "Resume" });
+      expect(resume.hasAttribute("disabled")).toBe(false);
       typeIntoComposer(view.container, "Unsent draft");
       const card = editor.closest(".rounded-xl");
       expect(card).not.toBeNull();
@@ -494,6 +500,13 @@ test.each(["model", "effort", "profile"] as const)(
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         true,
       );
+      expect(resume.isConnected).toBe(true);
+      expect(resume.hasAttribute("disabled")).toBe(true);
+      await act(async () => fireEvent.click(resume));
+      expect(resumeTurn).not.toHaveBeenCalled();
+      expect(
+        view.queryByText("Wait for the current send or session change before resuming."),
+      ).toBeNull();
       expect(
         view
           .getByRole("button", { name: "Select model, OpenCode, gpt-5" })
@@ -504,6 +517,8 @@ test.each(["model", "effort", "profile"] as const)(
       expect(editor.isConnected).toBe(true);
       expect(editor.textContent).toContain("Unsent draft edited while saving");
       expect(card?.className).toBe(cardClass);
+      expect(resume.isConnected).toBe(true);
+      expect(resume.hasAttribute("disabled")).toBe(false);
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         false,
       );
@@ -516,6 +531,13 @@ test.each(["model", "effort", "profile"] as const)(
           }[control],
         }),
       ).toBeTruthy();
+      await act(async () => fireEvent.click(resume));
+      expect(resumeTurn).toHaveBeenCalledTimes(1);
+      expect(resumeTurn).toHaveBeenCalledWith({
+        runtimeKind: session.runtimeKind,
+        externalSessionId: session.externalSessionId,
+        workingDirectory: session.workingDirectory,
+      });
     } finally {
       save.resolve();
       view.unmount();

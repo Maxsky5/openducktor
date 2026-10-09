@@ -158,6 +158,10 @@ const readMetaQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
   ) {
     return null;
   }
+  // Native content-block prompts have no string queue key and need no deduplication parse.
+  if ("prompt" in attachment && Array.isArray(attachment.prompt)) {
+    return null;
+  }
   const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment({
     prompt: "prompt" in attachment ? attachment.prompt : undefined,
     timestamp:

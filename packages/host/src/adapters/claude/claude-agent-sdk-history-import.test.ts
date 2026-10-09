@@ -22,6 +22,15 @@ describe("Claude SDK history import", () => {
       },
     },
     {
+      kind: "meta queued content blocks",
+      attachment: {
+        type: "queued_command",
+        isMeta: true,
+        prompt: [{ type: "text", text: "Continue the session" }],
+        timestamp: 123,
+      },
+    },
+    {
       kind: "unrelated",
       attachment: { type: "file", isMeta: "native flag", timestamp: 123 },
     },
@@ -40,8 +49,17 @@ describe("Claude SDK history import", () => {
       type: "attachment",
       attachment,
     };
+    const queueEntry = {
+      type: "queue-operation",
+      operation: "enqueue",
+      timestamp: "2026-10-09T18:00:00.000Z",
+      content: "Keep this queued message",
+    } as const satisfies SessionStoreEntry;
 
-    expect(filterClaudeHistoryMessages([queuedAttachment, userMessage])).toEqual([userMessage]);
+    expect(filterClaudeHistoryMessages([queuedAttachment, userMessage, queueEntry])).toEqual([
+      userMessage,
+      queueEntry,
+    ]);
   });
 
   test.each(["entry", "attachment"] as const)(

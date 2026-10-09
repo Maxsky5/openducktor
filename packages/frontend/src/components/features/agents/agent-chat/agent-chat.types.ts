@@ -113,6 +113,7 @@ export type AgentChatRuntimePresentation = {
 
 export type AgentChatInterruptedTurnResumeModel = {
   isPending: boolean;
+  isDisabled?: boolean;
   error: string | null;
   onResume: () => void;
   usageLimit?: AgentSessionUsageLimit | undefined;
