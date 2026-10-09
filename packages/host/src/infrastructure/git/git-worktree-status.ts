@@ -64,7 +64,6 @@ export const buildWorktreeStatusData = (
       runner,
       workingDirectory,
       currentBranch,
-      effectiveTargetBranch,
       fileStatuses,
     );
     const status = {
@@ -110,7 +109,6 @@ export const buildWorktreeStatusSummaryData = (
       runner,
       workingDirectory,
       currentBranch,
-      effectiveTargetBranch,
       fileStatuses,
     );
     const status = {

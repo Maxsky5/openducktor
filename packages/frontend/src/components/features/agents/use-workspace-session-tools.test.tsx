@@ -1716,3 +1716,79 @@ test("invalidates a completed hidden commit without reading Git until tools reop
     configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+test("a failed fetch refreshes both diff tabs and reports the fetch error", async () => {
+  let revision = 1;
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
+        gitGetBranches: async () => [],
+        gitFetchRemote: async () => {
+          throw new Error("Check the remote connection.");
+        },
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+          ...worktreeStatus(target, scope),
+          fileStatuses: [{ path: `${scope}-${revision}.txt`, status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: `${scope}-${revision}.txt`,
+              type: "modified",
+              additions: 1,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-before\n+after\n",
+            },
+          ],
+        }),
+      },
+    }),
+  );
+  const client = createToolsQueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await screen.findByText("uncommitted-1.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("target-1.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("uncommitted-1.txt");
+    revision = 2;
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    });
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
+        description: "Check the remote connection.",
+      }),
+    );
+    await screen.findByText("uncommitted-2.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("target-2.txt");
+  } finally {
+    view.unmount();
+    client.clear();
+    report.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});

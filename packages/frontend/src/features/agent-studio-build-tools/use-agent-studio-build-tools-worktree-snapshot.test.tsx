@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { toast } from "sonner";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { repoConfigSchema, type GitWorktreeStatus } from "@openducktor/contracts";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
@@ -1088,3 +1089,50 @@ function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktre
     },
   };
 }
+
+test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once", async (mode) => {
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: async () => {
+          throw new Error("Check the remote connection.");
+        },
+      },
+    }),
+  );
+  const harness = createHookHarness(
+    createBaseArgs({
+      selectedView: createSelectedView({
+        selectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranch: { branch: "release", remote: "origin" },
+        }),
+      }),
+    }),
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor(
+      (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/release",
+    );
+    await harness.run(async (state) => {
+      try {
+        await state.refreshWorktree(mode);
+      } catch {}
+    });
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
+      description: "Check the remote connection.",
+    });
+  } finally {
+    await harness.unmount();
+    report.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});

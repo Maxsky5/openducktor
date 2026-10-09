@@ -54,7 +54,7 @@ export const gitQueryKeys = {
       repoPath,
       targetBranch,
       diffScope,
-      workingDir ?? "",
+      workingDir ?? repoPath,
       branchKey,
     ] as const,
   worktreeStatusSummary: (
@@ -70,7 +70,7 @@ export const gitQueryKeys = {
       repoPath,
       targetBranch,
       diffScope,
-      workingDir ?? "",
+      workingDir ?? repoPath,
       branchKey,
     ] as const,
 };

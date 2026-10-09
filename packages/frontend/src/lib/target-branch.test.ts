@@ -22,7 +22,7 @@ describe("target-branch helpers", () => {
     });
     expect(normalizeTargetBranch({ remote: "origin", branch: "origin/main" })).toEqual({
       remote: "origin",
-      branch: "origin/main",
+      branch: "main",
     });
     expect(normalizeTargetBranch({ branch: "refs/remotes/upstream/release" })).toEqual({
       remote: "upstream",
@@ -35,6 +35,10 @@ describe("target-branch helpers", () => {
   });
 
   test("derives canonical, checkout, and remote values", () => {
+    expect(targetBranchSelectionValue({ remote: "origin", branch: "origin/main" })).toBe(
+      "refs/remotes/origin/main",
+    );
+    expect(targetBranchSelectionValue({ branch: "origin/main" })).toBe("refs/heads/origin/main");
     const target = { remote: "upstream", branch: "release" };
     expect(canonicalTargetBranch(target)).toBe("upstream/release");
     expect(checkoutTargetBranch(target)).toBe("release");

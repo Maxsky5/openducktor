@@ -322,3 +322,129 @@ test("reports a failed scheduled fetch and allows the next refresh to retry", as
     configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+test("reports a missing worktree without a pending comparison or host read", () => {
+  const read = mock(async () => ({ kind: "available" as const, reference: "refs/heads/main" }));
+  configureShellBridge(createShellBridgeFixture({ client: { gitGetComparisonTarget: read } }));
+  const client = createQueryClient();
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const hook = renderHook(useSessionComparison, {
+    initialProps: { ...initial, workingDirectory: null },
+    wrapper,
+  });
+  try {
+    expect(hook.result.current.isPending).toBe(false);
+    expect(hook.result.current.unavailableReason).toContain("Restore the session worktree");
+    expect(read).not.toHaveBeenCalled();
+  } finally {
+    hook.unmount();
+    client.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("updates mounted branch choices after a fetch discovers a remote branch", async () => {
+  let fetched = false;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/main",
+        }),
+        gitGetBranches: async () =>
+          fetched ? [{ name: "origin/release", isCurrent: false, isRemote: true }] : [],
+        gitFetchRemote: async () => {
+          fetched = true;
+          return { outcome: "fetched", output: "Fetched." };
+        },
+      },
+    }),
+  );
+  const client = createQueryClient();
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const hook = renderHook(
+    () => ({
+      comparison: useSessionComparison(initial),
+      control: useSessionComparisonControl({
+        repoPath: initial.repoPath,
+        target: initial.target,
+        editable: true,
+        applyTarget: async () => {},
+      }),
+    }),
+    { wrapper },
+  );
+  try {
+    await waitFor(() => expect(hook.result.current.control.targetBranchesPending).toBe(false));
+    await act(async () => {
+      await hook.result.current.comparison.refreshComparison("hard");
+    });
+    await waitFor(() =>
+      expect(
+        hook.result.current.control.targetBranchOptions.some(
+          (option) => option.value === "refs/remotes/origin/release",
+        ),
+      ).toBe(true),
+    );
+  } finally {
+    hook.unmount();
+    client.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test.each(["cooldown", "pending"] as const)(
+  "an upstream branch switch does not reuse the old branch's %s fetch",
+  async (state) => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitFetchRemote>>>();
+    const fetched = { outcome: "fetched" as const, output: "Fetched." };
+    const fetch = mock<typeof hostClient.gitFetchRemote>(async () => fetched);
+    if (state === "pending") fetch.mockImplementationOnce(() => pending.promise);
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          gitFetchRemote: fetch,
+          gitGetBranches: async () => [],
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/main",
+          }),
+        },
+      }),
+    );
+    const client = createQueryClient();
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const upstream = { ...initial, target: { branch: "@{upstream}" } };
+    const hook = renderHook(useSessionComparison, { initialProps: upstream, wrapper });
+    let first: Promise<string | null> | undefined;
+    let second: Promise<string | null> | undefined;
+    try {
+      await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
+      await act(async () => {
+        first = hook.result.current.refreshComparison("scheduled");
+        if (state === "cooldown") await first;
+      });
+      hook.rerender({ ...upstream, branchKey: "other" });
+      await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
+      await act(async () => {
+        second = hook.result.current.refreshComparison(state === "pending" ? "hard" : "scheduled");
+      });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      pending.resolve(fetched);
+      await act(async () => {
+        await Promise.all([first, second]);
+      });
+      hook.unmount();
+      client.clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);

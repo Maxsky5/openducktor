@@ -1819,3 +1819,33 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 });
+
+test("disables a reset confirmation until a pending push completes", async () => {
+  const confirm = mock(async () => {});
+  const model = baseModel({
+    pendingReset: { kind: "file", filePath: "src/main.ts" },
+    isPushing: true,
+    confirmReset: confirm,
+    cancelReset: () => {},
+  });
+  const view = render(renderAgentStudioGitPanelElement(model));
+  try {
+    const button = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(confirm).not.toHaveBeenCalled();
+    await act(async () => {
+      view.rerender(renderAgentStudioGitPanelElement({ ...model, isPushing: false }));
+    });
+    const ready = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    expect(ready.hasAttribute("disabled")).toBe(false);
+    await act(async () => {
+      fireEvent.click(ready);
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => {
+      view.unmount();
+    });
+  }
+});

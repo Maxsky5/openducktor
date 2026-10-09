@@ -52,6 +52,7 @@ type ComboboxProps = {
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   footer?: ReactNode;
+  /** A custom trigger must supply its own disabled state and accessible name. */
   trigger?: ReactElement;
 };
 

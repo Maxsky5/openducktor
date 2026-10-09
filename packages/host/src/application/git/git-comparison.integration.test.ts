@@ -153,3 +153,56 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
     await rm(root, { recursive: true, force: true });
   }
 }, 5000);
+
+// Both Git backends start real processes and stop on a conflicting commit.
+test.each(["--merge", "--apply"] as const)(
+  "restores the rebase destination independently of HEAD diffs with %s",
+  async (backend) => {
+    const repo = await mkdtemp(path.join(tmpdir(), "git-rebase-target-"));
+    const git = (...args: string[]) =>
+      execFileSync("git", args, {
+        cwd: repo,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+    const service = createGitService(adapter);
+    try {
+      git("init", "--initial-branch=main");
+      git("config", "user.name", "Rebase Test");
+      git("config", "user.email", "rebase@example.invalid");
+      git("config", "commit.gpgsign", "false");
+      await writeFile(path.join(repo, "conflict.txt"), "base\n");
+      git("add", ".");
+      git("commit", "-m", "base");
+      git("checkout", "-b", "feature");
+      await writeFile(path.join(repo, "conflict.txt"), "feature\n");
+      git("add", ".");
+      git("commit", "-m", "feature");
+      git("checkout", "main");
+      await writeFile(path.join(repo, "conflict.txt"), "main\n");
+      git("add", ".");
+      git("commit", "-m", "main");
+      const onto = git("rev-parse", "HEAD");
+      git("checkout", "feature");
+      let stopped = false;
+      try {
+        git("rebase", backend, "main");
+      } catch {
+        stopped = true;
+      }
+      expect(stopped).toBe(true);
+      const input = { repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" as const };
+      const full = await Effect.runPromise(service.getWorktreeStatus(input));
+      const summary = await Effect.runPromise(service.getWorktreeStatusSummary(input));
+      for (const result of [full, summary]) {
+        expect(result.gitConflict?.currentBranch).toBe("feature");
+        expect(result.gitConflict?.targetBranch).toBe(onto);
+        expect(result.gitConflict?.conflictedFiles).toContain("conflict.txt");
+      }
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  },
+  5000,
+);

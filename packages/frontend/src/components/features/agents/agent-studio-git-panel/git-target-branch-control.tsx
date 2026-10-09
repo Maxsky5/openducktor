@@ -1,5 +1,5 @@
 import { LoaderCircle, Pencil, Target } from "lucide-react";
-import { type ReactElement, useId, useRef, useState } from "react";
+import { type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
@@ -48,7 +48,10 @@ export function GitTargetBranchControl({
     setEditor({ context, mode: "display" });
   }
   // Block a second selection before React renders the saving state.
-  const saving = useRef(false);
+  const saving = useRef<EditorState | null>(null);
+  useLayoutEffect(() => {
+    if (saving.current?.context !== context) saving.current = null;
+  }, [context]);
   const isEditing = canEditTargetBranch && editor.context === context && editor.mode === "editing";
   const isSaving = isEditing ? editor.isSaving : false;
   const value = isEditing ? editor.draft : targetBranchSelectionValue;
@@ -61,7 +64,7 @@ export function GitTargetBranchControl({
       disabled: disableOptions || option.disabled === true,
     }));
   const setOpen = (open: boolean): void => {
-    if (!canEditTargetBranch || saving.current) {
+    if (!canEditTargetBranch || saving.current?.context === context) {
       return;
     }
 
@@ -73,7 +76,7 @@ export function GitTargetBranchControl({
   };
 
   const select = (selection: string): void => {
-    if (!onUpdateTargetBranch || editor.mode !== "editing" || saving.current) {
+    if (!onUpdateTargetBranch || editor.mode !== "editing" || saving.current?.context === context) {
       return;
     }
 
@@ -82,24 +85,24 @@ export function GitTargetBranchControl({
       return;
     }
 
-    saving.current = true;
     const pending: EditorState = {
       context,
       mode: "editing",
       draft: selection,
       isSaving: true,
     };
+    saving.current = pending;
     setEditor(pending);
 
     void onUpdateTargetBranch(selection).then(
       () => {
-        saving.current = false;
+        if (saving.current === pending) saving.current = null;
         setEditor((current) =>
           current === pending ? { context: current.context, mode: "display" } : current,
         );
       },
       (error) => {
-        saving.current = false;
+        if (saving.current === pending) saving.current = null;
         // Do not show a result after another target replaced this edit.
         setEditor((current) =>
           current === pending

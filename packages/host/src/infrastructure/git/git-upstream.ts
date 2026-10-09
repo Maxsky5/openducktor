@@ -26,7 +26,6 @@ const gitResourceError = (
 export const upstreamTargetBranch = "@{upstream}";
 const rebaseConflictOutputUnavailable =
   "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
-const rebaseConflictTargetUnavailable = "current rebase target";
 export const normalizeMergeRef = (mergeRef: string): string =>
   mergeRef.startsWith("refs/") ? mergeRef : `refs/heads/${mergeRef}`;
 export type UpstreamTargetConfig = {
@@ -264,7 +263,6 @@ export const loadRebaseConflictContext = (
   runner: GitCommandRunner,
   workingDirectory: string,
   currentBranch: GitCurrentBranch,
-  fallbackTargetBranch: string | undefined,
   fileStatuses: FileStatus[],
 ) =>
   Effect.gen(function* () {
@@ -274,24 +272,28 @@ export const loadRebaseConflictContext = (
     if (conflictedFiles.length === 0) {
       return undefined;
     }
-    const isRebaseInProgress =
-      (yield* hasGitPath(runner, workingDirectory, "rebase-merge")) ||
-      (yield* hasGitPath(runner, workingDirectory, "rebase-apply"));
-    if (!isRebaseInProgress) {
-      return undefined;
-    }
-    const mergeHeadName = yield* readGitPathContentsIfExists(
+    let directory: string;
+    if (yield* hasGitPath(runner, workingDirectory, "rebase-merge")) directory = "rebase-merge";
+    else if (yield* hasGitPath(runner, workingDirectory, "rebase-apply"))
+      directory = "rebase-apply";
+    else return undefined;
+    const headName = yield* readGitPathContentsIfExists(
       runner,
       workingDirectory,
-      "rebase-merge/head-name",
+      `${directory}/head-name`,
     );
-    const applyHeadName = yield* readGitPathContentsIfExists(
+    // The diff target can be HEAD. Git records the actual rebase destination in onto.
+    const targetBranch = yield* readGitPathContentsIfExists(
       runner,
       workingDirectory,
-      "rebase-apply/head-name",
+      `${directory}/onto`,
     );
-    const currentBranchName =
-      currentBranch.name ?? normalizeHeadName(mergeHeadName) ?? normalizeHeadName(applyHeadName);
+    if (!targetBranch)
+      return yield* gitOperationError(
+        "Cannot restore the rebase destination: Git rebase metadata has no onto commit.",
+        "git.rebase.context",
+      );
+    const currentBranchName = currentBranch.name ?? normalizeHeadName(headName);
     const statusOutput = yield* runGitAllowFailure(runner, workingDirectory, [
       "status",
       "--untracked-files=no",
@@ -302,7 +304,7 @@ export const loadRebaseConflictContext = (
     return {
       operation: "rebase" as const,
       currentBranch: currentBranchName,
-      targetBranch: fallbackTargetBranch ?? rebaseConflictTargetUnavailable,
+      targetBranch,
       conflictedFiles,
       output: statusOutput.trim() ? statusOutput : rebaseConflictOutputUnavailable,
     };

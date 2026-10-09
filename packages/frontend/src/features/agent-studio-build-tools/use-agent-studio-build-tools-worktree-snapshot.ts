@@ -1,6 +1,6 @@
 import type { DevServerOwner, GitTargetBranch } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { useAgentStudioDiffVisibilityRefresh } from "../agent-studio-git/refresh/use-diff-visibility-refresh";
@@ -346,6 +346,11 @@ function useTaskComparisonRefresh({
     if (comparison.resolvedTarget) void loadReads();
   }, [comparison.resolvedTarget, loadReads]);
   const refreshComparison = comparison.refreshComparison;
+  const contextKey = comparison.contextKey;
+  const currentContext = useRef(contextKey);
+  useLayoutEffect(() => {
+    currentContext.current = contextKey;
+  }, [contextKey]);
   const refreshWorktree = useCallback<GitDiffRefresh>(
     async (mode = "hard") => {
       // Keep uncommitted reads available when the comparison check fails.
@@ -357,22 +362,26 @@ function useTaskComparisonRefresh({
           await refreshComparison(mode);
         }
         // Reading the branch changes the comparison context. Fetch its captured target first.
+        if (currentContext.current !== contextKey) return;
         const branch = await refreshBranch();
         if (branch.isError) throw branch.error;
+      } catch (error) {
+        if (currentContext.current === contextKey) {
+          toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+        }
+        throw error;
       } finally {
         await refreshReads(mode === "scheduled" ? "summary" : "full");
       }
     },
-    [refreshBranch, refreshComparison, refreshReads, retryDefault],
+    [contextKey, refreshBranch, refreshComparison, refreshReads, retryDefault],
   );
   useAgentStudioDiffVisibilityRefresh({
     enableScheduledRefresh,
     repoPath,
     shouldBlockDiffLoading,
     refresh: () => {
-      void refreshWorktree("scheduled").catch((error) =>
-        toast.error("Could not refresh Git changes", { description: errorMessage(error) }),
-      );
+      void refreshWorktree("scheduled").catch(() => {});
     },
   });
   return refreshWorktree;

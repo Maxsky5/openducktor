@@ -423,8 +423,9 @@ function useWorkspaceSessionRefresh({
         });
       } catch (error) {
         if (!canRead()) return;
-        await refreshDiff("soft");
         toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+        if (resolvedTarget) await refreshAllScopes(mode === "scheduled" ? "summary" : "full");
+        else await refreshDiff("soft");
       } finally {
         setIsFetchingTarget(false);
       }

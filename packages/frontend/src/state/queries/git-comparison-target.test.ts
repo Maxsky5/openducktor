@@ -4,6 +4,8 @@ import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
+  loadWorktreeStatusFromQuery,
+  loadWorktreeStatusSummaryFromQuery,
   currentBranchQueryOptions,
   worktreeBranchQueryOptions,
 } from "./git";
@@ -121,3 +123,68 @@ test.each(["/repo", "/worktree"])(
     }
   },
 );
+
+test("Git actions invalidate root status cached without an explicit working directory", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let revision = 1;
+  const status = () => ({
+    currentBranch: { name: "feature", detached: false },
+    fileStatuses: [],
+    fileDiffs: [],
+    targetAheadBehind: { ahead: revision, behind: 0 },
+    upstreamAheadBehind: { outcome: "untracked" as const, ahead: revision },
+    snapshot: {
+      effectiveWorkingDir: "/repo",
+      targetBranch: "HEAD",
+      diffScope: "uncommitted" as const,
+      observedAtMs: revision,
+      hashVersion: 1,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    },
+  });
+  const host = {
+    gitGetWorktreeStatus: async () => status(),
+    gitGetWorktreeStatusSummary: async () => ({
+      ...status(),
+      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+    }),
+  };
+  const options = { branchKey: "feature", staleTime: Infinity };
+  try {
+    await loadWorktreeStatusFromQuery(client, "/repo", "HEAD", "uncommitted", null, options, host);
+    await loadWorktreeStatusSummaryFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    revision = 2;
+    await invalidateGitWorkingDirectoryQueries(client, "/repo", "/repo");
+    const full = await loadWorktreeStatusFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    const summary = await loadWorktreeStatusSummaryFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    expect(full.targetAheadBehind.ahead).toBe(2);
+    expect(summary.targetAheadBehind.ahead).toBe(2);
+  } finally {
+    client.clear();
+  }
+});

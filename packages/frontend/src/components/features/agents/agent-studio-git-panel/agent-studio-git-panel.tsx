@@ -354,6 +354,14 @@ function AgentStudioGitPanelDialogs({
   pendingReset: PendingReset | null;
   resetDialog: ReturnType<typeof getResetDialog>;
 }): ReactElement {
+  const confirmDisabled = [
+    model.isCommitting,
+    model.isPushing,
+    model.isRebasing,
+    model.isResetting,
+    model.isHandlingGitConflict,
+    model.isGitActionsLocked,
+  ].some(Boolean);
   return (
     <>
       {conflict.modalActions ? (
@@ -366,12 +374,14 @@ function AgentStudioGitPanelDialogs({
       ) : null}
       <ForcePushDialog
         pendingForcePush={model.pendingForcePush ?? null}
+        confirmDisabled={confirmDisabled}
         isPushing={model.isPushing ?? false}
         onCancel={() => model.cancelForcePush?.()}
         onConfirm={() => void model.confirmForcePush?.()}
       />
       <PullRebaseDialog
         pendingPullRebase={model.pendingPullRebase ?? null}
+        confirmDisabled={confirmDisabled}
         isRebasing={model.isRebasing ?? false}
         onCancel={() => model.cancelPullRebase?.()}
         onConfirm={() => void model.confirmPullRebase?.()}
@@ -395,7 +405,7 @@ function AgentStudioGitPanelDialogs({
         confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
         confirmPendingLabel={pendingReset?.kind === "hunk" ? "Resetting hunk…" : "Resetting file…"}
         confirmPending={model.isResetting ?? false}
-        confirmDisabled={model.isResetting ?? false}
+        confirmDisabled={confirmDisabled}
         onConfirm={() => void model.confirmReset?.()}
         confirmTestId="agent-studio-git-confirm-reset-button"
         confirmIcon={Undo2}

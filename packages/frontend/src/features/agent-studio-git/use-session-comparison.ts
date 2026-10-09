@@ -12,6 +12,7 @@ import {
 import {
   gitComparisonTargetQueryOptions,
   invalidateRepoBranchesQuery,
+  gitQueryKeys,
   repoBranchesQueryOptions,
 } from "@/state/queries/git";
 import { renewWorkspaceReadContext } from "@/state/queries/workspace-refresh";
@@ -148,7 +149,7 @@ export function sessionComparisonOptions(
 
 /** Share in-flight fetches and keep the scheduled fetch cooldown for this view. */
 function useComparisonRefresh(
-  input: Pick<SessionComparisonInput, "repoPath" | "workingDirectory" | "target">,
+  input: Pick<SessionComparisonInput, "repoPath" | "workingDirectory" | "target" | "branchKey">,
   contextKey: string,
   activeContext: RefObject<{ key: string; enabled: boolean }>,
   refetch: UseQueryResult<GitComparisonTarget, Error>["refetch"],
@@ -156,7 +157,7 @@ function useComparisonRefresh(
   const queryClient = useQueryClient();
   const fetchedAt = useRef(new Map<string, number>());
   const fetches = useRef(new Map<string, Promise<void>>());
-  const { repoPath, workingDirectory, target } = input;
+  const { repoPath, workingDirectory, target, branchKey } = input;
   return useCallback(
     async (mode: "hard" | "soft" | "scheduled" = "soft") => {
       if (
@@ -168,11 +169,10 @@ function useComparisonRefresh(
         return null;
       const targetBranch =
         target.branch === "@{upstream}" ? target.branch : targetBranchSelectionValue(target);
-      const key = createScheduledFetchCooldownKey({
-        repoPath,
-        workingDir: workingDirectory,
-        targetBranch,
-      });
+      const key = JSON.stringify([
+        createScheduledFetchCooldownKey({ repoPath, workingDir: workingDirectory, targetBranch }),
+        targetBranch === "@{upstream}" ? branchKey : null,
+      ]);
       const fetchDue =
         mode === "scheduled" &&
         shouldRunScheduledFetch({
@@ -189,8 +189,14 @@ function useComparisonRefresh(
               workingDirectory,
             );
             renewWorkspaceReadContext(queryClient, workingDirectory);
-            if (result.outcome === "fetched")
+            if (result.outcome === "fetched") {
               await invalidateRepoBranchesQuery(queryClient, repoPath);
+              await queryClient.refetchQueries({
+                queryKey: gitQueryKeys.branches(repoPath),
+                exact: true,
+                type: "active",
+              });
+            }
             fetchedAt.current.set(key, Date.now());
           })().finally(() => {
             fetches.current.delete(key);
@@ -205,7 +211,16 @@ function useComparisonRefresh(
       if (checked.isError) throw checked.error;
       return checked.data?.kind === "available" ? checked.data.reference : null;
     },
-    [repoPath, workingDirectory, target, refetch, contextKey, activeContext, queryClient],
+    [
+      repoPath,
+      workingDirectory,
+      target,
+      branchKey,
+      refetch,
+      contextKey,
+      activeContext,
+      queryClient,
+    ],
   );
 }
 
@@ -216,6 +231,7 @@ function comparisonState(
   const unavailableReason = comparisonUnavailableReason(input, comparison);
   return {
     isPending:
+      input.workingDirectory !== null &&
       !input.branchError &&
       !input.targetError &&
       (!input.branchReady || !input.target || comparison.isPending),

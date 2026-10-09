@@ -39,6 +39,10 @@ export const normalizeTargetBranch = (
     }
   }
 
+  if (normalizedRemote && normalizedBranch.startsWith(`${normalizedRemote}/`)) {
+    normalizedBranch = normalizedBranch.slice(normalizedRemote.length + 1);
+  }
+
   const targetBranch: GitTargetBranch = { branch: normalizedBranch };
   if (normalizedRemote) {
     targetBranch.remote = normalizedRemote;

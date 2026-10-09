@@ -366,3 +366,61 @@ test.each(["light", "dark"] as const)(
     }
   },
 );
+
+test("a pending target save does not lock a new context or release its newer save", async () => {
+  const first = Promise.withResolvers<void>();
+  const second = Promise.withResolvers<void>();
+  const update = mock(() => first.promise)
+    .mockImplementationOnce(() => first.promise)
+    .mockImplementationOnce(() => second.promise);
+  const props = createGitInfoHeaderProps({
+    targetBranchEditable: true,
+    targetBranchOptions: [
+      { value: "origin/main", label: "origin/main" },
+      { value: "origin/release", label: "origin/release" },
+    ],
+    targetBranchSelectionValue: "origin/main",
+    onUpdateTargetBranch: update,
+  });
+  const view = renderGitInfoHeader(props);
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    fireEvent.click(await screen.findByRole("option", { name: /origin\/release/ }));
+    view.rerender(header({ ...props, branch: "other" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    await screen.findByRole("option", { name: /origin\/release/ });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel target branch edit" }));
+    view.rerender(header(props));
+    fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+    const option = await screen.findByRole("option", { name: /origin\/release/ });
+    fireEvent.click(option);
+    expect(update).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      first.resolve();
+      await first.promise;
+    });
+    expect(
+      screen.getByRole("button", { name: "Edit target branch" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Cancel target branch edit" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(option.getAttribute("aria-disabled")).toBe("true");
+    await act(async () => {
+      fireEvent.keyDown(option, { key: "Escape" });
+    });
+    expect(screen.getByRole("dialog", { name: "Target branch" })).toBeTruthy();
+    await act(async () => {
+      second.resolve();
+      await second.promise;
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Target branch" })).toBeNull());
+  } finally {
+    first.resolve();
+    second.resolve();
+    await act(async () => {
+      await Promise.all([first.promise, second.promise]);
+    });
+    view.unmount();
+  }
+});
