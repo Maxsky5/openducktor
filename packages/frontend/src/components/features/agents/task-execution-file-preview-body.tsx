@@ -1,5 +1,5 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
-import type { Editor, EditorType } from "@pierre/diffs/edit";
+import type { EditorFocus } from "@/types/editor-focus";
 import { lazy, Suspense, type ReactElement, type RefObject, useState, useCallback } from "react";
 import type { MarkdownImageProps } from "../task-description-editor/task-description-image-context";
 import { isChatLocalDestination } from "./agent-chat/agent-chat-file-link";
@@ -28,7 +28,7 @@ type FilePreviewBodyProps = {
   >;
   editable: boolean;
   hasPendingDiscard: boolean;
-  editorRef: RefObject<Editor<EditorType, undefined, undefined> | null>;
+  editorRef: RefObject<EditorFocus | null>;
 };
 
 export function FilePreviewBody({
@@ -60,6 +60,7 @@ export function FilePreviewBody({
         file={snapshot.selectedFile}
         disabled={!editable || hasPendingDiscard || editor.isSaving}
         onChange={editor.onContentsChange}
+        editorRef={editorRef}
       />
     );
   }
@@ -111,11 +112,13 @@ function MarkdownFileEditor({
   file,
   disabled,
   onChange,
+  editorRef,
 }: {
   contents: string;
   file: TaskExecutionSelectedFile;
   disabled: boolean;
   onChange(contents: string): void;
+  editorRef: RefObject<EditorFocus | null>;
 }): ReactElement {
   const renderImage = useCallback(
     (props: MarkdownImageProps) =>
@@ -134,6 +137,7 @@ function MarkdownFileEditor({
           previews={EMPTY_PREVIEWS}
           renderImage={renderImage}
           onChange={onChange}
+          editorRef={editorRef}
         />
       </Suspense>
     </div>

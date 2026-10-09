@@ -1,6 +1,6 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import { type FileContents, getFiletypeFromFileName } from "@pierre/diffs";
-import type { Editor, EditorType } from "@pierre/diffs/edit";
+import type { EditorFocus } from "@/types/editor-focus";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import {
@@ -75,7 +75,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
-  const attachedEditorRef = useRef<Editor<EditorType, undefined, undefined> | null>(null);
+  const editorRef = useRef<EditorFocus | null>(null);
   const {
     data: fileData,
     error: fileError,
@@ -122,7 +122,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         editor: { session: editor.session, isDirty: editor.isDirty, isSaving: editor.isSaving },
         isFileError,
         readyCurrentSnapshot,
-        isCodeEditorAttached: attachedEditorRef.current !== null,
+        isEditorAttached: editorRef.current !== null,
       }),
     [
       editor.isDirty,
@@ -217,7 +217,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
           editor={editor}
           editable={hasActiveEditorSession}
           hasPendingDiscard={hasPendingDiscard}
-          editorRef={attachedEditorRef}
+          editorRef={editorRef}
         />
       </div>
       <FileDiscardDialog
@@ -225,13 +225,13 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         isApplyingTransition={isApplyingTransition}
         onKeepEditing={onKeepEditing}
         onDiscard={onDiscard}
-        onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}
+        onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
       />
       <FileConflictReviewDialog
         result={editor.conflictReview}
         onClose={editor.closeConflictReview}
         onAccept={editor.acceptLatestBaseline}
-        onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}
+        onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
       />
     </section>
   );
@@ -639,13 +639,13 @@ function createEditorSnapshot({
   editor,
   isFileError,
   readyCurrentSnapshot,
-  isCodeEditorAttached,
+  isEditorAttached,
 }: {
   selectedFile: TaskExecutionSelectedFile | null;
   editor: Pick<ReturnType<typeof useTaskExecutionFileEditor>, "session" | "isDirty" | "isSaving">;
   isFileError: boolean;
   readyCurrentSnapshot: FilePreviewSnapshot | null;
-  isCodeEditorAttached: boolean;
+  isEditorAttached: boolean;
 }): FilePreviewSnapshot | null {
   if (
     !selectedFile ||
@@ -661,7 +661,7 @@ function createEditorSnapshot({
     return readyCurrentSnapshot;
   }
   const result =
-    isCodeEditorAttached || isMarkdownFile(selectedFile.relativePath)
+    isEditorAttached || isMarkdownFile(selectedFile.relativePath)
       ? editor.session.source
       : editor.session.baseline;
   return createFilePreviewSnapshot(selectedFile, result);

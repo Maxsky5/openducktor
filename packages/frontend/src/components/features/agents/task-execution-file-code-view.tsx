@@ -1,5 +1,6 @@
 import type { CodeViewFileItem, CodeViewItem, CodeViewOptions, FileContents } from "@pierre/diffs";
-import { Editor, type EditorFactory, type EditorType } from "@pierre/diffs/edit";
+import { Editor, type EditorFactory } from "@pierre/diffs/edit";
+import type { EditorFocus } from "@/types/editor-focus";
 import {
   type CSSProperties,
   type ReactElement,
@@ -25,7 +26,7 @@ type TaskExecutionFileCodeViewProps = {
   file: CodeViewFile;
   editable: boolean;
   version: number;
-  editorRef: RefObject<Editor<EditorType, undefined, undefined> | null>;
+  editorRef: RefObject<EditorFocus | null>;
   onItemEditChange(item: CodeViewItem<undefined>, file: FileContents): void;
 };
 

@@ -5,7 +5,7 @@ import type { MarkdownImageProps } from "../task-description-editor/task-descrip
 import { errorMessage } from "@/lib/errors";
 import {
   resolvedPathQueryOptions,
-  workspaceTextFileQueryOptions,
+  workspaceImageFileQueryOptions,
 } from "@/state/queries/filesystem";
 import { parseChatFileLink, resolveChatFileLink } from "./agent-chat/agent-chat-file-link";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
@@ -53,7 +53,7 @@ function ReadImage({
   image: MarkdownImageProps;
 }) {
   const result = useQuery(
-    workspaceTextFileQueryOptions(file.rootPath, file.relativePath, undefined, file.access),
+    workspaceImageFileQueryOptions(file.rootPath, file.relativePath, file.access),
   );
   const [failedSource, setFailedSource] = useState<string | null>(null);
   if (result.isError) return <ImageState message={errorMessage(result.error)} />;

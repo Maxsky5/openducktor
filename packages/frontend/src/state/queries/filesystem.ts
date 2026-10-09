@@ -19,6 +19,7 @@ import {
   workspaceRefreshMode,
 } from "./workspace-refresh";
 import { host } from "@/state/operations/host";
+import { runImagePreview } from "@/lib/generated-images/image-preview-queue";
 
 type FilesystemQueryHost = Pick<
   typeof host,
@@ -56,6 +57,8 @@ export const filesystemQueryKeys = {
       relativePath,
       ...(access ? [access] : []),
     ] as const,
+  image: (rootPath: string, relativePath: string, access?: "local") =>
+    [...filesystemQueryKeys.textFile(rootPath, relativePath, access), "image-preview"] as const,
 };
 
 export const resolvedPathQueryOptions = (
@@ -186,16 +189,23 @@ export const workspaceTextFileQueryOptions = (
 ) =>
   queryOptions({
     queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
-    queryFn: async ({ signal }): Promise<WorkspaceTextFileReadResult> => {
-      const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
-      if (access) input.access = access;
-      const result = await hostClient.filesystemReadTextFile(input);
-      signal.throwIfAborted();
-      return result;
-    },
-    retry: false,
-    staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
+    ...fileReadOptions(rootPath, relativePath, hostClient, access),
   });
+
+export const workspaceImageFileQueryOptions = (
+  rootPath: string,
+  relativePath: string,
+  access?: "local",
+) => {
+  const read = fileReadOptions(rootPath, relativePath, host, access);
+  return queryOptions({
+    ...read,
+    queryKey: filesystemQueryKeys.image(rootPath, relativePath, access),
+    queryFn: (context) => runImagePreview(context.signal, () => read.queryFn(context)),
+    // Large image data must leave the cache when its last preview closes.
+    gcTime: 0,
+  });
+};
 
 export const workspaceTextFileWriteMutationOptions = (
   queryClient: QueryClient,
@@ -220,6 +230,23 @@ export const workspaceTextFileWriteMutationOptions = (
       });
     },
   });
+
+const fileReadOptions = (
+  rootPath: string,
+  relativePath: string,
+  hostClient: FilesystemQueryHost,
+  access?: "local",
+) => ({
+  queryFn: async ({ signal }: { signal: AbortSignal }): Promise<WorkspaceTextFileReadResult> => {
+    const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
+    if (access) input.access = access;
+    const result = await hostClient.filesystemReadTextFile(input);
+    signal.throwIfAborted();
+    return result;
+  },
+  retry: false,
+  staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
+});
 
 const assertSelectedBranch = (
   context: WorkspaceFileTreeContext | undefined,

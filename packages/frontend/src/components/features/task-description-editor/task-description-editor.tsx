@@ -1,6 +1,16 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, Info } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  type ReactElement,
+  type Ref,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { EditorFocus } from "@/types/editor-focus";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
@@ -22,6 +32,7 @@ type TaskDescriptionEditorProps = {
   taskId: string | null;
   issueImageContext?: IssueImageContext | undefined;
   renderImage?: MarkdownImageRenderer | undefined;
+  editorRef?: Ref<EditorFocus> | undefined;
   onChange(markdown: string): void;
   onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   uploads: TaskDescriptionAssetUpload[];
@@ -105,6 +116,7 @@ function TaskDescriptionEditorSession({
   taskId,
   issueImageContext,
   renderImage,
+  editorRef,
   onChange,
   onUpload,
   uploads,
@@ -168,6 +180,7 @@ function TaskDescriptionEditorSession({
           renderContext={renderContext}
           issueImageContext={issueImageContext}
           renderImage={renderImage}
+          editorRef={editorRef}
         />
       </Suspense>
     );
@@ -180,6 +193,7 @@ function TaskDescriptionEditorSession({
         disabled={disabled}
         onEdit={() => setMode("markdown")}
         uploads={uploads}
+        editorRef={editorRef}
       />
     );
   }

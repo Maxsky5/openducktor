@@ -5,7 +5,16 @@ import { CodeBlock } from "@tiptap/extension-code-block";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { ImagePlus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Ref,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { EditorFocus } from "@/types/editor-focus";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
@@ -52,6 +61,7 @@ type TaskDescriptionVisualEditorProps = {
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
   issueImageContext?: IssueImageContext | undefined;
   renderImage?: MarkdownImageRenderer | undefined;
+  editorRef?: Ref<EditorFocus> | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
   mermaidPreviews: MermaidPreviews;
@@ -66,6 +76,7 @@ export default function TaskDescriptionVisualEditor({
   renderContext,
   issueImageContext,
   renderImage,
+  editorRef,
   uploads,
   previews,
   mermaidPreviews,
@@ -126,6 +137,18 @@ export default function TaskDescriptionVisualEditor({
       onChange(`${frontMatter}${nextBody}`);
     },
   });
+
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus: (options) => {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.focus(undefined, { scrollIntoView: !options?.preventScroll });
+        }
+      },
+    }),
+    [editor],
+  );
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || hydratedBody.current === body) {

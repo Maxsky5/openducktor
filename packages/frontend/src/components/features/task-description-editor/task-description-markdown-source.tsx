@@ -1,6 +1,7 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ImagePlus } from "lucide-react";
-import { type ReactElement, useRef } from "react";
+import { type ReactElement, type Ref, useImperativeHandle, useRef } from "react";
+import type { EditorFocus } from "@/types/editor-focus";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
@@ -12,6 +13,7 @@ export function TaskDescriptionMarkdownSource({
   onEdit,
   uploads,
   disabled = false,
+  editorRef,
 }: {
   markdown: string;
   onChange: (markdown: string) => void;
@@ -19,10 +21,18 @@ export function TaskDescriptionMarkdownSource({
   disabled?: boolean;
   onEdit: () => void;
   uploads: TaskDescriptionAssetUpload[];
+  editorRef?: Ref<EditorFocus> | undefined;
 }): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const insertionOffset = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus: (options) => textareaRef.current?.focus(options),
+    }),
+    [],
+  );
   const uploading = uploads.some((upload) => upload.status === "uploading");
 
   const uploadFiles = (files: File[]): void => {

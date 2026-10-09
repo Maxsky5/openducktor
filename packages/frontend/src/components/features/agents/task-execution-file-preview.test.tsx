@@ -29,6 +29,7 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
@@ -517,6 +518,62 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(source).toHaveProperty("value", "# Changed\n");
     view.unmount();
   }, 5000);
+
+  for (const mode of ["Visual", "Markdown"] as const) {
+    for (const cancel of ["Keep editing", "Escape"] as const) {
+      // Each case mounts the real rich editor and opens a portal dialog.
+      test(`returns focus to ${mode} after ${cancel} cancels Markdown discard`, async () => {
+        await withAnimationFrameTestDriver(async (frames) => {
+          const selectedFile: TaskExecutionSelectedFile = {
+            rootPath: "/tmp",
+            relativePath: "report.md",
+            access: "local",
+          };
+          readTextFileMock.mockResolvedValue(textFileResult(selectedFile, "# Report\n"));
+          const onClose = mock(() => {});
+          const onKeepEditing = mock(() => {});
+          const model = { selectedFile, onClose, onKeepEditing };
+          const view = render(renderPreview(model));
+          try {
+            await screen.findByRole("heading", { name: "Report" }, { timeout: 4_000 });
+            let content: HTMLElement;
+            if (mode === "Markdown") {
+              fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+              content = screen.getByRole("textbox", { name: "Markdown source" });
+              fireEvent.change(content, { target: { value: "# Changed\n" } });
+            } else {
+              fireEvent.click(screen.getByRole("button", { name: "Paragraph" }));
+              const editor = view.container.querySelector(".tiptap");
+              if (!(editor instanceof HTMLElement)) throw new Error("Expected the Visual editor");
+              content = editor;
+            }
+            await waitForDirtyFile();
+            await frames.flushFrames();
+            content.focus();
+            fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+            expect(onClose).toHaveBeenCalledTimes(1);
+            view.rerender(renderPreview({ ...model, hasPendingDiscard: true }));
+            const dialog = await screen.findByRole("dialog", { name: "Discard unsaved changes?" });
+            if (cancel === "Keep editing") {
+              fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+            } else {
+              fireEvent.keyDown(dialog, { key: "Escape" });
+            }
+            expect(onKeepEditing).toHaveBeenCalledTimes(1);
+            view.rerender(renderPreview(model));
+            // The dialog closes on a timer; Tiptap restores focus on the next frame.
+            await frames.flushTimers();
+            await frames.flushFrames();
+            await waitFor(() => expect(document.activeElement === content).toBe(true));
+            expect(content.isConnected).toBe(true);
+            await waitForDirtyFile();
+          } finally {
+            view.unmount();
+          }
+        });
+      }, 5_000);
+    }
+  }
 
   test("keeps the previous highlighted file visible while the next file prepares", async () => {
     const onClose = mock(() => {});
