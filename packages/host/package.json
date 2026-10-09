@@ -17,10 +17,10 @@
     "lint": "oxlint -c ../../.oxlintrc.json src drizzle.task-store.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.286",
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
     "@azure/msal-node": "^6.0.1",
-    "@azure/msal-node-extensions": "^5.5.1",
-    "@ff-labs/fff-node": "0.10.6",
+    "@azure/msal-node-extensions": "^5.5.2",
+    "@ff-labs/fff-node": "0.11.0",
     "@openducktor/adapters-codex-app-server": "workspace:*",
     "@openducktor/adapters-opencode-sdk": "workspace:*",
     "@openducktor/contracts": "workspace:*",
@@ -30,7 +30,7 @@
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
     "diff": "9.0.0",
-    "drizzle-orm": "0.45.2",
+    "drizzle-orm": "0.45.3",
     "effect": "4.0.1",
     "file-type": "^22.1.1",
     "remark-gfm": "^4.0.1",
@@ -40,9 +40,9 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.4",
     "bun-types": "^1.4.2",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "node-pty": "1.2.0-beta.15"
   }
 }
