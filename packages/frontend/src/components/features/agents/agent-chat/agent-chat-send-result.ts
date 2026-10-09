@@ -6,7 +6,7 @@ export type AgentChatSendRecovery = {
   recoveryKey: string;
   error: Error;
   persistence?: AgentChatDraftPersistence | null;
-  onRecovered?: (clear: () => void) => void;
+  launchAttemptId?: string;
   inAppFeedbackHandled?: boolean;
 };
 

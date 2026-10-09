@@ -64,7 +64,7 @@ export const createAgentStudioChatDraftPersistence = ({
   return {
     targetKey: toAgentChatDraftStorageKey(identity),
     hydrate: () => hydrateAgentChatDraft(identity, taskId),
-    set: (draft) => setAgentChatDraft(identity, taskId, draft),
+    set: (draft, options) => setAgentChatDraft(identity, taskId, draft, options),
     readVersion: () => readAgentChatDraftVersion(identity),
     clear: (options) => clearAgentChatDraft(identity, options),
     flush: () => flushAgentChatDraft(identity),

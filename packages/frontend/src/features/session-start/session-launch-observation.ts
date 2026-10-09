@@ -67,7 +67,7 @@ export const observeSessionLaunches = async <State extends SessionLaunchState>({
       }),
     );
   };
-  const unsubscribe = await bridge.subscribeRunEvents((event) => {
+  const onEvent: Parameters<HostBridge["subscribeRunEvents"]>[0] = (event) => {
     if (disposed) return;
     if (isBrowserLiveControlEvent(event)) {
       if (event.kind === "reconnected") void read();
@@ -89,11 +89,17 @@ export const observeSessionLaunches = async <State extends SessionLaunchState>({
     } catch (cause) {
       onError(cause);
     }
-  });
-  // Subscribe first so an older read cannot replace a newer event.
+  };
+  let unsubscribe: (() => void) | undefined;
+  try {
+    unsubscribe = await bridge.subscribeRunEvents(onEvent);
+  } catch (cause) {
+    onError(cause);
+  }
+  // The initial read also exposes retained failures when the stream cannot attach.
   void read();
   return () => {
     disposed = true;
-    unsubscribe();
+    unsubscribe?.();
   };
 };

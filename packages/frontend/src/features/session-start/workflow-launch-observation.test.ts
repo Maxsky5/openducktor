@@ -44,7 +44,10 @@ const deferred = <T>() => {
   });
   return { promise, resolve };
 };
-const fixture = async (read: (ref: WorkflowLaunchRead) => Promise<WorkflowLaunchSnapshot[]>) => {
+const fixture = async (
+  read: (ref: WorkflowLaunchRead) => Promise<WorkflowLaunchSnapshot[]>,
+  subscriptionError?: Error,
+) => {
   let listener: RunEventListener = () => {};
   const errors: unknown[] = [];
   const seen: WorkflowLaunchSnapshot[] = [];
@@ -63,6 +66,7 @@ const fixture = async (read: (ref: WorkflowLaunchRead) => Promise<WorkflowLaunch
     bridge: {
       client,
       subscribeRunEvents: async (next) => {
+        if (subscriptionError) throw subscriptionError;
         listener = next;
         return () => {};
       },
@@ -88,6 +92,36 @@ const fixture = async (read: (ref: WorkflowLaunchRead) => Promise<WorkflowLaunch
       listener({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "new" }),
   };
 };
+
+test("a failed event subscription still reads retained recovery and reports the stream error", async () => {
+  const streamError = new Error("Event stream setup failed");
+  const h = await fixture(async () => [failed], streamError);
+  try {
+    await h.first.promise;
+    expect(h.errors).toEqual([streamError]);
+    expect(h.seen).toEqual([failed]);
+    expect(h.client.agentSessionWorkflowLaunchRead).toHaveBeenCalledTimes(1);
+    expect(workflowLaunchResult(failed, failed, h.client).retryPostStartMessage).toBeDefined();
+  } finally {
+    h.stop();
+  }
+});
+
+test("detachment suppresses a late retained read after event subscription fails", async () => {
+  const read = deferred<WorkflowLaunchSnapshot[]>();
+  const streamError = new Error("Event stream setup failed");
+  const h = await fixture(() => read.promise, streamError);
+  try {
+    h.stop();
+    read.resolve([failed]);
+    await Bun.sleep(0);
+    expect(h.errors).toEqual([streamError]);
+    expect(h.seen).toEqual([]);
+    expect(h.client.agentSessionWorkflowLaunchRead).toHaveBeenCalledTimes(1);
+  } finally {
+    h.stop();
+  }
+});
 
 test("attachment restores exact failure and same-attempt recovery without a launch or history read", async () => {
   const h = await fixture(async () => [failed]);

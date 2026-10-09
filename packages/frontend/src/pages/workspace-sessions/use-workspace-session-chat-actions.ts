@@ -35,7 +35,6 @@ import { launchWorkspaceSession } from "./launch-workspace-session";
 import { presentWorkspaceSessionLaunch } from "./use-workspace-session-launch-recovery";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { trackSessionLaunchDraft } from "@/features/session-start/session-launch-draft-recovery";
 
 type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>[0], "draft"> & {
   canSend: boolean;
@@ -271,9 +270,9 @@ export function useWorkspaceSessionChatActions(
             originKey: persistence.targetKey,
             recoveryKey: persistence.targetKey,
             persistence,
+            launchAttemptId: outcome.launchAttemptId,
             error: new Error(outcome.failure?.message ?? "First message failed."),
             inAppFeedbackHandled: true,
-            onRecovered: (clear) => trackSessionLaunchDraft(outcome, clear),
           };
         }
         return outcome.acceptance === "accepted" || outcome.acceptance === "unknown";

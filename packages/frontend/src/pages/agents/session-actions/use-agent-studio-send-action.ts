@@ -8,7 +8,6 @@ import {
   agentStudioChatDraftScopeKey,
   createAgentStudioChatDraftPersistence,
 } from "../agent-studio-chat-draft";
-import { trackSessionLaunchDraft } from "@/features/session-start/session-launch-draft-recovery";
 import type {
   AgentChatSendRecovery,
   AgentChatSendResult,
@@ -188,13 +187,13 @@ export function useAgentStudioSendAction({
             error: cause instanceof Error ? cause : new Error(String(cause)),
           };
           if (failure instanceof WorkflowLaunchFailure && failure.outcome.recoveryAllowed) {
+            recovery.launchAttemptId = failure.outcome.launchAttemptId;
             recovery.inAppFeedbackHandled = true;
             recovery.persistence = createAgentStudioChatDraftPersistence({
               workspaceId,
               taskId,
               session: createdSession,
             });
-            recovery.onRecovered = (clear) => trackSessionLaunchDraft(failure.outcome, clear);
           }
           return recovery;
         }

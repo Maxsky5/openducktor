@@ -117,7 +117,9 @@ export const createSessionLaunchSettlement = <
       const complete = () => {
         delete attempt.stoppedSources;
         attempt.active = false;
-        return Deferred.succeed(done, snapshot(attempt));
+        const result = snapshot(attempt);
+        if (!result.recoveryAllowed) delete attempt.sendInput;
+        return Deferred.succeed(done, result);
       };
       // Handle cancellation that arrived during publication before completing.
       yield* Effect.suspend(() =>

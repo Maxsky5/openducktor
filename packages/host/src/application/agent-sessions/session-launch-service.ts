@@ -66,6 +66,7 @@ export const createSessionLaunchService = <
   const cancelRecovery = (attempt: SessionLaunchAttempt<Request, State>) => {
     attempt.canceled = true;
     attempt.snapshot.phase = "canceled";
+    delete attempt.sendInput;
   };
   const checkCanceled = (attempt: SessionLaunchAttempt<Request, State>) =>
     Effect.suspend(() =>
@@ -179,7 +180,11 @@ export const createSessionLaunchService = <
   ) =>
     Effect.gen(function* () {
       const done = attempt.done;
-      attempt.worker = yield* Effect.forkDetach(settle(attempt, done, work));
+      const worker = yield* Effect.forkDetach(settle(attempt, done, work));
+      attempt.worker = worker;
+      worker.addObserver(() => {
+        if (attempt.worker === worker) delete attempt.worker;
+      });
       return done;
     });
   const service: SessionLaunchService<Request, State, Ref, Read> = {
@@ -326,6 +331,7 @@ export const createSessionLaunchService = <
         yield* Effect.forEach(workers, (attempt) =>
           attempt.worker ? Fiber.join(attempt.worker) : Effect.void,
         );
+        for (const attempt of attempts.values()) delete attempt.sendInput;
       }),
   };
   const cancel = (attempt: SessionLaunchAttempt<Request, State>) =>

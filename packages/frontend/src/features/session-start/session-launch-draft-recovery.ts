@@ -2,34 +2,22 @@ import type {
   WorkflowLaunchSnapshot,
   WorkspaceSessionLaunchSnapshot,
 } from "@openducktor/contracts";
+import { clearAgentChatDraft } from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 
 type Launch = WorkflowLaunchSnapshot | WorkspaceSessionLaunchSnapshot;
-const drafts = new Map<string, () => void>();
 
-/** Keep draft cleanup with the attempt when a view or a toast is replaced. */
-export const trackSessionLaunchDraft = (launch: Launch, clear: () => void): void => {
-  drafts.set(launchKey(launch), clear);
-};
-
+/** Clear only the failed instruction that this launch later accepted. */
 export const updateSessionLaunchDraft = (launch: Launch): void => {
-  const key = launchKey(launch);
-  const clear = drafts.get(key);
   if (launch.acceptance === "accepted") {
-    drafts.delete(key);
-    clear?.();
-  } else if (
-    ["completed", "canceled", "skipped"].includes(launch.phase) ||
-    (launch.phase === "failed" && !launch.recoveryAllowed)
-  ) {
-    drafts.delete(key);
+    const identity =
+      "taskId" in launch
+        ? launch.session && {
+            workspaceId: launch.workspaceId,
+            externalSessionId: launch.session.externalSessionId,
+            runtimeKind: launch.session.runtimeKind,
+            workingDirectory: launch.session.workingDirectory,
+          }
+        : { workspaceId: launch.workspaceId, workspaceSessionId: launch.sessionId };
+    if (identity) clearAgentChatDraft(identity, { onlyIfLaunchAttemptId: launch.launchAttemptId });
   }
 };
-
-const launchKey = (launch: Launch): string =>
-  JSON.stringify([
-    "taskId" in launch ? "task" : "workspace",
-    launch.workspaceId,
-    launch.repoPath,
-    "taskId" in launch ? launch.taskId : launch.sessionId,
-    launch.launchAttemptId,
-  ]);

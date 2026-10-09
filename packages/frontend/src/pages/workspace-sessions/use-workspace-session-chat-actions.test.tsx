@@ -622,7 +622,7 @@ test.each(["accepted", "rejected", "unknown", "unreadable", "pending"] as const)
         if (acceptance === "rejected")
           expect(result).toMatchObject({
             kind: "recover_draft",
-            onRecovered: expect.any(Function),
+            launchAttemptId: launch.mock.calls[0]?.[0].launchAttemptId,
           });
         else expect(result).toBe(true);
       });

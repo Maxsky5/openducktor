@@ -44,16 +44,8 @@ export function useAgentChatComposerDraftState({
   // Count edits across scopes so a late failure cannot restore text the user has since cleared.
   const editSequenceRef = useRef(0);
   const scopeEditsRef = useRef(new Map<string, number>());
-  const mounted = useRef(true);
   const nextKey = scope.key;
   const nextPersistence = scope.persistence;
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   useLayoutEffect(() => {
     const onClear = () => {
@@ -220,7 +212,7 @@ export function useAgentChatComposerDraftState({
           draftHasMeaningfulContent(persistence.hydrate())
         )
           return;
-        const version = persistence?.set(snapshot.draft) ?? null;
+        persistence?.set(snapshot.draft, { launchAttemptId: recovery.launchAttemptId });
         pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
         if (persistence) {
           pendingRecoveryRef.current.delete(recovery.recoveryKey);
@@ -231,18 +223,6 @@ export function useAgentChatComposerDraftState({
           latestStateRef.current = restored;
           setState(restored);
         }
-        recovery.onRecovered?.(() => {
-          if ((scopeEditsRef.current.get(recovery.recoveryKey) ?? 0) > snapshot.editSequence)
-            return;
-          if (persistence && persistence.readVersion() !== version) return;
-          pendingRecoveryRef.current.delete(recovery.recoveryKey);
-          persistence?.clear({ onlyIfVersion: version });
-          const latest = latestStateRef.current;
-          if (!mounted.current || latest.key !== recovery.recoveryKey) return;
-          const cleared = { ...latest, draft: createEmptyComposerDraft() };
-          latestStateRef.current = cleared;
-          setState(cleared);
-        });
         return;
       }
       if ((scopeEditsRef.current.get(snapshot.key) ?? 0) > snapshot.editSequence) return;

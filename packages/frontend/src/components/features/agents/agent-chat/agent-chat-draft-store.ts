@@ -31,6 +31,7 @@ type DraftMemoryEntry = {
   version: number;
   userVersion: number;
   persistedVersion: number;
+  launchAttemptId?: string | undefined;
   cancelMaxFlush: (() => void) | null;
   cancelTrailingFlush: (() => void) | null;
   isFlushing: boolean;
@@ -285,6 +286,7 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
     taskId: entry.taskId,
     draft: entry.draft,
     updatedAt: nowProvider().toISOString(),
+    launchAttemptId: entry.launchAttemptId,
   });
   if (writeResult.status === "oversized") {
     throw new Error(
@@ -327,6 +329,7 @@ export const hydrateAgentChatDraft = (
   cleanupExpiredAgentChatDraftsOnce();
 
   let draft = createEmptyComposerDraft();
+  let launchAttemptId: string | undefined;
   try {
     const result = readAgentChatDraftFromStorage({
       storage: getDraftStorage(),
@@ -335,12 +338,14 @@ export const hydrateAgentChatDraft = (
     });
     if (result.status === "restored") {
       draft = result.value.draft;
+      launchAttemptId = result.value.launchAttemptId;
     }
   } catch (error) {
     reportPersistenceError(error);
   }
 
   const entry = createEntry(identity, taskId, draft);
+  entry.launchAttemptId = launchAttemptId;
   draftEntries.set(toAgentChatDraftStorageKey(identity), entry);
   return draft;
 };
@@ -349,11 +354,14 @@ export const setAgentChatDraft = (
   identity: AgentChatDraftIdentity,
   taskId: string | null,
   draft: AgentChatComposerDraft,
+  options?: { launchAttemptId?: string | undefined },
 ): number => {
   const entry = upsertEntry(identity, taskId, draft);
   entry.version += 1;
   // A cleared and recreated entry must not match an earlier submitted draft.
   entry.userVersion = ++draftVersion;
+  // Ordinary edits stop this draft from belonging to a failed launch.
+  entry.launchAttemptId = options?.launchAttemptId;
   scheduleEntryFlush(entry);
   return entry.userVersion;
 };
@@ -365,11 +373,29 @@ export const clearAgentChatDraft = (
   identity: AgentChatDraftIdentity,
   options?: {
     onlyIfVersion?: number | null;
+    onlyIfLaunchAttemptId?: string;
     throwOnStorageError?: boolean;
   },
 ): boolean => {
   const key = toAgentChatDraftStorageKey(identity);
   const entry = draftEntries.get(key);
+  if (options?.onlyIfLaunchAttemptId !== undefined) {
+    let launchAttemptId = entry?.launchAttemptId;
+    if (!entry) {
+      try {
+        const stored = readAgentChatDraftFromStorage({
+          storage: getDraftStorage(),
+          identity,
+          now: nowProvider(),
+        });
+        if (stored.status === "restored") launchAttemptId = stored.value.launchAttemptId;
+      } catch (error) {
+        reportPersistenceError(error);
+        return false;
+      }
+    }
+    if (launchAttemptId !== options.onlyIfLaunchAttemptId) return false;
+  }
   if (
     options?.onlyIfVersion !== undefined &&
     options.onlyIfVersion !== null &&
