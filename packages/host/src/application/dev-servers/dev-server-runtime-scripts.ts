@@ -65,11 +65,15 @@ export const stopScriptProcessHandle = ({
   runtime: DevServerGroupRuntime;
   scriptId: string;
   updateScriptState: UpdateScriptState;
-}) =>
+}): Effect.Effect<string | null> =>
   Effect.gen(function* () {
+    const output =
+      runtime.processes.get(scriptId) === handle
+        ? runtime.terminalOutputs.get(scriptId)
+        : undefined;
     const stopResult = yield* Effect.result(handle.stop());
+    const isCurrentHandle = runtime.processes.get(scriptId) === handle;
     if (stopResult._tag === "Success") {
-      const isCurrentHandle = runtime.processes.get(scriptId) === handle;
       if (isCurrentHandle) {
         runtime.unresolvedStops.delete(scriptId);
         runtime.processes.delete(scriptId);
@@ -83,14 +87,18 @@ export const stopScriptProcessHandle = ({
           state.lastError = null;
         });
       }
+      // Terminal cleanup can forget the source as soon as it exits. Record the stop first.
+      output?.exit({ exitCode: null, signal: null });
       return null;
     }
 
     const message = errorMessage(stopResult.failure);
-    updateScriptState(runtime, scriptId, (script) => {
-      script.status = "failed";
-      script.lastError = message;
-    });
+    if (isCurrentHandle) {
+      updateScriptState(runtime, scriptId, (script) => {
+        script.status = "failed";
+        script.lastError = message;
+      });
+    }
     return message;
   });
 

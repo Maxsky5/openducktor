@@ -7,7 +7,8 @@ import {
 } from "@openducktor/contracts";
 import { Terminal } from "@xterm/headless";
 import { Effect, Fiber } from "effect";
-import { createDevServerService } from "../dev-servers/dev-server-service";
+import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../effect/host-errors";
 import type {
   DevServerProcessPort,
@@ -19,6 +20,16 @@ import {
   createGitPortTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
+import { createDevServerService } from "../dev-servers/dev-server-service";
+import { createGitProviderResolver } from "../git/git-provider-resolver";
+import {
+  createBuildSettingsConfig,
+  createDirectMergeGitPort,
+  createPullRequestSyncSystemCommands,
+  createTaskService,
+  githubPullResponsePayload,
+  task,
+} from "../tasks/test-support/task-workflow-harness";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { createTerminalService } from "./terminal-service";
 
@@ -312,6 +323,7 @@ const makeDevServers = (
   processPort: DevServerProcessPort,
 ) =>
   createDevServerService({
+    eventBus: { publish: () => {}, subscribe: () => () => {} },
     terminalSources: terminals,
     processPort,
     taskWorktreeService: { getTaskWorktree: () => Effect.succeed({ workingDirectory: "/repo" }) },
@@ -329,6 +341,144 @@ const makeDevServers = (
   });
 
 describe("dev server terminal ownership", () => {
+  test("closes a merged PR task when native stop succeeds before the exit callback", async () => {
+    const terminals = await makeService();
+    let startInput: DevServerProcessStartInput | undefined;
+    let stopCalls = 0;
+    let stopFails = true;
+    const service = makeDevServers(terminals, {
+      start: (input) => {
+        startInput = input;
+        return Effect.succeed({
+          pid: 779,
+          waitForReady: () => Effect.void,
+          pauseOutput: () => Effect.void,
+          resumeOutput: () => Effect.void,
+          stop: () =>
+            Effect.gen(function* () {
+              stopCalls += 1;
+              if (stopFails) {
+                return yield* new HostOperationError({
+                  operation: "stop",
+                  message: "native stop failed",
+                });
+              }
+            }),
+        });
+      },
+    });
+    let currentTask = task({
+      id: "task",
+      status: "human_review",
+      pullRequest: {
+        providerId: "github",
+        number: 42,
+        state: "open",
+        url: "https://github.com/openai/openducktor/pull/42",
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      },
+    });
+    const calls: unknown[] = [];
+    const gitPort = createDirectMergeGitPort({ calls });
+    const systemCommands = createPullRequestSyncSystemCommands({
+      calls,
+      payload: githubPullResponsePayload({
+        number: 42,
+        state: "closed",
+        mergedAt: "2026-05-10T11:00:00.000Z",
+      }),
+    });
+    const tasks = createTaskService({
+      devServerService: service,
+      terminalService: terminals,
+      gitPort,
+      gitProviderResolver: Effect.runSync(
+        createGitProviderResolver([
+          new GithubProviderAdapter({
+            gitPort,
+            systemCommands,
+            toolDiscovery: createToolDiscoveryAdapter({ systemCommands }),
+          }),
+        ]),
+      ),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskWorktreeService: { getTaskWorktree: () => Effect.succeed(null) },
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "workspace",
+              workspaceName: "Workspace",
+              repoPath: "/repo",
+              git: {
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  autoDetected: false,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                },
+              },
+            }),
+          ),
+      }),
+      taskStore: {
+        listPullRequestSyncCandidates: () => {
+          const { id, status, pullRequest } = currentTask;
+          return Effect.succeed(pullRequest ? [{ id, status, pullRequest }] : []);
+        },
+        listTasks: () => Effect.succeed([currentTask]),
+        setPullRequest: ({ pullRequest }) =>
+          Effect.sync(() => {
+            currentTask = { ...currentTask, pullRequest: pullRequest ?? undefined };
+            return true;
+          }),
+        getTaskMetadata: () =>
+          Effect.succeed({ spec: { markdown: "" }, plan: { markdown: "" }, agentSessions: [] }),
+        transitionTask: ({ status }) =>
+          Effect.sync(() => {
+            currentTask = { ...currentTask, status };
+            return currentTask;
+          }),
+      },
+    });
+    try {
+      await Effect.runPromise(service.start(command));
+      await expect(
+        Effect.runPromise(tasks.repoPullRequestSync({ repoPath: "/repo" })),
+      ).rejects.toThrow("Failed to terminate");
+      expect(currentTask.status).toBe("human_review");
+      expect((await Effect.runPromise(service.getState(command))).scripts[0]).toMatchObject({
+        status: "failed",
+        pid: 779,
+        lastError: "native stop failed",
+        terminalId: expect.any(String),
+      });
+      stopFails = false;
+      expect(await Effect.runPromise(tasks.repoPullRequestSync({ repoPath: "/repo" }))).toEqual({
+        ok: true,
+      });
+      expect(currentTask.status).toBe("closed");
+      expect(currentTask.pullRequest?.state).toBe("merged");
+      const stopped = await Effect.runPromise(service.getState(command));
+      expect(stopped.scripts[0]).toMatchObject({ status: "stopped", pid: null, terminalId: null });
+      expect(stopCalls).toBe(2);
+      expect(
+        (await Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/repo" })))
+          .activeOwners,
+      ).toEqual([]);
+      startInput?.onExit({ pid: 779, exitCode: 0, signal: null, error: null });
+      expect((await Effect.runPromise(service.getState(command))).scripts[0]).toMatchObject({
+        status: "stopped",
+        pid: null,
+        terminalId: null,
+      });
+    } finally {
+      startInput?.onExit({ pid: 779, exitCode: 0, signal: null, error: null });
+      await Effect.runPromise(terminals.dispose());
+    }
+  });
+
   test("keeps a failed native stop owned after startup overflow and supports Stop", async () => {
     const terminals = await makeService();
     let stopFails = true;
