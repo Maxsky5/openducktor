@@ -1,5 +1,5 @@
 import { GitBranch as GitBranchIcon } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,9 @@ type BranchSelectorProps = {
   triggerAriaLabelledBy?: string;
   wrapOptionLabels?: boolean;
   trigger?: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  footer?: ReactNode;
 };
 
 export function BranchSelector({
@@ -33,6 +36,9 @@ export function BranchSelector({
   triggerAriaLabelledBy,
   wrapOptionLabels = true,
   trigger,
+  open,
+  onOpenChange,
+  footer,
 }: BranchSelectorProps) {
   return (
     <div className={cn("relative", className)}>
@@ -52,6 +58,9 @@ export function BranchSelector({
           triggerClassName,
         )}
         onValueChange={onValueChange}
+        {...(open !== undefined ? { open } : {})}
+        {...(onOpenChange ? { onOpenChange } : {})}
+        {...(footer ? { footer } : {})}
         {...(trigger ? { trigger } : {})}
         {...(triggerAriaLabelledBy !== undefined ? { triggerAriaLabelledBy } : {})}
         {...(popoverClassName !== undefined ? { className: popoverClassName } : {})}

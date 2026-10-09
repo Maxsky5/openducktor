@@ -318,7 +318,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+      fireEvent.click(screen.getByTestId("mock-branch-selector"));
     });
     await act(async () => {
       fireEvent.click(screen.getByTestId("mock-branch-selector"));

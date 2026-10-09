@@ -4,7 +4,7 @@
 
 Use the Target branch editor in the Git panel to choose a local or remote-tracking branch. This changes comparison diffs, comparison counts, file-tree markers, and the Rebase destination. It does not change checkout, branch tracking, the repository default, or the upstream used by Pull and Push.
 
-Task and workspace sessions use the original task Git panel layout. Current branch and Target branch appear in cards with the comparison count above the arrow. The action lane keeps the original icons, order, badges, spacing, and tooltips. The diff tabs, empty states, and commit form keep their original layout. The target pencil opens the inline editor; its branch selector opens the searchable choices. In repository-root sessions, the current-branch pencil opens checkout choices. Worktree checkout rules stay the same. Help, loading, errors, and retry actions appear only while the target editor is open.
+Task and workspace sessions use the original task Git panel layout. Current branch and Target branch appear in cards with the comparison count above the arrow. The action lane keeps the original icons, order, badges, spacing, and tooltips. The diff tabs, empty states, and commit form keep their original layout. The target pencil opens searchable branch choices in one click, like the current-branch pencil. In repository-root sessions, the current-branch pencil opens checkout choices. Worktree checkout rules stay the same. Help, loading, errors, and retry actions appear only in the target dropdown.
 
 | Session context | Initial comparison | Choice owner |
 | --- | --- | --- |

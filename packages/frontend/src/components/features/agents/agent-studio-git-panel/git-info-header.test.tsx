@@ -152,11 +152,8 @@ describe("GitInfoHeader", () => {
     );
     expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
     fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
     expect(await screen.findByRole("option", { name: /Tracked upstream/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
-      "Tracked upstream",
-    );
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
   });
 
   test("keeps the worktree branch rows when a repository branch control is available", () => {
@@ -186,40 +183,42 @@ describe("GitInfoHeader", () => {
     expect(button.getAttribute("aria-describedby")).toBe(error.id);
   });
 
-  test("opens the target editor and closes when editing becomes unavailable", async () => {
-    const editableProps = createGitInfoHeaderProps({
-      targetBranchOptions: [
-        { value: "origin/main", label: "origin/main" },
-        { value: "origin/release", label: "origin/release" },
-      ],
-      targetBranchSelectionValue: "origin/main",
-      onUpdateTargetBranch: async () => {},
-    });
+  test.each(["worktree", "repository"] as const)(
+    "opens target choices with one click in %s mode and closes when editing becomes unavailable",
+    async (contextMode) => {
+      const editableProps = createGitInfoHeaderProps({
+        contextMode,
+        targetBranchEditable: true,
+        targetBranchOptions: [
+          { value: "origin/main", label: "origin/main" },
+          { value: "origin/release", label: "origin/release" },
+        ],
+        targetBranchSelectionValue: "origin/main",
+        onUpdateTargetBranch: async () => {},
+      });
 
-    rendered = renderGitInfoHeader(editableProps);
+      rendered = renderGitInfoHeader(editableProps);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
+      });
+      expect(screen.getByRole("dialog", { name: "Target branch" })).toBeTruthy();
+      expect(await screen.findByRole("option", { name: /origin\/release/ })).toBeTruthy();
 
-    expect(screen.getByTestId("agent-studio-git-target-branch-editor")).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "Target branch" })).toBeTruthy();
-    expect(await screen.findByRole("option", { name: /origin\/release/ })).toBeTruthy();
+      await act(async () => {
+        rendered?.rerender(header({ ...editableProps, targetBranchEditable: false }));
+      });
 
-    await act(async () => {
-      rendered?.rerender(header({ ...editableProps, targetBranchEditable: false }));
-    });
+      expect(screen.queryByRole("dialog", { name: "Target branch" })).toBeNull();
 
-    expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
+      await act(async () => {
+        rendered?.rerender(header(editableProps));
+      });
 
-    await act(async () => {
-      rendered?.rerender(header(editableProps));
-    });
-
-    expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
-    expect(screen.getByTestId("agent-studio-git-target-branch-display-row")).toBeTruthy();
-  });
+      expect(screen.queryByRole("dialog", { name: "Target branch" })).toBeNull();
+      expect(screen.getByTestId("agent-studio-git-target-branch-display-row")).toBeTruthy();
+    },
+  );
 
   test("keeps branch-list retry reachable without permitting a failed list's choices", async () => {
     const retry = mock(async () => {});
@@ -235,7 +234,6 @@ describe("GitInfoHeader", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
     const option = await screen.findByRole("option", { name: /origin\/main/ });
     expect(option.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(option);
@@ -246,7 +244,7 @@ describe("GitInfoHeader", () => {
     });
     expect(retry).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Cancel target branch edit" }));
-    expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Target branch" })).toBeNull();
     expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain(
       "origin/main",
     );
@@ -266,7 +264,6 @@ describe("GitInfoHeader", () => {
     rendered = renderGitInfoHeader(props);
     try {
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       fireEvent.click(await screen.findByRole("option", { name: /origin\/release/ }));
       await act(async () => {
         rendered?.rerender(
@@ -285,7 +282,7 @@ describe("GitInfoHeader", () => {
           ).toBe(true),
         { timeout: 200 },
       );
-      expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "Target branch" })).toBeNull();
       await act(async () => {
         rendered?.rerender(
           header({
@@ -303,9 +300,8 @@ describe("GitInfoHeader", () => {
         await save.promise.catch(() => {});
       });
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       expect(screen.queryByText("Old selection failed.")).toBeNull();
-      expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
+      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain(
         "origin/main",
       );
     } finally {
@@ -337,17 +333,18 @@ test.each(["light", "dark"] as const)(
     try {
       expect(screen.queryByText(/This choice applies only to this session/)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Edit target branch" }));
-      fireEvent.click(screen.getByRole("button", { name: "Target branch" }));
       fireEvent.click(await screen.findByRole("option", { name: /release/ }));
       expect(update).toHaveBeenCalledWith("refs/heads/release");
       expect(
         screen.getByTestId("agent-studio-git-target-branch-cancel").hasAttribute("disabled"),
       ).toBe(true);
-      expect(screen.getByRole("button", { name: "Target branch" }).hasAttribute("disabled")).toBe(
-        true,
-      );
+      expect(
+        screen.getByRole("button", { name: "Edit target branch" }).hasAttribute("disabled"),
+      ).toBe(true);
       expect(screen.getByRole("status").textContent).toContain("Applying comparison...");
-      expect(screen.queryByRole("option", { name: /origin\/main/ })).toBeNull();
+      expect(
+        screen.getByRole("option", { name: /origin\/main/ }).getAttribute("aria-disabled"),
+      ).toBe("true");
       expect(update).toHaveBeenCalledTimes(1);
       await act(async () => {
         failure.reject(new Error("Could not save the target. Try again."));
@@ -356,9 +353,10 @@ test.each(["light", "dark"] as const)(
       await waitFor(() =>
         expect(screen.getByText("Could not save the target. Try again.")).toBeTruthy(),
       );
-      expect(screen.getByRole("button", { name: "Target branch" }).textContent).toContain(
-        "release",
+      expect(screen.getByRole("option", { name: /release/ }).getAttribute("aria-selected")).toBe(
+        "true",
       );
+      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
       expect(screen.getByText(/This choice applies only to this session/)).toBeTruthy();
       fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-cancel"));
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
