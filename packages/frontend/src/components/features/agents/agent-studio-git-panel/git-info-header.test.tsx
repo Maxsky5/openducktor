@@ -98,6 +98,49 @@ describe("GitInfoHeader", () => {
     );
   });
 
+  test("names comparison counts separately from remote action counts", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        commitsAheadBehind: { ahead: 2, behind: 7 },
+        upstreamAheadBehind: { ahead: 5, behind: 3 },
+      }),
+    );
+    expect(screen.getByTestId("agent-studio-git-target-ahead-count").textContent).toBe("2 ahead");
+    expect(screen.getByTestId("agent-studio-git-behind-count").textContent).toBe("7 behind");
+    expect(screen.getByRole("button", { name: "Push branch" }).textContent).toBe("Push5");
+    expect(screen.getByRole("button", { name: "Pull from upstream" }).textContent).toBe("Pull3");
+  });
+
+  test("offers Publish for a branch without a remote branch", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        upstreamStatus: "untracked",
+        upstreamAheadBehind: { ahead: 0, behind: 0 },
+      }),
+    );
+    const publish = screen.getByRole("button", { name: "Push branch" });
+    expect(publish.textContent).toBe("Publish");
+    expect(publish.hasAttribute("disabled")).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Pull from upstream" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByText("No remote branch yet. Publish to share it.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  test("keeps Git output in closed details and shows a recovery step", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        upstreamStatus: "error",
+        upstreamError: "Command failed: git rev-list\nfatal: bad revision",
+      }),
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Refresh to fetch the remote");
+    expect(alert.querySelector("details")?.open).toBe(false);
+    expect(alert.querySelector("details")?.textContent).toContain("fatal: bad revision");
+  });
+
   test("shows a repository branch in one compact row", () => {
     rendered = renderGitInfoHeader(
       createGitInfoHeaderProps({ contextMode: "repository", branch: "beta" }),
@@ -165,9 +208,10 @@ describe("GitInfoHeader", () => {
     );
 
     const button = screen.getByTestId("agent-studio-git-detect-pr-button");
-    const error = screen.getByText("Sign in to GitHub CLI.");
+    const error = document.getElementById(button.getAttribute("aria-describedby") ?? "");
     expect(button.hasAttribute("disabled")).toBe(true);
-    expect(button.getAttribute("aria-describedby")).toBe(error.id);
+    expect(error?.textContent).toBe("Sign in to GitHub CLI.");
+    expect(screen.getByRole("alert").textContent).toContain("Sign in to GitHub CLI.");
   });
 
   test("opens comparison choices in one click and closes when editing becomes unavailable", async () => {

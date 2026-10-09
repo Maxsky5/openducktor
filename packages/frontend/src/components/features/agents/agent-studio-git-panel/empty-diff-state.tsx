@@ -54,17 +54,17 @@ export function EmptyDiffState({
     if (contextMode === "repository") {
       return "Uncommitted changes in the repository branch will appear here.";
     }
-    return "File modifications will appear here once the agent starts editing.";
+    return "Uncommitted changes in this worktree will appear here.";
   })();
 
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-      <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
-        <FolderGit2 className="size-5 text-muted-foreground" />
-      </div>
+    <div className="flex flex-col items-center justify-center gap-2 px-4 py-5 text-center">
       <div className="space-y-1">
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground/70">{description}</p>
+        <p className="flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground">
+          <FolderGit2 className="size-4 shrink-0" />
+          {title}
+        </p>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ const LAYOUT_CLASSES = {
   },
   inline: {
     root: "space-y-1",
-    row: "flex h-6 min-w-0 items-center gap-1.5",
+    row: "flex h-7 min-w-0 items-center gap-2",
     label: "sr-only",
     selector: "shrink-0",
     trigger: "h-7 text-xs",
@@ -167,7 +167,7 @@ function RepositoryBranchRow({
         <>
           <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
           <span
-            className="min-w-0 truncate font-mono text-xs text-foreground"
+            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
             title={`Current branch: ${value || placeholder}`}
           >
             {value || placeholder}
@@ -188,13 +188,14 @@ function RepositoryBranchRow({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  size="sm"
+                  className="h-7 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
                   aria-label="Edit repository branch"
                   title="Switch repository branch"
                   disabled={disabled}
                 >
                   <Pencil className="size-3" />
+                  Edit
                 </Button>
               ),
             }

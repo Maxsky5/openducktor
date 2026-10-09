@@ -1,4 +1,4 @@
-import { LoaderCircle, Pencil, X } from "lucide-react";
+import { GitCompareArrows, LoaderCircle, Pencil, X } from "lucide-react";
 import { type ReactElement, useId, useRef, useState } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
@@ -126,14 +126,15 @@ export function GitTargetBranchControl({
 
   return (
     <div
-      className="flex h-6 min-w-0 items-center gap-1.5"
+      className="flex h-7 min-w-0 items-center gap-2"
       data-testid="agent-studio-git-target-branch-display-row"
     >
       <span id={labelId} className="sr-only">
         Edit target branch
       </span>
+      <GitCompareArrows className="size-3.5 shrink-0 text-muted-foreground" />
       <span
-        className="min-w-0 truncate font-mono text-xs text-foreground"
+        className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
         title={`Compare with: ${label}`}
         data-testid="agent-studio-git-target-branch"
       >
@@ -151,13 +152,14 @@ export function GitTargetBranchControl({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+              size="sm"
+              className="h-7 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
               aria-labelledby={labelId}
               title="Change comparison branch"
               disabled={isSaving}
             >
               <Pencil className="size-3" />
+              Edit
             </Button>
           }
           className="w-[min(20rem,calc(100vw-1rem))] p-0 [&_[data-slot=command-list]]:max-h-48"
@@ -208,7 +210,7 @@ function GitTargetBranchMenuFooter({
         </p>
       ) : null}
       {control.targetBranchesError ? (
-        <div role="alert" className="space-y-2 text-xs text-destructive">
+        <div role="alert" className="space-y-2 text-xs text-destructive-surface-foreground">
           <p>{control.targetBranchesError}</p>
           <Button
             variant="outline"
@@ -221,7 +223,7 @@ function GitTargetBranchMenuFooter({
         </div>
       ) : null}
       {editor?.error ? (
-        <div role="alert" className="space-y-2 text-xs text-destructive">
+        <div role="alert" className="space-y-2 text-xs text-destructive-surface-foreground">
           <p>{editor.error}</p>
           <Button
             variant="outline"

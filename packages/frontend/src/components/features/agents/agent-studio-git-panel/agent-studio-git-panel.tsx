@@ -7,6 +7,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -145,10 +146,18 @@ function AgentStudioGitPanelContent({
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
 }): ReactElement {
+  const diffPanelId = `${useId()}-diff`;
   return (
     <>
-      <AgentStudioGitPanelHeader model={model} view={view} />
-      <AgentStudioGitDiff model={model} view={view} />
+      <AgentStudioGitPanelHeader model={model} view={view} diffPanelId={diffPanelId} />
+      <div
+        id={diffPanelId}
+        role="tabpanel"
+        aria-labelledby={`${diffPanelId}-tab-${view.diffScope}`}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <AgentStudioGitDiff model={model} view={view} />
+      </div>
       <AgentStudioGitCommit model={model} view={view} />
     </>
   );
@@ -157,14 +166,16 @@ function AgentStudioGitPanelContent({
 function AgentStudioGitPanelHeader({
   model,
   view,
+  diffPanelId,
 }: {
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
+  diffPanelId: string;
 }): ReactElement {
   const headerProps = getGitInfoHeaderProps(model, view);
   return (
     <>
-      <GitInfoHeader key={model.subjectKey} {...headerProps} />
+      <GitInfoHeader key={model.subjectKey} {...headerProps} diffPanelId={diffPanelId} />
       {model.resetError ? (
         <div
           role="alert"
