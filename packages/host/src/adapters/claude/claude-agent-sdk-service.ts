@@ -4,10 +4,14 @@ import {
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
-import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
+import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
+import type {
+  AgentSessionControlUpdateTitleInput,
+  ClaudeToolCatalogInput,
+} from "@openducktor/contracts";
+import { readClaudeToolCatalog } from "./claude-agent-sdk-tool-catalog";
 import type {
   AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
@@ -27,7 +31,7 @@ import type {
   UpdateControlledAgentSessionModelInput,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import { toHostOperationError } from "../../effect/host-errors";
 import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -74,7 +78,6 @@ import { loadClaudeTodos } from "./claude-agent-sdk-todos";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkService,
-  ClaudeSession,
   ClaudeSessionContext,
   ClaudeSessionInput,
   ClaudeSessionStore,
@@ -228,6 +231,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     );
   }
 
+  loadToolCatalog(input: ClaudeToolCatalogInput) {
+    return readClaudeToolCatalog(input, this.input);
+  }
+
   searchFiles(input: SearchAgentFilesInput) {
     return fromPromise("claudeRuntime.searchFiles", () => this.fileSearch.search(input));
   }
@@ -337,7 +344,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   prepareApprovalReply(input: ReplyApprovalInput) {
     return fromPromise("claudeRuntime.prepareApprovalReply", async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
-      const session = this.requireSession(target.sessionId);
+      const session = requireClaudeSession(this.sessionStore, target.sessionId);
       assertClaudeSessionRef(
         session,
         { ...input, externalSessionId: session.externalSessionId },
@@ -354,7 +361,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   prepareQuestionReply(input: ReplyQuestionInput) {
     return fromPromise("claudeRuntime.prepareQuestionReply", async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
-      const session = this.requireSession(target.sessionId);
+      const session = requireClaudeSession(this.sessionStore, target.sessionId);
       assertClaudeSessionRef(
         session,
         { ...input, externalSessionId: session.externalSessionId },
@@ -450,18 +457,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  private requireSession(externalSessionId: string): ClaudeSession {
-    const session = this.sessionStore.get(externalSessionId);
-    if (!session) {
-      throw new HostValidationError({
-        field: "externalSessionId",
-        message: `Unknown Claude session '${externalSessionId}'.`,
-        details: { externalSessionId },
-      });
-    }
-    return session;
-  }
-
   private requireSessionForSend(input: SendInput, runtimeId: string, scope: SessionScope) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
@@ -480,7 +475,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         runtimeId,
         resumedClaudeSessionLaunch(scope, input.externalSessionId),
       );
-      return this.requireSession(input.externalSessionId);
+      return requireClaudeSession(this.sessionStore, input.externalSessionId);
     });
   }
 

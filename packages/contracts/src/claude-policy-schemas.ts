@@ -11,6 +11,21 @@ export const CLAUDE_PERMISSION_MODE_VALUES = [
 export const claudePermissionModeSchema = z.enum(CLAUDE_PERMISSION_MODE_VALUES);
 export type ClaudePermissionAction = "allow" | "ask" | "deny";
 
+export const claudeBuiltinToolNameSchema = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_.-]*$/)
+  .refine(
+    (name) => !name.startsWith("mcp__"),
+    "Use an exact built-in Claude tool name, without MCP names or permission syntax.",
+  );
+export const claudeToolAvailabilitySchema = z.record(claudeBuiltinToolNameSchema, z.boolean());
+export type ClaudeToolAvailability = z.infer<typeof claudeToolAvailabilitySchema>;
+export const CLAUDE_INITIAL_TOOL_AVAILABILITY: Readonly<ClaudeToolAvailability> = Object.freeze({
+  Artifact: false,
+  ArtifactComments: false,
+  ArtifactData: false,
+});
+
 // Validate syntax only. Claude owns matching, trust filtering, and precedence.
 export const validateClaudePermissionRule = (
   rule: string,
@@ -96,6 +111,7 @@ const rules = (action: ClaudePermissionAction) =>
   });
 
 export const claudePolicyFieldsSchema = z.strictObject({
+  toolAvailability: claudeToolAvailabilitySchema.optional(),
   permissionMode: claudePermissionModeSchema.optional(),
   permissions: z
     .strictObject({
@@ -156,7 +172,12 @@ export const resolveClaudePolicy = (
     const value = explicit === undefined ? inherited : explicit;
     if (value !== undefined) owner[key] = structuredClone(value);
   };
-  const settings: ClaudePolicyFields = {};
+  const settings: ClaudePolicyFields & { toolAvailability: ClaudeToolAvailability } = {
+    toolAvailability: toolChoices(
+      override?.toolAvailability ?? defaults.toolAvailability ?? CLAUDE_INITIAL_TOOL_AVAILABILITY,
+    ),
+  };
+  sources.toolAvailability = override?.toolAvailability !== undefined ? "role" : "default";
   copy(
     settings,
     "permissionMode",
@@ -211,4 +232,17 @@ export const resolveClaudePolicy = (
   if (Object.keys(network).length) sandbox.network = network;
   if (Object.keys(sandbox).length) settings.sandbox = sandbox;
   return { settings, sources };
+};
+
+// Native init still calls Agent "Task"; tool hooks use the current name.
+export const claudeToolName = (name: string): string => (name === "Task" ? "Agent" : name);
+
+const toolChoices = (choices: Readonly<ClaudeToolAvailability>): ClaudeToolAvailability => {
+  const result: ClaudeToolAvailability = {};
+  for (const [name, enabled] of Object.entries(choices)) {
+    const tool = claudeToolName(name);
+    // A saved exclusion wins when both native names have a choice.
+    result[tool] = result[tool] === false ? false : enabled;
+  }
+  return result;
 };

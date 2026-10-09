@@ -231,6 +231,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        claudeToolCatalog: { load: (input) => service.loadToolCatalog(input) },
         sessionImport: createClaudeSessionImportAdapter(
           service,
           runtime.runtimeId,

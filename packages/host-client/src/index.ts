@@ -294,6 +294,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentRuntimeQueryClient.agentRuntimeFileStatus.bind(agentRuntimeQueryClient),
     agentRuntimeLoadCatalog:
       agentRuntimeQueryClient.agentRuntimeLoadCatalog.bind(agentRuntimeQueryClient),
+    agentRuntimeClaudeToolCatalog:
+      agentRuntimeQueryClient.agentRuntimeClaudeToolCatalog.bind(agentRuntimeQueryClient),
     agentRuntimePreviewModels:
       agentRuntimeQueryClient.agentRuntimePreviewModels.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionDiff:

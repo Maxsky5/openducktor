@@ -1,4 +1,6 @@
 import type {
+  ClaudeToolCatalog,
+  ClaudeToolCatalogInput,
   AgentSessionContextUsage,
   AgentSessionControlUpdateTitleInput,
   FileDiff,
@@ -44,6 +46,9 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
+  loadToolCatalog(
+    input: ClaudeToolCatalogInput,
+  ): Effect.Effect<ClaudeToolCatalog, ClaudeAgentSdkServiceError>;
   inspectSessionForImport(
     input: SessionRef,
     runtimeId: string,

@@ -1,5 +1,6 @@
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createOpenCodeCreationSettings } from "./opencode-creation-settings";
+import { createClaudeLaunchPolicy } from "../runtimes/claude-launch-policy";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -242,6 +243,49 @@ describe("createWorkspaceSettingsService", () => {
       await Effect.runPromise(createOpenCodeCreationSettings(port).resolve({ kind: "repository" })),
     ).toEqual({ defaults: config.agentRuntimes.opencode.defaults.rules, role: [] });
     expect(draft.agentRuntimes.opencode.defaults.rules[0]?.action).toBe("allow");
+  });
+  test("Claude tool choices survive a restart and failed writes keep the prior launch policy", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "odt-claude-tool-settings-"));
+    try {
+      const configPath = path.join(tempDir, "config.json");
+      const port = createSettingsConfigAdapter({ configPath });
+      const service = createWorkspaceSettingsService(port);
+      const draft = await Effect.runPromise(service.getSettingsSnapshot());
+      draft.agentRuntimes.claude.defaults.toolAvailability = { Artifact: true, RetiredTool: false };
+      draft.agentRuntimes.claude.roleOverrides.qa = {
+        toolAvailability: {},
+        sandbox: { enabled: true },
+      };
+      await Effect.runPromise(saveSettingsSnapshot(service, draft));
+      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const saved = await Effect.runPromise(restarted.getSettingsSnapshot());
+      expect(saved.agentRuntimes.claude).toEqual(draft.agentRuntimes.claude);
+      const failingPort: SettingsConfigPort = {
+        ...port,
+        writeConfig: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "config.write",
+              message: "Disk full. Free disk space and retry.",
+            }),
+          ),
+      };
+      saved.agentRuntimes.claude.defaults.toolAvailability = { Artifact: false };
+      await expect(
+        Effect.runPromise(saveSettingsSnapshot(createWorkspaceSettingsService(failingPort), saved)),
+      ).rejects.toThrow("Disk full");
+      const policy = await Effect.runPromise(
+        createClaudeLaunchPolicy(failingPort).resolve({ role: null }),
+      );
+      expect(policy.toolAvailability).toEqual({ Artifact: true, RetiredTool: false });
+      expect(saved.agentRuntimes.claude.defaults.toolAvailability).toEqual({ Artifact: false });
+      expect(
+        (await Effect.runPromise(createClaudeLaunchPolicy(port).resolve({ role: "qa" })))
+          .toolAvailability,
+      ).toEqual({});
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
   test("returns default settings snapshot when config is missing", async () => {
     const service = createWorkspaceSettingsService(createFakeSettingsConfig());

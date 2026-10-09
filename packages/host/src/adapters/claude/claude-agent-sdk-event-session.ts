@@ -14,6 +14,7 @@ import type {
 export type ClaudeEventSession = ClaudeBackgroundToolState &
   ErrorState & {
     appliedPermissionMode?: string;
+    disabledTools?: ReadonlySet<string>;
     requestedPermissionMode?: string;
     acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
     activeBackgroundSubagentTaskIds?: Set<string>;
@@ -133,6 +134,7 @@ export const claudeSubagentEventSession = (
     childSession.backgroundToolCallIdsSinceSnapshot = new Set();
   }
   session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
+  if (session.disabledTools) childSession.disabledTools = session.disabledTools;
   return childSession;
 };
 

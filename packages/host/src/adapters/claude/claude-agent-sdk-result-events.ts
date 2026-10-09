@@ -18,6 +18,7 @@ import {
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
+import { disabledToolReason } from "./claude-tool-availability";
 import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
@@ -30,6 +31,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
   } & Pick<
     ClaudeEventSession,
     | "acceptedUserMessages"
+    | "disabledTools"
     | "activeManualCompaction"
     | "activity"
     | "assistantTurnOriginKind"
@@ -183,7 +185,9 @@ export const emitClaudePermissionDeniedToolPart = ({
     endedAtMs: timestampMs(timestamp),
     isError: true,
     messageId,
-    text: permission.message,
+    text: session.disabledTools?.has(toolName)
+      ? `${disabledToolReason(toolName)}\n${permission.message}`
+      : permission.message,
     tool: toolName,
   };
   if (input) {

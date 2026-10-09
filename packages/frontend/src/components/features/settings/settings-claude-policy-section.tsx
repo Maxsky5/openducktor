@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { readClaudePolicyField } from "./settings-claude-policy";
 import { ClaudePolicyCard } from "./settings-claude-policy-card";
+import { ClaudeToolAvailabilitySettings } from "./settings-claude-tool-availability";
 import {
   CLAUDE_POLICY_GROUPS,
   CLAUDE_POLICY_ROLES,
@@ -153,10 +154,38 @@ export function ClaudePolicySection({
   onAcknowledgedChange: (value: boolean) => void;
 }) {
   const id = useId();
+  const [toolsOpen, setToolsOpen] = useState(false);
   const validation = claudeRuntimeConfigSchema.safeParse(config);
   const errors = validation.success ? [] : validation.error.issues;
   return (
     <div className="grid min-w-0 gap-5">
+      <Collapsible
+        open={toolsOpen}
+        onOpenChange={setToolsOpen}
+        className="rounded-lg border border-border bg-card"
+      >
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={disabled}
+            className="h-auto w-full justify-between p-4"
+            aria-label="Tool availability"
+          >
+            <span className="text-base font-semibold">Tool availability</span>
+            <ChevronDown className={cn("size-4", toolsOpen && "rotate-180")} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-t border-border p-4">
+          {toolsOpen && (
+            <ClaudeToolAvailabilitySettings
+              config={config}
+              disabled={disabled}
+              onChange={onChange}
+            />
+          )}
+        </CollapsibleContent>
+      </Collapsible>
       {requiresAcknowledgement && (
         <div className="flex flex-col gap-3 rounded-lg border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
           <div className="flex flex-col gap-1">

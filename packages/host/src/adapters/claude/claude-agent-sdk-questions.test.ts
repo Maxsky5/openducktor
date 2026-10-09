@@ -70,6 +70,30 @@ const createQuestionPayload = () => ({
 });
 
 describe("createClaudeUserDialogHandler", () => {
+  test("cancels disabled question tools before parsing or publishing a native dialog", async () => {
+    const session = createSession();
+    session.disabledTools = new Set(["AskUserQuestion"]);
+    const events: AgentEvent[] = [];
+    const handler = createClaudeUserDialogHandler({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+    await expect(
+      handler(
+        {
+          dialogKind: "permission_ask_user_question",
+          payload: { receivedAt: new Date() },
+          toolUseID: "tool-use-1",
+        },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
+      ),
+    ).resolves.toEqual({ behavior: "cancelled" });
+    expect(events).toEqual([]);
+    expect(session.pendingQuestions.size).toBe(0);
+  });
+
   test("matches only the complete built-in question tool name without case sensitivity", () => {
     expect(isClaudeAskUserQuestionTool(" askuserquestion ")).toBe(true);
     expect(isClaudeAskUserQuestionTool("ASKUSERQUESTION")).toBe(true);

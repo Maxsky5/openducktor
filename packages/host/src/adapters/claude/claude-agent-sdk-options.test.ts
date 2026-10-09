@@ -304,6 +304,102 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
 });
 
 describe("buildClaudeAgentSdkOptions", () => {
+  test.each(["default", "acceptEdits", "dontAsk", "bypassPermissions", "auto"] as const)(
+    "excludes tools ahead of root and child approvals in %s mode",
+    async (permissionMode) => {
+      const session = createRepositorySession();
+      const policy: ClaudePolicyFields = {
+        permissionMode,
+        permissions: { allow: ["Read", "Artifact", "AskUserQuestion", "Agent"] },
+        toolAvailability: {
+          Read: false,
+          Artifact: false,
+          AskUserQuestion: false,
+          Task: false,
+          Write: true,
+        },
+      };
+      try {
+        const options = await buildOptions(session, undefined, policy);
+        expect(options.disallowedTools).toEqual(["Read", "Artifact", "AskUserQuestion", "Agent"]);
+        const args = captureSdkLaunchArgs(options);
+        expect(args).toContain("--disallowedTools");
+        expect(args).toContain("Read,Artifact,AskUserQuestion,Agent");
+        expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
+        expect(options).not.toHaveProperty("allowedTools");
+        policy.toolAvailability = {};
+        const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
+        if (!hook || !options.canUseTool) throw new Error("Expected native tool guards");
+        for (const toolName of ["Read", "Artifact", "AskUserQuestion", "Agent", "Task"]) {
+          expect(
+            await hook(
+              {
+                hook_event_name: "PreToolUse",
+                session_id: "session-1",
+                transcript_path: "/tmp/transcript",
+                cwd: session.input.workingDirectory,
+                tool_name: toolName,
+                tool_input: {},
+                tool_use_id: "child-tool",
+                agent_id: "child-with-explicit-tools",
+                permission_mode: permissionMode,
+              },
+              "child-tool",
+              { signal: session.abortController.signal },
+            ),
+          ).toMatchObject({
+            hookSpecificOutput: {
+              permissionDecision: "deny",
+              permissionDecisionReason: `Tool ${toolName} is disabled by this session's tool settings.`,
+            },
+          });
+          expect(
+            await options.canUseTool(
+              toolName,
+              {},
+              {
+                signal: session.abortController.signal,
+                toolUseID: "root-tool",
+                requestId: "request-1",
+              },
+            ),
+          ).toMatchObject({
+            behavior: "deny",
+            message: `Tool ${toolName} is disabled by this session's tool settings.`,
+          });
+        }
+        expect(session.pendingApprovals.size).toBe(0);
+        expect(session.pendingQuestions.size).toBe(0);
+      } finally {
+        session.abortController.abort();
+      }
+    },
+  );
+  test("re-enabled preferences retain mandatory read-only exclusions and reject reserved tools", async () => {
+    const session = createSession("qa");
+    try {
+      const options = await buildOptions(session, undefined, {
+        toolAvailability: { Artifact: true, Write: true, Read: false },
+      });
+      expect(options.disallowedTools).toContain("Read");
+      expect(options.disallowedTools).toContain("Write");
+      expect(options.disallowedTools).not.toContain("Artifact");
+      expect(
+        await preToolUseHook(options, {
+          permissionMode: "bypassPermissions",
+          toolName: "Write",
+          toolInput: {},
+        }),
+      ).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+      await expect(
+        buildOptions(createRepositorySession(), undefined, {
+          toolAvailability: { EndConversation: false },
+        }),
+      ).rejects.toThrow("Enable EndConversation");
+    } finally {
+      session.abortController.abort();
+    }
+  });
   test("maps launch settings without granting tool availability or changing native rule strings", async () => {
     const session = createSession("qa");
     const policy: ClaudePolicyFields = {

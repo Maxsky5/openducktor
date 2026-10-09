@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, claudeToolName } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   normalizePathForComparison,
@@ -10,6 +10,7 @@ import {
   toProjectRelativePath,
 } from "@openducktor/path-support";
 import { z } from "zod";
+import { disabledToolReason } from "./claude-tool-availability";
 import {
   claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
@@ -204,6 +205,9 @@ export const authorizeClaudeToolUse = ({
 }: AuthorizeClaudeToolUseInput):
   | ClaudeToolUseAuthorization
   | Promise<ClaudeToolUseAuthorization> => {
+  if (session.disabledTools?.has(claudeToolName(toolName))) {
+    return { behavior: "deny", message: disabledToolReason(toolName) };
+  }
   const effectiveToolInput = normalizeToolInputForSession(session, toolName, toolInput);
   if (isClaudeAskUserQuestionTool(toolName)) {
     return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };

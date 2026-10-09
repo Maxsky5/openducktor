@@ -9,6 +9,8 @@ import {
 import { Effect } from "effect";
 import { z } from "zod";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
+import type { ClaudeToolCatalogPort } from "../../ports/claude-tool-catalog-port";
+import { HostValidationError } from "../../effect/host-errors";
 import {
   runtimeQueryError,
   type RuntimeQueryError,
@@ -22,8 +24,32 @@ export const createAgentRuntimeQueryCommandHandlers = (
   previewModels: (
     input: AgentRuntimePreviewModelsInput,
   ) => Effect.Effect<AgentRuntimeCatalog, RuntimeQueryError>,
+  claudeToolCatalog: ClaudeToolCatalogPort,
 ) =>
   ({
+    agent_runtime_claude_tool_catalog: (args) =>
+      Effect.gen(function* () {
+        const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.claudeToolCatalog;
+        const input = yield* Effect.try({
+          try: () => contract.inputSchema.parse(envelopeSchema.parse(args).input),
+          catch: (cause) =>
+            new HostValidationError({
+              field: "input",
+              message: "Select a ready Claude runtime and retry the tool catalog read.",
+              cause,
+            }),
+        });
+        const result = yield* claudeToolCatalog.load(input);
+        return yield* Effect.try({
+          try: () => contract.responseSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              field: "claudeToolCatalog",
+              message: "Claude returned invalid tool metadata. Update Claude Code and retry.",
+              cause,
+            }),
+        });
+      }),
     agent_runtime_preview_models: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.previewModels,
       previewModels,

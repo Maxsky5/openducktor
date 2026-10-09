@@ -12,10 +12,20 @@ test("reads saved Claude settings for each new launch", async () => {
   const readConfig = mock(() => Effect.succeed(config));
   const policies = createClaudeLaunchPolicy(createSettingsConfigTestDouble({ readConfig }));
   const first = await Effect.runPromise(policies.resolve({ role: null }));
-  config.agentRuntimes.claude.defaults = { permissionMode: "dontAsk" };
+  config.agentRuntimes.claude.defaults = {
+    permissionMode: "dontAsk",
+    toolAvailability: { Artifact: true, RetiredTool: false },
+  };
   const next = await Effect.runPromise(policies.resolve({ role: "qa" }));
-  expect(first).toEqual({ permissionMode: "acceptEdits" });
-  expect(next).toEqual({ permissionMode: "dontAsk", permissions: { allow: [] } });
+  expect(first).toEqual({
+    permissionMode: "acceptEdits",
+    toolAvailability: { Artifact: false, ArtifactComments: false, ArtifactData: false },
+  });
+  expect(next).toEqual({
+    permissionMode: "dontAsk",
+    permissions: { allow: [] },
+    toolAvailability: { Artifact: true, RetiredTool: false },
+  });
   expect(readConfig).toHaveBeenCalledTimes(2);
 });
 

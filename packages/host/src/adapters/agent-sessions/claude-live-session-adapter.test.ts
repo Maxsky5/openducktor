@@ -220,6 +220,7 @@ const createHarness = async (
   };
   const service = {
     ...unexpectedRuntimeQueries,
+    loadToolCatalog: () => Effect.die("Unexpected Claude tool catalog read"),
     inspectSessionForImport: (
       input: Parameters<ClaudeAgentSdkService["inspectSessionForImport"]>[0],
       runtimeId: string,
