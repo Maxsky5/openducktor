@@ -64,11 +64,11 @@ export function SharedToolsPanel<Id extends string>({
     );
   return (
     <ResizablePanelGroup direction="vertical">
-      <ResizablePanel defaultSize={60} minSize={30}>
+      <ResizablePanel defaultSize="60%" minSize="30%">
         <SharedToolsPanelTabs model={model} />
       </ResizablePanel>
       <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={40} minSize={20}>
+      <ResizablePanel defaultSize="40%" minSize="20%">
         <AgentStudioDevServerPanel model={devServer} />
       </ResizablePanel>
     </ResizablePanelGroup>

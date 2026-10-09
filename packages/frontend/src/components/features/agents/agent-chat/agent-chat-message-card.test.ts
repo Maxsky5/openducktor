@@ -8,6 +8,13 @@ import {
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 
+const parseUserMessageArticle = (html: string) => {
+  const article = new DOMParser().parseFromString(html, "text/html").body.querySelector("article");
+  const bubble = article?.children[0];
+  if (!article || !bubble) throw new Error("Expected a user message article with a bubble");
+  return { article, bubble, metaRow: article.children[1] ?? null };
+};
+
 describe("AgentChatMessageCard messages", () => {
   test("shows only the runtime when Codex history omits the turn model", () => {
     const [message] = historyToChatMessages(
@@ -318,7 +325,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).not.toContain("copy-assistant-message-content");
   });
 
-  test("renders user messages with border color from send-time user agent metadata", () => {
+  test("renders user messages as a right-aligned bubble without the send-time agent accent", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -341,10 +348,14 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("rounded-none");
-    expect(html).toContain("w-full");
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("border-left-color:#2f6fed");
+    const { article, bubble, metaRow } = parseUserMessageArticle(html);
+    expect(article.className).toContain("ml-auto");
+    expect(article.className).toContain("max-w-[80%]");
+    expect(bubble.className).toContain("bg-chat-surface");
+    expect(bubble.textContent).toBe("Draft the final UI pass.");
+    expect(metaRow?.textContent).toBe("10:25:00 AM");
+    expect(html).not.toContain("border-left-color");
+    expect(html).not.toContain("#2f6fed");
   });
 
   test("wraps long unbroken user prose", () => {
@@ -386,7 +397,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).not.toContain("border-left-color:#f97316");
   });
 
-  test("renders no-profile Codex user messages with the Codex session accent", () => {
+  test("does not color no-profile Codex user messages with the runtime accent", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -406,8 +417,8 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
+    expect(html).toContain("bg-chat-surface");
+    expect(html).not.toContain("--odt-runtime-accent-codex");
   });
 
   test("renders queued user messages with pending styling and label", () => {
@@ -427,10 +438,34 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("border-pending-border");
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("bg-card");
-    expect(html).toContain("Queued");
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.className).toContain("border-dashed border-pending-border bg-pending-surface");
+    expect(bubble.className).not.toContain("bg-chat-surface");
+    expect(bubble.textContent).toBe("Queued follow-up");
+    expect(metaRow?.textContent).toBe("Queued10:27:00 AM");
+  });
+
+  test("hides the meta row when the user message time is approximate", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "user-approximate-time",
+          role: "user",
+          content: "Restored from history",
+          timestamp: "2026-02-22T10:27:30.000Z",
+          timestampIsApproximate: true,
+          meta: {
+            kind: "user",
+            state: "read",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.textContent).toBe("Restored from history");
+    expect(metaRow).toBeNull();
   });
 
   test("renders user file references as inline chips inside the user message text", () => {
@@ -861,7 +896,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).toContain(" please  ");
   });
 
-  test("keeps the user footer row for queued metadata without rendering a separate file chip strip", () => {
+  test("keeps queued metadata below the bubble without rendering a separate file chip strip", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -898,13 +933,13 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("Queued");
-    expect(html).toContain("mt-2 flex items-end justify-between gap-3");
-    expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
-    expect(html).not.toContain("flex min-w-0 flex-wrap items-center gap-2");
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.children).toHaveLength(1);
+    expect(bubble.textContent).toBe("check main.ts please");
+    expect(metaRow?.textContent).toBe("Queued10:30:00 AM");
   });
 
-  test("renders attachment chips in the user footer row alongside queued metadata", () => {
+  test("renders attachment chips inside the bubble and queued metadata below it", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -937,10 +972,46 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("Queued");
-    expect(html).toContain("screenshot.png");
-    expect(html).toContain("mt-2 flex items-end justify-between gap-3");
-    expect(html).toContain("flex min-w-0 flex-wrap items-center gap-2");
-    expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.children).toHaveLength(2);
+    expect(bubble.children[0]?.textContent).toBe("please review this screenshot");
+    expect(bubble.children[1]?.textContent).toBe("screenshot.png");
+    expect(metaRow?.textContent).toBe("Queued10:31:00 AM");
+  });
+
+  test("renders an attachment-only user message as a bubble", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "user-attachment-only",
+          role: "user",
+          content: "",
+          timestamp: "2026-02-22T10:32:00.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-only",
+                  path: "/tmp/notes.pdf",
+                  name: "notes.pdf",
+                  kind: "pdf",
+                  mime: "application/pdf",
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.className).toContain("bg-chat-surface");
+    expect(bubble.children).toHaveLength(1);
+    expect(bubble.textContent).toBe("notes.pdf");
+    expect(metaRow?.textContent).toBe("10:32:00 AM");
   });
 });

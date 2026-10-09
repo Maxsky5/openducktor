@@ -687,8 +687,10 @@ describe("useAgentStudioPageModels", () => {
     const composer = harness.getLatest().agentChatModel.composer;
     expect(composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
-    const html = renderToStaticMarkup(createElement(AgentChatComposer, { model: composer }));
-    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, { model: { ...composer, isSessionWorking: true } }),
+    );
+    expect(html).toContain("--odt-border-ray-color:var(--odt-runtime-accent-codex)");
 
     await harness.unmount();
   });

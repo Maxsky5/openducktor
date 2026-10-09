@@ -186,7 +186,7 @@ export function AgentChatSurface({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {header}
-      <div className="min-h-0 flex-1 bg-muted">
+      <div className="min-h-0 flex-1 bg-chat-background">
         <div
           ref={dropTargetRef}
           data-testid="agent-chat-drop-target"

@@ -461,8 +461,10 @@ describe("TypeScript web host backend", () => {
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: () => {
-        proxyRequests += 1;
+      fetch: (request) => {
+        // A proxied request names another origin. Another local client can reach this reused
+        // loopback port directly, and that request is not proxy traffic.
+        if (new URL(request.url).port !== String(proxy.port)) proxyRequests += 1;
         return new Response("test proxy", { status: 503 });
       },
     });

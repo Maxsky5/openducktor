@@ -166,8 +166,11 @@ if (childPidPath) {
 if (fatalMessagePath) {
   const timer = setInterval(() => {
     if (!existsSync(fatalMessagePath)) return;
+    // writeFile creates the file before it writes the line, so wait for the line.
+    const fatalLine = readFileSync(fatalMessagePath, "utf8");
+    if (fatalLine.length === 0) return;
     clearInterval(timer);
-    process.stdout.write(readFileSync(fatalMessagePath, "utf8") + "\\n");
+    process.stdout.write(fatalLine + "\\n");
   }, 10);
 }
 const lines = createInterface({ input: process.stdin });

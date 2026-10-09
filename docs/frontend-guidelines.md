@@ -35,18 +35,20 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.
 
-| Purpose            | Use                                                              |
-| ------------------ | ---------------------------------------------------------------- |
-| Page background    | `bg-background`                                                  |
-| Card or surface    | `bg-card`                                                        |
-| Main text          | `text-foreground`                                                |
-| Secondary text     | `text-muted-foreground`                                          |
-| Layout border      | `border-border`                                                  |
-| Input border       | `border-input`                                                   |
-| Subtle surface     | `bg-muted`                                                       |
-| Interactive accent | `bg-primary`, `text-primary-foreground`                          |
-| Destructive action | `bg-destructive`, `text-destructive-foreground`                  |
-| Sidebar            | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
+| Purpose                  | Use                                                              |
+| ------------------------ | ---------------------------------------------------------------- |
+| Page background          | `bg-background`                                                  |
+| Card or surface          | `bg-card`                                                        |
+| Main text                | `text-foreground`                                                |
+| Secondary text           | `text-muted-foreground`                                          |
+| Layout border            | `border-border`                                                  |
+| Input border             | `border-input`                                                   |
+| Subtle surface           | `bg-muted`                                                       |
+| Interactive accent       | `bg-primary`, `text-primary-foreground`                          |
+| Destructive action       | `bg-destructive`, `text-destructive-foreground`                  |
+| Chat transcript          | `bg-chat-background`                                             |
+| Chat input, user message | `bg-chat-surface`, `shadow-chat`                                 |
+| Sidebar                  | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
 
 ## Hardcoded color exceptions
 

@@ -49,7 +49,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   return (
     <article
       className={vm.articleClassName}
-      style={vm.articleStyle}
       {...(sessionErrorMeta
         ? {
             "data-notification-attention-kind": "error",

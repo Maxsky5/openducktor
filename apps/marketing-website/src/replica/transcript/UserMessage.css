@@ -1,10 +1,9 @@
 @layer replica {
   .st-user {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     margin-bottom: calc(16 * var(--u));
-    padding: calc(12 * var(--u)) calc(16 * var(--u));
-    border-left: calc(4 * var(--u)) solid var(--runtime-accent);
-    background: var(--card);
-    box-shadow: var(--shadow-md);
     font-size: calc(14 * var(--u));
   }
   .st-agent + .st-user,
@@ -12,16 +11,22 @@
     margin-top: calc(16 * var(--u));
   }
   .st-user p {
+    max-width: 80%;
+    padding: calc(8 * var(--u)) calc(14 * var(--u));
+    border-radius: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u)) calc(16 * var(--u));
+    background: var(--chat-surface);
+    box-shadow: var(--chat-shadow);
+    color: var(--foreground);
     line-height: calc(24 * var(--u));
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .st-user time {
-    display: block;
     margin-top: calc(4 * var(--u));
+    padding: 0 calc(4 * var(--u));
     color: var(--muted-foreground);
     font-size: calc(11 * var(--u));
     font-weight: 500;
-    text-align: right;
   }
   .st-user code {
     padding: 0 calc(4 * var(--u));

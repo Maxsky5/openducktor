@@ -84,7 +84,7 @@ export function AgentsPageWorkspacePanes({
 }: AgentsPageWorkspacePanesProps): ReactElement {
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-      <ResizablePanel defaultSize={63} minSize={35}>
+      <ResizablePanel defaultSize="63%" minSize="35%">
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {workflowContent}
           <div
@@ -113,7 +113,7 @@ export function AgentsPageWorkspacePanes({
       {isRightPanelVisible ? (
         <>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={37} minSize={30}>
+          <ResizablePanel defaultSize="37%" minSize="30%">
             <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
               {rightPanelContent}
             </div>

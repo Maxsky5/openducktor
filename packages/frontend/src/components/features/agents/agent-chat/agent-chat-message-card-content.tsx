@@ -514,6 +514,28 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
   return meta.description?.trim() || meta.prompt?.trim() || null;
 };
 
+const readSubagentError = (meta: SubagentMeta): string | undefined => {
+  return meta.status === "error" ? meta.error?.trim() : undefined;
+};
+
+const isSubagentWaitingForInput = (meta: SubagentMeta, pendingRequestCount: number): boolean => {
+  return Boolean(
+    meta.externalSessionId &&
+    (meta.status === "pending" || meta.status === "running") &&
+    pendingRequestCount > 0,
+  );
+};
+
+const readSubagentDurationMs = (meta: SubagentMeta): number | null => {
+  if (meta.status === "pending" || meta.status === "running") {
+    return null;
+  }
+  if (meta.startedAtMs === undefined || meta.endedAtMs === undefined) {
+    return null;
+  }
+  return Math.max(0, meta.endedAtMs - meta.startedAtMs);
+};
+
 type SubagentMessageProps = {
   meta: SubagentMeta;
   parentSession: ParentSessionRuntimeContext | null;
@@ -530,20 +552,13 @@ const SubagentMessage = ({
   subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
-  const error = meta.status === "error" ? meta.error?.trim() : undefined;
+  const error = readSubagentError(meta);
   const isRunning = meta.status === "running";
-  const isWaitingForInput = Boolean(
-    meta.externalSessionId &&
-    (meta.status === "pending" || meta.status === "running") &&
-    subagentPendingApprovalCount + subagentPendingQuestionCount > 0,
+  const isWaitingForInput = isSubagentWaitingForInput(
+    meta,
+    subagentPendingApprovalCount + subagentPendingQuestionCount,
   );
-  const durationMs =
-    meta.status !== "pending" &&
-    meta.status !== "running" &&
-    meta.startedAtMs !== undefined &&
-    meta.endedAtMs !== undefined
-      ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
-      : null;
+  const durationMs = readSubagentDurationMs(meta);
 
   return (
     <div className="space-y-2">
@@ -622,6 +637,63 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
   );
 };
 
+type UserAttachmentPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
+
+const isUserAttachmentPart = (part: AgentUserMessageDisplayPart): part is UserAttachmentPart =>
+  part.kind === "attachment";
+
+const UserMessageBubble = ({
+  content,
+  attachments,
+  isQueued,
+}: {
+  content: ReactElement | null;
+  attachments: UserAttachmentPart[];
+  isQueued: boolean;
+}): ReactElement => (
+  <div
+    className={cn(
+      "max-w-full rounded-xl rounded-br-sm px-3.5 py-2 text-foreground",
+      isQueued
+        ? "border border-dashed border-pending-border bg-pending-surface"
+        : "bg-chat-surface shadow-chat",
+    )}
+  >
+    {content}
+    {attachments.length > 0 ? (
+      <div className={cn("flex flex-wrap items-center gap-2", content && "mt-2 mb-1")}>
+        {attachments.map((part) => (
+          <AgentChatAttachmentChip
+            key={part.attachment.id}
+            variant="transcript"
+            attachment={toTranscriptAttachment(part.attachment)}
+            className="w-32"
+          />
+        ))}
+      </div>
+    ) : null}
+  </div>
+);
+
+const UserMessageMeta = ({
+  isQueued,
+  timeLabel,
+}: {
+  isQueued: boolean;
+  timeLabel: string;
+}): ReactElement => (
+  <div className="mt-1 flex items-center justify-end gap-2 px-1">
+    {isQueued ? (
+      <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
+        Queued
+      </span>
+    ) : null}
+    {timeLabel ? (
+      <p className="text-right text-[11px] font-medium text-muted-foreground">{timeLabel}</p>
+    ) : null}
+  </div>
+);
+
 const UserMessage = ({
   message,
   timeLabel,
@@ -629,49 +701,19 @@ const UserMessage = ({
   message: AgentChatMessage;
   timeLabel: string;
 }): ReactElement => {
-  const meta = message.meta;
-  const isQueuedUserMessage = meta?.kind === "user" && meta.state === "queued";
-  const userParts = meta?.kind === "user" ? (meta.parts ?? []) : [];
-  const userAttachments = userParts.filter(
-    (part): part is Extract<AgentUserMessageDisplayPart, { kind: "attachment" }> =>
-      part.kind === "attachment",
-  );
+  const userMeta = message.meta?.kind === "user" ? message.meta : null;
+  const isQueued = userMeta?.state === "queued";
+  const userParts = userMeta?.parts ?? [];
+  const attachments = userParts.filter(isUserAttachmentPart);
   const userText = readRenderableUserMessageText(userParts, message.content);
-  const userContent = renderUserMessageInlineContent(userText, userParts);
+  const content = renderUserMessageInlineContent(userText, userParts);
 
   return (
     <>
-      {userContent}
-      {userAttachments.length > 0 || isQueuedUserMessage || timeLabel ? (
-        <div className="mt-2 flex items-end justify-between gap-3">
-          {userAttachments.length > 0 ? (
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {userAttachments.map((part) => (
-                <AgentChatAttachmentChip
-                  key={part.attachment.id}
-                  variant="transcript"
-                  attachment={toTranscriptAttachment(part.attachment)}
-                  className="w-32"
-                />
-              ))}
-            </div>
-          ) : (
-            <div />
-          )}
-          <div className="flex shrink-0 items-center justify-end gap-2 self-end">
-            {isQueuedUserMessage ? (
-              <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
-                Queued
-              </span>
-            ) : null}
-            {timeLabel ? (
-              <p className="text-right text-[11px] font-medium text-muted-foreground">
-                {timeLabel}
-              </p>
-            ) : null}
-          </div>
-        </div>
+      {content || attachments.length > 0 ? (
+        <UserMessageBubble content={content} attachments={attachments} isQueued={isQueued} />
       ) : null}
+      {isQueued || timeLabel ? <UserMessageMeta isQueued={isQueued} timeLabel={timeLabel} /> : null}
     </>
   );
 };
