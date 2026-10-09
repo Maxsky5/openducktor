@@ -74,7 +74,7 @@ const createRunSessionStartWorkflow = (
     queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     ...overrides,
   });
 
@@ -574,7 +574,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
@@ -877,7 +877,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const startAgentSession = mock(async () => {
       throw new Error("start failed");
     });
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -930,7 +930,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("keeps starting state while fresh session creation switches to the draft role", async () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -983,7 +983,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-rework"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -1091,7 +1091,7 @@ describe("useAgentStudioSessionStartFlow", () => {
             : "session-new",
         ),
     );
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const existingSession = createSession({
       externalSessionId: "session-existing",
@@ -1351,7 +1351,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startLaunchKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
@@ -1386,7 +1386,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startLaunchKickoff for human changes waits for parent start policy", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
 
     const harness = createHookHarness({
       ...createBaseArgs(),

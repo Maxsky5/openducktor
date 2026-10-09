@@ -1,3 +1,4 @@
+import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { DevServerOwner, GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
@@ -39,6 +40,9 @@ const missingWorkingDirectoryReason = "The selected working directory is unavail
 
 type WorkspaceSessionToolsProps = {
   isVisible: boolean;
+  onResolveGitConflict?: ResolveGitConflict;
+  conflictAssistanceBlockedReason?: string | null;
+  conflictAssistanceIsStarting?: boolean;
   repoPath: string;
   workspaceId: string;
   sessionId: string;
@@ -68,6 +72,9 @@ type WorkspaceToolsView = {
 /** The session shell owns this hook even when the tools view unmounts. */
 export function useWorkspaceSessionTools({
   isVisible,
+  onResolveGitConflict,
+  conflictAssistanceBlockedReason,
+  conflictAssistanceIsStarting,
   repoPath,
   workspaceId,
   sessionId,
@@ -187,6 +194,11 @@ export function useWorkspaceSessionTools({
     [diffData.fileStatuses],
   );
   const actions = useAgentStudioGitActions({
+    onResolveGitConflict,
+    assistanceContextKey: JSON.stringify([workspaceId, sessionId]),
+    conflictRecipientLabel: "agent",
+    conflictAssistanceBlockedReason,
+    conflictAssistanceIsStarting,
     repoPath: workingDirectory ? repoPath : null,
     workingDir: workingDirectory,
     branch: branchReady ? diffData.branch : null,

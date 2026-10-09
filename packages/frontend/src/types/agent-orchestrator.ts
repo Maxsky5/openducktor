@@ -146,6 +146,15 @@ export type AgentMessageSendOptions = {
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
   sessionScope?: AgentSessionScope;
+  /** Only the request that starts a held session can claim its first message. */
+  ownsStart?: (session: AgentSessionState) => boolean;
+  assertCanSubmit?: (session: AgentSessionState, ownsStart?: boolean) => void;
+};
+
+export type AgentMessageSendReceipt = {
+  recipient: AgentSessionIdentity;
+  acceptedMessage: import("@openducktor/core").AcceptedAgentUserMessage;
+  postAcceptanceFailure: string | null;
 };
 
 export type SessionMessagesState = {

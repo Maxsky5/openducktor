@@ -728,6 +728,7 @@ describe("first-message composer recovery", () => {
           await firstSend.promise;
           throw new Error("first send failed");
         }
+        return null;
       });
       const start = mock(async () => ({ ...created, postStartActionError: null }));
       function RecoveryComposer({ taskId }: { taskId: string }) {

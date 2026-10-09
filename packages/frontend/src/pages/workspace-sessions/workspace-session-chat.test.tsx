@@ -28,6 +28,7 @@ import {
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
 import {
   createAgentSessionFixture,
   createHostRuntimeStatusContextValue,
@@ -134,6 +135,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
       sendAgentMessage: async (identity, parts) => {
         sends.push([identity, parts]);
+        return createAgentMessageSendReceipt(identity);
       },
     });
     const view = render(<Harness />);

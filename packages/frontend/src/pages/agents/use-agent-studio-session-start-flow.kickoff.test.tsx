@@ -38,7 +38,7 @@ const createRunSessionStartWorkflow = (
     queryClient: new QueryClient(),
     workspaceId: null,
     startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     ...overrides,
   });
 
@@ -168,6 +168,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
       const startAgentSession = mock(async () => sessionIdentity("session-new"));
       const sendAgentMessage = mock(async () => {
         if (fails) throw new Error("kickoff failed");
+        return null;
       });
       const scheduleQueryUpdate = mock(() => {});
       const harness = createHookHarness(

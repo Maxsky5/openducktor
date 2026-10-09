@@ -343,7 +343,7 @@ describe("Sidebar session previews", () => {
       const role = within(preview).queryByLabelText("Custom role");
       expect(role?.textContent ?? null).toBe(roleName);
       expect(within(preview).getByLabelText("Working directory").textContent).toBe(
-        kind === "local_repo_root" ? betaWorkspace.repoPath : ref.workingDirectory,
+        entry.context.session.executionTarget.workingDirectory,
       );
       expect(within(preview).queryByLabelText("Role lane")).toBeNull();
       expect(within(preview).queryByText("Private role instructions")).toBeNull();

@@ -183,7 +183,7 @@ const operations = (
   startAgentSession: async () => {
     throw new Error("unexpected start");
   },
-  sendAgentMessage: async () => {},
+  sendAgentMessage: async () => null,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: async () => {},

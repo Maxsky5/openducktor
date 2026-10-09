@@ -1,5 +1,7 @@
+import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { useNavigate } from "react-router";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
@@ -165,10 +167,20 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     closeTaskDetails,
   });
 
+  const assertSessionCanSend = useAgentMessageSendPolicy();
+  const conflictWorkspaceKey = JSON.stringify([activeWorkspaceId, workspaceRepoPath]);
+  const conflictWorkspace = useRef({ key: conflictWorkspaceKey, version: 0 });
+  useLayoutEffect(() => {
+    if (conflictWorkspace.current.key !== conflictWorkspaceKey)
+      conflictWorkspace.current = {
+        key: conflictWorkspaceKey,
+        version: conflictWorkspace.current.version + 1,
+      };
+  }, [conflictWorkspaceKey]);
   const { handleResolveGitConflict } = useGitConflictResolution({
     workspaceId: activeWorkspaceId,
-    startConflictResolutionSession: async (request) =>
-      startSessionIntent({
+    startConflictResolutionSession: async (request) => {
+      const intent: Parameters<typeof startSessionIntent>[0] = {
         taskId: request.taskId,
         role: request.role,
         launchActionId: "build_rebase_conflict_resolution",
@@ -178,36 +190,48 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         existingSessionOptions: request.existingSessionOptions,
         postStartAction: "send_message",
         message: request.message,
-      }),
+      };
+      if (request.assertCanSubmit) intent.assertCanSubmit = request.assertCanSubmit;
+      return startSessionIntent(intent);
+    },
   });
   const handleResolveTaskGitConflict = useCallback(
     (conflict: Parameters<typeof handleResolveGitConflict>[0], taskId: string) => {
+      const version = conflictWorkspace.current.version;
+      const assertCurrent = () => {
+        if (conflictWorkspace.current.version !== version) throw new GitConflictRequestCancelled();
+      };
       const task = tasks.find((entry) => entry.id === taskId) ?? null;
       const builderSessions = sessions.filter(
         (entry) => entry.role === "build" && entry.taskId === taskId,
       );
-      return handleResolveGitConflict(conflict, {
-        taskId,
-        task,
-        builderSessions,
-        currentViewSession: null,
-        onOpenSession: (session) => {
-          if (!activeWorkspaceId) {
-            throw new Error("No active workspace is selected.");
-          }
-          navigate(
-            buildSessionNavigationHref({
-              kind: "task_session",
-              workspaceId: activeWorkspaceId,
-              taskId,
-              role: "build",
-              identity: toAgentSessionIdentity(session),
-            }),
-          );
+      return handleResolveGitConflict(
+        conflict,
+        {
+          taskId,
+          task,
+          builderSessions,
+          currentViewSession: null,
+          onOpenSession: (session) => {
+            if (!activeWorkspaceId) {
+              throw new Error("No active workspace is selected.");
+            }
+            navigate(
+              buildSessionNavigationHref({
+                kind: "task_session",
+                workspaceId: activeWorkspaceId,
+                taskId,
+                role: "build",
+                identity: toAgentSessionIdentity(session),
+              }),
+            );
+          },
         },
-      });
+        assertSessionCanSend,
+        assertCurrent,
+      );
     },
-    [activeWorkspaceId, handleResolveGitConflict, navigate, sessions, tasks],
+    [activeWorkspaceId, handleResolveGitConflict, navigate, sessions, tasks, assertSessionCanSend],
   );
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
@@ -349,7 +373,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         isHandlingConflict: taskGitConflictDialog.isHandlingConflict,
         conflictAction: taskGitConflictDialog.conflictAction,
         onAbort: taskGitConflictDialog.onAbort,
-        onAskBuilder: taskGitConflictDialog.onAskBuilder,
+        onAsk: taskGitConflictDialog.onAskBuilder,
       })
     : null;
 

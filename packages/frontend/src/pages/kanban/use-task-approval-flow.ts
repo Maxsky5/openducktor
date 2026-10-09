@@ -1,3 +1,4 @@
+import type { GitConflictAssistanceResult } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
@@ -43,7 +44,10 @@ type UseTaskApprovalFlowArgs = {
   refreshTasks: () => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   openResetImplementation: (taskId: string) => boolean;
-  onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
+  onResolveGitConflict?: (
+    conflict: GitConflict,
+    taskId: string,
+  ) => Promise<GitConflictAssistanceResult>;
 };
 
 type UseTaskApprovalFlowResult = {
@@ -67,7 +71,7 @@ export function useTaskApprovalFlow({
   refreshTasks,
   humanApproveTask,
   openResetImplementation,
-  onResolveGitConflict = async (): Promise<boolean> => {
+  onResolveGitConflict = async (): Promise<GitConflictAssistanceResult> => {
     throw new Error(
       "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
     );

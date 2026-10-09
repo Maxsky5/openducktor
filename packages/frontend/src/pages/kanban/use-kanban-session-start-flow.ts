@@ -1,3 +1,4 @@
+import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
@@ -59,7 +60,7 @@ type UseKanbanSessionStartFlowResult = {
   sessionStartModal: SessionStartModalModel | null;
   startSessionIntent: (
     intent: KanbanSessionStartIntent,
-  ) => Promise<AgentSessionIdentity | undefined>;
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
   onDelegate: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
@@ -192,7 +193,7 @@ export function useKanbanSessionStartFlow({
     [activeWorkspaceId, navigate],
   );
   const startSessionIntent = useCallback(
-    async (intent: KanbanSessionStartIntent): Promise<AgentSessionIdentity | undefined> => {
+    async (intent: KanbanSessionStartIntent): Promise<SessionStartWorkflowResult | undefined> => {
       const selectedTask = tasks.find((task) => task.id === intent.taskId) ?? null;
       const taskSessions = sessions.filter((session) => session.taskId === intent.taskId);
       return runSessionStartRequest(

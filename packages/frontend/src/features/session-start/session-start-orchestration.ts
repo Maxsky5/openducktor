@@ -5,6 +5,7 @@ import { AgentMessageSendError } from "@/lib/agent-message-send-error";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentMessageSendOptions } from "@/types/agent-orchestrator";
 import type { StartAgentSession } from "@/types/agent-session-start";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
@@ -25,6 +26,7 @@ export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedMode
   holdForPostStartMessage?: boolean;
   queueIfBusy?: boolean;
   message?: string;
+  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
   beforeStartAction?: SessionStartBeforeAction;
 };
 
@@ -278,6 +280,7 @@ export const executeSessionStartFromDecision = async ({
   if (request.message) {
     intent.message = request.message;
   }
+  if (request.assertCanSubmit) intent.assertCanSubmit = request.assertCanSubmit;
 
   if (request.beforeStartAction) {
     intent.beforeStartAction = request.beforeStartAction;

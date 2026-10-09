@@ -43,6 +43,9 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   commitError?: string | null;
   pushError?: string | null;
   rebaseError?: string | null;
+  conflictRecipientLabel?: "Builder" | "agent";
+  conflictAssistanceBlockedReason?: string | null;
+  conflictAssistanceIsStarting?: boolean;
   resetError?: string | null;
   isDetectingPullRequest?: boolean;
   detectPullRequestDisabledReason?: string | null;

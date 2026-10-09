@@ -15,6 +15,7 @@ import { useAgentChatPresentation } from "@/components/features/agents/agent-cha
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
+import { getBusyAgentMessageBlockedReason } from "@/lib/agent-message-send-policy";
 import {
   getAgentSessionWaitingInputPlaceholder,
   isAgentSessionBlockedOnInput,
@@ -33,10 +34,14 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import { useWorkspaceSessionModelCatalog } from "./use-workspace-session-model-catalog";
+import {
+  useWorkspaceConflictChatActions,
+  type WorkspaceConflictChatActions,
+} from "./use-workspace-conflict-chat-actions";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
+import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
@@ -47,6 +52,9 @@ type WorkspaceSessionChatProps = {
   onToolRefresh: () => void;
   isMounted: () => boolean;
   visitKey?: number;
+  onActionsReady?:
+    | ((ownerKey: string, actions: WorkspaceConflictChatActions | null) => void)
+    | undefined;
 };
 
 export function WorkspaceSessionChat({
@@ -57,12 +65,13 @@ export function WorkspaceSessionChat({
   onToolRefresh,
   isMounted,
   visitKey = 0,
+  onActionsReady,
 }: WorkspaceSessionChatProps): ReactElement {
   const identity = useMemo(() => workspaceSessionIdentity(record), [record]);
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
-  const { isSending, isStarting, isSavingModel, updateDraftModel } = actions;
+  const { isSending, isStarting, isSavingModel } = actions;
   const draftPersistence = useMemo(
     () => createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id),
     [workspace.workspaceId, record.id],
@@ -103,52 +112,26 @@ export function WorkspaceSessionChat({
     loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
     readSessionTodos: operations.readSessionTodos,
   });
-  const runtimeRef = useMemo(
-    () => ({
-      repoPath: workspace.repoPath,
-      runtimeKind: record.runtimeKind,
-      workingDirectory: record.executionTarget.workingDirectory,
-    }),
-    [record.executionTarget.workingDirectory, record.runtimeKind, workspace.repoPath],
-  );
+  const modelTarget = useWorkspaceSessionModelTarget({
+    repoPath: workspace.repoPath,
+    record,
+    identity,
+    selection: chatState.selectedModel,
+    readinessState: runtimeReadiness.state,
+    updateDraft: actions.updateDraftModel,
+    update: actions.updateSessionModel,
+  });
   const {
     catalog: modelCatalog,
     error: catalogError,
     isLoading: isLoadingModelCatalog,
-    retry: retryModelCatalog,
-  } = useWorkspaceSessionModelCatalog(runtimeRef, runtimeReadiness.state);
+  } = modelTarget;
   const sessionLoad = {
     session: isStarting ? null : session,
     runtimeReadinessState: runtimeReadiness.state,
   };
   useSelectedSessionHistoryLoad(sessionLoad);
   const contextError = useSelectedSessionContextLoad(sessionLoad);
-  const modelTarget = useMemo(
-    () => ({
-      identity,
-      runtimeKind: record.runtimeKind,
-      runtimeRef,
-      updateDraft: updateDraftModel,
-      selection: chatState.selectedModel,
-      catalog: modelCatalog,
-      isLoading: isLoadingModelCatalog,
-      error: catalogError,
-      retry: retryModelCatalog,
-      update: operations.updateAgentSessionModel,
-    }),
-    [
-      identity,
-      record.runtimeKind,
-      runtimeRef,
-      updateDraftModel,
-      chatState.selectedModel,
-      modelCatalog,
-      isLoadingModelCatalog,
-      catalogError,
-      retryModelCatalog,
-      operations.updateAgentSessionModel,
-    ],
-  );
   const picker = useWorkspaceSessionModelPicker(workspace.repoPath, modelTarget);
   const runtimePresentation = useMemo(
     () =>
@@ -191,6 +174,18 @@ export function WorkspaceSessionChat({
     readModel,
     loadHistory: operations.loadAgentSessionHistory,
   });
+  const descriptor =
+    runtime.allRuntimeDefinitions.find((entry) => entry.kind === record.runtimeKind) ?? null;
+  const busySendBlockedReason = getBusyAgentMessageBlockedReason(chatState.isWorking, descriptor);
+  const assertCanSubmit = useWorkspaceConflictChatActions({
+    workspace,
+    record,
+    session,
+    actions,
+    readiness: runtimeReadiness,
+    readOnlyReason: chatState.isReadOnly ? chatState.readOnlyReason : null,
+    onActionsReady,
+  });
   const canResumeSession = canResumeWorkspaceSession({
     identity,
     isStarting,
@@ -223,7 +218,8 @@ export function WorkspaceSessionChat({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
     onSend: (draft) =>
       actions.sendDraft(draft, {
-        canSend: canInteract,
+        canSend: canInteract && !busySendBlockedReason,
+        assertCanSubmit,
         reusablePrompts,
         selectedModelDescriptor: picker.selectedModelEntry,
         supportsAttachments: support.supportsAttachments,
@@ -285,7 +281,7 @@ export function WorkspaceSessionChat({
       isSessionWorking: chatState.isWorking,
       isWaitingInput: isAgentSessionBlockedOnInput(chatState),
       waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(chatState),
-      busySendBlockedReason: null,
+      busySendBlockedReason,
       canStopSession: chatState.canStopSession,
       stopAgentSession: operations.stopAgentSession,
       isResumingSession: actions.isResumingSession,

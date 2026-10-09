@@ -833,7 +833,7 @@ describe("kickoff and permission prompts", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "message.build_rebase_conflict_resolution",
-        builtinVersion: 4,
+        builtinVersion: 5,
         overrideBaseVersion: 2,
       },
     ]);
@@ -853,7 +853,7 @@ describe("kickoff and permission prompts", () => {
         },
       }),
     ).toThrow(
-      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel, currentBranch, conflictOutput.',
+      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel.',
     );
   });
 

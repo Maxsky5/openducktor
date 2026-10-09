@@ -88,7 +88,9 @@ const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
 });
 
 const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
-const sendAgentMessageMock = mock(async () => {});
+const sendAgentMessageMock = mock(async () => {
+  return null;
+});
 const updateAgentSessionModelMock = mock(async () => {});
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});

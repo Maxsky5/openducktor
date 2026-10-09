@@ -131,7 +131,7 @@ const agentOperations: AgentOperationsContextValue = {
   startAgentSession: async () => {
     throw new Error("Unexpected session start.");
   },
-  sendAgentMessage: async () => {},
+  sendAgentMessage: async () => null,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: async () => {},

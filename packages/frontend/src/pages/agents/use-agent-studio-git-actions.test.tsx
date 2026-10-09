@@ -1,3 +1,4 @@
+import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { HostClient } from "@openducktor/host-client";
 import type { GitConflict } from "@/features/agent-studio-git";
@@ -701,7 +702,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("derives persistent conflict state from unmerged files and blocks commit", async () => {
-    const onResolveGitConflict = mock(async () => true);
+    const onResolveGitConflict = mock(async () => createAgentMessageSendReceipt());
     const harness = createHookHarness(
       createBaseArgs({
         detectedConflictedFiles: ["AGENTS.md"],
@@ -714,12 +715,12 @@ describe("useAgentStudioGitActions", () => {
       await harness.mount();
 
       expect(harness.getLatest().gitConflict).toEqual({
-        operation: "rebase",
+        operation: null,
         currentBranch: "feature/task-10",
-        targetBranch: "current rebase target",
+        targetBranch: "",
         conflictedFiles: ["AGENTS.md"],
         output:
-          "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.",
+          "Git did not report the conflict operation. Restore the operation information before asking for assistance or aborting.",
         workingDir: "/tmp/worktree/task-10",
       });
       expect(harness.getLatest().isGitActionsLocked).toBe(true);
@@ -742,22 +743,14 @@ describe("useAgentStudioGitActions", () => {
         await state.askBuilderToResolveGitConflict();
       });
 
-      expect(onResolveGitConflict).toHaveBeenCalledWith({
-        operation: "rebase",
-        currentBranch: "feature/task-10",
-        targetBranch: "current rebase target",
-        conflictedFiles: ["AGENTS.md"],
-        output:
-          "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.",
-        workingDir: "/tmp/worktree/task-10",
-      });
+      expect(onResolveGitConflict).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
   test("uses rehydrated conflict context after reload when branch is unavailable", async () => {
-    const onResolveGitConflict = mock(async () => true);
+    const onResolveGitConflict = mock(async () => createAgentMessageSendReceipt());
     const detectedConflict = createDetectedConflict();
     const harness = createHookHarness(
       createBaseArgs({
@@ -778,7 +771,7 @@ describe("useAgentStudioGitActions", () => {
         await state.askBuilderToResolveGitConflict();
       });
 
-      expect(onResolveGitConflict).toHaveBeenCalledWith(detectedConflict);
+      expect(onResolveGitConflict).toHaveBeenCalledWith(detectedConflict, expect.any(Function));
     } finally {
       await harness.unmount();
     }
@@ -875,75 +868,90 @@ describe("useAgentStudioGitActions", () => {
         targetBranch: "tracked upstream branch",
         conflictedFiles: ["src/main.ts", "src/lib.ts"],
         output: "Automatic merge failed; fix conflicts and then commit the result.",
-        workingDir: null,
+        workingDir: "/repo",
       });
       expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(1);
       expect(harness.getLatest().rebaseError).toBeNull();
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      await harness.run((state) => state.abortGitConflict());
+      expect(gitAbortConflictMock).toHaveBeenCalledWith("/repo", "pull_rebase", "/repo");
     } finally {
       await harness.unmount();
     }
   });
 
-  test("captures rebase conflicts and can hand them to Builder", async () => {
-    gitRebaseBranchMock.mockImplementationOnce(async () => ({
-      outcome: "conflicts",
-      conflictedFiles: ["src/main.ts", "src/lib.ts"],
-      output: "CONFLICT (content): Merge conflict in src/main.ts",
-    }));
-    const onResolveGitConflict = mock(async () => true);
-    const refreshDiffData = mock(async () => {});
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-        workingDir: "/tmp/worktree/task-10",
-        onResolveGitConflict,
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      await harness.run(async (state) => {
-        await state.rebaseOntoTarget();
-      });
-
-      expect(harness.getLatest().gitConflict).toEqual({
-        operation: "rebase",
-        currentBranch: "feature/task-10",
-        targetBranch: "origin/main",
+  test.each([
+    [null, "/repo"],
+    ["/tmp/worktree/task-10", "/tmp/worktree/task-10"],
+  ] as const)(
+    "captures rebase conflicts in %s and can hand them to Builder",
+    async (workingDir, conflictDirectory) => {
+      gitRebaseBranchMock.mockImplementationOnce(async () => ({
+        outcome: "conflicts",
         conflictedFiles: ["src/main.ts", "src/lib.ts"],
         output: "CONFLICT (content): Merge conflict in src/main.ts",
-        workingDir: "/tmp/worktree/task-10",
-      });
-      expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(1);
-      expect(harness.getLatest().rebaseError).toBeNull();
-      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      }));
+      const onResolveGitConflict = mock(async () => createAgentMessageSendReceipt());
+      const refreshDiffData = mock(async () => {});
+      const harness = createHookHarness(
+        createBaseArgs({
+          refreshDiffData,
+          workingDir,
+          onResolveGitConflict,
+        }),
+      );
 
-      await harness.run(async (state) => {
-        await state.askBuilderToResolveGitConflict();
-      });
+      try {
+        await harness.mount();
 
-      expect(onResolveGitConflict).toHaveBeenCalledWith({
-        operation: "rebase",
-        currentBranch: "feature/task-10",
-        targetBranch: "origin/main",
-        conflictedFiles: ["src/main.ts", "src/lib.ts"],
-        output: "CONFLICT (content): Merge conflict in src/main.ts",
-        workingDir: "/tmp/worktree/task-10",
-      });
-      expect(harness.getLatest().gitConflict).toEqual({
-        operation: "rebase",
-        currentBranch: "feature/task-10",
-        targetBranch: "origin/main",
-        conflictedFiles: ["src/main.ts", "src/lib.ts"],
-        output: "CONFLICT (content): Merge conflict in src/main.ts",
-        workingDir: "/tmp/worktree/task-10",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
+        await harness.run(async (state) => {
+          await state.rebaseOntoTarget();
+        });
+
+        expect(harness.getLatest().gitConflict).toEqual({
+          operation: "rebase",
+          currentBranch: "feature/task-10",
+          targetBranch: "origin/main",
+          conflictedFiles: ["src/main.ts", "src/lib.ts"],
+          output: "CONFLICT (content): Merge conflict in src/main.ts",
+          workingDir: conflictDirectory,
+        });
+        expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(1);
+        expect(harness.getLatest().rebaseError).toBeNull();
+        expect(refreshDiffData).toHaveBeenCalledTimes(1);
+
+        await harness.run(async (state) => {
+          await state.askBuilderToResolveGitConflict();
+        });
+
+        expect(onResolveGitConflict).toHaveBeenCalledWith(
+          {
+            operation: "rebase",
+            currentBranch: "feature/task-10",
+            targetBranch: "origin/main",
+            conflictedFiles: ["src/main.ts", "src/lib.ts"],
+            output: "CONFLICT (content): Merge conflict in src/main.ts",
+            workingDir: conflictDirectory,
+          },
+          expect.any(Function),
+        );
+        expect(harness.getLatest().gitConflict).toEqual({
+          operation: "rebase",
+          currentBranch: "feature/task-10",
+          targetBranch: "origin/main",
+          conflictedFiles: ["src/main.ts", "src/lib.ts"],
+          output: "CONFLICT (content): Merge conflict in src/main.ts",
+          workingDir: conflictDirectory,
+        });
+        if (workingDir === null) {
+          await harness.run((state) => state.abortGitConflict());
+          expect(gitAbortConflictMock).toHaveBeenCalledWith("/repo", "rebase", "/repo");
+        }
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("tracks abort rebase action lifecycle while conflict resolution is pending", async () => {
     gitRebaseBranchMock.mockImplementationOnce(async () => ({
@@ -1035,10 +1043,18 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("tracks ask-builder action lifecycle while request is pending", async () => {
-    const resolveDeferred = createDeferred<boolean>();
+    const resolveDeferred = createDeferred<ReturnType<typeof createAgentMessageSendReceipt>>();
     const onResolveGitConflict = mock(async () => resolveDeferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
+        detectedConflict: {
+          operation: "rebase",
+          currentBranch: "feature/task-10",
+          targetBranch: "origin/main",
+          conflictedFiles: ["AGENTS.md"],
+          output: "Conflict",
+          workingDir: "/tmp/worktree/task-10",
+        },
         detectedConflictedFiles: ["AGENTS.md"],
         onResolveGitConflict,
         workingDir: "/tmp/worktree/task-10",
@@ -1058,7 +1074,7 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().isHandlingGitConflict).toBe(true);
       expect(harness.getLatest().gitConflictAction).toBe("ask_builder");
 
-      resolveDeferred.resolve(true);
+      resolveDeferred.resolve(createAgentMessageSendReceipt());
 
       await harness.waitFor((state) => !state.isHandlingGitConflict);
       expect(harness.getLatest().gitConflictAction).toBeNull();

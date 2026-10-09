@@ -122,7 +122,9 @@ export const createAgentSessionActions = ({
       loadTaskDocuments,
       refreshSessionRecords,
       refreshTaskData,
-      sendAgentMessage,
+      sendAgentMessage: async (identity, parts) => {
+        await sendAgentMessage(identity, parts);
+      },
     },
     model: {
       loadRepoPromptOverrides,

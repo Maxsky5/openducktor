@@ -79,7 +79,7 @@ const createRunSessionStartWorkflow = (
     queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     ...overrides,
   });
 
@@ -206,7 +206,7 @@ const createBaseArgs = (): HookArgs => {
     reusablePrompts: [],
     repoSettings: null,
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => undefined,
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
@@ -238,7 +238,7 @@ const createAttachmentDraft = (
 
 describe("useAgentStudioSessionActions attachments", () => {
   test("stages browser attachments before sending them", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       sendAgentMessage,
@@ -277,7 +277,7 @@ describe("useAgentStudioSessionActions attachments", () => {
   });
 
   test("rejects slash-command drafts that also contain attachments", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       sendAgentMessage,
@@ -306,7 +306,7 @@ describe("useAgentStudioSessionActions attachments", () => {
   });
 
   test("stages attachments even when the browser file exposes an original local path", async () => {
-    const sendAgentMessage = mock(async () => {});
+    const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
       sendAgentMessage,

@@ -17,6 +17,7 @@ import { HostInvokeError } from "@openducktor/host-client";
 import type {
   AgentChatMessage,
   AgentMessageSendOptions,
+  AgentMessageSendReceipt,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
@@ -228,12 +229,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     identity: AgentSessionIdentity,
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
-  ): Promise<void> => {
+  ): Promise<AgentMessageSendReceipt | null> => {
     const normalizedParts = normalizeAgentUserMessageParts(parts, {
       preserveTextWhitespace: options?.preserveTextWhitespace ?? false,
     });
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
-      return;
+      return null;
     }
     const isManualCompactionSend =
       classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
@@ -242,6 +243,20 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
       options?.sessionScope,
     );
+    const heldStart = options?.ownsStart?.(currentSession) ? currentSession : null;
+    const assertCanSubmit = (session: AgentSessionState): void => {
+      try {
+        options?.assertCanSubmit?.(session, options?.ownsStart?.(session) ?? false);
+      } catch (cause) {
+        if (heldStart) {
+          const current = dependencies.readSessionSnapshot(heldStart);
+          if (current && options?.ownsStart?.(current))
+            settleLoadedStartingSession(current, "idle", dependencies.updateSession);
+        }
+        throw cause;
+      }
+    };
+    assertCanSubmit(currentSession);
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
       const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
@@ -306,6 +321,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
     }
     const readySession = withSendScope(loadedReadySession, options?.sessionScope);
+    assertCanSubmit(readySession);
 
     const isBusyQueuedSend = readySession.status === "running";
     const sendAttempt = isBusyQueuedSend
@@ -347,6 +363,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           dependencies.updateSession,
         );
       }
+      return {
+        recipient: identity,
+        acceptedMessage: acceptedUserMessage,
+        postAcceptanceFailure: null,
+      };
     } catch (error) {
       const acceptedMessage =
         sentMessage ??
@@ -381,7 +402,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
             description: errorMessage(error),
           });
         }
-        return;
+        return { recipient: identity, acceptedMessage, postAcceptanceFailure: errorMessage(error) };
       }
       let settledOwnAttempt = false;
       dependencies.updateSession(readySession, (current) => {

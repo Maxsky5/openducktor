@@ -15,11 +15,18 @@ type GitConflictStripProps = {
 
 const toConflictDescription = (conflict: GitConflict): ReactNode => {
   const { operationLabel } = getGitConflictCopy(conflict.operation);
+  if (!conflict.operation)
+    return "Git reports unmerged files. Restore the operation information before asking for assistance or aborting.";
   return (
     <>
-      The {operationLabel} onto{" "}
-      <span className="font-medium text-foreground">{conflict.targetBranch}</span> is still paused
-      on conflicts.
+      The {operationLabel}
+      {conflict.targetBranch ? (
+        <>
+          {" "}
+          onto <span className="font-medium text-foreground">{conflict.targetBranch}</span>
+        </>
+      ) : null}{" "}
+      is still paused on conflicts.
     </>
   );
 };

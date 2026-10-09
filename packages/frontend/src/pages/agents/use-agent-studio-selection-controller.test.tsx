@@ -226,7 +226,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
       runtimeKind: "opencode",
       workingDirectory: "/repo",
     }),
-    sendAgentMessage: async () => undefined,
+    sendAgentMessage: async () => null,
     stopAgentSession: async () => undefined,
     continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => undefined,

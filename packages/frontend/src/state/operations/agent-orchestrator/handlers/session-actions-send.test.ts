@@ -5,6 +5,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
   findSessionMessageForTest,
@@ -60,6 +61,82 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     expect(sends).toBe(0);
   });
 
+  test("a rejected request does not release another request's held start", async () => {
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
+    const actions = createSessionActions({ sessionsRef });
+    await expect(
+      actions.sendAgentMessage(
+        getSession(sessionsRef),
+        [{ kind: "text", text: "Resolve conflict" }],
+        {
+          assertCanSubmit: () => {
+            throw new Error("Wait for the session to finish starting.");
+          },
+        },
+      ),
+    ).rejects.toThrow("finish starting");
+    expect(getSession(sessionsRef).status).toBe("starting");
+  });
+  test.each([
+    ["idle", "after preparation", "same"],
+    ["starting", "before preparation", "same"],
+    ["starting", "after preparation", "same"],
+    ["starting", "after preparation", "first live"],
+    ["starting", "after preparation", "newer"],
+  ] as const)(
+    "rejects a stale request for a %s session %s with the %s episode",
+    async (status, phase, episode) => {
+      const prepared = Promise.withResolvers<void>();
+      const preparing = Promise.withResolvers<void>();
+      let submissions = 0;
+      let current = phase === "after preparation";
+      const adapter = createTestOpencodeSdkAdapter();
+      adapter.sendUserMessage = async (input) => {
+        submissions += 1;
+        return acceptedUserMessage(input);
+      };
+      const session = buildSession({ status });
+      if (episode === "newer") session.executionEpisodeId = "first";
+      const sessionsRef = createSessionsRef([session]);
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        loadRepoPromptOverrides: async () => {
+          preparing.resolve();
+          await prepared.promise;
+          return {};
+        },
+      });
+      const send = actions.sendAgentMessage(
+        getSession(sessionsRef),
+        [{ kind: "text", text: "Resolve conflict" }],
+        {
+          ownsStart: createAgentMessageStartOwner(getSession(sessionsRef)),
+          assertCanSubmit: () => {
+            if (!current) throw new Error("Selection changed");
+          },
+        },
+      );
+      if (phase === "after preparation") {
+        await preparing.promise;
+        current = false;
+        if (episode === "newer" || episode === "first live") {
+          sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+            ...getSession(sessionsRef),
+            executionEpisodeId: episode === "newer" ? "newer-start" : "first",
+          });
+        }
+      }
+      prepared.resolve();
+      await expect(send).rejects.toThrow("Selection changed");
+      expect(submissions).toBe(0);
+      expect(getSession(sessionsRef).status).toBe(episode === "newer" ? "starting" : "idle");
+      current = true;
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Retry" }]);
+      expect(submissions).toBe(1);
+      expect(getSession(sessionsRef).status).toBe("running");
+    },
+  );
   test("an old send failure does not change a newer execution episode or its pending input", async () => {
     const entered = Promise.withResolvers<void>();
     const rejected = Promise.withResolvers<never>();

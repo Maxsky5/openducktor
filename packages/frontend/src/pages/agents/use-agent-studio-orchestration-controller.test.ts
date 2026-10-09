@@ -61,7 +61,7 @@ const createBaseArgs = (): BuildArgs => {
     onResumeSession: () => {},
     startLaunchKickoff: async () => {},
     onSend: async () => true,
-    sendAgentMessage: async () => {},
+    sendAgentMessage: async () => null,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
     isSubmittingApprovalByRequestId: {},

@@ -479,7 +479,7 @@ function useOptimisticDiffScope(model: AgentStudioGitPanelModel, clearFiles: () 
 function useGitConflictPanel(model: AgentStudioGitPanelModel) {
   const {
     abortGitConflict,
-    askBuilderToResolveGitConflict,
+    askBuilderToResolveGitConflict: askForHelp,
     gitConflict,
     gitConflictAction,
     gitConflictAutoOpenNonce,
@@ -494,51 +494,40 @@ function useGitConflictPanel(model: AgentStudioGitPanelModel) {
   const previousCloseNonceRef = useRef(0);
   const autoOpenNonce = gitConflictAutoOpenNonce ?? 0;
   const closeNonce = gitConflictCloseNonce ?? 0;
-  const closeAndAskBuilder = useCallback((): void => {
+  const closeAndAsk = useCallback((): void => {
     setModalOpen(false);
-    void askBuilderToResolveGitConflict?.();
-  }, [askBuilderToResolveGitConflict]);
-  const stripActions = useMemo(
-    () =>
-      active
-        ? createGitConflictActionsModel({
-            operation: active.operation,
-            isHandlingConflict: isHandlingGitConflict ?? false,
-            conflictAction: gitConflictAction,
-            onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: askBuilderToResolveGitConflict
-              ? () => void askBuilderToResolveGitConflict()
-              : undefined,
-          })
-        : null,
-    [
-      active,
-      abortGitConflict,
-      askBuilderToResolveGitConflict,
-      gitConflictAction,
-      isHandlingGitConflict,
-    ],
-  );
-  const modalActions = useMemo(
-    () =>
-      active
-        ? createGitConflictActionsModel({
-            operation: active.operation,
-            isHandlingConflict: isHandlingGitConflict ?? false,
-            conflictAction: gitConflictAction,
-            onAbort: () => void abortGitConflict?.(),
-            onAskBuilder: askBuilderToResolveGitConflict ? closeAndAskBuilder : undefined,
-          })
-        : null,
-    [
-      active,
-      closeAndAskBuilder,
-      abortGitConflict,
-      askBuilderToResolveGitConflict,
-      gitConflictAction,
-      isHandlingGitConflict,
-    ],
-  );
+    void askForHelp?.();
+  }, [askForHelp]);
+  const { stripActions, modalActions } = useMemo(() => {
+    if (!active) return { stripActions: null, modalActions: null };
+    const options = {
+      operation: active.operation,
+      recipientLabel: model.conflictRecipientLabel,
+      blockedReason: model.conflictAssistanceBlockedReason,
+      isStarting: model.conflictAssistanceIsStarting,
+      isHandlingConflict: isHandlingGitConflict ?? false,
+      conflictAction: gitConflictAction,
+      onAbort: () => void abortGitConflict?.(),
+      onAsk: askForHelp ? () => void askForHelp() : undefined,
+    };
+    return {
+      stripActions: createGitConflictActionsModel(options),
+      modalActions: createGitConflictActionsModel({
+        ...options,
+        onAsk: askForHelp ? closeAndAsk : undefined,
+      }),
+    };
+  }, [
+    active,
+    abortGitConflict,
+    askForHelp,
+    closeAndAsk,
+    gitConflictAction,
+    isHandlingGitConflict,
+    model.conflictRecipientLabel,
+    model.conflictAssistanceBlockedReason,
+    model.conflictAssistanceIsStarting,
+  ]);
 
   useEffect(() => {
     if (!initializedRef.current) {

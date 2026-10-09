@@ -25,19 +25,6 @@ type GitConflictDialogProps = {
   askBuilderTestId?: string;
 };
 
-const toConflictDescription = (conflict: GitConflict, showBuilderAction: boolean): ReactNode => {
-  const { operationLabel } = getGitConflictCopy(conflict.operation);
-
-  return (
-    <>
-      The {operationLabel} onto{" "}
-      <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> stopped on conflicts.
-      {" Abort the git operation"}
-      {showBuilderAction ? " or send the conflict to Builder for resolution." : "."}
-    </>
-  );
-};
-
 export const GitConflictDialog = memo(function GitConflictDialog({
   conflict,
   open,
@@ -63,7 +50,7 @@ export const GitConflictDialog = memo(function GitConflictDialog({
             {conflict ? getGitConflictTitle(conflict) : "Git conflict detected"}
           </DialogTitle>
           <DialogDescription>
-            {conflict ? toConflictDescription(conflict, Boolean(actions.askBuilder)) : null}
+            {conflict ? toConflictDescription(conflict, actions.help?.recipientLabel) : null}
           </DialogDescription>
         </DialogHeader>
 
@@ -76,13 +63,14 @@ export const GitConflictDialog = memo(function GitConflictDialog({
                   {conflict.conflictedFiles.map((file) => (
                     <li key={file}>{file}</li>
                   ))}
+                  {conflict.conflictedFiles.length === 0 ? <li>Unavailable</li> : null}
                 </ul>
               </div>
 
               <div>
                 <p className="text-sm font-medium text-foreground">Git output</p>
                 <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-foreground">
-                  {conflict.output}
+                  {conflict.output || "Unavailable"}
                 </pre>
               </div>
             </div>
@@ -111,3 +99,24 @@ export const GitConflictDialog = memo(function GitConflictDialog({
     </Dialog>
   );
 });
+
+const toConflictDescription = (conflict: GitConflict, recipient: string | undefined): ReactNode => {
+  const { operationLabel } = getGitConflictCopy(conflict.operation);
+  if (!conflict.operation)
+    return "Git reports unmerged files. Restore the operation information before asking for assistance or aborting.";
+
+  return (
+    <>
+      The {operationLabel}
+      {conflict.targetBranch ? (
+        <>
+          {" "}
+          onto <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code>
+        </>
+      ) : null}{" "}
+      stopped on conflicts.
+      {" Abort the git operation"}
+      {recipient ? ` or send the conflict to ${recipient} for resolution.` : "."}
+    </>
+  );
+};

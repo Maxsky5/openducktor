@@ -6,8 +6,14 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentMessageSendOptions,
+  AgentMessageSendReceipt,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
+import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { FEEDBACK_MESSAGE_REQUIRED_ERROR } from "./session-start-prompt-context";
 import { resolveSessionStartKickoff } from "./session-start-kickoff";
@@ -16,7 +22,7 @@ export type SendAgentMessage = (
   session: AgentSessionIdentity,
   parts: AgentUserMessagePart[],
   options?: AgentMessageSendOptions,
-) => Promise<void>;
+) => Promise<AgentMessageSendReceipt | null>;
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
@@ -37,12 +43,14 @@ export type SessionStartWorkflowIntent = {
   holdForPostStartMessage?: boolean;
   queueIfBusy?: boolean;
   message?: string;
+  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
   kickoffPrompt?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
 
 export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartActionError: Error | null;
+  postStartMessageReceipt?: AgentMessageSendReceipt;
   retryPostStartMessage?: () => Promise<void>;
 };
 
@@ -105,12 +113,18 @@ export const startSessionWorkflow = async ({
   requireCurrentContext();
   await runBeforeStartAction(beforeStartActionArgs);
 
-  const session = await startSessionFromIntent({
+  let heldStart: AgentSessionState | null = null;
+  const startOptions: Parameters<typeof startSessionFromIntent>[0] = {
     intent,
     selection,
     startAgentSession,
     holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
-  });
+  };
+  if (intent.assertCanSubmit)
+    startOptions.claimStart = (session) => {
+      heldStart = session;
+    };
+  const session = await startSessionFromIntent(startOptions);
 
   if (intent.postStartAction === "none") {
     return {
@@ -126,6 +140,8 @@ export const startSessionWorkflow = async ({
     throw new Error("Post-start message is unavailable.");
   }
 
+  const ownsStart = heldStart ? createAgentMessageStartOwner(heldStart) : null;
+  let postStartMessageReceipt: AgentMessageSendReceipt | null = null;
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
       const parts: AgentUserMessagePart[] = [
@@ -135,6 +151,10 @@ export const startSessionWorkflow = async ({
         },
       ];
       const sendOptions: AgentMessageSendOptions = {};
+      if (intent.assertCanSubmit) {
+        sendOptions.assertCanSubmit = intent.assertCanSubmit;
+        if (ownsStart) sendOptions.ownsStart = ownsStart;
+      }
       if (intent.postStartAction === "kickoff" && intent.kickoffPrompt !== undefined) {
         sendOptions.preserveTextWhitespace = true;
       }
@@ -142,9 +162,9 @@ export const startSessionWorkflow = async ({
         sendOptions.errorAttentionId = postStartErrorAttentionId;
       }
       if (Object.keys(sendOptions).length > 0) {
-        await postStartMessageSender(session, parts, sendOptions);
+        postStartMessageReceipt = await postStartMessageSender(session, parts, sendOptions);
       } else {
-        await postStartMessageSender(session, parts);
+        postStartMessageReceipt = await postStartMessageSender(session, parts);
       }
       return null;
     } catch (error) {
@@ -153,13 +173,20 @@ export const startSessionWorkflow = async ({
   };
 
   const postStartActionError = await runPostStartAction();
-  if (!postStartActionError) return { ...session, postStartActionError: null };
+  if (!postStartActionError) {
+    const result: SessionStartWorkflowResult = {
+      ...session,
+      postStartActionError: null,
+    };
+    if (postStartMessageReceipt) result.postStartMessageReceipt = postStartMessageReceipt;
+    return result;
+  }
   let retryPending = false;
   return {
     ...session,
     postStartActionError,
     retryPostStartMessage: async () => {
-      if (retryPending) return;
+      if (retryPending || postStartMessageReceipt) return;
       retryPending = true;
       try {
         const failure = await runPostStartAction();
@@ -186,8 +213,10 @@ const startSessionFromIntent = ({
   selection,
   startAgentSession,
   holdForPostStartMessage,
+  claimStart,
 }: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
   holdForPostStartMessage: boolean;
+  claimStart?: (session: AgentSessionState) => void;
 }): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return startAgentSession({
@@ -199,14 +228,16 @@ const startSessionFromIntent = ({
   }
 
   if (intent.startMode === "fork") {
-    return startAgentSession({
+    const forkRequest: Extract<StartAgentSessionInput, { startMode: "fork" }> = {
       taskId: intent.taskId,
       role: intent.role,
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
       sourceSession: requireSourceSession(intent.sourceSession, "fork"),
       holdForPostStartMessage,
-    });
+    };
+    if (claimStart) forkRequest.claimStart = claimStart;
+    return startAgentSession(forkRequest);
   }
 
   const freshRequest: Extract<StartAgentSessionInput, { startMode: "fresh" }> = {
@@ -216,6 +247,7 @@ const startSessionFromIntent = ({
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
+  if (claimStart) freshRequest.claimStart = claimStart;
   if (intent.queueIfBusy) {
     freshRequest.queueIfBusy = true;
   }

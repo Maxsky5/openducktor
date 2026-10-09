@@ -1,6 +1,7 @@
 import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -14,22 +15,28 @@ import {
   useWorkspaceSessionTools,
   type WorkspaceToolsTabId,
 } from "@/components/features/agents/use-workspace-session-tools";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
 import { errorMessage } from "@/lib/errors";
 import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
-import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
 import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
+import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import type { ActiveWorkspace } from "@/types/state-slices";
+import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
+import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import {
+  requestWorkspaceGitConflictAssistance,
+  workspaceConflictChatKey,
+} from "./workspace-git-conflict-assistance";
+import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
 import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
 } from "./workspace-session-file-preview";
-import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
-import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 
 export type WorkspaceSessionPanelState = {
   isOpen: boolean;
@@ -37,14 +44,7 @@ export type WorkspaceSessionPanelState = {
   selectedFile: TaskExecutionSelectedFile | null;
 };
 
-export function WorkspaceSessionContent({
-  workspace,
-  record,
-  sessionIds,
-  panelState,
-  onPanelStateChange: changePanel,
-  onSafeToLeave,
-}: {
+type WorkspaceSessionContentProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   sessionIds: readonly string[];
@@ -54,7 +54,46 @@ export function WorkspaceSessionContent({
     update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
   ) => void;
   onSafeToLeave?: () => void;
-}) {
+};
+
+export function WorkspaceSessionContent({
+  workspace,
+  record,
+  sessionIds,
+  panelState,
+  onPanelStateChange: changePanel,
+  onSafeToLeave,
+}: WorkspaceSessionContentProps): ReactElement {
+  const [chatActions, setChatActions] = useState<WorkspaceConflictChatActions | null>(null);
+  const selectedKey = workspaceConflictChatKey(workspace.workspaceId, record.id);
+  const onActionsReady = useCallback(
+    (ownerKey: string, actions: WorkspaceConflictChatActions | null) => {
+      if (ownerKey !== selectedKey) return;
+      if (actions) setChatActions(actions);
+      else
+        setChatActions((current) =>
+          current &&
+          workspaceConflictChatKey(current.workspace.workspaceId, current.record.id) === ownerKey
+            ? null
+            : current,
+        );
+    },
+    [selectedKey],
+  );
+  const assistance =
+    chatActions?.record.id === record.id &&
+    chatActions.workspace.workspaceId === workspace.workspaceId &&
+    chatActions.workspace.repoPath === workspace.repoPath
+      ? chatActions
+      : null;
+  const onResolveGitConflict: ResolveGitConflict = (conflict, assertCurrent = () => {}) =>
+    requestWorkspaceGitConflictAssistance({
+      workspace,
+      record,
+      actions: assistance,
+      conflict,
+      assertCurrent,
+    });
   const onPanelStateChange = useCallback(
     (update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>) =>
       changePanel(record.id, update),
@@ -163,6 +202,7 @@ export function WorkspaceSessionContent({
             onSelectFile={onSelectFile}
             workingDirectory={workingDirectory}
             branchKey={branchKey}
+            onActionsReady={onActionsReady}
           />
         </div>
       </div>
@@ -170,6 +210,11 @@ export function WorkspaceSessionContent({
   );
   const { toolsContent, refresh: refreshTools } = useWorkspaceSessionTools({
     isVisible: panelState.isOpen,
+    onResolveGitConflict,
+    conflictAssistanceBlockedReason:
+      assistance?.blockedReason ??
+      (assistance ? null : "Wait for the selected chat to load, or reload session data."),
+    conflictAssistanceIsStarting: assistance?.isStarting ?? false,
     repoPath: workspace.repoPath,
     workspaceId: workspace.workspaceId,
     sessionId: record.id,
@@ -205,7 +250,7 @@ export function WorkspaceSessionContent({
   );
 }
 
-export function WorkspaceSessionReadModelNotice() {
+export function WorkspaceSessionReadModelNotice(): ReactElement | null {
   const { sessionReadModelLoadState, workspaceSessionRecordsError, reloadSessionReadModel } =
     useAgentSessionReadModelState();
   const error =
@@ -223,17 +268,19 @@ export function WorkspaceSessionReadModelNotice() {
   );
 }
 
+type WorkspaceSessionPaneLayoutProps = {
+  isOpen: boolean;
+  isNarrow: boolean;
+  mainContent: ReactNode;
+  toolsContent: ReactNode;
+};
+
 function WorkspaceSessionPaneLayout({
   isOpen,
   isNarrow,
   mainContent,
   toolsContent,
-}: {
-  isOpen: boolean;
-  isNarrow: boolean;
-  mainContent: ReactNode;
-  toolsContent: ReactNode;
-}) {
+}: WorkspaceSessionPaneLayoutProps): ReactElement {
   return (
     <ResizablePanelGroup
       direction={isNarrow ? "vertical" : "horizontal"}

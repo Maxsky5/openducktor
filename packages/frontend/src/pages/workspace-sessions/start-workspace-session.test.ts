@@ -87,15 +87,15 @@ test("an already-bound chat enters the shared store without a fabricated history
 
 test("a late start response cannot seed another workspace", async () => {
   const store = createAgentSessionsStore("/other");
-  await expect(
-    startWorkspaceSession(
-      { workspaceId: "workspace", sessionId: "chat" },
-      startedResult().session,
-      store,
-      () => false,
-      async () => startedResult(),
-    ),
-  ).rejects.toThrow("Workspace changed");
+  const result = await startWorkspaceSession(
+    { workspaceId: "workspace", sessionId: "chat" },
+    startedResult().session,
+    store,
+    () => false,
+    async () => startedResult(),
+  );
+  expect(result.session.id).toBe("chat");
+  expect(result.identity.externalSessionId).toBe(result.session.externalSessionId!);
   expect(store.listSessionSnapshots()).toEqual([]);
 });
 

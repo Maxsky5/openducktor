@@ -1,16 +1,22 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import { buildGitConflictAssistancePrompt } from "@openducktor/core";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import {
-  buildGitConflictResolutionPrompt,
   buildReusableSessionOptions,
+  type SessionStartWorkflowResult,
 } from "@/features/session-start";
+import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { getGitConflictCopy } from "./conflict-copy";
+import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  conflictRequestContext,
+  GitConflictRequestCancelled,
+  type GitConflictAssistanceResult,
+} from "./conflict-assistance";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION } from "./constants";
 
 export type StartGitConflictResolutionSessionInput = {
@@ -22,6 +28,7 @@ export type StartGitConflictResolutionSessionInput = {
   initialStartMode: "fresh" | "reuse";
   initialSourceSession: AgentSessionIdentity | null;
   targetWorkingDirectory: string;
+  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
 };
 
 type GitConflictTaskContext = {
@@ -36,7 +43,7 @@ type UseGitConflictResolutionArgs = {
   workspaceId: string | null;
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
-  ) => Promise<AgentSessionIdentity | undefined>;
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -44,32 +51,9 @@ type UseGitConflictResolutionResult = {
   handleResolveGitConflict: (
     conflict: GitConflict,
     taskContext: GitConflictTaskContext,
-  ) => Promise<boolean>;
-};
-
-const filterConflictBuilderSessions = (
-  conflict: GitConflict,
-  builderSessions: AgentSessionSummary[],
-): AgentSessionSummary[] => {
-  const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
-
-  return builderSessions.filter(
-    (session) => normalizeWorkingDirectory(session.workingDirectory) === conflictWorkingDirectory,
-  );
-};
-
-const pickDefaultBuilderSession = ({
-  builderSessions,
-  currentViewSession,
-}: {
-  builderSessions: AgentSessionSummary[];
-  currentViewSession: AgentSessionIdentity | null;
-}): AgentSessionSummary | null => {
-  return (
-    builderSessions.find((session) => matchesAgentSessionIdentity(session, currentViewSession)) ??
-    builderSessions[0] ??
-    null
-  );
+    assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"],
+    assertCurrent?: () => void,
+  ) => Promise<GitConflictAssistanceResult>;
 };
 
 export function useGitConflictResolution({
@@ -78,42 +62,42 @@ export function useGitConflictResolution({
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseGitConflictResolutionArgs): UseGitConflictResolutionResult {
   const handleResolveGitConflict = useCallback(
-    async (conflict: GitConflict, taskContext: GitConflictTaskContext): Promise<boolean> => {
+    async (
+      conflict: GitConflict,
+      taskContext: GitConflictTaskContext,
+      assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"],
+      assertCurrent?: () => void,
+    ): Promise<GitConflictAssistanceResult> => {
       if (!workspaceId) {
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
       }
 
-      const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
-      if (!conflictWorkingDirectory) {
+      const workingDirectory = normalizeWorkingDirectory(conflict.workingDir);
+      if (!workingDirectory) {
         throw new Error(
           `Cannot resolve a git conflict for task "${taskContext.taskId}" because the conflicted working directory is missing.`,
         );
       }
 
-      const validBuilderSessions = filterConflictBuilderSessions(
-        conflict,
-        taskContext.builderSessions,
+      const matchingBuilders = taskContext.builderSessions.filter(
+        (session) => normalizeWorkingDirectory(session.workingDirectory) === workingDirectory,
       );
-      const defaultBuilderSession = pickDefaultBuilderSession({
-        builderSessions: validBuilderSessions,
-        currentViewSession: taskContext.currentViewSession,
-      });
+      const defaultBuilder =
+        matchingBuilders.find((session) =>
+          matchesAgentSessionIdentity(session, taskContext.currentViewSession),
+        ) ??
+        matchingBuilders[0] ??
+        null;
 
       const promptOverrides = await loadPromptOverrides(workspaceId);
-      const git: NonNullable<
-        NonNullable<Parameters<typeof buildGitConflictResolutionPrompt>[1]>["git"]
-      > = {
-        operationLabel: getGitConflictCopy(conflict.operation).operationLabel,
-        targetBranch: conflict.targetBranch,
-        conflictedFiles: conflict.conflictedFiles,
-        conflictOutput: conflict.output,
-      };
-      const promptContext: NonNullable<Parameters<typeof buildGitConflictResolutionPrompt>[1]> = {
+      assertCurrent?.();
+      const task: NonNullable<Parameters<typeof buildGitConflictAssistancePrompt>[0]["task"]> = {
         overrides: promptOverrides,
-        git,
+        context: { taskId: taskContext.taskId },
       };
       if (taskContext.task) {
-        promptContext.task = {
+        task.context = {
+          taskId: taskContext.taskId,
           title: taskContext.task.title,
           issueType: taskContext.task.issueType,
           status: taskContext.task.status,
@@ -121,10 +105,11 @@ export function useGitConflictResolution({
           description: taskContext.task.description,
         };
       }
-      if (conflict.currentBranch) {
-        git.currentBranch = conflict.currentBranch;
-      }
-      const message = buildGitConflictResolutionPrompt(taskContext.taskId, promptContext);
+      const git = conflictRequestContext(conflict);
+      const message = buildGitConflictAssistancePrompt({
+        git,
+        task,
+      });
 
       const session = await startConflictResolutionSession({
         taskId: taskContext.taskId,
@@ -132,22 +117,37 @@ export function useGitConflictResolution({
         launchActionId: BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION,
         message,
         existingSessionOptions: buildReusableSessionOptions({
-          sessions: validBuilderSessions,
+          sessions: matchingBuilders,
           role: "build",
         }),
-        initialStartMode: defaultBuilderSession ? "reuse" : "fresh",
-        initialSourceSession: defaultBuilderSession
-          ? toAgentSessionIdentity(defaultBuilderSession)
-          : null,
-        targetWorkingDirectory: conflictWorkingDirectory,
+        initialStartMode: defaultBuilder ? "reuse" : "fresh",
+        initialSourceSession: defaultBuilder ? toAgentSessionIdentity(defaultBuilder) : null,
+        targetWorkingDirectory: git.workingDirectory,
+        assertCanSubmit: (recipient, ownsStart) => {
+          assertCurrent?.();
+          if (normalizeWorkingDirectory(recipient.workingDirectory) !== workingDirectory)
+            throw new Error("Select a Builder in the conflict directory before sending.");
+          assertCanSubmit?.(recipient, ownsStart);
+        },
       });
 
       if (!session) {
         return false;
       }
 
+      const failure =
+        session.postStartActionError instanceof SessionStartWorkflowError
+          ? session.postStartActionError.originalCause
+          : session.postStartActionError;
+      if (failure instanceof GitConflictRequestCancelled) return false;
+      assertCurrent?.();
       taskContext.onOpenSession(session);
-      return true;
+      if (session.postStartActionError) throw session.postStartActionError;
+      if (!session.postStartMessageReceipt)
+        throw new Error(
+          "The Builder started, but no conflict message was accepted. Send the request again from the conflict tools.",
+        );
+      return session.postStartMessageReceipt;
     },
     [loadPromptOverrides, startConflictResolutionSession, workspaceId],
   );

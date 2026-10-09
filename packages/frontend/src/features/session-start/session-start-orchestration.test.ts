@@ -247,7 +247,7 @@ describe("session-start-orchestration", () => {
 
   test("maps Codex reuse decisions to workflow execution with standard kickoff messaging", async () => {
     const startAgentSession = mock(async () => sessionIdentity("codex-session-1", "codex"));
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = mock(async () => null);
 
     const result = await executeSessionStartFromDecision({
       workspaceId: null,

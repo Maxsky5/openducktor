@@ -308,6 +308,10 @@ Deferred refreshes check the current view before each read. Branch and settings 
 
 Dynamic tabs in `openduckto-k0u1t` must keep this hook in the session shell. Closing or hiding the Git tab must only unmount its view. Conflict assistance must use the same controller and keep task workflow policy in the task adapter.
 
+`features/git-conflict-resolution` shares conflict controls and core prompt instructions. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing saved-chat action owner through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved chat, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
+
+Git status supplies the effective conflict directory but uses the comparison branch as its target. The frontend marks that target unavailable. The retained conflict controller keeps operation and branch facts from the original command and updates its file paths from Git status.
+
 ## Composer
 
 Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/model-selection/*`, `features/agent-chat-composer/prompt-input/*`, `state/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.
@@ -340,6 +344,8 @@ Files: `handlers/start-session.ts`, `handlers/session-launch-executor.ts`, `hand
 Owns start, reuse, fork, send, stop, model update, pending-input replies, and workflow session registration.
 
 The shared send handler checks a typed accepted-message failure before ordinary send recovery. It upserts the native message once and adds a scoped failure notice. It completes the send action without restoring the accepted draft or resetting running state and pending input. Both task and workspace actions use this handler. Runtime-service conversion checks the exact session reference and preserves accepted model fields.
+
+The sender returns `AgentMessageSendReceipt` after acceptance, including queued state and any later host failure. Its optional `assertCanSubmit` guard checks the captured recipient and shared session send policy before preparation and immediately before transport. Guards and receipts stay in the frontend. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
 
 Before sending to a stopped repository or workflow session, the shared send handler resumes the same native session. It rejects an unbound session because that session has no repository or workflow scope. It checks repository continuity and retains newer live activity and pending input. For a workflow session, the host verifies that the task owns the session before it resumes it. A failed resume sends no message.
 
