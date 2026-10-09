@@ -1,4 +1,5 @@
 import { ChatFileLinkProvider } from "./agent-chat/agent-chat-file-link-provider";
+import type { ChatFileLinkOwner } from "./agent-chat/agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat/agent-chat-markdown-renderer";
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
@@ -326,7 +327,197 @@ function ChatPreviewHarness(): ReactElement {
   );
 }
 
+function WindowsTranscriptPreview({
+  scope,
+  href,
+}: {
+  scope: "task" | "workspace";
+  href: string;
+}): ReactElement {
+  const preview = useTaskExecutionFilePreviewController();
+  const common = {
+    repoPath: "C:/repo",
+    workingDirectory: "C:/repo/task",
+    ownerKey: "main",
+    onSelectFile: preview.onSelectFile,
+  };
+  const owner: ChatFileLinkOwner =
+    scope === "workspace" ? { ...common, kind: "workspace" } : { ...common, taskId: "a" };
+  return (
+    <>
+      <ChatFileLinkProvider owner={owner}>
+        <AgentChatMarkdownRenderer markdown={`[outside file](${href})`} />
+      </ChatFileLinkProvider>
+      <TaskExecutionSelectedFilePreview model={preview.model} onFileSaved={() => {}} />
+    </>
+  );
+}
+
 describe("TaskExecutionSelectedFilePreview", () => {
+  for (const scope of ["task", "workspace"] as const) {
+    for (const [href, rootPath] of [
+      ["file:///D:/reports/a.ts", String.raw`D:\reports`],
+      ["file:///D:/a.ts", "D:\\"],
+    ] as const) {
+      test(`opens and saves a canonical Windows outside file: ${scope}, ${href}`, async () => {
+        const selectedFile: TaskExecutionSelectedFile = {
+          rootPath,
+          relativePath: "a.ts",
+          access: "local",
+        };
+        configureShellBridge(
+          createShellBridgeFixture({
+            client: {
+              gitCanonicalizePath: async (path) => path.replaceAll("/", "\\"),
+              filesystemResolvePath: async () => String.raw`C:\repo\task`,
+              filesystemReadTextFile: readTextFileMock,
+              filesystemWriteTextFile: writeTextFileMock,
+            },
+          }),
+        );
+        readTextFileMock.mockResolvedValue(textFileResult(selectedFile, "before"));
+        const view = render(
+          <PreviewTestProviders>
+            <WindowsTranscriptPreview scope={scope} href={href} />
+          </PreviewTestProviders>,
+        );
+        try {
+          fireEvent.click(screen.getByRole("link", { name: "outside file" }));
+          await screen.findByText("before");
+          expect(readTextFileMock).toHaveBeenCalledWith(selectedFile);
+          const item = firstCodeViewItem();
+          act(() =>
+            latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "after" }),
+          );
+          await waitForDirtyFile();
+          await dispatchPreviewSaveShortcut();
+          await waitForCleanFile();
+          expect(writeTextFileMock).toHaveBeenCalledWith({
+            ...selectedFile,
+            contents: "after",
+            revision: "revision:before",
+          });
+          expect(
+            latestQueryClient?.getQueryData(
+              filesystemQueryKeys.textFile(rootPath, "a.ts", "local"),
+            ),
+          ).toMatchObject({ rootPath, contents: "after" });
+          expect(
+            latestQueryClient?.getQueryCache().findAll({
+              queryKey: filesystemQueryKeys.textFileRoot(rootPath.replaceAll("\\", "/")),
+            }),
+          ).toHaveLength(0);
+        } finally {
+          view.unmount();
+        }
+      });
+    }
+  }
+
+  test("bounds image reads across file switches and drops unused image data", async () => {
+    const files = ["one.png", "two.JPG", "three.webp", "four.svg"].map((relativePath) => ({
+      rootPath: "/tmp",
+      relativePath,
+      access: "local" as const,
+    }));
+    const reads = files.map(() => createDeferred<WorkspaceTextFileReadResult>());
+    const result = (index: number): WorkspaceTextFileReadResult => ({
+      kind: "image",
+      ...files[index]!,
+      mime: "image/png",
+      base64: "aW1hZ2U=",
+      revision: `image-${index}`,
+      size: 5,
+      mtimeMs: 1,
+    });
+    readTextFileMock.mockImplementation((input: { relativePath: string }) => {
+      const index = files.findIndex((file) => file.relativePath === input.relativePath);
+      return reads[index]!.promise;
+    });
+    const content = (index: number) =>
+      renderPreview({ selectedFile: files[index]!, onClose: () => {} });
+    const view = render(content(0));
+    const client = latestQueryClient!;
+    try {
+      await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(1));
+      view.rerender(content(1));
+      await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
+      view.rerender(content(2));
+      await waitFor(() =>
+        expect(
+          client.isFetching({
+            queryKey: filesystemQueryKeys.textFile("/tmp", "three.webp", "local"),
+          }),
+        ).toBe(1),
+      );
+      view.rerender(content(3));
+      await waitFor(() =>
+        expect(
+          client.isFetching({
+            queryKey: filesystemQueryKeys.textFile("/tmp", "four.svg", "local"),
+          }),
+        ).toBe(1),
+      );
+      expect(readTextFileMock).toHaveBeenCalledTimes(2);
+      await act(async () => reads[0]!.resolve(result(0)));
+      await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(3));
+      expect(readTextFileMock.mock.calls.at(-1)?.[0]).toEqual(files[3]);
+      await act(async () => {
+        reads[1]!.resolve(result(1));
+        reads[3]!.resolve(result(3));
+      });
+      await screen.findByRole("img", { name: "four.svg" });
+      await waitFor(() =>
+        expect(
+          client.getQueryCache().findAll({
+            queryKey: filesystemQueryKeys.textFileRoot("/tmp"),
+          }),
+        ).toHaveLength(1),
+      );
+      view.unmount();
+      await waitFor(() =>
+        expect(
+          client.getQueryCache().findAll({
+            queryKey: filesystemQueryKeys.textFileRoot("/tmp"),
+          }),
+        ).toHaveLength(0),
+      );
+      expect(readTextFileMock).toHaveBeenCalledTimes(3);
+    } finally {
+      view.unmount();
+      await act(async () => {
+        reads.forEach((read, index) => read.resolve(result(index)));
+        await Promise.all(reads.map((read) => read.promise));
+      });
+      client.clear();
+    }
+  });
+
+  for (const relativePath of [".png", "nested/.PNG", "nested.png/jpg", "picture.avif"]) {
+    test(`keeps the text save cache for ${relativePath}`, async () => {
+      const selectedFile = { rootPath: "/tmp", relativePath, access: "local" as const };
+      readTextFileMock.mockResolvedValue(textFileResult(selectedFile, "before"));
+      const view = render(renderPreview({ selectedFile, onClose: () => {} }));
+      try {
+        await screen.findByText("before");
+        const item = firstCodeViewItem();
+        act(() =>
+          latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "after" }),
+        );
+        await waitForDirtyFile();
+        await dispatchPreviewSaveShortcut();
+        await waitForCleanFile();
+        expect(
+          latestQueryClient?.getQueryData(
+            filesystemQueryKeys.textFile("/tmp", relativePath, "local"),
+          ),
+        ).toMatchObject({ contents: "after" });
+      } finally {
+        view.unmount();
+      }
+    });
+  }
+
   // This flow loads the real rich editor and its Markdown extensions.
   test("loads relative Markdown images from the file directory and keeps source paths", async () => {
     const selectedFile: TaskExecutionSelectedFile = {
@@ -396,50 +587,56 @@ describe("TaskExecutionSelectedFilePreview", () => {
       mtimeMs: 1,
       revision: "image-1",
     };
+    const nextRead = createDeferred<WorkspaceTextFileReadResult>();
     readTextFileMock.mockImplementation((input) =>
-      input.relativePath === "first.png" ? Promise.resolve(result) : new Promise(() => {}),
+      input.relativePath === "first.png" ? Promise.resolve(result) : nextRead.promise,
     );
     const onClose = () => {};
     const view = render(renderPreview({ selectedFile, onClose }));
-    await screen.findByRole("img", { name: "first.png" });
-    view.rerender(
-      renderPreview({
-        selectedFile: { ...selectedFile, access: "local" },
-        onClose,
-      }),
-    );
-    await screen.findByText("/repo/first.png");
-    await waitFor(() =>
-      expect(
-        latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
-          filesystemQueryKeys.textFile("/repo", "first.png", "local"),
-        ),
-      ).toBe(result),
-    );
-    expect(
-      latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
-        filesystemQueryKeys.textFile("/repo", "first.png"),
-      ),
-    ).toBe(result);
-    view.rerender(
-      renderPreview({
-        selectedFile: {
-          ...selectedFile,
+    try {
+      await screen.findByRole("img", { name: "first.png" });
+      view.rerender(
+        renderPreview({
+          selectedFile: { ...selectedFile, access: "local" },
+          onClose,
+        }),
+      );
+      await screen.findByText("/repo/first.png");
+      await waitFor(() =>
+        expect(
+          latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
+            filesystemQueryKeys.image("/repo", "first.png", "local"),
+          ),
+        ).toBe(result),
+      );
+      await waitFor(() =>
+        expect(
+          latestQueryClient?.getQueryData(filesystemQueryKeys.image("/repo", "first.png")),
+        ).toBeUndefined(),
+      );
+      view.rerender(
+        renderPreview({
+          selectedFile: {
+            ...selectedFile,
+            relativePath: "next.png",
+            access: "local",
+          },
+          preservePreviousSnapshot: true,
+          onClose,
+        }),
+      );
+      await waitFor(() =>
+        expect(readTextFileMock).toHaveBeenCalledWith({
+          rootPath: "/repo",
           relativePath: "next.png",
           access: "local",
-        },
-        preservePreviousSnapshot: true,
-        onClose,
-      }),
-    );
-    await waitFor(() =>
-      expect(readTextFileMock).toHaveBeenCalledWith({
-        rootPath: "/repo",
-        relativePath: "next.png",
-        access: "local",
-      }),
-    );
-    expect(screen.getByText("/repo/first.png")).toBeTruthy();
+        }),
+      );
+      expect(screen.getByText("/repo/first.png")).toBeTruthy();
+    } finally {
+      view.unmount();
+      await act(async () => nextRead.resolve({ ...result, relativePath: "next.png" }));
+    }
   });
   test("shows a local image without mounting the code editor and reports decode failure", async () => {
     const selectedFile: TaskExecutionSelectedFile = {

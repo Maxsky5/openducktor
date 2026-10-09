@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
-import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
+import { workspaceFilePreviewQueryOptions } from "@/state/queries/filesystem";
 import {
   isMarkdownFile,
   type TaskExecutionSelectedFile,
@@ -83,10 +83,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     isFetching: isFileFetching,
     isLoading: isFileLoading,
   } = useQuery({
-    ...workspaceTextFileQueryOptions(
+    ...workspaceFilePreviewQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
       selectedFile?.relativePath ?? "__inactive_file_preview__",
-      undefined,
       selectedFile?.access,
     ),
     enabled: selectedFile !== null,

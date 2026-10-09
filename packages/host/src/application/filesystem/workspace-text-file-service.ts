@@ -1,4 +1,5 @@
 import {
+  imagePreviewMime,
   type WorkspaceTextFileReadResult,
   type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteFailure,
@@ -29,18 +30,6 @@ import { requireRelativePath, toWorkspaceRelativeCanonicalGitPath } from "./work
 
 export const MAX_WORKSPACE_TEXT_FILE_BYTES = 1024 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES = 10 * 1024 * 1024;
-const IMAGE_MIME_BY_EXTENSION = new Map([
-  ["png", "image/png"],
-  ["jpg", "image/jpeg"],
-  ["jpeg", "image/jpeg"],
-  ["gif", "image/gif"],
-  ["webp", "image/webp"],
-  ["svg", "image/svg+xml"],
-  ["bmp", "image/bmp"],
-  ["ico", "image/x-icon"],
-]);
-const imageMime = (extension: string) =>
-  IMAGE_MIME_BY_EXTENSION.get(extension.slice(1).toLowerCase());
 const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const TEXT_ENCODER = new TextEncoder();
 
@@ -253,7 +242,7 @@ export const createWorkspaceTextFileService = (
           cause._tag === "WorkspaceFileAccessError" ? mapReadAccessFailure(cause) : cause,
         ),
       );
-      const mime = imageMime(filesystem.extension(relativePath));
+      const mime = imagePreviewMime(filesystem.extension(relativePath));
       const maxBytes = mime ? MAX_IMAGE_PREVIEW_BYTES : MAX_WORKSPACE_TEXT_FILE_BYTES;
       const snapshot = yield* filesystem.readFileSnapshot(canonicalPath, maxBytes + 1).pipe(
         Effect.mapError((cause) =>
@@ -334,7 +323,7 @@ export const createWorkspaceTextFileService = (
         return yield* Effect.fail(invalidWriteInput(rawInput, parsedInput.error));
       }
       const input = parsedInput.data;
-      if (imageMime(filesystem.extension(input.relativePath)))
+      if (imagePreviewMime(filesystem.extension(input.relativePath)))
         return yield* unsupportedWrite("Images cannot be saved as text.", input);
       if (input.contents.length > MAX_WORKSPACE_TEXT_FILE_BYTES) {
         return yield* Effect.fail(

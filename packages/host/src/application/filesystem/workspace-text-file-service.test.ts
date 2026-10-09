@@ -80,7 +80,7 @@ describe("createWorkspaceTextFileService", () => {
     }
   });
 
-  for (const relativePath of ["png", ".png", "nested.png/jpg"]) {
+  for (const relativePath of ["png", ".png", "nested/.PNG", "nested.png/jpg", "picture.avif"]) {
     test(`reads and saves text without an image extension: ${relativePath}`, async () => {
       const rootPath = await createRoot();
       const filePath = path.join(rootPath, relativePath);

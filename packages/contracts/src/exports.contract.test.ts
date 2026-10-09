@@ -346,6 +346,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "filesystemListDirectoryInputSchema",
   "filesystemResolvePathInputSchema",
   "filesystemResolvedPathSchema",
+  "imagePreviewMime",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
   "gitFetchRemoteRequestSchema",

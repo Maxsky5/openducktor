@@ -20,7 +20,8 @@ for (const [href, rootPath, relativePath] of [
   ["/tmp/screenshot.png", "/tmp", "screenshot.png"],
   ["file:///tmp/a%20b.md:42", "/tmp", "a b.md"],
   ["/report.md", "/", "report.md"],
-  [String.raw`C:\reports\a.md`, "C:/reports", "a.md"],
+  [String.raw`C:\reports\a.md`, String.raw`C:\reports`, "a.md"],
+  [String.raw`C:\a.md`, "C:\\", "a.md"],
   ["file:///C:/a.md", "C:/", "a.md"],
 ] as const) {
   test(`resolves an absolute file without a working directory: ${href}`, () => {
@@ -63,7 +64,7 @@ for (const [href, workingDirectory, rootPath, relativePath] of [
   ["/report.md", "/repo/task", "/", "report.md"],
   ["file:///D:/reports/a.md", "C:/repo/task", "D:/reports", "a.md"],
   ["C:/a.md", "C:/repo/task", "C:/", "a.md"],
-  ["C:%5Crepo%5Ctask%5C%2e%2e%5Cother%5Ca.md", "C:/repo/task", "C:/repo/other", "a.md"],
+  ["C:%5Crepo%5Ctask%5C%2e%2e%5Cother%5Ca.md", "C:/repo/task", String.raw`C:\repo\other`, "a.md"],
 ] as const) {
   test(`opens local transcript destination ${href}`, () => {
     expect(resolve(href, workingDirectory)).toEqual({

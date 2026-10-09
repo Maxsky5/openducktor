@@ -11,6 +11,7 @@ import type {
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
+import { imagePreviewMime } from "@openducktor/contracts";
 import { mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
 import {
   type WorkspaceGitRefresh,
@@ -196,14 +197,23 @@ export const workspaceImageFileQueryOptions = (
   rootPath: string,
   relativePath: string,
   access?: "local",
+) => queryOptions(imageReadOptions(rootPath, relativePath, access));
+
+export const workspaceFilePreviewQueryOptions = (
+  rootPath: string,
+  relativePath: string,
+  access?: "local",
 ) => {
-  const read = fileReadOptions(rootPath, relativePath, host, access);
-  return queryOptions({
-    ...read,
-    queryKey: filesystemQueryKeys.image(rootPath, relativePath, access),
-    queryFn: (context) => runImagePreview(context.signal, () => read.queryFn(context)),
-    // Large image data must leave the cache when its last preview closes.
-    gcTime: 0,
+  const filename = relativePath.slice(relativePath.lastIndexOf("/") + 1);
+  const dot = filename.lastIndexOf(".");
+  const mime = dot > 0 ? imagePreviewMime(filename.slice(dot)) : undefined;
+  return queryOptions<WorkspaceTextFileReadResult>({
+    ...(mime
+      ? imageReadOptions(rootPath, relativePath, access)
+      : {
+          queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
+          ...fileReadOptions(rootPath, relativePath, host, access),
+        }),
   });
 };
 
@@ -230,6 +240,18 @@ export const workspaceTextFileWriteMutationOptions = (
       });
     },
   });
+
+const imageReadOptions = (rootPath: string, relativePath: string, access?: "local") => {
+  const read = fileReadOptions(rootPath, relativePath, host, access);
+  return {
+    ...read,
+    queryKey: filesystemQueryKeys.image(rootPath, relativePath, access),
+    queryFn: (context: { signal: AbortSignal }) =>
+      runImagePreview(context.signal, () => read.queryFn(context)),
+    // Large image data must leave the cache when its last preview closes.
+    gcTime: 0,
+  };
+};
 
 const fileReadOptions = (
   rootPath: string,

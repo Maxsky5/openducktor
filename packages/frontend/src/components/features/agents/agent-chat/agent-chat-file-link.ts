@@ -110,12 +110,12 @@ function parseFileDestination(href: string): { kind: "path"; path: string } | In
   return { kind: "path", path: prefix + path };
 }
 
-function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
-  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+function resolveWorktreeFile(input: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
   const windows = /^[a-z]:[/\\]/i.test(rootPath);
+  const path = windows ? input.replaceAll("\\", "/") : input;
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
-  if (windows) path = path.replaceAll("\\", "/");
   if ((hasDrive && (!windows || !/^[a-z]:\//i.test(path))) || (windows && path.startsWith("/")))
     return invalid(ROOT_ERRORS[root].platform);
   if (!path || path.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(path))
@@ -138,7 +138,7 @@ function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot)
       windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
     );
     if (!matchesRoot) {
-      return resolveLocalFile(path);
+      return resolveLocalFile(input);
     }
     parts.splice(0, rootParts.length);
   }
@@ -148,12 +148,13 @@ function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot)
 
 function resolveLocalFile(path: string): ChatFileLink {
   const windows = /^[a-z]:[/\\]/i.test(path);
+  const separator = windows && path[2] === "\\" ? "\\" : "/";
   const parts = segments(windows ? path.replaceAll("\\", "/") : path);
   const relativePath = parts?.pop();
   if (!parts || !relativePath || (windows && parts.length === 0))
     return invalid("The destination must name a file.");
   const rootPath = windows
-    ? parts.join("/") + (parts.length === 1 ? "/" : "")
+    ? parts.join(separator) + (parts.length === 1 ? separator : "")
     : "/" + parts.join("/");
   return { kind: "file", file: { rootPath, relativePath, access: "local" } };
 }
