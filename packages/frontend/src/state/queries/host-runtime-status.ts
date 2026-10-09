@@ -6,11 +6,47 @@ import type {
   HostRuntimeStatus,
 } from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
+import { withRuntimeStatusTimeout } from "@/state/host-runtime/host-runtime-status-timeout";
 import type { HostStatusSnapshot } from "@/types/diagnostics";
 
 export const hostRuntimeStatusQueryKeys = {
   snapshot: ["host-runtime-status"] as const,
 };
+
+export const applyHostStatusEvent = (
+  current: HostStatusSnapshot | undefined,
+  event: HostRuntimeChangedEvent | HostMcpBridgeChangedEvent,
+): HostStatusSnapshot =>
+  mergeHostStatusSnapshots(
+    current,
+    event.type === "runtime_changed"
+      ? { hostInstanceId: event.hostInstanceId, runtimes: [event.status], mcpBridge: null }
+      : { hostInstanceId: event.hostInstanceId, runtimes: [], mcpBridge: event.status },
+  );
+
+/**
+ * The host runtime status owner reads the baseline only after it subscribes to runtime changes.
+ * Observers use `enabled: false` and never start this read.
+ */
+export const hostRuntimeStatusQueryOptions = (
+  runtimeStatus: () => Promise<HostRuntimeSnapshot>,
+  scheduler: ScheduleTask = scheduleTask,
+) =>
+  queryOptions({
+    queryKey: hostRuntimeStatusQueryKeys.snapshot,
+    queryFn: ({ signal }): Promise<HostStatusSnapshot> =>
+      withRuntimeStatusTimeout(runtimeStatus, "reading runtime status", signal, scheduler),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    // Merge every write with the cached snapshot by host instance and revision.
+    // SAFETY: this query key holds only HostStatusSnapshot values.
+    structuralSharing: (oldData, newData) =>
+      mergeHostStatusSnapshots(
+        oldData as HostStatusSnapshot | undefined,
+        newData as HostStatusSnapshot,
+      ),
+  });
 
 const newerStatus = <Status extends HostRuntimeStatus | HostMcpBridgeStatus>(
   current: Status | null | undefined,
@@ -43,33 +79,3 @@ const mergeHostStatusSnapshots = (
         : newerStatus(current.mcpBridge, incoming.mcpBridge),
   };
 };
-
-export const applyHostStatusEvent = (
-  current: HostStatusSnapshot | undefined,
-  event: HostRuntimeChangedEvent | HostMcpBridgeChangedEvent,
-): HostStatusSnapshot =>
-  mergeHostStatusSnapshots(
-    current,
-    event.type === "runtime_changed"
-      ? { hostInstanceId: event.hostInstanceId, runtimes: [event.status], mcpBridge: null }
-      : { hostInstanceId: event.hostInstanceId, runtimes: [], mcpBridge: event.status },
-  );
-
-/**
- * The host runtime status owner reads the baseline only after it subscribes to runtime changes.
- * Observers use `enabled: false` and never start this read.
- */
-export const hostRuntimeStatusQueryOptions = (runtimeStatus: () => Promise<HostRuntimeSnapshot>) =>
-  queryOptions({
-    queryKey: hostRuntimeStatusQueryKeys.snapshot,
-    queryFn: (): Promise<HostStatusSnapshot> => runtimeStatus(),
-    staleTime: Infinity,
-    gcTime: Infinity,
-    // Merge every write with the cached snapshot by host instance and revision.
-    // SAFETY: this query key holds only HostStatusSnapshot values.
-    structuralSharing: (oldData, newData) =>
-      mergeHostStatusSnapshots(
-        oldData as HostStatusSnapshot | undefined,
-        newData as HostStatusSnapshot,
-      ),
-  });

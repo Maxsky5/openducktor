@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { type GitCheck, type PathCheck, type TaskStoreCheck } from "@openducktor/contracts";
+import {
+  type GitCheck,
+  type PathCheck,
+  type TaskStoreCheck,
+  type HostRuntimeSnapshot,
+} from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
+import { createHostRuntimeStatusOwner } from "@/state/host-runtime/host-runtime-status-owner";
+import { hostRuntimeStatusQueryKeys } from "@/state/queries/host-runtime-status";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { ScheduleTask } from "@/lib/scheduling";
@@ -253,6 +261,61 @@ describe("use-checks", () => {
       path.resolve(makePathCheck());
       runtime.resolve();
       store.resolve(makeTaskStoreCheck());
+      await harness.run(async () => {
+        await refreshed;
+      });
+      await harness.unmount();
+    }
+  });
+
+  test("a runtime-status timeout releases Diagnostics Refresh and leaves PATH and Git observed", async () => {
+    const runtimeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const callbacks = new Set<() => void>();
+    const runtimeStatus = createDeferred<HostRuntimeSnapshot>();
+    const runtimeOwner = createHostRuntimeStatusOwner({
+      queryClient: runtimeQueryClient,
+      ports: {
+        subscribeRuntimeChanges: async () => () => {},
+        runtimeStatus: () => runtimeStatus.promise,
+      },
+      scheduleTask: (callback) => {
+        callbacks.add(callback);
+        return () => callbacks.delete(callback);
+      },
+    });
+    runtimeOwner.start();
+    const harness = createHookHarness({
+      activeRepo: null,
+      refreshHostRuntimeStatus: runtimeOwner.refresh,
+    });
+    let refreshed: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) => value.pathCheck.data !== null && value.gitCheck.data !== null,
+      );
+      const gitCalls = gitCheckMock.mock.calls.length;
+      await harness.run((value) => {
+        refreshed = value.refreshChecks();
+      });
+      await harness.waitFor(() => gitCheckMock.mock.calls.length > gitCalls);
+      expect(harness.getLatest().isRefreshingChecks).toBe(true);
+      await harness.run(async () => {
+        for (const callback of callbacks) callback();
+        await refreshed;
+      });
+      expect(harness.getLatest().isRefreshingChecks).toBe(false);
+      expect(harness.getLatest().pathCheck.data?.ok).toBe(true);
+      expect(harness.getLatest().gitCheck.data?.ok).toBe(true);
+      expect(harness.getLatest().pathCheck.error).toBeNull();
+      expect(harness.getLatest().gitCheck.error).toBeNull();
+      expect(
+        runtimeQueryClient.getQueryState(hostRuntimeStatusQueryKeys.snapshot)?.error?.message,
+      ).toContain("Timed out");
+      expect(runtimeOwner.getConnection().isRefreshing).toBe(false);
+    } finally {
+      runtimeOwner.stop();
+      runtimeQueryClient.clear();
       await harness.run(async () => {
         await refreshed;
       });
