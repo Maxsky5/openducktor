@@ -5,7 +5,16 @@ import { CodeBlock } from "@tiptap/extension-code-block";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { ImagePlus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Ref,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { EditorFocus } from "@/types/editor-focus";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
@@ -14,7 +23,10 @@ import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { cn } from "@/lib/utils";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
-import { TaskDescriptionImageContext } from "./task-description-image-context";
+import {
+  TaskDescriptionImageContext,
+  type MarkdownImageRenderer,
+} from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 import { TaskDescriptionLinkDialog } from "./task-description-link-dialog";
 import {
@@ -45,9 +57,11 @@ type TaskDescriptionVisualEditorProps = {
   disabled: boolean;
   frontMatter: string;
   onChange(markdown: string): void;
-  onUpload(file: File): Promise<TaskAssetStageResult>;
+  onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
   issueImageContext?: IssueImageContext | undefined;
+  renderImage?: MarkdownImageRenderer | undefined;
+  editorRef?: Ref<EditorFocus> | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
   mermaidPreviews: MermaidPreviews;
@@ -61,6 +75,8 @@ export default function TaskDescriptionVisualEditor({
   onUpload,
   renderContext,
   issueImageContext,
+  renderImage,
+  editorRef,
   uploads,
   previews,
   mermaidPreviews,
@@ -78,8 +94,8 @@ export default function TaskDescriptionVisualEditor({
     if (canEditRef.current) setMathEdit(edit);
   }, []);
   const imageContext = useMemo(
-    () => ({ previews, renderContext, issueImageContext }),
-    [previews, renderContext, issueImageContext],
+    () => ({ previews, renderContext, issueImageContext, renderImage }),
+    [previews, renderContext, issueImageContext, renderImage],
   );
 
   const editor = useEditor({
@@ -122,6 +138,18 @@ export default function TaskDescriptionVisualEditor({
     },
   });
 
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus: (options) => {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.focus(undefined, { scrollIntoView: !options?.preventScroll });
+        }
+      },
+    }),
+    [editor],
+  );
+
   useEffect(() => {
     if (!editor || editor.isDestroyed || hydratedBody.current === body) {
       return;
@@ -133,6 +161,11 @@ export default function TaskDescriptionVisualEditor({
   useEffect(() => {
     disabledRef.current = disabled;
     canEditRef.current = canEdit;
+    return () => {
+      // Tiptap defers destruction, so pending callbacks must stop at unmount.
+      disabledRef.current = true;
+      canEditRef.current = false;
+    };
   }, [canEdit, disabled]);
 
   useEffect(() => {
@@ -144,7 +177,7 @@ export default function TaskDescriptionVisualEditor({
 
   const uploadFiles = useCallback(
     (files: File[]): void => {
-      if (!editor || !canEdit || files.length === 0) return;
+      if (!editor || !canEdit || !onUpload || files.length === 0) return;
       const insertAt = editor.state.selection.from;
       void Promise.allSettled(files.map((file) => onUpload(file))).then((results) => {
         if (editor.isDestroyed || disabledRef.current) return;
@@ -179,6 +212,7 @@ export default function TaskDescriptionVisualEditor({
       preventDefault();
       return;
     }
+    if (!onUpload) return;
     const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (images.length === 0) return;
     preventDefault();
@@ -240,29 +274,33 @@ export default function TaskDescriptionVisualEditor({
             }}
             onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            aria-label={uploading ? "Uploading image" : "Insert image"}
-            title={uploading ? "Uploading image" : "Insert image"}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
-          </Button>
-          <input
-            ref={fileInputRef}
-            aria-label="Task description images"
-            type="file"
-            className="sr-only"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            onChange={(event) => {
-              uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
-              event.currentTarget.value = "";
-            }}
-          />
+          {onUpload ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label={uploading ? "Uploading image" : "Insert image"}
+                title={uploading ? "Uploading image" : "Insert image"}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
+              </Button>
+              <input
+                ref={fileInputRef}
+                aria-label="Task description images"
+                type="file"
+                className="sr-only"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                onChange={(event) => {
+                  uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
+                  event.currentTarget.value = "";
+                }}
+              />
+            </>
+          ) : null}
         </div>
       </fieldset>
       <TaskDescriptionImageContext.Provider value={imageContext}>

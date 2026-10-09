@@ -29,14 +29,12 @@ const ROOT_ERRORS = {
     platform: "The absolute path does not match the Build Worktree platform.",
     leaves: "The file path leaves the Build Worktree.",
     invalid: "The Build Worktree path is invalid.",
-    outside: "The file is outside the Task's Build Worktree.",
   },
   workspace: {
     unavailable: "The workspace directory is unavailable.",
     platform: "The absolute path uses a different path style from the workspace directory.",
     leaves: "The file path leaves the workspace directory.",
     invalid: "The workspace directory path is invalid.",
-    outside: "The file is outside the workspace directory.",
   },
 } as const;
 
@@ -71,7 +69,10 @@ export function resolveChatFileLink(
   root: ChatFileRoot = "task",
 ): ChatFileLink {
   if (destination.kind !== "path") return destination;
-  if (!rootPath) return invalid(ROOT_ERRORS[root].unavailable);
+  if (!rootPath)
+    return destination.absolute
+      ? resolveLocalFile(destination.path)
+      : invalid(ROOT_ERRORS[root].unavailable);
   return resolveWorktreeFile(destination.path, rootPath, root);
 }
 
@@ -109,17 +110,23 @@ function parseFileDestination(href: string): { kind: "path"; path: string } | In
   return { kind: "path", path: prefix + path };
 }
 
-function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
-  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+function resolveWorktreeFile(input: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
   const windows = /^[a-z]:[/\\]/i.test(rootPath);
+  const path = windows ? input.replaceAll("\\", "/") : input;
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
-  if (windows) path = path.replaceAll("\\", "/");
   if ((hasDrive && (!windows || !/^[a-z]:\//i.test(path))) || (windows && path.startsWith("/")))
     return invalid(ROOT_ERRORS[root].platform);
   if (!path || path.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(path))
     return invalid("The destination must name a file.");
   const absolute = path.startsWith("/") || hasDrive;
+  if (!absolute)
+    return resolveWorktreeFile(
+      `${windows ? rootPath.replaceAll("\\", "/") : rootPath}/${path}`,
+      rootPath,
+      root,
+    );
   const parts = segments(path);
   if (!parts) return invalid(ROOT_ERRORS[root].leaves);
   const rootParts = segments(windows ? rootPath.replaceAll("\\", "/") : rootPath);
@@ -130,11 +137,26 @@ function resolveWorktreeFile(path: string, rootPath: string, root: ChatFileRoot)
     const matchesRoot = rootParts.every((part, index) =>
       windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
     );
-    if (!matchesRoot) return invalid(ROOT_ERRORS[root].outside);
+    if (!matchesRoot) {
+      return resolveLocalFile(input);
+    }
     parts.splice(0, rootParts.length);
   }
   if (!parts.length) return invalid("The destination must name a file.");
   return { kind: "file", file: { rootPath, relativePath: parts.join("/") } };
+}
+
+function resolveLocalFile(path: string): ChatFileLink {
+  const windows = /^[a-z]:[/\\]/i.test(path);
+  const separator = windows && path[2] === "\\" ? "\\" : "/";
+  const parts = segments(windows ? path.replaceAll("\\", "/") : path);
+  const relativePath = parts?.pop();
+  if (!parts || !relativePath || (windows && parts.length === 0))
+    return invalid("The destination must name a file.");
+  const rootPath = windows
+    ? parts.join(separator) + (parts.length === 1 ? separator : "")
+    : "/" + parts.join("/");
+  return { kind: "file", file: { rootPath, relativePath, access: "local" } };
 }
 
 const segments = (path: string): string[] | null => {

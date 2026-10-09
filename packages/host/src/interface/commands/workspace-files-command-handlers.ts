@@ -1,5 +1,6 @@
 import {
   workspaceFileTreeRefreshInputSchema,
+  workspaceTextFileReadInputSchema,
   type WorkspaceTextFileWriteInput,
   workspaceTextFileWriteInputSchema,
 } from "@openducktor/contracts";
@@ -40,20 +41,14 @@ const parseListTreeInput = (
 };
 
 const parseReadTextFileInput = (args: HostCommandArgs) => {
-  const record = requireRecord(
-    commandInputRecordSchema.safeParse(args),
-    "filesystem_read_text_file input",
-  );
-  return {
-    rootPath: requireStringPreservingWhitespace(
-      commandInputStringSchema.safeParse(record.rootPath),
-      "rootPath",
-    ),
-    relativePath: requireStringPreservingWhitespace(
-      commandInputStringSchema.safeParse(record.relativePath),
-      "relativePath",
-    ),
-  } satisfies { rootPath: string; relativePath: string };
+  const parsed = workspaceTextFileReadInputSchema.safeParse(args);
+  if (!parsed.success)
+    throw new HostValidationError({
+      field: "filesystem_read_text_file input",
+      message: `filesystem_read_text_file input is invalid: ${parsed.error.message}`,
+      cause: parsed.error,
+    });
+  return parsed.data;
 };
 
 const parseWriteTextFileInput = (args: HostCommandArgs): WorkspaceTextFileWriteInput => {

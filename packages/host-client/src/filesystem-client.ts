@@ -7,8 +7,11 @@ import {
   directoryListingSchema,
   type FilesystemListDirectoryInput,
   filesystemListDirectoryInputSchema,
+  filesystemResolvedPathSchema,
+  filesystemResolvePathInputSchema,
   type WorkspaceFileTree,
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteInput,
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
@@ -71,7 +74,7 @@ const filesystemListTree = async (
 
 const filesystemReadTextFile = async (
   invokeFn: InvokeFn,
-  input: { rootPath: string; relativePath: string },
+  input: WorkspaceTextFileReadInput,
 ): Promise<WorkspaceTextFileReadResult> => {
   return invokeFn("filesystem_read_text_file", input, workspaceTextFileReadResultSchema);
 };
@@ -85,6 +88,14 @@ const filesystemWriteTextFile = async (
 
 export class HostFilesystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  async filesystemResolvePath(path: string): Promise<string | null> {
+    return this.invokeFn(
+      "filesystem_resolve_path",
+      filesystemResolvePathInputSchema.parse({ path }),
+      filesystemResolvedPathSchema,
+    );
+  }
 
   async filesystemListDirectory(
     input?: string | FilesystemListDirectoryInput,
@@ -106,10 +117,9 @@ export class HostFilesystemClient {
     );
   }
 
-  async filesystemReadTextFile(input: {
-    rootPath: string;
-    relativePath: string;
-  }): Promise<WorkspaceTextFileReadResult> {
+  async filesystemReadTextFile(
+    input: WorkspaceTextFileReadInput,
+  ): Promise<WorkspaceTextFileReadResult> {
     return filesystemReadTextFile(this.invokeFn, input);
   }
 

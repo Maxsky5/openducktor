@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemDirectoryEntry, FilesystemPort } from "../../ports/filesystem-port";
@@ -28,6 +29,7 @@ const createFakeFilesystem = ({
   statErrors?: Record<string, Error>;
   existingPaths?: Set<string>;
 }): FilesystemPort => ({
+  extension: posix.extname,
   homeDirectory: () => home,
   canonicalize: (path) =>
     Effect.tryPromise({

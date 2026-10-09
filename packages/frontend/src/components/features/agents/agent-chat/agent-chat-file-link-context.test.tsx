@@ -7,6 +7,7 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";
+import { parseChatFileLink } from "./agent-chat-file-link";
 import type { ChatFileLinkOwner } from "./agent-chat-file-link-context";
 import {
   chatFileLinkSuffixes,
@@ -22,11 +23,107 @@ beforeEach(() => {
   previousBridge = getShellBridge();
   configureShellBridge(
     createShellBridgeFixture({
-      client: { gitCanonicalizePath: async (path) => path },
+      client: {
+        gitCanonicalizePath: async (path) => path,
+        filesystemResolvePath: async (path) => path,
+      },
     }),
   );
 });
 afterEach(() => configureShellBridge(previousBridge));
+
+for (const ownerScope of ["task", "missing-task", "workspace"] as const) {
+  test(`absolute transcript links open without a working directory: ${ownerScope}`, async () => {
+    const client = createQueryClient();
+    const worktree = mock(async () => null);
+    const canonicalize = mock(async () => "/private/tmp/screenshot.png");
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { taskWorktreeGet: worktree, gitCanonicalizePath: canonicalize },
+      }),
+    );
+    const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+    const owner: ChatFileLinkOwner =
+      ownerScope === "workspace"
+        ? {
+            kind: "workspace",
+            repoPath: null,
+            workingDirectory: null,
+            ownerKey: "main",
+            onSelectFile,
+          }
+        : {
+            repoPath: "/repo",
+            taskId: ownerScope === "task" ? "a" : null,
+            ownerKey: "main",
+            onSelectFile,
+          };
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ChatFileLinkProvider owner={owner}>
+          <AgentChatMarkdownRenderer markdown="[image](file:///tmp/screenshot.png)" />
+        </ChatFileLinkProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await act(async () => fireEvent.click(view.getByRole("link")));
+      expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+        rootPath: "/private/tmp",
+        relativePath: "screenshot.png",
+        access: "local",
+      });
+      expect(canonicalize).toHaveBeenCalledWith("/tmp/screenshot.png");
+      expect(worktree).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+}
+
+test("absolute external links open after the recorded worktree is removed", async () => {
+  const client = createQueryClient();
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitCanonicalizePath: async (path) => {
+          if (path === "/repo/removed-worktree") {
+            throw Object.assign(new Error("Worktree no longer exists"), { code: "ENOENT" });
+          }
+          return path;
+        },
+        filesystemResolvePath: async () => null,
+      },
+    }),
+  );
+  const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ChatFileLinkProvider
+        owner={{
+          repoPath: "/repo",
+          taskId: "a",
+          workingDirectory: "/repo/removed-worktree",
+          ownerKey: "recorded-session",
+          onSelectFile,
+        }}
+      >
+        <AgentChatMarkdownRenderer markdown="[image](/tmp/existing.png)" />
+      </ChatFileLinkProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await act(async () => fireEvent.click(view.getByRole("link")));
+    expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+      rootPath: "/tmp",
+      relativePath: "existing.png",
+      access: "local",
+    });
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
 
 test("links use each Task's Build Worktree", async () => {
   const client = createQueryClient();
@@ -114,6 +211,9 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
 }
 
 for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
+  const destination = parseChatFileLink(href);
+  // Absolute targets have no worktree against which to check platform or root identity.
+  if (destination.kind === "path" && destination.absolute) continue;
   test(`malformed destination reports its target and cause: ${href}`, async () => {
     const { spyOn } = await import("bun:test");
     const { toast } = await import("sonner");
@@ -252,7 +352,7 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
 
 for (const [path, rootPath, relativePath] of validChatFileDestinations) {
   for (const suffix of chatFileLinkSuffixes) {
-    test(`link activation selects the exact relative path: ${path}${suffix}`, async () => {
+    test(`link activation selects the exact workspace path: ${path}${suffix}`, async () => {
       const { spyOn } = await import("bun:test");
       const external = await import("@/lib/open-external-url");
       const { toast } = await import("sonner");
@@ -267,7 +367,13 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
       const view = render(
         <QueryClientProvider client={client}>
           <ChatFileLinkProvider
-            owner={{ repoPath: "C:/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+            owner={{
+              repoPath: "C:/repo",
+              taskId: "a",
+              workingDirectory: rootPath,
+              ownerKey: "main",
+              onSelectFile,
+            }}
           >
             <AgentChatMarkdownRenderer markdown={`[file](${path}${suffix})`} />
           </ChatFileLinkProvider>
@@ -289,8 +395,12 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
   }
 }
 
-for (const stage of ["root", "file"] as const) {
-  for (const departure of ["session", "task", "repository", "close"] as const) {
+for (const [stage, pendingPath, href] of [
+  ["root", "/repo/a", "/repo/a/src/file.ts"],
+  ["file", "/repo/a/src/file.ts", "/repo/a/src/file.ts"],
+  ["outside", "/repo/a/../outside/file.ts", "../outside/file.ts"],
+] as const) {
+  for (const departure of ["session", "task", "repository", "directory", "close"] as const) {
     test(`late ${stage} canonicalization cannot select after ${departure}`, async () => {
       const client = createQueryClient();
       client.setQueryData(
@@ -300,24 +410,29 @@ for (const stage of ["root", "file"] as const) {
         }),
       );
       const deferred = Promise.withResolvers<string>();
-      const pendingPath = stage === "root" ? "/repo/a" : "/repo/a/src/file.ts";
       const canonicalize = mock(async (path: string) =>
-        path === pendingPath ? deferred.promise : path,
+        stage === "file" || (stage === "outside" && path !== "/repo/a") ? deferred.promise : path,
+      );
+      const resolvePath = mock(async (path: string) =>
+        stage === "root" ? deferred.promise : path,
       );
       configureShellBridge(
-        createShellBridgeFixture({ client: { gitCanonicalizePath: canonicalize } }),
+        createShellBridgeFixture({
+          client: { gitCanonicalizePath: canonicalize, filesystemResolvePath: resolvePath },
+        }),
       );
       const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
       const owner: ChatFileLinkOwner = {
         repoPath: "/repo",
         taskId: "a",
+        workingDirectory: "/repo/a",
         ownerKey: "main",
         onSelectFile,
       };
       const content = (value: ChatFileLinkOwner) => (
         <QueryClientProvider client={client}>
           <ChatFileLinkProvider owner={value}>
-            <AgentChatMarkdownRenderer markdown="[file](/repo/a/src/file.ts)" />
+            <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
           </ChatFileLinkProvider>
         </QueryClientProvider>
       );
@@ -325,13 +440,14 @@ for (const stage of ["root", "file"] as const) {
       try {
         expect(canonicalize).not.toHaveBeenCalled();
         await act(async () => fireEvent.click(view.getByRole("link")));
-        expect(canonicalize).toHaveBeenCalledWith(pendingPath);
+        expect(stage === "root" ? resolvePath : canonicalize).toHaveBeenCalledWith(pendingPath);
         if (departure === "close") view.unmount();
         else {
           const next = { ...owner };
           if (departure === "session") next.ownerKey = "child";
           if (departure === "task") next.taskId = "b";
           if (departure === "repository") next.repoPath = "/other";
+          if (departure === "directory") next.workingDirectory = "/repo/b";
           view.rerender(content(next));
         }
         await act(async () => deferred.resolve(pendingPath));
@@ -344,7 +460,99 @@ for (const stage of ["root", "file"] as const) {
   }
 }
 
-test("canonical file resolution decodes once and rejects a symlink escape", async () => {
+test("relative outside links select the canonical local root", async () => {
+  const client = createQueryClient();
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitCanonicalizePath: async (path) =>
+          path === "/repo/task/../../tmp/report.md" ? "/private/tmp/report.md" : path,
+      },
+    }),
+  );
+  const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ChatFileLinkProvider
+        owner={{
+          kind: "workspace",
+          repoPath: "/repo",
+          workingDirectory: "/repo/task",
+          ownerKey: "main",
+          onSelectFile,
+        }}
+      >
+        <AgentChatMarkdownRenderer markdown="[file](../../tmp/report.md)" />
+      </ChatFileLinkProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await act(async () => fireEvent.click(view.getByRole("link")));
+    expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+      rootPath: "/private/tmp",
+      relativePath: "report.md",
+      access: "local",
+    });
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
+
+for (const scope of ["task", "workspace"] as const) {
+  for (const [rootPath, target, parent] of [
+    ["/repo/task", "/exports/final%20report.md", "/exports"],
+    [String.raw`C:\repo\task`, String.raw`D:\exports\final%20report.md`, String.raw`D:\exports`],
+  ] as const) {
+    test(`relative outside symlinks select the full canonical target: ${scope}, ${rootPath}`, async () => {
+      const client = createQueryClient();
+      client.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        () => ({
+          workingDirectory: rootPath,
+        }),
+      );
+      const requestedPath = `${rootPath}/../outside/alias%20report.md`;
+      const canonicalize = mock(async (path: string) => (path === requestedPath ? target : path));
+      configureShellBridge(
+        createShellBridgeFixture({
+          client: { gitCanonicalizePath: canonicalize },
+        }),
+      );
+      const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+      const common = {
+        repoPath: "/repo",
+        ownerKey: "main",
+        workingDirectory: rootPath,
+        onSelectFile,
+      };
+      const owner: ChatFileLinkOwner =
+        scope === "workspace" ? { ...common, kind: "workspace" } : { ...common, taskId: "a" };
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ChatFileLinkProvider owner={owner}>
+            <AgentChatMarkdownRenderer markdown="[file](../outside/alias%2520report.md:42)" />
+          </ChatFileLinkProvider>
+        </QueryClientProvider>,
+      );
+      try {
+        await act(async () => fireEvent.click(view.getByRole("link")));
+        expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+          rootPath: parent,
+          relativePath: "final%20report.md",
+          access: "local",
+        });
+        expect(canonicalize).toHaveBeenCalledWith(requestedPath);
+        expect(onSelectFile).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+        client.clear();
+      }
+    });
+  }
+}
+
+test("canonical file resolution decodes once and opens an outside symlink target", async () => {
   const { spyOn } = await import("bun:test");
   const { toast } = await import("sonner");
   const error = spyOn(toast, "error").mockReturnValue("error");
@@ -372,10 +580,12 @@ test("canonical file resolution decodes once and rejects a symlink escape", asyn
   try {
     await act(async () => fireEvent.click(view.getByRole("link")));
     expect(canonicalize).toHaveBeenCalledWith("/alias/a/a%20b.ts");
-    expect(error).toHaveBeenCalledWith("Cannot open file: /alias/a/a%2520b.ts:42", {
-      description: "The file is outside the Task's Build Worktree.",
+    expect(error).not.toHaveBeenCalled();
+    expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+      rootPath: "/other",
+      relativePath: "a%20b.ts",
+      access: "local",
     });
-    expect(onSelectFile).not.toHaveBeenCalled();
   } finally {
     view.unmount();
     client.clear();
@@ -383,48 +593,53 @@ test("canonical file resolution decodes once and rejects a symlink escape", asyn
   }
 });
 
-for (const departure of [false, true]) {
-  test(`canonicalization failure has no raw-path fallback; departed=${departure}`, async () => {
-    const { spyOn } = await import("bun:test");
-    const { toast } = await import("sonner");
-    const error = spyOn(toast, "error").mockReturnValue("error");
-    const client = createQueryClient();
-    client.setQueryData(
-      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
-      () => ({
-        workingDirectory: "/alias/a",
-      }),
-    );
-    const deferred = Promise.withResolvers<string>();
-    configureShellBridge(
-      createShellBridgeFixture({ client: { gitCanonicalizePath: () => deferred.promise } }),
-    );
-    const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
-    const view = render(
-      <QueryClientProvider client={client}>
-        <ChatFileLinkProvider
-          owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
-        >
-          <AgentChatMarkdownRenderer markdown="[file](src/file.ts)" />
-        </ChatFileLinkProvider>
-      </QueryClientProvider>,
-    );
-    try {
-      await act(async () => fireEvent.click(view.getByRole("link")));
-      if (departure) view.unmount();
-      await act(async () => deferred.reject(new Error("Task root no longer exists")));
-      if (departure) expect(error).not.toHaveBeenCalled();
-      else
-        expect(error).toHaveBeenCalledWith("Cannot open file: src/file.ts", {
-          description: "Task root no longer exists",
-        });
-      expect(onSelectFile).not.toHaveBeenCalled();
-    } finally {
-      view.unmount();
-      client.clear();
-      error.mockRestore();
-    }
-  });
+for (const [href, failure] of [
+  ["src/file.ts", "Task root no longer exists"],
+  ["/tmp/screenshot.png", "File no longer exists"],
+] as const) {
+  for (const departure of [false, true]) {
+    test(`canonicalization failure has no raw-path fallback; target=${href}; departed=${departure}`, async () => {
+      const { spyOn } = await import("bun:test");
+      const { toast } = await import("sonner");
+      const error = spyOn(toast, "error").mockReturnValue("error");
+      const client = createQueryClient();
+      client.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        () => ({
+          workingDirectory: "/alias/a",
+        }),
+      );
+      const deferred = Promise.withResolvers<string>();
+      configureShellBridge(
+        createShellBridgeFixture({ client: { gitCanonicalizePath: () => deferred.promise } }),
+      );
+      const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ChatFileLinkProvider
+            owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+          >
+            <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
+          </ChatFileLinkProvider>
+        </QueryClientProvider>,
+      );
+      try {
+        await act(async () => fireEvent.click(view.getByRole("link")));
+        if (departure) view.unmount();
+        await act(async () => deferred.reject(new Error(failure)));
+        if (departure) expect(error).not.toHaveBeenCalled();
+        else
+          expect(error).toHaveBeenCalledWith(`Cannot open file: ${href}`, {
+            description: failure,
+          });
+        expect(onSelectFile).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+        client.clear();
+        error.mockRestore();
+      }
+    });
+  }
 }
 
 test("streaming invalid and partial links do not read or report errors before activation", async () => {

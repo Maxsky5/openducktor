@@ -7,9 +7,11 @@ import type {
   FilesystemListDirectoryInput,
   WorkspaceFileTree,
   WorkspaceTextFileReadResult,
+  WorkspaceTextFileReadInput,
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
+import { imagePreviewMime } from "@openducktor/contracts";
 import { mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
 import {
   type WorkspaceGitRefresh,
@@ -18,6 +20,7 @@ import {
   workspaceRefreshMode,
 } from "./workspace-refresh";
 import { host } from "@/state/operations/host";
+import { runImagePreview } from "@/lib/generated-images/image-preview-queue";
 
 type FilesystemQueryHost = Pick<
   typeof host,
@@ -33,6 +36,7 @@ const NO_TARGET_BRANCH_QUERY_KEY = "__no_target_branch__";
 
 export const filesystemQueryKeys = {
   all: ["filesystem"] as const,
+  resolvedPath: (path: string) => [...filesystemQueryKeys.all, "resolved-path", path] as const,
   directory: (path?: string, includeFiles = false) =>
     [
       ...filesystemQueryKeys.all,
@@ -48,9 +52,26 @@ export const filesystemQueryKeys = {
       ...(branchKey === undefined ? [] : [branchKey]),
     ] as const,
   textFileRoot: (rootPath: string) => [...filesystemQueryKeys.all, "text-file", rootPath] as const,
-  textFile: (rootPath: string, relativePath: string) =>
-    [...filesystemQueryKeys.textFileRoot(rootPath), relativePath] as const,
+  textFile: (rootPath: string, relativePath: string, access?: "local") =>
+    [
+      ...filesystemQueryKeys.textFileRoot(rootPath),
+      relativePath,
+      ...(access ? [access] : []),
+    ] as const,
+  image: (rootPath: string, relativePath: string, access?: "local") =>
+    [...filesystemQueryKeys.textFile(rootPath, relativePath, access), "image-preview"] as const,
 };
+
+export const resolvedPathQueryOptions = (
+  path: string,
+  hostClient: Pick<typeof host, "filesystemResolvePath"> = host,
+) =>
+  queryOptions({
+    queryKey: filesystemQueryKeys.resolvedPath(path),
+    queryFn: () => hostClient.filesystemResolvePath(path),
+    staleTime: 0,
+    retry: false,
+  });
 
 export const refreshWorkspaceFileQueries = (
   queryClient: QueryClient,
@@ -165,17 +186,36 @@ export const workspaceTextFileQueryOptions = (
   rootPath: string,
   relativePath: string,
   hostClient: FilesystemQueryHost = host,
+  access?: "local",
 ) =>
   queryOptions({
-    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath),
-    queryFn: async ({ signal }): Promise<WorkspaceTextFileReadResult> => {
-      const result = await hostClient.filesystemReadTextFile({ rootPath, relativePath });
-      signal.throwIfAborted();
-      return result;
-    },
-    retry: false,
-    staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
+    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
+    ...fileReadOptions(rootPath, relativePath, hostClient, access),
   });
+
+export const workspaceImageFileQueryOptions = (
+  rootPath: string,
+  relativePath: string,
+  access?: "local",
+) => queryOptions(imageReadOptions(rootPath, relativePath, access));
+
+export const workspaceFilePreviewQueryOptions = (
+  rootPath: string,
+  relativePath: string,
+  access?: "local",
+) => {
+  const filename = relativePath.slice(relativePath.lastIndexOf("/") + 1);
+  const dot = filename.lastIndexOf(".");
+  const mime = dot > 0 ? imagePreviewMime(filename.slice(dot)) : undefined;
+  return queryOptions<WorkspaceTextFileReadResult>({
+    ...(mime
+      ? imageReadOptions(rootPath, relativePath, access)
+      : {
+          queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
+          ...fileReadOptions(rootPath, relativePath, host, access),
+        }),
+  });
+};
 
 export const workspaceTextFileWriteMutationOptions = (
   queryClient: QueryClient,
@@ -184,13 +224,13 @@ export const workspaceTextFileWriteMutationOptions = (
   mutationOptions({
     mutationFn: (input: WorkspaceTextFileWriteInput): Promise<WorkspaceTextFileWriteResult> =>
       hostClient.filesystemWriteTextFile(input),
-    onSuccess: async (result) => {
+    onSuccess: async (result, input) => {
       await queryClient.cancelQueries({
-        queryKey: filesystemQueryKeys.textFile(result.rootPath, result.relativePath),
+        queryKey: filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
         exact: true,
       });
       queryClient.setQueryData(
-        filesystemQueryKeys.textFile(result.rootPath, result.relativePath),
+        filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
         result,
       );
       // Keep tree read errors in the explorer so a completed write still counts as saved.
@@ -200,6 +240,35 @@ export const workspaceTextFileWriteMutationOptions = (
       });
     },
   });
+
+const imageReadOptions = (rootPath: string, relativePath: string, access?: "local") => {
+  const read = fileReadOptions(rootPath, relativePath, host, access);
+  return {
+    ...read,
+    queryKey: filesystemQueryKeys.image(rootPath, relativePath, access),
+    queryFn: (context: { signal: AbortSignal }) =>
+      runImagePreview(context.signal, () => read.queryFn(context)),
+    // Large image data must leave the cache when its last preview closes.
+    gcTime: 0,
+  };
+};
+
+const fileReadOptions = (
+  rootPath: string,
+  relativePath: string,
+  hostClient: FilesystemQueryHost,
+  access?: "local",
+) => ({
+  queryFn: async ({ signal }: { signal: AbortSignal }): Promise<WorkspaceTextFileReadResult> => {
+    const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
+    if (access) input.access = access;
+    const result = await hostClient.filesystemReadTextFile(input);
+    signal.throwIfAborted();
+    return result;
+  },
+  retry: false,
+  staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
+});
 
 const assertSelectedBranch = (
   context: WorkspaceFileTreeContext | undefined,

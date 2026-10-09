@@ -89,57 +89,69 @@ describe("workspaceFileTreeQueryOptions", () => {
     ]);
   });
 
-  test("updates the exact text cache and invalidates only the workspace tree after save", async () => {
-    const hostClient = {
-      filesystemListDirectory: unusedDirectoryListing,
-      filesystemRefreshTree: unusedTree,
-      filesystemReadTextFile: unusedTextFile,
-      filesystemWriteTextFile: async (
-        input: WorkspaceTextFileWriteInput,
-      ): Promise<WorkspaceTextFileWriteResult> => ({
-        kind: "text",
-        ...input,
-        size: input.contents.length,
-        mtimeMs: 2,
-        revision: "revision-2",
-      }),
-    };
-    const { result } = renderHook(
-      () => {
-        const queryClient = useQueryClient();
-        return {
-          queryClient,
-          mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient, hostClient)),
-        };
-      },
-      { wrapper: IsolatedQueryWrapper },
-    );
-    const input = {
-      rootPath: "/repo",
-      relativePath: "file.txt",
-      contents: "saved",
-      revision: "revision-1",
-    };
-    const treeKey = filesystemQueryKeys.treeRoot("/repo");
-    const unrelatedKey = filesystemQueryKeys.treeRoot("/other");
-    act(() => {
-      result.current.queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
-      result.current.queryClient.setQueryData(unrelatedKey, { rootPath: "/other", entries: [] });
-    });
-    let saved: WorkspaceTextFileWriteResult | undefined;
-    await act(async () => {
-      saved = await result.current.mutation.mutateAsync(input);
-    });
-    await waitFor(() => expect(result.current.mutation.isSuccess).toBe(true));
+  for (const access of [undefined, "local"] as const) {
+    test(`updates the exact text cache and invalidates only the workspace tree after save, access=${access}`, async () => {
+      const hostClient = {
+        filesystemListDirectory: unusedDirectoryListing,
+        filesystemRefreshTree: unusedTree,
+        filesystemReadTextFile: unusedTextFile,
+        filesystemWriteTextFile: async (
+          input: WorkspaceTextFileWriteInput,
+        ): Promise<WorkspaceTextFileWriteResult> => ({
+          kind: "text",
+          ...input,
+          size: input.contents.length,
+          mtimeMs: 2,
+          revision: "revision-2",
+        }),
+      };
+      const { result } = renderHook(
+        () => {
+          const queryClient = useQueryClient();
+          return {
+            queryClient,
+            mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient, hostClient)),
+          };
+        },
+        { wrapper: IsolatedQueryWrapper },
+      );
+      const input: WorkspaceTextFileWriteInput = {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "saved",
+        revision: "revision-1",
+      };
+      if (access) input.access = access;
+      const otherFileKey = filesystemQueryKeys.textFile(
+        "/repo",
+        "file.txt",
+        access ? undefined : "local",
+      );
+      const treeKey = filesystemQueryKeys.treeRoot("/repo");
+      const unrelatedKey = filesystemQueryKeys.treeRoot("/other");
+      act(() => {
+        result.current.queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
+        result.current.queryClient.setQueryData(unrelatedKey, { rootPath: "/other", entries: [] });
+        result.current.queryClient.setQueryData<string>(otherFileKey, "other access mode");
+      });
+      let saved: WorkspaceTextFileWriteResult | undefined;
+      await act(async () => {
+        saved = await result.current.mutation.mutateAsync(input);
+      });
+      await waitFor(() => expect(result.current.mutation.isSuccess).toBe(true));
 
-    expect(
-      result.current.queryClient.getQueryData<WorkspaceTextFileWriteResult>(
-        filesystemQueryKeys.textFile("/repo", "file.txt"),
-      ),
-    ).toEqual(saved);
-    expect(result.current.queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
-    expect(result.current.queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
-  });
+      expect(
+        result.current.queryClient.getQueryData<WorkspaceTextFileWriteResult>(
+          filesystemQueryKeys.textFile("/repo", "file.txt", access),
+        ),
+      ).toEqual(saved);
+      expect(result.current.queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+      expect(result.current.queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
+      expect(result.current.queryClient.getQueryData<string>(otherFileKey)).toBe(
+        "other access mode",
+      );
+    });
+  }
 
   test("leaves the query cache unchanged when the write fails", async () => {
     const key = filesystemQueryKeys.textFile("/repo", "file.txt");

@@ -43,6 +43,7 @@ const filesystem: FilesystemPort = {
   exists: () => Effect.succeed(true),
   join: posix.join,
   relative: posix.relative,
+  extension: posix.extname,
   parent: (path) => (path === "/" ? null : posix.dirname(path)),
 };
 

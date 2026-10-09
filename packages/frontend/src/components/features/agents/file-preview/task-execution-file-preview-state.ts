@@ -68,7 +68,8 @@ export const requestTaskExecutionFilePreviewIntent = (
   if (
     intent.type === "select" &&
     state.selectedFile?.rootPath === intent.file.rootPath &&
-    state.selectedFile.relativePath === intent.file.relativePath
+    state.selectedFile.relativePath === intent.file.relativePath &&
+    state.selectedFile.access === intent.file.access
   )
     return state;
   if (state.pendingIntent !== null) return state;

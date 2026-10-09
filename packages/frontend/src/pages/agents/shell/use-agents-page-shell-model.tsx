@@ -206,12 +206,15 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     () => ({
       repoPath: workspaceRepoPath,
       taskId: selection.view.taskId || null,
+      workingDirectory:
+        orchestrationSelection.view.selectedSession.identity?.workingDirectory ?? null,
       ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
       onSelectFile: orchestration.onSelectTaskExecutionFile,
     }),
     [
       workspaceRepoPath,
       selection.view.taskId,
+      orchestrationSelection.view.selectedSession.identity?.workingDirectory,
       orchestration.agentChatModel.thread.transcript.displayedSessionKey,
       orchestration.onSelectTaskExecutionFile,
     ],

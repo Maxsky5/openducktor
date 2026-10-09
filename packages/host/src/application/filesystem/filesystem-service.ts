@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Data, Effect, Result } from "effect";
-import { hasNestedNodeErrorCode } from "../../effect/host-errors";
+import { hasNestedNodeErrorCode, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 export type FilesystemListDirectoryErrorKind =
   | "home_directory_unavailable"
@@ -25,6 +25,8 @@ export class FilesystemListDirectoryError extends Data.TaggedError("FilesystemLi
   }
 }
 export type FilesystemService = {
+  /** Return the canonical path, or null when a recorded directory no longer exists. */
+  resolvePath(path: string): Effect.Effect<string | null, HostOperationErrorAggregate>;
   listDirectory(
     input?: FilesystemListDirectoryInput,
   ): Effect.Effect<DirectoryListing, FilesystemListDirectoryError>;
@@ -165,6 +167,17 @@ const readDirectoryEntriesEffect = (
     return visibleEntries;
   });
 export const createFilesystemService = (filesystem: FilesystemPort): FilesystemService => ({
+  resolvePath(path) {
+    return filesystem
+      .canonicalize(path)
+      .pipe(
+        Effect.catchTag("HostOperationError", (error) =>
+          hasNestedNodeErrorCode(error, "ENOENT") || hasNestedNodeErrorCode(error, "ENOTDIR")
+            ? Effect.succeed(null)
+            : Effect.fail(error),
+        ),
+      );
+  },
   listDirectory(input) {
     return Effect.gen(function* () {
       const requestedPath = yield* Effect.try({

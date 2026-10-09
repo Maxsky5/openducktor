@@ -56,6 +56,7 @@ export * from "./development-instance";
 export * from "./external-task-sync-schemas";
 export * from "./failure-schemas";
 export * from "./filesystem-schemas";
+export * from "./image-preview";
 export * from "./git-provider-descriptors";
 export * from "./git-provider-repository";
 export * from "./git-schemas";

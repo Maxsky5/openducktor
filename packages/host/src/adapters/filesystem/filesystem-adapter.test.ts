@@ -35,6 +35,65 @@ afterEach(async () => {
 });
 
 describe("createFilesystemAdapter file snapshots", () => {
+  for (const operation of ["read_snapshot", "replace"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `rejects a FIFO without waiting for a writer: ${operation}`,
+      async () => {
+        const filePath = await createTempFile(encoder.encode("original"));
+        const filesystem = createFilesystemAdapter();
+        const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+        await rename(filePath, `${filePath}.original`);
+        const mkfifo = Bun.spawnSync(["mkfifo", filePath]);
+        expect(mkfifo.exitCode).toBe(0);
+        // A blocked native open cannot be canceled in this process. Kill its child on timeout.
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            "--eval",
+            `
+            import { Cause, Effect, Option } from "effect";
+            import path from "node:path";
+            import { createFilesystemAdapter } from ${JSON.stringify(new URL("./filesystem-adapter.ts", import.meta.url).href)};
+            const [filePath, revision, operation] = process.argv.slice(1);
+            const filesystem = createFilesystemAdapter();
+            const exit = await Effect.runPromiseExit(operation === "read_snapshot"
+              ? filesystem.readFileSnapshot(filePath, 1024)
+              : filesystem.replaceFileBytes({ canonicalRootPath: path.dirname(filePath), path: filePath,
+                  expectedRevision: revision, bytes: new TextEncoder().encode("draft"), maxCurrentBytes: 1024 }));
+            console.log(JSON.stringify({ tag: exit._tag, failure: exit._tag === "Failure"
+              ? Option.getOrNull(Cause.findErrorOption(exit.cause)) : null }));
+          `,
+            filePath,
+            original.revision,
+            operation,
+          ],
+          { cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" },
+        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const exitCode = await Promise.race([
+            child.exited,
+            new Promise<null>((resolve) => {
+              timer = setTimeout(() => resolve(null), 2_000);
+            }),
+          ]);
+          expect(exitCode).not.toBeNull();
+          expect(exitCode).toBe(0);
+          const output = JSON.parse(await new Response(child.stdout).text());
+          expect(output).toMatchObject({
+            tag: "Failure",
+            failure: { code: "unavailable_file", operation },
+          });
+          expect(await readFile(`${filePath}.original`, "utf8")).toBe("original");
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+          if (child.exitCode === null) child.kill("SIGKILL");
+          await child.exited;
+        }
+      },
+    );
+  }
+
   test("replaces exact bytes on the existing file and preserves its mode", async () => {
     const filePath = await createTempFile(encoder.encode("longer original"));
     await chmod(filePath, 0o640);

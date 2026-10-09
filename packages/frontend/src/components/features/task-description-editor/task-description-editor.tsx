@@ -1,10 +1,21 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, Info } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  type ReactElement,
+  type Ref,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { EditorFocus } from "@/types/editor-focus";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
+import type { MarkdownImageRenderer } from "./task-description-image-context";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 import { TaskDescriptionMarkdownSource } from "./task-description-markdown-source";
 import type { VisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
@@ -20,8 +31,10 @@ type TaskDescriptionEditorProps = {
   workspaceId: string | null;
   taskId: string | null;
   issueImageContext?: IssueImageContext | undefined;
+  renderImage?: MarkdownImageRenderer | undefined;
+  editorRef?: Ref<EditorFocus> | undefined;
   onChange(markdown: string): void;
-  onUpload(file: File): Promise<TaskAssetStageResult>;
+  onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
 };
@@ -102,6 +115,8 @@ function TaskDescriptionEditorSession({
   workspaceId,
   taskId,
   issueImageContext,
+  renderImage,
+  editorRef,
   onChange,
   onUpload,
   uploads,
@@ -132,12 +147,14 @@ function TaskDescriptionEditorSession({
     }
   };
 
-  const stageImage = async (file: File): Promise<TaskAssetStageResult> => {
-    if (!workspaceId) {
-      throw new Error("Select a workspace before adding task images.");
-    }
-    return onUpload(file);
-  };
+  const stageImage = onUpload
+    ? async (file: File): Promise<TaskAssetStageResult> => {
+        if (!workspaceId) {
+          throw new Error("Select a workspace before adding task images.");
+        }
+        return onUpload(file);
+      }
+    : undefined;
 
   const hasPreservedFrontMatter = frontMatter.kind === "valid";
   const visualBody = frontMatter.kind === "valid" ? frontMatter.body : markdown;
@@ -162,6 +179,8 @@ function TaskDescriptionEditorSession({
           mermaidPreviews={mermaidPreviews}
           renderContext={renderContext}
           issueImageContext={issueImageContext}
+          renderImage={renderImage}
+          editorRef={editorRef}
         />
       </Suspense>
     );
@@ -171,8 +190,10 @@ function TaskDescriptionEditorSession({
         markdown={markdown}
         onChange={onChange}
         onUpload={stageImage}
+        disabled={disabled}
         onEdit={() => setMode("markdown")}
         uploads={uploads}
+        editorRef={editorRef}
       />
     );
   }

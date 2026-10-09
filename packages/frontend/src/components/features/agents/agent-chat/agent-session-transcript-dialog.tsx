@@ -135,6 +135,7 @@ function AgentSessionTranscriptDialogContent({
             owner={{
               repoPath: workspaceRepoPath,
               taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
+              workingDirectory: target.workingDirectory,
               ownerKey: agentSessionIdentityKey(target),
               onSelectFile: (file, trigger) => {
                 linkRef.current = trigger;

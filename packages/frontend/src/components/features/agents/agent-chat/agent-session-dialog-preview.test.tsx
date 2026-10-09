@@ -16,12 +16,20 @@ for (const href of ["src/file.ts", "/alias/a/src/file.ts:42", "file:///real/a/sr
         workingDirectory: "/alias/a",
       }),
     );
-    h.canonicalize.mockImplementation(async (path) => path.replace("/alias/a", "/real/a"));
+    h.canonicalize.mockImplementation(async (path) =>
+      path.replace("/alias/a", "/real/a").replace("/repo/a", "/real/a"),
+    );
+    h.resolvePath.mockResolvedValue("/real/a");
+    const expectedFile = { rootPath: "/real/a", relativePath: "src/file.ts" };
+    h.read.mockImplementation(async ({ rootPath, relativePath }) => ({
+      ...dialogTextFile(rootPath),
+      relativePath,
+    }));
     try {
       await h.open();
       await h.selectFile();
-      expect(screen.getByDisplayValue("Contents of /real/a")).toBeTruthy();
-      expect(h.read).toHaveBeenCalledWith({ rootPath: "/real/a", relativePath: "src/file.ts" });
+      expect(screen.getByDisplayValue(`Contents of ${expectedFile.rootPath}`)).toBeTruthy();
+      expect(h.read).toHaveBeenCalledWith(expectedFile);
     } finally {
       h.dispose();
     }

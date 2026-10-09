@@ -66,6 +66,8 @@ export type FilesystemPort = {
   join(...paths: string[]): string;
   relative(from: string, to: string): string;
   parent(path: string): string | null;
+  /** Return the file-name extension, including its dot, or an empty string. */
+  extension(path: string): string;
 };
 
 export class FilesystemPortTag extends Context.Service<FilesystemPortTag, FilesystemPort>()(

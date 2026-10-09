@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -14,6 +15,9 @@ import {
 import { readBoundedFileBytes } from "./bounded-file-read";
 import { conditionallyReplaceOpenFile } from "./conditional-file-replace";
 
+// POSIX FIFOs must not block open before the descriptor type can be checked.
+const NONBLOCKING_OPEN_FLAG = process.platform === "win32" ? 0 : constants.O_NONBLOCK;
+
 const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number }): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
 
@@ -28,6 +32,7 @@ const fileOperationError = (
   operation: "read_snapshot" | "replace",
   inputPath: string,
 ): FilesystemFileOperationError => {
+  if (cause instanceof FilesystemFileOperationError) return cause;
   const code = nodeErrorCode(cause);
   const operationCode =
     code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR" || code === "ELOOP"
@@ -47,8 +52,16 @@ const fileOperationError = (
 const snapshotOpenFile = async (
   file: Awaited<ReturnType<typeof open>>,
   maxBytes: number,
+  input: Pick<FilesystemFileOperationError, "path" | "operation">,
 ): Promise<FilesystemFileSnapshot> => {
-  const [bytes, metadata] = await Promise.all([readBoundedFileBytes(file, maxBytes), file.stat()]);
+  const metadata = await file.stat();
+  if (!metadata.isFile())
+    throw new FilesystemFileOperationError({
+      ...input,
+      code: "unavailable_file",
+      message: "The selected path is not a regular file. Select a regular file.",
+    });
+  const bytes = await readBoundedFileBytes(file, maxBytes);
   return {
     bytes,
     isFile: metadata.isFile(),
@@ -160,9 +173,12 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   readFileSnapshot(inputPath, maxBytes) {
     return Effect.tryPromise({
       try: async () => {
-        const file = await open(inputPath, "r");
+        const file = await open(inputPath, constants.O_RDONLY | NONBLOCKING_OPEN_FLAG);
         try {
-          return await snapshotOpenFile(file, maxBytes);
+          return await snapshotOpenFile(file, maxBytes, {
+            path: inputPath,
+            operation: "read_snapshot",
+          });
         } finally {
           await file.close();
         }
@@ -179,7 +195,7 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   }) {
     return Effect.tryPromise({
       try: async () => {
-        const file = await open(inputPath, "r+");
+        const file = await open(inputPath, constants.O_RDWR | NONBLOCKING_OPEN_FLAG);
         try {
           return await conditionallyReplaceOpenFile({
             inputPath,
@@ -187,7 +203,11 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
             bytes,
             maxCurrentBytes,
             verifyEntry: () => verifyOpenFileContainment(file, canonicalRootPath, inputPath),
-            snapshot: () => snapshotOpenFile(file, maxCurrentBytes + 1),
+            snapshot: () =>
+              snapshotOpenFile(file, maxCurrentBytes + 1, {
+                path: inputPath,
+                operation: "replace",
+              }),
             truncate: () => file.truncate(0),
             write: (replacement) => writeAllBytes(file, replacement),
             sync: () => file.sync(),
@@ -196,10 +216,7 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
           await file.close();
         }
       },
-      catch: (cause) =>
-        cause instanceof FilesystemFileOperationError
-          ? cause
-          : fileOperationError(cause, "replace", inputPath),
+      catch: (cause) => fileOperationError(cause, "replace", inputPath),
     });
   },
   stat(inputPath, options) {
@@ -237,5 +254,8 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   parent(inputPath) {
     const parentPath = path.dirname(inputPath);
     return parentPath === inputPath ? null : parentPath;
+  },
+  extension(inputPath) {
+    return path.extname(inputPath);
   },
 });

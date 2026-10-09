@@ -26,13 +26,10 @@ export function TaskDescriptionImageNode({
   selected,
   updateAttributes,
 }: TaskDescriptionImageNodeProps) {
-  const { previews, renderContext, issueImageContext } = useContext(TaskDescriptionImageContext);
-  const sourceResult = z.string().safeParse(node.attrs.src);
-  const altResult = z.string().safeParse(node.attrs.alt);
-  const titleResult = z.string().safeParse(node.attrs.title);
-  const source = sourceResult.success ? sourceResult.data : "";
-  const alt = altResult.success ? altResult.data : "";
-  const title = titleResult.success ? titleResult.data : undefined;
+  const { previews, renderContext, issueImageContext, renderImage } = useContext(
+    TaskDescriptionImageContext,
+  );
+  const { source, alt, title } = imageAttributes(node.attrs);
   const assetId = parseTaskAssetUri(source);
   const isGithubIssueImage =
     issueImageContext?.providerId === "github" && isGithubIssueAttachmentUrl(source);
@@ -41,6 +38,12 @@ export function TaskDescriptionImageNode({
   const taskId = renderContext?.taskId ?? null;
   const [resolvedSource, setResolvedSource] = useState<string | null>(preview ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const fileImage = renderImage?.({
+    src: source,
+    alt,
+    title,
+    className: "mx-auto max-h-96 max-w-full rounded object-contain",
+  });
 
   useEffect(() => {
     let active = true;
@@ -93,6 +96,8 @@ export function TaskDescriptionImageNode({
             title={title}
             className="mx-auto max-h-96 max-w-full rounded object-contain"
           />
+        ) : fileImage ? (
+          fileImage
         ) : resolvedSource ? (
           <img
             src={resolvedSource}
@@ -132,4 +137,15 @@ export function TaskDescriptionImageNode({
       </figure>
     </NodeViewWrapper>
   );
+}
+
+function imageAttributes(attrs: TaskDescriptionImageNodeProps["node"]["attrs"]) {
+  const source = z.string().safeParse(attrs.src);
+  const alt = z.string().safeParse(attrs.alt);
+  const title = z.string().safeParse(attrs.title);
+  return {
+    source: source.success ? source.data : "",
+    alt: alt.success ? alt.data : "",
+    title: title.success ? title.data : undefined,
+  };
 }

@@ -105,7 +105,7 @@ export function WorkspaceSessionFilePreview({
       className="absolute inset-0 z-10 h-full min-h-0 overflow-hidden"
       data-testid="workspace-session-file-preview"
     >
-      {previewContent}
+      {preview.model.selectedFile.access === "local" ? filePreview : previewContent}
     </div>
   );
 }
