@@ -73,22 +73,25 @@ export function ChatFileLinkProvider({
           }
           const rootPath = await queryClient.fetchQuery(canonicalPathQueryOptions(root));
           if (request !== generation.current) return;
-          const result = resolveChatFileLink(
+          let result = resolveChatFileLink(
             destination,
             rootPath,
             isWorkspace ? "workspace" : "task",
           );
-          if (result.kind === "invalid") throw new Error(result.message);
-          if (result.kind === "file") {
-            // Relative outside links can select an alias such as /tmp on macOS.
-            if (result.file.access === "local") {
-              result.file.rootPath = await queryClient.fetchQuery(
-                canonicalPathQueryOptions(result.file.rootPath),
-              );
-              if (request !== generation.current) return;
-            }
-            onSelectFile(result.file, trigger);
+          if (result.kind === "file" && result.file.access === "local") {
+            // A symlink can change both the parent directory and file name.
+            const path = await queryClient.fetchQuery(
+              canonicalPathQueryOptions(`${rootPath}/${destination.path}`),
+            );
+            if (request !== generation.current) return;
+            result = resolveChatFileLink(
+              { ...destination, path, absolute: true },
+              rootPath,
+              isWorkspace ? "workspace" : "task",
+            );
           }
+          if (result.kind === "invalid") throw new Error(result.message);
+          if (result.kind === "file") onSelectFile(result.file, trigger);
         } catch (error) {
           if (request === generation.current)
             toast.error(`Cannot open file: ${href}`, { description: errorMessage(error) });

@@ -395,7 +395,11 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
   }
 }
 
-for (const stage of ["root", "file"] as const) {
+for (const [stage, pendingPath, href] of [
+  ["root", "/repo/a", "/repo/a/src/file.ts"],
+  ["file", "/repo/a/src/file.ts", "/repo/a/src/file.ts"],
+  ["outside", "/repo/a/../outside/file.ts", "../outside/file.ts"],
+] as const) {
   for (const departure of ["session", "task", "repository", "directory", "close"] as const) {
     test(`late ${stage} canonicalization cannot select after ${departure}`, async () => {
       const client = createQueryClient();
@@ -406,9 +410,8 @@ for (const stage of ["root", "file"] as const) {
         }),
       );
       const deferred = Promise.withResolvers<string>();
-      const pendingPath = stage === "root" ? "/repo/a" : "/repo/a/src/file.ts";
       const canonicalize = mock(async (path: string) =>
-        stage === "file" ? deferred.promise : path,
+        stage === "file" || (stage === "outside" && path !== "/repo/a") ? deferred.promise : path,
       );
       const resolvePath = mock(async (path: string) =>
         stage === "root" ? deferred.promise : path,
@@ -429,7 +432,7 @@ for (const stage of ["root", "file"] as const) {
       const content = (value: ChatFileLinkOwner) => (
         <QueryClientProvider client={client}>
           <ChatFileLinkProvider owner={value}>
-            <AgentChatMarkdownRenderer markdown="[file](/repo/a/src/file.ts)" />
+            <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
           </ChatFileLinkProvider>
         </QueryClientProvider>
       );
@@ -461,7 +464,10 @@ test("relative outside links select the canonical local root", async () => {
   const client = createQueryClient();
   configureShellBridge(
     createShellBridgeFixture({
-      client: { gitCanonicalizePath: async (path) => (path === "/tmp" ? "/private/tmp" : path) },
+      client: {
+        gitCanonicalizePath: async (path) =>
+          path === "/repo/task/../../tmp/report.md" ? "/private/tmp/report.md" : path,
+      },
     }),
   );
   const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
@@ -492,6 +498,59 @@ test("relative outside links select the canonical local root", async () => {
     client.clear();
   }
 });
+
+for (const scope of ["task", "workspace"] as const) {
+  for (const [rootPath, target, parent] of [
+    ["/repo/task", "/exports/final%20report.md", "/exports"],
+    [String.raw`C:\repo\task`, String.raw`D:\exports\final%20report.md`, String.raw`D:\exports`],
+  ] as const) {
+    test(`relative outside symlinks select the full canonical target: ${scope}, ${rootPath}`, async () => {
+      const client = createQueryClient();
+      client.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        () => ({
+          workingDirectory: rootPath,
+        }),
+      );
+      const requestedPath = `${rootPath}/../outside/alias%20report.md`;
+      const canonicalize = mock(async (path: string) => (path === requestedPath ? target : path));
+      configureShellBridge(
+        createShellBridgeFixture({
+          client: { gitCanonicalizePath: canonicalize },
+        }),
+      );
+      const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+      const common = {
+        repoPath: "/repo",
+        ownerKey: "main",
+        workingDirectory: rootPath,
+        onSelectFile,
+      };
+      const owner: ChatFileLinkOwner =
+        scope === "workspace" ? { ...common, kind: "workspace" } : { ...common, taskId: "a" };
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ChatFileLinkProvider owner={owner}>
+            <AgentChatMarkdownRenderer markdown="[file](../outside/alias%2520report.md:42)" />
+          </ChatFileLinkProvider>
+        </QueryClientProvider>,
+      );
+      try {
+        await act(async () => fireEvent.click(view.getByRole("link")));
+        expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({
+          rootPath: parent,
+          relativePath: "final%20report.md",
+          access: "local",
+        });
+        expect(canonicalize).toHaveBeenCalledWith(requestedPath);
+        expect(onSelectFile).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+        client.clear();
+      }
+    });
+  }
+}
 
 test("canonical file resolution decodes once and opens an outside symlink target", async () => {
   const { spyOn } = await import("bun:test");
