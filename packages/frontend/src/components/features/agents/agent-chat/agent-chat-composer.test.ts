@@ -132,7 +132,7 @@ describe("AgentChatComposer", () => {
 
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
-    expect(html).toContain("22.5%");
+    expect(html).toContain('aria-label="Session context: 22.5% used, 45K tokens"');
     expect(html).toContain("Select model, OpenCode, GPT-5.3 Codex");
     expect(html).toContain('viewBox="0 0 512 512"');
     expect(html).toContain("lucide-brain-cog");
@@ -219,7 +219,7 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).not.toContain("Stop session");
-    expect(html).not.toContain("22.5%");
+    expect(html).not.toContain("Session context:");
   });
 
   test("hides the agent profile selector when runtime profiles are unsupported", () => {
@@ -438,12 +438,13 @@ describe("AgentChatComposer", () => {
     const card = readComposerCard(html);
     const stop = card.querySelector('[aria-label="Stop session"]');
     const send = card.querySelector('[aria-label="Send message"]');
+    const contextMeter = card.querySelector('[aria-label^="Session context:"]');
     const actions = stop?.parentElement;
     const actionsRow = actions?.parentElement;
     expect(actions?.contains(send ?? null)).toBe(true);
-    expect(actions?.textContent).not.toContain("22.5%");
+    expect(actions?.contains(contextMeter)).toBe(false);
     expect(actions?.className).toContain("shrink-0");
-    expect(actionsRow?.textContent).toContain("22.5%");
+    expect(actionsRow?.contains(contextMeter)).toBe(true);
     expect(actionsRow?.className).toContain("max-w-full flex-wrap");
   });
 

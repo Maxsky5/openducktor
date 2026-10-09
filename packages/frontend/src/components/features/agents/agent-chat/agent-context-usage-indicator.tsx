@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatTokenCompact, formatTokenExact } from "../format-token-count";
 
@@ -55,56 +57,61 @@ export function AgentContextUsageIndicator({
   const exactOutput = formatTokenExact(outputLimit);
 
   return (
-    <div className={cn("group relative", className)}>
-      <div className="flex items-center gap-1.5 px-1 py-1">
-        {/* The ring hides the percent, so a hidden native meter gives it to screen readers. */}
-        <meter
-          className="sr-only"
-          aria-label="Session context"
-          min={0}
-          max={100}
-          value={barUsagePercent}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className={cn(
+              "h-7 gap-1.5 rounded-lg px-1.5 font-medium hover:bg-muted data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted",
+              className,
+            )}
+            aria-label={`Session context: ${usageLabel} used, ${compactTotal} tokens`}
+          >
+            <svg viewBox="0 0 16 16" className="size-4 shrink-0 -rotate-90" aria-hidden="true">
+              <circle
+                cx={8}
+                cy={8}
+                r={RING_RADIUS}
+                fill="none"
+                strokeWidth={RING_STROKE_WIDTH}
+                className="stroke-foreground/15"
+              />
+              <circle
+                cx={8}
+                cy={8}
+                r={RING_RADIUS}
+                fill="none"
+                strokeWidth={RING_STROKE_WIDTH}
+                strokeLinecap="round"
+                pathLength={100}
+                strokeDasharray={`${barUsagePercent} 100`}
+                className={cn("transition-[stroke-dasharray] duration-200", colors.ring)}
+              />
+            </svg>
+            <span className={cn("text-[11px] tabular-nums", colors.text)}>{compactTotal}</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="end"
+          sideOffset={6}
+          className="w-64 p-2 text-left text-[11px]"
         >
-          {usageLabel}
-        </meter>
-        <svg viewBox="0 0 16 16" className="size-4 shrink-0 -rotate-90" aria-hidden="true">
-          <circle
-            cx={8}
-            cy={8}
-            r={RING_RADIUS}
-            fill="none"
-            strokeWidth={RING_STROKE_WIDTH}
-            className="stroke-foreground/15"
-          />
-          <circle
-            cx={8}
-            cy={8}
-            r={RING_RADIUS}
-            fill="none"
-            strokeWidth={RING_STROKE_WIDTH}
-            strokeLinecap="round"
-            pathLength={100}
-            strokeDasharray={`${barUsagePercent} 100`}
-            className={cn("transition-[stroke-dasharray] duration-200", colors.ring)}
-          />
-        </svg>
-        <span className={cn("text-[11px] font-medium tabular-nums", colors.text)}>
-          {compactTotal}
-        </span>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden w-64 rounded-md border border-border bg-card p-2 text-[11px] text-foreground shadow-lg group-hover:block">
-        <p className="font-semibold text-foreground">Session Context</p>
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
-            <div className={cn("h-full", colors.bar)} style={{ width: `${barUsagePercent}%` }} />
+          <p className="font-semibold">Session Context</p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-background/25">
+              <div className={cn("h-full", colors.bar)} style={{ width: `${barUsagePercent}%` }} />
+            </div>
+            <span className="font-medium tabular-nums">{usageLabel}</span>
           </div>
-          <span className={cn("font-medium tabular-nums", colors.text)}>{usageLabel}</span>
-        </div>
-        <p className="mt-1.5">Used: {exactTotal} tokens</p>
-        <p>Max context: {exactWindow} tokens</p>
-        {exactOutput ? <p>Output limit: {exactOutput} tokens</p> : null}
-      </div>
-    </div>
+          <p className="mt-1.5">Used: {exactTotal} tokens</p>
+          <p>Max context: {exactWindow} tokens</p>
+          {exactOutput ? <p>Output limit: {exactOutput} tokens</p> : null}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
