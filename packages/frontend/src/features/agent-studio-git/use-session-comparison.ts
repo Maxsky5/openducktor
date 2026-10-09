@@ -169,9 +169,10 @@ function useComparisonRefresh(
         return null;
       const targetBranch =
         target.branch === "@{upstream}" ? target.branch : targetBranchSelectionValue(target);
+      // Fetch also updates the current branch's upstream when the comparison target is fixed.
       const key = JSON.stringify([
         createScheduledFetchCooldownKey({ repoPath, workingDir: workingDirectory, targetBranch }),
-        targetBranch === "@{upstream}" ? branchKey : null,
+        branchKey,
       ]);
       const fetchDue =
         mode === "scheduled" &&

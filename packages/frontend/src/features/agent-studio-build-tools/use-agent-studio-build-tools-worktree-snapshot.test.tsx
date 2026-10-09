@@ -139,7 +139,131 @@ beforeEach(async () => {
 afterEach(() => configureShellBridge(createUnavailableShellBridge()));
 
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
-  test("scheduled task refresh fetches its saved target before checking the branch", async () => {
+  test.each(["repository", "worktree"] as const)(
+    "fetches a changed %s branch on the first scheduled refresh within the old cooldown",
+    async (mode) => {
+      let branch = "main";
+      const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
+      configureShellBridge(
+        createGitBridge({
+          client: {
+            gitGetCurrentBranch: async () => ({ name: branch, detached: false }),
+            gitGetComparisonTarget: async () => ({
+              kind: "available",
+              reference: `refs/remotes/origin/${mode === "repository" ? branch : "main"}`,
+            }),
+            gitFetchRemote: fetch,
+          },
+        }),
+      );
+      const harness = createHookHarness(
+        createBaseArgs({
+          selectedView: createSelectedView({
+            role: mode === "repository" ? "spec" : "build",
+            selectedTask: createTaskCardFixture({
+              id: "task-24",
+              targetBranch: { branch: "main", remote: "origin" },
+            }),
+            loadedSession: createAgentSessionFixture({
+              sessionAssociation: {
+                kind: "workflow",
+                taskId: "task-1",
+                role: mode === "repository" ? "spec" : "build",
+              },
+              workingDirectory: mode === "repository" ? "/repo" : "/repo/.worktrees/task-24",
+            }),
+          }),
+        }),
+      );
+      try {
+        await harness.mount();
+        await harness.waitFor(
+          (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/main",
+        );
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        expect(fetch).toHaveBeenCalledTimes(1);
+        branch = "release";
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        await harness.waitFor(() => fetch.mock.calls.length === 2);
+        expect(harness.getLatest().comparison?.resolvedTarget).toBe(
+          `refs/remotes/origin/${mode === "repository" ? "release" : "main"}`,
+        );
+        expect(fetch).toHaveBeenCalledTimes(2);
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        expect(fetch).toHaveBeenCalledTimes(2);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test.each([false, true])(
+    "drops an old scheduled branch refresh after a session switch, return=%s",
+    async (returnToSession) => {
+      const branchRead = createDeferred<{ name: string; detached: boolean }>();
+      let reading = false;
+      const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
+      configureShellBridge(
+        createGitBridge({
+          client: {
+            gitGetCurrentBranch: async () =>
+              reading ? branchRead.promise : { name: "main", detached: false },
+            gitGetComparisonTarget: async () => ({
+              kind: "available",
+              reference: "refs/remotes/origin/main",
+            }),
+            gitFetchRemote: fetch,
+          },
+        }),
+      );
+      const args = createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "main", remote: "origin" },
+          }),
+        }),
+      });
+      const harness = createHookHarness(args);
+      try {
+        await harness.mount();
+        await harness.waitFor(
+          (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/main",
+        );
+        reading = true;
+        let refresh: Promise<void> | undefined;
+        await harness.run((state) => {
+          refresh = state.refreshWorktree("scheduled");
+        });
+        await harness.update({
+          ...args,
+          selectedView: createSelectedView({
+            selectedTask: args.selectedView.selectedTask,
+            loadedSession: createAgentSessionFixture({
+              ...args.selectedView.selectedSession.loadedSession,
+              externalSessionId: "new-session",
+            }),
+          }),
+        });
+        if (returnToSession) await harness.update(args);
+        await harness.run(async () => {
+          branchRead.resolve({ name: "release", detached: false });
+          await refresh;
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("scheduled task refresh keeps its saved target after checking the branch", async () => {
     const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
     configureShellBridge(
       createGitBridge({

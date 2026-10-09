@@ -1,6 +1,6 @@
 import type { DevServerOwner, GitTargetBranch } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { useAgentStudioDiffVisibilityRefresh } from "../agent-studio-git/refresh/use-diff-visibility-refresh";
@@ -145,10 +145,11 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
   });
 
   const directory = gitPanelContextMode === "repository" ? repoPath : worktree.path;
+  const viewKey = JSON.stringify([repoPath, taskId, selectedView.selectedSession.identity]);
   const { comparison, currentBranch, refreshBranch, retryDefault } = useTaskSessionComparison({
     repoPath,
     directory,
-    viewKey: JSON.stringify([repoPath, taskId, selectedView.selectedSession.identity]),
+    viewKey,
     contextMode: gitPanelContextMode,
     savedTarget: selectedView.selectedTask?.targetBranch,
     repoSettings,
@@ -205,6 +206,8 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
 
   const refreshWorktree = useTaskComparisonRefresh({
     comparison,
+    scopeKey: JSON.stringify([viewKey, directory, comparison.target]),
+    branchKey: JSON.stringify(currentBranch),
     refreshBranch,
     refreshReads: reads.refreshAllScopes,
     loadReads: reads.loadAllScopes,
@@ -302,6 +305,8 @@ function taskGitContext(
 
 function useTaskComparisonRefresh({
   comparison,
+  scopeKey,
+  branchKey,
   refreshBranch,
   refreshReads,
   loadReads,
@@ -311,6 +316,8 @@ function useTaskComparisonRefresh({
   shouldBlockDiffLoading,
 }: {
   comparison: ReturnType<typeof useSessionComparison>;
+  scopeKey: string;
+  branchKey: string;
   refreshBranch: ReturnType<typeof useTaskSessionComparison>["refreshBranch"];
   refreshReads: ReturnType<typeof useAgentStudioDiffData>["refreshAllScopes"];
   loadReads: ReturnType<typeof useAgentStudioDiffData>["loadAllScopes"];
@@ -328,7 +335,7 @@ function useTaskComparisonRefresh({
   useLayoutEffect(() => {
     currentContext.current = contextKey;
   }, [contextKey]);
-  const refreshWorktree = useCallback<GitDiffRefresh>(
+  const refreshSnapshot = useCallback<GitDiffRefresh>(
     async (mode = "hard") => {
       // Keep uncommitted reads available when the comparison check fails.
       try {
@@ -338,10 +345,9 @@ function useTaskComparisonRefresh({
         } else {
           await refreshComparison(mode);
         }
-        // Reading the branch changes the comparison context. Fetch its captured target first.
-        if (currentContext.current !== contextKey) return;
-        const branch = await refreshBranch();
-        if (branch.isError) throw branch.error;
+        if (mode !== "scheduled" && currentContext.current === contextKey) {
+          await refreshBranch();
+        }
       } catch (error) {
         if (currentContext.current === contextKey) {
           toast.error("Could not refresh Git changes", { description: errorMessage(error) });
@@ -353,6 +359,14 @@ function useTaskComparisonRefresh({
     },
     [contextKey, refreshBranch, refreshComparison, refreshReads, retryDefault],
   );
+  const refreshWorktree = useTaskBranchRefresh({
+    enabled: enableScheduledRefresh,
+    scopeKey,
+    cacheKey: branchKey,
+    refreshBranch,
+    refreshSnapshot,
+    refreshReads,
+  });
   useAgentStudioDiffVisibilityRefresh({
     enableScheduledRefresh,
     repoPath,
@@ -361,6 +375,72 @@ function useTaskComparisonRefresh({
       void refreshWorktree("scheduled").catch(() => {});
     },
   });
+  return refreshWorktree;
+}
+
+/** A changed branch must render its comparison before a scheduled fetch starts. */
+function useTaskBranchRefresh({
+  enabled,
+  scopeKey,
+  cacheKey,
+  refreshBranch,
+  refreshSnapshot,
+  refreshReads,
+}: {
+  enabled: boolean;
+  scopeKey: string;
+  cacheKey: string;
+  refreshBranch: ReturnType<typeof useTaskSessionComparison>["refreshBranch"];
+  refreshSnapshot: GitDiffRefresh;
+  refreshReads: ReturnType<typeof useAgentStudioDiffData>["refreshAllScopes"];
+}) {
+  const owner = useMemo(() => ({ scopeKey, enabled }), [scopeKey, enabled]);
+  const [pending, setPending] = useState<{ owner: typeof owner; cacheKey: string } | null>(null);
+  const currentOwner = useRef<typeof owner | null>(owner);
+  const handled = useRef<typeof pending>(null);
+  const lastBranch = useRef(cacheKey);
+  useLayoutEffect(() => {
+    currentOwner.current = enabled ? owner : null;
+    return () => {
+      currentOwner.current = null;
+    };
+  }, [enabled, owner]);
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    async (mode = "hard") => {
+      if (mode === "scheduled") {
+        if (currentOwner.current !== owner) return;
+        let nextKey: string;
+        try {
+          nextKey = await refreshBranch();
+        } catch (error) {
+          if (currentOwner.current === owner) {
+            toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+            await refreshReads("summary");
+          }
+          throw error;
+        }
+        if (currentOwner.current !== owner) return;
+        if (nextKey !== cacheKey) {
+          setPending({ owner, cacheKey: nextKey });
+          return;
+        }
+      }
+      await refreshSnapshot(mode);
+    },
+    [owner, cacheKey, refreshBranch, refreshSnapshot, refreshReads],
+  );
+  useEffect(() => {
+    const branchChanged = lastBranch.current !== cacheKey;
+    lastBranch.current = cacheKey;
+    if (!pending || handled.current === pending) return;
+    if (!enabled || pending.owner !== owner || (branchChanged && pending.cacheKey !== cacheKey)) {
+      handled.current = pending;
+      return;
+    }
+    if (pending.cacheKey !== cacheKey) return;
+    handled.current = pending;
+    void refreshSnapshot("scheduled").catch(() => {});
+  }, [enabled, owner, cacheKey, pending, refreshSnapshot]);
   return refreshWorktree;
 }
 
@@ -410,10 +490,16 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     branchKey: JSON.stringify([input.branchKey, branch.data]),
     branchReady: branch.data !== undefined && !branch.isError,
   });
+  const refetchBranch = branch.refetch;
+  const refreshBranch = useCallback(async () => {
+    const result = await refetchBranch();
+    if (result.isError) throw result.error;
+    return JSON.stringify(result.data);
+  }, [refetchBranch]);
   return {
     comparison,
     currentBranch: branch.isError ? null : (branch.data ?? null),
-    refreshBranch: branch.refetch,
+    refreshBranch,
     retryDefault,
   };
 }
