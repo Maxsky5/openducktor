@@ -16,7 +16,6 @@ import {
 import type { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import type { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type { useWorkspaceState } from "@/state/app-state-provider";
-import type { TaskWorktreeQueryHost } from "@/state/queries/build-runtime";
 import type {
   DiffDataState,
   GitDiffRefresh,
@@ -50,11 +49,6 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   loadRepoSettings: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"];
 };
 
-type AgentStudioBuildToolsWorktreeSnapshotDependencies = {
-  taskWorktreeHost: TaskWorktreeQueryHost;
-  useDiffData: typeof useAgentStudioDiffData;
-};
-
 type AgentStudioDevServerTarget = Parameters<typeof useAgentStudioDevServerPanel>[0];
 
 export type AgentStudioBuildToolsWorktreeSnapshot = {
@@ -83,33 +77,16 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
   refreshWorktree: GitDiffRefresh;
 };
 
-export function useAgentStudioBuildToolsWorktreeSnapshot(
-  args: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
-): AgentStudioBuildToolsWorktreeSnapshot {
-  return useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
-    args,
-    DEFAULT_SNAPSHOT_DEPENDENCIES,
-  );
-}
-
-const DEFAULT_SNAPSHOT_DEPENDENCIES: AgentStudioBuildToolsWorktreeSnapshotDependencies = {
-  taskWorktreeHost: hostClient,
-  useDiffData: useAgentStudioDiffData,
-};
-
-function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
-  {
-    workspaceRepoPath,
-    activeBranch,
-    selectedView,
-    isGitTabActive,
-    isRightPanelOpen,
-    repoSettings,
-    repoSettingsError,
-    loadRepoSettings,
-  }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
-  dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
-): AgentStudioBuildToolsWorktreeSnapshot {
+export function useAgentStudioBuildToolsWorktreeSnapshot({
+  workspaceRepoPath,
+  activeBranch,
+  selectedView,
+  isGitTabActive,
+  isRightPanelOpen,
+  repoSettings,
+  repoSettingsError,
+  loadRepoSettings,
+}: UseAgentStudioBuildToolsWorktreeSnapshotArgs): AgentStudioBuildToolsWorktreeSnapshot {
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
     selectedView,
@@ -156,7 +133,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     ],
   );
   const { worktree, queriedPath, diffResolutionTaskId } = useBuildToolsWorktree({
-    host: dependencies.taskWorktreeHost,
+    host: hostClient,
     repoPath,
     taskId,
     contextMode: gitPanelContextMode,
@@ -194,7 +171,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     cacheKey: comparison.cacheKey,
     enableScheduledRefresh: false,
   };
-  const reads = dependencies.useDiffData(diffDataInput);
+  const reads = useAgentStudioDiffData(diffDataInput);
   const diffData = buildComparisonView(
     reads,
     comparison,
@@ -472,16 +449,3 @@ function buildDevServerTarget(
     enabled && hasSelectedTask && taskId ? { kind: "task", taskId } : null;
   return { repoPath: path, owner, enabled: path !== null && owner !== null };
 }
-
-/** @internal Test-only dependency seam; production callers should use the default hook above. */
-export const createAgentStudioBuildToolsWorktreeSnapshotHookForTest = (
-  overrides: Partial<AgentStudioBuildToolsWorktreeSnapshotDependencies>,
-) => {
-  const dependencies = {
-    ...DEFAULT_SNAPSHOT_DEPENDENCIES,
-    ...overrides,
-  };
-
-  return (args: UseAgentStudioBuildToolsWorktreeSnapshotArgs) =>
-    useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(args, dependencies);
-};

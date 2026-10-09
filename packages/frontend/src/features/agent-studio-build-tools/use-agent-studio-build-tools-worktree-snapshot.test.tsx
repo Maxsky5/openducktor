@@ -1,10 +1,9 @@
-import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { repoConfigSchema, type GitWorktreeStatus } from "@openducktor/contracts";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type { QueryClient } from "@tanstack/react-query";
-import type { DiffDataState } from "@/features/agent-studio-git";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -19,84 +18,20 @@ import {
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
-  type useAgentStudioBuildToolsWorktreeSnapshot,
-} from "./use-agent-studio-build-tools-worktree-snapshot";
+import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
 if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
-const refreshDiffMock = mock(async (_mode?: string) => {});
-const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-type SnapshotDependencies = Parameters<
-  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
->[0];
-type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
-
-const useAgentStudioDiffDataMock = mock(
-  (args: Parameters<UseDiffData>[0]): ReturnType<UseDiffData> => ({
-    branch: "feature/task-24",
-    worktreePath: args.worktreePath,
-    targetBranch: "origin/main",
-    diffScope: "uncommitted",
-    gitConflict: null,
-    scopeStatesByScope: {
-      target: createEmptyScopeState(),
-      uncommitted: createEmptyScopeState(),
-    },
-    loadedScopesByScope: { target: false, uncommitted: false },
-    commitsAheadBehind: null,
-    upstreamAheadBehind: null,
-    upstreamStatus: "tracking",
-    fileDiffs: [],
-    fileStatuses: [],
-    statusSnapshotKey: null,
-    hashVersion: null,
-    statusHash: null,
-    diffHash: null,
-    uncommittedFileCount: 0,
-    isLoading: Boolean(args.isWorktreeResolutionResolving),
-    error: args.worktreeResolutionError,
-    refresh: refreshDiffMock,
-    refreshAllScopes: async () => {},
-    refreshInactiveScope: async () => {},
-    loadAllScopes: async () => {},
-    loadInactiveScope: async () => {},
-    setDiffScope: setDiffScopeMock,
-  }),
-);
 const taskWorktreeGetMock = mock(
   async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
   }),
 );
 
-const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
-  taskWorktreeHost: {
-    taskWorktreeGet: taskWorktreeGetMock,
-  },
-  useDiffData: useAgentStudioDiffDataMock,
-});
-
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;
-
-const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] => ({
-  branch: null,
-  gitConflict: null,
-  fileDiffs: [],
-  fileStatuses: [],
-  uncommittedFileCount: 0,
-  commitsAheadBehind: null,
-  upstreamAheadBehind: null,
-  upstreamStatus: "tracking",
-  error: null,
-  hashVersion: null,
-  statusHash: null,
-  diffHash: null,
-});
 
 type HookArgs = Parameters<UseSnapshotHook>[0];
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
@@ -191,22 +126,23 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 const createHookHarness = (initialProps: HookArgs, options?: { queryClient?: QueryClient }) =>
-  createSharedHookHarness(useSnapshotHookForTest, initialProps, options);
+  createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, initialProps, options);
 
 beforeEach(async () => {
   await clearAppQueryClient();
-  refreshDiffMock.mockClear();
-  setDiffScopeMock.mockClear();
-  useAgentStudioDiffDataMock.mockClear();
   taskWorktreeGetMock.mockClear();
   taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/.worktrees/task-24" });
+  readStatus.mockClear();
+  configureShellBridge(createGitBridge());
 });
+
+afterEach(() => configureShellBridge(createUnavailableShellBridge()));
 
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("scheduled task refresh fetches its saved target before checking the branch", async () => {
     const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
     configureShellBridge(
-      createShellBridgeFixture({
+      createGitBridge({
         client: {
           gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
           gitGetComparisonTarget: async () => ({
@@ -244,7 +180,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(harness.getLatest().comparison?.unavailableReason).toBeNull();
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -264,7 +199,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       reference: "refs/remotes/origin/main",
     }));
     configureShellBridge(
-      createShellBridgeFixture({
+      createGitBridge({
         client: {
           gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
           gitGetComparisonTarget: readComparison,
@@ -281,7 +216,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           workspaceGetGitProviderContext: async () => null,
         },
       });
-      const snapshot = useSnapshotHookForTest(
+      const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(
         createBaseArgs({
           repoSettings: settings.repoSettings,
           repoSettingsError: settings.repoSettingsError,
@@ -324,7 +259,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(readComparison).toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -335,7 +269,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         taskStatus(target, scope),
     );
     configureShellBridge(
-      createShellBridgeFixture({
+      createGitBridge({
         client: {
           gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
           gitGetComparisonTarget: async (_repo, _dir, target) =>
@@ -356,9 +290,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         },
       }),
     );
-    const useRealSnapshot = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
-      taskWorktreeHost: { taskWorktreeGet: taskWorktreeGetMock },
-    });
     const args = createBaseArgs({
       selectedView: createSelectedView({
         selectedTask: createTaskCardFixture({
@@ -367,7 +298,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         }),
       }),
     });
-    const harness = createSharedHookHarness(useRealSnapshot, args);
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
     try {
       await harness.mount();
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
@@ -392,7 +323,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(readStatus.mock.calls.some((call) => call[1] === "refs/heads/next")).toBe(true);
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -407,7 +337,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         taskStatus(target, scope),
     );
     configureShellBridge(
-      createShellBridgeFixture({
+      createGitBridge({
         client: {
           gitGetCurrentBranch: readBranch,
           gitGetComparisonTarget: readComparison,
@@ -415,9 +345,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         },
       }),
     );
-    const useRealSnapshot = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
-      taskWorktreeHost: { taskWorktreeGet: taskWorktreeGetMock },
-    });
     const argsFor = (sessionId: string) =>
       createBaseArgs({
         selectedView: createSelectedView({
@@ -432,7 +359,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           }),
         }),
       });
-    const harness = createSharedHookHarness(useRealSnapshot, argsFor("first"));
+    const harness = createSharedHookHarness(
+      useAgentStudioBuildToolsWorktreeSnapshot,
+      argsFor("first"),
+    );
     try {
       await harness.mount();
       await harness.waitFor(
@@ -452,7 +382,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       }
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -471,7 +400,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       },
     );
     configureShellBridge(
-      createShellBridgeFixture({
+      createGitBridge({
         client: {
           gitGetCurrentBranch: readBranch,
           gitGetComparisonTarget: async () => ({
@@ -492,9 +421,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         },
       }),
     );
-    const useRealSnapshot = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
-      taskWorktreeHost: { taskWorktreeGet: taskWorktreeGetMock },
-    });
     const args = createBaseArgs({
       selectedView: createSelectedView({
         selectedTask: createTaskCardFixture({
@@ -503,7 +429,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         }),
       }),
     });
-    const harness = createSharedHookHarness(useRealSnapshot, args);
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
     try {
       await harness.mount();
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
@@ -547,7 +473,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       nextStatus.resolve();
       nextBranch.resolve({ name: "feature/task-24", detached: false });
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -605,12 +530,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         status: "resolved",
         shouldBlockDiffLoading: true,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-25",
-        worktreeResolutionTaskId: "task-25",
-        shouldBlockDiffLoading: true,
-      });
+      expect(readStatus).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       queryClient.clear();
@@ -659,12 +579,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         shouldBlockDiffLoading: false,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-24",
-        worktreeResolutionTaskId: null,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-24",
+      );
     } finally {
       await harness.unmount();
     }
@@ -699,12 +620,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         path: "/repo/.worktrees/task-24",
         disabledReason: null,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-24",
-        worktreeResolutionTaskId: null,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-24",
+      );
     } finally {
       await harness.unmount();
     }
@@ -869,12 +791,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         status: "resolved",
         shouldBlockDiffLoading: false,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        worktreePath: "/repo/.worktrees/task-25",
-        worktreeResolutionTaskId: "task-25",
-        isWorktreeResolutionResolving: true,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-25",
+      );
 
       didResolveTaskWorktreeFetch = true;
       taskWorktreeFetch.resolve({ workingDirectory: "/repo/.worktrees/task-25" });
@@ -904,9 +827,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         path: null,
         disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        shouldBlockDiffLoading: true,
-      });
+      expect(readStatus).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -955,10 +876,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           path: "/repo/.worktrees/task-24",
           disabledReason: null,
         });
-        expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-          repoPath: "/repo",
-          worktreePath: "/repo/.worktrees/task-24",
-        });
+        await harness.waitFor(() => readStatus.mock.calls.length > 0);
+        expect(readStatus).toHaveBeenCalledWith(
+          "/repo",
+          "HEAD",
+          "uncommitted",
+          "/repo/.worktrees/task-24",
+        );
       } finally {
         await harness.unmount();
       }
@@ -988,6 +912,20 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps the selected detached revision for repository file reads", async () => {
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({
+            detached: true,
+            revision: "head-before",
+          }),
+          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+            ...taskStatus(target, scope),
+            currentBranch: { detached: true, revision: "head-before" },
+          }),
+        },
+      }),
+    );
     const args = createBaseArgs({
       activeBranch: { detached: true, revision: "head-before" },
       selectedView: createSelectedView({
@@ -1039,9 +977,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(snapshot.targetBranchState.validationError).toBe(
         "Invalid openducktor.targetBranch metadata: missing field `branch`.",
       );
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).not.toHaveProperty(
-        "preconditionError",
-      );
+      await harness.waitFor((state) => state.diffData.fileStatuses[0]?.path === "draft.ts");
+      expect(snapshot.comparison?.target).toEqual({ branch: "@{upstream}" });
     } finally {
       await harness.unmount();
     }
@@ -1093,7 +1030,7 @@ function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktre
 test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once", async (mode) => {
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
   configureShellBridge(
-    createShellBridgeFixture({
+    createGitBridge({
       client: {
         gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
         gitGetComparisonTarget: async () => ({
@@ -1133,6 +1070,37 @@ test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once",
   } finally {
     await harness.unmount();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
+
+const readStatus = mock(
+  async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+    taskStatus(target, scope),
+);
+
+function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFixture>[0] = {}) {
+  return createShellBridgeFixture({
+    client: {
+      taskWorktreeGet: taskWorktreeGetMock,
+      gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+      gitGetComparisonTarget: async (_repo, _dir, target) => ({
+        kind: "available",
+        reference: target.remote
+          ? `refs/remotes/${target.remote}/${target.branch}`
+          : `refs/heads/${target.branch}`,
+      }),
+      gitGetWorktreeStatus: readStatus,
+      gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
+        const full = taskStatus(target, scope);
+        return {
+          currentBranch: full.currentBranch,
+          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+          targetAheadBehind: full.targetAheadBehind,
+          upstreamAheadBehind: full.upstreamAheadBehind,
+          snapshot: full.snapshot,
+        };
+      },
+      ...client,
+    },
+  });
+}
