@@ -15,13 +15,11 @@ export function activityMarks(root: HTMLElement) {
   };
 }
 
-/** The context meter of the composer, in the format of agent-context-usage-indicator.tsx. */
+/** The context ring of the composer, in the format of agent-context-usage-indicator.tsx. */
 export function contextMeter(meter: HTMLElement) {
-  const text = must(meter, "[data-context]");
   const tokens = must(meter, "[data-tokens]");
   return (use: ContextUse): void => {
-    meter.style.setProperty("--used", `${use.percent}%`);
-    text.textContent = `${use.percent.toFixed(1)}%`;
+    meter.style.setProperty("--used", `${Math.min(use.percent, 100)}`);
     tokens.textContent = compactTokens(use.tokens);
   };
 }

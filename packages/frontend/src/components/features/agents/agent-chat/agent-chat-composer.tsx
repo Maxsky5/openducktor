@@ -23,6 +23,7 @@ import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import {
@@ -99,8 +100,17 @@ const hasComposerSendContent = (
   return draftHasMeaningfulContent(draft) || (pendingSendItems?.count ?? 0) > 0;
 };
 
+// The attach button and the selectors stay quiet, so they do not compete with the draft text.
+const COMPOSER_QUIET_CONTROL_CLASS_NAME =
+  "text-muted-foreground shadow-none hover:text-foreground data-[state=open]:text-foreground";
+// The selectors shrink and truncate their labels in a narrow pane.
+const COMPOSER_SELECTOR_TRIGGER_CLASS_NAME = cn(
+  COMPOSER_QUIET_CONTROL_CLASS_NAME,
+  "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted data-[state=open]:!bg-muted",
+);
+
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
-  "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
+  "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950 ring-2 ring-card";
 
 const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl({
   sendDisabled,
@@ -116,7 +126,7 @@ const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl(
       <Button
         type="submit"
         size="icon"
-        className="size-8 rounded-full"
+        className="size-8 rounded-lg"
         aria-label={showSubmittingState ? "Preparing message" : "Send message"}
         disabled={sendDisabled}
       >
@@ -186,13 +196,13 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   const hasVariantOptions = variantOptions.length > 0;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
+      <div className="flex min-w-0 flex-auto flex-wrap items-center gap-1">
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="size-7 rounded-full border border-input bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn("size-7 rounded-lg hover:bg-muted", COMPOSER_QUIET_CONTROL_CLASS_NAME)}
           aria-label="Add attachment"
           disabled={attachmentIntakeDisabled}
           onClick={onPickAttachments}
@@ -200,7 +210,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           <Paperclip className="size-3.5" />
         </Button>
         {supportsProfiles ? (
-          <div className="relative">
+          <div className="relative min-w-0">
             <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Combobox
               value={selectedModelSelection?.profileId ?? ""}
@@ -208,7 +218,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
               placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
               searchPlaceholder="Search agent..."
-              triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+              triggerClassName={cn(
+                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                "max-w-[min(15rem,100%)] !pl-7 !pr-2",
+              )}
               disabled={selectorDisabled}
               onValueChange={onSelectAgent}
               onOpenChange={(open) => {
@@ -230,13 +243,16 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               : modelPicker.selectionPolicy
           }
           placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-          triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !px-2 text-xs text-foreground shadow-none hover:!bg-muted"
+          triggerClassName={cn(
+            COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+            "max-w-[min(19rem,100%)] !px-2",
+          )}
           onValueChange={modelPicker.onValueChange}
           onOpenChange={modelPicker.onOpenChange}
         />
 
         {hasVariantOptions ? (
-          <div className="relative">
+          <div className="relative min-w-0">
             <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Combobox
               value={selectedModelSelection?.variant ?? ""}
@@ -244,7 +260,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
               placeholder="Effort"
               searchPlaceholder="Search effort..."
-              triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+              triggerClassName={cn(
+                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                "max-w-[min(12rem,100%)] !pl-7 !pr-2",
+              )}
               disabled={selectorDisabled}
               onValueChange={onSelectVariant}
               onOpenChange={(open) => {
@@ -257,34 +276,37 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
+      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
         {contextUsage ? (
-          <div className="mr-3">
-            <AgentContextUsageIndicator
-              totalTokens={contextUsage.totalTokens}
-              contextWindow={contextUsage.contextWindow}
-              {...(contextUsage.outputLimit !== undefined
-                ? { outputLimit: contextUsage.outputLimit }
-                : {})}
-            />
-          </div>
+          <AgentContextUsageIndicator
+            className="min-w-0"
+            totalTokens={contextUsage.totalTokens}
+            contextWindow={contextUsage.contextWindow}
+            {...(contextUsage.outputLimit !== undefined
+              ? { outputLimit: contextUsage.outputLimit }
+              : {})}
+          />
         ) : null}
-        {canStopSession ? (
-          <Button
-            type="button"
-            size="icon"
-            className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
-            aria-label="Stop session"
-            onClick={onStopSession}
-          >
-            <Square className="size-3 fill-current" />
-          </Button>
-        ) : null}
-        <AgentChatComposerSendControl
-          sendDisabled={sendDisabled}
-          showSubmittingState={showSubmittingState}
-          pendingSendItems={pendingSendItems}
-        />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {canStopSession ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="destructive"
+              className="size-8 rounded-lg"
+              aria-label="Stop session"
+              onClick={onStopSession}
+            >
+              <Square className="size-3 fill-current" />
+            </Button>
+          ) : null}
+          <AgentChatComposerSendControl
+            sendDisabled={sendDisabled}
+            showSubmittingState={showSubmittingState}
+            pendingSendItems={pendingSendItems}
+          />
+        </div>
       </div>
     </div>
   );
@@ -293,47 +315,61 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
 function AgentChatComposerAttachments({
   draft,
   attachmentErrors,
-  composerAccentColor,
   hasSlashAttachmentConflict,
   onRemoveAttachment,
 }: Pick<
   AgentChatComposerFormViewProps,
-  | "draft"
-  | "attachmentErrors"
-  | "composerAccentColor"
-  | "hasSlashAttachmentConflict"
-  | "onRemoveAttachment"
+  "draft" | "attachmentErrors" | "hasSlashAttachmentConflict" | "onRemoveAttachment"
 >): ReactElement | null {
   const attachments = draft.attachments ?? [];
   if (attachments.length === 0) return null;
   return (
-    <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
-      <div
-        className={composerAccentColor ? "border-l-4" : undefined}
-        style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
-      >
-        <div className="px-3 pb-3 pt-3">
-          <div className="flex flex-wrap gap-3">
-            {attachments.map((attachment) => (
-              <AgentChatAttachmentChip
-                key={attachment.id}
-                variant="draft"
-                attachment={attachment}
-                error={attachmentErrors[attachment.id] ?? null}
-                onRemove={() => onRemoveAttachment(attachment.id)}
-              />
-            ))}
-          </div>
-          {hasSlashAttachmentConflict ? (
-            <p className="mt-3 text-xs text-destructive">
-              Remove attachments before running a slash command.
-            </p>
-          ) : null}
-        </div>
+    <section className="px-3 pt-3">
+      <div className="flex flex-wrap gap-2">
+        {attachments.map((attachment) => (
+          <AgentChatAttachmentChip
+            key={attachment.id}
+            variant="draft"
+            attachment={attachment}
+            error={attachmentErrors[attachment.id] ?? null}
+            onRemove={() => onRemoveAttachment(attachment.id)}
+          />
+        ))}
       </div>
+      {hasSlashAttachmentConflict ? (
+        <p className="mt-2 text-xs text-destructive">
+          Remove attachments before running a slash command.
+        </p>
+      ) : null}
     </section>
   );
 }
+
+// The card has no border. Its surface and shadow set it apart from the transcript.
+const COMPOSER_CARD_CLASS_NAME =
+  "relative rounded-xl transition-[background-color,box-shadow] duration-150";
+// Only the draft editor highlights the card. The other controls show their own focus ring.
+const COMPOSER_CARD_FOCUS_CLASS_NAME = "has-[[data-composer-editor]:focus]:shadow-chat-focus";
+
+const composerCardClassName = ({
+  isWaitingInput,
+  isInputMuted,
+}: {
+  isWaitingInput: boolean;
+  isInputMuted: boolean;
+}): string => {
+  if (isWaitingInput) {
+    return cn(COMPOSER_CARD_CLASS_NAME, "odt-waiting-input-card bg-chat-surface");
+  }
+  if (isInputMuted) {
+    return cn(COMPOSER_CARD_CLASS_NAME, "bg-chat-surface/60");
+  }
+  return cn(
+    COMPOSER_CARD_CLASS_NAME,
+    "bg-chat-surface shadow-chat",
+    COMPOSER_CARD_FOCUS_CLASS_NAME,
+  );
+};
 
 function AgentChatComposerFormView({
   model,
@@ -417,19 +453,11 @@ function AgentChatComposerFormView({
           event.currentTarget.value = "";
         }}
       />
-      <AgentChatComposerAttachments
-        draft={draft}
-        attachmentErrors={attachmentErrors}
-        composerAccentColor={composerAccentColor}
-        hasSlashAttachmentConflict={hasSlashAttachmentConflict}
-        onRemoveAttachment={onRemoveAttachment}
-      />
       <div
-        className={
-          isWaitingInput
-            ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md focus-within:shadow-xl"
-            : "relative border border-input border-l-0 bg-card shadow-md focus-within:shadow-xl"
-        }
+        className={composerCardClassName({
+          isWaitingInput,
+          isInputMuted: isComposerInputDisabled && !isSubmitting,
+        })}
       >
         {isSessionWorking && !isWaitingInput ? (
           <BorderRay
@@ -438,17 +466,10 @@ function AgentChatComposerFormView({
             {...(composerAccentColor ? { color: composerAccentColor } : {})}
           />
         ) : null}
-        <div
-          className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
-          style={
-            composerAccentColor && !isWaitingInput
-              ? { borderLeftColor: composerAccentColor }
-              : undefined
-          }
-        >
+        <div className="relative z-10">
           {showPendingItemsWarning ? (
             <div
-              className="flex items-start gap-1.5 border-b border-border/50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"
+              className="flex items-start gap-1.5 px-3 pt-2.5 text-[11px] text-amber-700 dark:text-amber-300"
               data-testid="agent-chat-pending-items-warning"
               role="status"
             >
@@ -456,6 +477,12 @@ function AgentChatComposerFormView({
               <span>{pendingItemsWarning}</span>
             </div>
           ) : null}
+          <AgentChatComposerAttachments
+            draft={draft}
+            attachmentErrors={attachmentErrors}
+            hasSlashAttachmentConflict={hasSlashAttachmentConflict}
+            onRemoveAttachment={onRemoveAttachment}
+          />
           <AgentChatComposerEditor
             draft={draft}
             onDraftChange={onDraftChange}

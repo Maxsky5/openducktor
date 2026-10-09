@@ -1,6 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
@@ -38,7 +37,6 @@ type AgentChatMessageCardViewModel = {
   isReasoningMessage: boolean;
   isAssistantMessage: boolean;
   isUserMessage: boolean;
-  isQueuedUserMessage: boolean;
   isToolMessage: boolean;
   isWorkflowToolMessage: boolean;
   isRegularToolMessage: boolean;
@@ -47,7 +45,6 @@ type AgentChatMessageCardViewModel = {
   isSystemPromptMessage: boolean;
   isRichCardMessage: boolean;
   articleClassName: string;
-  articleStyle: CSSProperties | undefined;
 };
 
 const resolveMessageAgentColor = (
@@ -66,7 +63,6 @@ const toArticleClassName = (
   message: AgentChatMessage,
   isReasoningMessage: boolean,
   isUserMessage: boolean,
-  isQueuedUserMessage: boolean,
   isToolMessage: boolean,
   isWorkflowToolMessage: boolean,
   isSubagentMessage: boolean,
@@ -86,12 +82,13 @@ const toArticleClassName = (
     return SESSION_NOTICE_TONE_CLASS_NAMES[sessionNoticeTone];
   }
 
+  if (isUserMessage) {
+    // UserMessage draws the bubble. The article only puts it on the right of the transcript.
+    return "text-sm mb-4 ml-auto flex w-fit max-w-[80%] flex-col items-end";
+  }
+
   return cn(
     "text-sm",
-    isUserMessage &&
-      (isQueuedUserMessage
-        ? "mb-4 w-full rounded-none border-l-4 border-pending-border bg-card px-4 py-3 text-foreground shadow-md"
-        : "mb-4 w-full rounded-none border-l-4 bg-card px-4 py-3 text-foreground shadow-md"),
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
@@ -110,9 +107,7 @@ const toArticleClassName = (
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"
             ? "px-1 pt-1 pb-3 text-foreground"
-            : isUserMessage
-              ? ""
-              : "border-none bg-transparent px-0 py-2 text-foreground",
+            : "border-none bg-transparent px-0 py-2 text-foreground",
   );
 };
 
@@ -128,7 +123,6 @@ export const buildAgentChatMessageCardViewModel = ({
   const isImageGenerationMessage = meta?.kind === "image_generation";
   const isAssistantMessage = message.role === "assistant" && !isImageGenerationMessage;
   const isUserMessage = message.role === "user";
-  const isQueuedUserMessage = isUserMessage && meta?.kind === "user" && meta.state === "queued";
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage = isToolMessage && toolCallPresentation?.kind === "workflow";
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
@@ -144,12 +138,8 @@ export const buildAgentChatMessageCardViewModel = ({
     isImageGenerationMessage;
   const assistantRole = assistantRoleFromMessage(message);
   const assistantMeta = meta?.kind === "assistant" ? meta : null;
-  const userMeta = meta?.kind === "user" ? meta : null;
   const assistantAccentColor = isAssistantMessage
     ? resolveMessageAgentColor(assistantMeta?.profileId, sessionAgentColors, sessionRuntimeKind)
-    : undefined;
-  const userAccentColor = isUserMessage
-    ? resolveMessageAgentColor(userMeta?.profileId, sessionAgentColors, sessionRuntimeKind)
     : undefined;
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
@@ -172,7 +162,6 @@ export const buildAgentChatMessageCardViewModel = ({
     isReasoningMessage,
     isAssistantMessage,
     isUserMessage,
-    isQueuedUserMessage,
     isToolMessage,
     isWorkflowToolMessage,
     isRegularToolMessage,
@@ -184,16 +173,11 @@ export const buildAgentChatMessageCardViewModel = ({
       message,
       isReasoningMessage,
       isUserMessage,
-      isQueuedUserMessage,
       isToolMessage,
       isWorkflowToolMessage,
       isSubagentMessage,
       isSessionNoticeMessage,
       isSystemPromptMessage,
     ),
-    articleStyle:
-      isUserMessage && !isQueuedUserMessage && userAccentColor
-        ? { borderLeftColor: userAccentColor }
-        : undefined,
   };
 };

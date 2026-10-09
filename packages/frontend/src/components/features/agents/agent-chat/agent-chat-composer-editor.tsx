@@ -630,6 +630,7 @@ export function AgentChatComposerEditor({
       ) : null}
       <div
         ref={editorRef}
+        data-composer-editor
         role="combobox"
         aria-label="Message composer"
         aria-expanded={activePopup !== null}
@@ -698,7 +699,8 @@ export function AgentChatComposerEditor({
         }}
       >
         {!draftHasMeaningfulContent(draft) ? (
-          <div className="pointer-events-none absolute left-3 top-2.5 text-[15px] leading-6 text-muted-foreground">
+          // An empty draft keeps a one-line editor, so the placeholder stays on one line.
+          <div className="pointer-events-none absolute inset-x-3 top-2.5 truncate text-[15px] leading-6 text-muted-foreground">
             {placeholder}
           </div>
         ) : null}

@@ -22,7 +22,9 @@ test.each(["waitForBackend", "waitForBackendEffect"])(
     });
     const proxyRequests: string[] = [];
     const proxy = createServer((request, response) => {
-      proxyRequests.push(request.url ?? "");
+      // A proxied request names its target in absolute form. Another local client can reach this
+      // reused loopback port with an origin-form request, which is not proxy traffic.
+      if (request.url?.startsWith("http://")) proxyRequests.push(request.url);
       response.end("proxy success");
     });
     await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));

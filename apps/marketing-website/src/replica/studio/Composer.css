@@ -7,25 +7,18 @@
   .st-stack:not(:empty) + .st-composer {
     padding-top: calc(12 * var(--u));
   }
+  /* One rounded card without a border holds the draft and the controls, as in
+     agent-chat-composer.tsx. */
   .st-box {
     position: relative;
-    border: calc(1 * var(--u)) solid var(--input);
-    border-left: 0;
-    background: var(--card);
-    box-shadow: var(--shadow-md);
-  }
-  .st-box-inner {
-    border-left: calc(4 * var(--u)) solid var(--runtime-accent);
+    border-radius: calc(16 * var(--u));
+    background: var(--chat-surface);
+    box-shadow: var(--chat-shadow);
   }
   .st-box[data-activity="waiting"] {
-    border: calc(1 * var(--u)) solid var(--warning-border);
     box-shadow:
       0 0 0 calc(1 * var(--u)) color-mix(in srgb, var(--warning-border) 72%, transparent),
       0 0 calc(18 * var(--u)) color-mix(in srgb, var(--warning-ring) 30%, transparent);
-  }
-  .st-box[data-activity="waiting"] .st-box-inner {
-    border-left-color: transparent;
-    border-left-width: 0;
   }
   /* The draft: a menu of the slot opens above the editor. The placeholder sits under the text, as
      in agent-chat-composer-editor.tsx, and it hides when the draft has text. */
@@ -60,24 +53,23 @@
     align-items: center;
     justify-content: space-between;
     gap: calc(8 * var(--u));
-    padding: calc(8 * var(--u)) calc(10 * var(--u));
-    border-top: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 80%, transparent);
+    padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
   }
   .st-controls > span {
     display: flex;
     align-items: center;
-    gap: calc(6 * var(--u));
+    gap: calc(4 * var(--u));
   }
   .st-controls > span:last-child {
-    gap: calc(8 * var(--u));
+    gap: calc(6 * var(--u));
   }
+  /* The attach button and the selectors stay quiet next to the draft. */
   .st-attach {
     display: grid;
     place-items: center;
     width: calc(28 * var(--u));
     height: calc(28 * var(--u));
-    border: calc(1 * var(--u)) solid var(--input);
-    border-radius: 50%;
+    border-radius: calc(12 * var(--u));
     color: var(--muted-foreground);
   }
   .st-chip {
@@ -87,9 +79,8 @@
     gap: calc(8 * var(--u));
     height: calc(28 * var(--u));
     padding: 0 calc(8 * var(--u));
-    border: calc(1 * var(--u)) solid var(--input);
-    border-radius: 999px;
-    background: var(--card);
+    border-radius: calc(12 * var(--u));
+    color: var(--muted-foreground);
     font-size: calc(12 * var(--u));
     white-space: nowrap;
   }
@@ -107,40 +98,35 @@
     position: absolute;
     left: calc(8 * var(--u));
   }
+  /* The context ring and the token count, as in agent-context-usage-indicator.tsx. The ring
+     arc has a path length of 100, so --used is the usage percent. */
   .st-context {
     display: inline-flex;
     align-items: center;
-    gap: calc(8 * var(--u));
-    margin-right: calc(12 * var(--u));
-    padding: calc(4 * var(--u)) calc(10 * var(--u));
-    border: calc(1 * var(--u)) solid var(--input);
-    border-radius: 999px;
-    background: var(--card);
+    gap: calc(6 * var(--u));
+    margin-right: calc(6 * var(--u));
+    padding: calc(4 * var(--u));
   }
-  .st-context i {
-    position: relative;
-    width: calc(64 * var(--u));
-    height: calc(6 * var(--u));
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--secondary);
+  .st-ring {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    transform: rotate(-90deg);
   }
-  .st-context i::after {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: var(--used);
-    border-radius: inherit;
-    background: var(--success-accent);
+  .st-ring circle {
+    fill: none;
+    stroke: color-mix(in oklab, var(--foreground) 15%, transparent);
+    stroke-width: 2;
   }
-  .st-context b {
+  .st-ring circle:last-child {
+    stroke: var(--success-accent);
+    stroke-dasharray: var(--used) 100;
+    stroke-linecap: round;
+  }
+  .st-context small {
     color: var(--success-muted);
     font-size: calc(11 * var(--u));
     font-weight: 500;
-  }
-  .st-context small {
-    color: var(--muted-foreground);
-    font-size: calc(11 * var(--u));
+    font-variant-numeric: tabular-nums;
   }
   /* Send is disabled until the draft has text or pending review comments. */
   .st-send {
@@ -149,7 +135,7 @@
     place-items: center;
     width: calc(32 * var(--u));
     height: calc(32 * var(--u));
-    border-radius: 50%;
+    border-radius: calc(12 * var(--u));
     background: var(--primary);
     color: var(--primary-foreground);
     opacity: 0.5;
@@ -169,6 +155,7 @@
     padding: 0 calc(4 * var(--u));
     border-radius: 999px;
     background: var(--amber-300);
+    box-shadow: 0 0 0 calc(2 * var(--u)) var(--card);
     color: #0a0a0a;
     font-size: calc(10 * var(--u));
     font-weight: 600;
@@ -182,13 +169,9 @@
     place-items: center;
     width: calc(32 * var(--u));
     height: calc(32 * var(--u));
-    border-radius: 50%;
-    background: var(--red-500);
-    color: #fff;
-    box-shadow: var(--shadow-sm);
-  }
-  :where(:root[data-theme="dark"]) .st-stop {
-    background: var(--red-600);
+    border-radius: calc(12 * var(--u));
+    background: var(--destructive);
+    color: var(--destructive-foreground);
   }
   .st-stop .lucide {
     fill: currentColor;
@@ -201,6 +184,7 @@
     z-index: 1;
   }
   .st-ray rect {
+    rx: calc(16 * var(--u));
     stroke: var(--runtime-accent);
     stroke-width: calc(2.6 * var(--u));
     stroke-dasharray: 12 88;

@@ -5,6 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
+const readComposerCard = (html: string): Element => {
+  const card = new DOMParser().parseFromString(html, "text/html").body.querySelector("form > div");
+  if (!card) throw new Error("Expected the composer card");
+  return card;
+};
+
 const buildModel = () => ({
   displayedSessionKey: "session-1",
   isInteractionEnabled: true,
@@ -342,8 +348,16 @@ describe("AgentChatComposer", () => {
       }),
     );
 
-    expect(html).toContain("agent-chat-pending-items-warning");
-    expect(html).toContain("These comments are not saved for this session.");
+    const card = readComposerCard(html);
+    const warning = card.querySelector('[data-testid="agent-chat-pending-items-warning"]');
+    const editor = card.querySelector('[aria-label="Message composer"]');
+    expect(warning?.textContent).toBe("These comments are not saved for this session.");
+    expect(editor).not.toBeNull();
+    expect(
+      warning && editor
+        ? warning.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING
+        : 0,
+    ).toBeTruthy();
   });
 
   test("hides the warning when there are no pending comments", () => {
@@ -363,21 +377,43 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("agent-chat-pending-items-warning");
   });
 
-  test("styles composer shell with agent accent border and padded container", () => {
+  test("renders the idle composer as one rounded card without the agent accent", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: buildModel(),
       }),
     );
 
-    expect(html).toContain("px-4 pb-4");
-    expect(html).toContain("relative border border-input border-l-0 bg-card shadow-md");
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("focus-within:shadow-xl");
-    expect(html).toContain("border-left-color:#d97706");
+    const card = readComposerCard(html);
+    expect(card.className).toContain("rounded-xl");
+    expect(card.className).toContain("bg-chat-surface shadow-chat");
+    expect(card.className).not.toMatch(/(^|\s)border(\s|$)/);
+    expect(card.className).toContain("has-[[data-composer-editor]:focus]:shadow-chat-focus");
+    expect(card.querySelector('[aria-label="Message composer"]')).not.toBeNull();
+    expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
+    expect(html).not.toContain("border-l-4");
+    expect(html).not.toContain("#d97706");
   });
 
-  test("uses the Codex runtime accent when no profile is selected", () => {
+  test("mutes the composer card while input is read-only", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isReadOnly: true,
+          readOnlyReason: "This session is read-only.",
+        },
+      }),
+    );
+
+    const card = readComposerCard(html);
+    expect(card.className).toContain("bg-chat-surface/60");
+    expect(card.className).not.toContain("has-[[data-composer-editor]:focus]:shadow-chat-focus");
+    expect(html).toContain("This session is read-only.");
+    expect(html).toContain('aria-label="Send message" disabled');
+  });
+
+  test("keeps the Codex runtime accent off the idle composer", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
@@ -389,8 +425,26 @@ describe("AgentChatComposer", () => {
       }),
     );
 
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
+    expect(html).not.toContain("--odt-runtime-accent-codex");
+  });
+
+  test("keeps stop and send together in a wrapping group that the context meter can wrap above", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: buildModel(),
+      }),
+    );
+
+    const card = readComposerCard(html);
+    const stop = card.querySelector('[aria-label="Stop session"]');
+    const send = card.querySelector('[aria-label="Send message"]');
+    const actions = stop?.parentElement;
+    const actionsRow = actions?.parentElement;
+    expect(actions?.contains(send ?? null)).toBe(true);
+    expect(actions?.textContent).not.toContain("22.5%");
+    expect(actions?.className).toContain("shrink-0");
+    expect(actionsRow?.textContent).toContain("22.5%");
+    expect(actionsRow?.className).toContain("max-w-full flex-wrap");
   });
 
   test("renders a colored border ray while the session is working", () => {
@@ -438,8 +492,9 @@ describe("AgentChatComposer", () => {
       }),
     );
 
-    expect(html).toContain("odt-waiting-input-card");
-    expect(html).toContain("border-warning-border");
+    const card = readComposerCard(html);
+    expect(card.className).toContain("odt-waiting-input-card");
+    expect(card.className).not.toContain("bg-chat-surface/60");
     expect(html).toContain("Answer the pending question above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
     expect(html).not.toContain('class="odt-border-ray"');

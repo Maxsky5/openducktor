@@ -452,7 +452,12 @@ describe("AgentChatComposer attachments", () => {
       target: { files: [file] },
     });
 
-    await screen.findByTitle("brief.pdf");
+    const attachmentName = await screen.findByTitle("brief.pdf");
+    const editor = screen.getByRole("combobox", { name: "Message composer" });
+    expect(attachmentName.closest("form > div")?.contains(editor)).toBe(true);
+    expect(
+      attachmentName.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen.getByText("The selected model does not expose attachment capability data."),
     ).toBeDefined();

@@ -181,8 +181,7 @@
     .chat-window .st-tab:not([data-active]),
     .chat-window .st-tabs-tools > :not(:last-child),
     .chat-window .st-attach,
-    .chat-window .st-chip.effort,
-    .chat-window .st-context small {
+    .chat-window .st-chip.effort {
       display: none;
     }
     .chat-window .app-body {
@@ -207,9 +206,6 @@
     }
     .chat-window .st-context {
       margin-right: calc(4 * var(--u));
-    }
-    .chat-window .st-context i {
-      width: calc(40 * var(--u));
     }
   }
 }

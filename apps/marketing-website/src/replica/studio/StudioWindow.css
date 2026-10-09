@@ -71,7 +71,6 @@
     .studio .st-tabs-tools,
     .studio .st-attach,
     .studio .st-chip.effort,
-    .studio .st-context small,
     .studio .st-handle {
       display: none;
     }
@@ -115,9 +114,6 @@
     }
     .studio .st-context {
       margin-right: calc(4 * var(--u));
-    }
-    .studio .st-context i {
-      width: calc(40 * var(--u));
     }
   }
   /* A small tablet stage shows the one-column layout at the scale of the app. */
