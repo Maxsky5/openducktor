@@ -30,6 +30,7 @@ import {
   KANBAN_TASK_CARD_VIEW_VALUES,
   kanbanSettingsSchema,
   persistedGlobalConfigV2Schema,
+  repoActionCommandLines,
   repoConfigSchema,
   resolveCodexEffectivePolicy,
   resolveHorizontalScrollbarVisibility,
@@ -320,6 +321,35 @@ describe("config-schemas", () => {
         actions: { items: [], defaultActionId: "dev" },
       }),
     ).toThrow("A repository with no actions cannot have a default action.");
+  });
+
+  test("rejects an action command that has only blank and comment lines", () => {
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: {
+          items: [
+            {
+              id: "setup",
+              icon: "configure",
+              name: "Setup",
+              command: "# install later\n\n  # and build",
+              runOnWorktreeCreate: true,
+              waitBeforeAgentStart: true,
+            },
+          ],
+          defaultActionId: "setup",
+        },
+      }),
+    ).toThrow("Add a command line. Lines that start with # are comments.");
+  });
+
+  test("lists the action lines without blank lines, comments, or outer spaces", () => {
+    expect(repoActionCommandLines("# setup\r\nbun install\n\n  bun test  \n  # done")).toEqual([
+      "bun install",
+      "bun test",
+    ]);
+    expect(repoActionCommandLines("# later\n ")).toEqual([]);
   });
 
   test("requires explicit repo runtime kind", () => {

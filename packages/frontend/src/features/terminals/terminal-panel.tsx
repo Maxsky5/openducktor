@@ -172,24 +172,23 @@ function Header({ model, headerLeading, onCloseTab }: HeaderProps): ReactElement
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="New terminal"
-              className="size-8 text-(--terminal-foreground) shadow-none hover:bg-(--terminal-tab-inactive) hover:text-(--terminal-foreground)"
-              onClick={model.onCreate}
-              disabled={
-                model.isLoading ||
-                model.discoveryError !== null ||
-                model.isCreating ||
-                model.tabs.length >= 8
-              }
-            >
-              <Plus />
-            </Button>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="New terminal"
+                className="size-8 text-(--terminal-foreground) shadow-none hover:bg-(--terminal-tab-inactive) hover:text-(--terminal-foreground)"
+                onClick={model.onCreate}
+                disabled={model.startBlockedReason !== null}
+              >
+                <Plus />
+              </Button>
+            </span>
           </TooltipTrigger>
-          <TooltipContent side="top">New terminal</TooltipContent>
+          <TooltipContent side="top" className="max-w-64">
+            {model.startBlockedReason ?? "New terminal"}
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     </div>

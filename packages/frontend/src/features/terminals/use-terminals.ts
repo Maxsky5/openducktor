@@ -50,7 +50,7 @@ export type TerminalScope = {
 export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
-  /** Why this scope cannot start a terminal, or null when it can. */
+  /** Why a new terminal or action run cannot start now, or null when it can. */
   startBlockedReason: string | null;
   tabs: TerminalTab[];
   mountedTabs: MountedTab[];
@@ -362,12 +362,19 @@ export const useTerminals = (
   const isLoading = terminalQuery.isFetching || isScopeLoading;
   const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
   const discoveryError = terminalQuery.isError ? terminalQuery.error.message : null;
+  const startBlockedReason = terminalStartBlockedReason({
+    scope,
+    isLoading,
+    discoveryError,
+    isCreating,
+    tabCount: visibleTabs.length,
+  });
 
   return useMemo(
     () => ({
       scopeKey,
       isAvailable: scope !== null,
-      startBlockedReason: scopeStartBlockedReason(scope),
+      startBlockedReason,
       tabs: visibleTabs,
       mountedTabs,
       activeTabId: visibleState.activeTabId,
@@ -416,6 +423,7 @@ export const useTerminals = (
       selectTab,
       scope,
       scopeKey,
+      startBlockedReason,
       startCreate,
       transportError,
       togglePanel,
@@ -446,9 +454,31 @@ const startHostTerminal = (
     ? hostClient.terminalCreate({ workingDir, context })
     : hostClient.terminalRunAction({ workingDir, context, actionId });
 
-const scopeStartBlockedReason = (scope: TerminalScope | null): string | null => {
+const MAX_SCOPE_TERMINALS = 8;
+
+// A start during discovery or another start could duplicate a terminal or run a command twice.
+const terminalStartBlockedReason = ({
+  scope,
+  isLoading,
+  discoveryError,
+  isCreating,
+  tabCount,
+}: {
+  scope: TerminalScope | null;
+  isLoading: boolean;
+  discoveryError: string | null;
+  isCreating: boolean;
+  tabCount: number;
+}): string | null => {
   if (scope === null) return "Select a task or chat to use terminals.";
-  return scope.workingDirectory === null ? scope.workingDirectoryError : null;
+  if (scope.workingDirectory === null) return scope.workingDirectoryError;
+  if (isLoading) return "Terminals are loading.";
+  if (discoveryError !== null) return "Terminal discovery failed. Retry it in the terminal panel.";
+  if (isCreating) return "A terminal is starting.";
+  if (tabCount >= MAX_SCOPE_TERMINALS) {
+    return `Close a terminal to start another. The limit is ${MAX_SCOPE_TERMINALS} terminals.`;
+  }
+  return null;
 };
 
 const defaultDependencies = (): TerminalDependencies => ({

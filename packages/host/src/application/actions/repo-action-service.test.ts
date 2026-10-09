@@ -107,13 +107,4 @@ describe("createRepoActionService", () => {
     });
     expect(started).toEqual([]);
   });
-
-  test("fails without a terminal when the action has no command line", async () => {
-    const { service, started } = makeService([action({ command: "# later" })]);
-
-    expect(await Effect.runPromise(Effect.flip(service.run(request)))).toMatchObject({
-      _tag: "RepoActionHasNoCommandError",
-    });
-    expect(started).toEqual([]);
-  });
 });

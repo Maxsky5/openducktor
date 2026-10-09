@@ -385,6 +385,47 @@ describe("useTerminals", () => {
     }
   });
 
+  test("blocks a new start while discovery runs or failed", async () => {
+    const discovery = Promise.withResolvers<TerminalListResponse>();
+    const view = renderModel(mock(() => discovery.promise));
+    try {
+      expect(view.result.current.startBlockedReason).toBe("Terminals are loading.");
+
+      await act(async () => {
+        discovery.reject(new Error("Discovery failed."));
+        await discovery.promise.catch(() => undefined);
+      });
+
+      await waitFor(
+        () =>
+          expect(view.result.current.startBlockedReason).toBe(
+            "Terminal discovery failed. Retry it in the terminal panel.",
+          ),
+        { timeout: 500 },
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("blocks a new start at the terminal limit", async () => {
+    const terminals = Array.from({ length: 8 }, (_, index) => ({
+      ...existingTerminal(),
+      terminalId: `terminal-${index}`,
+    }));
+    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals })));
+    try {
+      await waitFor(() => expect(view.result.current.tabs).toHaveLength(8), { timeout: 500 });
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+
+      expect(view.result.current.startBlockedReason).toBe(
+        "Close a terminal to start another. The limit is 8 terminals.",
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("runs an action in a new visible tab and reads the host list again", async () => {
     const terminal = { ...existingTerminal(), terminalId: "action-terminal", label: "bun test" };
     let terminals: TerminalSummary[] = [];
@@ -409,6 +450,8 @@ describe("useTerminals", () => {
       expect(pendingTab?.requestState).toBe("creating");
       expect(pendingTab && "label" in pendingTab ? pendingTab.label : null).toBe("Run tests");
       expect(view.result.current.activeTabId).toBe(pendingTab?.tabId ?? null);
+      // A second click on the action control cannot run the command again before this start ends.
+      expect(view.result.current.startBlockedReason).toBe("A terminal is starting.");
       expect(view.terminalRunAction).toHaveBeenCalledWith({
         workingDir: "/repo",
         context: { repoPath: "/repo", taskId: "task-1" },

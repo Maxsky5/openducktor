@@ -20,7 +20,7 @@ Create, run action, list, close, and path setup use host commands. Input, resize
 
 ## Discover terminals
 
-The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty panel creates a terminal only after discovery succeeds with an empty list. New terminal creation stays disabled while discovery runs or fails.
+The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty panel creates a terminal only after discovery succeeds with an empty list. New terminals and action runs use one start rule. They stay disabled while discovery runs or fails, while another terminal starts, and when the owner has 8 terminals. The control shows the reason.
 
 An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, existing terminals, closing the panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
 

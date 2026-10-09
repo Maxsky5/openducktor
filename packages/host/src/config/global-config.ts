@@ -6,6 +6,7 @@ import {
   type PersistedGlobalConfigV3,
   persistedGlobalConfigV3Schema,
   persistedGlobalConfigV4Schema,
+  repoActionCommandLines,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -144,7 +145,8 @@ const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSO
   );
   const setupLines = preStart.data.map((line) => line.trim()).filter(Boolean);
   let setupActionId: string | null = null;
-  if (setupLines.length > 0) {
+  // A setup script with only comment lines ran nothing, so it becomes no action.
+  if (repoActionCommandLines(setupLines.join("\n")).length > 0) {
     setupActionId = uniqueActionId(
       WORKTREE_SETUP_ACTION_ID,
       new Set(items.map((item) => (isPersistedConfigObject(item) ? (item.id ?? null) : null))),

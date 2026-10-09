@@ -116,6 +116,7 @@ describe("TerminalPanel", () => {
           ...tabsModel([]),
           activeTabId: null,
           discoveryError: "Host discovery unavailable.",
+          startBlockedReason: "Terminal discovery failed. Retry it in the terminal panel.",
           onRetryDiscovery,
         }}
       />,
@@ -447,33 +448,19 @@ describe("TerminalPanel", () => {
     expect(panel.getAttribute("aria-labelledby")).toBe(tab.id);
   });
 
-  test("enforces the eight-terminal tab limit", () => {
-    const tabs = Array.from({ length: 8 }, (_, index) => ({
-      tabId: `lost:${index}`,
-      terminalId: null,
-      summary: null,
-      label: `Shell ${index + 1}`,
-      error: "This terminal belonged to a previous host session.",
-      requestState: "lost" as const,
-      sourceTerminalId: `terminal-${index}`,
-    }));
-    const view = render(
-      <TerminalPanel
-        model={{
-          ...model,
-          ...tabsModel(tabs.slice(0, 7)),
-        }}
-      />,
-    );
+  test("disables New terminal and gives the reason when a terminal cannot start", async () => {
+    const reason = "Close a terminal to start another. The limit is 8 terminals.";
+    const view = render(<TerminalPanel model={{ ...model, startBlockedReason: null }} />);
+    const newTerminal = () => screen.getByRole("button", { name: "New terminal" });
 
-    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
-      false,
-    );
+    expect(newTerminal().hasAttribute("disabled")).toBe(false);
 
-    view.rerender(<TerminalPanel model={{ ...model, ...tabsModel(tabs) }} />);
-    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
-      true,
-    );
+    view.rerender(<TerminalPanel model={{ ...model, startBlockedReason: reason }} />);
+    expect(newTerminal().hasAttribute("disabled")).toBe(true);
+    fireEvent.pointerMove(newTerminal().parentElement ?? newTerminal(), { pointerType: "mouse" });
+    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe(reason), {
+      timeout: 500,
+    });
   });
 
   test("closes an idle running shell without confirmation", async () => {

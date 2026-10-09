@@ -485,6 +485,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoConfigSchema",
   "settingsRepoConfigSchema",
   "REPO_ACTION_ICON_VALUES",
+  "repoActionCommandLines",
   "repoActionIconSchema",
   "repoActionSchema",
   "repoActionsSchema",

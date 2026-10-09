@@ -411,13 +411,25 @@ export const REPO_ACTION_ICON_VALUES = [
 export const repoActionIconSchema = z.enum(REPO_ACTION_ICON_VALUES);
 export type RepoActionIcon = z.infer<typeof repoActionIconSchema>;
 
+/**
+ * The lines that an action runs: each non-blank line that does not start with `#`. The lines share
+ * one shell process, and a line runs only after the previous line succeeds. Comment lines are
+ * skipped, because an interactive zsh runs `#` as a command.
+ */
+export const repoActionCommandLines = (command: string): string[] =>
+  command
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+
 export const repoActionSchema = z.object({
   id: trimmedRequiredString("Action id"),
   icon: repoActionIconSchema,
   name: trimmedRequiredString("Action name"),
-  // Each non-blank line that does not start with `#` is one command. The lines share one shell
-  // process, and a line runs only after the previous line succeeds.
-  command: trimmedRequiredString("Action command"),
+  command: trimmedRequiredString("Action command").refine(
+    (command) => repoActionCommandLines(command).length > 0,
+    "Add a command line. Lines that start with # are comments.",
+  ),
   runOnWorktreeCreate: z.boolean(),
   waitBeforeAgentStart: z.boolean(),
 });

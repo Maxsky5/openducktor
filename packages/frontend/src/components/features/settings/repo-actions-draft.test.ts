@@ -114,6 +114,9 @@ describe("repo actions draft", () => {
       validateRepoActionFields({ ...NEW_REPO_ACTION_FIELDS, name: " ", command: "\n" }),
     ).toEqual({ name: "Enter an action name.", command: "Enter a command." });
     expect(
+      validateRepoActionFields({ ...NEW_REPO_ACTION_FIELDS, name: "Setup", command: "# later\n" }),
+    ).toEqual({ command: "Add a command line. Lines that start with # are comments." });
+    expect(
       validateRepoActionFields({ ...NEW_REPO_ACTION_FIELDS, name: "Test", command: "bun test" }),
     ).toEqual({});
   });

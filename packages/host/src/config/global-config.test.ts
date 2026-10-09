@@ -347,7 +347,7 @@ describe("global config", () => {
     });
   });
 
-  test("converts empty legacy settings into no actions", () => {
+  test("converts empty or comment-only legacy settings into no actions", () => {
     const config = parsePersistedGlobalConfigV2({
       version: 2,
       workspaces: {
@@ -355,7 +355,7 @@ describe("global config", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          hooks: { preStart: [" "], postComplete: [] },
+          hooks: { preStart: [" ", "# bun install"], postComplete: [] },
           devServers: [],
         },
       },

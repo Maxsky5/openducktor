@@ -1,4 +1,4 @@
-import type { RepoAction, RepoActions } from "@openducktor/contracts";
+import { type RepoAction, type RepoActions, repoActionCommandLines } from "@openducktor/contracts";
 
 /** The action fields that the user edits. The draft keeps the id. */
 export type RepoActionFields = Omit<RepoAction, "id">;
@@ -23,6 +23,8 @@ export const validateRepoActionFields = (fields: RepoActionFields): RepoActionFi
   }
   if (!fields.command.trim()) {
     errors.command = "Enter a command.";
+  } else if (repoActionCommandLines(fields.command).length === 0) {
+    errors.command = "Add a command line. Lines that start with # are comments.";
   }
   return errors;
 };

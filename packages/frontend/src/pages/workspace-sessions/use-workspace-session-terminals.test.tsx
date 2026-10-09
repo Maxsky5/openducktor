@@ -38,8 +38,8 @@ const startBlockedReason = (selected: WorkspaceSession): string | null => {
   }
 };
 
-test("a chat with a present worktree can start terminals", () => {
-  expect(startBlockedReason(chat())).toBeNull();
+test("a chat with a present worktree waits only for terminal discovery", () => {
+  expect(startBlockedReason(chat())).toBe("Terminals are loading.");
 });
 
 test("an archived chat or a removed chat worktree gives the reason that terminals cannot start", () => {
