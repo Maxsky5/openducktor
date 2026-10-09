@@ -29,6 +29,8 @@ export function TaskDescriptionMarkdownSource({
     if (disabled || uploading || !onUpload || files.length === 0) return;
     const insertAt = insertionOffset.current;
     void Promise.allSettled(files.map(onUpload)).then((results) => {
+      const textarea = textareaRef.current;
+      if (!textarea || textarea.disabled) return;
       const images = results.flatMap((result, index) => {
         const file = files[index];
         if (result.status === "rejected" || !file) return [];
@@ -37,7 +39,7 @@ export function TaskDescriptionMarkdownSource({
         return [`![${alt}](odt-asset:${result.value.assetId} "${title}")`];
       });
       if (images.length === 0) return;
-      const currentMarkdown = textareaRef.current?.value ?? markdown;
+      const currentMarkdown = textarea.value;
       const offset = Math.min(insertAt, currentMarkdown.length);
       const before = currentMarkdown.slice(0, offset);
       const after = currentMarkdown.slice(offset);

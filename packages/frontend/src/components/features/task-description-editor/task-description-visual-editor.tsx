@@ -14,7 +14,10 @@ import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { cn } from "@/lib/utils";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
-import { TaskDescriptionImageContext } from "./task-description-image-context";
+import {
+  TaskDescriptionImageContext,
+  type MarkdownImageRenderer,
+} from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 import { TaskDescriptionLinkDialog } from "./task-description-link-dialog";
 import {
@@ -48,6 +51,7 @@ type TaskDescriptionVisualEditorProps = {
   onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
   issueImageContext?: IssueImageContext | undefined;
+  renderImage?: MarkdownImageRenderer | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
   mermaidPreviews: MermaidPreviews;
@@ -61,6 +65,7 @@ export default function TaskDescriptionVisualEditor({
   onUpload,
   renderContext,
   issueImageContext,
+  renderImage,
   uploads,
   previews,
   mermaidPreviews,
@@ -78,8 +83,8 @@ export default function TaskDescriptionVisualEditor({
     if (canEditRef.current) setMathEdit(edit);
   }, []);
   const imageContext = useMemo(
-    () => ({ previews, renderContext, issueImageContext }),
-    [previews, renderContext, issueImageContext],
+    () => ({ previews, renderContext, issueImageContext, renderImage }),
+    [previews, renderContext, issueImageContext, renderImage],
   );
 
   const editor = useEditor({
@@ -133,6 +138,11 @@ export default function TaskDescriptionVisualEditor({
   useEffect(() => {
     disabledRef.current = disabled;
     canEditRef.current = canEdit;
+    return () => {
+      // Tiptap defers destruction, so pending callbacks must stop at unmount.
+      disabledRef.current = true;
+      canEditRef.current = false;
+    };
   }, [canEdit, disabled]);
 
   useEffect(() => {

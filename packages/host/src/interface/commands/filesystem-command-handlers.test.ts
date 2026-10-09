@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
@@ -33,6 +33,12 @@ describe("createFilesystemCommandHandlers", () => {
       );
       await rm(directory, { recursive: true });
       await expect(router.invoke("filesystem_resolve_path", { path: alias })).resolves.toBeNull();
+      await writeFile(directory, "replaced worktree");
+      await expect(
+        router.invoke("filesystem_resolve_path", {
+          path: path.join(directory, "nested"),
+        }),
+      ).resolves.toBeNull();
       await expect(router.invoke("filesystem_resolve_path", { path: 123 })).rejects.toThrow(
         "filesystem_resolve_path input is invalid",
       );

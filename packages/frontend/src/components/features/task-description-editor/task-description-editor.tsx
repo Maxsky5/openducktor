@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
+import type { MarkdownImageRenderer } from "./task-description-image-context";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 import { TaskDescriptionMarkdownSource } from "./task-description-markdown-source";
 import type { VisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
@@ -20,6 +21,7 @@ type TaskDescriptionEditorProps = {
   workspaceId: string | null;
   taskId: string | null;
   issueImageContext?: IssueImageContext | undefined;
+  renderImage?: MarkdownImageRenderer | undefined;
   onChange(markdown: string): void;
   onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   uploads: TaskDescriptionAssetUpload[];
@@ -102,6 +104,7 @@ function TaskDescriptionEditorSession({
   workspaceId,
   taskId,
   issueImageContext,
+  renderImage,
   onChange,
   onUpload,
   uploads,
@@ -164,6 +167,7 @@ function TaskDescriptionEditorSession({
           mermaidPreviews={mermaidPreviews}
           renderContext={renderContext}
           issueImageContext={issueImageContext}
+          renderImage={renderImage}
         />
       </Suspense>
     );

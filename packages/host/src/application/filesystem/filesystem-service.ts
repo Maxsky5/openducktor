@@ -172,7 +172,9 @@ export const createFilesystemService = (filesystem: FilesystemPort): FilesystemS
       .canonicalize(path)
       .pipe(
         Effect.catchTag("HostOperationError", (error) =>
-          hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
+          hasNestedNodeErrorCode(error, "ENOENT") || hasNestedNodeErrorCode(error, "ENOTDIR")
+            ? Effect.succeed(null)
+            : Effect.fail(error),
         ),
       );
   },

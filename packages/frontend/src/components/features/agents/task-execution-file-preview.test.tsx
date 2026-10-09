@@ -326,6 +326,120 @@ function ChatPreviewHarness(): ReactElement {
 }
 
 describe("TaskExecutionSelectedFilePreview", () => {
+  // This flow loads the real rich editor and its Markdown extensions.
+  test("loads relative Markdown images from the file directory and keeps source paths", async () => {
+    const selectedFile: TaskExecutionSelectedFile = {
+      rootPath: "/tmp",
+      relativePath: "docs/report.md",
+      access: "local",
+    };
+    const markdown = "![Diagram](../assets/diagram.png)\n\n![Web](https://example.com/image.png)";
+    const resolvePath = mock<HostClient["filesystemResolvePath"]>(async (path) => {
+      expect(path).toBe("/tmp/docs/../assets/diagram.png");
+      return "/tmp/assets/diagram.png";
+    });
+    readTextFileMock.mockImplementation(async (input) =>
+      input.relativePath === "docs/report.md"
+        ? textFileResult(selectedFile, markdown)
+        : {
+            kind: "image",
+            rootPath: "/tmp/assets",
+            relativePath: "diagram.png",
+            mime: "image/png",
+            base64: "aW1hZ2U=",
+            size: 5,
+            mtimeMs: 1,
+            revision: "image-1",
+          },
+    );
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          filesystemResolvePath: resolvePath,
+          filesystemReadTextFile: readTextFileMock,
+          filesystemWriteTextFile: writeTextFileMock,
+        },
+      }),
+    );
+    render(renderPreview({ selectedFile, onClose: () => {} }));
+    const image = await screen.findByRole("img", { name: "Diagram" });
+    await waitFor(() => expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U="));
+    expect(readTextFileMock).toHaveBeenCalledWith({
+      rootPath: "/tmp/assets",
+      relativePath: "diagram.png",
+      access: "local",
+    });
+    expect(screen.getByRole("img", { name: "Web" }).getAttribute("src")).toBe(
+      "https://example.com/image.png",
+    );
+    expect(resolvePath).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(screen.getByRole("textbox", { name: "Markdown source" })).toHaveProperty(
+      "value",
+      markdown,
+    );
+  }, 5000);
+
+  test("retains the current access mode while the next image is loading", async () => {
+    const selectedFile: TaskExecutionSelectedFile = {
+      rootPath: "/repo",
+      relativePath: "first.png",
+    };
+    const result: WorkspaceTextFileReadResult = {
+      kind: "image",
+      rootPath: "/repo",
+      relativePath: "first.png",
+      mime: "image/png",
+      base64: "aW1hZ2U=",
+      size: 5,
+      mtimeMs: 1,
+      revision: "image-1",
+    };
+    readTextFileMock.mockImplementation((input) =>
+      input.relativePath === "first.png" ? Promise.resolve(result) : new Promise(() => {}),
+    );
+    const onClose = () => {};
+    const view = render(renderPreview({ selectedFile, onClose }));
+    await screen.findByRole("img", { name: "first.png" });
+    view.rerender(
+      renderPreview({
+        selectedFile: { ...selectedFile, access: "local" },
+        onClose,
+      }),
+    );
+    await screen.findByText("/repo/first.png");
+    await waitFor(() =>
+      expect(
+        latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
+          filesystemQueryKeys.textFile("/repo", "first.png", "local"),
+        ),
+      ).toBe(result),
+    );
+    expect(
+      latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
+        filesystemQueryKeys.textFile("/repo", "first.png"),
+      ),
+    ).toBe(result);
+    view.rerender(
+      renderPreview({
+        selectedFile: {
+          ...selectedFile,
+          relativePath: "next.png",
+          access: "local",
+        },
+        preservePreviousSnapshot: true,
+        onClose,
+      }),
+    );
+    await waitFor(() =>
+      expect(readTextFileMock).toHaveBeenCalledWith({
+        rootPath: "/repo",
+        relativePath: "next.png",
+        access: "local",
+      }),
+    );
+    expect(screen.getByText("/repo/first.png")).toBeTruthy();
+  });
   test("shows a local image without mounting the code editor and reports decode failure", async () => {
     const selectedFile: TaskExecutionSelectedFile = {
       rootPath: "/tmp",

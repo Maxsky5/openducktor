@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { constants } from "node:fs";
 import {
   chmod,
   mkdir,
   mkdtemp,
-  open,
   readFile,
   realpath,
   rename,
@@ -47,38 +45,50 @@ describe("createFilesystemAdapter file snapshots", () => {
         await rename(filePath, `${filePath}.original`);
         const mkfifo = Bun.spawnSync(["mkfifo", filePath]);
         expect(mkfifo.exitCode).toBe(0);
-        const pending = Effect.runPromiseExit(
-          operation === "read_snapshot"
-            ? filesystem.readFileSnapshot(filePath, 1024)
-            : filesystem.replaceFileBytes({
-                canonicalRootPath: path.dirname(filePath),
-                path: filePath,
-                expectedRevision: original.revision,
-                bytes: encoder.encode("draft"),
-                maxCurrentBytes: 1024,
-              }),
+        // A blocked native open cannot be canceled in this process. Kill its child on timeout.
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            "--eval",
+            `
+            import { Cause, Effect, Option } from "effect";
+            import path from "node:path";
+            import { createFilesystemAdapter } from ${JSON.stringify(new URL("./filesystem-adapter.ts", import.meta.url).href)};
+            const [filePath, revision, operation] = process.argv.slice(1);
+            const filesystem = createFilesystemAdapter();
+            const exit = await Effect.runPromiseExit(operation === "read_snapshot"
+              ? filesystem.readFileSnapshot(filePath, 1024)
+              : filesystem.replaceFileBytes({ canonicalRootPath: path.dirname(filePath), path: filePath,
+                  expectedRevision: revision, bytes: new TextEncoder().encode("draft"), maxCurrentBytes: 1024 }));
+            console.log(JSON.stringify({ tag: exit._tag, failure: exit._tag === "Failure"
+              ? Option.getOrNull(Cause.findErrorOption(exit.cause)) : null }));
+          `,
+            filePath,
+            original.revision,
+            operation,
+          ],
+          { cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" },
         );
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-          const exit = await Promise.race([
-            pending,
+          const exitCode = await Promise.race([
+            child.exited,
             new Promise<null>((resolve) => {
-              timer = setTimeout(() => resolve(null), 500);
+              timer = setTimeout(() => resolve(null), 2_000);
             }),
           ]);
-          expect(exit).not.toBeNull();
-          expect(exit?._tag).toBe("Failure");
-          if (exit?._tag === "Failure") {
-            const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
-            expect(failure).toMatchObject({ code: "unavailable_file", operation });
-          }
+          expect(exitCode).not.toBeNull();
+          expect(exitCode).toBe(0);
+          const output = JSON.parse(await new Response(child.stdout).text());
+          expect(output).toMatchObject({
+            tag: "Failure",
+            failure: { code: "unavailable_file", operation },
+          });
           expect(await readFile(`${filePath}.original`, "utf8")).toBe("original");
         } finally {
           if (timer !== undefined) clearTimeout(timer);
-          // Release a blocked reader if this regression returns; leave no pending I/O.
-          const writer = await open(filePath, constants.O_RDWR | constants.O_NONBLOCK);
-          await writer.close();
-          await pending;
+          if (child.exitCode === null) child.kill("SIGKILL");
+          await child.exited;
         }
       },
     );

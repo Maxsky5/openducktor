@@ -157,8 +157,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         if (
           previous?.sessionKey === previewSessionKey &&
           previous.snapshot.result === currentSnapshot.result &&
-          previous.snapshot.selectedFile.rootPath === currentSnapshot.selectedFile.rootPath &&
-          previous.snapshot.selectedFile.relativePath === currentSnapshot.selectedFile.relativePath
+          taskExecutionSelectedFileKey(previous.snapshot.selectedFile) ===
+            taskExecutionSelectedFileKey(currentSnapshot.selectedFile)
         ) {
           return previous;
         }

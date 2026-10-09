@@ -1,6 +1,9 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { Editor, EditorType } from "@pierre/diffs/edit";
-import { lazy, Suspense, type ReactElement, type RefObject, useState } from "react";
+import { lazy, Suspense, type ReactElement, type RefObject, useState, useCallback } from "react";
+import type { MarkdownImageProps } from "../task-description-editor/task-description-image-context";
+import { isChatLocalDestination } from "./agent-chat/agent-chat-file-link";
+import { MarkdownFileImage } from "./markdown-file-image";
 import {
   isMarkdownFile,
   type TaskExecutionSelectedFile,
@@ -54,6 +57,7 @@ export function FilePreviewBody({
       <MarkdownFileEditor
         key={`${previewSessionKey}:${fileId}:${snapshot.result.revision}`}
         contents={editable ? editor.draftContents : snapshot.result.contents}
+        file={snapshot.selectedFile}
         disabled={!editable || hasPendingDiscard || editor.isSaving}
         onChange={editor.onContentsChange}
       />
@@ -104,13 +108,20 @@ function ImageFilePreview({
 
 function MarkdownFileEditor({
   contents,
+  file,
   disabled,
   onChange,
 }: {
   contents: string;
+  file: TaskExecutionSelectedFile;
   disabled: boolean;
   onChange(contents: string): void;
 }): ReactElement {
+  const renderImage = useCallback(
+    (props: MarkdownImageProps) =>
+      isChatLocalDestination(props.src) ? <MarkdownFileImage file={file} {...props} /> : null,
+    [file],
+  );
   return (
     <div className="h-full overflow-auto p-4">
       <Suspense fallback={<FilePreviewState message="Loading Markdown editor..." />}>
@@ -121,6 +132,7 @@ function MarkdownFileEditor({
           taskId={null}
           uploads={EMPTY_UPLOADS}
           previews={EMPTY_PREVIEWS}
+          renderImage={renderImage}
           onChange={onChange}
         />
       </Suspense>

@@ -135,29 +135,37 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  test("does not insert an image that finishes uploading after the form locks", async () => {
-    const pendingUpload =
-      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
-    const onUpload = mock(() => pendingUpload.promise);
-    const onChange = mock((_value: string) => {});
-    const props = { ...createProps(), markdown: "Draft", onChange, onUpload };
-    const view = render(<TaskDescriptionEditor {...props} />);
-    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
-    onChange.mockClear();
-    const image = new File([new Uint8Array([1])], "draft.png", { type: "image/png" });
-    fireEvent.change(view.getByLabelText("Task description images"), {
-      target: { files: [image] },
-    });
-    expect(onUpload).toHaveBeenCalledWith(image);
+  for (const mode of ["Visual", "Markdown"] as const) {
+    for (const state of ["locks", "unmounts"] as const) {
+      test(`does not insert an image that finishes uploading after ${mode} ${state}`, async () => {
+        const pendingUpload =
+          createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+        const onUpload = mock(() => pendingUpload.promise);
+        const onChange = mock((_value: string) => {});
+        const props = { ...createProps(), markdown: "Draft", onChange, onUpload };
+        const view = render(<TaskDescriptionEditor {...props} />);
+        await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+        if (mode === "Markdown") fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+        onChange.mockClear();
+        const image = new File([new Uint8Array([1])], "draft.png", {
+          type: "image/png",
+        });
+        fireEvent.change(view.getByLabelText("Task description images"), {
+          target: { files: [image] },
+        });
+        expect(onUpload).toHaveBeenCalledWith(image);
 
-    view.rerender(<TaskDescriptionEditor {...props} disabled />);
-    await act(async () => {
-      pendingUpload.resolve(await createProps().onUpload());
-      await pendingUpload.promise;
-    });
-    expect(onChange).not.toHaveBeenCalled();
-    expect(view.container.textContent).toContain("Draft");
-  });
+        if (state === "locks") view.rerender(<TaskDescriptionEditor {...props} disabled />);
+        else view.unmount();
+        await act(async () => {
+          pendingUpload.resolve(await createProps().onUpload());
+          await pendingUpload.promise;
+        });
+        expect(onChange).not.toHaveBeenCalled();
+        if (state === "locks") expect(view.container.textContent).toContain("Draft");
+      });
+    }
+  }
 
   test("shows one stable Visual editor surface while the first rich bundle loads", () => {
     const view = render(
