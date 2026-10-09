@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
@@ -117,30 +116,6 @@ const diffModel: AgentStudioGitPanelModel = {
   rebaseOntoTarget: async () => {},
 };
 
-const devServerModel: AgentStudioDevServerPanelModel = {
-  mode: "stopped",
-  isExpanded: false,
-  isLoading: false,
-  disabledReason: null,
-  repoPath: "/repo",
-  owner: { kind: "task", taskId: "task-12" },
-  workingDirectory: "/tmp/worktree/task-12",
-  scripts: [],
-  selectedScriptId: null,
-  selectedScript: null,
-
-  error: null,
-  isStartPending: false,
-  isRetryPending: false,
-  isStopPending: false,
-  isRestartPending: false,
-  onSelectScript: () => {},
-  onStart: () => {},
-  onRetry: () => {},
-  onStop: () => {},
-  onRestart: () => {},
-};
-
 const fileExplorerModel = {
   rootPath: "/repo",
   targetBranch: "origin/main",
@@ -166,7 +141,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioRightPanel", () => {
-  test("builds task execution panel model with git and dev server models", () => {
+  test("builds task execution panel model with the git model", () => {
     const model = buildTaskExecutionPanelModel({
       tabs,
       activeTabId: "git",
@@ -174,7 +149,6 @@ describe("useAgentStudioRightPanel", () => {
       diffModel,
       fileExplorerModel,
       ciChecksModel: null,
-      devServerModel,
       onActiveTabChange: () => {},
     });
 
@@ -184,7 +158,6 @@ describe("useAgentStudioRightPanel", () => {
     expect(model?.gitModel.commitAll).toBe(diffModel.commitAll);
     expect(model?.gitModel.rebaseOntoTarget).toBe(diffModel.rebaseOntoTarget);
     expect(model?.gitModel.pushBranch).toBe(diffModel.pushBranch);
-    expect(model?.devServerModel?.mode).toBe("stopped");
   });
 
   test("builds document tab model when document tab is available", () => {
@@ -195,7 +168,6 @@ describe("useAgentStudioRightPanel", () => {
       diffModel,
       fileExplorerModel,
       ciChecksModel: null,
-      devServerModel: null,
       onActiveTabChange: () => {},
     });
 

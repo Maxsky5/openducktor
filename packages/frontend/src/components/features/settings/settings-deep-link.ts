@@ -5,7 +5,7 @@ import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-sele
 export type SettingsDeepLink =
   | { kind: "custom-agent-roles" }
   | {
-      kind: "repository-configuration" | "repository-dev-servers";
+      kind: "repository-configuration" | "repository-actions";
       repositoryPath: string | null;
     }
   | {
@@ -15,7 +15,7 @@ export type SettingsDeepLink =
   | { kind: "runtime"; runtimeKind: RuntimeKind };
 
 export type SettingsContentFocusRequest =
-  | { kind: "repository-dev-servers" }
+  | { kind: "repository-actions" }
   | { kind: "runtime-executable"; runtimeKind: RuntimeKind };
 
 type GlobalSettingsDeepLinkResolution = {
@@ -67,7 +67,7 @@ export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDee
           repoPath: deepLink.repositoryPath,
         },
       };
-    case "repository-dev-servers":
+    case "repository-actions":
       return {
         scope: "repository",
         navigation: {
@@ -79,7 +79,7 @@ export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDee
           repoPath: deepLink.repositoryPath,
         },
         contentFocus: {
-          kind: "repository-dev-servers",
+          kind: "repository-actions",
         },
       };
   }

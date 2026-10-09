@@ -310,15 +310,6 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos).toEqual([]);
   });
 
-  test("stops managed dev servers during normal host disposal", async () => {
-    const { infos, logger } = createLogger();
-
-    const router = await createRouter({ logger });
-    await Effect.runPromise(router.dispose());
-
-    expect(infos).toContain("No dev servers are running");
-  });
-
   test("disposes SQLite task store connections after every other host resource", async () => {
     const { infos, logger } = createLogger();
 

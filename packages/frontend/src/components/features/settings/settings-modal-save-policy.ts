@@ -80,25 +80,6 @@ export const validateAzureDevOpsDraft = (
   return { errorCount, invalidWorkspaceIds };
 };
 
-export const buildRepoScriptValidationSaveError = ({
-  invalidRepoPathsWithDevServerErrors,
-  repoScriptValidationErrorCount,
-  selectedWorkspaceId,
-}: {
-  invalidRepoPathsWithDevServerErrors: string[];
-  repoScriptValidationErrorCount: number;
-  selectedWorkspaceId: string | null;
-}): string => {
-  const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
-  const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
-    .map((workspaceId) =>
-      workspaceId === selectedWorkspaceId ? "the selected repository" : `\`${workspaceId}\``,
-    )
-    .join(", ");
-
-  return `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
-};
-
 export type SettingsSaveValidation = {
   openCodePermissions: readonly string[];
   azureDevOps: {
@@ -118,27 +99,20 @@ export type SettingsSaveValidation = {
   };
   claude?: { error: string | null; unacknowledged: boolean };
   hasUnacknowledgedCodexDangerousSettings: boolean;
-  repoScripts: {
-    hasErrors: boolean;
-    errorCount: number;
-    invalidRepoPaths: string[];
-    selectedWorkspaceId: string | null;
-  };
 };
 
 export type SettingsSaveBlocker = {
   reason: string;
   runtimeKind: RuntimeKind | null;
-  showRepoScriptErrors: boolean;
 };
 
 const saveBlocker = (
   reason: string,
-  options: Pick<SettingsSaveBlocker, "runtimeKind" | "showRepoScriptErrors"> = {
-    runtimeKind: null,
-    showRepoScriptErrors: false,
-  },
-): SettingsSaveBlocker => ({ reason, ...options });
+  runtimeKind: RuntimeKind | null = null,
+): SettingsSaveBlocker => ({
+  reason,
+  runtimeKind,
+});
 
 export const getSettingsSaveBlocker = (
   validation: SettingsSaveValidation,
@@ -146,7 +120,7 @@ export const getSettingsSaveBlocker = (
   if (validation.openCodePermissions.length > 0) {
     return saveBlocker(
       `Fix OpenCode permissions before saving. ${validation.openCodePermissions[0]}`,
-      { runtimeKind: "opencode", showRepoScriptErrors: false },
+      "opencode",
     );
   }
   if (validation.azureDevOps.hasErrors) {
@@ -185,34 +159,15 @@ export const getSettingsSaveBlocker = (
   if (validation.runtimeAvailability.hasErrors) {
     return saveBlocker(
       buildRuntimeAvailabilitySaveError(validation.runtimeAvailability.errorCount),
-      {
-        runtimeKind: validation.runtimeAvailability.invalidKind,
-        showRepoScriptErrors: false,
-      },
+      validation.runtimeAvailability.invalidKind,
     );
   }
   if (validation.claude?.error)
-    return saveBlocker(`Fix Claude settings before saving: ${validation.claude.error}`, {
-      runtimeKind: "claude",
-      showRepoScriptErrors: false,
-    });
+    return saveBlocker(`Fix Claude settings before saving: ${validation.claude.error}`, "claude");
   if (validation.claude?.unacknowledged)
-    return saveBlocker("Confirm the Claude safety acknowledgement before saving.", {
-      runtimeKind: "claude",
-      showRepoScriptErrors: false,
-    });
+    return saveBlocker("Confirm the Claude safety acknowledgement before saving.", "claude");
   if (validation.hasUnacknowledgedCodexDangerousSettings) {
     return saveBlocker(buildCodexDangerousSettingsSaveError());
-  }
-  if (validation.repoScripts.hasErrors) {
-    return saveBlocker(
-      buildRepoScriptValidationSaveError({
-        invalidRepoPathsWithDevServerErrors: validation.repoScripts.invalidRepoPaths,
-        repoScriptValidationErrorCount: validation.repoScripts.errorCount,
-        selectedWorkspaceId: validation.repoScripts.selectedWorkspaceId,
-      }),
-      { runtimeKind: null, showRepoScriptErrors: true },
-    );
   }
   return null;
 };

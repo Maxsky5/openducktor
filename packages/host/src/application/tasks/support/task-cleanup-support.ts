@@ -11,7 +11,6 @@ import { HostDependencyError, HostValidationError } from "../../../effect/host-e
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
-import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
@@ -306,13 +305,11 @@ const requireTaskCleanupWorktreeFiles = (
 };
 
 export const runTaskRuntimeCleanup = ({
-  devServerService,
   progress,
   repoPath,
   taskIds,
   terminalService,
 }: {
-  devServerService: DevServerService;
   progress: TaskCleanupProgressState;
   repoPath: string;
   taskIds: string[];
@@ -325,16 +322,10 @@ export const runTaskRuntimeCleanup = ({
         ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
         : "checked task terminals",
     );
-
-    for (const taskId of taskIds) {
-      yield* devServerService.stop({ repoPath, owner: { kind: "task", taskId } });
-    }
-    progress.completedSteps.push("stopped task dev servers");
   });
 
 export const runTaskLocalCleanup = ({
   branchNames,
-  devServerService,
   gitPort,
   managedWorktreeBasePath,
   progress,
@@ -347,7 +338,6 @@ export const runTaskLocalCleanup = ({
   worktreePaths,
 }: {
   branchNames: string[];
-  devServerService: DevServerService;
   gitPort: GitPort;
   managedWorktreeBasePath: string;
   progress: TaskCleanupProgressState;
@@ -375,7 +365,6 @@ export const runTaskLocalCleanup = ({
         : null;
 
     yield* runTaskRuntimeCleanup({
-      devServerService,
       progress,
       repoPath,
       taskIds,

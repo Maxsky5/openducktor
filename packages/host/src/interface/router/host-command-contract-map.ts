@@ -5,7 +5,6 @@ import type { createGeneratedImageCommandHandlers } from "../commands/generated-
 import type { Effect } from "effect";
 import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
 import type { createAgentRuntimeQueryCommandHandlers } from "../commands/agent-runtime-query-command-handlers";
-import type { createDevServerCommandHandlers } from "../commands/dev-server-command-handlers";
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
 import type { createGitCommandHandlers } from "../commands/git-command-handlers";
 import type { createGitProviderCommandHandlers } from "../commands/git-provider-command-handlers";
@@ -22,6 +21,7 @@ import type { createSystemDiagnosticsCommandHandlers } from "../commands/system-
 import type { createSystemPlatformCommandHandlers } from "../commands/system-platform-command-handlers";
 import type { createTaskAssetCommandHandlers } from "../commands/task-asset-command-handlers";
 import type { createTaskCommandHandlers } from "../commands/task-command-handlers";
+import type { createRepoActionCommandHandlers } from "../commands/repo-action-command-handlers";
 import type { createTaskWorktreeCommandHandlers } from "../commands/task-worktree-command-handlers";
 import type { createTerminalCommandHandlers } from "../commands/terminal-command-handlers";
 import type { createWorkspaceFilesCommandHandlers } from "../commands/workspace-files-command-handlers";
@@ -37,7 +37,6 @@ type AllHostCommandHandlers = ReturnType<typeof createNotificationCommandHandler
   ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionImportCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionCommandHandlers> &
-  ReturnType<typeof createDevServerCommandHandlers> &
   ReturnType<typeof createFilesystemCommandHandlers> &
   ReturnType<typeof createGitCommandHandlers> &
   ReturnType<typeof createGitProviderCommandHandlers> &
@@ -56,6 +55,7 @@ type AllHostCommandHandlers = ReturnType<typeof createNotificationCommandHandler
   ReturnType<typeof createTaskCommandHandlers> &
   ReturnType<typeof createTaskWorktreeCommandHandlers> &
   ReturnType<typeof createTerminalCommandHandlers> &
+  ReturnType<typeof createRepoActionCommandHandlers> &
   ReturnType<typeof createWorkspaceFilesCommandHandlers> &
   ReturnType<typeof createWorkspaceLifecycleCommandHandlers> &
   ReturnType<typeof createWorkspaceSettingsCommandHandlers>;

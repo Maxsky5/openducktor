@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
+import { invalidateTerminalList } from "@/state/queries/terminals";
 import { host } from "@/state/operations/host";
 import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
@@ -47,10 +48,17 @@ export function WorkspaceSessionHistoryDialog({
     mutationFn: (sessionId: string) => host.workspaceSessionRestore({ workspaceId, sessionId }),
     onSuccess: async (session) => {
       updateWorkspaceSessionQueries(queryClient, workspaceId, session);
-      await queryClient.invalidateQueries({
-        queryKey: workspaceSessionQueryKeys.list(workspaceId, true),
-        exact: true,
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: workspaceSessionQueryKeys.list(workspaceId, true),
+          exact: true,
+        }),
+        invalidateTerminalList(queryClient, {
+          kind: "workspace_session",
+          workspaceId,
+          sessionId: session.id,
+        }),
+      ]);
     },
     onSettled: () => {
       void invalidateRepoBranchesQuery(queryClient, repoPath);

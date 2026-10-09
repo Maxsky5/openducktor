@@ -9,9 +9,9 @@ describe("resolveSettingsDeepLink", () => {
     });
   });
 
-  test("resolves the repository dev-servers intent as one complete settings destination", () => {
+  test("resolves the repository actions intent as one complete settings destination", () => {
     const deepLink = {
-      kind: "repository-dev-servers" as const,
+      kind: "repository-actions" as const,
       repositoryPath: "/repo-two",
     };
 
@@ -26,15 +26,13 @@ describe("resolveSettingsDeepLink", () => {
         repoPath: "/repo-two",
       },
       contentFocus: {
-        kind: "repository-dev-servers",
+        kind: "repository-actions",
       },
     });
   });
 
   test("preserves an explicit missing repository without choosing a fallback", () => {
-    expect(
-      resolveSettingsDeepLink({ kind: "repository-dev-servers", repositoryPath: null }),
-    ).toEqual({
+    expect(resolveSettingsDeepLink({ kind: "repository-actions", repositoryPath: null })).toEqual({
       scope: "repository",
       navigation: {
         section: "repositories",
@@ -45,7 +43,7 @@ describe("resolveSettingsDeepLink", () => {
         repoPath: null,
       },
       contentFocus: {
-        kind: "repository-dev-servers",
+        kind: "repository-actions",
       },
     });
   });

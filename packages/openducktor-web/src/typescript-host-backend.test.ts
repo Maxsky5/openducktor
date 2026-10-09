@@ -152,7 +152,6 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     }),
   },
   terminalService: {
-    openOutputSource: () => unexpectedTerminalOperation("openOutputSource"),
     acknowledge: () => unexpectedTerminalOperation("acknowledge"),
     acquireTaskCleanup: () => unexpectedTerminalOperation("acquireTaskCleanup"),
     acquireWorkspaceSessionCleanup: () =>
@@ -1163,20 +1162,6 @@ describe("TypeScript web host backend", () => {
     const events = [
       { channel: "openducktor://run-event", payload: { type: "run" } },
       {
-        channel: "openducktor://dev-server-event",
-        payload: {
-          type: "snapshot",
-          state: {
-            repoPath: "/repo",
-            owner: { kind: "task", taskId: "task-1" },
-            workingDirectory: null,
-            scripts: [],
-            revision: 0,
-            updatedAt: "2026-03-19T15:30:00.000Z",
-          },
-        },
-      },
-      {
         channel: "openducktor://agent-session-live-event",
         payload: {
           type: "snapshot",
@@ -1216,7 +1201,7 @@ describe("TypeScript web host backend", () => {
       for (const event of events) {
         expect(replay).toContain(JSON.stringify(event));
       }
-      expect(replay).toContain(`id: 3\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `);
+      expect(replay).toContain(`id: 2\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `);
       eventBus.publish({
         channel: "openducktor://agent-session-live-event",
         payload: {
@@ -1226,7 +1211,7 @@ describe("TypeScript web host backend", () => {
         },
       });
       const next = new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
-      expect(next).toContain(`id: 4\nevent: ${liveSessionStreamEventName("/other")}\ndata: `);
+      expect(next).toContain(`id: 3\nevent: ${liveSessionStreamEventName("/other")}\ndata: `);
     } finally {
       await reader.cancel();
     }

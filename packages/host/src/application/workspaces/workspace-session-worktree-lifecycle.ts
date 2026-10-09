@@ -2,15 +2,19 @@ import type {
   RepoConfig,
   WorkspaceSessionArchivePreview,
   WorkspaceSessionExecutionTarget,
+  WorkspaceSessionRefInput,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { canonicalTargetBranch, checkoutBranch } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
-import { runHookCommandsAllowFailure } from "../tasks/support/workflow-hooks";
 import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
+import {
+  runWorkspaceSessionWorktreeActions,
+  stopWorktreeActionTerminals,
+} from "./workspace-session-worktree-actions";
 
 type WorktreeTarget = Extract<WorkspaceSessionExecutionTarget, { kind: "local_worktree" }>;
 
@@ -108,13 +112,14 @@ export const removeWorkspaceSessionWorktree = (
 
 export const withRestoredWorkspaceSessionWorktree = <A, E>(
   dependencies: WorkspaceSessionTargetDependencies,
+  owner: WorkspaceSessionRefInput,
   config: RepoConfig,
   target: WorktreeTarget,
   use: (target: WorktreeTarget) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const { git, settingsConfig, worktreeFiles, systemCommands } = dependencies;
+      const { git, settingsConfig, worktreeFiles } = dependencies;
       const { repoPath } = config;
       const branchName = target.branchName;
       if (branchName === null)
@@ -145,6 +150,10 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
         });
       }
       let acquired = false;
+      const actionRun = dependencies.worktreeActions.createRun({
+        worktreePath: target.workingDirectory,
+        branch: branchName,
+      });
       const result = yield* Effect.exit(
         Effect.gen(function* () {
           yield* git
@@ -167,17 +176,11 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
                 target.workingDirectory,
                 config.worktreeCopyPaths,
               );
-              const hookFailure = yield* runHookCommandsAllowFailure(
-                systemCommands,
-                config.hooks.preStart,
-                target.workingDirectory,
-              );
-              if (hookFailure) {
-                return yield* new HostOperationError({
-                  operation: "workspaceSession.restore.preStart",
-                  message: `Workspace Session pre-start hook failed: ${hookFailure.hook}\n${hookFailure.stderr}`,
-                });
-              }
+              yield* runWorkspaceSessionWorktreeActions(actionRun, {
+                owner,
+                repoPath,
+                actions: config.actions,
+              });
               yield* validateWorkspaceSessionTarget(dependencies, repoPath, target);
             }),
           );
@@ -186,6 +189,10 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
       );
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired) return yield* Effect.failCause(result.cause);
+      yield* stopWorktreeActionTerminals(actionRun, {
+        operation: "workspaceSession.restore.cleanup",
+        message: `Workspace Session restore failed: ${Cause.pretty(result.cause)}`,
+      });
       const cleanup = yield* Effect.exit(
         removeWorkspaceSessionWorktree(dependencies, config, target, target.workingDirectory),
       );

@@ -4,7 +4,6 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { buildState } from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -147,7 +146,6 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
   configureShellBridge(
     createShellBridgeFixture({
       client: {
-        devServerGetState: async (_repoPath, owner) => buildState({ owner, scripts: [] }),
         gitGetComparisonTarget: async (_repo, _dir, target) => ({
           kind: "available",
           reference: `refs/heads/${target.branch}`,
@@ -162,9 +160,6 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
         }),
         gitGetBranches: async () => [],
         gitRebaseBranch: rebase,
-      },
-      bridge: {
-        subscribeDevServerEvents: async () => ({ transportEpoch: "test:1", unsubscribe: () => {} }),
       },
     }),
   );
@@ -260,7 +255,6 @@ test.each(["directory", "branch"] as const)(
     configureShellBridge(
       createShellBridgeFixture({
         client: {
-          devServerGetState: async (_repoPath, owner) => buildState({ owner, scripts: [] }),
           gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
           gitGetWorktreeStatus: async (_repoPath, _target, _scope, workingDir) =>
             status(workingDir),
@@ -276,12 +270,6 @@ test.each(["directory", "branch"] as const)(
           },
           gitGetBranches: async () => [],
           gitPullBranch: pull,
-        },
-        bridge: {
-          subscribeDevServerEvents: async () => ({
-            transportEpoch: "test:1",
-            unsubscribe: () => {},
-          }),
         },
       }),
     );

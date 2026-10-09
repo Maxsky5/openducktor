@@ -2,8 +2,6 @@ export {
   type AzureDevOpsConnectionUpdateListener,
   type AppUpdateBridge,
   createDisabledAppUpdateBridge,
-  type DevServerEventListener,
-  type DevServerEventSubscription,
   type HostBridge,
   type NotificationBridge,
   type RunEventListener,

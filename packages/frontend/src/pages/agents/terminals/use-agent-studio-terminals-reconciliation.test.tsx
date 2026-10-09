@@ -26,6 +26,7 @@ const summaryForTask = (taskId: string): TerminalSummary => ({
   createdAt: "2026-07-13T00:00:00.000Z",
   lifecycle: "running",
   exit: null,
+  startedBy: "user",
 });
 
 const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
@@ -631,7 +632,7 @@ describe("useAgentStudioTerminals", () => {
       expect(probes.get("terminal-task-b")).toEqual([taskBProbe]);
       act(() => {
         taskAProbe.input.onTitleChange("Task A title");
-        taskAProbe.input.onLifecycle("exited", "Task A exited.");
+        taskAProbe.input.onLifecycle("exited", { text: "Task A exited.", isFailure: true });
       });
 
       view.rerender(renderHarness("task-a", ["task-a", "task-b"]));

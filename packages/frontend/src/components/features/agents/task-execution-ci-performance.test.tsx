@@ -149,7 +149,6 @@ const basePanelModel = {
     isActive: false,
     queryInput: ciQueryInput,
   },
-  devServerModel: null,
 } satisfies TaskExecutionPanelModel;
 
 function CiPerformanceHarness({

@@ -1,4 +1,8 @@
-import type { TerminalContext, TerminalCreateRequest } from "@openducktor/contracts";
+import type {
+  TerminalContext,
+  TerminalCreateRequest,
+  TerminalOwnedLaunchSpec,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -48,7 +52,7 @@ export const createTerminalTargetResolver = ({
   const resolveTask = (
     context: Extract<TerminalContext, { taskId: string }>,
     workingDir: string,
-  ): Effect.Effect<TerminalTarget, TerminalServiceError> =>
+  ): Effect.Effect<TerminalOwnedLaunchSpec, TerminalServiceError> =>
     Effect.gen(function* () {
       const repoPath = yield* canonicalizeRepositoryPath(context.repoPath, "create");
       const worktree = yield* taskWorktrees
@@ -133,7 +137,7 @@ export const createTerminalTargetResolver = ({
   const resolveWorkspaceSession = (
     context: Extract<TerminalContext, { kind: "workspace_session" }>,
     workingDir: string,
-  ): Effect.Effect<TerminalTarget, TerminalServiceError> =>
+  ): Effect.Effect<TerminalOwnedLaunchSpec, TerminalServiceError> =>
     Effect.gen(function* () {
       const { settings, store } = workspaceSessions;
       const config = yield* settings.getRepoConfig(context.workspaceId).pipe(
@@ -253,14 +257,25 @@ export const createTerminalTargetResolver = ({
       return { context: { ...context, repoPath }, workingDir: savedWorkingDir };
     });
 
+  /** Resolves the saved target of a task or chat owner. */
+  const resolveOwned = ({
+    context,
+    workingDir,
+  }: TerminalOwnedLaunchSpec): Effect.Effect<TerminalOwnedLaunchSpec, TerminalServiceError> =>
+    isTaskTerminalContext(context)
+      ? resolveTask(context, workingDir)
+      : resolveWorkspaceSession(context, workingDir);
+
   return {
     canonicalizeRepositoryPath,
-    resolve(input: TerminalCreateRequest): Effect.Effect<TerminalTarget, TerminalServiceError> {
-      const { context, workingDir } = input;
-      if (isTaskTerminalContext(context)) return resolveTask(context, workingDir);
-      if (isWorkspaceSessionTerminalContext(context))
-        return resolveWorkspaceSession(context, workingDir);
-      return Effect.succeed({ context, workingDir });
+    resolve({
+      context,
+      workingDir,
+    }: TerminalCreateRequest): Effect.Effect<TerminalTarget, TerminalServiceError> {
+      return isTaskTerminalContext(context) || isWorkspaceSessionTerminalContext(context)
+        ? resolveOwned({ context, workingDir })
+        : Effect.succeed({ context, workingDir });
     },
+    resolveOwned,
   };
 };

@@ -71,12 +71,7 @@ export function TaskCloseConfirmDialog({
               This manual override moves the task to Done and bypasses unfinished workflow steps.
             </p>
             <p>No code is merged and no pull request is created, updated, or merged.</p>
-            <p>Task-scoped dev servers will be stopped.</p>
-            <p>
-              {impact.terminalCount === 0
-                ? "No running task terminals will be stopped."
-                : `${impact.terminalCount} associated terminal${impact.terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
-            </p>
+            <p>{terminalStopMessage(impact.terminalCount)}</p>
             <TaskStopImpactNotice
               count={impact.activeSessionCount}
               error={impact.activeSessionCountError}
@@ -85,18 +80,7 @@ export function TaskCloseConfirmDialog({
             {impact.isLoadingStopImpact ? (
               <p>{formatActiveSessionStopLoadingMessage("close")}</p>
             ) : null}
-            {impact.isLoading ? (
-              <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
-            ) : impact.error ? (
-              <p>{formatUnknownManagedSessionCleanupMessage()}</p>
-            ) : impact.hasManagedSessionCleanup ? (
-              <p>{formatManagedSessionCleanupMessage(impact.managedWorktreeCount)}</p>
-            ) : (
-              <p>
-                Linked task worktrees and related local branches will be deleted when present. Any
-                uncommitted changes in those worktrees will be lost.
-              </p>
-            )}
+            <p>{worktreeCleanupMessage(impact)}</p>
             <p>The task record, documents, QA reports, and linked history are retained.</p>
           </div>
           {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
@@ -127,4 +111,24 @@ export function TaskCloseConfirmDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function terminalStopMessage(terminalCount: number): string {
+  if (terminalCount === 0) return "No running task terminals will be stopped.";
+  const noun = terminalCount === 1 ? "terminal" : "terminals";
+  return `${terminalCount} task ${noun}, including action terminals, will be stopped before the task closes.`;
+}
+
+function worktreeCleanupMessage(
+  impact: Pick<
+    TaskCloseConfirmDialogProps["impact"],
+    "isLoading" | "error" | "hasManagedSessionCleanup" | "managedWorktreeCount"
+  >,
+): string {
+  if (impact.isLoading) return formatManagedSessionCleanupLoadingMessage("close");
+  if (impact.error) return formatUnknownManagedSessionCleanupMessage();
+  if (impact.hasManagedSessionCleanup) {
+    return formatManagedSessionCleanupMessage(impact.managedWorktreeCount);
+  }
+  return "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost.";
 }

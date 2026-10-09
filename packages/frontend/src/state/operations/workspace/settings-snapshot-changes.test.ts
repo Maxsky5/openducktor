@@ -42,7 +42,6 @@ describe("diffSettingsSnapshots", () => {
       customAgentRolesChanged: true,
       kanbanDoneVisibleDaysChanged: false,
       changedGitProviderRepoPaths: ["/repo-a", "/repo-b"],
-      changedDevServerRepoPaths: ["/repo-a", "/repo-b"],
     });
   });
 
@@ -62,7 +61,6 @@ describe("diffSettingsSnapshots", () => {
       customAgentRolesChanged: false,
       kanbanDoneVisibleDaysChanged: false,
       changedGitProviderRepoPaths: [],
-      changedDevServerRepoPaths: [],
     });
   });
 
@@ -96,31 +94,24 @@ describe("diffSettingsSnapshots", () => {
       createSnapshot({
         "repo-a": {
           ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
-          hooks: { preStart: ["bun run setup"], postComplete: [] },
+          actions: {
+            items: [
+              {
+                id: "test",
+                icon: "test",
+                name: "Test",
+                command: "bun test",
+                runOnWorktreeCreate: false,
+                waitBeforeAgentStart: false,
+              },
+            ],
+            defaultActionId: "test",
+          },
         },
       }),
     );
 
     expect(changes.workspacesChanged).toBe(true);
-    expect(changes.changedGitProviderRepoPaths).toEqual([]);
-    expect(changes.changedDevServerRepoPaths).toEqual([]);
-  });
-
-  test("reports only the repository whose dev-server scripts changed", () => {
-    const repoA = createRepoSettingsConfigFixture("repo-a", "/repo-a");
-    const repoB = createRepoSettingsConfigFixture("repo-b", "/repo-b");
-    const changes = diffSettingsSnapshots(
-      createSnapshot({ "repo-a": repoA, "repo-b": repoB }),
-      createSnapshot({
-        "repo-a": repoA,
-        "repo-b": {
-          ...repoB,
-          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-        },
-      }),
-    );
-
-    expect(changes.changedDevServerRepoPaths).toEqual(["/repo-b"]);
     expect(changes.changedGitProviderRepoPaths).toEqual([]);
   });
 
@@ -167,7 +158,6 @@ describe("diffSettingsSnapshots", () => {
     );
 
     expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-moved", "/repo-a"]);
-    expect(changes.changedDevServerRepoPaths).toEqual(["/repo-moved", "/repo-a"]);
   });
 
   test("reports a repository added after the previous snapshot", () => {

@@ -51,7 +51,7 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 2. `start-session.ts` applies `fresh`, `reuse`, or `fork` rules.
 3. `session-start-launch-options.ts` resolves the mode for the selected launch action.
 4. A fresh or forked session reads task documents, resolves the runtime, and reads the repository default model.
-5. Every fresh workflow role uses the task-session bootstrap. The first role creates the canonical task worktree and runs copy paths and pre-start hooks. Later roles check and reuse that worktree. The runtime stays repository-scoped, but the session uses the worktree. Only Builder completion moves the task to `in_progress`.
+5. Every fresh workflow role uses the task-session bootstrap. The first role creates the canonical task worktree, copies the configured files, and runs the worktree-creation actions. Later roles check and reuse that worktree. The runtime stays repository-scoped, but the session uses the worktree. Only Builder completion moves the task to `in_progress`.
 6. The host starts the selected runtime. Descriptors and `RuntimeInstanceSummary` form the shared contract. OpenCode uses `local_http`; Codex uses stdio app-server; Claude uses a host service.
 7. A managed runtime MCP process gets the host bridge URL and token. It cannot pass `workspaceId`. An external client can pass `workspaceId`. Neither path gets a database path.
 8. The host starts, resumes, or forks through the registered live-session adapter.

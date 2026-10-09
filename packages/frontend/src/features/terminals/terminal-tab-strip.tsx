@@ -53,7 +53,7 @@ function TerminalTabDragOverlay({ tab }: { tab: TerminalTab }): ReactElement {
       aria-hidden="true"
       className={cn(
         terminalTabShellClassName,
-        "z-50 border-r border-(--dev-server-terminal-border) border-t-4 border-t-selected-accent bg-(--dev-server-terminal-tab-active) text-(--dev-server-terminal-foreground)",
+        "z-50 border-r border-(--terminal-border) border-t-4 border-t-selected-accent bg-(--terminal-tab-active) text-(--terminal-foreground)",
       )}
     >
       <TerminalTabLabel tab={tab} />
@@ -112,7 +112,7 @@ function SortableTerminalTab({
         variant="ghost"
         aria-label={`Close ${terminalTabLabel(tab)}`}
         aria-busy={terminalTabLifecycle(tab) === "closing"}
-        className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
+        className="absolute right-1 z-20 size-6 rounded-sm text-[var(--terminal-foreground)] hover:bg-[var(--terminal-surface)] hover:text-[var(--terminal-foreground)]"
         disabled={terminalTabLifecycle(tab) === "closing"}
         onMouseDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}

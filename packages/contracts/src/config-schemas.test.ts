@@ -188,9 +188,9 @@ describe("config-schemas", () => {
     ).toThrow("Favorite model id cannot be blank.");
   });
 
-  test("defaults dev servers to an empty array", () => {
+  test("defaults actions to an empty list with no default", () => {
     const parsed = repoConfigSchema.parse(baseRepoConfigInput);
-    expect(parsed.devServers).toEqual([]);
+    expect(parsed.actions).toEqual({ items: [], defaultActionId: null });
   });
 
   test("defaults repository Git config to no provider", () => {
@@ -209,59 +209,117 @@ describe("config-schemas", () => {
     expect(parsed).not.toHaveProperty("trustedHooksFingerprint");
   });
 
-  test("requires named dev server commands", () => {
-    expect(() =>
-      repoConfigSchema.parse({
-        ...baseRepoConfigInput,
-        devServers: [
-          {
-            id: "frontend",
-            name: "",
-            command: "bun run dev",
-          },
-        ],
-      }),
-    ).toThrow();
-  });
-
-  test("trims dev server fields and rejects duplicate ids", () => {
+  test("trims action fields and keeps list order", () => {
     const parsed = repoConfigSchema.parse({
       ...baseRepoConfigInput,
-      devServers: [
-        {
-          id: " frontend ",
-          name: " Frontend ",
-          command: " bun run dev ",
-        },
-      ],
+      actions: {
+        items: [
+          {
+            id: " setup ",
+            icon: "configure",
+            name: " Install ",
+            command: " bun install \n bun run build ",
+            runOnWorktreeCreate: true,
+            waitBeforeAgentStart: true,
+          },
+          {
+            id: "dev",
+            icon: "play",
+            name: "Dev",
+            command: "bun run dev",
+            runOnWorktreeCreate: false,
+            waitBeforeAgentStart: false,
+          },
+        ],
+        defaultActionId: "dev",
+      },
     });
 
-    expect(parsed.devServers).toEqual([
-      {
-        id: "frontend",
-        name: "Frontend",
-        command: "bun run dev",
-      },
-    ]);
-
-    expect(() =>
-      repoConfigSchema.parse({
-        ...baseRepoConfigInput,
-        devServers: [
-          { id: "frontend", name: "Frontend", command: "bun run dev" },
-          { id: " frontend ", name: "Backend", command: "bun run api" },
-        ],
-      }),
-    ).toThrow("Duplicate dev server id: frontend");
+    expect(parsed.actions).toEqual({
+      items: [
+        {
+          id: "setup",
+          icon: "configure",
+          name: "Install",
+          command: "bun install \n bun run build",
+          runOnWorktreeCreate: true,
+          waitBeforeAgentStart: true,
+        },
+        {
+          id: "dev",
+          icon: "play",
+          name: "Dev",
+          command: "bun run dev",
+          runOnWorktreeCreate: false,
+          waitBeforeAgentStart: false,
+        },
+      ],
+      defaultActionId: "dev",
+    });
   });
 
-  test("rejects whitespace-only dev server fields", () => {
+  test("rejects blank action names and commands", () => {
+    const action = {
+      id: "dev",
+      icon: "play",
+      name: "Dev",
+      command: "bun run dev",
+      runOnWorktreeCreate: false,
+      waitBeforeAgentStart: false,
+    };
     expect(() =>
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
-        devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+        actions: { items: [{ ...action, name: "  " }], defaultActionId: "dev" },
       }),
-    ).toThrow("Dev server command cannot be blank.");
+    ).toThrow("Action name cannot be blank.");
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [{ ...action, command: "  " }], defaultActionId: "dev" },
+      }),
+    ).toThrow("Action command cannot be blank.");
+  });
+
+  test("rejects duplicate action ids, a wait without worktree creation, and a missing default", () => {
+    const action = {
+      id: "dev",
+      icon: "play",
+      name: "Dev",
+      command: "bun run dev",
+      runOnWorktreeCreate: false,
+      waitBeforeAgentStart: false,
+    };
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [action, { ...action, id: " dev " }], defaultActionId: "dev" },
+      }),
+    ).toThrow("Duplicate action id: dev");
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [{ ...action, waitBeforeAgentStart: true }], defaultActionId: "dev" },
+      }),
+    ).toThrow("can make the agent wait only when it runs on worktree creation.");
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [action], defaultActionId: null },
+      }),
+    ).toThrow("The default action must be one of the repository actions.");
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [action], defaultActionId: "missing" },
+      }),
+    ).toThrow("The default action must be one of the repository actions.");
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        actions: { items: [], defaultActionId: "dev" },
+      }),
+    ).toThrow("A repository with no actions cannot have a default action.");
   });
 
   test("requires explicit repo runtime kind", () => {

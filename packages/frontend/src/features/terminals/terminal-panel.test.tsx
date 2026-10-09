@@ -53,6 +53,7 @@ const readyTab = (
 const model: TerminalPanelModel = {
   scopeKey: "/repo:task-1",
   isAvailable: true,
+  startBlockedReason: null,
   ...tabsModel([lostTab]),
   activeTabId: "lost:terminal-1",
   isVisible: true,
@@ -68,6 +69,7 @@ const model: TerminalPanelModel = {
   onHide: () => undefined,
   onSelectTab: () => undefined,
   onCreate: () => undefined,
+  onRunAction: () => undefined,
   onRetryDiscovery: () => undefined,
   onRetryCreate: () => undefined,
   onReorderTab: () => undefined,
@@ -146,6 +148,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-19T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     const panelModel = {
       ...model,
@@ -196,6 +199,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     let unmount: () => void = () => undefined;
     const panelModel: TerminalPanelModel = {
@@ -211,9 +215,12 @@ describe("TerminalPanel", () => {
       const callbacks = mount.mock.calls[0]?.[0];
       if (!callbacks) throw new Error("Terminal did not mount");
       if (attention) act(() => callbacks.onAttention(attention));
-      act(() => callbacks.onLifecycle("exited", "Exited with code 1."));
+      act(() => callbacks.onLifecycle("exited", { text: "Exited with code 1.", isFailure: true }));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
         expected,
+      );
+      expect(screen.getByRole("status", { name: "Terminal status" }).className).toContain(
+        "bg-warning-surface",
       );
       act(() => callbacks.onLifecycle("exited", null));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
@@ -236,6 +243,57 @@ describe("TerminalPanel", () => {
       view.rerender(<TerminalPanel model={panelModel} />);
       await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
       expect(screen.queryByRole("status", { name: "Terminal status" })).toBeNull();
+    } finally {
+      unmount();
+      mount.mockRestore();
+      await controller.dispose();
+    }
+  });
+  test("shows a clean exit as a neutral status", async () => {
+    const mount = spyOn(terminalMount, "mountTerminalViewport").mockReturnValue({
+      activate: () => undefined,
+      dispose: () => undefined,
+    });
+    const controller = createTerminalTransportController(
+      {
+        connect: async () => ({
+          send: async () => undefined,
+          close: () => undefined,
+        }),
+      },
+      () => undefined,
+    );
+    const summary: TerminalSummary = {
+      terminalId: "terminal-setup",
+      label: "Worktree setup",
+      context: {},
+      initialWorkingDir: "/repo",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      exit: null,
+      startedBy: "host",
+    };
+    let unmount: () => void = () => undefined;
+    try {
+      unmount = render(
+        <TerminalPanel
+          model={{
+            ...model,
+            ...tabsModel([readyTab(summary)]),
+            activeTabId: "tab:terminal-setup",
+            controller,
+          }}
+        />,
+      ).unmount;
+      await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
+      const callbacks = mount.mock.calls[0]?.[0];
+      if (!callbacks) throw new Error("Terminal did not mount");
+      act(() => callbacks.onLifecycle("exited", { text: "Exited with code 0.", isFailure: false }));
+
+      const status = screen.getByRole("status", { name: "Terminal status" });
+      expect(status.textContent).toBe("Exited with code 0.");
+      expect(status.className).toContain("bg-muted");
+      expect(status.className).not.toContain("bg-warning-surface");
     } finally {
       unmount();
       mount.mockRestore();
@@ -334,6 +392,7 @@ describe("TerminalPanel", () => {
       terminalId: null,
       summary: null,
       label: "Task A shell",
+      actionId: null,
       error: "Task A creation failed.",
       requestState: "creation_failed",
     };
@@ -341,6 +400,7 @@ describe("TerminalPanel", () => {
       ...taskAFailedTab,
       tabId: "creating:task-b",
       label: "Task B shell",
+      actionId: "lint",
       error: "Task B creation failed.",
     };
     const view = render(
@@ -366,7 +426,7 @@ describe("TerminalPanel", () => {
     const activeRetry = screen.getByRole("button", { name: "Retry terminal creation" });
     fireEvent.click(activeRetry);
 
-    expect(onRetryCreate).toHaveBeenCalledWith("/repo:task-b", taskBFailedTab.tabId);
+    expect(onRetryCreate).toHaveBeenCalledWith("/repo:task-b", taskBFailedTab.tabId, "lint");
   });
 
   test("links each current terminal tab to its tab panel", () => {
@@ -426,6 +486,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     render(
       <TerminalPanel
@@ -488,6 +549,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     render(
       <TerminalPanel
@@ -533,6 +595,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     const view = render(
       <TerminalPanel
@@ -576,6 +639,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     render(
       <TerminalPanel
@@ -593,7 +657,7 @@ describe("TerminalPanel", () => {
     expect(closeButton.querySelector(".animate-spin")).toBeTruthy();
   });
 
-  test("reuses compact Dev Server terminal chrome without muted icon actions", () => {
+  test("uses compact terminal chrome without muted icon actions", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
       label: "Shell 1",
@@ -602,6 +666,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     const view = render(
       <div className="dark">
@@ -624,7 +689,7 @@ describe("TerminalPanel", () => {
     const createButton = screen.getByRole("button", { name: "New terminal" });
     expect(createButton.textContent).toBe("");
     expect(createButton.className).not.toContain("bg-primary");
-    expect(createButton.className).toContain("text-(--dev-server-terminal-foreground)");
+    expect(createButton.className).toContain("text-(--terminal-foreground)");
     expect(createButton.className).not.toContain("text-muted-foreground");
     expect(createButton.className).not.toContain(" opacity-");
     const tab = screen.getByRole("tab", { name: "Shell 1, Running" });
@@ -637,9 +702,9 @@ describe("TerminalPanel", () => {
     expect(tab.className).toContain("rounded-none");
     expect(tab.className).toContain("font-mono");
     expect(tab.className).toContain("text-[11px]");
-    expect(tab.className).toContain("bg-(--dev-server-terminal-tab-inactive)");
+    expect(tab.className).toContain("bg-(--terminal-tab-inactive)");
     expect(tab.className).toContain("data-[state=active]:border-t-selected-accent");
-    expect(tab.className).toContain("data-[state=active]:bg-(--dev-server-terminal-tab-active)");
+    expect(tab.className).toContain("data-[state=active]:bg-(--terminal-tab-active)");
     expect(closeButton.className).not.toContain(" opacity-");
     const panel = view.container.querySelector(".bg-card");
     expect(panel).toBeNull();
@@ -656,6 +721,7 @@ describe("TerminalPanel", () => {
               terminalId: null,
               summary: null,
               label: "Shell 1",
+              actionId: null,
               error: null,
               requestState: "creating",
             },
@@ -668,7 +734,7 @@ describe("TerminalPanel", () => {
 
     expect(screen.queryByText("Creating terminal…")).toBeNull();
     const surface = screen.getByTestId("terminal-starting-surface");
-    expect(surface.className).toContain("bg-[var(--dev-server-terminal-panel)]");
+    expect(surface.className).toContain("bg-[var(--terminal-panel)]");
   });
 
   test("uses an exited lifecycle frame across every surface despite a stale running summary", async () => {
@@ -681,6 +747,7 @@ describe("TerminalPanel", () => {
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
       exit: null,
+      startedBy: "user",
     };
     render(
       <TerminalPanel

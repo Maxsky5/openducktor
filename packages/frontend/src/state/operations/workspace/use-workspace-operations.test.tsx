@@ -325,10 +325,9 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
           hooks: {
-            preStart: [],
             postComplete: [],
           },
-          devServers: [],
+          actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},

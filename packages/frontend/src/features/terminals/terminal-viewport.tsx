@@ -8,22 +8,21 @@ import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
+import type { TerminalExitNotice } from "./terminal-viewport-policy";
 
 type TerminalViewportProps = {
-  mode: "interactive" | "output";
   terminalId: string;
   controller: TerminalTransportController;
   platform: AppPlatform | undefined;
   active: boolean;
   focusRequest: number;
   onAttention: (message: string | null) => void;
-  onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
   onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
 };
 
 export function TerminalViewport({
-  mode,
   terminalId,
   controller,
   platform,
@@ -62,7 +61,6 @@ export function TerminalViewport({
     try {
       mountRef.current = mountTerminalViewport({
         container,
-        mode,
         terminalId,
         controller,
         isActive,
@@ -77,7 +75,7 @@ export function TerminalViewport({
         },
         writeClipboard: (text) => navigator.clipboard.writeText(text),
         onAttention: (message) => callbacksRef.current.onAttention(message),
-        onLifecycle: (lifecycle, exitText) => callbacksRef.current.onLifecycle(lifecycle, exitText),
+        onLifecycle: (lifecycle, exit) => callbacksRef.current.onLifecycle(lifecycle, exit),
         onForgotten: (message, failure) => callbacksRef.current.onForgotten(message, failure),
         onTitleChange: (title) => callbacksRef.current.onTitleChange(title),
         onHydrated: () => setIsHydrated(true),
@@ -95,7 +93,7 @@ export function TerminalViewport({
       mountRef.current = null;
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, mode, terminalId]);
+  }, [controller, terminalId]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;
@@ -104,12 +102,12 @@ export function TerminalViewport({
   }, [active, focusRequest, isHydrated]);
 
   return (
-    <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
+    <div className="relative h-full min-h-0 bg-[var(--terminal-panel)]">
       <div
         ref={containerRef}
         className={cn("h-full min-h-0 px-2 py-1", (!isHydrated || mountError) && "invisible")}
         role="application"
-        aria-label={`${mode === "output" ? "Dev server output" : "Interactive terminal"} ${terminalId}`}
+        aria-label={`Interactive terminal ${terminalId}`}
       />
       {isImageDragActive ? (
         <div
@@ -120,14 +118,11 @@ export function TerminalViewport({
         </div>
       ) : null}
       {mountError ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--dev-server-terminal-panel)] p-6">
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--terminal-panel)] p-6">
           <div role="alert" className="flex max-w-md flex-col items-center gap-2 text-center">
             <p className="text-sm font-semibold text-foreground">Terminal failed to start</p>
             <p className="text-xs text-muted-foreground">
-              {mountError}{" "}
-              {mode === "output"
-                ? "Stop and restart this dev server."
-                : "Close and reopen this terminal tab."}
+              {mountError} Close and reopen this terminal tab.
             </p>
           </div>
         </div>

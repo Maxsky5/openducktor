@@ -52,7 +52,7 @@ Electron, the published web package, and web workspace mode use this setup.
 
 The POSIX probe uses a login-style `argv0`, interactive login command flags, and a minimal environment. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries. The probe has a 15 second limit, because interactive shell startup files can be slow. Windows uses its normalized inherited environment and does not run a shell probe.
 
-`UserEnvironmentPort` in `packages/host/src/ports/user-environment-port.ts` owns the current result. Dev servers, runtime starts, tool discovery, Git, model catalog previews, and terminals read it through `readEnv` when they start a child process. Do not copy the environment when an adapter is created. A running runtime keeps the environment of its own start.
+`UserEnvironmentPort` in `packages/host/src/ports/user-environment-port.ts` owns the current result. Runtime starts, tool discovery, Git, model catalog previews, and terminals read it through `readEnv` when they start a child process. Do not copy the environment when an adapter is created. A running runtime keeps the environment of its own start.
 
 Values that do not use `PATH` read `startupEnv`, the environment at host startup. Examples are the config directory, the MCP discovery path, and the Azure DevOps client ID.
 
@@ -62,7 +62,7 @@ A forced runtime check runs the probe again. The Refresh action in Diagnostics s
 
 Tool discovery keeps the tool paths that it found before. A refresh does not search again for those tools. It only lets a tool that was not found before be found.
 
-If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Dev server starts, runtime starts, model catalog previews, and runtime config initialization fail with the error and do not start a child process. The guards for these operations are in `packages/host/src/composition/node/user-path-guards.ts`. After a refresh resolves `PATH`, the user restarts the failed runtimes from Diagnostics.
+If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Runtime starts, model catalog previews, and runtime config initialization fail with the error and do not start a child process. The guards for these operations are in `packages/host/src/composition/node/user-path-guards.ts`. After a refresh resolves `PATH`, the user restarts the failed runtimes from Diagnostics.
 
 A failed refresh also removes `PATH` from the shared environment, even when the previous probe was successful. Git commands and system commands then run without the user `PATH` until a refresh is successful.
 

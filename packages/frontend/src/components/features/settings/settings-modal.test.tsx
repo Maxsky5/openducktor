@@ -93,7 +93,7 @@ test("shared settings remembers the repository subsection and prompt tab", async
   const settings = renderSettings(true);
   try {
     let content = await settings.open("Open scripts");
-    expect(content.getByLabelText("Worktree setup script (one command per line)")).toBeDefined();
+    expect(content.getByLabelText("Worktree cleanup script (one command per line)")).toBeDefined();
     fireEvent.click(content.getByRole("button", { name: "Repo Prompts" }));
     fireEvent.click(content.getByRole("tab", { name: "QA" }));
     await settings.close(content);
@@ -112,7 +112,7 @@ test("shared settings clears the repository target after closing", async () => {
     await settings.close(content);
     content = await settings.open();
     expect(content.queryByRole("alert")).toBeNull();
-    expect(content.getByLabelText("Worktree setup script (one command per line)")).toBeDefined();
+    expect(content.getByLabelText("Worktree cleanup script (one command per line)")).toBeDefined();
   } finally {
     settings.unmount();
   }
@@ -232,11 +232,11 @@ function renderSettings(shared: boolean) {
       <SettingsModal triggerLabel="Open roles" deepLink={{ kind: "custom-agent-roles" }} />
       <SettingsModal
         triggerLabel="Open scripts"
-        deepLink={{ kind: "repository-dev-servers", repositoryPath: "/repo" }}
+        deepLink={{ kind: "repository-actions", repositoryPath: "/repo" }}
       />
       <SettingsModal
         triggerLabel="Open missing scripts"
-        deepLink={{ kind: "repository-dev-servers", repositoryPath: "/missing" }}
+        deepLink={{ kind: "repository-actions", repositoryPath: "/missing" }}
       />
     </>
   );

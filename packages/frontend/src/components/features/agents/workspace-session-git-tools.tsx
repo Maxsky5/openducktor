@@ -1,8 +1,6 @@
-import type { DevServerOwner } from "@openducktor/contracts";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import { GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
-import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import type { DiffDataState } from "@/features/agent-studio-git";
 import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
@@ -13,8 +11,6 @@ import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 export function WorkspaceSessionGitTools({
   actions,
   commentOwner,
-  repoPath,
-  devServerOwner,
   control,
   diffData,
   contextMode,
@@ -27,11 +23,6 @@ export function WorkspaceSessionGitTools({
   refresh,
   tools,
 }: WorkspaceSessionGitToolsProps): ReactElement {
-  const devServerModel = useAgentStudioDevServerPanel({
-    repoPath,
-    owner: devServerOwner,
-    enabled: true,
-  });
   const model: AgentStudioGitPanelModel = {
     ...diffData,
     ...actions,
@@ -74,7 +65,6 @@ export function WorkspaceSessionGitTools({
     <SharedToolsPanel
       model={{
         ...tools,
-        devServerModel,
         tabs: [
           { id: "git", label: "Git", icon: GitBranch, content: <GitPanel {...model} /> },
           ...tools.tabs,
@@ -87,8 +77,6 @@ export function WorkspaceSessionGitTools({
 type WorkspaceSessionGitToolsProps = {
   actions: ReturnType<typeof useAgentStudioGitActions>;
   commentOwner: Extract<InlineCommentOwner, { kind: "workspace_session" }>;
-  repoPath: string;
-  devServerOwner: DevServerOwner;
   tools: SharedToolsPanelModel<WorkspaceToolsTabId>;
   control: ReturnType<
     typeof import("@/features/agent-studio-git/use-session-comparison").useSessionComparisonControl
@@ -104,7 +92,7 @@ type WorkspaceSessionGitToolsProps = {
   refresh: () => Promise<void>;
 };
 
-// Keep dev-server updates from redrawing unchanged Git data.
+// Keep tab and file explorer updates from redrawing unchanged Git data.
 const GitPanel = memo(function GitPanel(model: AgentStudioGitPanelModel): ReactElement {
   return <AgentStudioGitPanel model={model} />;
 });

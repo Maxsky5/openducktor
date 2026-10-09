@@ -244,9 +244,8 @@ const createRepoSettings = (
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
   postCompleteHooks: [],
-  devServers: [],
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
     spec: specDefault,

@@ -12,8 +12,8 @@ import {
   createBuildStartGitPort,
   createBuildStartRuntimeRegistry,
   createBuildStartWorktreeFiles,
-  createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
+  createBuildWorktreeActions,
   createRuntimeDefinitionsService,
   createTaskService,
   type RuntimeRegistryPort,
@@ -27,12 +27,12 @@ const createDependencies = (calls: unknown[], taskStore: TaskStorePort) => ({
   runtimeDefinitionsService: createRuntimeDefinitionsService(),
   runtimeRegistry: createBuildStartRuntimeRegistry(calls),
   settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-  systemCommands: createBuildSystemCommands(calls),
+  worktreeActions: createBuildWorktreeActions(calls),
   worktreeFiles: createBuildStartWorktreeFiles(calls),
   workspaceSettingsService: createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
-    hooks: { preStart: [], postComplete: [] },
+    hooks: { postComplete: [] },
   }),
 });
 
@@ -136,7 +136,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
-  test("cleans a new worktree once when preparation is interrupted during a pre-start hook", async () => {
+  test("cleans a new worktree once when preparation is interrupted during a worktree action", async () => {
     const calls: unknown[] = [];
     const started = createGate();
     const deps = createDependencies(calls, {
@@ -146,15 +146,11 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       ...deps,
       taskSessionLifecycleCoordinator: coordinator,
-      workspaceSettingsService: createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { preStart: ["bun install"], postComplete: [] },
-      }),
-      systemCommands: {
-        ...deps.systemCommands,
-        runCommandAllowFailure: () =>
-          Effect.sync(started.release).pipe(Effect.andThen(Effect.never)),
+      worktreeActions: {
+        createRun: () => ({
+          run: () => Effect.sync(started.release).pipe(Effect.andThen(Effect.never)),
+          stopTerminals: () => Effect.sync(() => void calls.push("stopWorktreeActionTerminals")),
+        }),
       },
     });
     const fiber = Effect.runFork(
@@ -172,6 +168,13 @@ describe("createTaskService build start worktree handling", () => {
           (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
         ),
       ).toHaveLength(1);
+      // The action terminals stop before Git removes their worktree.
+      const closeIndex = calls.indexOf("stopWorktreeActionTerminals");
+      const removeIndex = calls.findIndex(
+        (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
+      );
+      expect(closeIndex).toBeGreaterThanOrEqual(0);
+      expect(closeIndex).toBeLessThan(removeIndex);
       await expect(
         Effect.runPromise(
           Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
@@ -539,5 +542,14 @@ describe("createTaskService build start worktree handling", () => {
       worktreePath: "/worktrees/repo/task-1",
       force: true,
     });
+    const closeIndex = calls.findIndex(
+      (call) =>
+        z.object({ type: z.literal("stopWorktreeActionTerminals") }).safeParse(call).success,
+    );
+    const removeIndex = calls.findIndex(
+      (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
+    );
+    expect(closeIndex).toBeGreaterThanOrEqual(0);
+    expect(closeIndex).toBeLessThan(removeIndex);
   });
 });

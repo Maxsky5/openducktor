@@ -1,11 +1,13 @@
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 import {
   beginTerminalClose,
   forgetTerminalSession,
   exitTerminalSession,
+  isCommandRunning,
   isLiveTerminal,
   markTerminalCloseFailed,
   markTerminalOverflowed,
@@ -165,6 +167,14 @@ export const createTerminalSessionLifecycle = ({
     );
   }
 
+  // A command process can end while its flow control runs. Its failure does not stop the shell.
+  function terminateCurrentForOverflow(
+    session: TerminalSession,
+    handle: TerminalSession["resources"]["handle"],
+  ): void {
+    if (session.resources.handle === handle) terminateForOverflow(session);
+  }
+
   function applyStreamEvents(session: TerminalSession, events: TerminalOutputEvents): void {
     for (const event of events) {
       if (event.type === "overflow") {
@@ -173,12 +183,13 @@ export const createTerminalSessionLifecycle = ({
         event.type === "resume_requested" ||
         (event.type === "attachments_empty" && session.resources.handle)
       ) {
+        const handle = session.resources.handle;
         Effect.runFork(
-          session.output.resumeIfUnblocked(session.resources.handle).pipe(
+          session.output.resumeIfUnblocked(handle).pipe(
             Effect.tap((resumeEvents) =>
               Effect.sync(() => applyStreamEvents(session, resumeEvents)),
             ),
-            Effect.tapError(() => Effect.sync(() => terminateForOverflow(session))),
+            Effect.tapError(() => Effect.sync(() => terminateCurrentForOverflow(session, handle))),
           ),
         );
       } else if (event.type === "pause_requested" && session.resources.handle) {
@@ -186,36 +197,38 @@ export const createTerminalSessionLifecycle = ({
         Effect.runFork(
           session.output.pauseIfRequested(handle).pipe(
             Effect.tap((pauseEvents) => Effect.sync(() => applyStreamEvents(session, pauseEvents))),
-            Effect.tapError(() => Effect.sync(() => terminateForOverflow(session))),
+            Effect.tapError(() => Effect.sync(() => terminateCurrentForOverflow(session, handle))),
           ),
         );
       }
     }
   }
 
+  const hasChildProcesses = (session: TerminalSession, handle: TerminalPtyHandle) =>
+    handle
+      .hasChildProcesses()
+      .pipe(
+        Effect.mapError((cause) =>
+          terminalFailure(
+            "close_failed",
+            "close",
+            `Failed to determine whether ${session.summary.label} has running commands.`,
+            session.summary.terminalId,
+            cause,
+          ),
+        ),
+      );
+
   const closeSession = (session: TerminalSession, confirmTerminate: boolean) =>
     Effect.gen(function* () {
       const terminalId = session.summary.terminalId;
       const handle = session.resources.handle;
-      if (
-        session.kind === "interactive" &&
-        isLiveTerminal(session) &&
-        !confirmTerminate &&
-        session.resources.handle
-      ) {
-        const inspection = yield* Effect.result(session.resources.handle.hasChildProcesses());
-        if (inspection._tag === "Failure") {
-          return yield* Effect.fail(
-            terminalFailure(
-              "close_failed",
-              "close",
-              `Failed to determine whether ${session.summary.label} has running commands.`,
-              terminalId,
-              inspection.failure,
-            ),
-          );
-        }
-        if (inspection.success) {
+      if (!confirmTerminate && isLiveTerminal(session)) {
+        // A command phase is busy without a process inspection.
+        const busy =
+          isCommandRunning(session) ||
+          (handle !== null && (yield* hasChildProcesses(session, handle)));
+        if (busy) {
           return yield* Effect.fail(
             terminalFailure(
               "confirmation_required",

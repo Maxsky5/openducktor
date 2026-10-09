@@ -5,6 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { failAfterRollback, rollbackFailureError } from "../tasks/support/task-worktree-rollback";
 import type { TaskServiceError } from "../tasks/task-service";
 import type {
   PreparedTaskSessionStart,
@@ -53,7 +54,7 @@ export const createStartTaskWorkflowSession =
             if (summary) {
               yield* runtime.stopSession(toControlSessionRef(repoPath, summary));
             }
-            yield* prepared.cleanup();
+            yield* prepared.rollback();
           });
 
         return yield* Effect.gen(function* () {
@@ -81,15 +82,11 @@ export const createStartTaskWorkflowSession =
             return summary;
           }).pipe(Effect.uninterruptible, Effect.result);
           if (launched._tag === "Failure") {
-            const cleanupError = yield* prepared.cleanup();
-            if (!cleanupError) {
-              return yield* Effect.fail(launched.failure);
-            }
-            return yield* Effect.fail(
-              new HostOperationError({
+            return yield* failAfterRollback(
+              prepared.rollback(),
+              launched.failure,
+              rollbackFailureError(launched.failure, {
                 operation: "task-workflow-session.start",
-                message: `${launched.failure.message}${cleanupError}`,
-                cause: launched.failure,
                 details: { repoPath, taskId: scope.taskId },
               }),
             );
@@ -107,31 +104,37 @@ export const createStartTaskWorkflowSession =
             stored = true;
           }).pipe(Effect.uninterruptible, Effect.result);
           if (persisted._tag === "Failure") {
-            const stopped = yield* Effect.result(
-              runtime.stopSession(toControlSessionRef(repoPath, summary)),
-            );
-            const cleanupError = stopped._tag === "Success" ? yield* prepared.cleanup() : "";
-            if (stopped._tag === "Success" && !cleanupError) {
-              return yield* Effect.fail(persisted.failure);
-            }
-            return yield* Effect.fail(
-              new HostOperationError({
-                operation: "task-workflow-session.store-control-result",
-                message: `${errorMessage(persisted.failure)}${
-                  stopped._tag === "Failure"
-                    ? ` Cleanup failed: ${stopped.failure.message}`
-                    : cleanupError
-                }`,
-                cause: {
-                  storeFailure: persisted.failure,
-                  stopFailure: stopped._tag === "Failure" ? stopped.failure : undefined,
-                },
-                details: {
-                  repoPath,
-                  taskId: scope.taskId,
-                  externalSessionId: summary.externalSessionId,
-                },
-              }),
+            const storeFailure = persisted.failure;
+            const storeError = {
+              operation: "task-workflow-session.store-control-result",
+              details: {
+                repoPath,
+                taskId: scope.taskId,
+                externalSessionId: summary.externalSessionId,
+              },
+            };
+            // The worktree rollback runs only after the runtime session stops.
+            return yield* runtime.stopSession(toControlSessionRef(repoPath, summary)).pipe(
+              Effect.mapError(
+                (stopFailure) =>
+                  new HostOperationError({
+                    ...storeError,
+                    message: `${errorMessage(storeFailure)} Cleanup failed: ${stopFailure.message}`,
+                    cause: { storeFailure, stopFailure },
+                  }),
+              ),
+              Effect.andThen(
+                failAfterRollback(
+                  prepared.rollback(),
+                  storeFailure,
+                  (rollbackFailure) =>
+                    new HostOperationError({
+                      ...storeError,
+                      message: `${errorMessage(storeFailure)}\n${rollbackFailure.message}`,
+                      cause: { storeFailure, rollbackFailure },
+                    }),
+                ),
+              ),
             );
           }
           const completed = yield* Effect.result(

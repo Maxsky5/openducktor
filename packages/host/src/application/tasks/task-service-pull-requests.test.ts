@@ -14,7 +14,6 @@ import {
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createPullRequestDetectSystemCommands,
@@ -249,7 +248,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -314,7 +313,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -528,7 +527,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -756,7 +755,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -961,7 +960,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -1240,7 +1239,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -1572,7 +1571,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -1833,7 +1832,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -2031,7 +2030,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).upsertPullRequest({
           repoPath: "/repo",
@@ -2223,7 +2222,6 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createGithubTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -2253,7 +2251,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -2462,7 +2460,7 @@ describe("createTaskService pull requests", () => {
             workspaceSettingsService: createBuildWorkspaceSettingsService({
               workspaceId: "repo",
               repoPath: "/repo",
-              hooks: { preStart: [], postComplete: [] },
+              hooks: { postComplete: [] },
               git: {
                 provider: {
                   id: "github",
@@ -2528,7 +2526,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -2580,7 +2578,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -2618,7 +2616,6 @@ describe("createTaskService pull requests", () => {
       listTasks: () => Effect.fail(mutationFailure),
     };
     const service = createGithubTaskService({
-      devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [] }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       systemCommands: createPullRequestSyncSystemCommands({
@@ -2635,7 +2632,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -2831,7 +2828,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
             git: {
               provider: {
                 id: "github",
@@ -3231,7 +3228,6 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -3244,7 +3240,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -3389,7 +3385,6 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -3410,7 +3405,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
     await expect(
@@ -3429,10 +3424,6 @@ describe("createTaskService pull requests", () => {
       {
         type: "setPullRequest",
         input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
@@ -3474,7 +3465,6 @@ describe("createTaskService pull requests", () => {
       transitionTask: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
-      devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({
         calls: [],
         currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
@@ -3493,7 +3483,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -3528,7 +3518,6 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskStore,
@@ -3536,7 +3525,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -3676,7 +3665,6 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
@@ -3684,7 +3672,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).linkMergedPullRequest({
           repoPath: "/repo",
@@ -3812,7 +3800,6 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService([]),
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
@@ -3820,7 +3807,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).linkMergedPullRequest({
           repoPath: "/repo",

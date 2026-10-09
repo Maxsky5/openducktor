@@ -37,13 +37,12 @@ export class TerminalScreenState {
   private writing = false;
   private pendingBytes = 0;
 
-  constructor(grid: TerminalGrid, convertEol = false) {
+  constructor(grid: TerminalGrid) {
     this.terminal = new Terminal({
       cols: grid.columns,
       rows: grid.rows,
       scrollback: SCREEN_SCROLLBACK_ROWS,
       allowProposedApi: true,
-      convertEol,
     });
     this.terminal.loadAddon(this.serializer);
     // SAFETY: xterm 6.0.0 emits parsed OSC color changes from this internal handler.
@@ -207,6 +206,21 @@ export class TerminalScreenState {
       );
     }
     return { columns: this.terminal.cols, rows: this.terminal.rows, payload, precedingJoinState };
+  }
+
+  /** Reads the last text lines of the parsed screen, without trailing blank lines. */
+  outputTail(lineCount: number): string[] {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    for (let index = 0; index < buffer.length; index += 1) {
+      const line = buffer.getLine(index);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+      else lines.push(text);
+    }
+    while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
+    return lines.slice(-lineCount);
   }
 
   dispose(): void {

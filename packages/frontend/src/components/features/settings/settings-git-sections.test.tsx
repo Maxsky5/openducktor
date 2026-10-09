@@ -75,10 +75,9 @@ const baseRepoConfig: SettingsRepoConfig = {
     },
   },
   hooks: {
-    preStart: [],
     postComplete: [],
   },
-  devServers: [],
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},

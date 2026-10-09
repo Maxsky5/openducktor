@@ -18,7 +18,6 @@ import { createTaskMutationProgressFailure } from "../task-mutation-progress-fai
 import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
-  devServerService,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -35,7 +34,6 @@ export const createTaskDirectMergeUseCase = ({
       const mergeInput = input.input;
       const dependencies = yield* requireDependencies(() =>
         requireDirectMergeDependencies({
-          devServerService,
           gitPort,
           settingsConfig,
           taskWorktreeService,

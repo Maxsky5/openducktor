@@ -56,7 +56,7 @@ Human actions are `human_request_changes(taskId, note)` and `human_approve(taskI
 | `human_approve` | `ai_review`, `human_review` | All direct epic children are closed. | `closed` |
 | `close_task` | Any non-closed status. | Detail sheet only. No live role activity. Epic children are closed. Cleanup succeeds. | `closed` |
 
-`reset_task` clears documents, linked sessions, delivery data, and in-memory runs. `close_task` stops task dev servers and removes task worktrees and related local branches.
+`reset_task` clears documents, linked sessions, delivery data, and in-memory runs. `close_task` stops task terminals and removes task worktrees and related local branches.
 
 ## Invalid examples
 

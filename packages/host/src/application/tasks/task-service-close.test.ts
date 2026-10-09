@@ -14,14 +14,12 @@ import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
-  createDevServerServiceTestDouble,
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
   createWorktreeFilePortTestDouble,
 } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
-import type { DevServerService } from "../dev-servers/dev-server-service";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import {
@@ -86,8 +84,8 @@ const repoConfig: RepoConfig = {
   defaultTargetBranch: { remote: "origin", branch: "main" },
   worktreeBasePath: "/worktrees/repo",
   git: {},
-  hooks: { preStart: [], postComplete: [] },
-  devServers: [],
+  hooks: { postComplete: [] },
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
@@ -166,22 +164,6 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
     },
   });
 
-const createDevServerService = (calls: string[] = []): DevServerService =>
-  createDevServerServiceTestDouble({
-    stop: (input) => {
-      const { repoPath, owner } = input;
-      calls.push(`stop-dev:${owner.kind === "task" ? owner.taskId : owner.sessionId}`);
-      return Effect.succeed({
-        repoPath,
-        owner,
-        workingDirectory: null,
-        scripts: [],
-        revision: 0,
-        updatedAt: "2026-05-10T11:30:00.000Z",
-      });
-    },
-  });
-
 const createGitPort = (input: {
   calls?: string[];
   branches?: GitBranch[];
@@ -217,7 +199,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -231,14 +212,13 @@ describe("TaskService.closeTask", () => {
     expect(closed.availableActions).not.toContain("close_task");
     expect(closed.documentSummary.spec.has).toBe(true);
     expect(closed.pullRequest?.number).toBe(12);
-    expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
+    expect(calls).toEqual(["transition:task-1:closed"]);
   });
 
   test("does not require task worktree service when no task worktree exists", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       workspaceSettingsService: createWorkspaceSettingsService(),
@@ -248,14 +228,13 @@ describe("TaskService.closeTask", () => {
     const closed = await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(closed.status).toBe("closed");
-    expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
+    expect(calls).toEqual(["transition:task-1:closed"]);
   });
 
   test("requires task worktree service when a task worktree exists", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       workspaceSettingsService: createWorkspaceSettingsService(),
@@ -271,7 +250,6 @@ describe("TaskService.closeTask", () => {
   test("closes an in-progress task", async () => {
     const service = createTaskService({
       taskStore: createTaskStore([task({ status: "in_progress" })]),
-      devServerService: createDevServerService(),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -307,7 +285,6 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], [], { "task-1": [buildSession] }),
-      devServerService: createDevServerService(),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -320,11 +297,10 @@ describe("TaskService.closeTask", () => {
     );
   });
 
-  test("stops dev servers, removes task worktree, deletes related branch, then closes", async () => {
+  test("removes task worktree, deletes related branch, then closes", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [
@@ -345,7 +321,6 @@ describe("TaskService.closeTask", () => {
     await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(calls).toEqual([
-      "stop-dev:task-1",
       "remove-worktree:/worktrees/repo/task-1",
       "remove-path:/worktrees/repo/task-1",
       "delete-branch:odt/task-1",
@@ -353,11 +328,10 @@ describe("TaskService.closeTask", () => {
     ]);
   });
 
-  test("requires worktree file cleanup dependencies before stopping dev servers", async () => {
+  test("requires worktree file cleanup dependencies before cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
@@ -377,7 +351,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService("/repo"),
@@ -408,7 +381,6 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -419,14 +391,13 @@ describe("TaskService.closeTask", () => {
     const closed = await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(closed.status).toBe("closed");
-    expect(calls).toEqual(["stop-dev:task-1", "transition:task-1:closed"]);
+    expect(calls).toEqual(["transition:task-1:closed"]);
   });
 
   test("removes the task worktree whatever branch it has checked out", async () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [
@@ -443,7 +414,6 @@ describe("TaskService.closeTask", () => {
     await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(calls).toEqual([
-      "stop-dev:task-1",
       "remove-worktree:/worktrees/repo/task-1",
       "remove-path:/worktrees/repo/task-1",
       "delete-branch:odt/task-1",
@@ -455,7 +425,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: true, isRemote: false, worktreePath: "/repo" }],
@@ -476,7 +445,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls, registered: false }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
@@ -507,7 +475,6 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
@@ -521,7 +488,6 @@ describe("TaskService.closeTask", () => {
     await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(calls).toEqual([
-      "stop-dev:task-1",
       "remove-worktree:/worktrees/repo/task-1",
       "remove-path:/worktrees/repo/task-1",
       "delete-branch:odt/task-1",
@@ -533,7 +499,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
         branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
@@ -573,7 +538,6 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [qaSession] }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -590,7 +554,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -615,7 +578,6 @@ describe("TaskService.closeTask", () => {
       "terminal-1",
     );
     expect(calls).toContain("terminals:/repo:task-1");
-    expect(calls).not.toContain("stop-dev:task-1");
     expect(calls).not.toContain("transition:task-1:closed");
   });
 
@@ -623,7 +585,6 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -641,7 +602,7 @@ describe("TaskService.closeTask", () => {
     await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
     expect(calls.indexOf("terminals:acquire:/repo:task-1")).toBeLessThan(
-      calls.indexOf("stop-dev:task-1"),
+      calls.indexOf("transition:task-1:closed"),
     );
     expect(calls.indexOf("terminals:release")).toBeGreaterThan(
       calls.indexOf("transition:task-1:closed"),
@@ -670,7 +631,6 @@ describe("TaskService.closeTask", () => {
     const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
       taskStore,
-      devServerService: createDevServerService(),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
       taskSessionLifecycleCoordinator,
@@ -730,7 +690,6 @@ describe("TaskService.closeTask", () => {
         "task-1": [specSession, plannerSession],
       }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
       }),
@@ -745,7 +704,6 @@ describe("TaskService.closeTask", () => {
     expect(closed.status).toBe("closed");
     expect(calls).toEqual([
       "close task:spec,planner",
-      "stop-dev:task-1",
       "remove-worktree:/worktrees/repo/planner-session",
       "remove-path:/worktrees/repo/planner-session",
       "transition:task-1:closed",
@@ -769,7 +727,6 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -819,7 +776,6 @@ describe("TaskService.closeTask", () => {
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
-      devServerService: createDevServerService(calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -830,7 +786,6 @@ describe("TaskService.closeTask", () => {
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
       "Failed stopping live build session session-1.",
     );
-    expect(calls).not.toContain("stop-dev:task-1");
     expect(calls.some((entry) => entry.startsWith("remove-worktree"))).toBe(false);
     expect(calls.some((entry) => entry.startsWith("terminals:"))).toBe(false);
     expect(calls).not.toContain("transition:task-1:closed");

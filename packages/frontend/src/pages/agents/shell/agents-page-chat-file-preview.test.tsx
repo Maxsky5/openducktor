@@ -8,6 +8,7 @@ import {
   buildSessionTranscript,
 } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
+import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { AgentsPageLayout, type AgentsPageLayoutModel } from "./agents-page-layout";
 import * as modals from "./agents-page-modal-content";
@@ -72,6 +73,7 @@ function MainChatPreview() {
     terminalPanel: {
       scopeKey: taskId,
       isAvailable: false,
+      startBlockedReason: null,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -88,6 +90,7 @@ function MainChatPreview() {
       onHide: () => {},
       onSelectTab: () => {},
       onCreate: () => {},
+      onRunAction: () => {},
       onRetryDiscovery: () => {},
       onRetryCreate: () => {},
       onReorderTab: () => {},
@@ -110,7 +113,12 @@ function MainChatPreview() {
 for (const departure of [false, true]) {
   test(`main chat returns keyboard focus only to the same owner; departure=${departure}`, async () => {
     const modalSpy = spyOn(modals, "AgentsPageModalContent").mockImplementation(() => <></>);
-    const h = createDialogPreviewHarness("src/file.ts", <MainChatPreview />);
+    const h = createDialogPreviewHarness(
+      "src/file.ts",
+      <SettingsModalProvider>
+        <MainChatPreview />
+      </SettingsModalProvider>,
+    );
     try {
       const link = await screen.findByRole("link", { name: "Open file" });
       link.focus();
@@ -145,7 +153,12 @@ for (const departure of [false, true]) {
 
 test("main chat remembers the invoking link when focus moves during worktree lookup", async () => {
   const modalSpy = spyOn(modals, "AgentsPageModalContent").mockImplementation(() => <></>);
-  const h = createDialogPreviewHarness("src/file.ts", <MainChatPreview />);
+  const h = createDialogPreviewHarness(
+    "src/file.ts",
+    <SettingsModalProvider>
+      <MainChatPreview />
+    </SettingsModalProvider>,
+  );
   const deferred = Promise.withResolvers<string>();
   h.canonicalize.mockImplementationOnce(() => deferred.promise);
   try {

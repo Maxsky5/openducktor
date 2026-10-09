@@ -95,10 +95,12 @@ function AgentStudioQuickActionsMenu({
 
 export function AgentStudioHeader({
   model,
+  repoActions,
   viewControls,
   openIn,
 }: {
   model: AgentStudioHeaderModel;
+  repoActions: ReactNode;
   viewControls: ReactNode;
   openIn: ReactNode;
 }): ReactElement {
@@ -125,6 +127,7 @@ export function AgentStudioHeader({
       }
       actions={
         <>
+          {repoActions}
           <SessionHistoryMenu
             selector={model.sessionSelector}
             agentStudioReady={model.agentStudioReady}

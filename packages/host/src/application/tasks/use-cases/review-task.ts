@@ -8,7 +8,6 @@ import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/tas
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskReviewUseCases = ({
-  devServerService,
   gitPort,
   taskStore,
   taskSessionLifecycleCoordinator,
@@ -81,14 +80,6 @@ export const createTaskReviewUseCases = ({
         return enrichTask(current, currentTasks);
       }
 
-      if (!devServerService) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: "task dependency",
-            message: "Dev server service is required for human_approve.",
-          }),
-        );
-      }
       if (!terminalService) {
         return yield* Effect.fail(
           new HostDependencyError({
@@ -107,7 +98,6 @@ export const createTaskReviewUseCases = ({
             "closed",
           );
           yield* runTaskRuntimeCleanup({
-            devServerService,
             progress: createTaskCleanupProgressState(),
             repoPath,
             taskIds: [taskId],

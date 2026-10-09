@@ -2,7 +2,6 @@ import { unexpectedSessionImport } from "./session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
 import { Effect } from "effect";
-import type { DevServerService } from "../application/dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../application/workspaces/workspace-settings-service";
 import type { GitPort } from "../ports/git-port";
 import type { SettingsConfigPort } from "../ports/settings-config-port";
@@ -56,18 +55,6 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   stopSession: unexpectedEffectCall("live session adapter", "stopSession"),
   updateSessionModel: unexpectedEffectCall("live session adapter", "updateSessionModel"),
   updateSessionTitle: unexpectedEffectCall("live session adapter", "updateSessionTitle"),
-  ...overrides,
-});
-
-export const createDevServerServiceTestDouble = <Overrides extends Partial<DevServerService>>(
-  overrides: Overrides,
-): DevServerService => ({
-  getState: unexpectedEffectCall("dev server service", "getState"),
-  inspectWorkspaceActivity: unexpectedEffectCall("dev server service", "inspectWorkspaceActivity"),
-  restart: unexpectedEffectCall("dev server service", "restart"),
-  start: unexpectedEffectCall("dev server service", "start"),
-  stop: unexpectedEffectCall("dev server service", "stop"),
-  stopWorkspaceSession: unexpectedEffectCall("dev server service", "stopWorkspaceSession"),
   ...overrides,
 });
 

@@ -24,7 +24,6 @@ import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskDeleteUseCase = ({
-  devServerService,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -38,12 +37,7 @@ export const createTaskDeleteUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId, deleteSubtasks } = input;
       const dependencies = yield* requireDependencies(() =>
-        requireTaskDeleteDependencies(
-          devServerService,
-          gitPort,
-          settingsConfig,
-          workspaceSettingsService,
-        ),
+        requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
       yield* taskSessionLifecycleCoordinator.acquireLifecycle(
@@ -150,7 +144,6 @@ export const createTaskDeleteUseCase = ({
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           branchNames,
-          devServerService: dependencies.devServerService,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
           progress: cleanupProgress,

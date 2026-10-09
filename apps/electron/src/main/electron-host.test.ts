@@ -4,7 +4,6 @@ import path from "node:path";
 import {
   DEFAULT_AGENT_RUNTIMES,
   type GlobalConfig,
-  type HostEventEnvelope,
   type HostRuntimeStatus,
   hostRuntimeSnapshotSchema,
   type RepoConfig,
@@ -17,11 +16,9 @@ import {
 import {
   createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
-  type DevServerProcessPort,
   Effect,
   type FilesystemPort,
   type GitPort,
-  type HostEventBusPort,
   type LocalAttachmentPort,
   type OpenInToolsPort,
   ProcessEnvironmentError,
@@ -111,8 +108,8 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { preStart: [], postComplete: [] },
-  devServers: [],
+  hooks: { postComplete: [] },
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
@@ -662,36 +659,6 @@ const createTaskStore = (): TaskStorePort => ({
     }),
 });
 
-const createDevServerProcesses = (): DevServerProcessPort => ({
-  start: (input) =>
-    Effect.sync(() => {
-      input.onOutput({ data: "ready\n" });
-      return {
-        pid: 1234,
-        waitForReady: () => Effect.void,
-        pauseOutput: () => Effect.void,
-        resumeOutput: () => Effect.void,
-        stop() {
-          input.onExit({ pid: 1234, exitCode: 0, signal: null, error: null });
-          return Effect.succeed(undefined);
-        },
-      };
-    }),
-});
-
-const createEventBus = () => {
-  const events: HostEventEnvelope[] = [];
-  const eventBus: HostEventBusPort = {
-    publish(envelope) {
-      events.push(envelope);
-    },
-    subscribe() {
-      return () => {};
-    },
-  };
-  return { eventBus, events };
-};
-
 type RuntimeStartInput = Parameters<RuntimeStarterPort["startRuntime"]>[0];
 type FakeRuntimeStarter = RuntimeStarterPort & {
   starts: RuntimeStartInput[];
@@ -788,7 +755,6 @@ describe("createElectronHostCommandRouter", () => {
       expect(lifecycleLogs).toEqual(
         expect.arrayContaining([
           "Shutting down OpenDucktor host services",
-          "No dev servers are running",
           "Stopping registered agent runtimes",
           "Stopping the OpenCode runtime opencode-1.",
           "The OpenCode runtime stopped.",
@@ -977,179 +943,7 @@ describe("createElectronHostCommandRouter", () => {
     }
   });
 
-  test("registers migrated passive dev server state command", async () => {
-    const { eventBus, events } = createEventBus();
-    const router = await createElectronHostCommandRouter({
-      devServerProcesses: createDevServerProcesses(),
-      eventBus,
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              devServers: [
-                {
-                  id: "web",
-                  name: "Web",
-                  command: "bun run dev",
-                },
-              ],
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
-    });
-
-    expect(
-      await router.invoke("dev_server_get_state", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      }),
-    ).toMatchObject({
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-1" },
-      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
-      scripts: [
-        {
-          scriptId: "web",
-          name: "Web",
-          command: "bun run dev",
-          status: "stopped",
-        },
-      ],
-    });
-    expect(
-      await router.invoke("task_worktree_get", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).toEqual({
-      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
-    });
-    expect(
-      await router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      }),
-    ).toMatchObject({
-      scripts: [
-        {
-          scriptId: "web",
-          status: "running",
-          pid: 1234,
-          terminalId: expect.any(String),
-        },
-      ],
-    });
-    expect(
-      await router.invoke("dev_server_stop", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      }),
-    ).toMatchObject({
-      scripts: [
-        {
-          scriptId: "web",
-          status: "stopped",
-          pid: null,
-        },
-      ],
-    });
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          channel: "openducktor://dev-server-event",
-          payload: expect.objectContaining({ type: "snapshot" }),
-        }),
-      ]),
-    );
-  });
-
-  test("shows a PATH probe failure in dev server start output", async () => {
-    const diagnostic = new ProcessEnvironmentError({
-      message:
-        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
-      reason: "timed_out",
-      shell: "/bin/zsh",
-    });
-    const router = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      processEnvironmentInput: pathFailure(diagnostic),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
-    });
-
-    await expect(
-      router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      }),
-    ).rejects.toThrow(diagnostic.message);
-    const state = await router.invoke("dev_server_get_state", {
-      repoPath: "/repo",
-      owner: { kind: "task", taskId: "task-1" },
-    });
-
-    expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
-    expect(state.scripts[0]?.terminalId).toEqual(expect.any(String));
-  });
-
-  test("blocks an injected dev server process when the user PATH is unavailable", async () => {
-    const diagnostic = new ProcessEnvironmentError({
-      message:
-        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
-      reason: "timed_out",
-      shell: "/bin/zsh",
-    });
-    let startCalls = 0;
-    const devServerProcesses: DevServerProcessPort = {
-      start: () =>
-        Effect.sync(() => {
-          startCalls += 1;
-          throw new Error("Injected dev server process must not start.");
-        }),
-    };
-    const router = await createElectronHostCommandRouter({
-      devServerProcesses,
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      processEnvironmentInput: pathFailure(diagnostic),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
-    });
-
-    await expect(
-      router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      }),
-    ).rejects.toThrow(diagnostic.message);
-    expect(startCalls).toBe(0);
-  });
-
-  test("resolves PATH again on a forced PATH check and then allows starts", async () => {
+  test("resolves PATH again on a forced PATH check", async () => {
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 15000 ms.",
@@ -1157,17 +951,7 @@ describe("createElectronHostCommandRouter", () => {
       shell: "/bin/zsh",
     });
     let probeCalls = 0;
-    let startCalls = 0;
-    const readyDevServers = createDevServerProcesses();
-    const devServerProcesses: DevServerProcessPort = {
-      start: (input) =>
-        Effect.suspend(() => {
-          startCalls += 1;
-          return readyDevServers.start(input);
-        }),
-    };
     const router = await createElectronHostCommandRouter({
-      devServerProcesses,
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1181,36 +965,21 @@ describe("createElectronHostCommandRouter", () => {
       },
       runtimeHealth: createRuntimeHealth(),
       settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
+        globalConfig({ workspaces: { repo: repoConfig() }, workspaceOrder: ["repo"] }),
       ),
       systemCommands: createSystemCommands(),
     });
-    const startDevServer = () =>
-      router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-      });
 
     await expect(router.invoke("path_check", { force: false })).resolves.toMatchObject({
       ok: false,
       error: diagnostic.message,
     });
-    await expect(startDevServer()).rejects.toThrow(diagnostic.message);
     await expect(router.invoke("path_check", { force: true })).resolves.toMatchObject({
       ok: true,
       error: null,
     });
-    await startDevServer();
 
     expect(probeCalls).toBe(2);
-    expect(startCalls).toBe(1);
   });
 
   test("blocks every runtime start when the user PATH is unavailable", async () => {
@@ -2539,7 +2308,7 @@ describe("createElectronHostCommandRouter", () => {
         globalConfig({
           workspaces: {
             repo: repoConfig({
-              hooks: { preStart: [], postComplete: [] },
+              hooks: { postComplete: [] },
             }),
           },
           workspaceOrder: ["repo"],

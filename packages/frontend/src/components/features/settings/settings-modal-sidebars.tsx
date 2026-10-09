@@ -63,9 +63,7 @@ type RepositorySidebarProps = {
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;
   selectedRepoPromptValidationErrorCount: number;
-  selectedRepoScriptValidationErrorCount: number;
   repoPromptErrorCountByWorkspaceId: Record<string, number>;
-  repoScriptErrorCountByWorkspaceId: Record<string, number>;
   onSelectWorkspaceId: (next: string) => void;
   onSelectSection: (next: RepositorySectionId) => void;
 };
@@ -76,24 +74,19 @@ export function RepositorySidebar({
   selectedRepositorySection,
   disabled,
   selectedRepoPromptValidationErrorCount,
-  selectedRepoScriptValidationErrorCount,
   repoPromptErrorCountByWorkspaceId,
-  repoScriptErrorCountByWorkspaceId,
   onSelectWorkspaceId,
   onSelectSection,
 }: RepositorySidebarProps): ReactElement {
   const repoErrorCountByWorkspaceId: Record<string, number> = {};
   for (const workspace of workspaces) {
-    const errorCount =
-      (repoPromptErrorCountByWorkspaceId[workspace.workspaceId] ?? 0) +
-      (repoScriptErrorCountByWorkspaceId[workspace.workspaceId] ?? 0);
+    const errorCount = repoPromptErrorCountByWorkspaceId[workspace.workspaceId] ?? 0;
     if (errorCount > 0) {
       repoErrorCountByWorkspaceId[workspace.workspaceId] = errorCount;
     }
   }
   const sectionErrorCountById = new Map<RepositorySectionId, number>([
     ["prompts", selectedRepoPromptValidationErrorCount],
-    ["scripts", selectedRepoScriptValidationErrorCount],
   ]);
 
   return (

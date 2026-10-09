@@ -94,19 +94,79 @@ const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): J
     : { ...workspace, git: { ...git, provider } };
 };
 
-const migrateRepositoryGitConfigs = (payload: PersistedConfigObject) => {
+const migrateWorkspaces = (
+  payload: PersistedConfigObject,
+  migrate: (workspaceId: string, workspace: JSONType) => JSONType,
+) => {
   if (!isPersistedConfigObject(payload.workspaces)) {
     return payload;
   }
   return {
     ...payload,
     workspaces: Object.fromEntries(
-      Object.entries(payload.workspaces).map(([id, workspace]) => [
-        id,
-        migrateRepositoryGitConfig(id, workspace),
-      ]),
+      Object.entries(payload.workspaces).map(([id, workspace]) => [id, migrate(id, workspace)]),
     ),
   };
+};
+
+const WORKTREE_SETUP_ACTION_ID = "worktree-setup";
+const legacyPreStartSchema = z.array(z.string());
+
+const uniqueActionId = (baseId: string, takenIds: ReadonlySet<JSONType>): string => {
+  let id = baseId;
+  for (let suffix = 1; takenIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
+  return id;
+};
+
+// Converts the worktree setup script and dev servers into repository actions.
+const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSONType => {
+  if (!isPersistedConfigObject(workspace)) return workspace;
+  const hooks = workspace.hooks;
+  const hasPreStart = isPersistedConfigObject(hooks) && Object.hasOwn(hooks, "preStart");
+  const hasDevServers = Object.hasOwn(workspace, "devServers");
+  if (!hasPreStart && !hasDevServers) return workspace;
+  if (Object.hasOwn(workspace, "actions")) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" contains both actions and legacy dev server or worktree setup settings.`,
+    });
+  }
+  const { devServers = [], ...migrated } = workspace;
+  const preStart = legacyPreStartSchema.safeParse(hasPreStart ? hooks.preStart : []);
+  if (!Array.isArray(devServers) || !preStart.success) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" has invalid legacy dev server or worktree setup settings.`,
+    });
+  }
+  const items: JSONType[] = devServers.map((devServer) =>
+    isPersistedConfigObject(devServer)
+      ? { ...devServer, icon: "play", runOnWorktreeCreate: false, waitBeforeAgentStart: false }
+      : devServer,
+  );
+  const setupLines = preStart.data.map((line) => line.trim()).filter(Boolean);
+  let setupActionId: string | null = null;
+  if (setupLines.length > 0) {
+    setupActionId = uniqueActionId(
+      WORKTREE_SETUP_ACTION_ID,
+      new Set(items.map((item) => (isPersistedConfigObject(item) ? (item.id ?? null) : null))),
+    );
+    items.unshift({
+      id: setupActionId,
+      icon: "configure",
+      name: "Worktree setup",
+      command: setupLines.join("\n"),
+      runOnWorktreeCreate: true,
+      waitBeforeAgentStart: true,
+    });
+  }
+  const firstDevServer = devServers[0];
+  const defaultActionId = isPersistedConfigObject(firstDevServer)
+    ? (firstDevServer.id ?? null)
+    : setupActionId;
+  if (hasPreStart) {
+    const { preStart: _preStart, ...currentHooks } = hooks;
+    migrated.hooks = currentHooks;
+  }
+  return { ...migrated, actions: { items, defaultActionId } };
 };
 
 const migratePersistedConfig = (payload: PersistedConfigObject) => {
@@ -127,7 +187,10 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
       }),
     );
   }
-  return migrateRepositoryGitConfigs(migrateReusablePrompts(migrated));
+  return migrateWorkspaces(
+    migrateWorkspaces(migrateReusablePrompts(migrated), migrateRepositoryGitConfig),
+    migrateRepositoryActions,
+  );
 };
 
 const parseSupportedConfigObject = (

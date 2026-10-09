@@ -15,7 +15,6 @@ import {
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
-import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
@@ -29,6 +28,8 @@ import { createTaskSessionStopService } from "../../application/tasks/task-sessi
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
+import { createRepoActionService } from "../../application/actions/repo-action-service";
+import { createWorktreeActionRunner } from "../../application/actions/worktree-action-runner";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
@@ -36,7 +37,6 @@ import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connect
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
-import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
@@ -49,6 +49,7 @@ import { createSystemPlatformCommandHandlers } from "../../interface/commands/sy
 import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
+import { createRepoActionCommandHandlers } from "../../interface/commands/repo-action-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
 import { createWorkspaceLifecycleCommandHandlers } from "../../interface/commands/workspace-lifecycle-command-handlers";
@@ -89,7 +90,6 @@ export const assembleNodeEffectHostCommandRouter = (
     taskEventPublicationReporter,
   } = input;
   const {
-    devServerProcesses,
     filesystem,
     git,
     localAttachments,
@@ -199,27 +199,17 @@ export const assembleNodeEffectHostCommandRouter = (
         store: assets.workspaceSessionStore,
       },
       ptyPort: terminalPty,
-      resolveLaunchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
+      launchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
     }),
   );
-  const devServerService = createDevServerService({
-    withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-    processPort: devServerProcesses,
-    terminalSources: terminalService,
-    taskWorktreeService,
-    workspaceSessions: {
-      store: assets.workspaceSessionStore,
-      settings: workspaceSettingsService,
-      git,
-      operationGate: workspaceSessions.operationGate,
-    },
-    workspaceSettingsService,
-    eventBus,
+  const repoActionService = createRepoActionService({
+    terminals: terminalService,
+    settings: workspaceSettingsService,
   });
+  const worktreeActions = createWorktreeActionRunner(terminalService);
   const workspaceLifecycleService = createWorkspaceLifecycleService({
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
-      devServerService,
       terminalService,
     }),
     admission: workspaceAdmissionService,
@@ -265,8 +255,8 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     createNodeTaskSessionServices({
       taskServiceInput: {
-        devServerService,
         terminalService,
+        worktreeActions,
         gitPort: git,
         gitProviderResolver,
         taskStore,
@@ -322,7 +312,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const mcpBridge = resolvedMcpHostBridge;
   const { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs } =
     createNodeWorkspaceSessionServices({
-      devServerService,
       terminalService,
       lifecycle: taskSessionLifecycleCoordinator,
       operationGate: workspaceSessions.operationGate,
@@ -336,7 +325,7 @@ export const assembleNodeEffectHostCommandRouter = (
       git,
       settingsConfig,
       worktreeFiles,
-      systemCommands,
+      worktreeActions,
       registry: liveSessionAdapterRegistry,
       publishUpdated: workspaceSessions.publishUpdated,
       runtimeAdmission,
@@ -351,7 +340,6 @@ export const assembleNodeEffectHostCommandRouter = (
     assets,
     azureDevOpsConnection,
     workspaceProviderSetup,
-    devServerService,
     imageWorkers: defaultPorts.imageWorkers,
     shutdownWorkspaceFiles: () =>
       workspaceFilesService.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
@@ -379,7 +367,6 @@ export const assembleNodeEffectHostCommandRouter = (
       },
       previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
     ),
-    ...createDevServerCommandHandlers(devServerService),
     ...createFilesystemCommandHandlers(filesystemService),
     ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
     ...createGitCommandHandlers(gitService),
@@ -415,6 +402,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createTaskCommandHandlers(taskService),
     ...createTaskWorktreeCommandHandlers(taskWorktreeService),
     ...createTerminalCommandHandlers(terminalService),
+    ...createRepoActionCommandHandlers(repoActionService),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
     ...createWorkspaceSessionImportCommandHandlers(workspaceSessionImports),
     ...createWorkspaceSessionCommandHandlers(

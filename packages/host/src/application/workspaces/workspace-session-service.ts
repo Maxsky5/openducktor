@@ -19,7 +19,6 @@ import {
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
-import type { DisposableDevServerService } from "../dev-servers/dev-server-service-types";
 import {
   planRuntimeTitleRename,
   runtimeTitle,
@@ -30,10 +29,6 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
-import {
-  forgetWorkspaceSessionDevServers,
-  stopWorkspaceSessionDevServers,
-} from "./workspace-session-dev-server-cleanup";
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import {
   validateWorkspaceSessionTarget,
@@ -56,10 +51,6 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   markCodexTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
-  devServerService: Pick<
-    DisposableDevServerService,
-    "stopWorkspaceSession" | "forgetWorkspaceSession"
-  >;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeRegistryPort, "requireReady">;
   live: Pick<
@@ -120,6 +111,7 @@ export const createWorkspaceSessionService = (
         return yield* withWorkspaceSessionTarget(
           dependencies,
           {
+            owner: { workspaceId: input.workspaceId, sessionId },
             worktree: input.worktree,
             repoConfig: { ...config, repoPath },
             location: input.location,
@@ -419,7 +411,6 @@ export const createWorkspaceSessionService = (
                 yield* live.stopSession(runtimeRef);
               }
             }
-            yield* stopWorkspaceSessionDevServers(dependencies.devServerService, ref);
             yield* acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input);
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
@@ -456,7 +447,6 @@ export const createWorkspaceSessionService = (
                         }),
                     ),
                   );
-                yield* forgetWorkspaceSessionDevServers(dependencies.devServerService, ref);
                 return archived;
               }),
             );
@@ -476,6 +466,7 @@ export const createWorkspaceSessionService = (
             const config = yield* settings.getRepoConfig(input.workspaceId);
             return yield* withRestoredWorkspaceSessionWorktree(
               dependencies,
+              input,
               { ...config, repoPath: ref.repoPath },
               session.executionTarget,
               (executionTarget) => store.restore({ ...ref, executionTarget }),

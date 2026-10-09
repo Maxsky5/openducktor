@@ -20,6 +20,7 @@ const summary = (): TerminalSummary => ({
   createdAt: "2026-07-17T00:00:00.000Z",
   lifecycle: "starting",
   exit: null,
+  startedBy: "user",
 });
 
 const handle: TerminalPtyHandle = {
@@ -35,7 +36,6 @@ const handle: TerminalPtyHandle = {
 const makeSession = async () => {
   let disposeCalls = 0;
   const session = createTerminalSession({
-    kind: "interactive",
     summary: summary(),
     titleTracker: {
       consume: () => undefined,
@@ -47,6 +47,8 @@ const makeSession = async () => {
     replayByteLimit: 1024,
     shell: "/bin/zsh",
     grid: { columns: 80, rows: 24 },
+    command: null,
+    commandRun: null,
   });
   return { session, disposeCalls: () => disposeCalls };
 };

@@ -29,7 +29,6 @@ type TaskBranchCleanup = {
 };
 
 export const createTaskLinkMergedPullRequestUseCase = ({
-  devServerService,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -77,7 +76,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
 
       const dependencies = yield* requireDependencies(() =>
         requireLinkMergedPullRequestDependencies({
-          devServerService,
           gitPort,
           settingsConfig,
           taskWorktreeService,
@@ -155,7 +153,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
                 cleanup.targetBranch,
               )
             : runTaskRuntimeCleanup({
-                devServerService: dependencies.devServerService,
                 progress: createTaskCleanupProgressState(),
                 repoPath,
                 taskIds: [taskId],

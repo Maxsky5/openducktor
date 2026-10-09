@@ -12,11 +12,15 @@ test.each(["waitForBackend", "waitForBackendEffect"])(
       hostname: "127.0.0.1",
       port: 0,
       fetch(request) {
-        requests.push({
-          path: new URL(request.url).pathname,
-          method: request.method,
-          token: request.headers.get("x-openducktor-app-token"),
-        });
+        const path = new URL(request.url).pathname;
+        // Local tools can probe the root of a new loopback port. Readiness never requests it.
+        if (path !== "/") {
+          requests.push({
+            path,
+            method: request.method,
+            token: request.headers.get("x-openducktor-app-token"),
+          });
+        }
         return new Response("ready");
       },
     });

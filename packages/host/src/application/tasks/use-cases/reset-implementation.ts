@@ -28,7 +28,6 @@ import { createTaskMutationProgressFailure } from "../task-mutation-progress-fai
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 export const createTaskImplementationResetUseCase = ({
-  devServerService,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -42,12 +41,7 @@ export const createTaskImplementationResetUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
-        requireTaskDeleteDependencies(
-          devServerService,
-          gitPort,
-          settingsConfig,
-          workspaceSettingsService,
-        ),
+        requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
@@ -134,7 +128,6 @@ export const createTaskImplementationResetUseCase = ({
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           branchNames: cleanupTargets.branchNames,
-          devServerService: dependencies.devServerService,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
           progress: cleanupProgress,

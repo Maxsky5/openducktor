@@ -1,10 +1,10 @@
 # Terminal architecture
 
-The shared host terminal engine owns each byte stream, headless screen, replay window, attachment, and output limit. A producer owns its native process. Interactive shells use a PTY producer. Dev servers use a read-only pipe producer. The renderer owns xterm and tab display state.
+The shared host terminal engine owns each byte stream, headless screen, replay window, attachment, and output limit. Each terminal session uses a PTY producer that owns its native process. The renderer owns xterm and tab display state.
 
-Both producers implement `TerminalProducerHandle` for output pause, resume, and termination. Interactive sessions also own the shell and `TerminalPtyHandle` capabilities for input, native resize, and child-process inspection. The session kind controls access to these capabilities. Output sessions have no shell or synthetic PTY methods.
+The PTY handle implements `TerminalProducerHandle` for output pause, resume, and termination, and `TerminalPtyHandle` for input, native resize, and child-process inspection. All terminals are interactive.
 
-Interactive and dev-server views load the shared viewport through `React.lazy`. The transport remains outside the loading boundary. The viewport attaches to the host when it mounts.
+The terminal panel loads the shared viewport through `React.lazy`. The transport remains outside the loading boundary. The viewport attaches to the host when it mounts.
 
 The app does not store terminal sessions, tabs, or transcripts in settings or SQLite. After a renderer reload, the UI finds terminals that still belong to the same host and attaches again. Host shutdown stops and forgets them.
 
@@ -14,9 +14,9 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
 - The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
-- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. A transport lease shares one controller and one connection per terminal bridge across shell panels and dev-server panels. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
+- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. A transport lease shares one controller and one connection per terminal bridge across terminal panels. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
 
-Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
+Create, run action, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
 
 ## Discover terminals
 
@@ -24,13 +24,15 @@ The frontend uses an owner-scoped TanStack Query read to discover host terminals
 
 An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, existing terminals, closing the panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
 
+Each terminal summary has `startedBy`. The value is `user` for a shell or an action that the user starts, and `host` for a terminal that OpenDucktor starts without a user request, such as a worktree-creation action. Until the user opens or closes the panel for an owner, the panel opens when the owner has a terminal that the user started. A `host` terminal stays in the tab list and does not open the panel. When the user opens the panel, the tab shows the retained output.
+
 Discovery failure appears in the panel with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport remains separate from the list query.
 
 ## Start a terminal
 
 `workingDir` is required. For a task or Workspace Session, the host reads the current target and checks that the requested directory matches it. The host starts in the saved target, checks that it is an accessible directory, and saves the canonical path as `initialWorkingDir`. For a terminal with no owner, the host starts in the requested directory. Later `cd` commands do not change `initialWorkingDir`.
 
-The host resolves one user environment during startup. On Unix, it uses a login-style `argv0` and interactive login command flags to run the account shell without a PTY. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. Dev servers, runtime starts, tool discovery, Git, and terminals read the current result when they start a child process. A forced runtime check from Diagnostics runs the probe again. See [CLI tool discovery](cli-tool-discovery.md#host-startup). Windows keeps its normalized inherited environment. A failed POSIX probe produces a typed startup diagnostic instead of silently using the GUI `PATH`, and new dev server and runtime starts fail before they create a child process.
+The host resolves one user environment during startup. On Unix, it uses a login-style `argv0` and interactive login command flags to run the account shell without a PTY. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. Runtime starts, tool discovery, Git, and terminals read the current result when they start a child process. A forced runtime check from Diagnostics runs the probe again. See [CLI tool discovery](cli-tool-discovery.md#host-startup). Windows keeps its normalized inherited environment. A failed POSIX probe produces a typed startup diagnostic instead of silently using the GUI `PATH`, and new runtime starts fail before they create a child process.
 
 The host selects the terminal shell, arguments, and clean child environment. The renderer cannot choose an executable, arguments, or environment variables. On Unix, use the login shell from the user account. If it is not available, use the `SHELL` environment variable. Run the shell with `-l` on the PTY, `TERM=xterm-256color`, and `COLORTERM=truecolor`. Shell startup lines that test for a real tty can change the terminal environment after launch, so their result can differ from the probe result.
 
@@ -42,9 +44,68 @@ For a task terminal, the host requires a task ID that names one directory. It re
 
 The first title is the canonical start directory. The host then reads bounded OSC 0 and OSC 2 title codes without changing PTY output. It cleans and stores the latest title, then sends it in snapshots and title events.
 
+## Run a command terminal
+
+A command terminal is one terminal session with two phases under one terminal ID, one byte stream, and one headless screen. The terminal module exposes it through `TerminalCommandService` in `terminal-command.ts`. The terminal module does not read repository settings and does not know about actions.
+
+`startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
+
+1. The command phase runs all command lines in one process of the account shell. The terminal shows the lines before the phase starts.
+2. When the command process exits with any code or signal, the host records the command result and the last 20 screen lines.
+3. The host then starts the normal shell launch, with shell integration, at the current grid. The user continues in this shell.
+
+When the terminal closes or its process fails before the command ends, the result is `closed` or `failed`. The `failed` result has the process error. Both results have the last 20 lines of parsed output.
+
+The label stays for the full terminal life. OSC titles do not replace it. During the command phase, the activity command is the command lines, workspace activity checks report the terminal as active, and an unconfirmed close returns `confirmation_required`. The command phase does not use the PTY rule that reports a non-zero exit before output as `spawn_failed`. The terminal `exit` reports only the shell-phase exit. Ctrl+C stops the command, and the user continues in the shell.
+
+### Shell syntax
+
+The launch environment port has two methods: `shell()` returns how to start the interactive login shell, and `command(lines)` returns how to run the lines and how to start the shell after them, from one read of the login shell. Only the infrastructure adapter knows the shell and its syntax.
+
+The command launch uses the probe flags: `-ilc`, or `-ic` for csh and tcsh. The adapter builds the script in the syntax of the shell: POSIX (sh, bash, zsh, ksh, mksh, dash, and ash), csh and tcsh, or fish. Another login shell fails with `unsupported_shell`, and no process starts.
+
+The script keeps each line unchanged and saves its status after it, so an inline comment or a trailing `;` keeps its shell meaning, and `cd`, `export`, or `set` continues to the next line. The script stops after the first line that ends with a non-zero status and exits with that status. csh applies `exit` only at the end of a `-c` script, so its script skips the later lines with nested `if` blocks. The fish script uses the same nested blocks. A line that continues on the next line with `\` is not supported.
+
+On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_shell`. The adapter writes the lines to a batch file and adds `if %errorlevel% neq 0 exit /b %errorlevel%` after each line. The PTY adapter writes the file to a private temporary directory, runs `cmd.exe /d /s /c ""<path>""`, and removes the directory when the process ends. Batch syntax applies to the lines, so a `for` loop variable needs `%%`.
+
+## Run an action
+
+An action is a repository command from `RepoConfig.actions`. `terminal_run_action` takes the owner context, the requested directory, and an action ID. The repository action service in `application/actions` reads the saved action and starts a command terminal with the action name as the label and `startedBy: "user"`. Later changes to the action do not change the terminal.
+
+Each non-blank line of the action is one command line. The service skips lines that start with `#`, because an interactive zsh runs `#` as a command.
+
+The service returns typed errors. The `terminal_run_action` handler in `repo-action-command-handlers.ts` maps them to terminal failures:
+
+| Error | Terminal failure code |
+| --- | --- |
+| `RepoActionNotFoundError` | `action_not_found` |
+| `RepoActionHasNoCommandError` | `invalid_input` |
+
+### Worktree-creation actions
+
+The host worktree action runner starts the worktree-creation actions with `startCommandInPreparedTarget`. It runs them in list order after the copied files. Each terminal continues as a normal shell after its command, so the user can work in it. All worktree-creation actions use `startedBy: "host"`, so the panel stays closed until the user opens it.
+
+The runner waits up to 5 minutes for each waiting action. Each failure has its own tagged error with the reason and the last output lines:
+
+| Failure | Error |
+| --- | --- |
+| Non-zero exit or signal | `WorktreeActionExitError` |
+| Time limit | `WorktreeActionTimeoutError` |
+| Terminal closed first | `WorktreeActionTerminalClosedError` |
+| Terminal process failed | `WorktreeActionTerminalFailedError` |
+| Terminal did not start | `WorktreeActionStartError` |
+
+The task start, chat create, and chat restore callers create the run for the new worktree and branch before the setup starts. The run records each terminal in the same step that starts it. Each rollback, also after an interruption, calls `stopTerminals` before it removes the new worktree. A terminal that already exited counts as stopped.
+
+When a terminal cannot stop, the rollback keeps the worktree and branch and fails with `WorktreeKeptForRunningActionsError`. Its message tells the user to close the terminal or restart OpenDucktor, then remove the worktree and the branch. Task and chat rollbacks show the same message.
+
+A task rollback runs each Git step also after an earlier step fails. When a step fails, the rollback fails with `TaskWorktreeRollbackError`, which lists each failed step. The task start adds the rollback message to the start failure and keeps both errors in the cause.
+
 ## Attach and replay
 
 The host adds an output consumer before it sends the attachment snapshot. The snapshot has lifecycle, title, first retained byte sequence, and snapshot end sequence. The host then sends retained output followed by live output. Output byte sequences increase monotonically. Exit comes after the final output sequence.
+
+An exited terminal keeps its output for reading. After the exit frame, the renderer disables xterm input and sends no more input to the host. The status line shows the exit code. A clean exit, code 0 without a signal, uses a neutral style. Another exit uses the warning style.
 
 The renderer tracks submitted bytes separately from parsed bytes. It submits contiguous output directly to xterm's ordered write queue. It does not wait for one chunk's callback before it submits the next chunk. After xterm parses a group of chunks, the renderer sends one ACK for that group's last byte sequence. On another attach, it sends the last parsed sequence so the host sends only missing output.
 
@@ -64,13 +125,13 @@ The frontend reconnects the frame transport and attaches mounted terminals again
 
 Before an unconfirmed close, the host checks for child processes. With no child, it closes at once. With a child, it returns `confirmation_required`. A confirmed close stops the process tree and removes the session.
 
-The producer resumes paused output before it stops the process tree. Both PTY and pipe producers wait for output to close before they report exit. Pipe shutdown drains stdout and stderr, including the final UTF-8 decoder bytes.
+The producer resumes paused output before it stops the process tree. The PTY producer waits for output to close before it reports exit.
 
 If process-tree termination fails while the PTY remains live, the adapter restores the host's current output pause request. An ACK or detach during close can clear that request.
 
 The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 
-Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup. It does not block terminals owned by other sessions or the global scope.
+Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup. It does not block terminals owned by other sessions or the global scope.
 
 Workspace Session archive checks for an active runtime turn first and asks for Stop consent when needed. It stops an active turn, takes a lease for that workspace and session pair, waits for pending starts, and stops only that session's terminals before worktree removal. A terminal stop failure leaves the terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
 
@@ -86,23 +147,13 @@ Image paste sends the terminal's native paste control so a compatible TUI can re
 
 Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. xterm or WebGL startup failure blocks that emulator and appears in its body.
 
-## Viewport and dev server output
+## Viewport
 
-Both terminal views use the shared xterm binding. The binding measures the visible container and calls `Terminal.resize` only when the grid changes. It rejects a collapsed container or the fit add-on's minimum 2-by-1 grid. It does not clear the renderer before each resize. Resize scheduling coalesces changes and permits at most one reflow per 100 ms during a continuous drag. Interactive input flushes the pending fit and host resize first. Theme changes update colors without a grid resize.
-
-Dev-server reads and events contain status metadata and an opaque `terminalId`. Active scripts require a terminal ID and the started command. Exited scripts keep the started command while their output remains available. They contain no log text or terminal chunks. TanStack Query owns the status metadata. A revision check prevents an older query or mutation result from replacing a newer status event. Selection owns only the selected script ID. The selected terminal attaches directly to the shared frame transport. Output does not change React state, query data, or selection.
-
-Dev server commands use stdout and stderr pipes. Each pipe has its own streaming UTF-8 decoder. The process adapter returns the native handle immediately after spawn. The service records the handle and activates terminal flow control before it waits for readiness. Readiness failure or cancellation stops the owned process. A failed stop keeps its handle and PID available for Stop and workspace cleanup. The terminal creation reservation remains held until activation or exit, so owner cleanup waits for a pending producer.
-
-The host preserves decoded pipe output, including split CRLF, ANSI control strings, and newlines. Both the host mirror and read-only viewport use `convertEol` for line-feed display. The host adds CRLF only to its own system messages. The shared screen restore keeps alternate-screen state after replay eviction. It does not reset xterm and replay a text tail. Interactive TUIs use the PTY path and retain its byte sequences and alternate-screen behavior.
-
-Read-only output rejects terminal input, path paste, and public terminal close commands. It permits xterm navigation and clipboard copy. Use the dev-server Stop or Restart action. Initial viewport resize works before native activation. Retained exited output can also resize. Restart releases the old source and creates a new terminal ID. Native callbacks keep their source instance, so late output cannot enter a replacement run. Before a callback changes script status, the host checks that its source is still the current source. Removed scripts and archived sessions release their exited sources. Shared retention removes expired output and clears its terminal ID in owner metadata.
-
-A normal `terminal_forgotten` notification does not report a dev-server renderer error. A failed attachment reports its typed `protocol_error` even when its failure code is `terminal_forgotten`. Renderer errors belong to the selected terminal ID. Replacing or removing that source removes its error banner.
+The terminal view uses the shared xterm binding. The binding measures the visible container and calls `Terminal.resize` only when the grid changes. It rejects a collapsed container or the fit add-on's minimum 2-by-1 grid. It does not clear the renderer before each resize. Resize scheduling coalesces changes and permits at most one reflow per 100 ms during a continuous drag. Interactive input flushes the pending fit and host resize first. Theme changes update colors without a grid resize.
 
 ## Limits and security
 
-The host applies the same terminal limits to shells and dev-server output sources per task, per Workspace Session, and per host. Pending sources count through admission until activation. Read-only sources stay out of shell discovery lists. A limit error shows the used capacity and limit. It states that shells and dev-server output share the limit and tells the user to close a terminal or stop a dev server. The host also limits input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. Each operation uses an opaque terminal ID. Workspace activity checks include live Workspace Session terminals in the matching repository.
+The host applies the same terminal limits to shells and command terminals per task, per Workspace Session, and per host. Pending terminals count through admission until activation. A limit error shows the used capacity and limit and tells the user to close a terminal. A command that exceeds the limit does not run. The host also limits input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. Each operation uses an opaque terminal ID. Workspace activity checks include live Workspace Session terminals in the matching repository.
 
 A browser WebSocket upgrade needs the HttpOnly app session, an allowed frontend origin, and the exact protocol name. Invalid direction, frame, or protocol version fails.
 

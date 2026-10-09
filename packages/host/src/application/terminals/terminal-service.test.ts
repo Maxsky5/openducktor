@@ -1,252 +1,29 @@
-import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, posix } from "node:path";
-import {
-  repoConfigSchema,
-  type TerminalActivityMessage,
-  type TerminalServerMessage,
-  type WorkspaceSession,
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import type {
+  TerminalActivityMessage,
+  TerminalServerMessage,
+  WorkspaceSession,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
-import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
-import {
-  TerminalPtyError,
-  type TerminalPtyHandlers,
-  type TerminalPtyLaunchPlan,
-  type TerminalPtyPort,
-} from "../../ports/terminal-pty-port";
+import { TerminalPtyError } from "../../ports/terminal-pty-port";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenState } from "./terminal-screen-state";
-import {
-  HostOperationError,
-  HostResourceError,
-  HostValidationError,
-} from "../../effect/host-errors";
-import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
-import { createTerminalService } from "./terminal-service";
 import type { TerminalWorkspaceActivity } from "./terminal-session-engine";
-import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
-import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
-import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
+import {
+  emitEvictedReplay,
+  filesystem,
+  makePty,
+  makeService,
+  removeFakeShell,
+  waitForPtyOperation,
+  workspaceSessionRecord,
+  workspaceTerminalDependencies,
+} from "./test-support/terminal-service-harness";
 
-let directoryAvailable = true;
-const filesystem: FilesystemPort = {
-  homeDirectory: () => "/home/user",
-  canonicalize: (path: string) => Effect.succeed(`/canonical${path}`),
-  readDirectory: () => Effect.succeed([]),
-  readFileBytes: () => Effect.succeed(new Uint8Array()),
-  readFileSnapshot: () => Effect.die("not used"),
-  replaceFileBytes: () => Effect.die("not used"),
-  stat: () => Effect.succeed({ isDirectory: directoryAvailable }),
-  exists: () => Effect.succeed(true),
-  join: posix.join,
-  relative: posix.relative,
-  extension: posix.extname,
-  parent: (path) => (path === "/" ? null : posix.dirname(path)),
-};
-
-const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
-  const operations: string[] = [];
-  const startDirectories: string[] = [];
-  const launches: TerminalPtyLaunchPlan[] = [];
-  let handlers: TerminalPtyHandlers | null = null;
-  let terminateFails = false;
-  let terminateFailuresRemaining = 0;
-  const port: TerminalPtyPort = {
-    start: (plan, nextHandlers) => {
-      startDirectories.push(plan.cwd);
-      launches.push(plan);
-      handlers = nextHandlers;
-      return Effect.succeed({
-        supportsOutputPause,
-        hasChildProcesses: () =>
-          Effect.sync(() => {
-            operations.push("inspect-children");
-            return hasChildProcesses;
-          }),
-        write: (data) =>
-          Effect.sync(() => operations.push(`write:${new TextDecoder().decode(data)}`)),
-        resize: (grid) => Effect.sync(() => operations.push(`resize:${grid.columns}x${grid.rows}`)),
-        pauseOutput: () => Effect.sync(() => operations.push("pause")),
-        resumeOutput: () => Effect.sync(() => operations.push("resume")),
-        terminate: () =>
-          Effect.suspend(() => {
-            if (terminateFails || terminateFailuresRemaining > 0) {
-              if (terminateFailuresRemaining > 0) terminateFailuresRemaining -= 1;
-              return Effect.fail(
-                new TerminalPtyError({
-                  code: "operation_failed",
-                  operation: "terminate",
-                  message: "busy",
-                }),
-              );
-            }
-            return Effect.sync(() => operations.push("terminate"));
-          }),
-      });
-    },
-  };
-  return {
-    port,
-    operations,
-    startDirectories,
-    launches,
-    emit: (data: Uint8Array) => handlers?.onOutput(data),
-    exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
-    fail: (failure: TerminalPtyError) => handlers?.onFailure(failure),
-    failTerminate: () => {
-      terminateFails = true;
-    },
-    failNextTerminate: () => {
-      terminateFailuresRemaining += 1;
-    },
-  };
-};
-
-const waitForPtyOperation = async (operations: string[], operation: string): Promise<void> => {
-  for (let attempt = 0; attempt < 200 && !operations.includes(operation); attempt += 1) {
-    await Bun.sleep(10);
-  }
-  expect(operations).toContain(operation);
-};
-
-const emitEvictedReplay = async (pty: ReturnType<typeof makePty>): Promise<void> => {
-  const chunk = new Uint8Array(64 * 1024).fill(120);
-  for (let index = 0; index < TERMINAL_LIMITS.replayBytes / chunk.byteLength + 1; index += 1) {
-    pty.emit(chunk);
-    await Bun.sleep(0);
-  }
-};
-
-const makeTitleSettlementScheduler = () => {
-  const scheduled = new Set<() => void>();
-  const schedule: TerminalTitleSettlementScheduler = (_delay, settle) => {
-    scheduled.add(settle);
-    return () => scheduled.delete(settle);
-  };
-  return {
-    schedule,
-    flush: () => {
-      const pending = [...scheduled];
-      scheduled.clear();
-      for (const settle of pending) settle();
-    },
-  };
-};
-
-let fakeShellRoot: string | null = null;
-let fakeShellPath: string | null = null;
-const resolveFakeShellPath = async (): Promise<string> => {
-  if (fakeShellPath !== null) {
-    return fakeShellPath;
-  }
-
-  const root = await mkdtemp(join(tmpdir(), "odt-terminal-service-"));
-  const shellPath = join(root, "sh");
-  await writeFile(shellPath, "#!/bin/sh\n");
-  await chmod(shellPath, 0o755);
-  fakeShellRoot = root;
-  fakeShellPath = shellPath;
-  return shellPath;
-};
-
-afterAll(async () => {
-  if (fakeShellRoot !== null) {
-    await rm(fakeShellRoot, { force: true, recursive: true });
-  }
-});
-
-const makeService = async (
-  pty = makePty(),
-  idFactory: () => string = () => "terminal-1",
-  filesystemPort: FilesystemPort = filesystem,
-  withProcessStartAdmission?: WithProcessStartAdmission,
-  workspaceSessions?: ReturnType<typeof workspaceTerminalDependencies>,
-  taskWorktrees?: Pick<TaskWorktreeService, "getTaskWorktree">,
-) => {
-  const titleSettlement = makeTitleSettlementScheduler();
-  const shellPath = await resolveFakeShellPath();
-  const targets = workspaceSessions ?? workspaceTerminalDependencies(new Map());
-  const serviceInput: Parameters<typeof createTerminalService>[0] = {
-    filesystem: filesystemPort,
-    git: targets.git,
-    taskWorktrees: taskWorktrees ?? {
-      getTaskWorktree: ({ repoPath }) =>
-        Effect.succeed({ workingDirectory: repoPath.replace(/^\/canonical/, "") }),
-    },
-    workspaceSessions: { settings: targets.settings, store: targets.store },
-    ptyPort: pty.port,
-    resolveLaunchEnvironment: createTerminalLaunchEnvironment({
-      readEnv: () => ({ PATH: "/usr/bin" }),
-      platform: "darwin",
-      readUserShell: () => shellPath,
-    }),
-    idFactory,
-    hostInstanceIdFactory: () => "host-1",
-    now: () => new Date("2026-07-12T00:00:00.000Z"),
-    scheduleTitleSettlement: titleSettlement.schedule,
-  };
-  if (withProcessStartAdmission) {
-    serviceInput.withProcessStartAdmission = withProcessStartAdmission;
-  }
-  return {
-    pty,
-    settleTitles: titleSettlement.flush,
-    service: await Effect.runPromise(createTerminalService(serviceInput)),
-  };
-};
-
-const workspaceSessionRecord = (
-  id: string,
-  executionTarget: WorkspaceSession["executionTarget"],
-): WorkspaceSession => ({
-  id,
-  runtimeKind: "opencode",
-  externalSessionId: null,
-  executionTarget,
-  roleSnapshot: null,
-  selectedModel: null,
-  generatedTitle: null,
-  manualTitle: null,
-  createdAt: 1,
-  updatedAt: 1,
-  archivedAt: null,
-});
-
-const workspaceTerminalDependencies = (records: Map<string, WorkspaceSession>) => ({
-  settings: {
-    getRepoConfig: () =>
-      Effect.succeed(
-        repoConfigSchema.parse({
-          workspaceId: "workspace-1",
-          workspaceName: "Workspace",
-          repoPath: "/repo",
-        }),
-      ),
-  },
-  store: {
-    get: ({ sessionId }: { sessionId: string }) => {
-      const record = records.get(sessionId);
-      return record
-        ? Effect.succeed(record)
-        : Effect.fail(
-            new HostResourceError({
-              resource: sessionId,
-              operation: "workspaceSessionStore.get",
-              message: "Missing chat",
-            }),
-          );
-    },
-  },
-  git: createGitPortTestDouble({
-    canonicalizePath: (path) => Effect.succeed(path),
-    isGitRepository: () => Effect.succeed(true),
-    shareGitCommonDirectory: () => Effect.succeed(true),
-    isRegisteredWorktree: () => Effect.succeed(true),
-  }),
-});
+afterAll(removeFakeShell);
 
 describe("TerminalService", () => {
   test("keeps a terminal available for cleanup when creation is interrupted during shell setup", async () => {
@@ -339,7 +116,6 @@ describe("TerminalService", () => {
       expect(messages.at(-1)).toMatchObject({
         type: "activity_updated",
         activity: {
-          kind: "terminal",
           command: "sleep 30",
           summary: { terminalId: terminal.ref.terminalId },
         },
@@ -1043,9 +819,6 @@ describe("TerminalService", () => {
     expect(failures(late)).toEqual(failures(live));
     expect(late[0]).toMatchObject({ type: "snapshot", lifecycle: "exited" });
   });
-  beforeEach(() => {
-    directoryAvailable = true;
-  });
   test("creates a taskless terminal and keeps its canonical initial directory immutable", async () => {
     const { service, pty } = await makeService();
     const created = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
@@ -1658,18 +1431,12 @@ describe("TerminalService", () => {
   });
 
   test.each(["context", "host"] as const)(
-    "reports shared %s capacity and how to free a slot when shells and output sources reach the limit",
+    "reports %s capacity and how to free a slot when shells and command terminals reach the limit",
     async (limitKind) => {
       let id = 0;
       const { service } = await makeService(makePty(), () => `terminal-${++id}`);
       const limit =
         limitKind === "context" ? TERMINAL_LIMITS.livePerTask : TERMINAL_LIMITS.livePerHost;
-      const outputHandle = {
-        supportsOutputPause: true,
-        pauseOutput: () => Effect.void,
-        resumeOutput: () => Effect.void,
-        terminate: () => Effect.void,
-      };
       const taskIdFor = (index: number) => (limitKind === "context" ? "shared" : `task-${index}`);
       try {
         for (let index = 0; index < limit; index += 1) {
@@ -1679,20 +1446,19 @@ describe("TerminalService", () => {
               service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId } }),
             );
           } else {
-            const source = await Effect.runPromise(
-              service.openOutputSource({
-                context: { repoPath: "/canonical/repo", taskId },
-                workingDir: "/canonical/repo",
-                label: "Dev server",
-                command: "bun run dev",
-                onForgotten: () => {},
+            await Effect.runPromise(
+              service.startCommand({
+                context: { repoPath: "/repo", taskId },
+                workingDir: "/repo",
+                label: "Dev",
+                commandLines: ["bun run dev"],
+                startedBy: "user",
               }),
             );
-            await Effect.runPromise(source.activate(outputHandle));
           }
         }
         expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toHaveLength(
-          limit / 2,
+          limit,
         );
         const create = () =>
           service.create({
@@ -1701,11 +1467,11 @@ describe("TerminalService", () => {
           });
         const rejected = await Effect.runPromise(Effect.result(create()));
         expect(rejected._tag).toBe("Failure");
-        if (rejected._tag !== "Failure") throw new Error("Expected the shared terminal limit.");
+        if (rejected._tag !== "Failure") throw new Error("Expected the terminal limit.");
         expect(rejected.failure.code).toBe(`${limitKind}_terminal_limit`);
         expect(rejected.failure.message).toContain(`${limit}/${limit}`);
-        expect(rejected.failure.message).toContain("Shell terminals and dev server output");
-        expect(rejected.failure.message).toContain("Close a terminal or stop a dev server");
+        expect(rejected.failure.message).toContain("Close a terminal to free a slot.");
+        expect(rejected.failure.message).not.toContain("dev server");
         await Effect.runPromise(
           service.close({ terminalId: "terminal-1", confirmTerminate: true }),
         );

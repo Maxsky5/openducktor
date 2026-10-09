@@ -57,7 +57,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   selectedView: createSelectedView(),
   isGitTabActive: true,
-  isRightPanelOpen: true,
   ...overrides,
 });
 
@@ -86,7 +85,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
 
       expect(harness.getLatest()).toEqual({
         isEnabled: true,
-        isDevServerEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
         shouldEnableScheduledRefresh: true,
@@ -118,7 +116,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
 
       expect(harness.getLatest()).toEqual({
         isEnabled: true,
-        isDevServerEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
         shouldEnableScheduledRefresh: true,
@@ -148,7 +145,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
 
       expect(harness.getLatest()).toEqual({
         isEnabled: true,
-        isDevServerEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
         shouldEnableScheduledRefresh: true,

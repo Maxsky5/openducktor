@@ -101,11 +101,6 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   isCodexDangerAcknowledged: false,
   selectedRepoRuntimeAvailabilityErrors: [],
   selectedRepoRuntimeAvailabilityErrorCount: 0,
-  hasRepoScriptValidationErrors: false,
-  repoScriptValidationErrorCountByWorkspaceId: {},
-  repoScriptValidationErrorCount: 0,
-  showRepoScriptValidationErrors: false,
-  selectedRepoDevServerValidationErrors: {},
   selectedRepoPromptValidationErrors: {},
   selectedRepoPromptValidationErrorCount: 0,
   globalPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
@@ -125,7 +120,6 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     autopilot: 0,
   },
   setSelectedWorkspaceId: () => {},
-  markRepoScriptSaveAttempt: () => {},
   retrySelectedRepoBranchesLoad: () => {},
   retryRuntimeDefinitions: async () => [],
   checkRuntimeExecutablesAgain: async () => {},
@@ -164,8 +158,20 @@ describe("settings modal content", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { preStart: ["bun install"], postComplete: ["bun run clean"] },
-          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+          hooks: { postComplete: ["bun run clean"] },
+          actions: {
+            items: [
+              {
+                id: "test",
+                icon: "test",
+                name: "Test",
+                command: "bun test",
+                runOnWorktreeCreate: false,
+                waitBeforeAgentStart: false,
+              },
+            ],
+            defaultActionId: "test",
+          },
           worktreeCopyPaths: [".env"],
           promptOverrides: {},
           agentDefaults: {},
@@ -209,81 +215,12 @@ describe("settings modal content", () => {
       ),
     );
 
-    expect(scriptsHtml).toContain("Worktree setup script");
-    expect(scriptsHtml).toContain("Dev servers");
+    expect(scriptsHtml).toContain("Actions are repository commands");
+    expect(scriptsHtml).toContain("Worktree cleanup script");
     expect(scriptsHtml).toContain("Files copied to worktrees");
-    expect(configurationHtml).not.toContain("Worktree setup script");
-    expect(configurationHtml).not.toContain("Dev servers");
+    expect(configurationHtml).not.toContain("Actions are repository commands");
+    expect(configurationHtml).not.toContain("Worktree cleanup script");
     expect(configurationHtml).not.toContain("Files copied to worktrees");
-  });
-
-  test("surfaces dev-server validation on the repository and Scripts navigation", () => {
-    const snapshot = createMockSnapshot({
-      workspaces: {
-        repo: {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          branchPrefix: "odt",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {},
-          hooks: { preStart: [], postComplete: [] },
-          devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
-          worktreeCopyPaths: [],
-          promptOverrides: {},
-          agentDefaults: {},
-        },
-      },
-    });
-    const selectedRepoConfig = snapshot.workspaces.repo ?? null;
-    const controller = {
-      ...createMockController(snapshot),
-      workspaces: [
-        {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          abbreviation: null,
-          tileColor: null,
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/tmp/worktrees",
-          effectiveWorktreeBasePath: "/tmp/worktrees",
-        },
-      ],
-      workspaceIds: ["repo"],
-      selectedWorkspaceId: "repo",
-      selectedRepoConfig,
-      hasRepoScriptValidationErrors: true,
-      repoScriptValidationErrorCountByWorkspaceId: { repo: 1 },
-      repoScriptValidationErrorCount: 1,
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
-        createElement(SettingsModalContent, {
-          section: "repositories",
-          repositorySection: "configuration",
-          globalPromptRoleTab: "shared",
-          repoPromptRoleTab: "shared",
-          selectedReusablePromptId: null,
-          selectedCustomAgentRoleId: null,
-          onSelectedCustomAgentRoleIdChange: () => {},
-          isInteractionDisabled: false,
-          controller,
-          onRepositorySectionChange: () => {},
-          onGlobalPromptRoleTabChange: () => {},
-          onRepoPromptRoleTabChange: () => {},
-          onSelectedReusablePromptIdChange: () => {},
-        }),
-      ),
-    );
-
-    expect(html).toContain('title="1 error in Scripts"');
-    expect(html).toContain("background-color:hsl(var(--destructive))");
   });
 
   test("does not show saved provider health for an unsaved repository", () => {
@@ -302,8 +239,8 @@ describe("settings modal content", () => {
           repository: { host: "github.com", owner: "openai", name: "saved" },
         },
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
+      hooks: { postComplete: [] },
+      actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},

@@ -7,7 +7,6 @@ import type {
   TaskExecutionPanelTabId,
   TaskExecutionPanelToggleModel,
 } from "@/components/features/agents";
-import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import type { TaskExecutionCiChecksPanelModel } from "@/components/features/agents/task-execution-ci-checks-panel";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
@@ -86,7 +85,6 @@ type BuildTaskExecutionPanelModelInput = {
   diffModel: AgentStudioGitPanelModel;
   fileExplorerModel: TaskExecutionFileExplorerPanelModel;
   ciChecksModel: TaskExecutionCiChecksPanelModel | null;
-  devServerModel: AgentStudioDevServerPanelModel | null;
   onActiveTabChange: (tabId: TaskExecutionPanelTabId) => void;
 };
 
@@ -97,7 +95,6 @@ export const buildTaskExecutionPanelModel = ({
   diffModel,
   fileExplorerModel,
   ciChecksModel,
-  devServerModel,
   onActiveTabChange,
 }: BuildTaskExecutionPanelModelInput): TaskExecutionPanelModel | null => {
   if (!activeTabId || tabs.length === 0) {
@@ -112,7 +109,6 @@ export const buildTaskExecutionPanelModel = ({
     gitModel: diffModel,
     fileExplorerModel,
     ciChecksModel,
-    devServerModel,
   };
 };
 

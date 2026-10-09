@@ -1,6 +1,6 @@
 import type { TerminalListFilter, TerminalListResponse } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { type QueryKey, queryOptions } from "@tanstack/react-query";
+import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 import { skippedQueryOptions } from "./skipped-query";
 
@@ -44,3 +44,12 @@ export const terminalListByFilterQueryOptions = ({
         retry: false,
         staleTime: 0,
       });
+
+/**
+ * Refreshes the terminal list of one owner. Call it after a host command that can open terminals,
+ * such as a worktree creation that runs actions.
+ */
+export const invalidateTerminalList = (
+  queryClient: QueryClient,
+  filter: TerminalListFilter,
+): Promise<void> => queryClient.invalidateQueries({ queryKey: terminalQueryKeys.filter(filter) });

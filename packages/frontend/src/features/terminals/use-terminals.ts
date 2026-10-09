@@ -1,10 +1,13 @@
 import type {
   AppPlatform,
+  RepoAction,
   TerminalCloseResponse,
-  TerminalContext,
+  TerminalCreateResponse,
   TerminalLifecycle,
   TerminalListFilter,
   TerminalListResponse,
+  TerminalOwnedContext,
+  TerminalOwnedLaunchSpec,
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,11 +15,15 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
-import { terminalListByFilterQueryOptions, terminalQueryKeys } from "@/state/queries/terminals";
+import {
+  invalidateTerminalList,
+  terminalListByFilterQueryOptions,
+} from "@/state/queries/terminals";
 import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
 import {
   createTerminalPresentationState,
   emptyTerminalScopePresentation,
+  isUserStartedTab,
   type TerminalTab,
   terminalPresentationReducer,
 } from "./terminal-presentation-state";
@@ -28,14 +35,14 @@ export type { TerminalTab } from "./terminal-presentation-state";
 export type TerminalDependencies = {
   hostClient: Pick<
     typeof host,
-    "systemGetPlatform" | "terminalClose" | "terminalCreate" | "terminalList"
+    "systemGetPlatform" | "terminalClose" | "terminalCreate" | "terminalList" | "terminalRunAction"
   >;
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
 
 export type TerminalScope = {
   key: string;
-  context: TerminalContext;
+  context: TerminalOwnedContext;
   workingDirectory: string | null;
   workingDirectoryError: string;
 };
@@ -43,6 +50,8 @@ export type TerminalScope = {
 export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
+  /** Why this scope cannot start a terminal, or null when it can. */
+  startBlockedReason: string | null;
   tabs: TerminalTab[];
   mountedTabs: MountedTab[];
   activeTabId: string | null;
@@ -59,8 +68,10 @@ export type TerminalPanelModel = {
   onHide: () => void;
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
+  /** Opens the panel and runs the repository action in a new terminal tab. */
+  onRunAction: (action: RepoAction) => void;
   onRetryDiscovery: () => void;
-  onRetryCreate: (scopeKey: string, tabId: string) => void;
+  onRetryCreate: (scopeKey: string, tabId: string, actionId: string | null) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
   onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
@@ -134,11 +145,11 @@ export const useTerminals = (
   );
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
-    : visibleTabs.length > 0;
+    : visibleTabs.some(isUserStartedTab);
   const focusRequest = visibleState.focusRequest;
 
   const createTerminal = useCallback(
-    async (retryTabId?: string): Promise<void> => {
+    async ({ retryTabId, actionId = null, label }: TerminalCreation = {}): Promise<void> => {
       if (!scope || !scopeKey) return;
       const tabId = retryTabId ?? `creating:${globalThis.crypto.randomUUID()}`;
       const workingDir = scope.workingDirectory;
@@ -147,7 +158,8 @@ export const useTerminals = (
         scopeKey,
         tabId,
         retry: retryTabId !== undefined,
-        label: workingDir ?? "Terminal",
+        label: label ?? workingDir ?? "Terminal",
+        actionId,
       });
       if (!workingDir) {
         dispatch({
@@ -160,9 +172,10 @@ export const useTerminals = (
         return;
       }
       try {
-        const created = await dependencies.hostClient.terminalCreate({
+        const created = await startHostTerminal(dependencies.hostClient, {
           workingDir,
           context: scope.context,
+          actionId,
         });
         if (abandonedCreationTabIds.current.delete(tabId)) {
           dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
@@ -175,16 +188,12 @@ export const useTerminals = (
             closed = closeResult.closed;
           } finally {
             dispatch({ type: closed ? "closeCompleted" : "closeRejected", scopeKey, tabId });
-            await queryClient.invalidateQueries({
-              queryKey: terminalQueryKeys.filter(listFilter),
-            });
+            await invalidateTerminalList(queryClient, listFilter);
           }
           return;
         }
         dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
-        await queryClient.invalidateQueries({
-          queryKey: terminalQueryKeys.filter(listFilter),
-        });
+        await invalidateTerminalList(queryClient, listFilter);
       } catch (cause) {
         if (abandonedCreationTabIds.current.delete(tabId)) {
           dispatch({ type: "closeCompleted", scopeKey, tabId });
@@ -267,14 +276,22 @@ export const useTerminals = (
     [scopeKey],
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
+  const runAction = useCallback(
+    (action: RepoAction): void => {
+      if (!scopeKey) return;
+      dispatch({ type: "visibilitySet", scopeKey, value: true, isExplicit: true });
+      void createTerminal({ actionId: action.id, label: action.name });
+    },
+    [createTerminal, scopeKey],
+  );
   const { refetch } = terminalQuery;
   const retryDiscovery = useCallback((): void => {
     if (scopeKey) void refetch();
   }, [refetch, scopeKey]);
   const retryCreate = useCallback(
-    (ownerScopeKey: string, tabId: string): void => {
+    (ownerScopeKey: string, tabId: string, actionId: string | null): void => {
       if (ownerScopeKey !== scopeKey) return;
-      void createTerminal(tabId);
+      void createTerminal({ retryTabId: tabId, actionId });
     },
     [createTerminal, scopeKey],
   );
@@ -325,10 +342,7 @@ export const useTerminals = (
         return closeResult;
       }
       dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
-      if (scope)
-        await queryClient.invalidateQueries({
-          queryKey: terminalQueryKeys.filter(listFilter),
-        });
+      if (scope) await invalidateTerminalList(queryClient, listFilter);
       return closeResult;
     },
     [controller, dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
@@ -353,6 +367,7 @@ export const useTerminals = (
     () => ({
       scopeKey,
       isAvailable: scope !== null,
+      startBlockedReason: scopeStartBlockedReason(scope),
       tabs: visibleTabs,
       mountedTabs,
       activeTabId: visibleState.activeTabId,
@@ -369,6 +384,7 @@ export const useTerminals = (
       onHide: hidePanel,
       onSelectTab: selectTab,
       onCreate: startCreate,
+      onRunAction: runAction,
       onRetryDiscovery: retryDiscovery,
       onRetryCreate: retryCreate,
       onReorderTab: reorderTab,
@@ -396,6 +412,7 @@ export const useTerminals = (
       reorderTab,
       retryCreate,
       retryDiscovery,
+      runAction,
       selectTab,
       scope,
       scopeKey,
@@ -413,22 +430,40 @@ type MountedTab = {
   tab: TerminalTab;
 };
 
+type TerminalCreation = {
+  /** Restarts creation in this failed tab instead of a new tab. */
+  retryTabId?: string;
+  /** The repository action that the new terminal runs. */
+  actionId?: string | null;
+  label?: string;
+};
+
+const startHostTerminal = (
+  hostClient: TerminalDependencies["hostClient"],
+  { workingDir, context, actionId }: TerminalOwnedLaunchSpec & { actionId: string | null },
+): Promise<TerminalCreateResponse> =>
+  actionId === null
+    ? hostClient.terminalCreate({ workingDir, context })
+    : hostClient.terminalRunAction({ workingDir, context, actionId });
+
+const scopeStartBlockedReason = (scope: TerminalScope | null): string | null => {
+  if (scope === null) return "Select a task or chat to use terminals.";
+  return scope.workingDirectory === null ? scope.workingDirectoryError : null;
+};
+
 const defaultDependencies = (): TerminalDependencies => ({
   hostClient: host,
   terminalBridge: getShellBridge().terminals,
 });
 
-const filterForContext = (context: TerminalContext | null): TerminalListFilter => {
+const filterForContext = (context: TerminalOwnedContext | null): TerminalListFilter => {
   if (context === null) return { kind: "all" };
   if ("taskId" in context) {
     return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
   }
-  if ("kind" in context) {
-    return {
-      kind: "workspace_session",
-      workspaceId: context.workspaceId,
-      sessionId: context.sessionId,
-    };
-  }
-  return { kind: "unassociated" };
+  return {
+    kind: "workspace_session",
+    workspaceId: context.workspaceId,
+    sessionId: context.sessionId,
+  };
 };

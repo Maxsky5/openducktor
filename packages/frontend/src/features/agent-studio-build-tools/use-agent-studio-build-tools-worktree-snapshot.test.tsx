@@ -610,11 +610,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       expect(harness.getLatest().isEnabled).toBe(false);
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
-      expect(harness.getLatest().devServerTarget).toEqual({
-        repoPath: null,
-        owner: null,
-        enabled: false,
-      });
     } finally {
       await harness.unmount();
     }
@@ -871,11 +866,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         error: null,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      expect(harness.getLatest().devServerTarget).toEqual({
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-24" },
-        enabled: true,
-      });
     } finally {
       await harness.unmount();
     }
@@ -1108,7 +1098,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test("keeps dev-server reads scoped to the hydrated selected task", async () => {
+  test("resolves the view task worktree before the selected task loads", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({ selectedTask: null }),
@@ -1121,11 +1111,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
       expect(harness.getLatest().context.taskId).toBe("task-24");
-      expect(harness.getLatest().devServerTarget).toEqual({
-        repoPath: "/repo",
-        owner: null,
-        enabled: false,
-      });
     } finally {
       await harness.unmount();
     }

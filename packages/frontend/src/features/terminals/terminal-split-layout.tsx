@@ -112,7 +112,7 @@ export function TerminalSplitLayout({
                 type="button"
                 size="xs"
                 variant="ghost"
-                className="shrink-0 text-(--dev-server-terminal-foreground) hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground) md:hidden"
+                className="shrink-0 text-(--terminal-foreground) hover:bg-(--terminal-tab-inactive) hover:text-(--terminal-foreground) md:hidden"
                 onClick={model.onHide}
               >
                 Back to workspace

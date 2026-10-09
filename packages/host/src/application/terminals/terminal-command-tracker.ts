@@ -1,3 +1,5 @@
+import { TERMINAL_LIMITS } from "./terminal-limits";
+
 /** Read shell execution markers through the existing xterm parser, not terminal titles. */
 export const createTerminalCommandTracker = (
   nonce: string,
@@ -7,7 +9,10 @@ export const createTerminalCommandTracker = (
   return (data) => {
     const [kind, line, source] = data.split(";");
     if (kind === "E") {
-      pending = source === nonce && line ? decodeCommand(line).slice(0, 1024).trim() || null : null;
+      pending =
+        source === nonce && line
+          ? decodeCommand(line).slice(0, TERMINAL_LIMITS.activityCommandLength).trim() || null
+          : null;
     } else if (kind === "C" && pending !== null) {
       onCommand(pending);
       pending = null;

@@ -32,7 +32,7 @@ describe("TaskCloseConfirmDialog", () => {
     expect(screen.getByText(/bypasses unfinished workflow steps/i)).toBeDefined();
     expect(screen.getByText(/No code is merged/i)).toBeDefined();
     expect(screen.getByText(/pull request is created, updated, or merged/i)).toBeDefined();
-    expect(screen.getByText(/Task-scoped dev servers will be stopped/i)).toBeDefined();
+    expect(screen.getByText("No running task terminals will be stopped.")).toBeDefined();
     expect(
       screen.getByText(/task record, documents, QA reports, and linked history/i),
     ).toBeDefined();
@@ -71,6 +71,11 @@ describe("TaskCloseConfirmDialog", () => {
 
     expect(screen.getByText("Could not preview cleanup")).toBeDefined();
     expect(screen.getByText("Close failed")).toBeDefined();
+    expect(
+      screen.getByText(
+        "2 task terminals, including action terminals, will be stopped before the task closes.",
+      ),
+    ).toBeDefined();
     expect(
       screen.getByText("3 active agent sessions will be stopped before closing."),
     ).toBeDefined();

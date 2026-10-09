@@ -206,7 +206,6 @@ function SettingsDialog({
   }, [navigation, onOpenChange]);
 
   const handleSave = (): void => {
-    controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
         close();
@@ -293,7 +292,6 @@ function SettingsDialog({
             claudeSettingsError: controller.claudeSettingsSaveError,
             hasUnacknowledgedCodexDangerousSettings:
               controller.hasUnacknowledgedCodexDangerousSettings,
-            repoScriptFieldErrorCount: controller.repoScriptValidationErrorCount,
           }}
           errors={{
             saveError: controller.saveError,

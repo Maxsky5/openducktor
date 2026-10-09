@@ -46,7 +46,6 @@ import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-dr
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
-import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-script-validation";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
 import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-reusable-prompt-validation";
@@ -119,13 +118,7 @@ export type SettingsModalController = {
   isCodexDangerAcknowledged: boolean;
   selectedRepoRuntimeAvailabilityErrors: string[];
   selectedRepoRuntimeAvailabilityErrorCount: number;
-  hasRepoScriptValidationErrors: boolean;
-  repoScriptValidationErrorCountByWorkspaceId: Record<string, number>;
-  repoScriptValidationErrorCount: number;
-  showRepoScriptValidationErrors: boolean;
-  selectedRepoDevServerValidationErrors: Record<string, { name?: string; command?: string }>;
   setSelectedWorkspaceId: (next: string) => void;
-  markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   checkRuntimeExecutablesAgain: () => Promise<void>;
@@ -405,16 +398,6 @@ export const useSettingsModalController = ({
 
     return selectedRepoDefaultWorktreeBasePath;
   }, [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath]);
-  const {
-    selectedRepoDevServerValidationErrors,
-    invalidRepoPathsWithDevServerErrors,
-    repoScriptValidationErrorCountByWorkspaceId,
-    repoScriptValidationErrorCount,
-    hasRepoScriptValidationErrors,
-  } = useSettingsModalRepoScriptValidation({
-    snapshotDraft,
-    selectedRepoConfig,
-  });
   const settingsSectionErrorCountByIdWithValidation = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
@@ -422,14 +405,12 @@ export const useSettingsModalController = ({
         settingsSectionErrorCountById.repositories +
         runtimeAvailabilityValidationState.totalErrorCount -
         runtimeAvailabilityValidationState.runtimeExecutableErrors.length +
-        repoScriptValidationErrorCount +
         azureDevOpsValidationErrorCount,
       runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
       "custom-agent-roles": customAgentRoleValidationState.totalErrorCount,
     }),
     [
-      repoScriptValidationErrorCount,
       azureDevOpsValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
       customAgentRoleValidationState.totalErrorCount,
@@ -448,9 +429,7 @@ export const useSettingsModalController = ({
     cancelRuntimeReview,
     isSaving,
     saveError,
-    showRepoScriptValidationErrors,
     clearSaveError,
-    markRepoScriptSaveAttempt,
     submit,
   } = useSettingsModalSaveOrchestration({
     open,
@@ -490,12 +469,6 @@ export const useSettingsModalController = ({
       claude: {
         error: claudeValidationError,
         unacknowledged: requiresClaudeDangerAcknowledgement && !isClaudeDangerAcknowledged,
-      },
-      repoScripts: {
-        hasErrors: hasRepoScriptValidationErrors,
-        errorCount: repoScriptValidationErrorCount,
-        invalidRepoPaths: invalidRepoPathsWithDevServerErrors,
-        selectedWorkspaceId,
       },
     },
     onRuntimeAvailabilityError,
@@ -646,13 +619,7 @@ export const useSettingsModalController = ({
     isCodexDangerAcknowledged,
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoRuntimeAvailabilityErrorCount,
-    hasRepoScriptValidationErrors,
-    repoScriptValidationErrorCountByWorkspaceId,
-    repoScriptValidationErrorCount,
-    showRepoScriptValidationErrors,
-    selectedRepoDevServerValidationErrors,
     setSelectedWorkspaceId,
-    markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
     checkRuntimeExecutablesAgain,

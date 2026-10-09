@@ -199,7 +199,7 @@ describe("global config", () => {
           },
         },
       },
-      "workspaces.repo.devServers.0.extra",
+      "workspaces.repo.actions.items.0.extra",
     ],
     [
       {
@@ -263,6 +263,147 @@ describe("global config", () => {
       ).toThrow("workspaces.repo.defaultTargetBranch.extra: Unknown setting.");
     },
   );
+
+  test("converts the worktree setup script and dev servers into actions", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          hooks: {
+            preStart: ["bun install", "  ", " bun run build "],
+            postComplete: ["make clean"],
+          },
+          devServers: [
+            { id: "web", name: "Web", command: "bun run dev" },
+            { id: "api", name: "API", command: "bun run api" },
+          ],
+          worktreeCopyPaths: [".env"],
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.actions).toEqual({
+      items: [
+        {
+          id: "worktree-setup",
+          icon: "configure",
+          name: "Worktree setup",
+          command: "bun install\nbun run build",
+          runOnWorktreeCreate: true,
+          waitBeforeAgentStart: true,
+        },
+        {
+          id: "web",
+          icon: "play",
+          name: "Web",
+          command: "bun run dev",
+          runOnWorktreeCreate: false,
+          waitBeforeAgentStart: false,
+        },
+        {
+          id: "api",
+          icon: "play",
+          name: "API",
+          command: "bun run api",
+          runOnWorktreeCreate: false,
+          waitBeforeAgentStart: false,
+        },
+      ],
+      defaultActionId: "web",
+    });
+    expect(config.workspaces.repo?.hooks).toEqual({ postComplete: ["make clean"] });
+    expect(config.workspaces.repo?.worktreeCopyPaths).toEqual([".env"]);
+    expect(config.workspaces.repo).not.toHaveProperty("devServers");
+  });
+
+  test("makes the converted worktree setup action the default when no dev servers exist", () => {
+    const config = parsePersistedGlobalConfigV3({
+      version: 3,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          hooks: { preStart: ["bun install"], postComplete: [] },
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.actions).toEqual({
+      items: [
+        {
+          id: "worktree-setup",
+          icon: "configure",
+          name: "Worktree setup",
+          command: "bun install",
+          runOnWorktreeCreate: true,
+          waitBeforeAgentStart: true,
+        },
+      ],
+      defaultActionId: "worktree-setup",
+    });
+  });
+
+  test("converts empty legacy settings into no actions", () => {
+    const config = parsePersistedGlobalConfigV2({
+      version: 2,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          hooks: { preStart: [" "], postComplete: [] },
+          devServers: [],
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.actions).toEqual({ items: [], defaultActionId: null });
+    expect(config.workspaces.repo?.hooks).toEqual({ postComplete: [] });
+  });
+
+  test("gives the converted setup action an id that no dev server uses", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          hooks: { preStart: ["bun install"] },
+          devServers: [{ id: "worktree-setup", name: "Setup server", command: "bun run setup" }],
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.actions.items.map((action) => action.id)).toEqual([
+      "worktree-setup-1",
+      "worktree-setup",
+    ]);
+    expect(config.workspaces.repo?.actions.defaultActionId).toBe("worktree-setup");
+  });
+
+  test("rejects actions together with legacy dev server or setup settings", () => {
+    expect(() =>
+      parsePersistedGlobalConfig({
+        version: 4,
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            devServers: [],
+            actions: { items: [], defaultActionId: null },
+          },
+        },
+      }),
+    ).toThrow(
+      'Repository "repo" contains both actions and legacy dev server or worktree setup settings.',
+    );
+  });
 
   test("migrates one legacy repository Git provider without losing values", () => {
     const config = parsePersistedGlobalConfig({

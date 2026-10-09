@@ -294,6 +294,15 @@ export class TerminalSessionOutput {
     });
   }
 
+  /** A new producer starts with its output unpaused. */
+  clearProducerPause(): Effect.Effect<void> {
+    return this.flowOperations.run(
+      Effect.sync(() => {
+        this.producerPaused = false;
+      }),
+    );
+  }
+
   markOverflowed(): boolean {
     if (this.overflowed) return false;
     this.overflowed = true;

@@ -6,16 +6,12 @@ import {
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   type SettingsSnapshotSaveResult,
+  type RepoActions,
   type WorkspaceRecord,
-  type DevServerOwner,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import {
-  buildScript,
-  buildState,
-} from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDeferred,
@@ -27,11 +23,14 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
-import { devServerGroupStateQueryOptions } from "../../queries/dev-servers";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
-import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "../../queries/workspace";
+import {
+  repoConfigQueryOptions,
+  settingsSnapshotQueryOptions,
+  workspaceQueryKeys,
+} from "../../queries/workspace";
 import { customAgentRolesQueryOptions } from "../../queries/workspace-sessions";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -207,6 +206,20 @@ const startSettingsSave = async ({
   };
 };
 
+const createRepoActions = (): RepoActions => ({
+  items: [
+    {
+      id: "test",
+      icon: "test",
+      name: "Test",
+      command: "bun test",
+      runOnWorktreeCreate: true,
+      waitBeforeAgentStart: true,
+    },
+  ],
+  defaultActionId: "test",
+});
+
 const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConfig>> => ({
   workspaceId: "repo-a",
   workspaceName: "repo-a",
@@ -214,8 +227,8 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { preStart: ["a"], postComplete: ["b"] },
-  devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+  hooks: { postComplete: ["b"] },
+  actions: createRepoActions(),
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentStudioState: { openTaskIds: [] },
@@ -241,9 +254,8 @@ const inputFixture: RepoSettingsInput = {
   branchPrefix: "  codex/  ",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "  develop  " },
-  preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
-  devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
+  actions: createRepoActions(),
   worktreeCopyPaths: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
@@ -441,9 +453,8 @@ describe("use-repo-settings-operations", () => {
         branchPrefix: "codex/",
         defaultModel: null,
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        preStartHooks: ["a"],
         postCompleteHooks: ["b"],
-        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+        actions: createRepoActions(),
         worktreeCopyPaths: [],
         agentDefaults: {
           spec: {
@@ -515,10 +526,9 @@ describe("use-repo-settings-operations", () => {
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
         hooks: {
-          preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
-        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+        actions: createRepoActions(),
         worktreeCopyPaths: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -576,44 +586,42 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveRepoSettings refreshes a mounted dev-server group", async () => {
-    const owner: DevServerOwner = { kind: "task", taskId: "task-a" };
-    const options = devServerGroupStateQueryOptions("/repo-a", owner, "epoch-a");
+  test("saveRepoSettings refreshes a mounted repository config", async () => {
+    const savedConfig = createRepoConfig();
     const original = {
       save: host.workspaceSaveRepoSettings,
-      getState: host.devServerGetState,
+      getRepoConfig: host.workspaceGetRepoConfig,
     };
     host.workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-    host.devServerGetState = mock(async () =>
-      buildState({ repoPath: "/repo-a", owner, scripts: [buildScript()] }),
-    );
+    host.workspaceGetRepoConfig = mock(async () => savedConfig);
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
       applyWorkspaceRecord: mock(() => {}),
     });
+    const options = repoConfigQueryOptions("repo-a");
     let unsubscribe = () => {};
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
-      queryClient.setQueryData(
-        options.queryKey,
-        buildState({ repoPath: "/repo-a", owner, scripts: [] }),
-      );
+      queryClient.setQueryData(options.queryKey, {
+        ...savedConfig,
+        actions: { items: [], defaultActionId: null },
+      });
       const observer = new QueryObserver(queryClient, options);
       unsubscribe = observer.subscribe(() => {});
-      expect(observer.getCurrentResult().data?.scripts).toEqual([]);
+      expect(observer.getCurrentResult().data?.actions.items).toEqual([]);
 
       await harness.run((operations) => operations.saveRepoSettings(inputFixture));
 
-      expect(observer.getCurrentResult().data?.scripts).toEqual([buildScript()]);
-      expect(host.devServerGetState).toHaveBeenCalledWith("/repo-a", owner);
+      expect(observer.getCurrentResult().data?.actions).toEqual(createRepoActions());
+      expect(host.workspaceGetRepoConfig).toHaveBeenCalledWith("repo-a");
     } finally {
       unsubscribe();
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.save;
-      host.devServerGetState = original.getState;
+      host.workspaceGetRepoConfig = original.getRepoConfig;
     }
   });
 
@@ -673,7 +681,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveRepoSettings sends normalized repo scripts", async () => {
+  test("saveRepoSettings sends normalized cleanup hooks and the repository actions", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
@@ -693,12 +701,7 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings({
         ...inputFixture,
-        preStartHooks: ["  echo pre  ", " ", ""],
         postCompleteHooks: ["\t", " echo post "],
-        devServers: [
-          { id: "frontend", name: "Frontend", command: " bun run dev " },
-          { id: "backend", name: "Backend", command: " " },
-        ],
       });
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
@@ -706,10 +709,9 @@ describe("use-repo-settings-operations", () => {
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
         hooks: {
-          preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
-        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+        actions: createRepoActions(),
         worktreeCopyPaths: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -765,40 +767,6 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveRepoSettings(inputFixture);
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(2);
       expect(applyWorkspaceRecord).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("saveRepoSettings omits blank dev server commands", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await harness.getLatest().saveRepoSettings({
-        ...inputFixture,
-        devServers: [{ id: "frontend", name: "Frontend", command: " " }],
-      });
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith(
-        "repo-a",
-        expect.objectContaining({
-          devServers: [],
-        }),
-      );
     } finally {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
@@ -1292,7 +1260,7 @@ describe("use-repo-settings-operations", () => {
       workspaces: {
         "repo-a": {
           ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
-          hooks: { preStart: ["bun run setup"], postComplete: [] },
+          hooks: { postComplete: ["bun run cleanup"] },
         },
       },
     });
@@ -1311,34 +1279,21 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("adding the first script refreshes only the changed repository's mounted group", async () => {
-    const owner: DevServerOwner = {
-      kind: "workspace_session",
-      workspaceId: "repo-a",
-      sessionId: "session-a",
-    };
+  test("adding an action refreshes the mounted repository config", async () => {
     const previousRepoA = createRepoSettingsConfigFixture("repo-a", "/repo-a");
-    const repoB = createRepoSettingsConfigFixture("repo-b", "/repo-b");
     const previousSnapshot = createSettingsSnapshotFixture({
-      workspaces: { "repo-a": previousRepoA, "repo-b": repoB },
+      workspaces: { "repo-a": previousRepoA },
     });
     const normalizedSnapshot = createSettingsSnapshotFixture({
-      workspaces: {
-        "repo-a": {
-          ...previousRepoA,
-          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-        },
-        "repo-b": repoB,
-      },
+      workspaces: { "repo-a": { ...previousRepoA, actions: createRepoActions() } },
     });
+    const savedConfig = createRepoConfig();
     const original = {
-      getState: host.devServerGetState,
+      getRepoConfig: host.workspaceGetRepoConfig,
       save: host.workspaceSaveSettingsSnapshot,
       getSnapshot: host.workspaceGetSettingsSnapshot,
     };
-    host.devServerGetState = mock(async (repoPath, stateOwner) =>
-      buildState({ repoPath, owner: stateOwner, scripts: [buildScript()] }),
-    );
+    host.workspaceGetRepoConfig = mock(async () => savedConfig);
     host.workspaceSaveSettingsSnapshot = mock(async () => savedResult([createWorkspaceRecord()]));
     host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
     const harness = createHookHarness({
@@ -1346,36 +1301,31 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecords: mock(() => {}),
       applyWorkspaceRecord: mock(() => {}),
     });
-    const repoAOptions = devServerGroupStateQueryOptions("/repo-a", owner, "epoch-a");
-    const repoBOptions = devServerGroupStateQueryOptions("/repo-b", owner, "epoch-b");
-    const emptyState = (repoPath: string) => buildState({ repoPath, owner, scripts: [] });
-    let unsubscribeA = () => {};
-    let unsubscribeB = () => {};
+    const options = repoConfigQueryOptions("repo-a");
+    let unsubscribe = () => {};
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), previousSnapshot);
-      queryClient.setQueryData(repoAOptions.queryKey, emptyState("/repo-a"));
-      queryClient.setQueryData(repoBOptions.queryKey, emptyState("/repo-b"));
-      const repoAObserver = new QueryObserver(queryClient, repoAOptions);
-      const repoBObserver = new QueryObserver(queryClient, repoBOptions);
-      unsubscribeA = repoAObserver.subscribe(() => {});
-      unsubscribeB = repoBObserver.subscribe(() => {});
-      expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([]);
+      queryClient.setQueryData(options.queryKey, {
+        ...savedConfig,
+        actions: { items: [], defaultActionId: null },
+      });
+      const observer = new QueryObserver(queryClient, options);
+      unsubscribe = observer.subscribe(() => {});
+      expect(observer.getCurrentResult().data?.actions.items).toEqual([]);
+
       await harness.run(async (operations) => {
         await operations.saveSettingsSnapshot(normalizedSnapshot);
       });
 
-      expect(repoAObserver.getCurrentResult().data?.scripts).toEqual([buildScript()]);
-      expect(repoBObserver.getCurrentResult().data?.scripts).toEqual([]);
-      expect(host.devServerGetState).toHaveBeenCalledTimes(1);
-      expect(host.devServerGetState).toHaveBeenCalledWith("/repo-a", owner);
+      expect(observer.getCurrentResult().data?.actions).toEqual(createRepoActions());
+      expect(host.workspaceGetRepoConfig).toHaveBeenCalledWith("repo-a");
     } finally {
-      unsubscribeA();
-      unsubscribeB();
+      unsubscribe();
       await harness.unmount();
-      host.devServerGetState = original.getState;
+      host.workspaceGetRepoConfig = original.getRepoConfig;
       host.workspaceSaveSettingsSnapshot = original.save;
       host.workspaceGetSettingsSnapshot = original.getSnapshot;
     }
@@ -1570,8 +1520,8 @@ describe("use-repo-settings-operations", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { preStart: [], postComplete: [] },
-          devServers: [],
+          hooks: { postComplete: [] },
+          actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: repoPromptOverrides,
           agentDefaults: {},

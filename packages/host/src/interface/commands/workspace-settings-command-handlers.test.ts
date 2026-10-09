@@ -151,8 +151,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { preStart: [], postComplete: [] },
-              devServers: [],
+              hooks: { postComplete: [] },
+              actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},
@@ -176,8 +176,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { preStart: [], postComplete: [] },
-          devServers: [],
+          hooks: { postComplete: [] },
+          actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
@@ -197,8 +197,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { preStart: [], postComplete: [] },
-              devServers: [],
+              hooks: { postComplete: [] },
+              actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},
@@ -493,7 +493,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_update_repo_hooks", {
         workspaceId: "repo",
-        hooks: { preStart: [], postComplete: [], extra: true },
+        hooks: { postComplete: [], extra: true },
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({

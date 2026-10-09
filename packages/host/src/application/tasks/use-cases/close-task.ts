@@ -27,7 +27,6 @@ import { enrichTask } from "../support/task-workflow-helpers";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 export const createTaskCloseUseCase = ({
-  devServerService,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -59,12 +58,7 @@ export const createTaskCloseUseCase = ({
       yield* validateManualCloseTaskEffect(current, currentTasks);
 
       const dependencies = yield* requireDependencies(() =>
-        requireTaskCloseDependencies(
-          devServerService,
-          gitPort,
-          settingsConfig,
-          workspaceSettingsService,
-        ),
+        requireTaskCloseDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
@@ -134,7 +128,6 @@ export const createTaskCloseUseCase = ({
         }
         yield* runTaskLocalCleanup({
           branchNames,
-          devServerService: dependencies.devServerService,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
           progress: cleanupProgress,

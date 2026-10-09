@@ -13,24 +13,33 @@ const terminalRepoPathSchema = z.string().trim().min(1);
 const terminalWorkspaceIdSchema = z.string().trim().min(1);
 const terminalSessionIdSchema = z.string().trim().min(1);
 
+const taskTerminalContextSchema = z
+  .object({
+    repoPath: terminalRepoPathSchema,
+    taskId: terminalTaskIdSchema,
+  })
+  .strict();
+const workspaceSessionTerminalContextSchema = z
+  .object({
+    kind: z.literal("workspace_session"),
+    workspaceId: terminalWorkspaceIdSchema,
+    sessionId: terminalSessionIdSchema,
+    repoPath: terminalRepoPathSchema,
+  })
+  .strict();
+
 export const terminalContextSchema = z.union([
   z.object({}).strict(),
-  z
-    .object({
-      repoPath: terminalRepoPathSchema,
-      taskId: terminalTaskIdSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("workspace_session"),
-      workspaceId: terminalWorkspaceIdSchema,
-      sessionId: terminalSessionIdSchema,
-      repoPath: terminalRepoPathSchema,
-    })
-    .strict(),
+  taskTerminalContextSchema,
+  workspaceSessionTerminalContextSchema,
 ]);
 export type TerminalContext = z.infer<typeof terminalContextSchema>;
+
+export const terminalOwnedContextSchema = z.union([
+  taskTerminalContextSchema,
+  workspaceSessionTerminalContextSchema,
+]);
+export type TerminalOwnedContext = z.infer<typeof terminalOwnedContextSchema>;
 
 export const terminalLaunchSpecSchema = z
   .object({
@@ -39,6 +48,11 @@ export const terminalLaunchSpecSchema = z
   })
   .strict();
 export type TerminalLaunchSpec = z.infer<typeof terminalLaunchSpecSchema>;
+
+const terminalOwnedLaunchSpecSchema = terminalLaunchSpecSchema.extend({
+  context: terminalOwnedContextSchema,
+});
+export type TerminalOwnedLaunchSpec = z.infer<typeof terminalOwnedLaunchSpecSchema>;
 
 export const terminalRefSchema = z.object({ terminalId: terminalIdSchema }).strict();
 export type TerminalRef = z.infer<typeof terminalRefSchema>;
@@ -71,14 +85,19 @@ export const terminalSummarySchema = z
     createdAt: z.string().min(1),
     lifecycle: terminalLifecycleSchema,
     exit: terminalExitSchema.nullable(),
+    /**
+     * `host` marks a terminal that OpenDucktor started without a user request, such as a
+     * worktree-creation action. The terminal panel does not open for it.
+     */
+    startedBy: z.enum(["user", "host"]),
   })
   .strict();
 export type TerminalSummary = z.infer<typeof terminalSummarySchema>;
+export type TerminalStartedBy = TerminalSummary["startedBy"];
 
 export const terminalActivitySchema = z
   .object({
     summary: terminalSummarySchema,
-    kind: z.enum(["terminal", "dev_server"]),
     command: z.string().min(1),
   })
   .strict();
@@ -91,6 +110,7 @@ export const terminalFailureCodeSchema = z.enum([
   "working_directory_not_directory",
   "task_worktree_unavailable",
   "workspace_session_unavailable",
+  "action_not_found",
   "shell_unavailable",
   "unsupported_shell",
   "unsupported_runtime",
@@ -126,6 +146,11 @@ export type TerminalFailure = z.infer<typeof terminalFailureSchema>;
 
 export const terminalCreateRequestSchema = terminalLaunchSpecSchema;
 export type TerminalCreateRequest = z.infer<typeof terminalCreateRequestSchema>;
+
+export const terminalRunActionRequestSchema = terminalOwnedLaunchSpecSchema.extend({
+  actionId: z.string().trim().min(1),
+});
+export type TerminalRunActionRequest = z.infer<typeof terminalRunActionRequestSchema>;
 
 export const terminalCreateResponseSchema = z
   .object({

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
@@ -39,7 +38,6 @@ describe("provider-neutral task dependency gates", () => {
   });
 
   test("direct merge does not require a Git provider", () => {
-    const devServerService = dependencyStub<DevServerService>();
     const gitPort = dependencyStub<GitPort>();
     const settingsConfig = dependencyStub<SettingsConfigPort>();
     const taskWorktreeService = dependencyStub<TaskWorktreeService>();
@@ -52,7 +50,6 @@ describe("provider-neutral task dependency gates", () => {
 
     expect(
       requireDirectMergeDependencies({
-        devServerService,
         gitPort,
         settingsConfig,
         taskWorktreeService,
@@ -61,7 +58,6 @@ describe("provider-neutral task dependency gates", () => {
         workspaceSettingsService,
       }),
     ).toEqual({
-      devServerService,
       gitPort,
       settingsConfig,
       taskWorktreeService,
@@ -72,7 +68,6 @@ describe("provider-neutral task dependency gates", () => {
   });
 
   test("merged Pull Request cleanup does not require a Git provider", () => {
-    const devServerService = dependencyStub<DevServerService>();
     const gitPort = dependencyStub<GitPort>();
     const settingsConfig = dependencyStub<SettingsConfigPort>();
     const taskWorktreeService = dependencyStub<TaskWorktreeService>();
@@ -85,7 +80,6 @@ describe("provider-neutral task dependency gates", () => {
 
     expect(
       requireLinkMergedPullRequestDependencies({
-        devServerService,
         gitPort,
         settingsConfig,
         taskWorktreeService,
@@ -94,7 +88,6 @@ describe("provider-neutral task dependency gates", () => {
         workspaceSettingsService,
       }),
     ).toEqual({
-      devServerService,
       gitPort,
       settingsConfig,
       taskWorktreeService,

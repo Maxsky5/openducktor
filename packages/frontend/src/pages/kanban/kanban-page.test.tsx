@@ -278,9 +278,8 @@ const createRepoSettingsFixture = (): RepoSettingsInput => ({
   branchPrefix: "codex/",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
   postCompleteHooks: [],
-  devServers: [],
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
     spec: {
@@ -481,10 +480,9 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     defaultTargetBranch: { remote: "origin", branch: "main" },
     git: {},
     hooks: {
-      preStart: [],
       postComplete: [],
     },
-    devServers: [],
+    actions: { items: [], defaultActionId: null },
     worktreeCopyPaths: [],
     promptOverrides,
     agentStudioState: { openTaskIds: [] },

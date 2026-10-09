@@ -51,9 +51,8 @@ export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
   worktreeBasePath: config.worktreeBasePath ?? "",
   branchPrefix: config.branchPrefix,
   defaultTargetBranch: normalizeTargetBranch(config.defaultTargetBranch),
-  preStartHooks: config.hooks.preStart,
   postCompleteHooks: config.hooks.postComplete,
-  devServers: config.devServers ?? [],
+  actions: config.actions,
   worktreeCopyPaths: config.worktreeCopyPaths ?? [],
   agentDefaults: {
     spec: toRepoAgentDefaultInput(config.agentDefaults.spec),

@@ -8,7 +8,6 @@ import {
   type KanbanTaskCardView,
   globalConfigSchema,
   type RepoConfig,
-  type RepoDevServerScript,
   type RepoHooks,
   repoConfigSchema,
   repoHooksSchema,
@@ -170,18 +169,8 @@ const normalizeOptionalNonEmptyString = (value: string | undefined): string | un
 const normalizeHooks = (value: WorkspaceRepoHooksInput | RepoHooks): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
-    preStart: hooks.preStart.map((command) => command.trim()).filter(Boolean),
     postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
   };
-};
-const normalizeDevServers = (value: RepoDevServerScript[]): RepoDevServerScript[] => {
-  return value
-    .map((entry) => ({
-      id: entry.id.trim(),
-      name: entry.name.trim(),
-      command: entry.command.trim(),
-    }))
-    .filter((entry) => entry.command.length > 0);
 };
 const normalizeWorktreeCopyPaths = (value: string[]): string[] =>
   value.map((entry) => entry.trim()).filter(Boolean);
@@ -193,7 +182,6 @@ const normalizeRepoConfigInput = (input: RepoConfigDraft): RepoConfig => {
     worktreeBasePath: rawWorktreeBasePath,
     branchPrefix: rawBranchPrefix,
     hooks: input.hooks === undefined ? undefined : normalizeHooks(input.hooks),
-    devServers: input.devServers === undefined ? undefined : normalizeDevServers(input.devServers),
     worktreeCopyPaths:
       input.worktreeCopyPaths === undefined
         ? undefined
@@ -374,7 +362,7 @@ export const buildMergedRepoConfig = (
   defaultTargetBranch: update.defaultTargetBranch ?? existing.defaultTargetBranch,
   git: update.git ?? existing.git,
   hooks: includeHooks && update.hooks ? normalizeHooks(update.hooks) : existing.hooks,
-  devServers: update.devServers ?? existing.devServers,
+  actions: update.actions ?? existing.actions,
   worktreeCopyPaths: update.worktreeCopyPaths ?? existing.worktreeCopyPaths,
   promptOverrides: update.promptOverrides ?? existing.promptOverrides,
   agentDefaults: update.agentDefaults ?? existing.agentDefaults,

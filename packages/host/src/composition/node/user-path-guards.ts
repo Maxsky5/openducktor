@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import type { RuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
 import type { ModelCatalogPreviewReader } from "../../application/runtimes/model-catalog-preview-service";
 import { HostOperationError } from "../../effect/host-errors";
-import type { DevServerProcessPort } from "../../ports/dev-server-process-port";
 import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { UserEnvironmentPort, UserPathError } from "../../ports/user-environment-port";
 
@@ -29,17 +28,6 @@ const requireUserPath = (
         )
       : Effect.void;
   });
-
-export const guardDevServerStart = (
-  port: DevServerProcessPort,
-  userEnvironment: UserEnvironmentPort,
-): DevServerProcessPort => ({
-  start(input) {
-    return requireUserPath(userEnvironment, "devServerProcess.resolveEnvironment").pipe(
-      Effect.andThen(port.start(input)),
-    );
-  },
-});
 
 export const guardRuntimeStart = (
   starter: RuntimeStarterPort,

@@ -11,4 +11,6 @@ export const TERMINAL_LIMITS = {
   resumeOutputBytes: 256 * 1024,
   retainedExited: 64,
   exitedRetentionMs: 24 * 60 * 60 * 1000,
+  commandOutputTailLines: 20,
+  activityCommandLength: 1024,
 } as const;

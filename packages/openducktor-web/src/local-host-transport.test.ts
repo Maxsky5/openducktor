@@ -450,7 +450,6 @@ describe("local host SSE subscriptions", () => {
   test("shares one EventSource across non-task host event channels", async () => {
     const {
       observeLocalHostAgentSessions,
-      subscribeLocalHostDevServerEvents,
       subscribeLocalHostRunEvents,
       subscribeLocalHostWorkspaceSessionUpdates,
       subscribeLocalHostWorkspaceProviderSetupUpdates,
@@ -463,13 +462,11 @@ describe("local host SSE subscriptions", () => {
     );
     globalThis.fetch = createFetchFixture(fetchMock);
     const runListener = mock(() => {});
-    const devServerListener = mock(() => {});
     const liveSessionListener = mock(() => {});
     const workspaceSessionListener = mock(() => {});
     const setupListener = mock(() => {});
 
     const unsubscribeRun = await subscribeLocalHostRunEvents(runListener);
-    const devServerSubscription = subscribeLocalHostDevServerEvents(devServerListener);
     const workspaceSessionSubscription =
       subscribeLocalHostWorkspaceSessionUpdates(workspaceSessionListener);
     const setupSubscription = subscribeLocalHostWorkspaceProviderSetupUpdates(setupListener);
@@ -483,7 +480,6 @@ describe("local host SSE subscriptions", () => {
     expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     FakeEventSource.instances[0]?.emit("open", "");
-    const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const unsubscribeWorkspaceSession = await workspaceSessionSubscription;
     const unsubscribeSetup = await setupSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
@@ -525,17 +521,6 @@ describe("local host SSE subscriptions", () => {
     };
     emitHostEvent("openducktor://workspace-provider-setup-updated", setupUpdate);
     expect(setupListener).toHaveBeenCalledWith(setupUpdate);
-    emitHostEvent("openducktor://dev-server-event", {
-      type: "snapshot",
-      state: {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-        workingDirectory: null,
-        scripts: [],
-        revision: 0,
-        updatedAt: "2026-03-19T15:30:00.000Z",
-      },
-    });
     emitHostEvent("openducktor://agent-session-live-event", {
       type: "snapshot",
       repoPath: "/repo",
@@ -543,30 +528,18 @@ describe("local host SSE subscriptions", () => {
     });
 
     expect(runListener).toHaveBeenCalledWith({ type: "run" });
-    expect(devServerListener).toHaveBeenCalledWith({
-      type: "snapshot",
-      state: {
-        repoPath: "/repo",
-        owner: { kind: "task", taskId: "task-1" },
-        workingDirectory: null,
-        scripts: [],
-        revision: 0,
-        updatedAt: "2026-03-19T15:30:00.000Z",
-      },
-    });
     expect(liveSessionListener).toHaveBeenCalledWith({
       isConnectionSnapshot: true,
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
     });
-    expect(() => emitHostEvent("openducktor://dev-server-event", { type: "dev-server" })).toThrow(
-      "Invalid OpenDucktor host event envelope.",
-    );
-    expect(devServerListener).toHaveBeenCalledTimes(1);
+    expect(() =>
+      emitHostEvent("openducktor://workspace-session-updated", { workspaceId: "workspace-A" }),
+    ).toThrow("Invalid OpenDucktor host event envelope.");
+    expect(workspaceSessionListener).toHaveBeenCalledTimes(1);
 
     unsubscribeRun();
-    unsubscribeDevServer();
     unsubscribeWorkspaceSession();
     unsubscribeSetup();
     expect(FakeEventSource.instances[0]?.closed).toBe(false);
@@ -662,14 +635,14 @@ describe("local host SSE subscriptions", () => {
     expect(source.closed).toBe(true);
   });
 
-  test("resolves dev-server subscriptions on initial open and emits reconnect control payloads afterward", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+  test("resolves host event subscriptions on initial open and emits reconnect control payloads afterward", async () => {
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     const listener = mock(() => {});
 
-    const subscription = subscribeLocalHostDevServerEvents(listener);
+    const subscription = subscribeLocalHostWorkspaceSessionUpdates(listener);
     const eventSource = await waitForEventSourceInstance();
     let didResolve = false;
     void subscription.then(() => {
@@ -680,8 +653,7 @@ describe("local host SSE subscriptions", () => {
     expect(didResolve).toBe(false);
 
     eventSource.emit("open", "");
-    const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe("events:0");
+    const unsubscribe = await subscription;
     expect(listener).not.toHaveBeenCalled();
 
     eventSource.emit("open", "");
@@ -739,7 +711,7 @@ describe("local host SSE subscriptions", () => {
   });
 
   test("delivers reconnect once to a listener removed by a failing earlier listener", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
@@ -750,12 +722,11 @@ describe("local host SSE subscriptions", () => {
       throw failure;
     });
     const later = mock(() => {});
-    const firstSubscription = subscribeLocalHostDevServerEvents(first);
+    const firstSubscription = subscribeLocalHostWorkspaceSessionUpdates(first);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const { unsubscribe: unsubscribeFirst } = await firstSubscription;
-    const laterSubscription = await subscribeLocalHostDevServerEvents(later);
-    unsubscribeLater = laterSubscription.unsubscribe;
+    const unsubscribeFirst = await firstSubscription;
+    unsubscribeLater = await subscribeLocalHostWorkspaceSessionUpdates(later);
 
     let thrown: unknown;
     try {
@@ -950,13 +921,13 @@ describe("local host SSE subscriptions", () => {
   });
 
   test("waits for the native EventSource reconnect when the initial open fails", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     const listener = mock(() => {});
 
-    const subscription = subscribeLocalHostDevServerEvents(listener);
+    const subscription = subscribeLocalHostWorkspaceSessionUpdates(listener);
     const eventSource = await waitForEventSourceInstance();
 
     eventSource.emit("error", "failed");
@@ -978,29 +949,28 @@ describe("local host SSE subscriptions", () => {
       kind: "reconnected",
       transportEpoch: "events:0",
     });
-    const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe("events:0");
+    const unsubscribe = await subscription;
 
     // A subscriber that joins after this recovery gets no old warning.
     const late = mock(() => {});
-    const { unsubscribe: unsubscribeLate } = await subscribeLocalHostDevServerEvents(late);
+    const unsubscribeLate = await subscribeLocalHostWorkspaceSessionUpdates(late);
     expect(late).not.toHaveBeenCalled();
     unsubscribeLate();
     unsubscribe();
     expect(eventSource.closed).toBe(true);
   });
 
-  test("emits a stream-warning control payload when dev-server EventSource errors after opening", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+  test("emits a stream-warning control payload when the EventSource errors after opening", async () => {
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     const listener = mock(() => {});
 
-    const subscription = subscribeLocalHostDevServerEvents(listener);
+    const subscription = subscribeLocalHostWorkspaceSessionUpdates(listener);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const { unsubscribe } = await subscription;
+    const unsubscribe = await subscription;
 
     eventSource.emit("error", "lost connection");
 
@@ -1073,8 +1043,8 @@ describe("local host SSE subscriptions", () => {
     stopAfterRecovery();
   });
 
-  test("isolates post-open dev-server stream-warning listener failures", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+  test("isolates post-open stream-warning listener failures", async () => {
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
@@ -1083,11 +1053,11 @@ describe("local host SSE subscriptions", () => {
     });
     const listener = mock(() => {});
 
-    const throwingSubscription = subscribeLocalHostDevServerEvents(throwingListener);
+    const throwingSubscription = subscribeLocalHostWorkspaceSessionUpdates(throwingListener);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const { unsubscribe: unsubscribeThrowing } = await throwingSubscription;
-    const { unsubscribe } = await subscribeLocalHostDevServerEvents(listener);
+    const unsubscribeThrowing = await throwingSubscription;
+    const unsubscribe = await subscribeLocalHostWorkspaceSessionUpdates(listener);
 
     expect(() => eventSource.emit("error", "lost connection")).toThrow("listener failed");
     expect(listener).toHaveBeenNthCalledWith(1, {
@@ -1103,8 +1073,8 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
-  test("isolates named dev-server stream-warning listener failures", async () => {
-    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+  test("isolates named stream-warning listener failures", async () => {
+    const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
@@ -1113,22 +1083,22 @@ describe("local host SSE subscriptions", () => {
     });
     const listener = mock(() => {});
 
-    const throwingSubscription = subscribeLocalHostDevServerEvents(throwingListener);
+    const throwingSubscription = subscribeLocalHostWorkspaceSessionUpdates(throwingListener);
     const eventSource = await waitForEventSourceInstance();
     eventSource.emit("open", "");
-    const { unsubscribe: unsubscribeThrowing } = await throwingSubscription;
-    const { unsubscribe } = await subscribeLocalHostDevServerEvents(listener);
+    const unsubscribeThrowing = await throwingSubscription;
+    const unsubscribe = await subscribeLocalHostWorkspaceSessionUpdates(listener);
 
     expect(() =>
       eventSource.emit(
         "stream-warning",
-        "Dev server stream skipped 2 events; reconnect will replay buffered events.",
+        "Host event stream skipped 2 events; reconnect will replay buffered events.",
       ),
     ).toThrow("listener failed");
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "stream-warning",
-      message: "Dev server stream skipped 2 events; reconnect will replay buffered events.",
+      message: "Host event stream skipped 2 events; reconnect will replay buffered events.",
     });
 
     unsubscribeThrowing();

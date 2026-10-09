@@ -7,7 +7,6 @@ import {
 import {
   buildCodexDangerousSettingsSaveError,
   buildPromptValidationSaveError,
-  buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
   buildRuntimeAvailabilitySaveError,
   getSettingsSaveBlocker,
@@ -94,13 +93,6 @@ describe("settings-modal-save-policy", () => {
     expect(buildCodexDangerousSettingsSaveError()).toBe(
       "Confirm the Codex safety acknowledgement before saving.",
     );
-    expect(
-      buildRepoScriptValidationSaveError({
-        invalidRepoPathsWithDevServerErrors: ["repo", "repo-two"],
-        repoScriptValidationErrorCount: 2,
-        selectedWorkspaceId: "repo",
-      }),
-    ).toBe("Fix 2 dev server field errors in the selected repository, `repo-two` before saving.");
   });
 
   test.each([
@@ -132,18 +124,11 @@ describe("settings-modal-save-policy", () => {
         runtimeRequest: { isPending: true, error: "request failed" },
         runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "claude" },
         hasUnacknowledgedCodexDangerousSettings: true,
-        repoScripts: {
-          hasErrors: true,
-          errorCount: 1,
-          invalidRepoPaths: ["repo"],
-          selectedWorkspaceId: "repo",
-        },
       });
 
       expect(blocker).toEqual({
         reason,
         runtimeKind,
-        showRepoScriptErrors: false,
       });
     },
   );
@@ -163,12 +148,6 @@ describe("settings-modal-save-policy", () => {
       runtimeRequest: { isPending: false, error: null },
       runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
       hasUnacknowledgedCodexDangerousSettings: false,
-      repoScripts: {
-        hasErrors: false,
-        errorCount: 0,
-        invalidRepoPaths: [],
-        selectedWorkspaceId: "repo",
-      },
     });
 
     expect(blocker?.reason).toBe("Fix 2 Azure DevOps field errors before saving.");
@@ -189,18 +168,11 @@ describe("settings-modal-save-policy", () => {
       runtimeRequest: { isPending: false, error: null },
       runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "codex" },
       hasUnacknowledgedCodexDangerousSettings: false,
-      repoScripts: {
-        hasErrors: false,
-        errorCount: 0,
-        invalidRepoPaths: [],
-        selectedWorkspaceId: null,
-      },
     });
 
     expect(blocker).toEqual({
       reason: "Fix 1 runtime executable error before saving.",
       runtimeKind: "codex",
-      showRepoScriptErrors: false,
     });
   });
 
@@ -220,12 +192,6 @@ describe("settings-modal-save-policy", () => {
         runtimeRequest: { isPending: false, error: null },
         runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
         hasUnacknowledgedCodexDangerousSettings: false,
-        repoScripts: {
-          hasErrors: false,
-          errorCount: 0,
-          invalidRepoPaths: [],
-          selectedWorkspaceId: null,
-        },
       }),
     ).toBeNull();
   });

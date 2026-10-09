@@ -425,7 +425,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: null,
       branchPrefix: "obp",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
@@ -443,7 +443,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -467,7 +467,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
       promptOverrides: {
         "kickoff.spec_initial": {
           template: "Custom kickoff for {{task.id}}",
@@ -489,7 +489,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
       promptOverrides: {
         "system.shared.workflow_guards": {
           template: "",
@@ -508,7 +508,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -1927,7 +1927,7 @@ describe("runtime schemas", () => {
         workspaceName: "Repo",
         repoPath: "/repo",
         branchPrefix: "obp",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     ).toMatchObject({ workspaceId: "repo" });
 
@@ -1935,7 +1935,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         agentDefaults: {
           spec: {
             providerId: "openai",
@@ -1949,7 +1949,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         defaultModel: {
           providerId: "openai",
           modelId: "gpt-5",

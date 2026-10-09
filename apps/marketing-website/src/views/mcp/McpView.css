@@ -15,10 +15,10 @@
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
-    border: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    border: calc(1 * var(--u)) solid var(--terminal-border);
     border-radius: calc(14 * var(--u));
-    background: var(--dev-server-terminal-panel);
-    color: var(--dev-server-terminal-foreground);
+    background: var(--terminal-panel);
+    color: var(--terminal-foreground);
     box-shadow:
       0 calc(24 * var(--u)) calc(48 * var(--u)) calc(-24 * var(--u)) rgb(15 23 42 / 0.45),
       0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(15 23 42 / 0.12);
@@ -29,8 +29,8 @@
     justify-content: space-between;
     height: calc(32 * var(--u));
     padding: 0 calc(14 * var(--u));
-    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
-    background: var(--dev-server-terminal-panel-header);
+    border-bottom: calc(1 * var(--u)) solid var(--terminal-border);
+    background: var(--terminal-tab-active);
     font-size: calc(13 * var(--u));
     font-weight: 500;
   }
@@ -42,7 +42,7 @@
   .mcp-head code,
   .mcp-file,
   .mcp-line span {
-    color: var(--dev-server-terminal-muted);
+    color: var(--terminal-muted);
   }
   .mcp-head code,
   .mcp-config,
@@ -53,8 +53,8 @@
   }
   .mcp-config {
     padding: calc(8 * var(--u)) calc(14 * var(--u));
-    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
-    background: var(--dev-server-terminal-panel-header);
+    border-bottom: calc(1 * var(--u)) solid var(--terminal-border);
+    background: var(--terminal-tab-active);
   }
   .mcp-file {
     display: inline-flex;
@@ -80,7 +80,7 @@
     color: var(--number);
   }
   .mcp-json .punct {
-    color: var(--dev-server-terminal-muted);
+    color: var(--terminal-muted);
   }
   .mcp-log {
     display: grid;
@@ -101,7 +101,7 @@
   .mcp-ask .typed::after {
     width: calc(7 * var(--u));
     height: calc(15 * var(--u));
-    background: var(--dev-server-terminal-foreground);
+    background: var(--terminal-foreground);
   }
   .mcp-step {
     display: grid;
@@ -119,7 +119,7 @@
     font-weight: 500;
   }
   .mcp-line .lucide {
-    color: var(--dev-server-terminal-muted);
+    color: var(--terminal-muted);
   }
   .mcp-line .mcp-spin,
   .mcp-line[data-running] .mcp-dir {

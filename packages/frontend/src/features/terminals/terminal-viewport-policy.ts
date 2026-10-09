@@ -117,11 +117,14 @@ export const createLiveTerminalFitScheduler = ({
   };
 };
 
+/** The exit status of a terminal process. A clean exit is not a failure. */
+export type TerminalExitNotice = { text: string; isFailure: boolean };
+
 export const handleTerminalMetadataFrame = (
   message: TerminalServerMessage,
   handlers: {
     onAttention: (message: string | null) => void;
-    onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+    onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
     onTitle: (title: string) => void;
     onForgotten: (message: string, failure: TerminalFailure | null) => void;
     onFailure: (message: string) => void;
@@ -141,12 +144,15 @@ export const handleTerminalMetadataFrame = (
     return true;
   }
   if (message.type === "lifecycle") {
-    let exitText: string | null = null;
+    let exit: TerminalExitNotice | null = null;
     if (message.lifecycle === "exited") {
       const signalText = message.signal ? ` (${message.signal})` : "";
-      exitText = `Exited with code ${message.exitCode ?? "unknown"}${signalText}.`;
+      exit = {
+        text: `Exited with code ${message.exitCode ?? "unknown"}${signalText}.`,
+        isFailure: message.exitCode !== 0 || Boolean(message.signal),
+      };
     }
-    handlers.onLifecycle(message.lifecycle, exitText);
+    handlers.onLifecycle(message.lifecycle, exit);
     return true;
   }
   if (message.type === "terminal_forgotten") {

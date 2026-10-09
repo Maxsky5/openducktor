@@ -34,10 +34,6 @@ const createTestShellBridge = (): ShellBridge =>
     subscribeRunEvents: async () => () => {},
     subscribeWorkspaceProviderSetupUpdates: async () => () => {},
     subscribeAzureDevOpsConnectionUpdates: async () => () => {},
-    subscribeDevServerEvents: async () => ({
-      transportEpoch: "test:0",
-      unsubscribe: () => {},
-    }),
     subscribeNotificationStream: async () => () => {},
     subscribeTaskStream: async () => ({
       subscriptionId: "test-subscription",

@@ -93,18 +93,21 @@
     height: calc(24 * var(--u));
   }
   .dev-terminals {
+    /* The product theme has no tokens for this retired panel, so the replica keeps its colors. */
+    --replica-terminal-subtle: oklch(0.5 0.015 260);
+    --replica-terminal-dot-stopped: oklch(0.35 0.012 260);
     display: flex;
     flex: 1;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-    background: var(--dev-server-terminal-surface);
-    color: var(--dev-server-terminal-foreground);
+    background: var(--terminal-surface);
+    color: var(--terminal-foreground);
   }
   .dev-tabs {
     display: flex;
     flex: 0 0 auto;
-    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
+    border-bottom: calc(1 * var(--u)) solid var(--terminal-border);
   }
   .dev-tab {
     display: flex;
@@ -114,9 +117,9 @@
     max-width: calc(320 * var(--u));
     padding: calc(4 * var(--u)) calc(12 * var(--u));
     border-top: calc(4 * var(--u)) solid transparent;
-    border-right: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
-    background: var(--dev-server-terminal-tab-inactive);
-    color: var(--dev-server-terminal-muted);
+    border-right: calc(1 * var(--u)) solid var(--terminal-border);
+    background: var(--terminal-tab-inactive);
+    color: var(--terminal-muted);
     font-family: var(--mono);
     font-size: calc(11 * var(--u));
     font-weight: 500;
@@ -124,19 +127,19 @@
   }
   .dev-tab[data-active] {
     border-top-color: var(--selected-accent);
-    background: var(--dev-server-terminal-tab-active);
-    color: var(--dev-server-terminal-foreground);
+    background: var(--terminal-tab-active);
+    color: var(--terminal-foreground);
   }
   .dev-prompt {
     margin-right: calc(8 * var(--u));
-    color: var(--dev-server-terminal-subtle);
+    color: var(--replica-terminal-subtle);
   }
   .dev-dot {
     width: calc(8 * var(--u));
     height: calc(8 * var(--u));
     margin-left: calc(8 * var(--u));
     border-radius: 50%;
-    background: var(--dev-server-terminal-dot-stopped);
+    background: var(--replica-terminal-dot-stopped);
     transition: background-color 200ms ease;
   }
   .dev-dot[data-status="starting"] {
@@ -151,7 +154,7 @@
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-    background: var(--dev-server-terminal-panel);
+    background: var(--terminal-panel);
   }
   .dev-command {
     display: flex;
@@ -159,15 +162,15 @@
     align-items: center;
     gap: calc(8 * var(--u));
     padding: calc(8 * var(--u)) calc(12 * var(--u));
-    border-bottom: calc(1 * var(--u)) solid var(--dev-server-terminal-border);
-    background: var(--dev-server-terminal-panel-header);
-    color: var(--dev-server-terminal-foreground);
+    border-bottom: calc(1 * var(--u)) solid var(--terminal-border);
+    background: var(--terminal-tab-active);
+    color: var(--terminal-foreground);
     font-family: var(--mono);
     font-size: calc(12 * var(--u));
     line-height: calc(16 * var(--u));
   }
   .dev-command span:first-child {
-    color: var(--dev-server-terminal-subtle);
+    color: var(--replica-terminal-subtle);
   }
   /*
    * xterm output. The terminal shows whole rows from the top. When the output has more rows than

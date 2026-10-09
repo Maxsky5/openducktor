@@ -16,7 +16,6 @@ type SettingsModalFooterValidationSummary = {
   claudeSettingsError?: string | null | undefined;
   openCodePermissionErrorCount: number;
   hasUnacknowledgedCodexDangerousSettings: boolean;
-  repoScriptFieldErrorCount: number;
 };
 
 type SettingsModalFooterErrors = {
@@ -48,7 +47,7 @@ const validationMessage = (summary: SettingsModalFooterValidationSummary): strin
   summary.claudeSettingsError ??
   (summary.hasUnacknowledgedCodexDangerousSettings
     ? "Confirm the Codex safety acknowledgement before saving."
-    : fieldErrors(summary.repoScriptFieldErrorCount, "dev server field"));
+    : null);
 
 export function resolveSettingsModalFooter({
   saveState,

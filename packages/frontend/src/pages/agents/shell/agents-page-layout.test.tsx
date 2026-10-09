@@ -88,6 +88,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
+      startBlockedReason: null,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -104,6 +105,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onHide: () => undefined,
       onSelectTab: () => undefined,
       onCreate: () => undefined,
+      onRunAction: () => undefined,
       onRetryDiscovery: () => undefined,
       onRetryCreate: () => undefined,
       onReorderTab: () => undefined,
@@ -158,6 +160,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
+      startBlockedReason: null,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -174,6 +177,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onHide: () => undefined,
       onSelectTab: () => undefined,
       onCreate: () => undefined,
+      onRunAction: () => undefined,
       onRetryDiscovery: () => undefined,
       onRetryCreate: () => undefined,
       onReorderTab: () => undefined,
@@ -244,6 +248,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
+      startBlockedReason: null,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -260,6 +265,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onHide,
       onSelectTab: () => undefined,
       onCreate: () => undefined,
+      onRunAction: () => undefined,
       onRetryDiscovery: () => undefined,
       onRetryCreate: () => undefined,
       onReorderTab: () => undefined,

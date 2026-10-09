@@ -10,7 +10,7 @@ import {
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 
-type TerminalAdmissionReservation = {
+export type TerminalAdmissionReservation = {
   bind(context: TerminalContext): Effect.Effect<void, TerminalServiceError>;
   release(): void;
 };
@@ -103,7 +103,7 @@ export const createTerminalAdmission = ({
           new TerminalServiceError({
             code: "host_terminal_limit",
             operation: "create",
-            message: `The host terminal limit has been reached (${hostUsage}/${TERMINAL_LIMITS.livePerHost}). Shell terminals and dev server output share this limit. Close a terminal or stop a dev server to free a slot.`,
+            message: `The host terminal limit has been reached (${hostUsage}/${TERMINAL_LIMITS.livePerHost}). Close a terminal to free a slot.`,
           }),
         );
       }
@@ -146,7 +146,7 @@ export const createTerminalAdmission = ({
                 new TerminalServiceError({
                   code: "context_terminal_limit",
                   operation: "create",
-                  message: `The terminal limit for ${contextLabel} has been reached (${contextUsage}/${contextLimit}). Shell terminals and dev server output share this limit. Close a terminal or stop a dev server to free a slot.`,
+                  message: `The terminal limit for ${contextLabel} has been reached (${contextUsage}/${contextLimit}). Close a terminal to free a slot.`,
                 }),
               );
             }

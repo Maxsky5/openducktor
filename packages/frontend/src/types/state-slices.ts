@@ -6,7 +6,7 @@ import type {
   GitTargetBranch,
   GlobalGitConfig,
   PullRequest,
-  RepoDevServerScript,
+  RepoActions,
   RuntimeApprovalReplyOutcome,
   HostRuntimeEvent,
   GitCheck,
@@ -83,9 +83,8 @@ export type RepoSettingsInput = {
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
   defaultTargetBranch: GitTargetBranch;
-  preStartHooks: string[];
   postCompleteHooks: string[];
-  devServers: RepoDevServerScript[];
+  actions: RepoActions;
   /** Paths copied from the main repo into a new worktree on creation. */
   worktreeCopyPaths: string[];
   agentDefaults: {

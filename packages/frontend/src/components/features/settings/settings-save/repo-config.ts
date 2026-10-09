@@ -5,7 +5,7 @@ import {
   normalizeRepoDefaultModelForSave,
 } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
+import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 
 const trimmedNonEmpty = (value: string): string | null => {
@@ -31,11 +31,6 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
   if (qa) {
     agentDefaults.qa = qa;
   }
-  const { hooks, devServers } = normalizeRepoScripts({
-    hooks: repo.hooks,
-    devServers: repo.devServers ?? [],
-  });
-
   return {
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
@@ -47,12 +42,10 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
     git: repo.git,
-    hooks,
-    devServers,
-    worktreeCopyPaths: repo.worktreeCopyPaths.flatMap((entry) => {
-      const trimmed = entry.trim();
-      return trimmed ? [trimmed] : [];
-    }),
+    hooks: { postComplete: dropBlankLines(repo.hooks.postComplete) },
+    // The action dialog trims and checks each action, so the draft holds only valid actions.
+    actions: repo.actions,
+    worktreeCopyPaths: dropBlankLines(repo.worktreeCopyPaths),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
     agentDefaults,
   };

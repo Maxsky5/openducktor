@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { ITerminalOptions } from "@xterm/xterm";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import * as sharedTerminalBinding from "./shared-terminal-binding";
@@ -81,9 +82,11 @@ const createLightweightBinding = () => {
   let resizeListener: (grid: { cols: number; rows: number }) => void = () => undefined;
   const parsedCallbacks: Array<() => void> = [];
   const subscription = { dispose: mock(() => undefined) };
+  const options: ITerminalOptions = {};
   const terminal = {
     cols: 80,
     rows: 24,
+    options,
     _core: { _inputHandler: { _parser: { precedingJoinState: 0 } } },
     write: mock((payload: Uint8Array, parsed: () => void) => {
       output += new TextDecoder().decode(payload);
@@ -197,6 +200,71 @@ describe("retained terminal rendering", () => {
       expect(operations).toEqual(["resize:120x40", "input:3"]);
     } finally {
       globalThis.ResizeObserver = nativeResizeObserver;
+      mount?.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
+  test("keeps an exited terminal readable but sends no more input to the host", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller, listeners } = createController();
+    const inputs: string[] = [];
+    const failures: unknown[] = [];
+    const lifecycles: string[] = [];
+    controller.write = async (_terminalId, data) => {
+      inputs.push(new TextDecoder().decode(data));
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    let mount: TerminalViewportMount | null = null;
+    try {
+      mount = mountTerminalViewport({
+        container,
+        terminalId: "terminal-1",
+        controller,
+        isActive: () => true,
+        getPlatform: () => "darwin",
+        stageFile: async () => "/tmp/image.png",
+        preparePathInput: async () => "/tmp/image.png",
+        writeClipboard: async () => undefined,
+        onAttention: () => undefined,
+        onLifecycle: (lifecycle) => lifecycles.push(lifecycle),
+        onForgotten: () => undefined,
+        onTitleChange: () => undefined,
+        onHydrated: () => undefined,
+        onImageDragActiveChange: () => undefined,
+        onInteractionFailure: (_title, cause) => failures.push(cause),
+      });
+      lightweight.sendInput("ls\r");
+      await Bun.sleep(0);
+      listeners.get("terminal-1")?.(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "lifecycle",
+          terminalId: "terminal-1",
+          lifecycle: "exited",
+          exitCode: 0,
+          signal: null,
+          finalSequence: 0,
+        },
+        new Uint8Array(),
+      );
+      lightweight.sendInput("pwd\r");
+      await Bun.sleep(0);
+
+      expect(lifecycles).toEqual(["exited"]);
+      expect(inputs).toEqual(["ls\r"]);
+      expect(failures).toEqual([]);
+      expect(lightweight.binding.terminal.options).toEqual({
+        disableStdin: true,
+        cursorBlink: false,
+      });
+    } finally {
       mount?.dispose();
       container.remove();
       createBinding.mockRestore();

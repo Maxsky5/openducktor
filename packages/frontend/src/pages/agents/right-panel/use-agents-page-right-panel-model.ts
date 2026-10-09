@@ -11,7 +11,6 @@ import { useSessionComparisonControl } from "@/features/agent-studio-git/use-ses
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
@@ -247,7 +246,6 @@ export function useAgentsPageRightPanelModel({
   const { buildToolsSnapshot, gitActions } = buildTools;
   const { diffData } = buildToolsSnapshot;
   const { refreshWorktree: refreshBuildToolsWorktree } = buildToolsSnapshot;
-  const devServerModel = useAgentStudioDevServerPanel(buildToolsSnapshot.devServerTarget);
   const commentOwner = useMemo(
     () =>
       activeWorkspace
@@ -312,7 +310,6 @@ export function useAgentsPageRightPanelModel({
       selectedFile,
     ],
   );
-  const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
   const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");
   const linkedPullRequestProviderId = selectedView.selectedTask?.pullRequest?.providerId ?? null;
   const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
@@ -462,7 +459,6 @@ export function useAgentsPageRightPanelModel({
         diffModel,
         fileExplorerModel,
         ciChecksModel,
-        devServerModel: visibleDevServerModel,
         onActiveTabChange,
       }),
     [
@@ -473,7 +469,6 @@ export function useAgentsPageRightPanelModel({
       fileExplorerModel,
       onActiveTabChange,
       tabs,
-      visibleDevServerModel,
     ],
   );
 
