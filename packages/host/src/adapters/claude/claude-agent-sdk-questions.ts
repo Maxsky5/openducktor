@@ -275,7 +275,10 @@ export const createClaudeUserDialogHandler = ({
   session: ClaudeSessionContext;
 }): OnUserDialog => {
   return async (request, options): Promise<UserDialogResult> => {
-    if (!isClaudeAskUserQuestionDialogKind(request.dialogKind)) {
+    if (
+      session.disabledTools?.has(CLAUDE_ASK_USER_QUESTION_TOOL_NAME) ||
+      !isClaudeAskUserQuestionDialogKind(request.dialogKind)
+    ) {
       return { behavior: "cancelled" };
     }
 

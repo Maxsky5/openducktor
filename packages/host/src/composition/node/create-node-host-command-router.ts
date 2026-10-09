@@ -21,6 +21,7 @@ import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
+import { createClaudeToolCatalogService } from "../../application/runtimes/claude-tool-catalog-service";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
@@ -370,6 +371,10 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createAgentRuntimeQueryCommandHandlers(
       taskSessions.agentRuntimeQueries,
       previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
+      createClaudeToolCatalogService({
+        runtimeRegistry,
+        adapterRegistry: liveSessionAdapterRegistry,
+      }),
     ),
     ...createFilesystemCommandHandlers(filesystemService),
     ...createWorkspaceFilesCommandHandlers(workspaceFilesService),

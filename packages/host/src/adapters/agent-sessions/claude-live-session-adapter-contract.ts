@@ -40,6 +40,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "inspectSessionForImport"
     | "resolveSessionParent"
     | "loadRuntimeCatalog"
+    | "loadToolCatalog"
     | "searchFiles"
     | "loadSessionHistory"
     | "loadSessionTodos"

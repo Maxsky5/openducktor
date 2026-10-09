@@ -7,6 +7,63 @@ import {
 } from "./claude-policy-schemas";
 
 describe("Claude policy contracts", () => {
+  test.each([{ Task: false }, { Task: false, Agent: true }, { Agent: true, Task: false }])(
+    "uses one Agent choice for native aliases without changing saved settings: %j",
+    (choices) => {
+      const config = agentRuntimesSchema.parse({
+        claude: {
+          enabled: true,
+          executablePath: "",
+          defaults: { toolAvailability: { ...choices, FutureTool: false } },
+        },
+      }).claude;
+      const saved = structuredClone(config);
+      expect(resolveClaudePolicy(config).settings.toolAvailability).toEqual({
+        Agent: false,
+        FutureTool: false,
+      });
+      expect(config).toEqual(saved);
+      config.roleOverrides.qa = { toolAvailability: { Task: true } };
+      expect(resolveClaudePolicy(config, "qa").settings.toolAvailability).toEqual({ Agent: true });
+    },
+  );
+  test("initializes Artifact exclusions and replaces complete maps for explicit defaults and roles", () => {
+    const config = agentRuntimesSchema.parse({}).claude;
+    expect(resolveClaudePolicy(config, "build").settings.toolAvailability).toEqual({
+      Artifact: false,
+      ArtifactComments: false,
+      ArtifactData: false,
+    });
+    config.defaults.toolAvailability = { Artifact: true, FutureTool: false };
+    expect(resolveClaudePolicy(config, "qa").settings.toolAvailability).toEqual({
+      Artifact: true,
+      FutureTool: false,
+    });
+    config.roleOverrides.qa = { toolAvailability: {}, permissions: { deny: ["Write"] } };
+    const explicit = resolveClaudePolicy(config, "qa");
+    expect(explicit.settings.toolAvailability).toEqual({});
+    expect(explicit.sources.toolAvailability).toBe("role");
+    delete config.roleOverrides.qa.toolAvailability;
+    const inherited = resolveClaudePolicy(config, "qa");
+    expect(inherited.settings.toolAvailability).toEqual({ Artifact: true, FutureTool: false });
+    expect(inherited.settings.permissions?.deny).toEqual(["Write"]);
+    expect(inherited.sources.toolAvailability).toBe("default");
+    const persisted = persistedGlobalConfigV4Schema.parse({
+      version: 4,
+      agentRuntimes: { claude: config },
+    });
+    expect(persisted.agentRuntimes.claude.defaults.toolAvailability).toEqual(
+      config.defaults.toolAvailability,
+    );
+  });
+  test.each(["", "Read(*)", "B*", "?", " Read", "Re ad", "Read\0", "mcp__odt__odt_read_task"])(
+    "rejects availability key %s",
+    (name) => {
+      expect(
+        claudePolicyFieldsSchema.safeParse({ toolAvailability: { [name]: false } }).success,
+      ).toBe(false);
+    },
+  );
   test("loads old configuration with native inheritance and rejects invalid present fields", () => {
     expect(
       agentRuntimesSchema.parse({ claude: { enabled: true, executablePath: "/bin/claude" } })
@@ -41,6 +98,7 @@ describe("Claude policy contracts", () => {
     };
     const resolved = resolveClaudePolicy(config, "qa");
     expect(resolved.settings).toEqual({
+      toolAvailability: { Artifact: false, ArtifactComments: false, ArtifactData: false },
       permissionMode: "auto",
       permissions: { allow: [], ask: ["Bash"] },
       sandbox: {
@@ -54,7 +112,7 @@ describe("Claude policy contracts", () => {
     expect(resolved.sources["sandbox.filesystem.denyRead"]).toBe("default");
     config.roleOverrides.qa.permissions = {};
     expect(resolveClaudePolicy(config, "qa").settings.permissions?.allow).toEqual(["Read"]);
-    expect(resolveClaudePolicy(config).settings).toEqual(config.defaults);
+    expect(resolveClaudePolicy(config).settings).toMatchObject(config.defaults);
   });
   test.each([
     "Read",

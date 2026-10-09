@@ -1,6 +1,7 @@
 import { type AgentSessionRef, assertAgentRuntimeQuerySession } from "@openducktor/core";
+import { HostValidationError } from "../../effect/host-errors";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
-import type { ClaudeSessionStore } from "./claude-agent-sdk-types";
+import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
 import { claudeSessionRef } from "./claude-agent-sdk-utils";
 
 export const resolveClaudeQuerySession = (
@@ -17,4 +18,19 @@ export const resolveClaudeQuerySession = (
     );
   }
   return { target, session };
+};
+
+export const requireClaudeSession = (
+  store: Pick<ClaudeSessionStore, "get">,
+  externalSessionId: string,
+): ClaudeSession => {
+  const session = store.get(externalSessionId);
+  if (!session) {
+    throw new HostValidationError({
+      field: "externalSessionId",
+      message: `Unknown Claude session '${externalSessionId}'.`,
+      details: { externalSessionId },
+    });
+  }
+  return session;
 };

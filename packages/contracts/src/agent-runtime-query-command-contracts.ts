@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  claudeToolCatalogInputSchema,
+  claudeToolCatalogSchema,
+} from "./claude-tool-catalog-schemas";
+import {
   agentFileDiffsSchema,
   agentFileStatusesSchema,
   agentSessionHistorySchema,
@@ -112,6 +116,11 @@ export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown
 };
 
 export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
+  claudeToolCatalog: {
+    command: "agent_runtime_claude_tool_catalog",
+    inputSchema: claudeToolCatalogInputSchema,
+    responseSchema: claudeToolCatalogSchema,
+  },
   previewModels: {
     command: "agent_runtime_preview_models",
     inputSchema: agentRuntimePreviewModelsInputSchema,

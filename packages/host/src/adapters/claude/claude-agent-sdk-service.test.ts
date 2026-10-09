@@ -160,7 +160,10 @@ describe("createClaudeAgentSdkService", () => {
         sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "qa" as const },
         systemPrompt: "Review",
       };
-      const currentPolicy = { permissionMode: "default" as const };
+      const currentPolicy = {
+        permissionMode: "default" as const,
+        toolAvailability: { Artifact: true, Read: false },
+      };
       const resolve = mock(
         (
           _input: Parameters<

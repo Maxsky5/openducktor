@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { claudeRuntimeConfigSchema, type ClaudeRuntimeConfig } from "@openducktor/contracts";
 import {
   act,
@@ -7,13 +7,58 @@ import {
   render,
   renderHook,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { hostClient } from "@/lib/host-client";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { ClaudePolicySection } from "./settings-claude-policy-section";
 import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
 
 afterEach(cleanup);
+
+test("reads the selected native catalog only when tool availability is open", async () => {
+  const client = new QueryClient();
+  const originalLoad = hostClient.agentRuntimeClaudeToolCatalog;
+  const load = mock(async () => ({
+    runtimeKind: "claude" as const,
+    runtimeId: "claude-runtime-1",
+    tools: [{ name: "Read", canDisable: true }],
+  }));
+  hostClient.agentRuntimeClaudeToolCatalog = load;
+  const runtimeStatus = createHostRuntimeStatusContextValue();
+  const config = claudeRuntimeConfigSchema.parse({ enabled: true, executablePath: "" });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <HostRuntimeStatusContext value={runtimeStatus}>
+          <ClaudePolicySection
+            config={config}
+            disabled={false}
+            onChange={() => {}}
+            requiresAcknowledgement={false}
+            acknowledged={false}
+            onAcknowledgedChange={() => {}}
+          />
+        </HostRuntimeStatusContext>
+      </QueryClientProvider>,
+    );
+    expect(load).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Tool availability" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Default Read" })).toBeDefined());
+    expect(load).toHaveBeenCalledWith({ runtimeId: "claude-runtime-1" });
+    fireEvent.click(screen.getByRole("button", { name: "Tool availability" }));
+    expect(screen.queryByRole("textbox", { name: "Search Claude tools" })).toBeNull();
+    expect(load).toHaveBeenCalledTimes(1);
+  } finally {
+    cleanup();
+    client.clear();
+    hostClient.agentRuntimeClaudeToolCatalog = originalLoad;
+  }
+});
 const choose = (name: string, option: string) => {
   fireEvent.click(screen.getByRole("button", { name }));
   fireEvent.click(screen.getByRole("option", { name: new RegExp(`^${option}`) }));

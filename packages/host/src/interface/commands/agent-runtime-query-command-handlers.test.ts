@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -12,6 +12,32 @@ import {
 } from "../../test-support/runtime-query-test-doubles";
 import { hostInvokeFailureFromError } from "../router/host-invoke-failure";
 import { createAgentRuntimeQueryCommandHandlers } from "./agent-runtime-query-command-handlers";
+
+test("reads a Claude tool catalog without a repository and rejects extra routing input", async () => {
+  const catalog = { runtimeKind: "claude" as const, runtimeId: "claude-1", tools: [] };
+  const load = mock(() => Effect.succeed(catalog));
+  const handlers = createAgentRuntimeQueryCommandHandlers(
+    unexpectedRuntimeQueries,
+    () => Effect.die("Unexpected model preview"),
+    { load },
+  );
+  expect(
+    await Effect.runPromise(
+      handlers.agent_runtime_claude_tool_catalog({ input: { runtimeId: "claude-1" } }),
+    ),
+  ).toEqual(catalog);
+  expect(load).toHaveBeenCalledWith({ runtimeId: "claude-1" });
+  expect(load).toHaveBeenCalledTimes(1);
+  const error = await Effect.runPromise(
+    Effect.flip(
+      handlers.agent_runtime_claude_tool_catalog({
+        input: { runtimeId: "claude-1", repoPath: "/repo" },
+      }),
+    ),
+  );
+  expect(error).toMatchObject({ _tag: "HostValidationError", field: "input" });
+  expect(load).toHaveBeenCalledTimes(1);
+});
 
 const input = { repoPath: "/remote/repo", runtimeKind: "opencode" } as const;
 const directoryInput = { ...input, workingDirectory: "/remote/repo" } as const;
@@ -33,6 +59,7 @@ const handlers = createAgentRuntimeQueryCommandHandlers(
       Effect.succeed({ models: { status: "available" as const, catalog: modelsCatalog } }),
   },
   () => Effect.succeed(previewCatalog),
+  { load: () => Effect.die("Unexpected Claude tool catalog read") },
 );
 
 for (const invalid of [
@@ -99,6 +126,7 @@ test("rejects a catalog describing the wrong runtime", async () => {
         }),
     },
     () => Effect.succeed(previewCatalog),
+    { load: () => Effect.die("Unexpected Claude tool catalog read") },
   );
   const error = await Effect.runPromise(
     Effect.flip(
@@ -121,6 +149,7 @@ test("rejects a malformed combined catalog response", async () => {
         } as never),
     },
     () => Effect.succeed(previewCatalog),
+    { load: () => Effect.die("Unexpected Claude tool catalog read") },
   );
   expect(
     (

@@ -9,6 +9,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
   test("keeps the original tool identity and detailed reason across denial messages", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
+    session.disabledTools = new Set(["Agent"]);
     const modelSelection = (model: string) => ({
       providerId: "claude",
       modelId: model,
@@ -120,7 +121,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
     expect(toolParts.at(-1)).toEqual(
       expect.objectContaining({
         callId: "agent-call",
-        error: detailedReason,
+        error: `Tool Agent is disabled by this session's tool settings.\n${detailedReason}`,
         tool: "Agent",
       }),
     );
@@ -130,6 +131,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
   test("emits permission_denied events as errored tool parts with input and duration", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
+    session.disabledTools = new Set(["Bash"]);
     session.toolInputsByCallId.set("tool-1", { command: "rm -rf dist" });
     session.toolStartedAtMsByCallId.set("tool-1", Date.parse("2026-06-25T20:00:00.000Z"));
 
@@ -158,7 +160,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           callId: "tool-1",
-          error: "Denied by policy",
+          error: "Tool Bash is disabled by this session's tool settings.\nDenied by policy",
           input: { command: "rm -rf dist" },
           messageId: "permission-denied:tool-1",
           metadata: { source: "permission_denied" },
@@ -178,6 +180,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
     (idMap) => {
       const events: AgentEvent[] = [];
       const session: ClaudeEventSession = createSession();
+      session.disabledTools = new Set(["Bash"]);
       if (idMap === "task") {
         session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
       } else {
@@ -248,7 +251,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
           externalSessionId: toolEvents[0]?.externalSessionId,
           part: expect.objectContaining({
             callId: "bash-call",
-            error: "Denied by policy",
+            error: "Tool Bash is disabled by this session's tool settings.\nDenied by policy",
             input: { command: "rm -rf dist" },
             status: "error",
           }),

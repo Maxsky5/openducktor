@@ -183,6 +183,30 @@ const createRouter = (input: {
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("tool catalog requests reach the runtime readiness check", async () => {
+    const { logger } = createLogger();
+    const router = await createRouter({ logger });
+    try {
+      const result = await Effect.runPromise(
+        router
+          .invoke("agent_runtime_claude_tool_catalog", {
+            input: { runtimeId: "claude-unavailable" },
+          })
+          .pipe(Effect.result),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toMatchObject({
+          _tag: "HostResourceError",
+          resource: "agent_runtime",
+          operation: "runtime.requireReady",
+        });
+      }
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+  });
+
   test("returns synchronous setup faults through the Effect channel", async () => {
     const result = await Effect.runPromise(
       createNodeEffectHostCommandRouter(createFailingRouterInput()).pipe(Effect.result),

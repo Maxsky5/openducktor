@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@openducktor/core";
+import { disabledToolReason } from "./claude-tool-availability";
 import {
   type ClaudeBackgroundToolState,
   projectClaudeBackgroundToolResult,
@@ -29,6 +30,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeSdkUserMessageProjection } from "./claude-agent-sdk-message-projection";
 
 type ClaudeToolResultSession = ClaudeBackgroundToolState & {
+  disabledTools?: ReadonlySet<string>;
   activeBackgroundSubagentTaskIds?: Set<string>;
   externalSessionId: string;
   retractedSubagentTaskIds?: Set<string>;
@@ -115,7 +117,10 @@ export const handleClaudeUserToolResultMessage = ({
       isError: result.isError,
       messageId,
       raw: result.raw,
-      resultText: result.text,
+      resultText:
+        result.isError && session.disabledTools?.has(tool)
+          ? `${disabledToolReason(tool)}\n${result.text}`
+          : result.text,
       state: session.todosById,
       tool,
     };

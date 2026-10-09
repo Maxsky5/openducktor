@@ -29,6 +29,7 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { claudeWorkflowRole, isReadOnlyWorkflowRole } from "./claude-agent-sdk-utils";
+import { getDisabledTools } from "./claude-tool-availability";
 
 export type ClaudeAgentSdkOptionsDependencies = {
   claudeExecutablePath: string;
@@ -124,6 +125,7 @@ export const buildClaudeAgentSdkOptions = async ({
   sessionOptions,
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
   const workflowRole = claudeWorkflowRole(input);
+  session.disabledTools = getDisabledTools(claudePolicy?.toolAvailability);
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({
       resolvedDependencies,
@@ -272,9 +274,11 @@ export const buildClaudeAgentSdkOptions = async ({
   if (model?.profileId) {
     options.agent = model.profileId;
   }
-  if (readOnlyWorkflowRole) {
-    options.disallowedTools = [...CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools];
-  }
+  const disallowedTools = new Set(session.disabledTools);
+  if (readOnlyWorkflowRole)
+    for (const name of CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools)
+      disallowedTools.add(name);
+  if (disallowedTools.size) options.disallowedTools = [...disallowedTools];
   return options;
 };
 

@@ -108,6 +108,7 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
 
 export type ClaudeSession = ClaudeBackgroundToolState &
   ErrorState & {
+    disabledTools?: ReadonlySet<string>;
     appliedPermissionMode?: string;
     requestedPermissionMode?: string;
     acceptedUserMessages: ClaudeAcceptedUserMessage[];
