@@ -18,7 +18,7 @@ import type {
   AgentSessionTodoItem,
   SessionRef,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
+import { agentSessionStatusFromActivity } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
 import { codexServerRequestThreadId, codexTurnKey } from "./codex-app-server-requests";
 import {
@@ -153,15 +153,19 @@ const isServerRequestStreamEvent = (event: CodexRuntimeStreamEvent): boolean =>
 const routedSession = (
   retainedSession: CodexSessionState,
   targetExternalSessionId: string,
-): CodexSessionState => ({
-  ...retainedSession,
-  summary: {
-    ...retainedSession.summary,
-    externalSessionId: targetExternalSessionId,
-    title: targetExternalSessionId,
-  },
-  threadId: targetExternalSessionId,
-});
+): CodexSessionState => {
+  const session: CodexSessionState = {
+    ...retainedSession,
+    summary: {
+      ...retainedSession.summary,
+      externalSessionId: targetExternalSessionId,
+      title: targetExternalSessionId,
+    },
+    threadId: targetExternalSessionId,
+  };
+  delete session.firstTurnHistory;
+  return session;
+};
 
 export class CodexRuntimeSessionEvents {
   private readonly liveImages: CodexLiveImagePreparation;
@@ -274,8 +278,9 @@ export class CodexRuntimeSessionEvents {
     return this.contextUsage.latest(runtimeId, threadId);
   }
 
-  initializeFreshThreadContextUsage(runtimeId: string, threadId: string): void {
+  initializeFreshThread(runtimeId: string, threadId: string): void {
     this.contextUsage.initializeFreshThread(runtimeId, threadId);
+    this.latestTodosBySessionId.set(threadId, []);
   }
 
   loadSessionContextUsage(
@@ -1280,9 +1285,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private publishSessionEvent(session: CodexSessionState, event: AgentEvent): AgentEvent {
-    const sessionRef = codexSessionRef(session);
-    const sessionEvent = withAgentSessionRef(sessionRef, event);
-    this.deps.sessionEvents.emit(sessionRef, sessionEvent);
+    const sessionEvent = this.deps.sessionEvents.publish(session, event);
     if (isAgentSessionTranscriptEventType(sessionEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)

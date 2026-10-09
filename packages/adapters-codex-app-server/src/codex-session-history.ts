@@ -1,18 +1,14 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
-import type {
-  CodexImageGenerationItem,
-  CodexImageGenerationPreparer,
-} from "./codex-image-generation";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
   type AgentSessionHistoryMessage,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
-import type { CodexMappingContext } from "./codex-canonical-events";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
-import { type CodexThreadItemInput } from "./codex-event-mapper";
+import type { CodexMappingContext } from "./codex-canonical-events";
+import type { CodexThreadItemInput } from "./codex-event-mapper";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import {
   type CodexForkBoundary,
@@ -22,7 +18,11 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import type { CodexThreadInventoryReader, CodexThreadReadGuard } from "./codex-thread-inventory";
+import type {
+  CodexImageGenerationItem,
+  CodexImageGenerationPreparer,
+} from "./codex-image-generation";
+import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type {
   CodexAppServerClient,
   CodexSessionState,
@@ -34,171 +34,12 @@ type CodexSessionHistoryRuntime = {
   runtimeId: string;
 };
 
-type CodexSessionHistoryInput = CodexThreadReadGuard & {
+type CodexSessionHistoryInput = {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
   prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
-};
-
-const codexSystemPromptHistoryMessage = ({
-  threadId,
-  startedAt,
-  systemPrompt,
-}: {
-  threadId: string;
-  startedAt: string;
-  systemPrompt: string;
-}): AgentSessionHistoryMessage | null => {
-  const trimmedSystemPrompt = systemPrompt.trim();
-  if (trimmedSystemPrompt.length === 0) {
-    return null;
-  }
-
-  return {
-    messageId: `codex-system-prompt:${threadId}`,
-    role: "system",
-    timestamp: startedAt,
-    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${trimmedSystemPrompt}`,
-    parts: [],
-  };
-};
-
-const codexHistorySystemPrompt = (
-  input: LoadAgentSessionHistoryInput,
-  session: CodexSessionState | undefined,
-): AgentSessionHistoryMessage | null => {
-  const hasRetainedSystemPrompt = session && session.systemPrompt.trim().length > 0;
-  if (hasRetainedSystemPrompt) {
-    return codexSystemPromptHistoryMessage({
-      threadId: session.threadId,
-      startedAt: session.summary.startedAt,
-      systemPrompt: session.systemPrompt,
-    });
-  }
-  if (!input.systemPromptContext) {
-    return null;
-  }
-  return codexSystemPromptHistoryMessage({
-    threadId: input.externalSessionId,
-    startedAt: input.systemPromptContext.startedAt,
-    systemPrompt: input.systemPromptContext.systemPrompt,
-  });
-};
-
-const projectCodexThreadReadToHistory = ({
-  input,
-  session,
-  response,
-  eventMapperPipeline,
-  runtimeId,
-  forkBoundary,
-  preparedImages,
-}: {
-  input: LoadAgentSessionHistoryInput;
-  session: CodexSessionState | undefined;
-  response: CodexThreadHistoryReadResponse | undefined;
-  eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
-  runtimeId: string;
-  forkBoundary: CodexForkBoundary | null;
-  preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
-}): AgentSessionHistoryMessage[] => {
-  const forkBoundaryProjection = forkBoundary
-    ? {
-        ...forkBoundary,
-        message: codexForkBoundaryHistoryMessage(forkBoundary),
-      }
-    : null;
-  let didInsertForkBoundary = false;
-  const projectedHistory = codexTurnItemsFromThreadRead(response)
-    .flatMap(
-      (
-        {
-          item,
-          turnIndex,
-          turn,
-          timestamp,
-          timestampIsApproximate,
-          isFinalAgentMessage,
-          turnTiming,
-          model,
-        },
-        index,
-      ) => {
-        const itemOwnerThreadId =
-          forkBoundaryProjection && turnIndex < forkBoundaryProjection.beforeTurnIndex
-            ? forkBoundaryProjection.parentThreadId
-            : input.externalSessionId;
-        const turnModel = model;
-        const threadItemInput: CodexThreadItemInput = {
-          item,
-          turn,
-          index,
-        };
-        if (item.type === "imageGeneration" && preparedImages) {
-          const prepared = preparedImages.get(item);
-          if (!prepared)
-            throw new Error("Image history preparation returned no result. Reload this session.");
-          threadItemInput.preparedImageGeneration = prepared;
-        }
-        if (timestamp) {
-          threadItemInput.timestamp = timestamp;
-        }
-        if (isFinalAgentMessage) {
-          threadItemInput.isFinalAgentMessage = true;
-        }
-        const mappingContext: CodexMappingContext = {
-          source: "thread_read",
-          runtimeId,
-          threadId: itemOwnerThreadId,
-          turnId: turn.id,
-        };
-        if (timestamp) {
-          mappingContext.timestamp = timestamp;
-        }
-        const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
-        let history: AgentSessionHistoryMessage[];
-        if (canonicalEvents.length > 0) {
-          history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);
-          if (isFinalAgentMessage) {
-            history = history.map((message) =>
-              applyFinalAssistantTurnMetadata(message, turnTiming, null),
-            );
-          }
-        } else {
-          const message = toHistoryMessage(
-            item,
-            turnModel,
-            timestamp ?? undefined,
-            isFinalAgentMessage,
-            turnTiming,
-            null,
-          );
-          history = message ? [message] : [];
-        }
-        if (timestampIsApproximate) {
-          history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
-        }
-        if (
-          forkBoundaryProjection &&
-          !didInsertForkBoundary &&
-          turnIndex >= forkBoundaryProjection.beforeTurnIndex
-        ) {
-          didInsertForkBoundary = true;
-          return [forkBoundaryProjection.message, ...history];
-        }
-        return history;
-      },
-    )
-    .filter((message): message is AgentSessionHistoryMessage => Boolean(message));
-  if (forkBoundaryProjection && !didInsertForkBoundary) {
-    projectedHistory.push(forkBoundaryProjection.message);
-  }
-  const systemPromptHistoryMessage = codexHistorySystemPrompt(input, session);
-  return systemPromptHistoryMessage
-    ? [systemPromptHistoryMessage, ...projectedHistory]
-    : projectedHistory;
 };
 
 export const loadCodexSessionHistory = async ({
@@ -207,19 +48,14 @@ export const loadCodexSessionHistory = async ({
   runtime,
   threadInventory,
   prepareImageGenerations,
-  getFreshThreadCwd,
-  onThreadRead,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
-  const { client, runtimeId } = runtime;
-  const response = await threadInventory.readThreadHistory(client, {
-    ...input,
-    allowUnmaterialized: session !== undefined,
-    getFreshThreadCwd,
-    onThreadRead,
-  });
-  if (!response) {
-    return [];
+  if (session?.firstTurnHistory) {
+    const promptMessage = systemPromptMessage(input, session);
+    const history = session.firstTurnHistory.snapshot();
+    return promptMessage ? [promptMessage, ...history] : history;
   }
+  const { client, runtimeId } = runtime;
+  const response = await threadInventory.readThreadHistory(client, input);
   const forkedFromThreadId = codexForkedFromThreadId(response);
   const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
     ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((cause: unknown) => {
@@ -266,13 +102,138 @@ export const loadCodexSessionHistory = async ({
       }),
     );
   }
-  return projectCodexThreadReadToHistory({
+  return toHistory({
     input,
     session,
     response,
-    eventMapperPipeline: createCodexEventMapperPipeline(),
     runtimeId,
     forkBoundary,
     preparedImages,
   });
+};
+
+const systemPromptMessage = (
+  input: LoadAgentSessionHistoryInput,
+  session: CodexSessionState | undefined,
+): AgentSessionHistoryMessage | null => {
+  const prompt =
+    session && session.systemPrompt.trim().length > 0
+      ? {
+          threadId: session.threadId,
+          startedAt: session.summary.startedAt,
+          systemPrompt: session.systemPrompt,
+        }
+      : input.systemPromptContext && {
+          threadId: input.externalSessionId,
+          startedAt: input.systemPromptContext.startedAt,
+          systemPrompt: input.systemPromptContext.systemPrompt,
+        };
+  if (!prompt) return null;
+  const text = prompt.systemPrompt.trim();
+  if (!text) return null;
+  return {
+    messageId: `codex-system-prompt:${prompt.threadId}`,
+    role: "system",
+    timestamp: prompt.startedAt,
+    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${text}`,
+    parts: [],
+  };
+};
+
+const toHistory = ({
+  input,
+  session,
+  response,
+  runtimeId,
+  forkBoundary,
+  preparedImages,
+}: {
+  input: LoadAgentSessionHistoryInput;
+  session: CodexSessionState | undefined;
+  response: CodexThreadHistoryReadResponse;
+  runtimeId: string;
+  forkBoundary: CodexForkBoundary | null;
+  preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
+}): AgentSessionHistoryMessage[] => {
+  const eventMapperPipeline = createCodexEventMapperPipeline();
+  let boundaryAdded = false;
+  const projectedHistory = codexTurnItemsFromThreadRead(response).flatMap(
+    (
+      {
+        item,
+        turnIndex,
+        turn,
+        timestamp,
+        timestampIsApproximate,
+        isFinalAgentMessage,
+        turnTiming,
+        model,
+      },
+      index,
+    ) => {
+      const itemOwnerThreadId =
+        forkBoundary && turnIndex < forkBoundary.beforeTurnIndex
+          ? forkBoundary.parentThreadId
+          : input.externalSessionId;
+      const threadItemInput: CodexThreadItemInput = {
+        item,
+        turn,
+        index,
+      };
+      if (item.type === "imageGeneration" && preparedImages) {
+        const prepared = preparedImages.get(item);
+        if (!prepared)
+          throw new Error("Image history preparation returned no result. Reload this session.");
+        threadItemInput.preparedImageGeneration = prepared;
+      }
+      if (timestamp) {
+        threadItemInput.timestamp = timestamp;
+      }
+      if (isFinalAgentMessage) {
+        threadItemInput.isFinalAgentMessage = true;
+      }
+      const mappingContext: CodexMappingContext = {
+        source: "thread_read",
+        runtimeId,
+        threadId: itemOwnerThreadId,
+        turnId: turn.id,
+      };
+      if (timestamp) {
+        mappingContext.timestamp = timestamp;
+      }
+      const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
+      let history: AgentSessionHistoryMessage[];
+      if (canonicalEvents.length > 0) {
+        history = projectCodexCanonicalEventsToHistory(canonicalEvents, model);
+        if (isFinalAgentMessage) {
+          history = history.map((message) =>
+            applyFinalAssistantTurnMetadata(message, turnTiming, null),
+          );
+        }
+      } else {
+        const message = toHistoryMessage(
+          item,
+          model,
+          timestamp ?? undefined,
+          isFinalAgentMessage,
+          turnTiming,
+          null,
+        );
+        history = message ? [message] : [];
+      }
+      if (timestampIsApproximate) {
+        history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
+      }
+      if (forkBoundary && !boundaryAdded && turnIndex >= forkBoundary.beforeTurnIndex) {
+        boundaryAdded = true;
+        return [codexForkBoundaryHistoryMessage(forkBoundary), ...history];
+      }
+      return history;
+    },
+  );
+  if (forkBoundary && !boundaryAdded) {
+    projectedHistory.push(codexForkBoundaryHistoryMessage(forkBoundary));
+  }
+  const promptMessage = systemPromptMessage(input, session);
+  return promptMessage ? [promptMessage, ...projectedHistory] : projectedHistory;
 };

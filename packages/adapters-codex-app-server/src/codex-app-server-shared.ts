@@ -86,65 +86,6 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 
-const codexRpcErrorSchema = z.object({
-  cause: z.object({ code: z.number(), message: z.string() }),
-  details: z.object({ method: z.string() }),
-});
-
-const hostHistoryErrorSchema = z.object({
-  _tag: z.literal("CodexSessionHistoryError"),
-  threadId: z.string(),
-  failure: z.object({
-    code: z.literal("request_failed"),
-    diagnosticId: z.string().min(1),
-    method: z.literal("thread/turns/list"),
-  }),
-  cause: codexRpcErrorSchema,
-});
-
-export const isCodexEmptyRolloutError = (cause: unknown, threadId: string): boolean => {
-  const wrapped = hostHistoryErrorSchema.safeParse(cause);
-  const nativeCause =
-    wrapped.success && wrapped.data.threadId === threadId ? wrapped.data.cause : cause;
-  const parsed = codexRpcErrorSchema.safeParse(nativeCause);
-  if (
-    !parsed.success ||
-    !["thread/read", "thread/turns/list"].includes(parsed.data.details.method) ||
-    parsed.data.cause.code !== -32603
-  ) {
-    return false;
-  }
-
-  // Codex can report an empty rollout before it writes the first session_meta record.
-  const legacyMatch =
-    /^failed to read thread: thread-store internal error: failed to read thread ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
-      parsed.data.cause.message,
-    );
-  if (legacyMatch) {
-    return legacyMatch[1] === legacyMatch[2];
-  }
-  const metadataMatch =
-    /^failed to read thread: thread-store internal error: failed to read session metadata ([^\r\n]+): thread-store internal error: failed to read session metadata ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
-      parsed.data.cause.message,
-    );
-  return (
-    metadataMatch !== null &&
-    metadataMatch[1] === metadataMatch[2] &&
-    metadataMatch[2] === metadataMatch[3]
-  );
-};
-
-export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  const inlineTurnsUnavailable =
-    message.includes("is not materialized yet") &&
-    message.includes("includeTurns is unavailable before first user message");
-  const paginatedTurnsUnavailable = message.includes(
-    "thread/turns/list is unavailable before first user message",
-  );
-  return inlineTurnsUnavailable || paginatedTurnsUnavailable;
-};
-
 export const isCodexThreadNotLoadedError = (cause: unknown): boolean => {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message.includes("thread not loaded:");

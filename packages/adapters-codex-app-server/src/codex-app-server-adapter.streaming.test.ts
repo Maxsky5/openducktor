@@ -226,6 +226,53 @@ describe("CodexAppServerAdapter streaming", () => {
       expect(mutations.flatMap(({ transcriptEvents }) => transcriptEvents)).not.toContainEqual(
         expect.objectContaining({ type: "question_resolved" }),
       );
+
+      const history = await adapter.loadSessionHistory(
+        codexSessionRuntimeRef("thread/start-runtime-live"),
+      );
+      if (accepted.type !== "user_message") throw new Error("Expected an accepted user reply.");
+      expect(history.filter((message) => message.role === "user")).toEqual([
+        expect.objectContaining({
+          messageId: accepted.messageId,
+          text: "> Which environment should I use?\n\nStaging",
+          resolvedQuestionRequestIds: ["async-question-1"],
+        }),
+      ]);
+      expect(history).toContainEqual(
+        expect.objectContaining({
+          messageId: "codex-question-async-question-1",
+          parts: [
+            expect.objectContaining({
+              kind: "tool",
+              status: "completed",
+              metadata: expect.objectContaining({
+                answers: { [questionItemId]: { answers: ["Staging"] } },
+              }),
+            }),
+          ],
+        }),
+      );
+
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-accepted",
+          completedAtMs: 1_777_766_419_750,
+          item: codexUserMessageItemFixture({
+            id: "late-native-async-reply",
+            content: [{ type: "text", text: nativeReply, text_elements: [] }],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+      const echoedHistory = await adapter.loadSessionHistory(
+        codexSessionRuntimeRef("thread/start-runtime-live"),
+      );
+      expect(echoedHistory.filter((message) => message.role === "user")).toEqual(
+        history.filter((message) => message.role === "user"),
+      );
+      expect(events.filter((event) => event.type === "user_message")).toEqual([]);
     } finally {
       unsubscribe();
     }
@@ -616,6 +663,15 @@ describe("CodexAppServerAdapter streaming", () => {
         pendingQuestions: [expect.objectContaining({ requestId: "async-question-rejected" })],
       });
       expect(events.some((event) => event.type === "user_message")).toBe(false);
+      const history = await adapter.loadSessionHistory(
+        codexSessionRuntimeRef("thread/start-runtime-live"),
+      );
+      expect(history.some((message) => message.role === "user")).toBe(false);
+      expect(
+        history.some((message) =>
+          message.parts.some((part) => part.kind === "tool" && part.status === "completed"),
+        ),
+      ).toBe(false);
     } finally {
       unsubscribe();
     }

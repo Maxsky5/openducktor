@@ -87,6 +87,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
+import { CodexFirstTurnHistory } from "./codex-first-turn-history";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexQuestionHistory } from "./codex-question-history";
 import { CodexAsyncQuestionState } from "./codex-async-questions";
@@ -127,7 +128,7 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import { CodexThreadInventoryReader, type CodexThreadReadGuard } from "./codex-thread-inventory";
+import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import {
   requireNormalizedCodexToolInvocation,
   toCodexToolQuestions,
@@ -245,8 +246,6 @@ export class CodexAppServerAdapter
   private readonly asyncQuestions = new CodexAsyncQuestionState();
   private readonly questionHistory: CodexQuestionHistory;
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
-  // A new active session may have an empty rollout until a full history read succeeds.
-  private readonly freshSessions = new WeakSet<CodexSessionState>();
   private readonly freshTitleState = new WeakMap<CodexSessionState, "pending" | "tried">();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
@@ -478,10 +477,10 @@ export class CodexAppServerAdapter
       sessionPolicy.kind === "repository" ? undefined : title,
     );
     const { summary } = session;
+    session.firstTurnHistory = new CodexFirstTurnHistory();
     this.localSessions.remember(session);
-    this.freshSessions.add(session);
     if (sessionPolicy.kind === "repository") this.freshTitleState.set(session, "pending");
-    this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
+    this.runtimeEvents.initializeFreshThread(runtimeId, session.threadId);
     if (title !== undefined && sessionPolicy.kind !== "repository") {
       await client.threadSetName({
         threadId: session.threadId,
@@ -941,7 +940,6 @@ export class CodexAppServerAdapter
       runtime,
       threadInventory: this.threadInventory,
       prepareImageGenerations: this.options.prepareImageGenerations,
-      ...this.freshThreadReadGuard(session),
     });
     const history = this.questionHistory.merge(
       runtime.runtimeId,
@@ -1053,14 +1051,12 @@ export class CodexAppServerAdapter
       input,
       "load Codex session todos",
     );
-    const session = this.querySession(input, runtimeId);
+    this.querySession(input, runtimeId);
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
     if (liveTodos !== undefined) return liveTodos;
     const response = await this.threadInventory.readThreadHistory(client, {
       externalSessionId: input.externalSessionId,
       workingDirectory: input.workingDirectory,
-      allowUnmaterialized: session !== undefined,
-      ...this.freshThreadReadGuard(session),
     });
     const historyTodos = codexTodosFromThreadRead(response);
     const latestLiveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
@@ -1127,28 +1123,6 @@ export class CodexAppServerAdapter
       );
     }
     return session;
-  }
-
-  private freshThreadReadGuard(session: CodexSessionState | undefined): CodexThreadReadGuard {
-    if (
-      !session ||
-      this.localSessions.get(session.threadId) !== session ||
-      !this.freshSessions.has(session)
-    ) {
-      return {};
-    }
-    return {
-      getFreshThreadCwd: () =>
-        this.localSessions.get(session.threadId) === session &&
-        this.freshSessions.has(session) &&
-        session.liveStatus !== undefined &&
-        session.liveStatus.classification !== "idle"
-          ? session.workingDirectory
-          : undefined,
-      onThreadRead: () => {
-        this.freshSessions.delete(session);
-      },
-    };
   }
 
   /** Lists native root sessions of every directory. The caller filters by repository. */
@@ -1536,6 +1510,8 @@ export class CodexAppServerAdapter
         );
         throw error;
       }
+      // The caller publishes this accepted reply, and the native echo is suppressed.
+      session.firstTurnHistory?.record(accepted, session.model);
       const replyTools = codexAsyncQuestionReplyTools(backgroundReplies);
       const resolvedRequestIds = replyTools.map(({ requestId }) => requestId);
       this.asyncQuestions.resolve(input.runtimeId, input.externalSessionId, resolvedRequestIds);
@@ -1913,8 +1889,7 @@ export class CodexAppServerAdapter
       }
       return;
     }
-    const sessionRef = codexSessionRef(session);
-    this.sessionEvents.emit(sessionRef, withAgentSessionRef(sessionRef, event));
+    this.sessionEvents.publish(session, event);
   }
 
   private turnLifecycleContext(): CodexTurnLifecycleContext {

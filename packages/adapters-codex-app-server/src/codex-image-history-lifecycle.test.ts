@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   codexSessionRuntimeRef,
-  codexStartSessionInput,
   codexThreadFixture,
   codexTurnFixture,
   createDeferred,
@@ -19,7 +18,7 @@ for (const order of ["history-first", "terminal-first", "during-history"] as con
     const releaseHistory = createDeferred<void>();
     const projected: AgentImageGenerationPart[] = [];
     const settledTurns: string[] = [];
-    const ref = codexSessionRuntimeRef();
+    const ref = codexSessionRuntimeRef("thread-existing");
     const { adapter } = createHarness({
       subscribeEvents,
       onLiveSessionMutation: (mutation) => {
@@ -72,7 +71,7 @@ for (const order of ["history-first", "terminal-first", "during-history"] as con
         };
       },
     });
-    await adapter.startSession(codexStartSessionInput());
+    await adapter.resumeSession(ref);
     const terminate = async () => {
       emitNotification({
         method: "turn/completed",

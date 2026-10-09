@@ -16,6 +16,61 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
+  test("keeps a recovered Codex first-turn reply in one row when its final event arrives", async () => {
+    const session = buildSession({ runtimeKind: "codex", status: "running" });
+    const recovered = applyLoadedSessionHistory(
+      session,
+      [
+        {
+          messageId: "codex-reply",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          text: "Reply emitted while the renderer was away",
+          parts: [],
+        },
+      ],
+      session.messages,
+    );
+    const sessionsRef = createSessionsRef([recovered]);
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter: {
+        subscribeEvents: async (_externalSessionId, handler) => {
+          handlers.push(handler);
+          return () => {};
+        },
+        replyApproval: async () => {},
+      },
+      repoPath: "/tmp/repo",
+      externalSessionId: session.externalSessionId,
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      eventBatchWindowMs: 0,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+    try {
+      const handleEvent = handlers[0];
+      if (!handleEvent) throw new Error("Expected session event handler to be registered");
+      expect(getSessionMessages(sessionsRef).map((message) => message.id)).toEqual(["codex-reply"]);
+      handleEvent({
+        type: "assistant_message",
+        externalSessionId: session.externalSessionId,
+        timestamp: "2026-02-22T08:00:02.000Z",
+        messageId: "codex-reply",
+        message: "Final reply",
+      });
+      expect(
+        getSessionMessages(sessionsRef).map((message) => ({
+          id: message.id,
+          content: message.content,
+        })),
+      ).toEqual([{ id: "codex-reply", content: "Final reply" }]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("flushes deferred stream events before an immediate idle event closes the turn", async () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: SessionEvent) => void> = [];
