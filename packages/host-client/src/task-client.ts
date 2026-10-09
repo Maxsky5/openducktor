@@ -44,6 +44,8 @@ import {
   taskStatusSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
+  tasksExistingIdsInputSchema,
+  tasksExistingIdsResultSchema,
 } from "@openducktor/contracts";
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import { z } from "zod";
@@ -150,6 +152,14 @@ export class HostTaskClient {
       throw new Error(`repoPath is required to set ${documentType}`);
     }
     return repoPath;
+  }
+
+  async tasksExistingIds(repoPath: string, taskIds: string[]): Promise<string[]> {
+    return this.invokeFn(
+      "tasks_existing_ids",
+      tasksExistingIdsInputSchema.parse({ repoPath, taskIds }),
+      tasksExistingIdsResultSchema,
+    );
   }
 
   async tasksList(repoPath: string): Promise<TaskCard[]> {

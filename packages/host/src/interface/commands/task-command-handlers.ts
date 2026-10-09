@@ -9,6 +9,7 @@ import {
   parseCreateTaskInput,
   parseDeleteTaskInput,
   parseDirectMergeInput,
+  parseExistingTaskIdsInput,
   parseListAgentSessionsForTasksInput,
   parseMarkdownDocumentInput,
   parseOptionalNoteInput,
@@ -86,6 +87,7 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.saveSpecDocument(
         parseMarkdownDocumentInput(args, "spec_save_document input", "spec"),
       ),
+    tasks_existing_ids: (args) => taskService.listExistingTaskIds(parseExistingTaskIdsInput(args)),
     tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),
     task_ids_list: (args) =>
       taskService.listTaskIds(parseRepoPathInput(args, "task_ids_list input")),

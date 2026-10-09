@@ -40,7 +40,8 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 ## Parallel runs
 
 - The root `bun run test` runs workspace suites in sequence. CI uses `bun run test:parallel` on Windows and `bun run test` on Linux and macOS.
-- `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
+- `packages/frontend` runs with `bun test --parallel=2 --no-isolate`. The worker limit keeps concurrent UI renders within the test timeout.
+- `packages/host` runs with `bun test --parallel --no-isolate`.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
 - The other workspaces run serially in one process.
 - The preload gives every parallel worker its own temp directory and config directory.

@@ -13,6 +13,7 @@ import type {
   TaskMetadataPayload,
   TaskStatus,
   TaskUpdatePatch,
+  TasksExistingIdsInput,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
@@ -51,6 +52,7 @@ export type TaskReader = {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskMetadataPayload, TaskStoreError>;
+  listExistingTaskIds(input: TasksExistingIdsInput): Effect.Effect<string[], TaskStoreError>;
   listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskCard[], TaskStoreError>;
 };
 export type TaskWriter = {

@@ -7,6 +7,7 @@ import {
   type AgentSessionViewSync,
 } from "@/state/queries/agent-session-view-sync";
 import { createTaskViewSync, type TaskViewSync } from "@/state/queries/task-view-sync";
+import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
 
@@ -76,6 +77,7 @@ const createHarness = ({
     ...taskViewSyncOverrides,
   };
   const agentSessionViewSync: AgentSessionViewSync = agentSessionViewSyncOverride ?? {
+    stopPending: mock(() => {}),
     reconcileExternalEvent: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => {}),
   };
@@ -166,8 +168,10 @@ describe("task stream controller recovery", () => {
     const agentSessionViewSync = createAgentSessionViewSync({
       queryClient,
       readPort: {
-        agentSessionsList: async () => [],
         agentSessionsListForTasks: loadSessionBatch,
+        tasksExistingIds: async () => {
+          throw new Error("unexpected task existence read");
+        },
       },
       removeTaskSessions: () => {},
       refreshLiveSessions: async () => {},
@@ -471,6 +475,7 @@ describe("task stream controller recovery", () => {
         reconcileStreamSnapshot: async () => [],
       },
       agentSessionViewSync: {
+        stopPending: () => {},
         reconcileExternalEvent: async () => {},
         reconcileStreamSnapshot: async () => {},
       },
@@ -511,5 +516,168 @@ describe("task stream controller recovery", () => {
 
     expect(harness.taskViewSync.reconcileStreamSnapshot).not.toHaveBeenCalled();
     expect(harness.transport.subscribeTaskStream).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("task stream admission", () => {
+  for (const nextWorkspace of ["/repo", "/other"] as const) {
+    test(`uses the active workspace when a queued frame starts after switching to ${nextWorkspace}`, async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const firstRead = deferred<void>();
+      let activeRepoPath = nextWorkspace === "/repo" ? "/other" : "/repo";
+      const firstRepoPath = activeRepoPath;
+      const before = createTaskCardFixture({ id: "task", title: "Before" });
+      const after = createTaskCardFixture({ id: "task", title: "After" });
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [before] });
+      const listTasks = mock(async (repoPath: string) => {
+        if (listTasks.mock.calls.length === 1) await firstRead.promise;
+        return repoPath === "/repo" ? [after] : [];
+      });
+      const taskViewSync = createTaskViewSync({
+        queryClient,
+        ports: {
+          listTasks,
+          loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
+        },
+      });
+      const harness = createHarness({ taskViewSync, getActiveRepoPath: () => activeRepoPath });
+      try {
+        await harness.controller.start();
+        harness.emit(0, {
+          type: "change",
+          cursor: cursor(0),
+          event: { ...event("first"), repoPath: firstRepoPath },
+        });
+        await flush();
+        expect(listTasks).toHaveBeenCalledTimes(1);
+        harness.emit(0, { type: "change", cursor: cursor(1), event: event("task") });
+        activeRepoPath = nextWorkspace;
+        firstRead.resolve();
+        await flush();
+        await flush();
+        expect(listTasks.mock.calls.map(([repoPath]) => repoPath)).toEqual(
+          nextWorkspace === "/repo" ? ["/other", "/repo"] : ["/repo"],
+        );
+        expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))).toEqual({
+          tasks: [after],
+        });
+        expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))?.isInvalidated).toBe(
+          nextWorkspace !== "/repo",
+        );
+        expect(harness.records[0]?.acknowledge.mock.calls.map(([value]) => value)).toEqual([
+          cursor(0),
+          cursor(1),
+        ]);
+        expect(harness.onDegraded).not.toHaveBeenCalled();
+      } finally {
+        firstRead.resolve();
+        await harness.controller.stop();
+        queryClient.clear();
+      }
+    });
+  }
+
+  test("admits contiguous changes while earlier work is pending and acknowledges in completion order", async () => {
+    const first = deferred<void>();
+    const second = deferred<void>();
+    const admitted: string[] = [];
+    const harness = createHarness({
+      agentSessionViewSync: {
+        stopPending: () => {},
+        reconcileStreamSnapshot: async () => {},
+        reconcileExternalEvent: (change) => {
+          const id = change.kind === "external_task_created" ? change.taskId : change.taskIds[0]!;
+          admitted.push(id);
+          return id === "first" ? first.promise : second.promise;
+        },
+      },
+    });
+    try {
+      await harness.controller.start();
+      harness.emit(0, { type: "change", cursor: cursor(0), event: event("first") });
+      harness.emit(0, { type: "change", cursor: cursor(1), event: event("second") });
+      await flush();
+      expect(admitted).toEqual(["first", "second"]);
+      second.resolve();
+      await flush();
+      expect(harness.records[0]?.acknowledge).not.toHaveBeenCalled();
+      first.resolve();
+      await flush();
+      expect(harness.records[0]?.acknowledge.mock.calls.map(([value]) => value)).toEqual([
+        cursor(0),
+        cursor(1),
+      ]);
+    } finally {
+      first.resolve();
+      second.resolve();
+      await harness.controller.stop();
+    }
+  });
+
+  test("fences old record responses as soon as a replacement snapshot arrives", async () => {
+    const queryClient = new QueryClient();
+    const before = {
+      externalSessionId: "before",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+      role: "build" as const,
+      startedAt: "2026-10-04T12:00:00Z",
+      selectedModel: null,
+    };
+    const key = ["agent-sessions", "list", "/repo", "old"];
+    queryClient.setQueryData(key, [before]);
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const snapshotTasks = deferred<string[]>();
+    const readPort = {
+      tasksExistingIds: async () => [],
+      agentSessionsListForTasks: mock(async (_repo: string, ids: string[]) => {
+        if (ids.includes("old")) {
+          started.resolve();
+          await release.promise;
+          return [{ taskId: "old", agentSessions: [{ ...before, externalSessionId: "late" }] }];
+        }
+        return ids.map((taskId) => ({ taskId, agentSessions: [] }));
+      }),
+    };
+    const sync = createAgentSessionViewSync({
+      queryClient,
+      readPort,
+      removeTaskSessions: () => {},
+      refreshLiveSessions: async () => {},
+    });
+    // An existing imperative consumer holds demand during the change.
+    const { getSessionReads } = await import("../queries/agent-session-reads");
+    const releaseDemand = getSessionReads(queryClient).registerDemand("/repo", ["old"]);
+    const harness = createHarness({
+      agentSessionViewSync: sync,
+      taskViewSync: { reconcileStreamSnapshot: () => snapshotTasks.promise },
+    });
+    try {
+      await harness.controller.start();
+      harness.emit(0, { type: "change", cursor: cursor(0), event: event("old") });
+      await started.promise;
+      harness.emit(0, { type: "snapshot_required", cursor: cursor(5), reason: "buffer_gap" });
+      release.resolve();
+      await flush();
+      expect(queryClient.getQueryData<(typeof before)[]>(key)).toEqual([before]);
+      expect(harness.records[0]?.acknowledge).not.toHaveBeenCalled();
+      snapshotTasks.resolve(["current"]);
+      await flush();
+      await flush();
+      expect(queryClient.getQueryData(key)).toBeUndefined();
+      expect(
+        queryClient.getQueryData<unknown[]>(["agent-sessions", "list", "/repo", "current"]),
+      ).toEqual([]);
+      expect(harness.records[0]?.acknowledge.mock.calls.map(([value]) => value)).toEqual([
+        cursor(5),
+      ]);
+    } finally {
+      release.resolve();
+      snapshotTasks.resolve([]);
+      releaseDemand();
+      await harness.controller.stop();
+      queryClient.clear();
+    }
   });
 });

@@ -745,3 +745,38 @@ describe("createAgentSessionsStore activity snapshots", () => {
     });
   });
 });
+
+test("applies confirmed inactive task removals before exposing a retained workspace", () => {
+  const store = createAgentSessionsStore("/a");
+  const deleted = createAgentSessionFixture({
+    externalSessionId: "deleted",
+    sessionAssociation: { kind: "workflow", taskId: "same-task", role: "build" },
+  });
+  const repository = createAgentSessionFixture({
+    externalSessionId: "repository",
+    sessionAssociation: { kind: "repository" },
+    status: "running",
+  });
+  replaceStoreSessions(store, [deleted, repository]);
+  store.resetWorkspace("/b");
+  const other = createAgentSessionFixture({
+    externalSessionId: "other",
+    sessionAssociation: { kind: "workflow", taskId: "same-task", role: "build" },
+    status: "running",
+  });
+  replaceStoreSessions(store, [other]);
+  store.removeTaskSessions("/a", ["same-task"]);
+  expect(store.listSessionSnapshots()).toEqual([other]);
+  const observed: string[][] = [];
+  const unsubscribe = store.subscribe(() =>
+    observed.push(store.listSessionSnapshots().map((session) => session.externalSessionId)),
+  );
+  store.resetWorkspace("/a");
+  unsubscribe();
+  expect(observed).toEqual([["repository"]]);
+  expect(store.getActivitySnapshot().repositorySessions[0]?.activityState).toBe("running");
+  store.resetWorkspace("/b");
+  expect(store.listSessionSnapshots()).toEqual([{ ...other, historyLoadState: "stale" }]);
+  store.removeTaskSessions("/b", ["same-task"]);
+  expect(store.listSessionSnapshots()).toEqual([]);
+});

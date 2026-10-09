@@ -298,6 +298,7 @@ describe("electron shell bridge", () => {
         reconcileStreamSnapshot,
       },
       agentSessionViewSync: {
+        stopPending: () => {},
         reconcileExternalEvent: reconcileAgentSessionExternalEvent,
         reconcileStreamSnapshot: reconcileAgentSessionStreamSnapshot,
       },

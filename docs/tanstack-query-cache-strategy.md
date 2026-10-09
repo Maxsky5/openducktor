@@ -49,18 +49,20 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 |---|---:|
 | Task list and runs | 30 sec |
 | Runs | 30 sec |
-| Agent session list | 30 sec |
+| Agent session list | Infinity |
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
 | Host runtime and MCP bridge status | Infinite, updated by events |
+
+Agent session lists stay fresh until a task event invalidates them or an explicit refresh requests current records. Session-list queries do not retry on mount after a failure.
 
 Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
-Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. Cancel older reads and advance the list's invalidation version so a response in flight cannot replace the event with stale data. Workspace session updates use their existing record event. These updates do not trigger another read.
+Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. Advance the list's read revision and complete pending reads with the committed records so an older response cannot replace them. Workspace session updates use their existing record event. These updates do not trigger another read.
 
-A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps and reads again the observed session lists of inactive workspaces, and removes the others.
+A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot reads again the observed session lists of inactive workspaces. Unobserved lists stay stale until a view needs them.
 
 ### Checks and file data
 

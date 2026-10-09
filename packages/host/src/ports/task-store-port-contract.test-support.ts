@@ -457,6 +457,9 @@ export const describeTaskStorePortContract = (
       await expect(run(store.listTasks({ repoPath, doneVisibleDays: 1 }))).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ id: closed.id })]),
       );
+      await expect(
+        run(store.listExistingTaskIds({ repoPath, taskIds: [closed.id, "missing-task"] })),
+      ).resolves.toEqual([closed.id]);
 
       await run(store.deleteTask({ repoPath, taskId: root.id, deleteSubtasks: true }));
       await expect(run(store.listTasks({ repoPath }))).resolves.not.toEqual(
@@ -466,6 +469,15 @@ export const describeTaskStorePortContract = (
           expect.objectContaining({ id: grandchild.id }),
         ]),
       );
+      await expect(
+        run(
+          store.listExistingTaskIds({
+            repoPath,
+            taskIds: [root.id, child.id, grandchild.id, closed.id],
+          }),
+        ),
+      ).resolves.toEqual([closed.id]);
+      await expect(run(store.listExistingTaskIds({ repoPath, taskIds: [] }))).resolves.toEqual([]);
     });
 
     test("returns typed failures for missing tasks", async () => {

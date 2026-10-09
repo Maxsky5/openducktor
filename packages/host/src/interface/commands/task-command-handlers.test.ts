@@ -10,7 +10,7 @@ import type {
   TaskPullRequestDetectResult,
 } from "@openducktor/contracts";
 import { createTaskServiceTestDouble } from "../../test-support/task-service-test-double";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
 import type { HostCommandHandlerError } from "../router/host-command-router";
 
@@ -104,6 +104,30 @@ describe("createTaskCommandHandlers", () => {
     ]);
     expect(inputs).toEqual([{ repoPath: "/repo" }]);
     expect(() => handlers.task_ids_list?.({})).toThrow("repoPath is required.");
+  });
+
+  test("validates task existence batches and exposes store failures", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.read",
+      message: "Task store is unavailable.",
+    });
+    const inputs: unknown[] = [];
+    const handlers = createTaskCommandHandlers(
+      createTaskServiceTestDouble({
+        listExistingTaskIds: (input) => {
+          inputs.push(input);
+          return Effect.fail(failure);
+        },
+      }),
+    );
+    expect(() => handlers.tasks_existing_ids({ repoPath: "/repo", taskIds: [1] })).toThrow(
+      HostValidationError,
+    );
+    expect(inputs).toHaveLength(0);
+    await expect(
+      runHandler(handlers.tasks_existing_ids({ repoPath: "/repo", taskIds: ["closed", "closed"] })),
+    ).rejects.toMatchObject({ message: failure.message });
+    expect(inputs).toEqual([{ repoPath: "/repo", taskIds: ["closed"] }]);
   });
 
   test("registers tasks_list", async () => {

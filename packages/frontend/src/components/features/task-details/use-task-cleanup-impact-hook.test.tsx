@@ -214,7 +214,9 @@ describe("useTaskCleanupImpact", () => {
   test("refreshes an invalidated session entry through its canonical per-task query", async () => {
     const { calls, readPorts, sessionFixture } = createReadPorts();
     const refresh = createDeferred<AgentSessionRecord[]>();
-    calls.agentSessionsList.mockImplementation(() => refresh.promise);
+    calls.agentSessionsListForTasks.mockImplementation(async (_repo, ids) =>
+      Promise.all(ids.map(async (taskId) => ({ taskId, agentSessions: await refresh.promise }))),
+    );
     const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
     const harness = createHarness(initialProps);
 
@@ -229,13 +231,13 @@ describe("useTaskCleanupImpact", () => {
       });
 
       await harness.update({ ...initialProps, enabled: true });
-      await harness.waitFor(() => calls.agentSessionsList.mock.calls.length === 1);
+      await harness.waitFor(() => calls.agentSessionsListForTasks.mock.calls.length === 1);
       expect(harness.getLatest().impact.isLoadingImpact).toBe(true);
       await harness.run(() => refresh.resolve([sessionFixture]));
       await harness.waitFor(({ impact }) => !impact.isLoadingImpact);
-      expect(calls.agentSessionsListForTasks).not.toHaveBeenCalled();
-      expect(calls.agentSessionsList).toHaveBeenCalledTimes(1);
-      expect(calls.agentSessionsList).toHaveBeenCalledWith("/repo", "task-1");
+      expect(calls.agentSessionsList).not.toHaveBeenCalled();
+      expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
+      expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["task-1"]);
     } finally {
       await harness.unmount();
     }

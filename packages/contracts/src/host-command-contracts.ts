@@ -115,6 +115,7 @@ export const HOST_COMMAND_NAMES = [
   "task_transition",
   "task_update",
   "task_worktree_get",
+  "tasks_existing_ids",
   "tasks_list",
   "terminal_close",
   "terminal_create",
@@ -187,3 +188,10 @@ export type HostCommandName = (typeof HOST_COMMAND_NAMES)[number];
 export const hostCommandInputRecordSchema = z.record(z.string(), z.unknown());
 export type HostCommandInputRecord = z.output<typeof hostCommandInputRecordSchema>;
 export type HostCommandArgs = HostCommandInputRecord | undefined;
+
+export const tasksExistingIdsInputSchema = z.object({
+  repoPath: z.string().trim().min(1),
+  taskIds: z.array(z.string().trim().min(1)).transform((ids) => [...new Set(ids)]),
+});
+export type TasksExistingIdsInput = z.output<typeof tasksExistingIdsInputSchema>;
+export const tasksExistingIdsResultSchema = z.array(z.string().min(1));

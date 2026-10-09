@@ -298,6 +298,7 @@ describe("useAppLifecycle task stream", () => {
         },
         taskViewSync: { ...taskViewSync, reconcileStreamSnapshot },
         agentSessionViewSync: {
+          stopPending: () => {},
           reconcileExternalEvent: async () => {},
           reconcileStreamSnapshot: async () => {},
         },
@@ -450,6 +451,7 @@ describe("useAppLifecycle task stream", () => {
         },
         taskViewSync,
         agentSessionViewSync: {
+          stopPending: () => {},
           reconcileExternalEvent: async () => {},
           reconcileStreamSnapshot: async () => {},
         },

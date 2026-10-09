@@ -90,6 +90,24 @@ const createClient = (
 };
 
 describe("HostClient", () => {
+  test("checks task existence in one validated batch", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "tasks_existing_ids") return ["closed"];
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    await expect(
+      client.tasksExistingIds("/repo", ["closed", "missing", "closed"]),
+    ).resolves.toEqual(["closed"]);
+    expect(calls).toEqual([
+      {
+        command: "tasks_existing_ids",
+        args: { repoPath: "/repo", taskIds: ["closed", "missing"] },
+      },
+    ]);
+    const malformed = createClient(() => [""]);
+    await expect(malformed.client.tasksExistingIds("/repo", ["closed"])).rejects.toThrow();
+  });
+
   test.each(["set", "cancel_sign_in", "pat", "commit"] as const)(
     "projects session-derived %s requests to the strict host contract",
     async (action) => {

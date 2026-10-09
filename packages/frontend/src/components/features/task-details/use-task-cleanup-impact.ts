@@ -187,7 +187,12 @@ export function useTaskCleanupImpact(
   const taskSessionObservers = useQueries(
     {
       queries: taskIds.map((taskId) => ({
-        ...agentSessionListQueryOptions(queryRepoPath, taskId, readPorts.agentSessions),
+        ...agentSessionListQueryOptions(
+          queryClient,
+          queryRepoPath,
+          taskId,
+          readPorts.agentSessions,
+        ),
         enabled: false,
       })),
     },

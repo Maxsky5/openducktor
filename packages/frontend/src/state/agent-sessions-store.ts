@@ -69,6 +69,7 @@ export type AgentSessionsStore = {
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
   ) => AgentSessionState | null;
+  removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
@@ -76,6 +77,7 @@ export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
+  const pendingTaskRemovals = new Map<string, Set<string>>();
   const retainedCollections = new Map<string, AgentSessionCollection>();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   if (workspaceRepoPath !== null) {
@@ -193,10 +195,27 @@ export const createAgentSessionsStore = (
     if (repoPath === null) {
       return emptyAgentSessionCollection();
     }
-    return retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
+    let collection = retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
+    const removals = pendingTaskRemovals.get(repoPath);
+    if (removals) {
+      collection = withoutTasks(collection, removals);
+      pendingTaskRemovals.delete(repoPath);
+    }
+    return collection;
   };
 
   return {
+    removeTaskSessions: (repoPath, taskIds) => {
+      if (taskIds.length === 0) return;
+      if (repoPath === workspaceRepoPath) {
+        setSessionCollection((current) => withoutTasks(current, new Set(taskIds)));
+        return;
+      }
+      // Inactive collections have no writer. Save removals until the next workspace switch.
+      const removals = pendingTaskRemovals.get(repoPath) ?? new Set<string>();
+      for (const taskId of taskIds) removals.add(taskId);
+      pendingTaskRemovals.set(repoPath, removals);
+    },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -276,3 +295,18 @@ export const createAgentSessionsStore = (
     },
   };
 };
+
+function withoutTasks(
+  collection: AgentSessionCollection,
+  taskIds: Set<string>,
+): AgentSessionCollection {
+  let next = collection;
+  for (const session of listAgentSessions(collection)) {
+    if (
+      session.sessionAssociation.kind === "workflow" &&
+      taskIds.has(session.sessionAssociation.taskId)
+    )
+      next = removeAgentSession(next, session);
+  }
+  return next;
+}

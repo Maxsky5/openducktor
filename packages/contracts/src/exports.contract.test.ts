@@ -654,6 +654,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskStopImpactSchema",
   "taskSummarySchema",
   "taskUpdatePatchSchema",
+  "tasksExistingIdsInputSchema",
+  "tasksExistingIdsResultSchema",
   "taskWorktreeSummarySchema",
   "tasksUpdatedEventSchema",
   "TERMINAL_PROTOCOL_MAX_COLUMNS",
