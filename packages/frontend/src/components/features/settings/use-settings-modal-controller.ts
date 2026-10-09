@@ -116,8 +116,7 @@ export type SettingsModalController = {
   setClaudeDangerAcknowledged: (value: boolean) => void;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
-  selectedRepoRuntimeAvailabilityErrors: string[];
-  selectedRepoRuntimeAvailabilityErrorCount: number;
+  selectedRepoModelWarnings: string[];
   setSelectedWorkspaceId: (next: string) => void;
   retrySelectedRepoBranchesLoad: () => void;
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
@@ -316,7 +315,7 @@ export const useSettingsModalController = ({
     runtimeAvailabilityValidationState,
     hasRuntimeAvailabilityErrors,
     invalidRuntimeKind,
-    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoModelWarnings,
   } = useRuntimeState({
     runtimeDefinitions,
     snapshotDraft,
@@ -334,7 +333,6 @@ export const useSettingsModalController = ({
     claudeSettingsSaveError,
     claudeValidationError,
   } = useRuntimePolicyState({ open, loadedSnapshot, snapshotDraft });
-  const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
@@ -401,11 +399,7 @@ export const useSettingsModalController = ({
   const settingsSectionErrorCountByIdWithValidation = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      repositories:
-        settingsSectionErrorCountById.repositories +
-        runtimeAvailabilityValidationState.totalErrorCount -
-        runtimeAvailabilityValidationState.runtimeExecutableErrors.length +
-        azureDevOpsValidationErrorCount,
+      repositories: settingsSectionErrorCountById.repositories + azureDevOpsValidationErrorCount,
       runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
       "custom-agent-roles": customAgentRoleValidationState.totalErrorCount,
@@ -414,7 +408,6 @@ export const useSettingsModalController = ({
       azureDevOpsValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
       customAgentRoleValidationState.totalErrorCount,
-      runtimeAvailabilityValidationState.totalErrorCount,
       runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       settingsSectionErrorCountById,
     ],
@@ -617,8 +610,7 @@ export const useSettingsModalController = ({
     setClaudeDangerAcknowledged,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
-    selectedRepoRuntimeAvailabilityErrors,
-    selectedRepoRuntimeAvailabilityErrorCount,
+    selectedRepoModelWarnings,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
@@ -762,15 +754,15 @@ const useRuntimeState = ({
     ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)
         ?.kind ?? null)
     : null;
-  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
-    ? (validation.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
+  const selectedRepoModelWarnings = selectedWorkspaceId
+    ? (validation.warningsByWorkspaceId[selectedWorkspaceId] ?? [])
     : [];
 
   return {
     runtimeAvailabilityValidationState: validation,
     hasRuntimeAvailabilityErrors: validation.totalErrorCount > 0,
     invalidRuntimeKind,
-    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoModelWarnings,
   };
 };
 

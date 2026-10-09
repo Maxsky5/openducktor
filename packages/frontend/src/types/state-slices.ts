@@ -12,7 +12,6 @@ import type {
   GitCheck,
   PathCheck,
   RuntimeKind,
-  SettingsRepoConfig,
   SettingsSnapshot,
   SettingsSnapshotRuntimePreview,
   SettingsSnapshotSaveInput,
@@ -40,6 +39,7 @@ import type {
   LoadAgentSessionHistoryInput,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
+import type { RepoAgentDefaultRole, ModelDefaultDraft } from "@/lib/repo-agent-defaults";
 import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,
@@ -72,10 +72,10 @@ export type RepoAgentDefaultInput = {
   profileId: string;
 };
 
-export type WorkspaceModelDefaultsDraft = Pick<
-  SettingsRepoConfig,
-  "defaultModel" | "agentDefaults"
->;
+export type WorkspaceModelDefaultsDraft = {
+  defaultModel?: ModelDefaultDraft | undefined;
+  agentDefaults: Partial<Record<RepoAgentDefaultRole, ModelDefaultDraft | undefined>>;
+};
 
 export type RepoSettingsInput = {
   defaultModel: RepoAgentDefaultInput | null;

@@ -9,7 +9,14 @@ beforeAll(() => {
 });
 afterAll(() => releaseProviderFixture?.());
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, type WorkspaceRecord } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  workspaceProviderSetupCommitSchema,
+  type AgentModelDefault,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
@@ -25,6 +32,7 @@ import {
   WorkspaceCreationFields,
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
+import { getModelWarnings } from "./workspace-model-warnings";
 import { useWorkspaceCreation } from "./use-workspace-creation";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 
@@ -133,10 +141,22 @@ function CreationHarness({
       >
         Choose model
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          creation.updateModelDraft((current) => ({
+            ...current,
+            // @ts-expect-error Pass a malformed draft to test validation before the host commit.
+            defaultModel: { providerId: "openai", modelId: "o3" },
+          }))
+        }
+      >
+        Choose invalid model
+      </button>
       <p data-testid="created-id">{creation.createdWorkspaceId ?? ""}</p>
       <WorkspaceCreationFields controller={creation} modelSurface={modelSurface} />
       <WorkspaceCreationBackAction controller={creation} />
-      <WorkspaceCreationSubmitAction controller={creation} modelSurface={modelSurface} />
+      <WorkspaceCreationSubmitAction controller={creation} />
     </>
   );
 }
@@ -175,6 +195,158 @@ const advanceToModels = async () => {
 };
 
 describe("workspace creation", () => {
+  test.each([
+    { runtime: null, profileId: "", expectedProfile: undefined, variant: "", warningCount: 0 },
+    {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      profileId: "",
+      expectedProfile: undefined,
+      variant: "",
+      warningCount: 0,
+    },
+    {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      profileId: "",
+      expectedProfile: undefined,
+      variant: "retired",
+      warningCount: 5,
+    },
+    {
+      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+      profileId: "old-opencode-profile",
+      expectedProfile: undefined,
+      variant: "",
+      warningCount: 0,
+    },
+    {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      profileId: "",
+      expectedProfile: undefined,
+      variant: "",
+      warningCount: 0,
+    },
+    {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      profileId: "retired",
+      expectedProfile: "retired",
+      variant: "",
+      warningCount: 5,
+    },
+    {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      profileId: " build ",
+      expectedProfile: "build",
+      variant: "",
+      warningCount: 0,
+    },
+  ])(
+    "opens with optional defaults, profile '$profileId', and effort '$variant'",
+    async ({ runtime, profileId, expectedProfile, variant, warningCount }) => {
+      const commit = mock(async (input) =>
+        outcome(workspaceProviderSetupCommitSchema.parse(input)),
+      );
+      const success = mock(() => {});
+      const modelCatalog: AgentModelCatalog = {
+        ...catalog,
+        runtime: runtime ?? CODEX_RUNTIME_DESCRIPTOR,
+        profiles: [{ id: "build", label: "Build", mode: "primary" }],
+      };
+      const modelSurface: WorkspaceCreationModelSurface = {
+        ...surface,
+        availableRuntimeDefinitions: runtime ? [runtime] : [],
+        catalogResources: runtime
+          ? [{ ...surface.catalogResources[0]!, runtimeKind: runtime.kind, catalog: modelCatalog }]
+          : [],
+        getCatalogForRuntime: () => modelCatalog,
+      };
+      const harness = createHookHarness(
+        () =>
+          useWorkspaceCreation({
+            workspaces: [],
+            commitWorkspaceProviderSetup: commit,
+            onSuccess: success,
+          }),
+        {},
+        {
+          wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+        },
+      );
+      await harness.mount();
+      try {
+        await harness.run(async (state) => {
+          await state.confirmRepo("/optional-model-test");
+        });
+        await harness.run(async (state) => {
+          await state.skipProvider();
+        });
+        await harness.run((state) => {
+          state.next();
+          if (runtime) {
+            const model = {
+              runtimeKind: runtime.kind,
+              providerId: "openai",
+              modelId: "o3",
+              variant,
+              profileId,
+            };
+            state.updateModelDraft(() => ({
+              defaultModel: model,
+              agentDefaults: { spec: model, planner: model, build: model, qa: model },
+            }));
+          }
+        });
+        await harness.run(async (state) => {
+          expect(getModelWarnings(state.modelDraft, modelSurface)).toHaveLength(warningCount);
+          await state.submit();
+        });
+        expect(harness.getLatest().error).toBeNull();
+        expect(success).toHaveBeenCalledTimes(1);
+        expect(commit).toHaveBeenCalledTimes(1);
+        const input = commit.mock.calls[0]?.[0];
+        if (runtime) {
+          const expected: AgentModelDefault = {
+            runtimeKind: runtime.kind,
+            providerId: "openai",
+            modelId: "o3",
+          };
+          if (expectedProfile) expected.profileId = expectedProfile;
+          if (variant) expected.variant = variant;
+          expect(input?.defaultModel).toEqual(expected);
+          expect(Object.values(input?.agentDefaults ?? {})).toEqual([
+            expected,
+            expected,
+            expected,
+            expected,
+          ]);
+        } else {
+          expect(input?.defaultModel).toBeUndefined();
+          expect(input?.agentDefaults).toEqual({});
+        }
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps each submission error readable and allows correction", async () => {
+    const failure =
+      "defaultModel.modelId: Model is unavailable.\nagentDefaults.qa.variant: Choose an effort.";
+    const commit = mock(async () => {
+      throw new Error(failure);
+    });
+    renderHarness({ commit });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(failure);
+    expect(screen.getByRole("button", { name: "Read saved creation progress" })).toBeTruthy();
+    expect(alert.classList.contains("whitespace-pre-line")).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(false);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Open repository" }).disabled,
+    ).toBe(false);
+  });
+
   test.each(["partial result", "rejection", "complete result"] as const)(
     "discards an unmounted setup after the commit returns a %s",
     async (failure) => {
@@ -480,7 +652,7 @@ describe("workspace creation", () => {
     expect(commit).not.toHaveBeenCalled();
   });
   test("submits workspace details and current models only on the final action", async () => {
-    const commit = mock(async (input) => outcome(input));
+    const commit = mock(async (input) => outcome(workspaceProviderSetupCommitSchema.parse(input)));
     const onSuccess = mock(() => {});
     renderHarness({ commit, onSuccess });
     await advanceToModels();
@@ -495,6 +667,7 @@ describe("workspace creation", () => {
       agentDefaults: {},
       defaultModel: { runtimeKind: "codex", providerId: "openai", modelId: "o3", variant: "low" },
     });
+    expect(commit.mock.calls[0]?.[0].defaultModel).not.toHaveProperty("profileId");
   });
   test("retains a partial workspace and retries the same setup", async () => {
     let calls = 0;
@@ -619,7 +792,7 @@ describe("workspace creation", () => {
       hostClient.workspaceProviderSetupDiscard = discard;
     }
   });
-  test("blocks blank names and unavailable selected models before saving", async () => {
+  test("blocks blank names but saves unavailable optional defaults with a warning", async () => {
     const commit = mock(async (input) => outcome(input));
     renderHarness({
       commit,
@@ -632,8 +805,24 @@ describe("workspace creation", () => {
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "repo" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await screen.findByText(/Default Model is unavailable/);
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0]?.[0].defaultModel).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "o3",
+      variant: "low",
+    });
+  });
+  test("does not offer saved-progress recovery for a local model error", async () => {
+    const commit = mock(async (input) => outcome(input));
+    renderHarness({ commit });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Choose invalid model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await screen.findByText(/Default Model.*runtime/);
     expect(commit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Read saved creation progress" })).toBeNull();
   });
 });

@@ -13,7 +13,6 @@ import {
   clearRoleDefault,
   ensureDraftAgentDefault,
   findCatalogModel,
-  getMissingRequiredRoleLabels,
   getNeededCatalogRuntimeKinds,
   isSettingsInteractionDisabled,
   resolvePromptOverrideFallbackTemplate,
@@ -196,21 +195,6 @@ describe("settings-modal-model", () => {
         "openai/o3",
       )?.modelName,
     ).toBe("o3");
-  });
-
-  test("reports missing required role labels", () => {
-    const defaults = {
-      ...emptyDefaults,
-      spec: {
-        runtimeKind: "opencode" as const,
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec",
-      },
-    };
-
-    expect(getMissingRequiredRoleLabels(defaults)).toEqual(["Planner", "Builder", "QA"]);
   });
 
   test("derives one catalog target when all roles inherit the same runtime", () => {

@@ -506,7 +506,7 @@ export function WorkspaceStage({
               />
             </>
           ) : (
-            <WorkspaceCreationSubmitAction controller={workspaceCreation} modelSurface={models} />
+            <WorkspaceCreationSubmitAction controller={workspaceCreation} />
           )}
         </div>
       </div>

@@ -22,10 +22,7 @@ import {
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
 import { useWorkspaceCreation, type WorkspaceCreationController } from "./use-workspace-creation";
-import {
-  useWorkspaceCreationModels,
-  type WorkspaceCreationModelSurface,
-} from "./use-workspace-creation-models";
+import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
 
 type OpenRepositoryModalProps = {
   open: boolean;
@@ -116,7 +113,6 @@ function OpenRepositoryModalFooter({
   cancellationLocked,
   showCreationFlow,
   creation,
-  models,
   onClose,
   onBackToWorkspaces,
 }: {
@@ -126,7 +122,6 @@ function OpenRepositoryModalFooter({
   cancellationLocked: boolean;
   showCreationFlow: boolean;
   creation: WorkspaceCreationController;
-  models: WorkspaceCreationModelSurface;
   onClose: () => void;
   onBackToWorkspaces: () => void;
 }): ReactElement {
@@ -159,7 +154,7 @@ function OpenRepositoryModalFooter({
       </div>
       {showCreationFlow ? (
         <div className="w-full sm:w-auto [&>button]:w-full">
-          <WorkspaceCreationSubmitAction controller={creation} modelSurface={models} />
+          <WorkspaceCreationSubmitAction controller={creation} />
         </div>
       ) : null}
     </DialogFooter>
@@ -295,7 +290,6 @@ function OpenRepositoryModalSession({
           cancellationLocked={cancellationLocked}
           showCreationFlow={showCreationFlow}
           creation={creation}
-          models={models}
           onClose={() => void close()}
           onBackToWorkspaces={() => {
             void creation.abandon().then((done) => {

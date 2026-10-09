@@ -5,14 +5,9 @@ import type {
   WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import { useMemo, useReducer, useRef } from "react";
-import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
-import type { ModelDefaultsValue } from "@/components/features/repository/model-defaults/model-defaults-model";
 import { errorMessage } from "@/lib/errors";
-import type {
-  WorkspaceModelDefaultsDraft,
-  WorkspaceSelectionOperationsInput,
-} from "@/types/state-slices";
-import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
+import { prepareModelDefaultsForSave } from "@/lib/repo-agent-defaults";
+import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import {
   useWorkspaceProviderSetup,
   type WorkspaceProviderSetupController,
@@ -100,7 +95,7 @@ export function useWorkspaceCreation({
     }
   };
 
-  const submit = async (surface?: WorkspaceCreationModelSurface): Promise<void> => {
+  const submit = async (): Promise<void> => {
     if (
       submitInFlight.current ||
       disabled ||
@@ -109,13 +104,6 @@ export function useWorkspaceCreation({
       validationError
     )
       return;
-    const modelError = state.createdWorkspaceId
-      ? null
-      : selectedModelError(state.modelDraft, surface);
-    if (modelError) {
-      dispatch({ type: "error", error: modelError, stage: "models" });
-      return;
-    }
     submitInFlight.current = true;
     onSubmittingChange?.(true);
     dispatch({ type: "error", error: null, stage: null });
@@ -123,21 +111,26 @@ export function useWorkspaceCreation({
     try {
       const completed = await runChange(async () => {
         // A lost acknowledgement can remove the host setup before its reply arrives.
-        if (state.committed) return;
-        const workspaceInput: WorkspaceSelectionOperationsInput = {
+        if (state.commitStatus === "complete") return;
+        const details: Pick<
+          WorkspaceProviderSetupCommit,
+          "workspaceId" | "workspaceName" | "abbreviation" | "tileColor"
+        > = {
           workspaceId: state.workspaceId.trim(),
           workspaceName: state.workspaceName.trim(),
-          repoPath: state.repoPath,
         };
-        if (state.abbreviation.trim()) workspaceInput.abbreviation = state.abbreviation.trim();
-        if (state.tileColor) workspaceInput.tileColor = state.tileColor;
-        const { repoPath: _repoPath, ...details } = workspaceInput;
+        const abbreviation = state.abbreviation.trim();
+        if (abbreviation) details.abbreviation = abbreviation;
+        if (state.tileColor) details.tileColor = state.tileColor;
         const outcome = await provider.commit(
           {
             ...details,
-            ...state.modelDraft,
+            ...prepareModelDefaultsForSave(state.modelDraft),
           },
-          commitWorkspaceProviderSetup,
+          async (input) => {
+            dispatch({ type: "commitAttempted" });
+            return commitWorkspaceProviderSetup(input);
+          },
         );
         if (outcome.workspace)
           dispatch({ type: "created", workspaceId: outcome.workspace.workspaceId });
@@ -164,7 +157,7 @@ export function useWorkspaceCreation({
   return {
     provider,
     recoverCreation: async () => {
-      if (busy || submitInFlight.current || state.committed) return;
+      if (busy || submitInFlight.current || state.commitStatus !== "attempted") return;
       try {
         const saved = await provider.recover();
         if (!saved) return;
@@ -204,7 +197,8 @@ export function useWorkspaceCreation({
     tileColor: state.tileColor,
     modelDraft: state.modelDraft,
     createdWorkspaceId: state.createdWorkspaceId,
-    committed: state.committed,
+    committed: state.commitStatus === "complete",
+    canRecoverCreation: state.commitStatus === "attempted",
     pickerOpen: state.pickerOpen,
     submitting,
     progress: state.progress,
@@ -223,7 +217,7 @@ export function useWorkspaceCreation({
       if (!busy && state.repoPath) dispatch({ type: "stage", stage: "provider" });
     },
     back: () => {
-      if (busy || state.committed) return;
+      if (busy || state.commitStatus === "complete") return;
       if (state.stage === "models") dispatch({ type: "stage", stage: "information" });
       else if (state.stage === "information") dispatch({ type: "stage", stage: "provider" });
       else if (state.stage === "provider" && !state.createdWorkspaceId)
@@ -277,62 +271,6 @@ const emptyModelDraft = (): WorkspaceModelDefaultsDraft => ({
   agentDefaults: {},
 });
 
-const selectedModelError = (
-  draft: WorkspaceModelDefaultsDraft,
-  surface: WorkspaceCreationModelSurface | undefined,
-): string | null => {
-  const definitionsByKind = new Map(
-    surface?.availableRuntimeDefinitions.map((definition) => [definition.kind, definition]) ?? [],
-  );
-  const resourcesByKind = new Map(
-    surface?.catalogResources.map((resource) => [resource.runtimeKind, resource]) ?? [],
-  );
-  const catalogsByKind = new Map(
-    surface?.catalogResources.map((resource) => [
-      resource.runtimeKind,
-      surface.getCatalogForRuntime(resource.runtimeKind),
-    ]) ?? [],
-  );
-  const modelsByKey = new Map(
-    [...catalogsByKind].flatMap(
-      ([runtimeKind, catalog]) =>
-        catalog?.models.map(
-          (model) => [`${runtimeKind}\0${model.providerId}\0${model.modelId}`, model] as const,
-        ) ?? [],
-    ),
-  );
-  const entries = [
-    ["Default Model", draft.defaultModel],
-    ["Specification", draft.agentDefaults.spec],
-    ["Planner", draft.agentDefaults.planner],
-    ["Builder", draft.agentDefaults.build],
-    ["QA", draft.agentDefaults.qa],
-  ] as const;
-  for (const [label, entry] of entries) {
-    if (!entry) continue;
-    if (!entry.runtimeKind || !entry.providerId.trim() || !entry.modelId.trim()) {
-      return `${label} needs a runtime and model. Choose a model or clear this choice.`;
-    }
-    const definition = definitionsByKind.get(entry.runtimeKind);
-    const resource = resourcesByKind.get(entry.runtimeKind);
-    const catalog = catalogsByKind.get(entry.runtimeKind);
-    const model = modelsByKey.get(`${entry.runtimeKind}\0${entry.providerId}\0${entry.modelId}`);
-    if (!definition || !resource?.isEnabled || resource.error || !model) {
-      return `${label} is unavailable. Retry the model list or clear this choice.`;
-    }
-    if (entry.variant && !model.variants.includes(entry.variant)) {
-      return `${label} has an unavailable effort. Choose one again or clear this choice.`;
-    }
-    if (
-      entry.profileId &&
-      !toPrimaryAgentOptions(catalog ?? null).some((option) => option.value === entry.profileId)
-    ) {
-      return `${label} has an unavailable agent profile. Choose one again or clear this choice.`;
-    }
-  }
-  return null;
-};
-
 type State = {
   stage: WorkspaceCreationStage;
   pickerOpen: boolean;
@@ -344,7 +282,7 @@ type State = {
   editedId: boolean;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
-  committed: boolean;
+  commitStatus: "not_attempted" | "attempted" | "complete";
   progress: "idle" | "creating" | "saving" | "finishing";
   error: string | null;
   errorStage: WorkspaceCreationStage | null;
@@ -365,6 +303,7 @@ type Action =
     }
   | { type: "created"; workspaceId: string }
   | { type: "committed" }
+  | { type: "commitAttempted" }
   | { type: "progress"; value: State["progress"] }
   | { type: "error"; error: string | null; stage: WorkspaceCreationStage | null };
 
@@ -379,7 +318,7 @@ const initialState: State = {
   editedId: false,
   modelDraft: emptyModelDraft(),
   createdWorkspaceId: null,
-  committed: false,
+  commitStatus: "not_attempted",
   progress: "idle",
   error: null,
   errorStage: null,
@@ -408,6 +347,7 @@ const reducer = (state: State, action: Action): State => {
         tileColor: null,
         editedId: false,
         modelDraft: emptyModelDraft(),
+        commitStatus: "not_attempted",
         error: null,
       };
     case "stage":
@@ -424,8 +364,10 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, modelDraft: action.updater(state.modelDraft), error: null };
     case "created":
       return { ...state, createdWorkspaceId: action.workspaceId };
+    case "commitAttempted":
+      return { ...state, commitStatus: "attempted" };
     case "committed":
-      return { ...state, committed: true };
+      return { ...state, commitStatus: "complete" };
     case "progress":
       return { ...state, progress: action.value };
     case "error":
@@ -461,6 +403,7 @@ export type WorkspaceCreationController = {
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
   committed: boolean;
+  canRecoverCreation: boolean;
   pickerOpen: boolean;
   submitting: boolean;
   progress: State["progress"];
@@ -478,6 +421,8 @@ export type WorkspaceCreationController = {
   updateWorkspaceName: (workspaceName: string) => void;
   updateAbbreviation: (abbreviation: string) => void;
   updateTileColor: (tileColor: string | null) => void;
-  updateModelDraft: (updater: (current: ModelDefaultsValue) => ModelDefaultsValue) => void;
-  submit: (surface?: WorkspaceCreationModelSurface) => Promise<void>;
+  updateModelDraft: (
+    updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
+  ) => void;
+  submit: () => Promise<void>;
 };

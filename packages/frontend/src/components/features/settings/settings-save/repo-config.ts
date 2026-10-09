@@ -1,9 +1,6 @@
 import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import {
-  normalizeRepoAgentDefaultForSave,
-  normalizeRepoDefaultModelForSave,
-} from "@/lib/repo-agent-defaults";
+import { prepareModelDefaultsForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
@@ -14,30 +11,13 @@ const trimmedNonEmpty = (value: string): string | null => {
 };
 
 export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepoConfig => {
-  const spec = normalizeRepoAgentDefaultForSave("spec", repo.agentDefaults.spec);
-  const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
-  const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
-  const qa = normalizeRepoAgentDefaultForSave("qa", repo.agentDefaults.qa);
-  const agentDefaults: SettingsRepoConfig["agentDefaults"] = {};
-  if (spec) {
-    agentDefaults.spec = spec;
-  }
-  if (planner) {
-    agentDefaults.planner = planner;
-  }
-  if (build) {
-    agentDefaults.build = build;
-  }
-  if (qa) {
-    agentDefaults.qa = qa;
-  }
   return {
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
     abbreviation: trimmedNonEmpty(repo.abbreviation ?? "") ?? undefined,
     tileColor: trimmedNonEmpty(repo.tileColor ?? "") ?? undefined,
     repoPath: repo.repoPath.trim(),
-    defaultModel: normalizeRepoDefaultModelForSave(repo.defaultModel),
+    ...prepareModelDefaultsForSave(repo),
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
@@ -47,6 +27,5 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     actions: repo.actions,
     worktreeCopyPaths: dropBlankLines(repo.worktreeCopyPaths),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
-    agentDefaults,
   };
 };

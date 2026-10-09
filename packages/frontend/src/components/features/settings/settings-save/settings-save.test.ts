@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
+  settingsSnapshotSaveInputSchema,
+  type AgentModelDefault,
   type SettingsRepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
@@ -212,6 +214,50 @@ describe("settings save transforms", () => {
       },
     });
   });
+
+  test.each(["codex", "claude", "opencode"] as const)(
+    "saves optional model defaults and only keeps supported profiles for %s",
+    (runtimeKind) => {
+      const model = {
+        runtimeKind,
+        providerId: "openai",
+        modelId: "model",
+        variant: "",
+        profileId: " build ",
+      };
+      const snapshot = createSettingsSnapshotFixture({
+        workspaces: {
+          "repo-a": createRepoConfig({
+            defaultModel: model,
+            agentDefaults: { spec: model, planner: model, build: model, qa: model },
+          }),
+          "repo-b": createRepoConfig({
+            workspaceId: "repo-b",
+            defaultModel: undefined,
+            agentDefaults: {},
+          }),
+        },
+      });
+      const saved = settingsSnapshotSaveInputSchema.parse(prepareSettingsSnapshotForSave(snapshot));
+      const expected: AgentModelDefault = {
+        runtimeKind,
+        providerId: "openai",
+        modelId: "model",
+      };
+      if (runtimeKind === "opencode") expected.profileId = "build";
+      expect(saved.workspaces["repo-a"]?.defaultModel).toEqual(expected);
+      expect(Object.values(saved.workspaces["repo-a"]?.agentDefaults ?? {})).toEqual([
+        expected,
+        expected,
+        expected,
+        expected,
+      ]);
+      expect(saved.workspaces["repo-b"]?.defaultModel).toBeUndefined();
+      expect(
+        Object.values(saved.workspaces["repo-b"]?.agentDefaults ?? {}).filter(Boolean),
+      ).toEqual([]);
+    },
+  );
 
   test("trims the abbreviation and drops a blank abbreviation and tile color", () => {
     const trimmed = prepareRepoConfigForSave(

@@ -87,7 +87,7 @@ describe("RepositoryAgentsSection", () => {
           isSaving: false,
         },
         runtimeDefinitionsError: null,
-        runtimeAvailabilityErrors: [],
+        modelWarnings: [],
         getCatalogForRuntime: () => codexCatalog,
         isCatalogLoadingForRuntime: () => false,
         onUpdateSelectedRepoConfig: () => {},
@@ -103,6 +103,7 @@ describe("RepositoryAgentsSection", () => {
       "Used for new chats and for workflow sessions that have no role default.",
     );
     expect(html).toContain("o3");
+    expect(html).not.toContain("Missing complete defaults");
   });
 
   test("resolves an exact cross-runtime model pair with compatible defaults", () => {
@@ -165,7 +166,7 @@ describe("RepositoryAgentsSection", () => {
           isSaving: false,
         },
         runtimeDefinitionsError: null,
-        runtimeAvailabilityErrors: ['Default Model runtime "Codex" is disabled.'],
+        modelWarnings: ['Default Model runtime "Codex" is disabled.'],
         getCatalogForRuntime: () => codexCatalog,
         isCatalogLoadingForRuntime: () => false,
         onUpdateSelectedRepoConfig: () => {},

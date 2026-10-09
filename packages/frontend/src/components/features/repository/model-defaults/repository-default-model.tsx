@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
@@ -12,6 +12,7 @@ import {
   resolveRuntimeKindSelection,
 } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { ensureDraftAgentDefault } from "./model-defaults-model";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
@@ -19,7 +20,7 @@ import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 type RepositoryDefaultModelBlockProps = {
   presentation?: "settings" | "creation";
-  selectedRepoConfig: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">;
+  selectedRepoConfig: WorkspaceModelDefaultsDraft;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
@@ -30,9 +31,7 @@ type RepositoryDefaultModelBlockProps = {
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (
-    updater: (
-      current: Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">,
-    ) => Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults">,
+    updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;
   onUpdateSelectedRepoDefaultModel: (
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",

@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { filterRuntimeDefinitionsForRole, findRuntimeDefinition } from "@/lib/agent-runtime";
 import { cn } from "@/lib/utils";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
 import { RepositoryDefaultModelBlock } from "./repository-default-model";
@@ -16,12 +17,11 @@ import {
   ensureDraftAgentDefault,
   ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
-  type ModelDefaultsValue,
 } from "./model-defaults-model";
 
 export type RepositoryModelDefaultsFieldsProps = {
   presentation?: "settings" | "creation";
-  selectedRepoConfig: ModelDefaultsValue;
+  selectedRepoConfig: WorkspaceModelDefaultsDraft;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
@@ -32,12 +32,11 @@ export type RepositoryModelDefaultsFieldsProps = {
     isSaving: boolean;
   };
   runtimeDefinitionsError: string | null;
-  runtimeAvailabilityErrors: string[];
-  roleNotice?: ReactNode;
+  modelWarnings: string[];
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (
-    updater: (current: ModelDefaultsValue) => ModelDefaultsValue,
+    updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;
   onUpdateSelectedRepoAgentDefault: (
     role: "spec" | "planner" | "build" | "qa",
@@ -52,47 +51,6 @@ export type RepositoryModelDefaultsFieldsProps = {
   onClearSelectedRepoDefaultModel: () => void;
 };
 
-type RepositoryAgentRoleViewModel = {
-  runtimeKind: RuntimeKind | null;
-  value: ReturnType<typeof ensureDraftAgentDefault>;
-  runtimeDescriptor: RuntimeDescriptor | null;
-  catalog: AgentModelCatalog | null;
-  isCatalogLoading: boolean;
-};
-
-const buildRepositoryAgentRoleViewModel = ({
-  selectedRepoConfig,
-  runtimeDefinitions,
-  role,
-  getCatalogForRuntime,
-  isCatalogLoadingForRuntime,
-}: {
-  selectedRepoConfig: ModelDefaultsValue;
-  runtimeDefinitions: RuntimeDescriptor[];
-  role: "spec" | "planner" | "build" | "qa";
-  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
-  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
-}): RepositoryAgentRoleViewModel => {
-  const value = ensureDraftAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
-  const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
-    selectedRepoConfig,
-    runtimeDefinitions,
-    role,
-  });
-  const runtimeDescriptor = runtimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
-    : null;
-  const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
-
-  return {
-    runtimeKind,
-    value,
-    runtimeDescriptor,
-    catalog,
-    isCatalogLoading: runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false,
-  };
-};
-
 export function RepositoryModelDefaultsFields({
   presentation = "settings",
   selectedRepoConfig,
@@ -101,8 +59,7 @@ export function RepositoryModelDefaultsFields({
   favoriteState,
   loadingState,
   runtimeDefinitionsError,
-  runtimeAvailabilityErrors,
-  roleNotice,
+  modelWarnings,
   getCatalogForRuntime,
   isCatalogLoadingForRuntime,
   onUpdateSelectedRepoConfig,
@@ -154,14 +111,13 @@ export function RepositoryModelDefaultsFields({
           Failed to load runtime definitions: {runtimeDefinitionsError}
         </p>
       ) : null}
-      {runtimeAvailabilityErrors.length > 0 ? (
+      {modelWarnings.length > 0 ? (
         <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-xs text-warning-surface-foreground">
-          {runtimeAvailabilityErrors.map((error) => (
-            <p key={error}>{error}</p>
+          {modelWarnings.map((warning) => (
+            <p key={warning}>{warning}</p>
           ))}
         </div>
       ) : null}
-      {roleNotice}
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
@@ -275,3 +231,44 @@ export function RepositoryModelDefaultsFields({
     </div>
   );
 }
+
+type RepositoryAgentRoleViewModel = {
+  runtimeKind: RuntimeKind | null;
+  value: ReturnType<typeof ensureDraftAgentDefault>;
+  runtimeDescriptor: RuntimeDescriptor | null;
+  catalog: AgentModelCatalog | null;
+  isCatalogLoading: boolean;
+};
+
+const buildRepositoryAgentRoleViewModel = ({
+  selectedRepoConfig,
+  runtimeDefinitions,
+  role,
+  getCatalogForRuntime,
+  isCatalogLoadingForRuntime,
+}: {
+  selectedRepoConfig: WorkspaceModelDefaultsDraft;
+  runtimeDefinitions: RuntimeDescriptor[];
+  role: "spec" | "planner" | "build" | "qa";
+  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
+  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
+}): RepositoryAgentRoleViewModel => {
+  const value = ensureDraftAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
+  const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+    selectedRepoConfig,
+    runtimeDefinitions,
+    role,
+  });
+  const runtimeDescriptor = runtimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
+    : null;
+  const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
+
+  return {
+    runtimeKind,
+    value,
+    runtimeDescriptor,
+    catalog,
+    isCatalogLoading: runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false,
+  };
+};
