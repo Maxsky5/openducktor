@@ -1,5 +1,6 @@
 import {
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteFailure,
   type WorkspaceTextFileWriteFailureCode,
   type WorkspaceTextFileWriteInput,
@@ -27,6 +28,19 @@ import {
 import { requireRelativePath, toWorkspaceRelativeCanonicalGitPath } from "./workspace-files-paths";
 
 export const MAX_WORKSPACE_TEXT_FILE_BYTES = 1024 * 1024;
+const MAX_IMAGE_PREVIEW_BYTES = 10 * 1024 * 1024;
+const IMAGE_MIME_BY_EXTENSION = new Map([
+  ["png", "image/png"],
+  ["jpg", "image/jpeg"],
+  ["jpeg", "image/jpeg"],
+  ["gif", "image/gif"],
+  ["webp", "image/webp"],
+  ["svg", "image/svg+xml"],
+  ["bmp", "image/bmp"],
+  ["ico", "image/x-icon"],
+]);
+const imageMime = (extension: string) =>
+  IMAGE_MIME_BY_EXTENSION.get(extension.slice(1).toLowerCase());
 const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const TEXT_ENCODER = new TextEncoder();
 
@@ -37,10 +51,9 @@ export class WorkspaceTextFileWriteError extends Data.TaggedError("WorkspaceText
 }> {}
 
 export type WorkspaceTextFileService = {
-  readTextFile(input: {
-    rootPath: string;
-    relativePath: string;
-  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
+  readTextFile(
+    input: WorkspaceTextFileReadInput,
+  ): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
     input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
@@ -172,8 +185,11 @@ const resolveAvailableWorkspaceFile = (
   gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
   canonicalRoot: string,
   relativePath: string,
+  access?: "local",
 ) =>
   Effect.gen(function* () {
+    if (access === "local")
+      return yield* canonicalizeContainedWorkspaceFile(filesystem, canonicalRoot, relativePath);
     const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, relativePath);
     if (!listedFilePaths.includes(relativePath)) {
       return yield* new WorkspaceFileAccessError({
@@ -231,22 +247,27 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
+        input.access,
       ).pipe(
         Effect.mapError((cause) =>
           cause._tag === "WorkspaceFileAccessError" ? mapReadAccessFailure(cause) : cause,
         ),
       );
-      const snapshot = yield* filesystem
-        .readFileSnapshot(canonicalPath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1)
-        .pipe(
-          Effect.mapError((cause) =>
-            workspaceFileValidationError(cause, `Unable to read file '${relativePath}'.`, {
+      const mime = imageMime(filesystem.extension(relativePath));
+      const maxBytes = mime ? MAX_IMAGE_PREVIEW_BYTES : MAX_WORKSPACE_TEXT_FILE_BYTES;
+      const snapshot = yield* filesystem.readFileSnapshot(canonicalPath, maxBytes + 1).pipe(
+        Effect.mapError((cause) =>
+          workspaceFileValidationError(
+            cause,
+            `Unable to read file '${relativePath}': ${cause.message}`,
+            {
               rootPath: canonicalRoot,
               relativePath,
-            }),
+            },
           ),
-        );
-      if (snapshot.bytes.byteLength > MAX_WORKSPACE_TEXT_FILE_BYTES) {
+        ),
+      );
+      if (snapshot.bytes.byteLength > maxBytes) {
         return workspaceTextFileReadResultSchema.parse({
           kind: "unsupported",
           rootPath: canonicalRoot,
@@ -257,6 +278,29 @@ export const createWorkspaceTextFileService = (
           mtimeMs: snapshot.mtimeMs,
         });
       }
+      if (!snapshot.isFile)
+        return yield* new HostValidationError({
+          field: "relativePath",
+          message: `Selected path is not a file: ${relativePath}`,
+          details: input,
+        });
+      if (mime && snapshot.bytes.byteLength === 0)
+        return yield* new HostValidationError({
+          field: "relativePath",
+          message: `Image '${relativePath}' is empty. Select an image file with content.`,
+          details: input,
+        });
+      if (mime)
+        return workspaceTextFileReadResultSchema.parse({
+          kind: "image",
+          rootPath: canonicalRoot,
+          relativePath,
+          mime,
+          base64: Buffer.from(snapshot.bytes).toString("base64"),
+          size: snapshot.size,
+          mtimeMs: snapshot.mtimeMs,
+          revision: snapshot.revision,
+        });
       if (isBinaryBytes(snapshot.bytes)) {
         return workspaceTextFileReadResultSchema.parse({
           kind: "unsupported",
@@ -290,6 +334,8 @@ export const createWorkspaceTextFileService = (
         return yield* Effect.fail(invalidWriteInput(rawInput, parsedInput.error));
       }
       const input = parsedInput.data;
+      if (imageMime(filesystem.extension(input.relativePath)))
+        return yield* unsupportedWrite("Images cannot be saved as text.", input);
       if (input.contents.length > MAX_WORKSPACE_TEXT_FILE_BYTES) {
         return yield* Effect.fail(
           unsupportedWrite(
@@ -330,6 +376,7 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
+        input.access,
       ).pipe(
         Effect.mapError((cause) =>
           cause._tag === "WorkspaceFileAccessError"

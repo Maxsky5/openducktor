@@ -7,6 +7,7 @@ import type {
   FilesystemListDirectoryInput,
   WorkspaceFileTree,
   WorkspaceTextFileReadResult,
+  WorkspaceTextFileReadInput,
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
@@ -33,6 +34,7 @@ const NO_TARGET_BRANCH_QUERY_KEY = "__no_target_branch__";
 
 export const filesystemQueryKeys = {
   all: ["filesystem"] as const,
+  resolvedPath: (path: string) => [...filesystemQueryKeys.all, "resolved-path", path] as const,
   directory: (path?: string, includeFiles = false) =>
     [
       ...filesystemQueryKeys.all,
@@ -48,9 +50,24 @@ export const filesystemQueryKeys = {
       ...(branchKey === undefined ? [] : [branchKey]),
     ] as const,
   textFileRoot: (rootPath: string) => [...filesystemQueryKeys.all, "text-file", rootPath] as const,
-  textFile: (rootPath: string, relativePath: string) =>
-    [...filesystemQueryKeys.textFileRoot(rootPath), relativePath] as const,
+  textFile: (rootPath: string, relativePath: string, access?: "local") =>
+    [
+      ...filesystemQueryKeys.textFileRoot(rootPath),
+      relativePath,
+      ...(access ? [access] : []),
+    ] as const,
 };
+
+export const resolvedPathQueryOptions = (
+  path: string,
+  hostClient: Pick<typeof host, "filesystemResolvePath"> = host,
+) =>
+  queryOptions({
+    queryKey: filesystemQueryKeys.resolvedPath(path),
+    queryFn: () => hostClient.filesystemResolvePath(path),
+    staleTime: 0,
+    retry: false,
+  });
 
 export const refreshWorkspaceFileQueries = (
   queryClient: QueryClient,
@@ -165,11 +182,14 @@ export const workspaceTextFileQueryOptions = (
   rootPath: string,
   relativePath: string,
   hostClient: FilesystemQueryHost = host,
+  access?: "local",
 ) =>
   queryOptions({
-    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath),
+    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
     queryFn: async ({ signal }): Promise<WorkspaceTextFileReadResult> => {
-      const result = await hostClient.filesystemReadTextFile({ rootPath, relativePath });
+      const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
+      if (access) input.access = access;
+      const result = await hostClient.filesystemReadTextFile(input);
       signal.throwIfAborted();
       return result;
     },
@@ -184,13 +204,13 @@ export const workspaceTextFileWriteMutationOptions = (
   mutationOptions({
     mutationFn: (input: WorkspaceTextFileWriteInput): Promise<WorkspaceTextFileWriteResult> =>
       hostClient.filesystemWriteTextFile(input),
-    onSuccess: async (result) => {
+    onSuccess: async (result, input) => {
       await queryClient.cancelQueries({
-        queryKey: filesystemQueryKeys.textFile(result.rootPath, result.relativePath),
+        queryKey: filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
         exact: true,
       });
       queryClient.setQueryData(
-        filesystemQueryKeys.textFile(result.rootPath, result.relativePath),
+        filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
         result,
       );
       // Keep tree read errors in the explorer so a completed write still counts as saved.

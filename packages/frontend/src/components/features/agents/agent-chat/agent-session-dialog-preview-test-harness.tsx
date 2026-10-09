@@ -85,6 +85,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     dialogTextFile(rootPath, contents),
   );
   const canonicalize = mock<HostClient["gitCanonicalizePath"]>(async (path) => path);
+  const resolvePath = mock<HostClient["filesystemResolvePath"]>(async (path) => path);
   const previousBridge = getShellBridge();
   configureShellBridge(
     createShellBridgeFixture({
@@ -92,6 +93,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
         filesystemReadTextFile: read,
         filesystemWriteTextFile: write,
         gitCanonicalizePath: canonicalize,
+        filesystemResolvePath: resolvePath,
       },
     }),
   );
@@ -224,6 +226,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     read,
     write,
     canonicalize,
+    resolvePath,
     frames,
     async open(target: AgentSessionTranscriptTarget = dialogTargets.main) {
       act(() =>

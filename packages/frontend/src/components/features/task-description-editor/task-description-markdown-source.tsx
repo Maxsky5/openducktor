@@ -11,10 +11,12 @@ export function TaskDescriptionMarkdownSource({
   onUpload,
   onEdit,
   uploads,
+  disabled = false,
 }: {
   markdown: string;
   onChange: (markdown: string) => void;
-  onUpload: (file: File) => Promise<TaskAssetStageResult>;
+  onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
+  disabled?: boolean;
   onEdit: () => void;
   uploads: TaskDescriptionAssetUpload[];
 }): ReactElement {
@@ -24,7 +26,7 @@ export function TaskDescriptionMarkdownSource({
   const uploading = uploads.some((upload) => upload.status === "uploading");
 
   const uploadFiles = (files: File[]): void => {
-    if (uploading || files.length === 0) return;
+    if (disabled || uploading || !onUpload || files.length === 0) return;
     const insertAt = insertionOffset.current;
     void Promise.allSettled(files.map(onUpload)).then((results) => {
       const images = results.flatMap((result, index) => {
@@ -47,36 +49,40 @@ export function TaskDescriptionMarkdownSource({
 
   return (
     <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
-      <div className="flex items-center border-b border-border bg-muted/30 p-1.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1.5"
-          disabled={uploading}
-          onClick={() => {
-            insertionOffset.current = textareaRef.current?.selectionStart ?? markdown.length;
-            fileInputRef.current?.click();
-          }}
-        >
-          <ImagePlus className="size-4" /> {uploading ? "Uploading image" : "Insert image"}
-        </Button>
-        <input
-          ref={fileInputRef}
-          aria-label="Task description images"
-          type="file"
-          className="sr-only"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          multiple
-          onChange={(event) => {
-            uploadFiles(Array.from(event.currentTarget.files ?? []));
-            event.currentTarget.value = "";
-          }}
-        />
-      </div>
+      {onUpload ? (
+        <div className="flex items-center border-b border-border bg-muted/30 p-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5"
+            disabled={disabled || uploading}
+            onClick={() => {
+              insertionOffset.current = textareaRef.current?.selectionStart ?? markdown.length;
+              fileInputRef.current?.click();
+            }}
+          >
+            <ImagePlus className="size-4" /> {uploading ? "Uploading image" : "Insert image"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            aria-label="Task description images"
+            type="file"
+            className="sr-only"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(event) => {
+              uploadFiles(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+      ) : null}
       <Textarea
+        disabled={disabled}
         ref={textareaRef}
         id="task-description"
+        aria-label="Markdown source"
         rows={12}
         value={markdown}
         placeholder="Problem context, scope, and expected output."

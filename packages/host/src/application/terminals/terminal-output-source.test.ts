@@ -45,6 +45,7 @@ const filesystem: FilesystemPort = {
   exists: unused,
   join: posix.join,
   relative: posix.relative,
+  extension: posix.extname,
   parent: posix.dirname,
 };
 const context = { repoPath: "/repo", taskId: "task" };

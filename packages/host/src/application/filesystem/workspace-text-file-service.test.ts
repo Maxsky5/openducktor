@@ -65,6 +65,113 @@ afterEach(async () => {
 });
 
 describe("createWorkspaceTextFileService", () => {
+  test("reports why a selected local path cannot be read as a regular file", async () => {
+    const rootPath = await createRoot();
+    await mkdir(path.join(rootPath, "directory"));
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
+    const exit = await Effect.runPromiseExit(
+      service.readTextFile({ rootPath, relativePath: "directory", access: "local" }),
+    );
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrNull(Cause.findErrorOption(exit.cause));
+      expect(failure?.message).toContain("not a regular file");
+      expect(failure?.message).toContain("Select a regular file");
+    }
+  });
+
+  for (const relativePath of ["png", ".png", "nested.png/jpg"]) {
+    test(`reads and saves text without an image extension: ${relativePath}`, async () => {
+      const rootPath = await createRoot();
+      const filePath = path.join(rootPath, relativePath);
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, "plain text");
+      const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
+      const input = { rootPath, relativePath, access: "local" as const };
+      const loaded = await Effect.runPromise(service.readTextFile(input));
+      expect(loaded.kind).toBe("text");
+      if (loaded.kind !== "text") throw new Error("Expected text.");
+      await Effect.runPromise(
+        service.writeTextFile({ ...input, contents: "changed text", revision: loaded.revision }),
+      );
+      expect(await readFile(filePath, "utf8")).toBe("changed text");
+    });
+  }
+
+  test("reads and saves a selected local file without Git and guards stale writes", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "report.md");
+    await writeFile(filePath, "# Before\n");
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), {
+      isGitRepository: () => Effect.die("Local access must not read Git"),
+      listFiles: () => Effect.die("Local access must not list Git files"),
+      getCurrentBranch: () => Effect.die("Local access must not check a branch"),
+    });
+    const input = { rootPath, relativePath: "report.md", access: "local" as const };
+    const loaded = await Effect.runPromise(service.readTextFile(input));
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+    const saved = await Effect.runPromise(
+      service.writeTextFile({ ...input, contents: "# After\n", revision: loaded.revision }),
+    );
+    expect(await readFile(filePath, "utf8")).toBe("# After\n");
+    expect(saved.revision).not.toBe(loaded.revision);
+    expect(
+      (
+        await writeFailure(
+          service.writeTextFile({ ...input, contents: "stale", revision: loaded.revision }),
+        )
+      ).code,
+    ).toBe("stale_revision");
+    expect(await readFile(filePath, "utf8")).toBe("# After\n");
+  });
+
+  test("local access still rejects traversal and symlink changes outside the selected root", async () => {
+    const rootPath = await createRoot();
+    const outsideRoot = await createRoot();
+    await writeFile(path.join(outsideRoot, "outside.txt"), "private");
+    await symlink(path.join(outsideRoot, "outside.txt"), path.join(rootPath, "link.txt"));
+    const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
+    for (const relativePath of [`../${path.basename(outsideRoot)}/outside.txt`, "link.txt"]) {
+      const input = { rootPath, relativePath, access: "local" as const };
+      const result = await Effect.runPromiseExit(service.readTextFile(input));
+      expect(result._tag).toBe("Failure");
+      const failure = await writeFailure(
+        service.writeTextFile({ ...input, contents: "replace", revision: "unknown" }),
+      );
+      expect(["invalid_input", "path_escape"]).toContain(failure.code);
+    }
+    expect(await readFile(path.join(outsideRoot, "outside.txt"), "utf8")).toBe("private");
+  });
+
+  test("previews images above the text limit and rejects image text writes and oversized images", async () => {
+    const rootPath = await createRoot();
+    const bytes = Buffer.alloc(MAX_WORKSPACE_TEXT_FILE_BYTES + 1);
+    const relativePath = "screenshot.PNG";
+    await writeFile(path.join(rootPath, relativePath), bytes);
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort([relativePath]),
+    );
+    const input = { rootPath, relativePath };
+    const result = await Effect.runPromise(service.readTextFile(input));
+    expect(result.kind).toBe("image");
+    if (result.kind !== "image") throw new Error("Expected image.");
+    expect(result.mime).toBe("image/png");
+    expect(Buffer.from(result.base64, "base64")).toEqual(bytes);
+    expect(
+      (
+        await writeFailure(
+          service.writeTextFile({ ...input, contents: "text", revision: result.revision }),
+        )
+      ).code,
+    ).toBe("unsupported_file");
+    await writeFile(path.join(rootPath, relativePath), Buffer.alloc(10 * 1024 * 1024 + 1));
+    expect(await Effect.runPromise(service.readTextFile(input))).toMatchObject({
+      kind: "unsupported",
+      reason: "too_large",
+    });
+  });
+
   test("reads a revision and returns a new authoritative revision after an exact save", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");

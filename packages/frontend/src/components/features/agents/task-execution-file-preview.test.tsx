@@ -20,7 +20,11 @@ import {
   useState,
 } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  getShellBridge,
+} from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
@@ -239,6 +243,7 @@ beforeEach(async () => {
   configureShellBridge(
     createShellBridgeFixture({
       client: {
+        filesystemResolvePath: async (path) => path,
         gitCanonicalizePath: async (path) => path,
         filesystemReadTextFile: readTextFileMock,
         filesystemWriteTextFile: writeTextFileMock,
@@ -321,6 +326,84 @@ function ChatPreviewHarness(): ReactElement {
 }
 
 describe("TaskExecutionSelectedFilePreview", () => {
+  test("shows a local image without mounting the code editor and reports decode failure", async () => {
+    const selectedFile: TaskExecutionSelectedFile = {
+      rootPath: "/tmp",
+      relativePath: "screen.png",
+      access: "local",
+    };
+    readTextFileMock.mockResolvedValue({
+      kind: "image",
+      rootPath: "/tmp",
+      relativePath: "screen.png",
+      mime: "image/png",
+      base64: "aW1hZ2U=",
+      size: 5,
+      mtimeMs: 1,
+      revision: "image-1",
+    });
+    const view = render(renderPreview({ selectedFile, onClose: () => {} }));
+    const image = await screen.findByRole("img", { name: "screen.png" });
+    expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
+    expect(screen.queryByLabelText("Code editor")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
+    expect(readTextFileMock).toHaveBeenCalledWith(selectedFile);
+    fireEvent.error(image);
+    expect(screen.getByText(/The image could not be displayed/)).toBeTruthy();
+    view.unmount();
+  });
+
+  // The real rich editor loads Tiptap and its Markdown extensions on first use.
+  test("opens Markdown in the rich editor and saves local drafts without a workspace branch", async () => {
+    const selectedFile: TaskExecutionSelectedFile = {
+      rootPath: "/tmp",
+      relativePath: "report.md",
+      access: "local",
+    };
+    const onLeavePolicyChange = mock(() => {});
+    readTextFileMock.mockResolvedValue(textFileResult(selectedFile, "# Report\n"));
+    const view = render(
+      renderPreview(
+        { selectedFile, onClose: () => {}, onLeavePolicyChange },
+        "light",
+        () => {},
+        null,
+        true,
+      ),
+    );
+    await screen.findByRole("heading", { name: "Report" });
+    expect(screen.queryByLabelText("Code editor")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Insert image" })).toBeNull();
+    expect(screen.queryByRole("status", { name: "Unsaved changes" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Paragraph" }));
+    await waitForDirtyFile();
+    await dispatchPreviewSaveShortcut();
+    await waitForCleanFile();
+    expect(writeTextFileMock).toHaveBeenCalledWith({
+      ...selectedFile,
+      contents: "Report",
+      revision: "revision:# Report\n",
+    });
+    writeTextFileMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^Markdown$/ }));
+    const source = await screen.findByRole("textbox", { name: "Markdown source" });
+    expect(source).toHaveProperty("value", "Report");
+    fireEvent.change(source, { target: { value: "# Changed\n" } });
+    await waitForDirtyFile();
+    expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
+    await dispatchPreviewSaveShortcut();
+    await waitForCleanFile();
+    expect(writeTextFileMock).toHaveBeenCalledWith({
+      ...selectedFile,
+      contents: "# Changed\n",
+      revision: "revision:# Report\n:saved",
+    });
+    expect(source.isConnected).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Markdown source" })).toBe(source);
+    expect(source).toHaveProperty("value", "# Changed\n");
+    view.unmount();
+  }, 5000);
+
   test("keeps the previous highlighted file visible while the next file prepares", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
@@ -973,10 +1056,42 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({ contents: "draft" });
   });
 
-  test("keeps a draft but blocks saving it on another branch with the same file revision", async () => {
-    const onClose = mock(() => {});
-    const model = { selectedFile: firstFile, onClose };
-    const view = render(renderPreview(model, "light", undefined, "branch:main"));
+  test("absolute workspace links keep drafts and block saves after a branch change with the same revision", async () => {
+    moduleSpies.push(
+      spyOn(getShellBridge().client, "filesystemResolvePath").mockResolvedValue("/repo"),
+    );
+    readTextFileMock.mockImplementation(async (file: TaskExecutionSelectedFile) =>
+      textFileResult(file, "const first = true;"),
+    );
+    function Preview({ branch }: { branch: string }): ReactElement {
+      const preview = useTaskExecutionFilePreviewController();
+      return (
+        <ChatFileLinkProvider
+          owner={{
+            kind: "workspace",
+            repoPath: "/repo",
+            workingDirectory: "/repo-alias",
+            ownerKey: "session",
+            onSelectFile: preview.onSelectFile,
+          }}
+        >
+          <AgentChatMarkdownRenderer markdown="[first file](/repo/src/first.ts)" />
+          <TaskExecutionSelectedFilePreview
+            model={preview.model}
+            onFileSaved={() => {}}
+            branch={branch}
+            requireBranch
+          />
+        </ChatFileLinkProvider>
+      );
+    }
+    const content = (branch: string) => (
+      <PreviewTestProviders>
+        <Preview branch={branch} />
+      </PreviewTestProviders>
+    );
+    const view = render(content("branch:main"));
+    fireEvent.click(view.getByRole("link", { name: "first file" }));
     await screen.findByText("const first = true;");
     const item = firstCodeViewItem();
     act(() => {
@@ -984,7 +1099,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     await waitForDirtyFile();
 
-    view.rerender(renderPreview(model, "light", undefined, "branch:feature"));
+    view.rerender(content("branch:feature"));
 
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
@@ -1013,6 +1128,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(writeTextFileMock.mock.calls[0]?.[0]).toMatchObject({
+      rootPath: "/repo",
+      relativePath: "src/first.ts",
       contents: "draft",
       revision: "revision:const first = true;",
       expectedBranch: "branch:feature",

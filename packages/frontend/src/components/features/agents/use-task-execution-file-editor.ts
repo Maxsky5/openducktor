@@ -36,6 +36,7 @@ type SaveFailure = {
 
 type EditorState = {
   session: EditorSession | null;
+  draftContents: string;
   isDirty: boolean;
   isSaving: boolean;
   saveFailure: SaveFailure | null;
@@ -47,7 +48,7 @@ type EditorAction =
   | { type: "reset" }
   | { type: "seed"; id: string; branch: string | null; result: TextFileResult }
   | { type: "adopt_clean_result"; branch: string | null; result: TextFileResult }
-  | { type: "edit"; isDirty: boolean }
+  | { type: "edit"; isDirty: boolean; contents: string }
   | { type: "save_started" }
   | {
       type: "save_succeeded";
@@ -86,6 +87,7 @@ type EditorAction =
 
 const INITIAL_EDITOR_STATE: EditorState = {
   session: null,
+  draftContents: "",
   isDirty: false,
   isSaving: false,
   saveFailure: null,
@@ -100,6 +102,7 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
     case "seed":
       return {
         ...INITIAL_EDITOR_STATE,
+        draftContents: action.result.contents,
         session: {
           id: action.id,
           branch: action.branch,
@@ -112,6 +115,7 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
       if (!state.session) return state;
       return {
         ...state,
+        draftContents: action.result.contents,
         session: {
           ...state.session,
           branch: action.branch,
@@ -125,6 +129,7 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
     case "edit":
       return {
         ...state,
+        draftContents: action.contents,
         isDirty: action.isDirty,
         saveFailure: state.saveFailure?.code === "stale_revision" ? state.saveFailure : null,
       };
@@ -294,17 +299,23 @@ export const useTaskExecutionFileEditor = ({
     }
   }, [branch, state.conflictReview]);
 
-  const onItemEditChange = useCallback(
-    (item: CodeViewItem<undefined>, file: FileContents) => {
-      if (!state.session || item.id !== state.session.id) return;
-      draftRef.current = file.contents;
-      const isDirty = file.contents !== state.session.baseline.contents;
-      dispatch({ type: "edit", isDirty });
+  const onContentsChange = useCallback(
+    (contents: string) => {
+      if (!state.session || state.session.id !== selectedFileId) return;
+      draftRef.current = contents;
+      const isDirty = contents !== state.session.baseline.contents;
+      dispatch({ type: "edit", isDirty, contents });
       if (!saveInFlightRef.current) {
         onLeavePolicyChange(isDirty ? "confirm" : "allow");
       }
     },
-    [onLeavePolicyChange, state.session],
+    [onLeavePolicyChange, selectedFileId, state.session],
+  );
+  const onItemEditChange = useCallback(
+    (item: CodeViewItem<undefined>, file: FileContents) => {
+      if (item.id === state.session?.id) onContentsChange(file.contents);
+    },
+    [onContentsChange, state.session],
   );
 
   const branchUnavailable = requireBranch && branch === null;
@@ -346,6 +357,7 @@ export const useTaskExecutionFileEditor = ({
         contents: contentsToSave,
         revision: baselineRevision,
       };
+      if (selectedFile?.access) input.access = selectedFile.access;
       if (session.branch) input.expectedBranch = session.branch;
       const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync(input);
       const activeSession = stateRef.current.session;
@@ -409,6 +421,7 @@ export const useTaskExecutionFileEditor = ({
     onFileSaved,
     onLeavePolicyChange,
     selectedFileId,
+    selectedFile?.access,
     state.isDirty,
     state.session,
   ]);
@@ -428,11 +441,20 @@ export const useTaskExecutionFileEditor = ({
     dispatch({ type: "conflict_review_started" });
     try {
       const result = await queryClient.fetchQuery({
-        ...workspaceTextFileQueryOptions(session.baseline.rootPath, session.baseline.relativePath),
+        ...workspaceTextFileQueryOptions(
+          session.baseline.rootPath,
+          session.baseline.relativePath,
+          undefined,
+          selectedFile?.access,
+        ),
         staleTime: 0,
       });
       if (result.kind !== "text") {
-        throw new Error(result.message);
+        throw new Error(
+          result.kind === "unsupported"
+            ? result.message
+            : "The file is now an image and cannot be edited as text.",
+        );
       }
       if (branchRef.current !== reviewBranch) {
         throw new Error("The branch changed during review. Review the file again.");
@@ -452,7 +474,14 @@ export const useTaskExecutionFileEditor = ({
         message: errorMessage(cause),
       });
     }
-  }, [hasStaleConflict, queryClient, requireBranch, state.isReviewingConflict, state.session]);
+  }, [
+    hasStaleConflict,
+    queryClient,
+    requireBranch,
+    selectedFile?.access,
+    state.isReviewingConflict,
+    state.session,
+  ]);
 
   const closeConflictReview = useCallback(() => {
     dispatch({ type: "conflict_review_closed" });
@@ -474,6 +503,7 @@ export const useTaskExecutionFileEditor = ({
   return useMemo(
     () => ({
       session: state.session,
+      draftContents: state.draftContents,
       isDirty: state.isDirty,
       isSaving: state.isSaving,
       saveError,
@@ -481,6 +511,7 @@ export const useTaskExecutionFileEditor = ({
       canReviewConflict,
       isReviewingConflict: state.isReviewingConflict,
       conflictReview: state.conflictReview?.result ?? null,
+      onContentsChange,
       onItemEditChange,
       save,
       reviewLatestVersion,
@@ -492,6 +523,7 @@ export const useTaskExecutionFileEditor = ({
       canReviewConflict,
       closeConflictReview,
       hasStaleConflict,
+      onContentsChange,
       onItemEditChange,
       reviewLatestVersion,
       save,

@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { FileDiff } from "@openducktor/contracts";
@@ -30,6 +31,7 @@ const createFakeFilesystem = ({
   stats = {},
   files = {},
 }: FakeFilesystemInput = {}): FilesystemPort => ({
+  extension: posix.extname,
   homeDirectory: () => "/home/dev",
   canonicalize: (path) => Effect.succeed(canonical[path] ?? path),
   readDirectory: () => Effect.succeed([]),

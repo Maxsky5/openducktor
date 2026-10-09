@@ -662,6 +662,7 @@ describe("terminalWebSocketHandler", () => {
       join: () => unusedSyncDependency("join"),
       relative: () => unusedSyncDependency("relative"),
       parent: () => unusedSyncDependency("parent"),
+      extension: () => unusedSyncDependency("extension"),
     } satisfies FilesystemPort;
     const unusedPtyPort = {
       start: () => unusedDependency("start"),

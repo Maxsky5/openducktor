@@ -6,7 +6,7 @@ export type ChatFileLinkOwner = {
   ownerKey: string;
   onSelectFile(file: TaskExecutionSelectedFile, trigger: HTMLAnchorElement): void;
 } & (
-  | { taskId: string | null; kind?: never; workingDirectory?: never }
+  | { taskId: string | null; kind?: never; workingDirectory?: string | null }
   | { kind: "workspace"; workingDirectory: string | null; taskId?: never }
 );
 

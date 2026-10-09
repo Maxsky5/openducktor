@@ -45,7 +45,7 @@ type TaskDescriptionVisualEditorProps = {
   disabled: boolean;
   frontMatter: string;
   onChange(markdown: string): void;
-  onUpload(file: File): Promise<TaskAssetStageResult>;
+  onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
   issueImageContext?: IssueImageContext | undefined;
   uploads: TaskDescriptionAssetUpload[];
@@ -144,7 +144,7 @@ export default function TaskDescriptionVisualEditor({
 
   const uploadFiles = useCallback(
     (files: File[]): void => {
-      if (!editor || !canEdit || files.length === 0) return;
+      if (!editor || !canEdit || !onUpload || files.length === 0) return;
       const insertAt = editor.state.selection.from;
       void Promise.allSettled(files.map((file) => onUpload(file))).then((results) => {
         if (editor.isDestroyed || disabledRef.current) return;
@@ -240,29 +240,33 @@ export default function TaskDescriptionVisualEditor({
             }}
             onEditMath={(kind) => openMathEditor({ kind, latex: "" })}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            aria-label={uploading ? "Uploading image" : "Insert image"}
-            title={uploading ? "Uploading image" : "Insert image"}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
-          </Button>
-          <input
-            ref={fileInputRef}
-            aria-label="Task description images"
-            type="file"
-            className="sr-only"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            onChange={(event) => {
-              uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
-              event.currentTarget.value = "";
-            }}
-          />
+          {onUpload ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label={uploading ? "Uploading image" : "Insert image"}
+                title={uploading ? "Uploading image" : "Insert image"}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className={cn("size-4", uploading && "animate-pulse")} />
+              </Button>
+              <input
+                ref={fileInputRef}
+                aria-label="Task description images"
+                type="file"
+                className="sr-only"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                onChange={(event) => {
+                  uploadFilesRef.current(Array.from(event.currentTarget.files ?? []));
+                  event.currentTarget.value = "";
+                }}
+              />
+            </>
+          ) : null}
         </div>
       </fieldset>
       <TaskDescriptionImageContext.Provider value={imageContext}>

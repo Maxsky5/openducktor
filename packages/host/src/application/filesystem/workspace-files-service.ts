@@ -3,6 +3,7 @@ import {
   type WorkspaceFileTreeRefreshInput,
   type WorkspaceFileTreeRefreshResult,
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteInput,
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
@@ -32,10 +33,9 @@ export type WorkspaceFilesService = {
     rootPath: string;
     targetBranch?: string;
   }): Effect.Effect<WorkspaceFileTree, HostValidationErrorAggregate>;
-  readTextFile(input: {
-    rootPath: string;
-    relativePath: string;
-  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
+  readTextFile(
+    input: WorkspaceTextFileReadInput,
+  ): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
     input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;

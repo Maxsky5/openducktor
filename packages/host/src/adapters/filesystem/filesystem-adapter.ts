@@ -255,4 +255,7 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
     const parentPath = path.dirname(inputPath);
     return parentPath === inputPath ? null : parentPath;
   },
+  extension(inputPath) {
+    return path.extname(inputPath);
+  },
 });

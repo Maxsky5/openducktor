@@ -21,7 +21,7 @@ type TaskDescriptionEditorProps = {
   taskId: string | null;
   issueImageContext?: IssueImageContext | undefined;
   onChange(markdown: string): void;
-  onUpload(file: File): Promise<TaskAssetStageResult>;
+  onUpload?: ((file: File) => Promise<TaskAssetStageResult>) | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
 };
@@ -132,12 +132,14 @@ function TaskDescriptionEditorSession({
     }
   };
 
-  const stageImage = async (file: File): Promise<TaskAssetStageResult> => {
-    if (!workspaceId) {
-      throw new Error("Select a workspace before adding task images.");
-    }
-    return onUpload(file);
-  };
+  const stageImage = onUpload
+    ? async (file: File): Promise<TaskAssetStageResult> => {
+        if (!workspaceId) {
+          throw new Error("Select a workspace before adding task images.");
+        }
+        return onUpload(file);
+      }
+    : undefined;
 
   const hasPreservedFrontMatter = frontMatter.kind === "valid";
   const visualBody = frontMatter.kind === "valid" ? frontMatter.body : markdown;
@@ -171,6 +173,7 @@ function TaskDescriptionEditorSession({
         markdown={markdown}
         onChange={onChange}
         onUpload={stageImage}
+        disabled={disabled}
         onEdit={() => setMode("markdown")}
         uploads={uploads}
       />

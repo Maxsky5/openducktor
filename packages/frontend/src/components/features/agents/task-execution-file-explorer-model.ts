@@ -4,6 +4,7 @@ import type { GitStatusEntry } from "@pierre/trees";
 export type TaskExecutionSelectedFile = {
   rootPath: string;
   relativePath: string;
+  access?: "local";
 };
 
 // biome-ignore lint/suspicious/noConfusingVoidType: Event handlers may omit a result; false reports a rejected selection.
@@ -11,7 +12,11 @@ export type TaskExecutionSelectedFile = {
 export type TaskExecutionFileSelectionResult = false | void;
 
 export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): string =>
-  JSON.stringify([file.rootPath, file.relativePath]);
+  JSON.stringify([file.rootPath, file.relativePath, ...(file.access ? [file.access] : [])]);
+
+export function isMarkdownFile(path: string): boolean {
+  return /\.(md|markdown|mdown|mkd)$/i.test(path);
+}
 
 export type TaskExecutionFileExplorerPanelModel = {
   rootPath: string | null;

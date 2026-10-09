@@ -576,11 +576,16 @@ function mockFilePreview(
 }
 
 test.each([
-  { name: "repository", sessionRecord: record, rootPath: "/repo" },
-  { name: "worktree", sessionRecord: worktreeRecord, rootPath: "/repo/worktree" },
+  { name: "repository", sessionRecord: record, rootPath: "/repo", outsideRoot: "/" },
+  {
+    name: "worktree",
+    sessionRecord: worktreeRecord,
+    rootPath: "/repo/worktree",
+    outsideRoot: "/repo",
+  },
 ])(
-  "$name chat links open repo files and name the workspace in path errors",
-  async ({ sessionRecord, rootPath }) => {
+  "$name chat links open repo files and outside files",
+  async ({ sessionRecord, rootPath, outsideRoot }) => {
     const previousBridge = getShellBridge();
     configureShellBridge(
       createShellBridgeFixture({
@@ -594,7 +599,11 @@ test.each([
       <AgentChatMarkdownRenderer markdown="[outside](../secret.md) [README](./README.md)" />
     ));
     const error = spyOn(toast, "error").mockReturnValue("error");
-    const preview = mockFilePreview(() => <div>File preview</div>);
+    const preview = mockFilePreview(({ model }) => (
+      <div>
+        File preview<button onClick={model.onClose}>Close preview</button>
+      </div>
+    ));
     const queryClient = newQueryClient();
     queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
       name: "main",
@@ -603,7 +612,14 @@ test.each([
     const view = renderClosedSession(queryClient, "main", undefined, sessionRecord, null);
     try {
       fireEvent.click(screen.getByRole("link", { name: "outside" }));
-      await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(preview.mock.calls.at(-1)?.[0].model.selectedFile).toEqual({
+          rootPath: outsideRoot,
+          relativePath: "secret.md",
+          access: "local",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
       fireEvent.click(screen.getByRole("link", { name: "README" }));
       await waitFor(() =>
         expect(screen.getByTestId("workspace-session-file-preview")).toBeTruthy(),
@@ -615,10 +631,7 @@ test.each([
         rootPath,
         relativePath: "README.md",
       });
-      expect(error).toHaveBeenCalledTimes(1);
-      expect(error.mock.calls[0]?.[1]?.description).toBe(
-        "The file path leaves the workspace directory.",
-      );
+      expect(error).not.toHaveBeenCalled();
     } finally {
       view.unmount();
       queryClient.clear();

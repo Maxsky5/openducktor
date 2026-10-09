@@ -14,6 +14,9 @@ export const filesystemListDirectoryInputSchema = z.object({
 });
 export type FilesystemListDirectoryInput = z.infer<typeof filesystemListDirectoryInputSchema>;
 
+export const filesystemResolvePathInputSchema = z.object({ path: z.string().min(1) }).strict();
+export const filesystemResolvedPathSchema = z.string().min(1).nullable();
+
 export const directoryListingSchema = z.object({
   currentPath: z.string().min(1),
   currentPathIsGitRepo: z.boolean(),
@@ -48,6 +51,16 @@ export const workspaceFileTreeSchema = z.object({
 });
 export type WorkspaceFileTree = z.infer<typeof workspaceFileTreeSchema>;
 
+/** Local access opens an explicitly selected file without requiring Git membership. */
+export const workspaceTextFileReadInputSchema = z
+  .object({
+    rootPath: z.string().min(1),
+    relativePath: z.string().min(1),
+    access: z.literal("local").optional(),
+  })
+  .strict();
+export type WorkspaceTextFileReadInput = z.infer<typeof workspaceTextFileReadInputSchema>;
+
 const workspaceTextFileTextResultSchema = z.object({
   kind: z.literal("text"),
   rootPath: z.string().min(1),
@@ -60,6 +73,24 @@ const workspaceTextFileTextResultSchema = z.object({
 
 export const workspaceTextFileReadResultSchema = z.discriminatedUnion("kind", [
   workspaceTextFileTextResultSchema,
+  z.object({
+    kind: z.literal("image"),
+    rootPath: z.string().min(1),
+    relativePath: z.string().min(1),
+    mime: z.enum([
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/svg+xml",
+      "image/bmp",
+      "image/x-icon",
+    ]),
+    base64: z.string().min(1),
+    revision: z.string().min(1),
+    size: z.number().nonnegative(),
+    mtimeMs: z.number().nonnegative().nullable(),
+  }),
   z.object({
     kind: z.literal("unsupported"),
     rootPath: z.string().min(1),
@@ -79,6 +110,7 @@ export const workspaceTextFileWriteInputSchema = z
     contents: z.string(),
     revision: z.string().min(1),
     expectedBranch: z.string().min(1).optional(),
+    access: z.literal("local").optional(),
   })
   .strict();
 export type WorkspaceTextFileWriteInput = z.infer<typeof workspaceTextFileWriteInputSchema>;
