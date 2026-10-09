@@ -112,8 +112,10 @@ const migrateWorkspaces = (
 
 const WORKTREE_SETUP_ACTION_ID = "worktree-setup";
 const legacyPreStartSchema = z.array(z.string());
+// The dev server schema trimmed each id, so a hand-edited id can have outer spaces.
+const legacyDevServersSchema = z.array(z.looseObject({ id: z.string().trim() }));
 
-const uniqueActionId = (baseId: string, takenIds: ReadonlySet<JSONType>): string => {
+const uniqueActionId = (baseId: string, takenIds: ReadonlySet<string>): string => {
   let id = baseId;
   for (let suffix = 1; takenIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
   return id;
@@ -132,24 +134,27 @@ const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSO
     });
   }
   const { devServers = [], ...migrated } = workspace;
+  const legacyDevServers = legacyDevServersSchema.safeParse(devServers);
   const preStart = legacyPreStartSchema.safeParse(hasPreStart ? hooks.preStart : []);
-  if (!Array.isArray(devServers) || !preStart.success) {
+  if (!legacyDevServers.success || !preStart.success) {
     throw new HostValidationError({
       message: `Repository "${workspaceId}" has invalid legacy dev server or worktree setup settings.`,
     });
   }
-  const items: JSONType[] = devServers.map((devServer) =>
-    isPersistedConfigObject(devServer)
-      ? { ...devServer, icon: "play", runOnWorktreeCreate: false, waitBeforeAgentStart: false }
-      : devServer,
-  );
+  const devServerItems = legacyDevServers.data.map((devServer) => ({
+    ...devServer,
+    icon: "play",
+    runOnWorktreeCreate: false,
+    waitBeforeAgentStart: false,
+  }));
+  const items: JSONType[] = [...devServerItems];
   const setupLines = preStart.data.map((line) => line.trim()).filter(Boolean);
   let setupActionId: string | null = null;
   // A setup script with only comment lines ran nothing, so it becomes no action.
   if (repoActionCommandLines(setupLines.join("\n")).length > 0) {
     setupActionId = uniqueActionId(
       WORKTREE_SETUP_ACTION_ID,
-      new Set(items.map((item) => (isPersistedConfigObject(item) ? (item.id ?? null) : null))),
+      new Set(devServerItems.map((devServer) => devServer.id)),
     );
     items.unshift({
       id: setupActionId,
@@ -160,10 +165,7 @@ const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSO
       waitBeforeAgentStart: true,
     });
   }
-  const firstDevServer = devServers[0];
-  const defaultActionId = isPersistedConfigObject(firstDevServer)
-    ? (firstDevServer.id ?? null)
-    : setupActionId;
+  const defaultActionId = devServerItems[0]?.id ?? setupActionId;
   if (hasPreStart) {
     const { preStart: _preStart, ...currentHooks } = hooks;
     migrated.hooks = currentHooks;

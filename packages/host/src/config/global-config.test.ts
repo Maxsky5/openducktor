@@ -386,6 +386,31 @@ describe("global config", () => {
     expect(config.workspaces.repo?.actions.defaultActionId).toBe("worktree-setup");
   });
 
+  test("trims hand-edited dev server ids before it selects the default action", () => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          hooks: { preStart: ["bun install"] },
+          devServers: [
+            { id: " worktree-setup ", name: "Setup server", command: "bun run setup" },
+            { id: " web ", name: "Web", command: "bun run dev" },
+          ],
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.actions.items.map((action) => action.id)).toEqual([
+      "worktree-setup-1",
+      "worktree-setup",
+      "web",
+    ]);
+    expect(config.workspaces.repo?.actions.defaultActionId).toBe("worktree-setup");
+  });
+
   test("rejects actions together with legacy dev server or setup settings", () => {
     expect(() =>
       parsePersistedGlobalConfig({
