@@ -205,8 +205,6 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-target-status-row")).toBe(0);
     const targetAheadCount = findByTestId(root, "agent-studio-git-target-ahead-count");
     expect(targetAheadCount.children.join("")).toBe("2");
-    expect(targetAheadCount.props.className).toContain("text-emerald-600");
-    expect(targetAheadCount.props.className).toContain("dark:text-emerald-400");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
     expect(
@@ -319,37 +317,15 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    let root = getRoot(renderer);
-    expect(
-      findByTestId(root, "agent-studio-git-current-branch-display-row").props.className,
-    ).toContain("h-7");
-    expect(
-      findByTestId(root, "agent-studio-git-target-branch-display-row").props.className,
-    ).toContain("h-7");
     await act(async () => {
-      findByTestId(root, "agent-studio-git-target-branch-edit").props.onClick();
+      fireEvent.click(screen.getByTestId("mock-branch-selector"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("mock-branch-selector"));
       await flush();
     });
-
-    root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(1);
-    expect(countByTestId(root, "agent-studio-git-target-branch-save")).toBe(0);
-    expect(countByTestId(root, "agent-studio-git-target-branch-cancel")).toBe(1);
-    expect(findByTestId(root, "agent-studio-git-target-branch-editor").props.className).toContain(
-      "h-7",
-    );
-    expect(
-      findByTestId(root, "mock-branch-selector").element.getAttribute("data-popover-class"),
-    ).toBe("w-[min(28rem,calc(100vw-2rem))] p-0");
-
-    await act(async () => {
-      findByTestId(root, "mock-branch-selector").props.onClick();
-      await flush();
-    });
-
     expect(updateTargetBranch).toHaveBeenCalledWith("refs/remotes/origin/beta");
-    root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(0);
+    expect(screen.queryByTestId("agent-studio-git-target-branch-editor")).toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -477,7 +453,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("renders repository mode without target branch or rebase action", async () => {
+  test("shows the repository comparison without a target edit or rebase action", async () => {
     const refresh = mock(async () => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     const commitAll = mock(async (_message: string) => true);
@@ -504,9 +480,10 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(hasVisibleText(root, "Repository context")).toBe(false);
-    expect(hasVisibleText(root, "Repository branch")).toBe(true);
-    expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(0);
-    expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-current-branch")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(1);
+    expect(screen.queryByRole("button", { name: "Edit target branch" })).toBeNull();
+    expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(1);
     expect(countByTestId(root, "agent-studio-git-rebase-button")).toBe(0);
     expect(findByTestId(root, "agent-studio-git-pull-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
@@ -521,7 +498,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("shows a clear no-upstream message in repository compare mode", async () => {
+  test("keeps an explicit comparison independent from untracked upstream state", async () => {
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -540,12 +517,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(hasVisibleText(root, "No upstream branch yet")).toBe(true);
+    expect(hasVisibleText(root, "No changes against origin/main")).toBe(true);
     expect(
-      hasVisibleText(
-        root,
-        "This branch is not tracking an upstream branch yet. Push it first to create one, then its branch changes will appear here.",
-      ),
+      hasVisibleText(root, "Changes since this branch diverged from origin/main appear here."),
     ).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-pull-button").props.disabled)).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(false);
@@ -1844,4 +1818,34 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
   });
+});
+
+test("disables a reset confirmation until a pending push completes", async () => {
+  const confirm = mock(async () => {});
+  const model = baseModel({
+    pendingReset: { kind: "file", filePath: "src/main.ts" },
+    isPushing: true,
+    confirmReset: confirm,
+    cancelReset: () => {},
+  });
+  const view = render(renderAgentStudioGitPanelElement(model));
+  try {
+    const button = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(confirm).not.toHaveBeenCalled();
+    await act(async () => {
+      view.rerender(renderAgentStudioGitPanelElement({ ...model, isPushing: false }));
+    });
+    const ready = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    expect(ready.hasAttribute("disabled")).toBe(false);
+    await act(async () => {
+      fireEvent.click(ready);
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => {
+      view.unmount();
+    });
+  }
 });

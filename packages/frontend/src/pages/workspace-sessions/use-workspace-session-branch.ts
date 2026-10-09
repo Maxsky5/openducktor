@@ -28,20 +28,24 @@ export function useWorkspaceSessionBranch({
   const worktreeBranch = useQuery({
     ...worktreeBranchQueryOptions(repoPath, workingDirectory ?? ""),
     enabled: isWorktree && workingDirectory !== null,
+    staleTime: Infinity,
+    refetchOnMount: false,
   });
-  const { previewBranch, branchKey, branchReady } = branchState(
+  const { currentBranch, previewBranch, branchKey, branchReady } = branchState(
     isWorktree,
     rootBranch,
     worktreeBranch,
     activeBranch,
   );
-  const lastBranch = useRef<string | null>(null);
+  const lastBranch = useRef<string | null>(
+    previewBranch && workingDirectory ? JSON.stringify([workingDirectory, previewBranch]) : null,
+  );
   useEffect(() => {
     if (!previewBranch || !workingDirectory) return;
     const key = JSON.stringify([workingDirectory, previewBranch]);
+    if (!isWorktree && isSwitchingBranch) return;
     if (lastBranch.current === key) return;
     lastBranch.current = key;
-    if (!isWorktree && isSwitchingBranch) return;
     // File queries render their own refresh errors.
     void invalidateWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
   }, [isSwitchingBranch, isWorktree, previewBranch, queryClient, workingDirectory]);
@@ -90,6 +94,7 @@ export function useWorkspaceSessionBranch({
   }, [isWorktree, workingDirectory]);
 
   return {
+    currentBranch,
     rootBranch,
     worktreeBranch,
     previewBranch,
@@ -116,6 +121,7 @@ function branchState(
   const cached = isWorktree ? (worktree.data ?? null) : (root.data ?? active);
   const cachedKey = branchIdentity(cached);
   return {
+    currentBranch: read.isError ? null : cached,
     previewBranch: read.isError || read.isFetching ? null : cachedKey,
     branchKey: read.isError ? "unknown" : branchKeyFor(cached, isWorktree),
     branchReady: cachedKey !== null || read.isError,

@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
+  gitQueryKeys,
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
 import { toScopeSnapshot, toScopeSummaryFields } from "../model/normalization";
-import { readCachedFullLoadSnapshot } from "./cached-full-load";
 import type {
   DiffLoadRunner,
   InFlightRequestContext,
@@ -15,10 +15,11 @@ import type { LoadRequestContext } from "./use-diff-batch-state";
 
 type UseDiffLoadRunnerArgs = Pick<
   UseAgentStudioDiffLoaderArgs,
+  | "cacheKey"
   | "repoPathRef"
+  | "requestContextKeyRef"
   | "targetBranchRef"
   | "workingDirRef"
-  | "applyCachedFullResult"
   | "applyFullResult"
   | "applySummaryResult"
   | "clearScopeInvalidation"
@@ -28,10 +29,11 @@ type UseDiffLoadRunnerArgs = Pick<
 >;
 
 export const useAgentStudioDiffLoadRunner = ({
+  cacheKey,
+  requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
   workingDirRef,
-  applyCachedFullResult,
   applyFullResult,
   applySummaryResult,
   clearScopeInvalidation,
@@ -40,80 +42,73 @@ export const useAgentStudioDiffLoadRunner = ({
   shouldApplyResult,
 }: UseDiffLoadRunnerArgs): DiffLoadRunner => {
   const queryClient = useQueryClient();
-  const hasLoadContextChanged = useCallback(
-    (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
-      repoPathRef.current !== path ||
-      targetBranchRef.current !== nextTargetBranch ||
-      (workingDirRef.current ?? null) !== nextWorkingDir,
-    [repoPathRef, targetBranchRef, workingDirRef],
-  );
-
-  const hydrateCachedFullLoad = useCallback(
-    (context: LoadRequestContext): boolean => {
-      const cachedSnapshot = readCachedFullLoadSnapshot(queryClient, context);
-      if (cachedSnapshot === null) {
-        return false;
-      }
-
-      applyCachedFullResult({
-        clearScopeInvalidation,
-        scope: context.scope,
-        snapshot: cachedSnapshot,
-      });
-      return true;
-    },
-    [applyCachedFullResult, clearScopeInvalidation, queryClient],
+  const isStale = useCallback(
+    (context: LoadRequestContext): boolean =>
+      requestContextKeyRef.current !== context.requestContextKey ||
+      repoPathRef.current !== context.repoPath ||
+      targetBranchRef.current !== context.targetBranch ||
+      workingDirRef.current !== context.workingDir,
+    [requestContextKeyRef, repoPathRef, targetBranchRef, workingDirRef],
   );
 
   const runSummaryLoad = useCallback(
-    async ({
-      repoPath: activeRepoPath,
-      requestContextKey,
-      requestSequence,
-      scope,
-      targetBranch: activeTargetBranch,
-      version,
-      workingDir: nextWorkingDir,
-    }: InFlightRequestContext): Promise<void> => {
-      if (
-        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
-        !shouldApplyResult(scope, "summary", version)
-      ) {
+    async (context: InFlightRequestContext): Promise<void> => {
+      const {
+        repoPath,
+        requestContextKey,
+        requestSequence,
+        scope,
+        targetBranch,
+        version,
+        workingDir,
+      } = context;
+      if (isStale(context) || !shouldApplyResult(scope, "summary", version)) {
         return;
       }
 
       const summary = await loadWorktreeStatusSummaryFromQuery(
         queryClient,
-        activeRepoPath,
-        activeTargetBranch,
+        repoPath,
+        scope === "uncommitted" ? "HEAD" : targetBranch,
         scope,
-        nextWorkingDir,
+        workingDir,
+        { branchKey: cacheKey },
       );
 
-      if (
-        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
-        shouldApplyResult(scope, "summary", version)
-      ) {
+      if (!isStale(context) && shouldApplyResult(scope, "summary", version)) {
         applySummaryResult({
           loadContext: {
-            repoPath: activeRepoPath,
+            requestContextKey,
+            repoPath,
             scope,
-            targetBranch: activeTargetBranch,
-            workingDir: nextWorkingDir,
+            targetBranch,
+            workingDir,
           },
-          markScopeInvalidated,
+          markScopeInvalidated: (invalidatedScope) => {
+            markScopeInvalidated(invalidatedScope);
+            void queryClient.invalidateQueries({
+              queryKey: gitQueryKeys.worktreeStatus(
+                repoPath,
+                invalidatedScope === "uncommitted" ? "HEAD" : targetBranch,
+                invalidatedScope,
+                workingDir,
+                cacheKey,
+              ),
+              exact: true,
+              refetchType: "none",
+            });
+          },
           requestSequence,
           scope,
           summaryFields: toScopeSummaryFields(summary),
         });
-        if (requestContextKey != null) {
-          onLoadApplied?.(requestContextKey);
-        }
+        onLoadApplied?.(requestContextKey);
       }
     },
     [
       applySummaryResult,
-      hasLoadContextChanged,
+      cacheKey,
+      isStale,
       markScopeInvalidated,
       onLoadApplied,
       queryClient,
@@ -122,51 +117,45 @@ export const useAgentStudioDiffLoadRunner = ({
   );
 
   const runFullLoad = useCallback(
-    async ({
-      force = false,
-      repoPath: activeRepoPath,
-      requestContextKey,
-      requestSequence,
-      scope,
-      targetBranch: activeTargetBranch,
-      version,
-      workingDir: nextWorkingDir,
-    }: InFlightRequestContext & { force?: boolean }): Promise<void> => {
-      if (
-        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
-        !shouldApplyResult(scope, "full", version)
-      ) {
+    async (context: InFlightRequestContext & { force?: boolean }): Promise<void> => {
+      const {
+        force = false,
+        repoPath,
+        requestContextKey,
+        requestSequence,
+        scope,
+        targetBranch,
+        version,
+        workingDir,
+      } = context;
+      if (isStale(context) || !shouldApplyResult(scope, "full", version)) {
         return;
       }
 
       const snapshot = await loadWorktreeStatusFromQuery(
         queryClient,
-        activeRepoPath,
-        activeTargetBranch,
+        repoPath,
+        scope === "uncommitted" ? "HEAD" : targetBranch,
         scope,
-        nextWorkingDir,
-        { force },
+        workingDir,
+        { force, branchKey: cacheKey, staleTime: Infinity },
       );
 
-      if (
-        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
-        shouldApplyResult(scope, "full", version)
-      ) {
+      if (!isStale(context) && shouldApplyResult(scope, "full", version)) {
         applyFullResult({
           clearScopeInvalidation,
           requestSequence,
           scope,
           snapshot: toScopeSnapshot(snapshot),
         });
-        if (requestContextKey != null) {
-          onLoadApplied?.(requestContextKey);
-        }
+        onLoadApplied?.(requestContextKey);
       }
     },
     [
       applyFullResult,
+      cacheKey,
       clearScopeInvalidation,
-      hasLoadContextChanged,
+      isStale,
       onLoadApplied,
       queryClient,
       shouldApplyResult,
@@ -175,11 +164,10 @@ export const useAgentStudioDiffLoadRunner = ({
 
   return useMemo(
     () => ({
-      hasLoadContextChanged,
-      hydrateCachedFullLoad,
+      isStale,
       runFullLoad,
       runSummaryLoad,
     }),
-    [hasLoadContextChanged, hydrateCachedFullLoad, runFullLoad, runSummaryLoad],
+    [isStale, runFullLoad, runSummaryLoad],
   );
 };

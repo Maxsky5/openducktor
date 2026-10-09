@@ -552,8 +552,8 @@ describe("TaskExecutionPanel", () => {
       ciChecksModel: null,
     });
 
-    expect(html).toContain("Current");
-    expect(html).toContain("Target");
+    expect(html).toContain("Current branch");
+    expect(html).toContain("Compare with");
     expect(html).toContain("origin/main");
     expect(html).not.toContain("agent-studio-dev-server-terminal");
   });

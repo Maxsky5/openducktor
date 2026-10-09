@@ -9,7 +9,7 @@ import {
   loadRebaseConflictContext,
   resolveEffectiveTargetBranch,
   resolveUpstreamAheadBehind,
-  resolveUpstreamTargetForBranch,
+  resolveTrackedUpstreamReference,
 } from "./git-upstream";
 type WorktreeReads = {
   branch: () => Effect.Effect<GitCurrentBranch, GitPortError>;
@@ -28,7 +28,7 @@ export const buildWorktreeStatusData = (
   Effect.gen(function* () {
     const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const currentBranch = yield* reads.branch();
-    const upstreamTarget = yield* resolveUpstreamTargetForBranch(
+    const upstreamTarget = yield* resolveTrackedUpstreamReference(
       runner,
       workingDirectory,
       currentBranch.name,
@@ -59,13 +59,11 @@ export const buildWorktreeStatusData = (
       runner,
       workingDirectory,
       upstreamTarget,
-      targetAheadBehind,
     );
     const gitConflict = yield* loadRebaseConflictContext(
       runner,
       workingDirectory,
       currentBranch,
-      effectiveTargetBranch,
       fileStatuses,
     );
     const status = {
@@ -90,7 +88,7 @@ export const buildWorktreeStatusSummaryData = (
   Effect.gen(function* () {
     const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const currentBranch = yield* reads.branch();
-    const upstreamTarget = yield* resolveUpstreamTargetForBranch(
+    const upstreamTarget = yield* resolveTrackedUpstreamReference(
       runner,
       workingDirectory,
       currentBranch.name,
@@ -106,13 +104,11 @@ export const buildWorktreeStatusSummaryData = (
       runner,
       workingDirectory,
       upstreamTarget,
-      targetAheadBehind,
     );
     const gitConflict = yield* loadRebaseConflictContext(
       runner,
       workingDirectory,
       currentBranch,
-      effectiveTargetBranch,
       fileStatuses,
     );
     const status = {

@@ -187,7 +187,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     workspaceName: "Repo",
     repoPath: "/repo",
   },
-  branches: [],
   buildTools: createBuildToolsFixture({
     buildToolsSnapshot: buildToolsSnapshotState.current,
     gitActions: createGitActionsFixture(null),

@@ -42,7 +42,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo-b",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );
@@ -76,7 +76,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         1,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         "/repo/.worktrees/run-1",
       );
@@ -100,7 +100,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         "/repo/.worktrees/run-2",
       );

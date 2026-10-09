@@ -63,6 +63,10 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeTabId: "git",
   isPanelOpen: true,
   repoSettings: null,
+  repoSettingsError: null,
+  loadRepoSettings: async () => {
+    throw new Error("Unexpected repository settings read.");
+  },
   onResolveGitConflict: resolveGitConflict,
   ...overrides,
 });

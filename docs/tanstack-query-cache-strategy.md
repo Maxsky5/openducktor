@@ -75,7 +75,7 @@ A task event for an inactive workspace invalidates its task list and session lis
 | Worktree status | 0 |
 | Worktree status summary | 0 |
 
-Use a zero stale time for worktree status. TanStack Query still deduplicates concurrent reads, but the next caller does not trust an old diff snapshot.
+Use a zero stale time for general worktree status reads. Session Git panels reuse completed comparison and status reads for the same repository, directory, branch, target, and scope. Session activation does not refresh these reads. Manual refresh, file events, Git actions, and focus refresh check Git and update or invalidate the cache. Cancel unfinished status reads when their view ends. Keep view guards separate from cache keys so late reads cannot enter a new view. An unknown branch shows a pending or unavailable label. Only a completed read can show a detached branch.
 
 Query modules: `checks.ts`, `filesystem.ts`, and `git.ts`.
 

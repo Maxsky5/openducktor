@@ -21,8 +21,10 @@ export type UseAgentStudioDiffDataInput = {
   worktreeResolutionError: string | null;
   retryWorktreeResolution: () => void | Promise<void>;
   defaultTargetBranch: GitTargetBranch;
+  comparisonReference?: string;
   preconditionError?: string | null;
   branchIdentityKey?: string | null;
+  cacheKey?: string | undefined;
   enableScheduledRefresh: boolean;
 };
 
@@ -35,6 +37,7 @@ export type DiffScopeState = {
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
   upstreamStatus: "tracking" | "untracked" | "error";
+  upstreamError?: string | null;
   error: string | null;
   hashVersion: number | null;
   statusHash: string | null;
@@ -42,6 +45,8 @@ export type DiffScopeState = {
 };
 
 export type DiffDataState = {
+  branchKnown?: boolean;
+  comparisonPending?: boolean;
   branch: string | null;
   worktreePath: string | null;
   targetBranch: string;
@@ -52,6 +57,7 @@ export type DiffDataState = {
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
   upstreamStatus: "tracking" | "untracked" | "error";
+  upstreamError?: string | null;
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
   statusSnapshotKey?: string | null;
@@ -62,7 +68,7 @@ export type DiffDataState = {
   isLoading: boolean;
   error: string | null;
   refresh: GitDiffRefresh;
-  refreshAllScopes?: () => Promise<void>;
+  refreshAllScopes?: (mode?: "full" | "summary") => Promise<void>;
   setDiffScope: (scope: DiffScope) => void;
 };
 

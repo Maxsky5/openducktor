@@ -38,6 +38,7 @@ export const normalizeTargetBranch = (
       normalizedBranch = remoteRef.slice(slashIndex + 1);
     }
   }
+
   if (normalizedRemote && normalizedBranch.startsWith(`${normalizedRemote}/`)) {
     normalizedBranch = normalizedBranch.slice(normalizedRemote.length + 1);
   }

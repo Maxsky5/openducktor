@@ -9,6 +9,7 @@ import {
 } from "./use-agent-studio-git-action-utils";
 
 type UseAgentStudioGitPushActionsArgs = {
+  isCurrentContext: () => boolean;
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
@@ -25,6 +26,7 @@ type GitPushTarget = {
 };
 
 export function useAgentStudioGitPushActions({
+  isCurrentContext,
   repoPath,
   workingDir,
   branch,
@@ -74,6 +76,10 @@ export function useAgentStudioGitPushActions({
         }
         const pushResult = await host.gitPushBranch(resolvedRepoPath, resolvedBranch, pushOptions);
 
+        if (!isCurrentContext()) {
+          await refreshDiffData("soft");
+          return;
+        }
         if (pushResult.outcome === "rejected_non_fast_forward") {
           if (forceWithLease) {
             const message = pushResult.output.trim() || "Force push was rejected.";
@@ -99,6 +105,7 @@ export function useAgentStudioGitPushActions({
         });
         await refreshDiffData("soft");
       } catch (error) {
+        if (!isCurrentContext()) return;
         const message = toErrorMessage(
           error,
           forceWithLease ? "Force push failed." : "Push failed.",
@@ -112,6 +119,7 @@ export function useAgentStudioGitPushActions({
       }
     },
     [
+      isCurrentContext,
       branch,
       clearActionErrors,
       ensureGitActionsUnlocked,

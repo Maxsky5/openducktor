@@ -23,13 +23,23 @@ export function useAgentStudioRepoSettings(args: {
 }) {
   const { activeRepoPath, activeWorkspaceId, hostClient } = args;
   const queryClient = useQueryClient();
-  const { data: repoConfig, isLoading: isLoadingRepoConfig } = useQuery({
+  const repoConfigQuery = useQuery({
     ...repoConfigQueryOptions(
       activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
       hostClient,
     ),
     enabled: activeWorkspaceId !== null,
   });
+  const repoConfig = repoConfigQuery.data;
+  const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
+    if (activeWorkspaceId === null)
+      throw new Error("Select a workspace before loading repository settings.");
+    const config = await queryClient.fetchQuery({
+      ...repoConfigQueryOptions(activeWorkspaceId, hostClient),
+      staleTime: 0,
+    });
+    return toRepoSettingsInput(config);
+  }, [activeWorkspaceId, hostClient, queryClient]);
   const providerContextQuery = useQuery(
     repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath, hostClient),
   );
@@ -56,15 +66,20 @@ export function useAgentStudioRepoSettings(args: {
 
   return {
     repoSettings,
+    repoSettingsError:
+      activeWorkspaceId !== null && repoConfigQuery.isError ? repoConfigQuery.error : null,
+    loadRepoSettings,
     gitProvider: {
       context: gitProviderContext,
       error: gitProviderContextError,
       load: loadGitProviderContext,
       retry: retryGitProviderContext,
     },
-    isLoadingRepoSettings: activeWorkspaceId !== null && isLoadingRepoConfig,
+    isLoadingRepoSettings: activeWorkspaceId !== null && repoConfigQuery.isLoading,
   } satisfies {
     repoSettings: RepoSettingsInput | null;
+    repoSettingsError: Error | null;
+    loadRepoSettings: () => Promise<RepoSettingsInput>;
     gitProvider: {
       context: RepositoryGitProviderContext | undefined;
       error: Error | null;

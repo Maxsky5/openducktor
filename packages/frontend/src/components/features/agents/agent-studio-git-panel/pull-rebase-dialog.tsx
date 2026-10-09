@@ -7,6 +7,7 @@ import { GitConfirmationDialog } from "./git-confirmation-dialog";
 type PullRebaseDialogProps = {
   pendingPullRebase: AgentStudioPendingPullRebase | null;
   isRebasing: boolean;
+  confirmDisabled: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -14,6 +15,7 @@ type PullRebaseDialogProps = {
 export const PullRebaseDialog = memo(function PullRebaseDialog({
   pendingPullRebase,
   isRebasing,
+  confirmDisabled,
   onCancel,
   onConfirm,
 }: PullRebaseDialogProps): ReactElement {
@@ -45,7 +47,7 @@ export const PullRebaseDialog = memo(function PullRebaseDialog({
       confirmLabel="Pull with rebase"
       confirmPendingLabel="Pulling…"
       confirmPending={isRebasing}
-      confirmDisabled={isRebasing}
+      confirmDisabled={isRebasing || confirmDisabled}
       onConfirm={onConfirm}
       confirmTestId="agent-studio-git-confirm-pull-rebase-button"
       confirmIcon={ArrowDown}

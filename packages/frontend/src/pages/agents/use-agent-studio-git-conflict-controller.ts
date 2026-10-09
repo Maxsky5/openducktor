@@ -57,6 +57,8 @@ type ConflictEvent =
     };
 
 type UseAgentStudioGitConflictControllerArgs = {
+  contextKey?: string;
+  isCurrentContext: () => boolean;
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
@@ -73,6 +75,8 @@ type UseAgentStudioGitConflictControllerArgs = {
 };
 
 export function useAgentStudioGitConflictController({
+  isCurrentContext,
+  contextKey,
   repoPath,
   workingDir,
   branch,
@@ -93,7 +97,7 @@ export function useAgentStudioGitConflictController({
   const directoryKey = JSON.stringify([repoPath, workingDir]);
   const reservation = useRef(false);
   const selection = useRef({ key: "", version: 0, mounted: true });
-  const selectionKey = JSON.stringify([directoryKey, assistanceContextKey]);
+  const selectionKey = JSON.stringify([directoryKey, contextKey, assistanceContextKey]);
   useLayoutEffect(() => {
     if (selection.current.key !== selectionKey) {
       selection.current = {
@@ -200,6 +204,7 @@ export function useAgentStudioGitConflictController({
 
   const captureFreshConflict = useCallback(
     (conflict: GitConflict) => {
+      if (!isCurrentContext()) return;
       dispatch({
         type: "capture_conflict",
         conflict,
@@ -207,7 +212,7 @@ export function useAgentStudioGitConflictController({
         snapshotKey: worktreeStatusSnapshotKey,
       });
     },
-    [directoryKey, worktreeStatusSnapshotKey],
+    [isCurrentContext, directoryKey, worktreeStatusSnapshotKey],
   );
 
   const abortGitConflict = useCallback(async (): Promise<void> => {
@@ -233,6 +238,10 @@ export function useAgentStudioGitConflictController({
         activeGitConflict.operation,
         activeGitConflict.workingDir,
       );
+      if (!isCurrentContext()) {
+        await refreshDiffData("soft");
+        return;
+      }
       if (selection.current.version === version && selection.current.mounted) {
         clearActionErrors();
         dispatch({ type: "clear_local_conflict", closeModal: true });
@@ -242,6 +251,7 @@ export function useAgentStudioGitConflictController({
       try {
         await refreshDiffData("soft");
       } catch (error) {
+        if (!isCurrentContext()) return;
         const message = toErrorMessage(error, "Git conflict was aborted, but diff refresh failed.");
         if (selection.current.version === version && selection.current.mounted) {
           setRebaseError(message);
@@ -249,6 +259,7 @@ export function useAgentStudioGitConflictController({
         }
       }
     } catch (error) {
+      if (!isCurrentContext()) return;
       const message = toErrorMessage(error, "Failed to abort the git conflict.");
       if (selection.current.version === version && selection.current.mounted) {
         setRebaseError(message);
@@ -260,7 +271,14 @@ export function useAgentStudioGitConflictController({
       reservation.current = false;
       dispatch({ type: "finish_action" });
     }
-  }, [activeGitConflict, clearActionErrors, refreshDiffData, repoPath, setRebaseError]);
+  }, [
+    isCurrentContext,
+    activeGitConflict,
+    clearActionErrors,
+    refreshDiffData,
+    repoPath,
+    setRebaseError,
+  ]);
 
   const askForHelp = useCallback(async (): Promise<void> => {
     if (!activeGitConflict || reservation.current) {
@@ -288,7 +306,11 @@ export function useAgentStudioGitConflictController({
     reservation.current = true;
     const version = selection.current.version;
     const assertCurrent = () => {
-      if (!selection.current.mounted || selection.current.version !== version)
+      if (
+        !isCurrentContext() ||
+        !selection.current.mounted ||
+        selection.current.version !== version
+      )
         throw new GitConflictRequestCancelled();
     };
     dispatch({ type: "start_action", action: "ask_builder" });
@@ -313,6 +335,7 @@ export function useAgentStudioGitConflictController({
       }
     } catch (error) {
       if (
+        !isCurrentContext() ||
         error instanceof GitConflictRequestCancelled ||
         selection.current.version !== version ||
         !selection.current.mounted
@@ -329,6 +352,7 @@ export function useAgentStudioGitConflictController({
       dispatch({ type: "finish_action" });
     }
   }, [
+    isCurrentContext,
     activeGitConflict,
     clearActionErrors,
     onResolveGitConflict,

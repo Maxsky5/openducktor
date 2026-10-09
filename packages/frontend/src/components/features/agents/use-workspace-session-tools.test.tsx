@@ -122,12 +122,14 @@ function PanelHarness({
   const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>(initialTabId);
   const { toolsContent, refresh } = useWorkspaceSessionTools({
     isVisible,
+    applyTarget: async () => {},
     repoPath: "/repo",
     workspaceId: "workspace-1",
     sessionId: sessionId,
     workingDirectory,
     contextMode: contextMode,
     branchKey: branchKey,
+    currentBranch: branchReady ? { name: branchKey, detached: false } : null,
     branchReady: branchReady,
     target: target,
     targetError: targetError,
@@ -247,7 +249,8 @@ test("keeps each session's dev-server layout while its tab reloads", async () =>
     });
     configureShellBridge(createUnavailableShellBridge());
   }
-});
+  // This flow mounts four complete tool panels and revisits a cached session.
+}, 5000);
 
 test("shows a live session server when repository settings are unavailable", async () => {
   configureShellBridge(
@@ -355,7 +358,60 @@ test("shows a failed dev-server read after loading", async () => {
   }
 });
 
-test("waits for the comparison target before reading Git status", async () => {
+test("reuses checked Git data when workspace sessions share a directory and comparison", async () => {
+  const comparison = mock(async (): Promise<GitComparisonTarget> => ({
+    kind: "available",
+    reference: targetReference,
+  }));
+  const status = mock(
+    async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+      worktreeStatus(target, scope),
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: comparison,
+        gitGetWorktreeStatus: status,
+        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
+        gitGetBranches: async () => [],
+      },
+    }),
+  );
+  const client = createToolsQueryClient();
+  const panel = (sessionId: string) => (
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <PanelHarness key={sessionId} sessionId={sessionId} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+  const view = render(panel("session-1"));
+  try {
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature"),
+    );
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    const reads = status.mock.calls.length;
+    view.rerender(panel("session-2"));
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    expect(screen.queryByText(/Checking comparison|Loading comparison/)).toBeNull();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(status).toHaveBeenCalledTimes(reads);
+    expect(comparison).toHaveBeenCalledTimes(1);
+    view.rerender(panel("session-1"));
+    expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(status).toHaveBeenCalledTimes(reads);
+  } finally {
+    view.unmount();
+    client.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("reads HEAD status while the comparison target is pending", async () => {
   let finishComparison!: (value: GitComparisonTarget) => void;
   const comparison = mock(
     () => new Promise<GitComparisonTarget>((resolve) => (finishComparison = resolve)),
@@ -385,10 +441,10 @@ test("waits for the comparison target before reading Git status", async () => {
   );
   try {
     await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
-    expect(statusTargets).toEqual([]);
+    expect(statusTargets).toEqual(["HEAD"]);
     await act(async () => finishComparison({ kind: "available", reference: targetReference }));
     await waitFor(() => expect(statusTargets).toContain(targetReference));
-    expect(statusTargets).not.toContain("HEAD");
+    expect(statusTargets).toContain("HEAD");
   } finally {
     view.unmount();
     queryClient.clear();
@@ -466,7 +522,7 @@ const treeSnapshot = (
 });
 
 test.each(["available", "unavailable", "error"] as const)(
-  "holds the file tree until the %s comparison outcome",
+  "browses files while the %s comparison is pending",
   async (outcome) => {
     let finishComparison!: (value: GitComparisonTarget) => void;
     let failComparison!: (reason: Error) => void;
@@ -503,7 +559,8 @@ test.each(["available", "unavailable", "error"] as const)(
     );
     try {
       await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
-      expect(treeReads).toEqual([]);
+      await waitFor(() => expect(treeReads.length).toBeGreaterThan(0));
+      expect(treeReads[0]?.targetBranch).toBeUndefined();
       await act(async () => {
         if (outcome === "error") {
           failComparison(new Error("Could not check comparison target"));
@@ -515,17 +572,11 @@ test.each(["available", "unavailable", "error"] as const)(
           );
         }
       });
-      await waitFor(() => expect(treeReads).toHaveLength(1));
-      expect(treeReads).toEqual([
-        outcome === "available"
-          ? {
-              rootPath: "/repo",
-              targetBranch: targetReference,
-              mode: "full",
-              refreshId: expect.any(String),
-            }
-          : { rootPath: "/repo", mode: "full", refreshId: expect.any(String) },
-      ]);
+      await waitFor(() =>
+        expect(treeReads.at(-1)?.targetBranch).toBe(
+          outcome === "available" ? targetReference : undefined,
+        ),
+      );
     } finally {
       view.unmount();
       queryClient.clear();
@@ -830,6 +881,11 @@ test("manual refresh fetches before it reloads Git changes", async () => {
   try {
     await waitFor(() => expect(calls.some((call) => call.startsWith("status:"))).toBe(true));
     calls.length = 0;
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     await waitFor(() => expect(calls).toContain("fetch"));
     await waitFor(() => expect(calls.filter((call) => call.startsWith("status:"))).toHaveLength(2));
@@ -837,9 +893,7 @@ test("manual refresh fetches before it reloads Git changes", async () => {
       calls.findIndex((call) => call.startsWith("status:")),
     );
     expect(calls.filter((call) => call === `status:${targetReference}:target`)).toHaveLength(1);
-    expect(calls.filter((call) => call === `status:${targetReference}:uncommitted`)).toHaveLength(
-      1,
-    );
+    expect(calls.filter((call) => call === "status:HEAD:uncommitted")).toHaveLength(1);
   } finally {
     view.unmount();
     queryClient.clear();
@@ -847,7 +901,7 @@ test("manual refresh fetches before it reloads Git changes", async () => {
   }
 });
 
-test("manual refresh keeps the branch and diff through branch and status reads", async () => {
+test("manual refresh retains data when branch and comparison identity stay unchanged", async () => {
   let finishBranchRead!: (branch: { name: string; detached: false }) => void;
   const releaseStatusRead = Promise.withResolvers<void>();
   let statusReadHeld = false;
@@ -921,7 +975,13 @@ test("manual refresh keeps the branch and diff through branch and status reads",
   );
   try {
     const diff = await screen.findByText("draft.txt");
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
     expect(screen.getByTestId("agent-studio-git-current-branch").textContent).toBe("feature");
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     await waitFor(() => expect(readBranch).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -1129,7 +1189,9 @@ test.each(
       expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
         false,
       );
-      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(true);
+      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(
+        change === "branch" || stage === "settings" || stage === "branch",
+      );
       if (change === "branch") expect(reads.some((read) => read.startsWith("fetch:"))).toBe(false);
     }
   } finally {
@@ -1232,15 +1294,20 @@ test("a missing target fetch failure tells the user what failed", async () => {
     await screen.findByText("No tracked upstream.");
     await waitFor(() => expect(statusTargets).toContain("HEAD"));
     const localReads = statusTargets.length;
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     await waitFor(() =>
       expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
         description: "Current branch has no upstream remote",
       }),
     );
-    await waitFor(() => expect(comparison).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(statusTargets.length).toBeGreaterThan(localReads));
-    await waitFor(() => expect(queryClient.getQueryData(treeKey)).toBeUndefined());
+    expect(comparison).toHaveBeenCalledTimes(1);
+    expect(statusTargets.length).toBeGreaterThan(localReads);
+    expect(queryClient.getQueryData(treeKey)).toBeDefined();
   } finally {
     view.unmount();
     queryClient.clear();
@@ -1334,6 +1401,7 @@ test("refresh recovers local Git and file reads when the comparison target disap
     createShellBridgeFixture({
       client: {
         gitGetComparisonTarget: comparison,
+        gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
         gitGetWorktreeStatus,
         gitGetWorktreeStatusSummary,
         filesystemRefreshTree,
@@ -1473,6 +1541,11 @@ test.each(
         );
         fireEvent.click(screen.getByTestId("agent-studio-git-confirm-reset-button"));
       } else {
+        await waitFor(() =>
+          expect(
+            screen.getByTestId(`agent-studio-git-${kind}-button`).hasAttribute("disabled"),
+          ).toBe(false),
+        );
         fireEvent.click(screen.getByTestId(`agent-studio-git-${kind}-button`));
       }
       await waitFor(() => expect(operation).toHaveBeenCalledTimes(1));
@@ -1640,6 +1713,82 @@ test("invalidates a completed hidden commit without reading Git until tools reop
     completed.resolve();
     view.unmount();
     queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a failed fetch refreshes both diff tabs and reports the fetch error", async () => {
+  let revision = 1;
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
+        gitGetBranches: async () => [],
+        gitFetchRemote: async () => {
+          throw new Error("Check the remote connection.");
+        },
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+          ...worktreeStatus(target, scope),
+          fileStatuses: [{ path: `${scope}-${revision}.txt`, status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: `${scope}-${revision}.txt`,
+              type: "modified",
+              additions: 1,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-before\n+after\n",
+            },
+          ],
+        }),
+      },
+    }),
+  );
+  const client = createToolsQueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+  try {
+    await screen.findByText("uncommitted-1.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("target-1.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("uncommitted-1.txt");
+    revision = 2;
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    });
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
+        description: "Check the remote connection.",
+      }),
+    );
+    await screen.findByText("uncommitted-2.txt");
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), {
+        button: 0,
+        ctrlKey: false,
+      });
+    });
+    await screen.findByText("target-2.txt");
+  } finally {
+    view.unmount();
+    client.clear();
+    report.mockRestore();
     configureShellBridge(createUnavailableShellBridge());
   }
 });

@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { toast } from "sonner";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { repoConfigSchema, type GitWorktreeStatus } from "@openducktor/contracts";
+import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type { QueryClient } from "@tanstack/react-query";
-import type { DiffDataState } from "@/features/agent-studio-git";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -14,82 +18,20 @@ import {
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
-  type useAgentStudioBuildToolsWorktreeSnapshot,
-} from "./use-agent-studio-build-tools-worktree-snapshot";
+import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
 if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
-const refreshDiffMock = mock(async (_mode?: string) => {});
-const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-type SnapshotDependencies = Parameters<
-  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
->[0];
-type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
-
-const useAgentStudioDiffDataMock = mock(
-  (args: Parameters<UseDiffData>[0]): ReturnType<UseDiffData> => ({
-    branch: "feature/task-24",
-    worktreePath: args.worktreePath,
-    targetBranch: "origin/main",
-    diffScope: "uncommitted",
-    gitConflict: null,
-    scopeStatesByScope: {
-      target: createEmptyScopeState(),
-      uncommitted: createEmptyScopeState(),
-    },
-    loadedScopesByScope: { target: false, uncommitted: false },
-    commitsAheadBehind: null,
-    upstreamAheadBehind: null,
-    upstreamStatus: "tracking",
-    fileDiffs: [],
-    fileStatuses: [],
-    statusSnapshotKey: null,
-    hashVersion: null,
-    statusHash: null,
-    diffHash: null,
-    uncommittedFileCount: 0,
-    isLoading: Boolean(args.isWorktreeResolutionResolving),
-    error: args.worktreeResolutionError,
-    refresh: refreshDiffMock,
-    refreshAllScopes: async () => {},
-    refreshInactiveScope: async () => {},
-    setDiffScope: setDiffScopeMock,
-  }),
-);
 const taskWorktreeGetMock = mock(
   async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
   }),
 );
 
-const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
-  taskWorktreeHost: {
-    taskWorktreeGet: taskWorktreeGetMock,
-  },
-  useDiffData: useAgentStudioDiffDataMock,
-});
-
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;
-
-const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] => ({
-  branch: null,
-  gitConflict: null,
-  fileDiffs: [],
-  fileStatuses: [],
-  uncommittedFileCount: 0,
-  commitsAheadBehind: null,
-  upstreamAheadBehind: null,
-  upstreamStatus: "tracking",
-  error: null,
-  hashVersion: null,
-  statusHash: null,
-  diffHash: null,
-});
 
 type HookArgs = Parameters<UseSnapshotHook>[0];
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
@@ -176,22 +118,488 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isGitTabActive: true,
   isRightPanelOpen: true,
   repoSettings: null,
+  repoSettingsError: null,
+  loadRepoSettings: async () => {
+    throw new Error("Unexpected repository settings read.");
+  },
   ...overrides,
 });
 
 const createHookHarness = (initialProps: HookArgs, options?: { queryClient?: QueryClient }) =>
-  createSharedHookHarness(useSnapshotHookForTest, initialProps, options);
+  createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, initialProps, options);
 
 beforeEach(async () => {
   await clearAppQueryClient();
-  refreshDiffMock.mockClear();
-  setDiffScopeMock.mockClear();
-  useAgentStudioDiffDataMock.mockClear();
   taskWorktreeGetMock.mockClear();
   taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/.worktrees/task-24" });
+  readStatus.mockClear();
+  configureShellBridge(createGitBridge());
 });
 
+afterEach(() => configureShellBridge(createUnavailableShellBridge()));
+
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
+  test.each(["repository", "worktree"] as const)(
+    "fetches a changed %s branch on the first scheduled refresh within the old cooldown",
+    async (mode) => {
+      let branch = "main";
+      const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
+      configureShellBridge(
+        createGitBridge({
+          client: {
+            gitGetCurrentBranch: async () => ({ name: branch, detached: false }),
+            gitGetComparisonTarget: async () => ({
+              kind: "available",
+              reference: `refs/remotes/origin/${mode === "repository" ? branch : "main"}`,
+            }),
+            gitFetchRemote: fetch,
+          },
+        }),
+      );
+      const harness = createHookHarness(
+        createBaseArgs({
+          selectedView: createSelectedView({
+            role: mode === "repository" ? "spec" : "build",
+            selectedTask: createTaskCardFixture({
+              id: "task-24",
+              targetBranch: { branch: "main", remote: "origin" },
+            }),
+            loadedSession: createAgentSessionFixture({
+              sessionAssociation: {
+                kind: "workflow",
+                taskId: "task-1",
+                role: mode === "repository" ? "spec" : "build",
+              },
+              workingDirectory: mode === "repository" ? "/repo" : "/repo/.worktrees/task-24",
+            }),
+          }),
+        }),
+      );
+      try {
+        await harness.mount();
+        await harness.waitFor(
+          (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/main",
+        );
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        expect(fetch).toHaveBeenCalledTimes(1);
+        branch = "release";
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        await harness.waitFor(() => fetch.mock.calls.length === 2);
+        expect(harness.getLatest().comparison?.resolvedTarget).toBe(
+          `refs/remotes/origin/${mode === "repository" ? "release" : "main"}`,
+        );
+        expect(fetch).toHaveBeenCalledTimes(2);
+        await harness.run(async (state) => {
+          await state.refreshWorktree("scheduled");
+        });
+        expect(fetch).toHaveBeenCalledTimes(2);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test.each([false, true])(
+    "drops an old scheduled branch refresh after a session switch, return=%s",
+    async (returnToSession) => {
+      const branchRead = createDeferred<{ name: string; detached: boolean }>();
+      let reading = false;
+      const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
+      configureShellBridge(
+        createGitBridge({
+          client: {
+            gitGetCurrentBranch: async () =>
+              reading ? branchRead.promise : { name: "main", detached: false },
+            gitGetComparisonTarget: async () => ({
+              kind: "available",
+              reference: "refs/remotes/origin/main",
+            }),
+            gitFetchRemote: fetch,
+          },
+        }),
+      );
+      const args = createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "main", remote: "origin" },
+          }),
+        }),
+      });
+      const harness = createHookHarness(args);
+      try {
+        await harness.mount();
+        await harness.waitFor(
+          (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/main",
+        );
+        reading = true;
+        let refresh: Promise<void> | undefined;
+        await harness.run((state) => {
+          refresh = state.refreshWorktree("scheduled");
+        });
+        await harness.update({
+          ...args,
+          selectedView: createSelectedView({
+            selectedTask: args.selectedView.selectedTask,
+            loadedSession: createAgentSessionFixture({
+              ...args.selectedView.selectedSession.loadedSession,
+              externalSessionId: "new-session",
+            }),
+          }),
+        });
+        if (returnToSession) await harness.update(args);
+        await harness.run(async () => {
+          branchRead.resolve({ name: "release", detached: false });
+          await refresh;
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("scheduled task refresh keeps its saved target after checking the branch", async () => {
+    const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+          gitFetchRemote: fetch,
+        },
+      }),
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        repoSettingsError: new Error("Repair config permissions."),
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release", remote: "origin" },
+          }),
+        }),
+      }),
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/release",
+      );
+      await harness.run(async (state) => {
+        await state.refreshWorktree("scheduled");
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        "/repo",
+        "refs/remotes/origin/release",
+        "/repo/.worktrees/task-24",
+      );
+      expect(harness.getLatest().comparison?.unavailableReason).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a failed default-target read and retries settings from Refresh", async () => {
+    let fails = true;
+    const config = repoConfigSchema.parse({
+      workspaceId: "workspace-repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+    });
+    const readConfig = mock(async () => {
+      if (fails) throw new Error("Repair config permissions.");
+      return config;
+    });
+    const readComparison = mock(async () => ({
+      kind: "available" as const,
+      reference: "refs/remotes/origin/main",
+    }));
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+          gitGetComparisonTarget: readComparison,
+          gitFetchRemote: async () => ({ outcome: "fetched", output: "Fetched." }),
+        },
+      }),
+    );
+    const harness = createSharedHookHarness(() => {
+      const settings = useAgentStudioRepoSettings({
+        activeWorkspaceId: "workspace-repo",
+        activeRepoPath: "/repo",
+        hostClient: {
+          workspaceGetRepoConfig: readConfig,
+          workspaceGetGitProviderContext: async () => null,
+        },
+      });
+      const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(
+        createBaseArgs({
+          repoSettings: settings.repoSettings,
+          repoSettingsError: settings.repoSettingsError,
+          loadRepoSettings: settings.loadRepoSettings,
+        }),
+      );
+      return { settings, snapshot };
+    }, undefined);
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => !state.settings.isLoadingRepoSettings && state.snapshot.worktree.path !== null,
+      );
+      expect(harness.getLatest().snapshot.diffData.comparisonUnavailableReason).toBe(
+        "Repair config permissions.",
+      );
+      expect(readComparison).not.toHaveBeenCalled();
+      let retryError: unknown;
+      await harness.run(async (state) => {
+        try {
+          await state.snapshot.refreshWorktree("hard");
+        } catch (error) {
+          retryError = error;
+        }
+      });
+      expect(retryError).toBeInstanceOf(Error);
+      expect(retryError).toMatchObject({ message: "Repair config permissions." });
+      expect(harness.getLatest().snapshot.diffData.comparisonUnavailableReason).toBe(
+        "Repair config permissions.",
+      );
+      fails = false;
+      await harness.run(async (state) => {
+        await state.snapshot.refreshWorktree("hard");
+      });
+      await harness.waitFor(
+        (state) => state.snapshot.comparison?.resolvedTarget === "refs/remotes/origin/main",
+      );
+      expect(readConfig).toHaveBeenCalledTimes(3);
+      expect(harness.getLatest().snapshot.comparison?.unavailableReason).toBeNull();
+      expect(readComparison).toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the saved task comparison while settings load and clears it during a target change", async () => {
+    const nextComparison = createDeferred<{ kind: "available"; reference: string }>();
+    const readStatus = mock(
+      async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+        taskStatus(target, scope),
+    );
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+          gitGetComparisonTarget: async (_repo, _dir, target) =>
+            target.branch === "release"
+              ? { kind: "available", reference: "refs/heads/release" }
+              : nextComparison.promise,
+          gitGetWorktreeStatus: readStatus,
+          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
+            const full = taskStatus(target, scope);
+            return {
+              currentBranch: full.currentBranch,
+              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+              targetAheadBehind: full.targetAheadBehind,
+              upstreamAheadBehind: full.upstreamAheadBehind,
+              snapshot: full.snapshot,
+            };
+          },
+        },
+      }),
+    );
+    const args = createBaseArgs({
+      selectedView: createSelectedView({
+        selectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranch: { branch: "release" },
+        }),
+      }),
+    });
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
+      expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+      expect(harness.getLatest().diffData.statusHash).toBe("0123456789abcdef");
+      expect(readStatus.mock.calls.some((call) => call[1] === "HEAD")).toBe(true);
+      await harness.update({
+        ...args,
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({ id: "task-24", targetBranch: { branch: "next" } }),
+        }),
+      });
+      expect(harness.getLatest().diffData.comparisonReference).toBeNull();
+      expect(harness.getLatest().diffData.commitsAheadBehind).toBeNull();
+      expect(harness.getLatest().diffData.scopeStatesByScope.target.fileDiffs).toEqual([]);
+      await harness.waitFor((state) => state.diffData.fileStatuses[0]?.path === "draft.ts");
+      await harness.run(async () => {
+        nextComparison.resolve({ kind: "available", reference: "refs/heads/next" });
+        await nextComparison.promise;
+      });
+      await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/next");
+      expect(readStatus.mock.calls.some((call) => call[1] === "refs/heads/next")).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reuses branch and comparison reads when task sessions share a worktree", async () => {
+    const readBranch = mock(async () => ({ name: "feature/task-24", detached: false }));
+    const readComparison = mock(async () => ({
+      kind: "available" as const,
+      reference: "refs/heads/release",
+    }));
+    const readStatus = mock(
+      async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+        taskStatus(target, scope),
+    );
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: readBranch,
+          gitGetComparisonTarget: readComparison,
+          gitGetWorktreeStatus: readStatus,
+        },
+      }),
+    );
+    const argsFor = (sessionId: string) =>
+      createBaseArgs({
+        selectedView: createSelectedView({
+          loadedSession: createAgentSessionFixture({
+            externalSessionId: sessionId,
+            workingDirectory: "/repo/.worktrees/task-24",
+            sessionAssociation: { kind: "workflow", taskId: "task-24", role: "build" },
+          }),
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release" },
+          }),
+        }),
+      });
+    const harness = createSharedHookHarness(
+      useAgentStudioBuildToolsWorktreeSnapshot,
+      argsFor("first"),
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.comparisonReference === "refs/heads/release" && !state.diffData.isLoading,
+      );
+      const reads = readStatus.mock.calls.length;
+      for (const sessionId of ["second", "first"]) {
+        await harness.update(argsFor(sessionId));
+        expect(harness.getLatest().resolvedGitPanelBranch).toBe("feature/task-24");
+        expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+        expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+        expect(harness.getLatest().diffData.fileStatuses[0]?.path).toBe("draft.ts");
+        expect(readStatus).toHaveBeenCalledTimes(reads);
+        expect(readBranch).toHaveBeenCalledTimes(1);
+        expect(readComparison).toHaveBeenCalledTimes(1);
+      }
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps task comparison and counts while its branch and status reads refresh", async () => {
+    const nextBranch = createDeferred<{ name: string; detached: boolean }>();
+    let holdBranch = false;
+    let holdStatus = false;
+    const nextStatus = createDeferred<void>();
+    const readBranch = mock(async () =>
+      holdBranch ? nextBranch.promise : { name: "feature/task-24", detached: false },
+    );
+    const readStatus = mock(
+      async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") => {
+        if (holdStatus) await nextStatus.promise;
+        return taskStatus(target, scope);
+      },
+    );
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: readBranch,
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/heads/release",
+          }),
+          gitGetWorktreeStatus: readStatus,
+          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
+            const full = taskStatus(target, scope);
+            return {
+              currentBranch: full.currentBranch,
+              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+              targetAheadBehind: full.targetAheadBehind,
+              upstreamAheadBehind: full.upstreamAheadBehind,
+              snapshot: full.snapshot,
+            };
+          },
+        },
+      }),
+    );
+    const args = createBaseArgs({
+      selectedView: createSelectedView({
+        selectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranch: { branch: "release" },
+        }),
+      }),
+    });
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
+      expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+      expect(harness.getLatest().diffData.statusHash).toBe("0123456789abcdef");
+      expect(readStatus.mock.calls.some((call) => call[1] === "HEAD")).toBe(true);
+      holdBranch = true;
+      let refresh: Promise<void> | undefined;
+      await harness.run((state) => {
+        refresh = state.refreshWorktree("soft");
+      });
+      await harness.waitFor(() => readBranch.mock.calls.length === 2);
+      // Query notifications use a timer. Flush them while the host read stays pending.
+      await harness.run(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+      expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+      expect(harness.getLatest().diffData.branch).toBe("feature/task-24");
+      await harness.run(async () => {
+        nextBranch.resolve({ name: "feature/task-24", detached: false });
+        await refresh;
+      });
+      expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+      expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+      holdBranch = false;
+      holdStatus = true;
+      await harness.run((state) => {
+        refresh = state.refreshWorktree("soft");
+      });
+      await harness.waitFor((state) => state.diffData.isLoading);
+      expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+      expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
+      expect(harness.getLatest().diffData.fileStatuses[0]?.path).toBe("draft.ts");
+      await harness.run(async () => {
+        nextStatus.resolve();
+        await refresh;
+      });
+      expect(harness.getLatest().diffData.comparisonReference).toBe("refs/heads/release");
+    } finally {
+      nextStatus.resolve();
+      nextBranch.resolve({ name: "feature/task-24", detached: false });
+      await harness.unmount();
+    }
+  });
+
   test("disables the snapshot when the build-tools panel is closed", async () => {
     const harness = createHookHarness(
       createBaseArgs({ isGitTabActive: false, isRightPanelOpen: false }),
@@ -246,12 +654,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         status: "resolved",
         shouldBlockDiffLoading: true,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-25",
-        worktreeResolutionTaskId: "task-25",
-        shouldBlockDiffLoading: true,
-      });
+      expect(readStatus).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       queryClient.clear();
@@ -300,12 +703,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         shouldBlockDiffLoading: false,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-24",
-        worktreeResolutionTaskId: null,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-24",
+      );
     } finally {
       await harness.unmount();
     }
@@ -340,12 +744,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         path: "/repo/.worktrees/task-24",
         disabledReason: null,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-24",
-        worktreeResolutionTaskId: null,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-24",
+      );
     } finally {
       await harness.unmount();
     }
@@ -510,12 +915,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         status: "resolved",
         shouldBlockDiffLoading: false,
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        worktreePath: "/repo/.worktrees/task-25",
-        worktreeResolutionTaskId: "task-25",
-        isWorktreeResolutionResolving: true,
-        shouldBlockDiffLoading: false,
-      });
+      await harness.waitFor(() => readStatus.mock.calls.length > 0);
+      expect(readStatus).toHaveBeenCalledWith(
+        "/repo",
+        "HEAD",
+        "uncommitted",
+        "/repo/.worktrees/task-25",
+      );
 
       didResolveTaskWorktreeFetch = true;
       taskWorktreeFetch.resolve({ workingDirectory: "/repo/.worktrees/task-25" });
@@ -545,9 +951,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         path: null,
         disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
       });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        shouldBlockDiffLoading: true,
-      });
+      expect(readStatus).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -596,10 +1000,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           path: "/repo/.worktrees/task-24",
           disabledReason: null,
         });
-        expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-          repoPath: "/repo",
-          worktreePath: "/repo/.worktrees/task-24",
-        });
+        await harness.waitFor(() => readStatus.mock.calls.length > 0);
+        expect(readStatus).toHaveBeenCalledWith(
+          "/repo",
+          "HEAD",
+          "uncommitted",
+          "/repo/.worktrees/task-24",
+        );
       } finally {
         await harness.unmount();
       }
@@ -629,6 +1036,20 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps the selected detached revision for repository file reads", async () => {
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({
+            detached: true,
+            revision: "head-before",
+          }),
+          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+            ...taskStatus(target, scope),
+            currentBranch: { detached: true, revision: "head-before" },
+          }),
+        },
+      }),
+    );
     const args = createBaseArgs({
       activeBranch: { detached: true, revision: "head-before" },
       selectedView: createSelectedView({
@@ -680,9 +1101,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(snapshot.targetBranchState.validationError).toBe(
         "Invalid openducktor.targetBranch metadata: missing field `branch`.",
       );
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).not.toHaveProperty(
-        "preconditionError",
-      );
+      await harness.waitFor((state) => state.diffData.fileStatuses[0]?.path === "draft.ts");
+      expect(snapshot.comparison?.target).toEqual({ branch: "@{upstream}" });
     } finally {
       await harness.unmount();
     }
@@ -711,3 +1131,100 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 });
+
+function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktreeStatus {
+  return {
+    currentBranch: { name: "feature/task-24", detached: false },
+    fileStatuses: [{ path: "draft.ts", status: "M", staged: false }],
+    fileDiffs: [],
+    targetAheadBehind: { ahead: target === "HEAD" ? 0 : 2, behind: 1 },
+    upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+    snapshot: {
+      effectiveWorkingDir: "/repo/.worktrees/task-24",
+      targetBranch: target,
+      diffScope: scope,
+      observedAtMs: 1,
+      hashVersion: 1,
+      statusHash: target === "HEAD" ? "0123456789abcdef" : "1111111111111111",
+      diffHash: "fedcba9876543210",
+    },
+  };
+}
+
+test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once", async (mode) => {
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  configureShellBridge(
+    createGitBridge({
+      client: {
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: async () => {
+          throw new Error("Check the remote connection.");
+        },
+      },
+    }),
+  );
+  const harness = createHookHarness(
+    createBaseArgs({
+      selectedView: createSelectedView({
+        selectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranch: { branch: "release", remote: "origin" },
+        }),
+      }),
+    }),
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor(
+      (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/release",
+    );
+    await harness.run(async (state) => {
+      try {
+        await state.refreshWorktree(mode);
+      } catch {}
+    });
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
+      description: "Check the remote connection.",
+    });
+  } finally {
+    await harness.unmount();
+    report.mockRestore();
+  }
+});
+
+const readStatus = mock(
+  async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
+    taskStatus(target, scope),
+);
+
+function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFixture>[0] = {}) {
+  return createShellBridgeFixture({
+    client: {
+      taskWorktreeGet: taskWorktreeGetMock,
+      gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+      gitGetComparisonTarget: async (_repo, _dir, target) => ({
+        kind: "available",
+        reference: target.remote
+          ? `refs/remotes/${target.remote}/${target.branch}`
+          : `refs/heads/${target.branch}`,
+      }),
+      gitGetWorktreeStatus: readStatus,
+      gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
+        const full = taskStatus(target, scope);
+        return {
+          currentBranch: full.currentBranch,
+          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+          targetAheadBehind: full.targetAheadBehind,
+          upstreamAheadBehind: full.upstreamAheadBehind,
+          snapshot: full.snapshot,
+        };
+      },
+      ...client,
+    },
+  });
+}

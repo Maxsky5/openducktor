@@ -167,6 +167,8 @@ export function setupAgentStudioGitPanelTests(): void {
           disabled,
           className,
           popoverClassName,
+          open,
+          onOpenChange,
         }: {
           value: string;
           options: { value: string; label: string }[];
@@ -174,6 +176,8 @@ export function setupAgentStudioGitPanelTests(): void {
           disabled?: boolean;
           className?: string;
           popoverClassName?: string;
+          open?: boolean;
+          onOpenChange?: (open: boolean) => void;
         }) =>
           createElement(
             "button",
@@ -184,6 +188,10 @@ export function setupAgentStudioGitPanelTests(): void {
               "data-testid": "mock-branch-selector",
               "data-popover-class": popoverClassName,
               onClick: () => {
+                if (open === false) {
+                  onOpenChange?.(true);
+                  return;
+                }
                 const fallback = options.find((option) => option.value !== value)?.value ?? value;
                 onValueChange(fallback);
               },

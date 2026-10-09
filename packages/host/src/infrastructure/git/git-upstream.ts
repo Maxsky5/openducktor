@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { CommitsAheadBehind, FileStatus, GitCurrentBranch } from "@openducktor/contracts";
+import type { FileStatus, GitCurrentBranch } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -26,7 +26,6 @@ const gitResourceError = (
 export const upstreamTargetBranch = "@{upstream}";
 const rebaseConflictOutputUnavailable =
   "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
-const rebaseConflictTargetUnavailable = "current rebase target";
 export const normalizeMergeRef = (mergeRef: string): string =>
   mergeRef.startsWith("refs/") ? mergeRef : `refs/heads/${mergeRef}`;
 export type UpstreamTargetConfig = {
@@ -90,42 +89,19 @@ export const resolveFallbackRemoteRefForBranch = (
     }
     return matches.length === 1 ? matches[0] : undefined;
   });
-export const resolveUpstreamTargetForBranch = (
+export const resolveTrackedUpstreamReference = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  branchName: string | undefined,
+  branch: string | undefined,
 ) =>
   Effect.gen(function* () {
-    if (!branchName) {
-      return undefined;
-    }
-    const remoteResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "config",
-      "--get",
-      `branch.${branchName}.remote`,
-    ]);
-    if (!remoteResult.ok || !remoteResult.stdout.trim()) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    const mergeResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "config",
-      "--get",
-      `branch.${branchName}.merge`,
-    ]);
-    if (!mergeResult.ok || !mergeResult.stdout.trim()) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    const upstreamRef = resolveUpstreamRef(remoteResult.stdout.trim(), mergeResult.stdout.trim());
-    const existsResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      upstreamRef,
-    ]);
-    if (!existsResult.ok) {
-      return yield* resolveFallbackRemoteRefForBranch(runner, workingDirectory, branchName);
-    }
-    return upstreamRef;
+    if (!branch) return undefined;
+    const ref = (yield* runGit(runner, workingDirectory, [
+      "for-each-ref",
+      "--format=%(upstream)",
+      `refs/heads/${branch}`,
+    ])).trim();
+    return ref || undefined;
   });
 export const resolveUpstreamTargetConfigForBranch = (
   runner: GitCommandRunner,
@@ -198,18 +174,31 @@ export const resolveUpstreamAheadBehind = (
   runner: GitCommandRunner,
   workingDirectory: string,
   upstreamTarget: string | undefined,
-  targetAheadBehind: CommitsAheadBehind,
 ) =>
   Effect.gen(function* () {
     if (!upstreamTarget) {
-      return { outcome: "untracked" as const, ahead: targetAheadBehind.ahead };
+      return { outcome: "untracked" as const, ahead: 0 };
     }
-    const result = yield* commitsAgainstTargetOrDefault(
-      runner,
-      workingDirectory,
-      upstreamTarget,
-    ).pipe(
-      Effect.map((counts) => ({ outcome: "counts" as const, counts })),
+    const result = yield* Effect.gen(function* () {
+      const ref = yield* runGitAllowFailure(runner, workingDirectory, [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        upstreamTarget,
+      ]);
+      // A new task branch can have tracking settings before its first push.
+      if (!ref.ok && ref.exitCode === 1 && upstreamTarget.startsWith("refs/remotes/")) {
+        return { outcome: "untracked" as const, ahead: 0 };
+      }
+      if (!ref.ok) {
+        return yield* gitOperationError(
+          `Cannot read upstream ${upstreamTarget}: ${combineOutput(ref.stdout, ref.stderr)}`,
+          "git.show-ref",
+        );
+      }
+      const counts = yield* commitsAgainstTargetOrDefault(runner, workingDirectory, upstreamTarget);
+      return { outcome: "tracking" as const, ahead: counts.ahead, behind: counts.behind };
+    }).pipe(
       Effect.catch((error) =>
         Effect.succeed({
           outcome: "error" as const,
@@ -217,14 +206,7 @@ export const resolveUpstreamAheadBehind = (
         }),
       ),
     );
-    if (result.outcome === "error") {
-      return result;
-    }
-    return {
-      outcome: "tracking" as const,
-      ahead: result.counts.ahead,
-      behind: result.counts.behind,
-    };
+    return result;
   });
 const resolveGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
   Effect.gen(function* () {
@@ -281,7 +263,6 @@ export const loadRebaseConflictContext = (
   runner: GitCommandRunner,
   workingDirectory: string,
   currentBranch: GitCurrentBranch,
-  fallbackTargetBranch: string | undefined,
   fileStatuses: FileStatus[],
 ) =>
   Effect.gen(function* () {
@@ -291,24 +272,28 @@ export const loadRebaseConflictContext = (
     if (conflictedFiles.length === 0) {
       return undefined;
     }
-    const isRebaseInProgress =
-      (yield* hasGitPath(runner, workingDirectory, "rebase-merge")) ||
-      (yield* hasGitPath(runner, workingDirectory, "rebase-apply"));
-    if (!isRebaseInProgress) {
-      return undefined;
-    }
-    const mergeHeadName = yield* readGitPathContentsIfExists(
+    let directory: string;
+    if (yield* hasGitPath(runner, workingDirectory, "rebase-merge")) directory = "rebase-merge";
+    else if (yield* hasGitPath(runner, workingDirectory, "rebase-apply"))
+      directory = "rebase-apply";
+    else return undefined;
+    const headName = yield* readGitPathContentsIfExists(
       runner,
       workingDirectory,
-      "rebase-merge/head-name",
+      `${directory}/head-name`,
     );
-    const applyHeadName = yield* readGitPathContentsIfExists(
+    // The diff target can be HEAD. Git records the actual rebase destination in onto.
+    const targetBranch = yield* readGitPathContentsIfExists(
       runner,
       workingDirectory,
-      "rebase-apply/head-name",
+      `${directory}/onto`,
     );
-    const currentBranchName =
-      currentBranch.name ?? normalizeHeadName(mergeHeadName) ?? normalizeHeadName(applyHeadName);
+    if (!targetBranch)
+      return yield* gitOperationError(
+        "Cannot restore the rebase destination: Git rebase metadata has no onto commit.",
+        "git.rebase.context",
+      );
+    const currentBranchName = currentBranch.name ?? normalizeHeadName(headName);
     const statusOutput = yield* runGitAllowFailure(runner, workingDirectory, [
       "status",
       "--untracked-files=no",
@@ -319,7 +304,7 @@ export const loadRebaseConflictContext = (
     return {
       operation: "rebase" as const,
       currentBranch: currentBranchName,
-      targetBranch: fallbackTargetBranch ?? rebaseConflictTargetUnavailable,
+      targetBranch,
       conflictedFiles,
       output: statusOutput.trim() ? statusOutput : rebaseConflictOutputUnavailable,
     };

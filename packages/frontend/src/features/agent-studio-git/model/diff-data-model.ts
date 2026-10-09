@@ -20,6 +20,7 @@ export type ScopeSummaryFields = Pick<
   | "commitsAheadBehind"
   | "upstreamAheadBehind"
   | "upstreamStatus"
+  | "upstreamError"
   | "error"
   | "hashVersion"
   | "statusHash"
@@ -143,6 +144,7 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
     aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
     aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
     left.upstreamStatus === right.upstreamStatus &&
+    left.upstreamError === right.upstreamError &&
     left.error === right.error &&
     hashMetadataEqual(left, right)
   );
@@ -154,12 +156,9 @@ const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): 
   gitConflict: source.gitConflict ?? null,
   fileStatuses: source.fileStatuses,
   uncommittedFileCount: source.uncommittedFileCount,
-  commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   upstreamStatus: source.upstreamStatus,
-  error: base.error ?? source.error,
-  hashVersion: source.hashVersion,
-  statusHash: source.statusHash,
+  upstreamError: source.upstreamError ?? null,
 });
 
 const mergeSharedSummaryFields = (
@@ -170,12 +169,9 @@ const mergeSharedSummaryFields = (
   branch: source.branch,
   gitConflict: source.gitConflict ?? null,
   uncommittedFileCount: source.uncommittedFileCount,
-  commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   upstreamStatus: source.upstreamStatus,
-  error: base.error ?? source.error,
-  hashVersion: source.hashVersion,
-  statusHash: source.statusHash,
+  upstreamError: source.upstreamError ?? null,
 });
 
 const finalizeCompletedState = (
@@ -387,6 +383,8 @@ export const applyScopeError = ({
   const nextScopeSnapshot: ScopeSnapshot = {
     ...previousScopeSnapshot,
     error,
+    fileDiffs: [],
+    commitsAheadBehind: null,
     hashVersion: null,
     statusHash: null,
     diffHash: null,

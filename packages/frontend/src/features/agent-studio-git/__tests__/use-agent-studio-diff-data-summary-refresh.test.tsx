@@ -15,6 +15,37 @@ import {
 setupAgentStudioDiffDataTestHarness();
 
 describe("useAgentStudioDiffData", () => {
+  test("summary refresh checks both scopes without reloading unchanged full diffs", async () => {
+    const harness = createHookHarness(createBaseArgs());
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.loadedScopesByScope.uncommitted);
+      await harness.run(async (state) => {
+        await state.refreshAllScopes();
+      });
+      await harness.waitFor((state) => state.loadedScopesByScope.target);
+      const diffs = harness.getLatest().scopeStatesByScope;
+      gitGetWorktreeStatusMock.mockClear();
+      gitGetWorktreeStatusSummaryMock.mockClear();
+      await harness.run(async (state) => {
+        await state.refreshAllScopes("summary");
+      });
+      expect(gitGetWorktreeStatusSummaryMock.mock.calls.map((call) => call[2]).sort()).toEqual([
+        "target",
+        "uncommitted",
+      ]);
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().scopeStatesByScope.target.fileDiffs).toEqual(
+        diffs.target.fileDiffs,
+      );
+      expect(harness.getLatest().scopeStatesByScope.uncommitted.fileDiffs).toEqual(
+        diffs.uncommitted.fileDiffs,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refresh syncs shared branch/upstream fields for cached inactive scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
@@ -136,7 +167,7 @@ describe("useAgentStudioDiffData", () => {
         state.refresh();
       });
       await harness.waitFor((state) => state.upstreamStatus === "untracked");
-      expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
+      expect(harness.getLatest().upstreamAheadBehind).toBeNull();
 
       await harness.run((state) => {
         state.setDiffScope("uncommitted");
@@ -145,7 +176,7 @@ describe("useAgentStudioDiffData", () => {
 
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
       expect(harness.getLatest().upstreamStatus).toBe("untracked");
-      expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
+      expect(harness.getLatest().upstreamAheadBehind).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -294,7 +325,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusSummaryMock).toHaveBeenNthCalledWith(
         1,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );

@@ -77,7 +77,6 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     workspaceName: "Repo",
     repoPath: "/repo",
   },
-  branches: [],
   buildTools: createBuildToolsFixture(),
   selection: {
     view: createSelectionView(),

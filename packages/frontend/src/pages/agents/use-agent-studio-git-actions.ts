@@ -1,6 +1,8 @@
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { CommitsAheadBehind } from "@openducktor/contracts";
-import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
@@ -59,6 +61,7 @@ type AgentStudioGitActionState = {
 };
 
 type UseAgentStudioGitActionsInput = {
+  contextKey?: string | undefined;
   repoPath: string | null;
   workingDir: string | null;
   branch: string | null;
@@ -82,6 +85,7 @@ type UseAgentStudioGitActionsInput = {
 };
 
 export function useAgentStudioGitActions({
+  contextKey,
   repoPath,
   workingDir,
   branch,
@@ -95,7 +99,7 @@ export function useAgentStudioGitActions({
   detectedConflict = null,
   detectedConflictedFiles = [],
   worktreeStatusSnapshotKey = null,
-  refreshDiffData,
+  refreshDiffData: refreshInput,
   isDiffDataLoading = false,
   onResolveGitConflict,
   assistanceContextKey = "",
@@ -103,6 +107,33 @@ export function useAgentStudioGitActions({
   conflictAssistanceBlockedReason = null,
   conflictAssistanceIsStarting = false,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {
+  const key = contextKey ?? JSON.stringify([repoPath, workingDir, branch, targetBranch]);
+  const currentKey = useRef(key);
+  useLayoutEffect(() => {
+    currentKey.current = key;
+  }, [key]);
+  const isCurrentContext = useCallback(() => currentKey.current === key, [key]);
+  const queryClient = useQueryClient();
+  const refreshDiffData = useCallback<GitDiffRefresh>(
+    async (mode) => {
+      if (repoPath)
+        await invalidateGitWorkingDirectoryQueries(queryClient, repoPath, workingDir ?? repoPath);
+      if (isCurrentContext()) await refreshInput(mode);
+    },
+    [repoPath, workingDir, queryClient, isCurrentContext, refreshInput],
+  );
+  const operationInFlight = useRef(false);
+  const runAction = useCallback(async <T>(action: () => Promise<T>): Promise<T | undefined> => {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
+    try {
+      return await action();
+    } finally {
+      operationInFlight.current = false;
+    }
+  }, []);
+  const confirmationKey = useRef(key);
+  const isConfirmationCurrent = confirmationKey.current === key;
   const {
     commitError,
     pushError,
@@ -115,6 +146,8 @@ export function useAgentStudioGitActions({
     clearActionErrors,
   } = useAgentStudioGitActionErrors(JSON.stringify([repoPath, workingDir]));
   const conflictControllerInput: Parameters<typeof useAgentStudioGitConflictController>[0] = {
+    contextKey: key,
+    isCurrentContext,
     repoPath,
     workingDir,
     branch,
@@ -176,6 +209,7 @@ export function useAgentStudioGitActions({
     confirmReset,
     cancelReset,
   } = useAgentStudioGitResetActions({
+    isCurrentContext,
     repoPath,
     workingDir,
     branchIdentityKey,
@@ -192,6 +226,7 @@ export function useAgentStudioGitActions({
   });
 
   const { isCommitting, commitAll } = useAgentStudioGitCommitActions({
+    isCurrentContext,
     repoPath,
     workingDir,
     refreshDiffData,
@@ -202,6 +237,7 @@ export function useAgentStudioGitActions({
 
   const { isPushing, pendingForcePush, pushBranch, confirmForcePush, cancelForcePush } =
     useAgentStudioGitPushActions({
+      isCurrentContext,
       repoPath,
       workingDir,
       branch,
@@ -219,6 +255,7 @@ export function useAgentStudioGitActions({
     cancelPullRebase,
     rebaseOntoTarget,
   } = useAgentStudioGitRebaseActions({
+    isCurrentContext,
     repoPath,
     workingDir,
     branch,
@@ -231,6 +268,14 @@ export function useAgentStudioGitActions({
     setRebaseError,
     captureFreshConflict,
   });
+
+  useEffect(() => {
+    confirmationKey.current = key;
+    cancelForcePush();
+    cancelPullRebase();
+    cancelReset();
+    clearActionErrors();
+  }, [key, cancelForcePush, cancelPullRebase, cancelReset, clearActionErrors]);
 
   return useMemo(
     () => ({
@@ -255,29 +300,38 @@ export function useAgentStudioGitActions({
           ? "Restore the Git conflict directory before asking for assistance."
           : null),
       conflictAssistanceIsStarting,
-      pendingForcePush,
-      pendingPullRebase,
-      pendingReset,
+      pendingForcePush: isConfirmationCurrent ? pendingForcePush : null,
+      pendingPullRebase: isConfirmationCurrent ? pendingPullRebase : null,
+      pendingReset: isConfirmationCurrent ? pendingReset : null,
       commitError,
       pushError,
       rebaseError,
       resetError,
-      commitAll,
+      commitAll: async (message: string) => (await runAction(() => commitAll(message))) ?? false,
       requestFileReset,
       requestHunkReset,
-      confirmReset,
+      confirmReset: async () => {
+        if (isCurrentContext() && isConfirmationCurrent) await runAction(confirmReset);
+      },
       cancelReset,
-      pushBranch,
-      confirmForcePush,
+      pushBranch: () => runAction(pushBranch),
+      confirmForcePush: async () => {
+        if (isCurrentContext() && isConfirmationCurrent) await runAction(confirmForcePush);
+      },
       cancelForcePush,
-      confirmPullRebase,
+      confirmPullRebase: async () => {
+        if (isCurrentContext() && isConfirmationCurrent) await runAction(confirmPullRebase);
+      },
       cancelPullRebase,
-      rebaseOntoTarget,
-      abortGitConflict,
-      askBuilderToResolveGitConflict,
-      pullFromUpstream,
+      rebaseOntoTarget: () => runAction(rebaseOntoTarget),
+      abortGitConflict: () => runAction(abortGitConflict),
+      askBuilderToResolveGitConflict: () => runAction(askBuilderToResolveGitConflict),
+      pullFromUpstream: () => runAction(pullFromUpstream),
     }),
     [
+      runAction,
+      isCurrentContext,
+      isConfirmationCurrent,
       isCommitting,
       isPushing,
       isRebasing,

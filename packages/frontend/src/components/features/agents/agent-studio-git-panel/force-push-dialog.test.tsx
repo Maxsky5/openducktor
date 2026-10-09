@@ -21,6 +21,7 @@ describe("ForcePushDialog", () => {
   test("uses the info surface styling and body spacing for the safety content", async () => {
     rendered = render(
       <ForcePushDialog
+        confirmDisabled={false}
         pendingForcePush={{
           remote: "origin",
           branch: "feature/task-11",

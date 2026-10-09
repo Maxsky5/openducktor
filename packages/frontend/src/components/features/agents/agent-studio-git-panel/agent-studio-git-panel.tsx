@@ -7,6 +7,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -145,10 +146,18 @@ function AgentStudioGitPanelContent({
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
 }): ReactElement {
+  const diffPanelId = `${useId()}-diff`;
   return (
     <>
-      <AgentStudioGitPanelHeader model={model} view={view} />
-      <AgentStudioGitDiff model={model} view={view} />
+      <AgentStudioGitPanelHeader model={model} view={view} diffPanelId={diffPanelId} />
+      <div
+        id={diffPanelId}
+        role="tabpanel"
+        aria-labelledby={`${diffPanelId}-tab-${view.diffScope}`}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <AgentStudioGitDiff model={model} view={view} />
+      </div>
       <AgentStudioGitCommit model={model} view={view} />
     </>
   );
@@ -157,14 +166,16 @@ function AgentStudioGitPanelContent({
 function AgentStudioGitPanelHeader({
   model,
   view,
+  diffPanelId,
 }: {
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
+  diffPanelId: string;
 }): ReactElement {
   const headerProps = getGitInfoHeaderProps(model, view);
   return (
     <>
-      <GitInfoHeader {...headerProps} />
+      <GitInfoHeader key={model.subjectKey} {...headerProps} diffPanelId={diffPanelId} />
       {model.resetError ? (
         <div
           role="alert"
@@ -196,14 +207,18 @@ function getGitInfoHeaderProps(
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
     comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
+    comparisonPending: model.comparisonPending ?? false,
+    branchKnown: model.branchKnown ?? true,
+    comparisonReference: model.comparisonReference ?? null,
     pullRequest: model.pullRequest ?? null,
-    branch: view.displayedScopeState.branch,
+    branch: model.branch,
     targetBranch: model.targetBranch,
     diffScope: view.diffScope,
     uncommittedFileCount: view.displayedUncommittedFileCount,
-    commitsAheadBehind: view.displayedScopeState.commitsAheadBehind,
+    commitsAheadBehind: model.commitsAheadBehind,
     upstreamAheadBehind: view.displayedScopeState.upstreamAheadBehind ?? null,
     upstreamStatus: view.displayedScopeState.upstreamStatus,
+    upstreamError: view.displayedScopeState.upstreamError ?? null,
     isLoading: model.isLoading,
     isCommitting: model.isCommitting ?? false,
     isPushing: model.isPushing ?? false,
@@ -220,6 +235,11 @@ function getGitInfoHeaderProps(
     rebaseOntoTarget: model.rebaseOntoTarget ?? null,
     pullFromUpstream: model.pullFromUpstream ?? null,
     onDetectPullRequest: model.onDetectPullRequest ?? null,
+    targetBranchEditable: model.targetBranchEditable,
+    targetBranchHelpText: model.targetBranchHelpText,
+    targetBranchesPending: model.targetBranchesPending,
+    targetBranchesError: model.targetBranchesError,
+    retryTargetBranches: model.retryTargetBranches,
     targetBranchOptions: model.targetBranchOptions ?? [],
     targetBranchSelectionValue: model.targetBranchSelectionValue ?? "",
     setDiffScope: view.handleDiffScopeChange,
@@ -285,6 +305,7 @@ function AgentStudioGitDiff({
   return (
     <ScrollArea className="min-h-0 flex-1">
       <EmptyDiffState
+        targetBranch={model.targetBranch}
         isLoading={view.displayedIsInitialLoading}
         contextMode={model.contextMode ?? "worktree"}
         diffScope={view.diffScope}
@@ -333,6 +354,14 @@ function AgentStudioGitPanelDialogs({
   pendingReset: PendingReset | null;
   resetDialog: ReturnType<typeof getResetDialog>;
 }): ReactElement {
+  const confirmDisabled = [
+    model.isCommitting,
+    model.isPushing,
+    model.isRebasing,
+    model.isResetting,
+    model.isHandlingGitConflict,
+    model.isGitActionsLocked,
+  ].some(Boolean);
   return (
     <>
       {conflict.modalActions ? (
@@ -345,12 +374,14 @@ function AgentStudioGitPanelDialogs({
       ) : null}
       <ForcePushDialog
         pendingForcePush={model.pendingForcePush ?? null}
+        confirmDisabled={confirmDisabled}
         isPushing={model.isPushing ?? false}
         onCancel={() => model.cancelForcePush?.()}
         onConfirm={() => void model.confirmForcePush?.()}
       />
       <PullRebaseDialog
         pendingPullRebase={model.pendingPullRebase ?? null}
+        confirmDisabled={confirmDisabled}
         isRebasing={model.isRebasing ?? false}
         onCancel={() => model.cancelPullRebase?.()}
         onConfirm={() => void model.confirmPullRebase?.()}
@@ -374,7 +405,7 @@ function AgentStudioGitPanelDialogs({
         confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
         confirmPendingLabel={pendingReset?.kind === "hunk" ? "Resetting hunk…" : "Resetting file…"}
         confirmPending={model.isResetting ?? false}
-        confirmDisabled={model.isResetting ?? false}
+        confirmDisabled={confirmDisabled}
         onConfirm={() => void model.confirmReset?.()}
         confirmTestId="agent-studio-git-confirm-reset-button"
         confirmIcon={Undo2}

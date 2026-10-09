@@ -7,6 +7,7 @@ import {
 } from "./use-agent-studio-git-action-utils";
 
 type UseAgentStudioGitCommitActionsArgs = {
+  isCurrentContext: () => boolean;
   repoPath: string | null;
   workingDir: string | null;
   refreshDiffData: RefreshGitDiffData;
@@ -16,6 +17,7 @@ type UseAgentStudioGitCommitActionsArgs = {
 };
 
 export function useAgentStudioGitCommitActions({
+  isCurrentContext,
   repoPath,
   workingDir,
   refreshDiffData,
@@ -50,8 +52,13 @@ export function useAgentStudioGitCommitActions({
       try {
         try {
           await host.gitCommitAll(repoPath, trimmedMessage, workingDir ?? undefined);
+          if (!isCurrentContext()) {
+            await refreshDiffData("soft");
+            return false;
+          }
           clearActionErrors();
         } catch (error) {
+          if (!isCurrentContext()) return false;
           setCommitError(toErrorMessage(error, "Commit failed."));
           return false;
         }
@@ -59,6 +66,7 @@ export function useAgentStudioGitCommitActions({
         try {
           await refreshDiffData("soft");
         } catch (error) {
+          if (!isCurrentContext()) return false;
           setCommitError(toErrorMessage(error, "Diff refresh failed."));
         }
 
@@ -68,6 +76,7 @@ export function useAgentStudioGitCommitActions({
       }
     },
     [
+      isCurrentContext,
       clearActionErrors,
       ensureGitActionsUnlocked,
       isCommitting,

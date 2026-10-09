@@ -18,6 +18,9 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   /** A repository-root branch switcher shown in repository mode. */
   repositoryBranchControl?: ReactNode;
   comparisonUnavailableReason?: string | null;
+  comparisonPending?: boolean;
+  branchKnown?: boolean;
+  comparisonReference?: string | null;
   commentOwner?: InlineCommentOwner | null;
   commentPlaceholder?: string;
   pullRequest?: PullRequest | null;
@@ -65,7 +68,12 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   pullFromUpstream?: () => Promise<void>;
   onDetectPullRequest?: () => Promise<void> | void;
   openDirectoryInTool?: (toolId: SystemOpenInToolId) => Promise<void>;
+  targetBranchEditable?: boolean | undefined;
+  targetBranchHelpText?: string | undefined;
+  targetBranchesPending?: boolean | undefined;
+  targetBranchesError?: string | null | undefined;
+  retryTargetBranches?: (() => Promise<void>) | undefined;
   targetBranchOptions?: ComboboxOption[];
   targetBranchSelectionValue?: string;
-  onUpdateTargetBranch?: (selection: string) => Promise<void>;
+  onUpdateTargetBranch?: ((selection: string) => Promise<void>) | undefined;
 };

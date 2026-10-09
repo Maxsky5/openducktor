@@ -1,8 +1,10 @@
+import { GitBranch, Pencil } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
 
@@ -18,9 +20,9 @@ const LAYOUT_CLASSES = {
   },
   inline: {
     root: "space-y-1",
-    row: "flex min-w-0 items-center gap-2",
-    label: "shrink-0 text-xs text-muted-foreground",
-    selector: "min-w-0 flex-1",
+    row: "flex h-7 min-w-0 items-center gap-1.5",
+    label: "sr-only",
+    selector: "shrink-0",
     trigger: "h-7 text-xs",
   },
 } satisfies Record<RepositoryBranchSwitcherLayout, Record<string, string>>;
@@ -55,7 +57,6 @@ export const RepositoryBranchSwitcher = memo(function RepositoryBranchSwitcher({
   const [pendingBranchSelection, setPendingBranchSelection] =
     useState<PendingBranchSelection | null>(null);
   const pendingBranchRequestIdRef = useRef(0);
-  const labelId = `${useId()}-repository-branch`;
   const activeBranchValue = activeBranch?.name ?? "";
 
   const branchOptions = useMemo(() => toBranchSelectorOptions(branches), [branches]);
@@ -78,64 +79,57 @@ export const RepositoryBranchSwitcher = memo(function RepositoryBranchSwitcher({
 
   return (
     <div className={classes.root}>
-      <div className={classes.row}>
-        <p id={labelId} className={classes.label} title={workspaceRepoPath}>
-          Repository branch
-        </p>
-        <BranchSelector
-          value={selectedBranchValue}
-          options={branchOptions}
-          disabled={isBranchPickerDisabled}
-          placeholder={branchPlaceholder}
-          className={classes.selector}
-          triggerClassName={classes.trigger}
-          triggerAriaLabelledBy={labelId}
-          popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
-          onValueChange={(nextBranch) => {
-            const previousBranch = activeBranchValue;
+      <RepositoryBranchRow
+        layout={layout}
+        repoPath={workspaceRepoPath}
+        value={selectedBranchValue}
+        options={branchOptions}
+        disabled={isBranchPickerDisabled}
+        placeholder={branchPlaceholder}
+        onValueChange={(nextBranch) => {
+          const previousBranch = activeBranchValue;
 
-            if (!nextBranch || nextBranch === previousBranch) {
-              return;
-            }
+          if (!nextBranch || nextBranch === previousBranch) {
+            return;
+          }
 
-            guardBranchSwitch(
-              () => {
-                const requestId = ++pendingBranchRequestIdRef.current;
-                setPendingBranchSelection({
-                  repoPath: workspaceRepoPath,
-                  requestId,
-                  value: nextBranch,
-                });
-                return new Promise<boolean>((resolve) => {
-                  let switched = false;
-                  void switchBranch(nextBranch, () => {
-                    switched = true;
-                    resolve(true);
+          guardBranchSwitch(
+            () => {
+              const requestId = ++pendingBranchRequestIdRef.current;
+              setPendingBranchSelection({
+                repoPath: workspaceRepoPath,
+                requestId,
+                value: nextBranch,
+              });
+              return new Promise<boolean>((resolve) => {
+                let switched = false;
+                void switchBranch(nextBranch, () => {
+                  switched = true;
+                  resolve(true);
+                })
+                  .catch((error) => {
+                    if (!switched) {
+                      toast.error("Failed to switch branch", {
+                        description: errorMessage(error),
+                      });
+                    }
                   })
-                    .catch((error) => {
-                      if (!switched) {
-                        toast.error("Failed to switch branch", {
-                          description: errorMessage(error),
-                        });
-                      }
-                    })
-                    .finally(() => {
-                      resolve(false);
-                      setPendingBranchSelection((currentSelection) =>
-                        currentSelection?.repoPath === workspaceRepoPath &&
-                        currentSelection.requestId === requestId
-                          ? null
-                          : currentSelection,
-                      );
-                    });
-                });
-              },
-              undefined,
-              { waitForSuccess: true, kind: "root_branch_switch" },
-            );
-          }}
-        />
-      </div>
+                  .finally(() => {
+                    resolve(false);
+                    setPendingBranchSelection((currentSelection) =>
+                      currentSelection?.repoPath === workspaceRepoPath &&
+                      currentSelection.requestId === requestId
+                        ? null
+                        : currentSelection,
+                    );
+                  });
+              });
+            },
+            undefined,
+            { waitForSuccess: true, kind: "root_branch_switch" },
+          );
+        }}
+      />
       {branchSyncDegraded ? (
         <p className="px-1 text-[11px] text-amber-700 dark:text-amber-400">
           Branch sync degraded. Auto-refresh may be stale.
@@ -147,3 +141,71 @@ export const RepositoryBranchSwitcher = memo(function RepositoryBranchSwitcher({
     </div>
   );
 });
+
+function RepositoryBranchRow({
+  layout,
+  repoPath,
+  value,
+  options,
+  disabled,
+  placeholder,
+  onValueChange,
+}: Pick<Parameters<typeof BranchSelector>[0], "value" | "options" | "onValueChange"> & {
+  layout: RepositoryBranchSwitcherLayout;
+  repoPath: string;
+  disabled: boolean;
+  placeholder: string;
+}): ReactElement {
+  const labelId = `${useId()}-repository-branch`;
+  const classes = LAYOUT_CLASSES[layout];
+  return (
+    <div className={classes.row}>
+      <p id={labelId} className={classes.label} title={repoPath}>
+        Repository branch
+      </p>
+      {layout === "inline" ? (
+        <>
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
+            title={`Current branch: ${value || placeholder}`}
+          >
+            {value || placeholder}
+          </span>
+        </>
+      ) : null}
+      <BranchSelector
+        value={value}
+        options={options}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={classes.selector}
+        triggerClassName={classes.trigger}
+        triggerAriaLabelledBy={labelId}
+        {...(layout === "inline"
+          ? {
+              trigger: (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  aria-label="Edit repository branch"
+                  title="Switch repository branch"
+                  disabled={disabled}
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+              ),
+            }
+          : {})}
+        popoverClassName={
+          layout === "inline"
+            ? "w-[min(20rem,calc(100vw-1rem))] p-0 [&_[data-slot=command-list]]:max-h-48"
+            : "w-[min(28rem,calc(100vw-2rem))] p-0"
+        }
+        onValueChange={onValueChange}
+      />
+    </div>
+  );
+}

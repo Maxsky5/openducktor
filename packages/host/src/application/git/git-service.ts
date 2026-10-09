@@ -96,17 +96,20 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         }
         const reference =
           input.target.branch === "@{upstream}"
-            ? "@{upstream}"
+            ? yield* gitPort.getTrackedUpstreamReference(workingDirectory)
             : input.target.remote
-              ? `${input.target.remote}/${input.target.branch}`
-              : input.target.branch;
+              ? `refs/remotes/${input.target.remote}/${input.target.branch}`
+              : `refs/heads/${input.target.branch}`;
+        if (!reference) {
+          return {
+            kind: "unavailable" as const,
+            reason: `Branch ${currentBranch.name} has no tracked upstream. Choose a comparison branch or set an upstream.`,
+          };
+        }
         if (!(yield* gitPort.referenceExists(workingDirectory, reference))) {
           return {
             kind: "unavailable" as const,
-            reason:
-              reference === "@{upstream}"
-                ? `Branch ${currentBranch.name} has no tracked upstream. Set an upstream to compare changes.`
-                : `Comparison branch ${reference} is unavailable. Check the configured default target branch.`,
+            reason: `Comparison branch ${reference} is unavailable. Fetch its remote or choose an available branch.`,
           };
         }
         return { kind: "available" as const, reference };

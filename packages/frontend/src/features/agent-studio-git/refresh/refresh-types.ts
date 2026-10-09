@@ -10,7 +10,7 @@ export type DiffRefreshContext = {
 
 export type RefreshScopeContext = Pick<
   DiffRefreshContext,
-  "repoPath" | "targetBranch" | "workingDir" | "scope"
+  "repoPath" | "targetBranch" | "workingDir" | "scope" | "requestContextKey"
 >;
 
 export type RefreshRequest = {

@@ -17,7 +17,7 @@ import {
 setupAgentStudioDiffDataTestHarness();
 
 describe("useAgentStudioDiffData", () => {
-  test("shows cached worktree diff data immediately while refreshing after task switch", async () => {
+  test("hides cached worktree diffs until the new task context is checked", async () => {
     const queryClient = createQueryClient();
     const taskBWorktreePath = "/repo/.worktrees/task-b";
     const freshTaskBStatus = withSnapshotHashes({
@@ -111,12 +111,10 @@ describe("useAgentStudioDiffData", () => {
 
       expect(renders.find((render) => render.worktreePath === taskBWorktreePath)).toEqual({
         worktreePath: taskBWorktreePath,
-        filePath: "src/cached-task-b.ts",
-        isLoading: false,
+        filePath: undefined,
+        isLoading: true,
       });
-      await harness.waitFor(
-        (state) => state.fileStatuses[0]?.path === "src/cached-task-b.ts" && !state.isLoading,
-      );
+      expect(harness.getLatest().fileStatuses).toEqual([]);
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
 
       await harness.run(async () => {
@@ -156,7 +154,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         3,
         "/repo-b",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );
@@ -214,7 +212,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         3,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         "/repo/.worktrees/task-b",
       );
@@ -248,7 +246,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         3,
         "/repo-b",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );

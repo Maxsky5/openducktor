@@ -15,7 +15,6 @@ type AgentStudioRightPanelPanelState = Pick<
 
 type UseAgentStudioRightPanelBridgeArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
-  branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selection: AgentStudioRightPanelBridgeSelection;
   panel: AgentStudioRightPanelPanelState;
@@ -31,7 +30,6 @@ type UseAgentStudioRightPanelBridgeArgs = {
 
 export type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
-  branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
   tabs: UseAgentsPageRightPanelModelArgs["tabs"];
@@ -89,7 +87,6 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
 
 function buildAgentStudioRightPanelBridgeModel({
   activeWorkspace,
-  branches,
   buildTools,
   selection,
   activeTabId,
@@ -117,7 +114,6 @@ function buildAgentStudioRightPanelBridgeModel({
     },
     rightPanel: {
       activeWorkspace,
-      branches,
       buildTools,
       selectedView: selection.view,
       tabs,
@@ -139,7 +135,6 @@ function buildAgentStudioRightPanelBridgeModel({
 
 export function useAgentStudioRightPanelBridge({
   activeWorkspace,
-  branches,
   buildTools,
   selection,
   panel,
@@ -166,7 +161,6 @@ export function useAgentStudioRightPanelBridge({
 
     return buildAgentStudioRightPanelBridgeModel({
       activeWorkspace,
-      branches,
       buildTools,
       selection,
       activeTabId,
@@ -185,7 +179,6 @@ export function useAgentStudioRightPanelBridge({
     });
   }, [
     activeWorkspace,
-    branches,
     detectingPullRequestTaskId,
     documentsModel,
     activeTabId,

@@ -1,3 +1,4 @@
+import { isCancelledError } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type {
   DiffLoadRefs,
@@ -22,6 +23,7 @@ type UseDiffLoadDataArgs = DiffLoadRefs &
   };
 
 export const useAgentStudioDiffLoadData = ({
+  requestContextKeyRef,
   repoPathRef,
   targetBranchRef,
   workingDirRef,
@@ -34,35 +36,30 @@ export const useAgentStudioDiffLoadData = ({
   runner,
 }: UseDiffLoadDataArgs): UseAgentStudioDiffLoaderResult["loadData"] => {
   const loadData = useCallback(
-    async (showLoading = false, context?: LoadDataContext) => {
-      const activeRepoPath = context?.repoPath ?? repoPathRef.current;
-      if (!activeRepoPath) {
+    async (showLoading = false, context?: LoadDataContext): Promise<void> => {
+      const activeRepoPath = context ? context.repoPath : repoPathRef.current;
+      const requestContextKey = context ? context.requestContextKey : requestContextKeyRef.current;
+      if (!activeRepoPath || requestContextKey === null) {
         return;
       }
 
       const loadContext: LoadRequestContext = {
+        requestContextKey,
         repoPath: activeRepoPath,
         scope: context?.scope ?? diffScopeRef.current,
         targetBranch: context?.targetBranch ?? targetBranchRef.current,
-        workingDir: context?.workingDir ?? workingDirRef.current,
+        workingDir: context ? context.workingDir : workingDirRef.current,
       };
+      if (runner.isStale(loadContext)) return;
       const mode = context?.mode ?? "full";
       const force = context?.force === true;
       const replayIfInFlight = context?.replayIfInFlight === true;
-      const didHydrateCachedFullLoad =
-        mode === "full" && context?.hydrateCachedFullLoad === true
-          ? runner.hydrateCachedFullLoad(loadContext)
-          : false;
-      const shouldShowLoading = showLoading && !didHydrateCachedFullLoad;
-      const requestKey = `${loadContext.repoPath}::${loadContext.targetBranch}::${
-        loadContext.workingDir ?? ""
-      }`;
 
       const beginRequestResult = beginRequest({
         scope: loadContext.scope,
         mode,
-        requestKey,
-        showLoading: shouldShowLoading,
+        requestKey: requestContextKey,
+        showLoading,
         replayIfInFlight,
         force,
       });
@@ -71,34 +68,25 @@ export const useAgentStudioDiffLoadData = ({
       }
 
       const { requestSequence, version } = beginRequestResult;
-      if (shouldShowLoading) {
+      if (showLoading) {
         setBatchLoading(true);
       }
 
       try {
-        const inFlightRequestContext: InFlightRequestContext = {
+        const request: InFlightRequestContext = {
           ...loadContext,
-          mode,
-          requestKey,
-          requestContextKey: context?.requestContextKey ?? null,
           requestSequence,
           version,
         };
 
         if (mode === "summary") {
-          await runner.runSummaryLoad(inFlightRequestContext);
+          await runner.runSummaryLoad(request);
           return;
         }
 
-        await runner.runFullLoad({ ...inFlightRequestContext, force });
+        await runner.runFullLoad({ ...request, force });
       } catch (error) {
-        if (
-          runner.hasLoadContextChanged(
-            loadContext.repoPath,
-            loadContext.targetBranch,
-            loadContext.workingDir,
-          )
-        ) {
+        if (isCancelledError(error) || runner.isStale(loadContext)) {
           return;
         }
 
@@ -110,29 +98,32 @@ export const useAgentStudioDiffLoadData = ({
           });
         }
       } finally {
-        const { clearLoading, replayFullLoad } = finishRequest({
-          scope: loadContext.scope,
-          mode,
-          requestKey,
-          requestSequence,
-          showLoading: shouldShowLoading,
-        });
-
-        if (clearLoading) {
-          setBatchLoading(false);
-        }
-
-        if (mode === "full" && replayFullLoad) {
-          queueMicrotask(() => {
-            void loadData(false, {
-              repoPath: loadContext.repoPath,
-              targetBranch: loadContext.targetBranch,
-              workingDir: loadContext.workingDir,
-              scope: loadContext.scope,
-              mode: "full",
-              force: replayFullLoad.force,
-            });
+        if (!runner.isStale(loadContext)) {
+          const { clearLoading, replayFullLoad } = finishRequest({
+            scope: loadContext.scope,
+            mode,
+            requestKey: requestContextKey,
+            requestSequence,
+            showLoading,
           });
+
+          if (clearLoading) {
+            setBatchLoading(false);
+          }
+
+          if (mode === "full" && replayFullLoad) {
+            queueMicrotask(() => {
+              void loadData(false, {
+                requestContextKey: loadContext.requestContextKey,
+                repoPath: loadContext.repoPath,
+                targetBranch: loadContext.targetBranch,
+                workingDir: loadContext.workingDir,
+                scope: loadContext.scope,
+                mode: "full",
+                force: replayFullLoad.force,
+              });
+            });
+          }
         }
       }
     },
@@ -142,6 +133,7 @@ export const useAgentStudioDiffLoadData = ({
       diffScopeRef,
       finishRequest,
       repoPathRef,
+      requestContextKeyRef,
       runner,
       setBatchLoading,
       shouldApplyResult,

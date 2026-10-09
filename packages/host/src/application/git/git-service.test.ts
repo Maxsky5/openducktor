@@ -139,6 +139,9 @@ const createFakeGitPort = ({
     listWorktrees() {
       return Effect.die(new Error("unexpected list worktrees"));
     },
+    getTrackedUpstreamReference() {
+      return Effect.succeed("refs/remotes/origin/main");
+    },
     referenceExists(workingDir, reference) {
       calls.push(`referenceExists:${workingDir}:${reference}`);
       return Effect.succeed(
@@ -695,7 +698,7 @@ describe("createGitService", () => {
           "/repo": { name: "main", detached: false, revision: "abc" },
           "/worktree": { name: "feature", detached: false, revision: "def" },
         },
-        existingRefs: ["/repo:@{upstream}", "/worktree:origin/main"],
+        existingRefs: ["/repo:refs/remotes/origin/main", "/worktree:refs/remotes/origin/main"],
         calls,
       }),
     );
@@ -703,7 +706,7 @@ describe("createGitService", () => {
       Effect.runPromise(
         service.getComparisonTarget({ repoPath: "/repo", target: { branch: "@{upstream}" } }),
       ),
-    ).resolves.toEqual({ kind: "available", reference: "@{upstream}" });
+    ).resolves.toEqual({ kind: "available", reference: "refs/remotes/origin/main" });
     await expect(
       Effect.runPromise(
         service.getComparisonTarget({
@@ -712,8 +715,8 @@ describe("createGitService", () => {
           target: { remote: "origin", branch: "main" },
         }),
       ),
-    ).resolves.toEqual({ kind: "available", reference: "origin/main" });
-    expect(calls).toContain("referenceExists:/worktree:origin/main");
+    ).resolves.toEqual({ kind: "available", reference: "refs/remotes/origin/main" });
+    expect(calls).toContain("referenceExists:/worktree:refs/remotes/origin/main");
   });
   test("reports an unavailable target without replacing the selected working directory", async () => {
     const service = createGitService(
@@ -747,7 +750,7 @@ describe("createGitService", () => {
       ),
     ).resolves.toMatchObject({
       kind: "unavailable",
-      reason: expect.stringContaining("no tracked upstream"),
+      reason: expect.stringContaining("unavailable"),
     });
   });
   test("compares a detached worktree with an explicit target", async () => {
@@ -758,7 +761,7 @@ describe("createGitService", () => {
         gitRepositories: ["/repo", "/worktree"],
         sharedCommonDirectories: ["/repo|/worktree"],
         currentBranches: { "/worktree": { detached: true } },
-        existingRefs: ["/worktree:origin/main"],
+        existingRefs: ["/worktree:refs/remotes/origin/main"],
         calls,
       }),
     );
@@ -770,7 +773,7 @@ describe("createGitService", () => {
           target: { remote: "origin", branch: "main" },
         }),
       ),
-    ).resolves.toEqual({ kind: "available", reference: "origin/main" });
+    ).resolves.toEqual({ kind: "available", reference: "refs/remotes/origin/main" });
     await expect(
       Effect.runPromise(
         service.getComparisonTarget({
@@ -780,7 +783,7 @@ describe("createGitService", () => {
         }),
       ),
     ).resolves.toMatchObject({ kind: "unavailable", reason: expect.stringContaining("detached") });
-    expect(calls).toContain("referenceExists:/worktree:origin/main");
+    expect(calls).toContain("referenceExists:/worktree:refs/remotes/origin/main");
   });
   test("returns branches from the canonical repository path", async () => {
     const service = createGitService(

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type PropsWithChildren, useEffect, useSyncExternalStore } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -290,6 +290,37 @@ describe("RepositoryBranchSwitcher", () => {
     const html = renderRepositoryBranchSwitcherMarkup(RepositoryBranchSwitcher);
 
     expect(html).toContain('data-branch-value="feature/desloppify"');
+  });
+
+  test("opens checkout choices from the pencil beside the branch text", async () => {
+    branchSelectorSpy.mockRestore();
+    updateBranchState({
+      branches: [
+        { name: "main", isCurrent: true, isRemote: false },
+        { name: "release", isCurrent: false, isRemote: false },
+      ],
+    });
+    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <RepositoryBranchSwitcher layout="inline" />
+      </BranchStateProvider>,
+    );
+    try {
+      expect(screen.getByTitle("Current branch: main").textContent).toBe("main");
+      const edit = screen.getByRole("button", { name: "Edit repository branch" });
+      expect(edit.textContent).toBe("");
+      fireEvent.click(edit);
+      expect(screen.getByRole("dialog", { name: "Repository branch" })).toBeTruthy();
+      fireEvent.click(await screen.findByRole("option", { name: /release/ }));
+      await waitFor(() =>
+        expect(switchBranch).toHaveBeenCalledWith("release", expect.any(Function)),
+      );
+      expect(screen.queryByRole("option", { name: /release/ })).toBeNull();
+      expect(screen.getByTitle("Current branch: main").textContent).toBe("main");
+    } finally {
+      rendered.unmount();
+    }
   });
 
   test("keeps the current branch when the preview guard cancels", async () => {

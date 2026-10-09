@@ -3,17 +3,23 @@ import type { ReactElement } from "react";
 import type { DiffScope } from "@/features/agent-studio-git";
 
 export function EmptyDiffState({
+  targetBranch,
   isLoading,
   contextMode = "worktree",
   diffScope,
   upstreamStatus,
 }: {
+  targetBranch?: string;
   isLoading: boolean;
   contextMode?: "repository" | "worktree";
   diffScope: DiffScope;
   upstreamStatus?: "tracking" | "untracked" | "error";
 }): ReactElement {
   const title = (() => {
+    if (diffScope === "target" && targetBranch)
+      return isLoading
+        ? `Checking changes against ${targetBranch}...`
+        : `No changes against ${targetBranch}`;
     if (isLoading) {
       return contextMode === "repository" && diffScope === "target"
         ? "Checking branch changes..."
@@ -32,6 +38,8 @@ export function EmptyDiffState({
   })();
 
   const description = (() => {
+    if (diffScope === "target" && targetBranch)
+      return `Changes since this branch diverged from ${targetBranch} appear here.`;
     if (isLoading) {
       return contextMode === "repository" && diffScope === "target"
         ? "Collecting changes in this branch since it diverged from its tracked upstream branch."

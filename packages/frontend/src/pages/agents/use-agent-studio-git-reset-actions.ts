@@ -10,6 +10,7 @@ import {
 } from "./use-agent-studio-git-action-utils";
 
 type UseAgentStudioGitResetActionsArgs = {
+  isCurrentContext: () => boolean;
   repoPath: string | null;
   workingDir: string | null;
   branchIdentityKey: string | null;
@@ -26,6 +27,7 @@ type UseAgentStudioGitResetActionsArgs = {
 };
 
 export function useAgentStudioGitResetActions({
+  isCurrentContext,
   repoPath,
   workingDir,
   branchIdentityKey,
@@ -186,6 +188,10 @@ export function useAgentStudioGitResetActions({
     setResetError(null);
     try {
       const result = await host.gitResetWorktreeSelection(request);
+      if (!isCurrentContext()) {
+        await refreshDiffData("soft");
+        return;
+      }
       clearActionErrors();
       setPending(null);
       const affectedCount = result.affectedPaths.length;
@@ -199,6 +205,7 @@ export function useAgentStudioGitResetActions({
       try {
         await refreshDiffData("soft");
       } catch (error) {
+        if (!isCurrentContext()) return;
         const message = toErrorMessage(error, "Reset was applied, but diff refresh failed.");
         setResetError(message);
         toast.error("Reset applied but refresh failed", {
@@ -206,13 +213,21 @@ export function useAgentStudioGitResetActions({
         });
       }
     } catch (error) {
+      if (!isCurrentContext()) return;
       const message = toErrorMessage(error, "Reset failed.");
       setResetError(message);
       toast.error("Reset failed", { description: message });
     } finally {
       setIsResetting(false);
     }
-  }, [buildResetRequest, clearActionErrors, request, refreshDiffData, setResetError]);
+  }, [
+    isCurrentContext,
+    buildResetRequest,
+    clearActionErrors,
+    request,
+    refreshDiffData,
+    setResetError,
+  ]);
 
   const cancelReset = useCallback((): void => {
     setPending(null);

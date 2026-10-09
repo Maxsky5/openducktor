@@ -374,7 +374,7 @@ describe("createGitCliAdapter", () => {
           },
         ],
         targetAheadBehind: { ahead: 2, behind: 1 },
-        upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
+        upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
       }),
     );
   });
@@ -749,6 +749,8 @@ describe("createGitCliAdapter", () => {
               remote: "origin\nbackup\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/feature/electron\n",
+              "for-each-ref --format=%(upstream) refs/heads/feature/electron":
+                "refs/remotes/origin/feature/electron\n",
               "fetch --prune -- origin": "",
               "fetch --prune -- backup": "Fetched backup\n",
             }[command] ?? "",
@@ -796,6 +798,8 @@ describe("createGitCliAdapter", () => {
                   : "after\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/feature/electron\n",
+              "for-each-ref --format=%(upstream) refs/heads/feature/electron":
+                "refs/remotes/origin/feature/electron\n",
               "status --porcelain=v1 -z --untracked-files=all": "",
               "fetch --prune -- origin +refs/heads/feature/electron:refs/remotes/origin/feature/electron":
                 "Fetched origin\n",
@@ -837,6 +841,8 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "before\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/main\n",
+              "for-each-ref --format=%(upstream) refs/heads/feature/electron":
+                "refs/remotes/origin/main\n",
               "status --porcelain=v1 -z --untracked-files=all": rebaseFailed
                 ? "UU src/main.ts\n"
                 : "",

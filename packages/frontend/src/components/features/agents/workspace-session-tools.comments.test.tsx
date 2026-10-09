@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -38,7 +38,7 @@ function ToolsOwner({
   contextMode: "repository" | "worktree";
   workingDirectory: string;
 }) {
-  const { toolsContent, refresh } = useWorkspaceSessionTools({
+  const { toolsContent } = useWorkspaceSessionTools({
     isVisible,
     repoPath: "/repo",
     workspaceId: commentOwner.workspaceId,
@@ -46,9 +46,11 @@ function ToolsOwner({
     workingDirectory,
     contextMode,
     branchKey: "feature",
+    currentBranch: { name: "feature", detached: false },
     branchReady: true,
     target: { branch: "main", remote: "origin" },
     targetError: null,
+    applyTarget: async () => {},
     retryTarget: async () => {},
     readBranch: async () => "feature",
     activeTabId: "file_explorer",
@@ -56,14 +58,7 @@ function ToolsOwner({
     selectedFile: null,
     onSelectFile: () => {},
   });
-  return (
-    <>
-      <button type="button" onClick={() => void refresh?.("git")}>
-        Refresh tools
-      </button>
-      {isVisible ? toolsContent : null}
-    </>
-  );
+  return isVisible ? toolsContent : null;
 }
 
 afterEach(resetInlineCommentDraftStoreForTests);
@@ -179,8 +174,6 @@ for (const contextMode of ["repository", "worktree"] as const) {
       const view = render(panel(true));
       try {
         await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(0));
-        if (diffScope === "target")
-          fireEvent.click(screen.getByRole("button", { name: "Refresh tools" }));
         await waitFor(() =>
           expect(read.mock.calls.some((call) => call[2] === diffScope)).toBe(true),
         );

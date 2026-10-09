@@ -1,3 +1,4 @@
+import { workspaceComparisonChoices } from "../workspace-comparison-choices";
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -72,6 +73,22 @@ describe("Workspace Session query cache", () => {
       unsubscribe();
       client.clear();
     }
+  });
+
+  test("only a confirmed archive clears its session choice, including an unloaded list", () => {
+    const client = new QueryClient();
+    const store = workspaceComparisonChoices(client);
+    const first = { workspaceId: "A", sessionId: "first" };
+    const other = { workspaceId: "B", sessionId: "first" };
+    const choice = { branch: "release" };
+    store.set(first, choice);
+    store.set(other, choice);
+    updateWorkspaceSessionQueries(client, "A", session("first"));
+    expect(store.get(first)).toEqual(choice);
+    updateWorkspaceSessionQueries(client, "A", { ...session("first"), archivedAt: 3000 });
+    expect(store.get(first)).toBeUndefined();
+    expect(store.get(other)).toEqual(choice);
+    client.clear();
   });
 
   test("updates only the owning workspace and moves archive membership without changing activity", () => {

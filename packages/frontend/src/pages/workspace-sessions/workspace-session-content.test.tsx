@@ -799,7 +799,7 @@ test("a branch change and later refresh each obtain a current read", async () =>
     });
     view.setBranch("feature");
 
-    expect(treeReads).toBe(3);
+    await waitFor(() => expect(treeReads).toBe(3));
   } finally {
     view.unmount();
     queryClient.clear();
@@ -1055,7 +1055,7 @@ test("a file edit refreshes file queries while the tools panel is closed", async
 
     await waitFor(() => {
       expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
-      expect(queryClient.getQueryState(treeKey)).toBeUndefined();
+      expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
     });
   } finally {
     view.unmount();

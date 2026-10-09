@@ -42,7 +42,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         1,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );
@@ -353,7 +353,7 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         1,
         "/repo",
-        "origin/main",
+        "HEAD",
         "uncommitted",
         undefined,
       );
@@ -362,7 +362,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("maps untracked-upstream outcome to push-ahead count without error banner", async () => {
+  test("keeps untracked upstream counts separate from comparison counts", async () => {
     gitGetWorktreeStatusMock.mockImplementation(
       async (
         _repoPath: string,
@@ -391,7 +391,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
-      expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 3, behind: 0 });
+      expect(harness.getLatest().upstreamAheadBehind).toBeNull();
       expect(harness.getLatest().error).toBeNull();
     } finally {
       await harness.unmount();
@@ -465,7 +465,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       expect(harness.getLatest().upstreamAheadBehind).toBeNull();
-      expect(harness.getLatest().error).toContain("Upstream status unavailable");
+      expect(harness.getLatest().error).toBeNull();
+      expect(harness.getLatest().upstreamStatus).toBe("error");
     } finally {
       await harness.unmount();
     }

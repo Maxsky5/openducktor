@@ -7,6 +7,7 @@ import { GitConfirmationDialog } from "./git-confirmation-dialog";
 type ForcePushDialogProps = {
   pendingForcePush: AgentStudioPendingForcePush | null;
   isPushing: boolean;
+  confirmDisabled: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -16,6 +17,7 @@ const INFO_INLINE_CODE_CLASS_NAME = `${INLINE_CODE_CLASS_NAME} border-info-borde
 export const ForcePushDialog = memo(function ForcePushDialog({
   pendingForcePush,
   isPushing,
+  confirmDisabled,
   onCancel,
   onConfirm,
 }: ForcePushDialogProps): ReactElement {
@@ -43,7 +45,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
       confirmLabel="Force push with lease"
       confirmPendingLabel="Force pushing…"
       confirmPending={isPushing}
-      confirmDisabled={isPushing}
+      confirmDisabled={isPushing || confirmDisabled}
       onConfirm={onConfirm}
       confirmTestId="agent-studio-git-confirm-force-push-button"
       confirmIcon={ArrowUp}

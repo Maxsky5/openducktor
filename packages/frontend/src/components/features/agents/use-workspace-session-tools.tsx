@@ -1,6 +1,11 @@
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
-import type { DevServerOwner, GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useSessionComparison,
+  useSessionComparisonControl,
+} from "@/features/agent-studio-git/use-session-comparison";
+import { buildComparisonView } from "@/features/agent-studio-git/session-comparison-view";
+import type { DevServerOwner, GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import {
   type ReactNode,
@@ -17,13 +22,9 @@ import { toast } from "sonner";
 import { collectUnmergedFilePaths, useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
-import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import { filesystemQueryKeys, refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
-import {
-  gitComparisonTargetQueryOptions,
-  invalidateGitWorkingDirectoryQueries,
-} from "@/state/queries/git";
+import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
@@ -49,9 +50,12 @@ type WorkspaceSessionToolsProps = {
   workingDirectory: string | null;
   contextMode: "repository" | "worktree";
   branchKey: string;
+  currentBranch: GitCurrentBranch | null;
   branchReady: boolean;
+  branchError?: string | null;
   target: GitTargetBranch | null;
   targetError: string | null;
+  applyTarget: (target: GitTargetBranch) => Promise<void>;
   retryTarget: () => Promise<void>;
   readBranch: () => Promise<string>;
   activeTabId: WorkspaceToolsTabId;
@@ -66,6 +70,8 @@ type WorkspaceToolsView = {
   isVisible: boolean;
   directoryKey: string;
   branchKey: string;
+  contextKey: string;
+  ownerKey: string;
   refresh: WorkspaceRefresh["refresh"];
 };
 
@@ -81,7 +87,10 @@ export function useWorkspaceSessionTools({
   workingDirectory,
   contextMode,
   branchKey,
+  currentBranch,
   branchReady,
+  branchError,
+  applyTarget,
   target,
   targetError,
   retryTarget,
@@ -93,34 +102,56 @@ export function useWorkspaceSessionTools({
   repositoryBranchControl,
 }: WorkspaceSessionToolsProps) {
   const directoryKey = JSON.stringify([repoPath, workingDirectory]);
+  const ownerKey = JSON.stringify([workspaceId, sessionId]);
   const viewRef = useRef<WorkspaceToolsView | null>(null);
   const owner = useMemo<Extract<DevServerOwner, { kind: "workspace_session" }>>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
   );
-  const { resolvedTarget, unavailableReason, isReady, refetchComparison } =
-    useWorkspaceSessionComparison({
-      isVisible,
-      repoPath,
-      workingDirectory,
-      target,
-      targetError,
-      branchKey,
-      branchReady,
-    });
+  const comparison = useSessionComparison({
+    enabled: isVisible,
+    viewKey: JSON.stringify([workspaceId, sessionId]),
+    repoPath,
+    workingDirectory,
+    target,
+    targetError,
+    branchKey,
+    branchReady,
+    branchError: branchError ?? null,
+  });
+  const { resolvedTarget, refreshComparison, contextKey } = comparison;
+  const control = useSessionComparisonControl({
+    repoPath,
+    target,
+    editable: isVisible,
+    allowUpstream: contextMode === "repository",
+    applyTarget,
+    helpText:
+      "This choice applies only to this session. It resets on app reload or successful archive.",
+  });
   const readTarget = resolvedTarget ?? "HEAD";
-  const diffData = useAgentStudioDiffData({
+  const reads = useAgentStudioDiffData({
     repoPath: workingDirectory ? repoPath : null,
     worktreePath: workingDirectory,
     worktreeResolutionTaskId: null,
-    shouldBlockDiffLoading: !isVisible || workingDirectory === null || !isReady,
+    shouldBlockDiffLoading: !isVisible || workingDirectory === null || !branchReady,
     isWorktreeResolutionResolving: false,
     worktreeResolutionError: null,
     retryWorktreeResolution,
+    comparisonReference: readTarget,
     defaultTargetBranch: { branch: readTarget },
-    branchIdentityKey: `${workingDirectory ?? ""}:${branchKey}`,
+    branchIdentityKey: comparison.contextKey,
+    cacheKey: comparison.cacheKey,
     enableScheduledRefresh: false,
   });
+  const diffData = buildComparisonView(
+    reads,
+    comparison,
+    target ? canonicalTargetBranch(target) : "Default target pending",
+    currentBranch,
+  );
+  const unavailableReason = diffData.comparisonUnavailableReason;
+  const markerTarget = diffData.comparisonReference;
   // An in-flight diff can finish after the tools view closes.
   useGitCommentDraftValidation({
     commentOwner: owner,
@@ -129,13 +160,19 @@ export function useWorkspaceSessionTools({
     scopeStatesByScope: diffData.scopeStatesByScope,
     loadedScopesByScope: diffData.loadedScopesByScope,
   });
+  const { loadInactiveScope } = reads;
+  useEffect(() => {
+    if (isVisible && resolvedTarget) void loadInactiveScope();
+  }, [isVisible, resolvedTarget, loadInactiveScope]);
   const { refresh, isFetchingTarget } = useWorkspaceSessionRefresh({
     isVisible,
     viewRef,
     branchKey,
+    contextKey,
+    ownerKey,
     branchReady,
     diffData,
-    refetchComparison,
+    refreshComparison,
     resolvedTarget,
     target,
     targetError,
@@ -170,11 +207,11 @@ export function useWorkspaceSessionTools({
   }, [isVisible, workingDirectory]);
   const queryClient = useQueryClient();
   useLayoutEffect(() => {
-    viewRef.current = { isVisible, directoryKey, branchKey, refresh };
+    viewRef.current = { isVisible, directoryKey, branchKey, contextKey, ownerKey, refresh };
     return () => {
       viewRef.current = null;
     };
-  }, [isVisible, directoryKey, branchKey, refresh]);
+  }, [isVisible, directoryKey, branchKey, contextKey, ownerKey, refresh]);
   const refreshDiffData = useCallback(async () => {
     // Completion invalidates the original directory. Only the current visible view reads again.
     if (workingDirectory) {
@@ -184,11 +221,11 @@ export function useWorkspaceSessionTools({
     if (
       current?.isVisible &&
       current.directoryKey === directoryKey &&
-      current.branchKey === branchKey
+      current.contextKey === contextKey
     ) {
       await current.refresh("soft");
     }
-  }, [branchKey, directoryKey, queryClient, repoPath, workingDirectory]);
+  }, [contextKey, directoryKey, queryClient, repoPath, workingDirectory]);
   const conflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
@@ -202,9 +239,9 @@ export function useWorkspaceSessionTools({
     repoPath: workingDirectory ? repoPath : null,
     workingDir: workingDirectory,
     branch: branchReady ? diffData.branch : null,
-    branchIdentityKey: branchKey,
-    targetBranch: resolvedTarget ?? "",
-    resetTargetBranch: resolvedTarget ?? "HEAD",
+    contextKey,
+    targetBranch: markerTarget ?? "",
+    resetTargetBranch: "HEAD",
     hashVersion: diffData.hashVersion,
     statusHash: diffData.statusHash,
     diffHash: diffData.diffHash,
@@ -218,8 +255,7 @@ export function useWorkspaceSessionTools({
   const fileModel = {
     ...workspaceFileModel({
       workingDirectory,
-      resolvedTarget,
-      isReady,
+      resolvedTarget: markerTarget,
       branchReady,
       activeTabId,
       selectedFile,
@@ -238,7 +274,8 @@ export function useWorkspaceSessionTools({
       contextMode={contextMode}
       repositoryBranchControl={repositoryBranchControl}
       branchReady={branchReady}
-      resolvedTarget={resolvedTarget}
+      resolvedTarget={markerTarget}
+      control={control}
       unavailableReason={unavailableReason}
       workingDirectory={workingDirectory}
       isFetchingTarget={isFetchingTarget || isWaitingForBranch}
@@ -253,8 +290,8 @@ export function useWorkspaceSessionTools({
             keepMounted: true,
           },
         ],
-        activeTabId,
-        onActiveTabChange,
+        activeTabId: activeTabId,
+        onActiveTabChange: onActiveTabChange,
         tabListLabel: "Workspace session tools",
         testIdPrefix: "workspace-session-tools",
         headerActions: null,
@@ -269,7 +306,6 @@ const retryWorktreeResolution = (): void => undefined;
 function workspaceFileModel({
   workingDirectory,
   resolvedTarget,
-  isReady,
   branchReady,
   activeTabId,
   selectedFile,
@@ -277,7 +313,6 @@ function workspaceFileModel({
 }: {
   workingDirectory: string | null;
   resolvedTarget: string | null;
-  isReady: boolean;
   branchReady: boolean;
   activeTabId: WorkspaceToolsTabId;
   selectedFile: TaskExecutionSelectedFile | null;
@@ -286,16 +321,14 @@ function workspaceFileModel({
   let unavailableReason: string | null = null;
   if (!workingDirectory) {
     unavailableReason = missingWorkingDirectoryReason;
-  } else if (!isReady && !branchReady) {
+  } else if (!branchReady) {
     unavailableReason = "Checking branch...";
-  } else if (!isReady) {
-    unavailableReason = "Checking comparison target...";
   }
   return {
     rootPath: workingDirectory,
     targetBranch: resolvedTarget,
     unavailableReason,
-    isActive: activeTabId === "file_explorer" && isReady,
+    isActive: activeTabId === "file_explorer" && branchReady,
     selectedFile,
     onSelectFile,
   };
@@ -311,8 +344,10 @@ function useWorkspaceSessionRefresh({
   viewRef,
   branchKey,
   branchReady,
+  contextKey,
+  ownerKey,
   diffData,
-  refetchComparison,
+  refreshComparison,
   resolvedTarget,
   target,
   targetError,
@@ -324,8 +359,10 @@ function useWorkspaceSessionRefresh({
   viewRef: RefObject<WorkspaceToolsView | null>;
   branchKey: string;
   branchReady: boolean;
+  contextKey: string;
+  ownerKey: string;
   diffData: ReturnType<typeof useAgentStudioDiffData>;
-  refetchComparison: WorkspaceComparison["refetchComparison"];
+  refreshComparison: ReturnType<typeof useSessionComparison>["refreshComparison"];
   resolvedTarget: string | null;
   target: GitTargetBranch | null;
   targetError: string | null;
@@ -334,11 +371,11 @@ function useWorkspaceSessionRefresh({
   repoPath: string;
 }): WorkspaceRefresh {
   const directoryKey = JSON.stringify([repoPath, workingDirectory]);
-  const scopeKey = JSON.stringify([repoPath, workingDirectory, branchKey]);
+  const scopeKey = JSON.stringify([directoryKey, branchKey, ownerKey]);
   const queryClient = useQueryClient();
   const { refresh: refreshDiff, refreshInactiveScope, refreshAllScopes } = diffData;
   const [isFetchingTarget, setIsFetchingTarget] = useState(false);
-  const [retry, setRetry] = useState<{ scopeKey: string } | null>(null);
+  const [retry, setRetry] = useState<{ scopeKey: string; target: string | null } | null>(null);
   const handledRetry = useRef<typeof retry>(null);
   const refresh = useCallback(
     async (mode: WorkspaceRefreshMode = "hard", includeFiles = true) => {
@@ -346,7 +383,7 @@ function useWorkspaceSessionRefresh({
       const canRead = () =>
         viewRef.current?.isVisible === true &&
         viewRef.current.directoryKey === directoryKey &&
-        viewRef.current.branchKey === branchKey;
+        viewRef.current.contextKey === contextKey;
       if (!branchReady || !canRead()) return;
       const fetchTarget =
         mode === "hard" &&
@@ -358,9 +395,10 @@ function useWorkspaceSessionRefresh({
           await retryTarget();
           if (
             viewRef.current?.directoryKey === directoryKey &&
-            viewRef.current.branchKey === branchKey
+            viewRef.current.branchKey === branchKey &&
+            viewRef.current.ownerKey === ownerKey
           ) {
-            setRetry({ scopeKey });
+            setRetry({ scopeKey, target: target ? JSON.stringify(target) : null });
           }
           return;
         }
@@ -372,8 +410,8 @@ function useWorkspaceSessionRefresh({
             refreshAllScopes,
             diffScope: diffData.diffScope,
           },
-          branchKey,
-          refetchComparison,
+          branchKey: contextKey,
+          refreshComparison,
           resolvedTarget,
           target,
           targetError,
@@ -384,7 +422,10 @@ function useWorkspaceSessionRefresh({
           canRead,
         });
       } catch (error) {
+        if (!canRead()) return;
         toast.error("Could not refresh Git changes", { description: errorMessage(error) });
+        if (resolvedTarget) await refreshAllScopes(mode === "scheduled" ? "summary" : "full");
+        else await refreshDiff("soft");
       } finally {
         setIsFetchingTarget(false);
       }
@@ -392,12 +433,14 @@ function useWorkspaceSessionRefresh({
     [
       branchReady,
       branchKey,
+      contextKey,
+      ownerKey,
       refreshDiff,
       refreshInactiveScope,
       refreshAllScopes,
       diffData.diffScope,
       queryClient,
-      refetchComparison,
+      refreshComparison,
       resolvedTarget,
       target,
       targetError,
@@ -411,7 +454,10 @@ function useWorkspaceSessionRefresh({
   );
   useEffect(() => {
     if (retry === null || retry === handledRetry.current) return;
-    if (retry.scopeKey !== scopeKey) {
+    if (
+      retry.scopeKey !== scopeKey ||
+      (retry.target !== null && retry.target !== JSON.stringify(target))
+    ) {
       handledRetry.current = retry;
       return;
     }
@@ -419,7 +465,7 @@ function useWorkspaceSessionRefresh({
     // Use the target from the render after the settings read succeeds.
     handledRetry.current = retry;
     void refresh("hard");
-  }, [isVisible, refresh, retry, scopeKey, targetError]);
+  }, [isVisible, refresh, retry, scopeKey, target, targetError]);
   return { refresh, isFetchingTarget };
 }
 
@@ -492,19 +538,6 @@ function useManualBranchRefresh({
   return { manualRefresh, isWaitingForBranch: pending?.directoryKey === directoryKey };
 }
 
-function comparisonUnavailableReason(input: {
-  targetError: string | null;
-  isPending: boolean;
-  isError: boolean;
-  error: Error | null;
-  data: GitComparisonTarget | undefined;
-}): string | null {
-  if (input.targetError) return input.targetError;
-  if (input.isPending) return "Checking the comparison target…";
-  if (input.isError) return errorMessage(input.error);
-  return input.data?.kind === "unavailable" ? input.data.reason : null;
-}
-
 async function refreshWorkspaceSessionData(input: {
   queryClient: QueryClient;
   diffData: Pick<
@@ -512,7 +545,7 @@ async function refreshWorkspaceSessionData(input: {
     "refresh" | "refreshInactiveScope" | "refreshAllScopes" | "diffScope"
   >;
   branchKey: string;
-  refetchComparison: WorkspaceComparison["refetchComparison"];
+  refreshComparison: ReturnType<typeof useSessionComparison>["refreshComparison"];
   resolvedTarget: string | null;
   target: GitTargetBranch | null;
   targetError: string | null;
@@ -526,7 +559,7 @@ async function refreshWorkspaceSessionData(input: {
     queryClient,
     diffData,
     branchKey,
-    refetchComparison,
+    refreshComparison,
     resolvedTarget,
     target,
     targetError,
@@ -538,20 +571,8 @@ async function refreshWorkspaceSessionData(input: {
   } = input;
   if (!canRead()) return;
   if (workingDirectory && target && !targetError) {
-    if (mode === "hard" && !resolvedTarget) {
-      try {
-        await hostClient.gitFetchRemote(repoPath, canonicalTargetBranch(target), workingDirectory);
-      } catch (error) {
-        toast.error("Could not refresh Git changes", { description: errorMessage(error) });
-      }
-    }
+    const checkedTarget = await refreshComparison(mode);
     if (!canRead()) return;
-    const checkedComparison = await refetchComparison();
-    if (!canRead()) return;
-    const checkedTarget =
-      !checkedComparison.isError && checkedComparison.data?.kind === "available"
-        ? checkedComparison.data.reference
-        : null;
     if (checkedTarget !== resolvedTarget) {
       await Promise.all([
         queryClient.invalidateQueries({
@@ -574,17 +595,7 @@ async function refreshWorkspaceSessionData(input: {
       await diffData.refresh("soft");
       return;
     }
-    if (mode === "hard") {
-      await diffData.refresh("hard");
-      if (!canRead()) return;
-      await diffData.refreshInactiveScope();
-      return;
-    }
-    if (mode === "scheduled") {
-      await diffData.refresh("scheduled");
-      return;
-    }
-    await diffData.refreshAllScopes();
+    await diffData.refreshAllScopes(mode === "scheduled" ? "summary" : "full");
   };
   if (includeFiles && workingDirectory) {
     await refreshWorkspaceFileQueries(
@@ -602,55 +613,4 @@ async function refreshWorkspaceSessionData(input: {
   } else {
     await refreshGit();
   }
-}
-
-type WorkspaceComparison = {
-  resolvedTarget: string | null;
-  isReady: boolean;
-  unavailableReason: string | null;
-  refetchComparison: () => Promise<{
-    isError: boolean;
-    data: GitComparisonTarget | undefined;
-  }>;
-};
-
-function useWorkspaceSessionComparison(input: {
-  isVisible: boolean;
-  repoPath: string;
-  workingDirectory: string | null;
-  target: GitTargetBranch | null;
-  targetError: string | null;
-  branchKey: string;
-  branchReady: boolean;
-}): WorkspaceComparison {
-  const { isVisible, repoPath, workingDirectory, target, targetError, branchKey, branchReady } =
-    input;
-  const hasComparisonTarget =
-    branchReady && Boolean(workingDirectory) && target !== null && targetError === null;
-  const comparison = useQuery({
-    ...gitComparisonTargetQueryOptions(
-      repoPath,
-      workingDirectory ?? "__missing_working_directory__",
-      target ?? { branch: "HEAD" },
-      branchKey,
-    ),
-    enabled: isVisible && hasComparisonTarget,
-  });
-  const resolvedTarget =
-    hasComparisonTarget && !comparison.isError && comparison.data?.kind === "available"
-      ? comparison.data.reference
-      : null;
-  return {
-    resolvedTarget,
-    isReady:
-      branchReady && (targetError !== null || comparison.isError || comparison.data !== undefined),
-    unavailableReason: comparisonUnavailableReason({
-      targetError,
-      isPending: comparison.isPending,
-      isError: comparison.isError,
-      error: comparison.error,
-      data: comparison.data,
-    }),
-    refetchComparison: comparison.refetch,
-  };
 }

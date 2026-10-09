@@ -2,7 +2,10 @@ import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/c
 import type { GitConflict } from "../contracts";
 import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
 
-type UpstreamState = Pick<ScopeSummaryFields, "upstreamAheadBehind" | "upstreamStatus" | "error">;
+type UpstreamState = Pick<
+  ScopeSummaryFields,
+  "upstreamAheadBehind" | "upstreamStatus" | "upstreamError" | "error"
+>;
 
 const toGitConflict = (
   conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
@@ -33,17 +36,16 @@ const toUpstreamState = (
         behind: upstreamAheadBehind.behind,
       },
       upstreamStatus: "tracking",
+      upstreamError: null,
       error: null,
     };
   }
 
   if (upstreamAheadBehind.outcome === "untracked") {
     return {
-      upstreamAheadBehind: {
-        ahead: upstreamAheadBehind.ahead,
-        behind: 0,
-      },
+      upstreamAheadBehind: null,
       upstreamStatus: "untracked",
+      upstreamError: null,
       error: null,
     };
   }
@@ -51,12 +53,13 @@ const toUpstreamState = (
   return {
     upstreamAheadBehind: null,
     upstreamStatus: "error",
-    error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
+    upstreamError: upstreamAheadBehind.message,
+    error: null,
   };
 };
 
 export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
-  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamState(
+  const { upstreamAheadBehind, upstreamStatus, upstreamError, error } = toUpstreamState(
     snapshot.upstreamAheadBehind,
   );
   return {
@@ -68,6 +71,7 @@ export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
     commitsAheadBehind: snapshot.targetAheadBehind,
     upstreamAheadBehind,
     upstreamStatus,
+    upstreamError: upstreamError ?? null,
     error,
     hashVersion: snapshot.snapshot.hashVersion,
     statusHash: snapshot.snapshot.statusHash,
@@ -76,7 +80,7 @@ export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
 };
 
 export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSummaryFields => {
-  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamState(
+  const { upstreamAheadBehind, upstreamStatus, upstreamError, error } = toUpstreamState(
     summary.upstreamAheadBehind,
   );
   return {
@@ -86,6 +90,7 @@ export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSu
     commitsAheadBehind: summary.targetAheadBehind,
     upstreamAheadBehind,
     upstreamStatus,
+    upstreamError: upstreamError ?? null,
     error,
     hashVersion: summary.snapshot.hashVersion,
     statusHash: summary.snapshot.statusHash,

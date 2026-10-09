@@ -1,12 +1,10 @@
-import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import {
   type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -19,19 +17,14 @@ import { RepositoryBranchSwitcher } from "@/components/features/repository/repos
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
-import { errorMessage } from "@/lib/errors";
-import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
-import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
-import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
-import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 import {
   requestWorkspaceGitConflictAssistance,
   workspaceConflictChatKey,
 } from "./workspace-git-conflict-assistance";
+import { useWorkspaceSessionGit } from "./use-workspace-session-git";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
 import {
   WorkspaceSessionFilePreview,
@@ -99,21 +92,21 @@ export function WorkspaceSessionContent({
       changePanel(record.id, update),
     [changePanel, record.id],
   );
-  const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
-  const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
-  const queryClient = useQueryClient();
-  const workingDirectory = workspaceSessionWorkingDirectory(workspace, record);
-  const isWorktree = record.executionTarget.kind === "local_worktree";
-  const branch = useWorkspaceSessionBranch({
-    repoPath: workspace.repoPath,
+  const {
+    branch,
     workingDirectory,
     isWorktree,
-    isSwitchingBranch,
-    activeBranch,
-  });
-  const { rootBranch, branchKey, branchReady, refreshBranch, readBranch } = branch;
+    hasRootBranch,
+    branchError,
+    target,
+    targetError,
+    applyTarget,
+    retryTarget,
+    refreshAfterChange,
+    refreshRef,
+  } = useWorkspaceSessionGit({ workspace, record, isPanelOpen: panelState.isOpen });
+  const { branchKey, branchReady, readBranch } = branch;
   const previewRef = useRef<WorkspaceSessionFilePreviewHandle | null>(null);
-  const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -122,36 +115,6 @@ export function WorkspaceSessionContent({
     media.addEventListener("change", updateLayout);
     return () => media.removeEventListener("change", updateLayout);
   }, []);
-  const target: GitTargetBranch | null = useMemo(
-    () =>
-      record.executionTarget.kind === "local_repo_root"
-        ? { branch: "@{upstream}" }
-        : (repoConfig.data?.defaultTargetBranch ?? null),
-    [record.executionTarget.kind, repoConfig.data?.defaultTargetBranch],
-  );
-  const targetError =
-    record.executionTarget.kind === "local_worktree" && repoConfig.isError
-      ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
-      : null;
-  const refreshAfterChange = useCallback(
-    (scope: "git" | "all") => {
-      if (isWorktree || scope === "all") refreshBranch();
-      const refresh = refreshRef.current;
-      if (workingDirectory && (scope === "git" || !refresh)) {
-        void invalidateGitWorkingDirectoryQueries(
-          queryClient,
-          workspace.repoPath,
-          workingDirectory,
-        );
-      }
-      if (workingDirectory && scope === "all" && !refresh) {
-        // File queries render their own refresh errors.
-        void refreshWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
-      }
-      void refresh?.(scope);
-    },
-    [isWorktree, queryClient, refreshBranch, workingDirectory, workspace.repoPath],
-  );
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
     const actions = previewRef.current;
     if (!actions) throw new Error("The file preview is not ready. Open the chat again.");
@@ -159,11 +122,6 @@ export function WorkspaceSessionContent({
   }, []);
   const onFileSaved = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
   const onToolRefresh = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
-  const { refetch: refetchConfig } = repoConfig;
-  const retryTarget = useCallback(async () => {
-    const result = await refetchConfig();
-    if (result.isError) throw result.error;
-  }, [refetchConfig]);
   const onSelectionChange = useCallback(
     (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
     [onPanelStateChange],
@@ -181,7 +139,7 @@ export function WorkspaceSessionContent({
       onSafeToLeave={onSafeToLeave}
       isWorktree={isWorktree}
       branch={branch}
-      hasRootBranch={rootBranch.data !== undefined || activeBranch !== null}
+      hasRootBranch={hasRootBranch}
       onFileSaved={onFileSaved}
     />
   );
@@ -222,7 +180,10 @@ export function WorkspaceSessionContent({
     contextMode: record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree",
     repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
     branchKey,
+    currentBranch: branch.currentBranch,
     branchReady,
+    branchError,
+    applyTarget,
     target,
     targetError,
     readBranch,
@@ -237,7 +198,7 @@ export function WorkspaceSessionContent({
     return () => {
       refreshRef.current = null;
     };
-  }, [refreshTools]);
+  }, [refreshRef, refreshTools]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
       <WorkspaceSessionPaneLayout

@@ -4,6 +4,10 @@ import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
+  loadWorktreeStatusFromQuery,
+  loadWorktreeStatusSummaryFromQuery,
+  currentBranchQueryOptions,
+  worktreeBranchQueryOptions,
 } from "./git";
 
 test("comparison target reads keep the working directory and target in their query keys", async () => {
@@ -66,4 +70,121 @@ test("Git invalidation keeps other worktrees fresh", async () => {
   expect(client.getQueryState(rootStatus)?.isInvalidated).toBe(true);
   expect(client.getQueryState(worktreeTarget)?.isInvalidated).toBe(false);
   expect(client.getQueryState(worktreeStatus)?.isInvalidated).toBe(false);
+});
+
+test.each(["/repo", "/worktree"])(
+  "a branch change in %s invalidates completed and pending comparisons",
+  async (directory) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let name = "feature";
+    const host = { gitGetCurrentBranch: async () => ({ name, detached: false }) };
+    const readBranch = () =>
+      directory === "/repo"
+        ? client.fetchQuery({ ...currentBranchQueryOptions("/repo", host), staleTime: 0 })
+        : client.fetchQuery({
+            ...worktreeBranchQueryOptions("/repo", directory, host),
+            staleTime: 0,
+          });
+    const statusKey = gitQueryKeys.worktreeStatus(
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      directory,
+      "feature",
+    );
+    const otherKey = gitQueryKeys.worktreeStatus(
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      "/other",
+      "feature",
+    );
+    const pending = Promise.withResolvers<string>();
+    try {
+      await readBranch();
+      client.setQueryData(statusKey, "before");
+      client.setQueryData(otherKey, "other");
+      await readBranch();
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(false);
+      const read = client
+        .fetchQuery({ queryKey: statusKey, queryFn: () => pending.promise, staleTime: 0 })
+        .catch(() => undefined);
+      name = "other";
+      await readBranch();
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(true);
+      pending.resolve("late");
+      await read;
+      expect(client.getQueryData<string>(statusKey)).toBe("before");
+      expect(client.getQueryState(statusKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
+    } finally {
+      pending.resolve("late");
+      client.clear();
+    }
+  },
+);
+
+test("Git actions invalidate root status cached without an explicit working directory", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let revision = 1;
+  const status = () => ({
+    currentBranch: { name: "feature", detached: false },
+    fileStatuses: [],
+    fileDiffs: [],
+    targetAheadBehind: { ahead: revision, behind: 0 },
+    upstreamAheadBehind: { outcome: "untracked" as const, ahead: revision },
+    snapshot: {
+      effectiveWorkingDir: "/repo",
+      targetBranch: "HEAD",
+      diffScope: "uncommitted" as const,
+      observedAtMs: revision,
+      hashVersion: 1,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    },
+  });
+  const host = {
+    gitGetWorktreeStatus: async () => status(),
+    gitGetWorktreeStatusSummary: async () => ({
+      ...status(),
+      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+    }),
+  };
+  const options = { branchKey: "feature", staleTime: Infinity };
+  try {
+    await loadWorktreeStatusFromQuery(client, "/repo", "HEAD", "uncommitted", null, options, host);
+    await loadWorktreeStatusSummaryFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    revision = 2;
+    await invalidateGitWorkingDirectoryQueries(client, "/repo", "/repo");
+    const full = await loadWorktreeStatusFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    const summary = await loadWorktreeStatusSummaryFromQuery(
+      client,
+      "/repo",
+      "HEAD",
+      "uncommitted",
+      null,
+      options,
+      host,
+    );
+    expect(full.targetAheadBehind.ahead).toBe(2);
+    expect(summary.targetAheadBehind.ahead).toBe(2);
+  } finally {
+    client.clear();
+  }
 });

@@ -44,7 +44,11 @@ import { NotificationProvider } from "./providers/notification-provider";
 import { WorkspaceActivityProvider } from "./providers/workspace-activity-provider";
 import { TerminalActivityProvider } from "./providers/terminal-activity-provider";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { workspaceComparisonChoices } from "./workspace-comparison-choices";
+
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
+  workspaceComparisonChoices(useQueryClient());
   const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
 
   return (

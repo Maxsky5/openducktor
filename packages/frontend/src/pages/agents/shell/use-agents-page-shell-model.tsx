@@ -59,10 +59,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, gitProvider, isLoadingRepoSettings } = useAgentStudioRepoSettings({
-    activeRepoPath: workspaceRepoPath,
-    activeWorkspaceId,
-  });
+  const { repoSettings, repoSettingsError, loadRepoSettings, gitProvider, isLoadingRepoSettings } =
+    useAgentStudioRepoSettings({
+      activeRepoPath: workspaceRepoPath,
+      activeWorkspaceId,
+    });
   const providerReadError = gitProviderReadError(gitProvider.error);
   const {
     tasksAreCurrent,
@@ -149,6 +150,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeTabId: orchestration.rightPanel.activeTabId,
     isPanelOpen: orchestration.rightPanel.isPanelOpen,
     repoSettings: orchestration.repoSettings,
+    repoSettingsError,
+    loadRepoSettings,
     onResolveGitConflict: handleResolveRebaseConflict,
   });
   const agentStudioHeaderModel = useAgentStudioGitConflictHeaderModel({
@@ -173,7 +176,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =
     useAgentStudioRightPanelBridge({
       activeWorkspace,
-      branches: branches ?? [],
       buildTools,
       selection: orchestrationSelection,
       panel: orchestration.rightPanel,
