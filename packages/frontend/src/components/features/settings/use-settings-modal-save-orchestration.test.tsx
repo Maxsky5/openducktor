@@ -42,8 +42,8 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
+        hooks: { postComplete: [] },
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
@@ -67,12 +67,6 @@ const createValidation = (
   runtimeRequest: { isPending: false, error: null },
   runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
   hasUnacknowledgedCodexDangerousSettings: false,
-  repoScripts: {
-    hasErrors: false,
-    errorCount: 0,
-    invalidRepoPaths: [],
-    selectedWorkspaceId: "repo",
-  },
   ...overrides,
 });
 
@@ -178,6 +172,25 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
+  });
+
+  test("clears the save error when the modal closes", async () => {
+    const validation = createValidation({ prompt: { hasErrors: true, errorCount: 2 } });
+    const harness = createHookHarness(createArgs({ validation }));
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.submit();
+      });
+      expect(harness.getLatest().saveError).toBe("Fix 2 prompt placeholder errors before saving.");
+
+      await harness.update(createArgs({ open: false, validation }));
+
+      expect(harness.getLatest().saveError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("blocks a full snapshot save while favorites are being written", async () => {
@@ -451,49 +464,6 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(true);
     expect(harness.getLatest().saveError).toBeNull();
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-
-    await harness.unmount();
-  });
-
-  test("blocks repo script validation errors, shows submit-gated errors, and resets the gate when validation clears", async () => {
-    const harness = createHookHarness(
-      createArgs({
-        validation: createValidation({
-          repoScripts: {
-            hasErrors: true,
-            errorCount: 1,
-            invalidRepoPaths: ["repo"],
-            selectedWorkspaceId: "repo",
-          },
-        }),
-      }),
-    );
-
-    await harness.mount();
-
-    expect(harness.getLatest().showRepoScriptValidationErrors).toBe(false);
-
-    let didSave = true;
-    await harness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(false);
-    expect(harness.getLatest().showRepoScriptValidationErrors).toBe(true);
-    expect(harness.getLatest().saveError).toBe(
-      "Fix 1 dev server field error in the selected repository before saving.",
-    );
-
-    await harness.update(
-      createArgs(
-        {
-          validation: createValidation(),
-        },
-        EMPTY_DIRTY_SECTIONS,
-      ),
-    );
-
-    expect(harness.getLatest().showRepoScriptValidationErrors).toBe(false);
 
     await harness.unmount();
   });

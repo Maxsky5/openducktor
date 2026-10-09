@@ -1,19 +1,5 @@
-import type { RepoDevServerScript, ReusablePrompt } from "@openducktor/contracts";
+import type { ReusablePrompt } from "@openducktor/contracts";
 import { REUSABLE_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
-
-type HookDraftInput = {
-  preStart: string[];
-  postComplete: string[];
-};
-
-type RepoDevServerDraftInput = RepoDevServerScript;
-
-type DevServerDraftValidationErrors = {
-  id?: string;
-  name?: string;
-};
-
-type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
 
 export type ReusablePromptValidationErrors = {
   name?: string;
@@ -21,11 +7,6 @@ export type ReusablePromptValidationErrors = {
 };
 
 export type ReusablePromptValidationMap = Record<string, ReusablePromptValidationErrors>;
-
-type RepoScriptDraftInput = {
-  hooks: HookDraftInput;
-  devServers: RepoDevServerDraftInput[];
-};
 
 // Preserve blank draft rows and raw spacing so controlled multi-line inputs do not collapse
 // trailing newlines or strip characters while the user is still editing. Save-time
@@ -117,103 +98,9 @@ export const prepareReusablePromptsForSave = (prompts: ReusablePrompt[]): Reusab
   }));
 };
 
-const normalizeHookCommands = (commands: string[]): string[] =>
-  commands.flatMap((entry) => {
-    const trimmed = entry.trim();
+/** Trims each line and drops the blank lines. */
+export const dropBlankLines = (lines: readonly string[]): string[] =>
+  lines.flatMap((line) => {
+    const trimmed = line.trim();
     return trimmed ? [trimmed] : [];
   });
-
-const normalizeDevServerName = (name: string): string => name.trim();
-
-const normalizeDevServerCommand = (command: string): string => command.trim();
-
-const getDevServerDraftValidationErrors = (
-  devServer: RepoDevServerDraftInput,
-): DevServerDraftValidationErrors | null => {
-  const errors: DevServerDraftValidationErrors = {};
-
-  if (!normalizeDevServerCommand(devServer.command)) {
-    return null;
-  }
-
-  if (!devServer.id.trim()) {
-    errors.id = "Dev server id is required.";
-  }
-  if (!normalizeDevServerName(devServer.name)) {
-    errors.name = "Tab label is required.";
-  }
-
-  return Object.keys(errors).length > 0 ? errors : null;
-};
-
-export const buildDevServerDraftValidationMap = (
-  devServers: RepoDevServerDraftInput[],
-): DevServerDraftValidationMap =>
-  Object.fromEntries(
-    devServers.flatMap((devServer) => {
-      const id = devServer.id.trim();
-      if (!id) {
-        return [];
-      }
-      const errors = getDevServerDraftValidationErrors(devServer);
-      return errors ? [[id, errors] as const] : [];
-    }),
-  );
-
-export const countDevServerDraftValidationErrors = (
-  devServers: RepoDevServerDraftInput[],
-): number =>
-  devServers.reduce((count, devServer) => {
-    const errors = getDevServerDraftValidationErrors(devServer);
-    return count + (errors?.id ? 1 : 0) + (errors?.name ? 1 : 0);
-  }, 0);
-
-export const normalizeDevServers = (
-  devServers: RepoDevServerDraftInput[],
-): RepoDevServerDraftInput[] =>
-  devServers.flatMap((devServer) => {
-    const command = normalizeDevServerCommand(devServer.command);
-    if (!command) {
-      return [];
-    }
-
-    const validationErrors = getDevServerDraftValidationErrors(devServer);
-    if (validationErrors?.id) {
-      throw new Error("Dev server id cannot be blank.");
-    }
-    if (validationErrors?.name) {
-      throw new Error("Dev server tab labels cannot be blank.");
-    }
-
-    const name = normalizeDevServerName(devServer.name);
-
-    return [
-      {
-        id: devServer.id.trim(),
-        name,
-        command,
-      },
-    ];
-  });
-
-export const hasConfiguredHookCommands = (hooks: HookDraftInput): boolean =>
-  hooks.preStart.some((entry) => entry.trim().length > 0) ||
-  hooks.postComplete.some((entry) => entry.trim().length > 0);
-
-export const normalizeHooks = (hooks: HookDraftInput): HookDraftInput => ({
-  preStart: normalizeHookCommands(hooks.preStart),
-  postComplete: normalizeHookCommands(hooks.postComplete),
-});
-
-export const normalizeRepoScripts = (input: RepoScriptDraftInput) => {
-  const normalizedHooks = normalizeHooks(input.hooks);
-  const normalizedDevServers = normalizeDevServers(input.devServers);
-
-  return {
-    hooks: normalizedHooks,
-    devServers: normalizedDevServers,
-  } satisfies {
-    hooks: HookDraftInput;
-    devServers: RepoDevServerDraftInput[];
-  };
-};

@@ -43,7 +43,7 @@ import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
-import type { DevServerService, DevServerServiceError } from "../dev-servers/dev-server-service";
+import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
 import type { GitProviderResolver } from "../git/git-provider-resolver";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
@@ -51,6 +51,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
+import { failOperationAfterRollback } from "./support/task-worktree-rollback";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
@@ -106,7 +107,6 @@ import {
 } from "./worktrees/task-session-start-preparation-service";
 
 export type TaskServiceError =
-  | DevServerServiceError
   | GitProviderRepositoryError
   | GitProviderCapabilityError
   | GitProviderResolutionError
@@ -250,8 +250,8 @@ export type RepoPullRequestSyncResult = {
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
-  devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;
+  worktreeActions?: WorktreeActionRunner;
   gitPort?: GitPort;
   gitProviderResolver?: GitProviderResolver;
   taskStore: TaskStorePort;
@@ -367,13 +367,13 @@ const createTaskServiceImplementation = (
             runtimeKind: startInput.runtimeKind,
           };
           const prepared = yield* taskSessionStart.prepare(preparationInput);
-          let cleanup = prepared.cleanup;
+          let rollback = prepared.rollback;
           const completion = yield* Effect.gen(function* () {
             yield* taskSessionStart.complete(prepared, (transitionInput) =>
               input.taskStore.transitionTask(transitionInput),
             );
             // A committed build retains its worktree when cancellation arrives.
-            cleanup = () => Effect.succeed("");
+            rollback = () => Effect.void;
             return buildSessionBootstrapSchema.parse({
               runtimeKind: prepared.runtimeKind,
               workingDirectory: prepared.workingDirectory,
@@ -381,20 +381,15 @@ const createTaskServiceImplementation = (
           }).pipe(
             Effect.result,
             Effect.uninterruptible,
-            Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
+            Effect.onInterrupt(() => rollback().pipe(Effect.orDie)),
           );
           if (completion._tag === "Success") {
             return completion.success;
           }
-          const cleanupError = yield* cleanup();
-          return yield* Effect.fail(
-            new HostOperationErrorValue({
-              operation: "task.build_start.finalize",
-              message: `${errorMessage(completion.failure)}${cleanupError}`,
-              cause: completion.failure,
-              details: { repoPath: canonicalRepoPath, taskId: startInput.taskId },
-            }),
-          );
+          return yield* failOperationAfterRollback(rollback(), completion.failure, {
+            operation: "task.build_start.finalize",
+            details: { repoPath: canonicalRepoPath, taskId: startInput.taskId },
+          });
         }),
       ),
     ...createTaskBuildStateUseCases(useCaseInput),

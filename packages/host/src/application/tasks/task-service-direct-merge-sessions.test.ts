@@ -8,7 +8,6 @@ import {
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
@@ -39,7 +38,6 @@ const createHarness = (
       countLiveSessions,
       cleanupTaskSessions: () => Effect.die(new Error("must not stop sessions")),
     },
-    devServerService: createDirectMergeDevServerService(calls),
     gitPort: extendGitPort(
       createDirectMergeGitPort({
         calls,
@@ -64,7 +62,7 @@ const createHarness = (
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
       defaultTargetBranch: publish ? { remote: "origin", branch: "main" } : { branch: "main" },
     }),
     taskStore: {

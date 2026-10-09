@@ -14,7 +14,6 @@ import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../task-service";
 
 export const createTaskPullRequestSyncUseCases = ({
-  devServerService,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -84,7 +83,6 @@ export const createTaskPullRequestSyncUseCases = ({
             const cleanupDependencies = yield* requireDependencies(() =>
               requireMergedTaskCleanupDependencies(
                 {
-                  devServerService,
                   gitPort,
                   settingsConfig,
                   taskWorktreeService,

@@ -28,7 +28,6 @@ import {
 } from "../agent-studio-test-utils";
 import {
   createBuildToolsSnapshotFixture,
-  createDevServerModelFixture,
   createGitActionsFixture,
   createBuildToolsFixture,
 } from "../shell/agents-page-build-tools.test-support";
@@ -37,23 +36,16 @@ enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
   (typeof import("./use-agents-page-right-panel-model"))["useAgentsPageRightPanelModel"];
-type DevServerPanelModule =
-  typeof import("@/features/dev-servers/use-agent-studio-dev-server-panel");
 type PullRequestReviewQueriesModule = typeof import("@/state/queries/pull-request-review");
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
-const realDevServerPanel: DevServerPanelModule =
-  await import("@/features/dev-servers/use-agent-studio-dev-server-panel");
 const realPullRequestReviewQueries: PullRequestReviewQueriesModule =
   await import("@/state/queries/pull-request-review");
 let testSpies: Array<{ mockRestore(): void }> = [];
 
 type BuildToolsSnapshot = HookArgs["buildTools"]["buildToolsSnapshot"];
 
-const devServerPanelMock = mock<DevServerPanelModule["useAgentStudioDevServerPanel"]>(() =>
-  createDevServerModelFixture(),
-);
 type PrefetchPullRequestReviewContext =
   PullRequestReviewQueriesModule["prefetchPullRequestReviewContextFromQuery"];
 const prefetchPullRequestReviewContextMock = mock(
@@ -160,12 +152,8 @@ beforeEach(async () => {
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot();
-  devServerPanelMock.mockClear();
 
   testSpies = [
-    spyOn(realDevServerPanel, "useAgentStudioDevServerPanel").mockImplementation(
-      devServerPanelMock,
-    ),
     spyOn(
       realPullRequestReviewQueries,
       "prefetchPullRequestReviewContextFromQuery",
@@ -312,17 +300,6 @@ describe("useAgentsPageRightPanelModel", () => {
       await harness.unmount();
       queryClient.clear();
     }
-  });
-
-  test("reads the dev server for the snapshot target", async () => {
-    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
-
-    await harness.mount();
-
-    expect(devServerPanelMock).toHaveBeenLastCalledWith(
-      buildToolsSnapshotState.current.devServerTarget,
-    );
-    await harness.unmount();
   });
 
   test("gives the git panel a new subject key only for another workspace, task, or session", async () => {

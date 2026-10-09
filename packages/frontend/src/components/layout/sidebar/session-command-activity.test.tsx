@@ -22,7 +22,6 @@ import {
 } from "./session-navigation.test-support";
 
 const command = (terminalId: string, context: TerminalContext): TerminalActivity => ({
-  kind: "terminal",
   command: "bun test",
   summary: {
     terminalId,
@@ -31,6 +30,7 @@ const command = (terminalId: string, context: TerminalContext): TerminalActivity
     lifecycle: "running",
     createdAt: "2026-10-04T12:00:00.000Z",
     exit: null,
+    startedBy: "user",
     context,
   },
 });
@@ -98,7 +98,7 @@ describe("session command activity", () => {
       await act(async () =>
         snapshot([
           command("terminal", taskOwner),
-          { ...command("server", taskOwner), kind: "dev_server", command: "bun run dev" },
+          { ...command("server", taskOwner), command: "bun run dev" },
           command("chat-terminal", chatOwner),
         ]),
       );
@@ -157,12 +157,7 @@ describe("session command activity", () => {
     try {
       await act(async () =>
         snapshot([
-          {
-            ...command("server", owner),
-            kind: "dev_server",
-            command: "bun run dev --port 3000",
-            summary: { ...command("server", owner).summary, label: "Web app" },
-          },
+          { ...command("server", owner), command: "bun run dev --port 3000" },
           command("shell", owner),
         ]),
       );
@@ -170,10 +165,8 @@ describe("session command activity", () => {
       expect(indicator.textContent).toBe("2");
       fireEvent.focus(indicator);
       const details = await screen.findByRole("tooltip");
-      expect(details.textContent).toContain("Dev servers · 1");
-      expect(details.textContent).toContain("Web app");
+      expect(details.textContent).toContain("Terminals · 2");
       expect(details.textContent).toContain("bun run dev --port 3000");
-      expect(details.textContent).toContain("Terminals · 1");
       expect(details.textContent).toContain("bun test");
       expect(details.textContent).not.toContain("/repo/worktree");
       await act(async () => disconnect());

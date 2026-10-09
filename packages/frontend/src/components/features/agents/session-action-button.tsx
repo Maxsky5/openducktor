@@ -3,13 +3,27 @@ import type { ComponentProps, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type ActionButtonProps = Omit<ComponentProps<typeof Button>, "variant" | "size">;
+type SessionActionVariant = "default" | "outline";
 
-export function SessionActionButton({ className, ...props }: ActionButtonProps): ReactElement {
+type ActionButtonProps = Omit<ComponentProps<typeof Button>, "variant" | "size"> & {
+  /** The filled default marks the main session action. Outline marks a secondary one. */
+  variant?: SessionActionVariant;
+};
+
+const menuTriggerBorderClassNames = {
+  default: "border-l border-primary-foreground/25",
+  outline: "border-l-0",
+} satisfies Record<SessionActionVariant, string>;
+
+export function SessionActionButton({
+  className,
+  variant = "default",
+  ...props
+}: ActionButtonProps): ReactElement {
   return (
     <Button
       type="button"
-      variant="default"
+      variant={variant}
       size="sm"
       className={cn("h-7 max-w-44 gap-1.5 rounded-r-none px-2.5 text-xs shadow-none", className)}
       {...props}
@@ -19,15 +33,17 @@ export function SessionActionButton({ className, ...props }: ActionButtonProps):
 
 export function SessionActionMenuTrigger({
   className,
+  variant = "default",
   ...props
 }: Omit<ActionButtonProps, "children">): ReactElement {
   return (
     <Button
       type="button"
-      variant="default"
+      variant={variant}
       size="sm"
       className={cn(
-        "h-7 rounded-l-none border-l border-primary-foreground/25 px-1.5 shadow-none",
+        "h-7 rounded-l-none px-1.5 shadow-none",
+        menuTriggerBorderClassNames[variant],
         className,
       )}
       {...props}

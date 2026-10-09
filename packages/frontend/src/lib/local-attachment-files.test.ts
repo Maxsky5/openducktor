@@ -19,10 +19,6 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
   subscribeRunEvents: async () => () => {},
   subscribeWorkspaceProviderSetupUpdates: async () => () => {},
   subscribeAzureDevOpsConnectionUpdates: async () => () => {},
-  subscribeDevServerEvents: async () => ({
-    transportEpoch: "test:0",
-    unsubscribe: () => {},
-  }),
   observeAgentSessionLive: async () => () => {},
   subscribeNotificationStream: async () => () => {},
   subscribeTaskStream: async () => ({

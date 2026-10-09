@@ -11,6 +11,7 @@ import {
   createTerminalInputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
+  type TerminalExitNotice,
 } from "./terminal-viewport-policy";
 import {
   containsTransferredImage,
@@ -31,7 +32,6 @@ export type TerminalViewportMount = {
 };
 
 type MountTerminalViewportInput = {
-  mode?: "interactive" | "output";
   container: HTMLDivElement;
   terminalId: string;
   controller: TerminalTransportController;
@@ -41,7 +41,7 @@ type MountTerminalViewportInput = {
   preparePathInput: (paths: readonly string[]) => Promise<string>;
   writeClipboard: (text: string) => Promise<void>;
   onAttention: (message: string | null) => void;
-  onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
   onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
   onHydrated: () => void;
@@ -50,7 +50,6 @@ type MountTerminalViewportInput = {
 };
 
 export const mountTerminalViewport = ({
-  mode = "interactive",
   container,
   terminalId,
   controller,
@@ -73,14 +72,11 @@ export const mountTerminalViewport = ({
   };
   const binding = createTerminalBinding(
     container,
-    createTerminalOptions(container, {
-      cursorBlink: mode === "interactive",
-      screenReaderMode: true,
-      disableStdin: mode === "output",
-      convertEol: mode === "output",
-    }),
+    createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
   const { fitAddon, terminal } = binding;
+  // An exited terminal keeps its output for reading, but its process can no longer take input.
+  let processExited = false;
   let restoringScreen = false;
   let restoreGeneration = 0;
   let inputGate: Promise<void> | null = null;
@@ -128,7 +124,7 @@ export const mountTerminalViewport = ({
       .catch((cause) => reportFailure("Terminal resize failed", cause));
   });
   const enqueueInput = createTerminalInputSequencer({
-    isActive,
+    isActive: () => !processExited && isActive(),
     writeInput: async (data) => {
       if (inputGate) await inputGate;
       if (disposed) return;
@@ -143,7 +139,6 @@ export const mountTerminalViewport = ({
     resizeScheduler.schedule(cols, rows);
   });
   const dataSubscription = terminal.onData((data) => {
-    if (mode === "output") return;
     const input = encodeTerminalTextInput(data);
     if (!input) return;
     if (restoringScreen) {
@@ -163,7 +158,6 @@ export const mountTerminalViewport = ({
   terminal.attachCustomKeyEventHandler(
     createTerminalKeyEventHandler({
       getPlatform,
-      readOnly: mode === "output",
       hasSelection: () => terminal.hasSelection(),
       getSelection: () => terminal.getSelection(),
       writeClipboard,
@@ -204,13 +198,11 @@ export const mountTerminalViewport = ({
       },
     }).catch((cause) => reportFailure("Image drop failed", cause));
   };
-  if (mode === "interactive") {
-    container.addEventListener("paste", handleImagePaste, true);
-    container.addEventListener("dragenter", handleImageDragEnter);
-    container.addEventListener("dragover", handleImageDragOver);
-    container.addEventListener("dragleave", handleImageDragLeave);
-    container.addEventListener("drop", handleImageDrop);
-  }
+  container.addEventListener("paste", handleImagePaste, true);
+  container.addEventListener("dragenter", handleImageDragEnter);
+  container.addEventListener("dragover", handleImageDragOver);
+  container.addEventListener("dragleave", handleImageDragLeave);
+  container.addEventListener("drop", handleImageDrop);
 
   const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
     if (message.type === "snapshot") {
@@ -254,7 +246,14 @@ export const mountTerminalViewport = ({
     if (
       handleTerminalMetadataFrame(message, {
         onAttention,
-        onLifecycle,
+        onLifecycle: (lifecycle, exit) => {
+          if (lifecycle === "exited" && !processExited) {
+            processExited = true;
+            terminal.options.disableStdin = true;
+            terminal.options.cursorBlink = false;
+          }
+          onLifecycle(lifecycle, exit);
+        },
         onTitle: onTitleChange,
         onForgotten,
         onFailure: onAttention,

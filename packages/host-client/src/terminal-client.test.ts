@@ -10,6 +10,7 @@ const summary = {
   createdAt: "2026-07-12T00:00:00.000Z",
   lifecycle: "running",
   exit: null,
+  startedBy: "user",
 };
 
 describe("host client terminal operations", () => {

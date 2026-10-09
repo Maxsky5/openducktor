@@ -13,6 +13,7 @@ const summary = (terminalId: string): TerminalSummary => ({
   createdAt: "2026-07-17T00:00:00.000Z",
   lifecycle: "running",
   exit: null,
+  startedBy: "user",
 });
 
 describe("terminalPresentationReducer", () => {

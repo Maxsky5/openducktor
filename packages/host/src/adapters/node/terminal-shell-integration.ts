@@ -1,9 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { formatTerminalPathInput } from "../../application/terminals/terminal-path-input";
 import { TerminalPtyError, type TerminalPtyLaunchPlan } from "../../ports/terminal-pty-port";
+import { writeTerminalTempFiles } from "./terminal-temp-files";
 
 export type TerminalShell = {
   plan: TerminalPtyLaunchPlan;
@@ -24,21 +23,12 @@ export const prepareTerminalShell = (
         plan: { ...plan, args: [...plan.args, "--init-command", fishHooks(nonce)] },
         dispose: Effect.void,
       };
-    const root = yield* Effect.tryPromise({
-      try: () => mkdtemp(join(tmpdir(), "odt-terminal-shell-")),
-      catch: (cause) => shellFailure(cause, "start"),
-    });
-    const dispose = Effect.tryPromise({
-      try: () => rm(root, { recursive: true, force: true }),
-      catch: (cause) => shellFailure(cause, "terminate"),
-    });
-    const files =
-      shell === "zsh" ? zshFiles(plan, root, nonce) : { bashrc: bashScript(plan, nonce) };
-    yield* Effect.tryPromise({
-      try: () =>
-        Promise.all(Object.entries(files).map(([name, text]) => writeFile(join(root, name), text))),
-      catch: (cause) => shellFailure(cause, "start"),
-    }).pipe(Effect.tapError(() => dispose));
+    const { root, dispose } = yield* writeTerminalTempFiles(
+      "odt-terminal-shell-",
+      (root) =>
+        shell === "zsh" ? zshFiles(plan, root, nonce) : { bashrc: bashScript(plan, nonce) },
+      shellFailure,
+    );
     return {
       plan:
         shell === "zsh"

@@ -66,7 +66,7 @@ describe("subscribeElectronHostEvent", () => {
       receive(
         {} satisfies IpcRendererEvent,
         JSON.parse(
-          '{"channel":"openducktor://dev-server-event","payload":{"type":"not-a-dev-event"}}',
+          '{"channel":"openducktor://workspace-session-updated","payload":{"workspaceId":"repo"}}',
         ),
       );
       receive({} satisfies IpcRendererEvent, {

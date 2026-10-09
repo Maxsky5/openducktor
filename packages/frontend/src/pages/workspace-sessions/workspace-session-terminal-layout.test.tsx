@@ -19,6 +19,7 @@ test("a narrow chat shows the terminal and Back returns to the workspace", () =>
   const model: TerminalPanelModel = {
     scopeKey: "workspace-1:first",
     isAvailable: true,
+    startBlockedReason: null,
     tabs: [],
     mountedTabs: [],
     activeTabId: null,
@@ -37,6 +38,7 @@ test("a narrow chat shows the terminal and Back returns to the workspace", () =>
     },
     onSelectTab: () => undefined,
     onCreate: () => undefined,
+    onRunAction: () => undefined,
     onRetryDiscovery: () => undefined,
     onRetryCreate: () => undefined,
     onReorderTab: () => undefined,

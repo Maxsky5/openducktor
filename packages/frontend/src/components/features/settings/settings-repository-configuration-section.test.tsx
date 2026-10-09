@@ -54,8 +54,8 @@ const repoConfig: SettingsRepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { preStart: ["bun install"], postComplete: ["bun run clean"] },
-  devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+  hooks: { postComplete: ["bun run clean"] },
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [".env"],
   promptOverrides: {},
   agentDefaults: {},
@@ -92,8 +92,8 @@ describe("RepositoryConfigurationSection", () => {
       expect(updaters[0]?.(repoConfig).workspaceName).toBe("Renamed Repo");
       expect(screen.getByLabelText("Repository path")).toBeTruthy();
       expect(screen.getByLabelText("Branch prefix")).toBeTruthy();
-      expect(screen.queryByText("Worktree setup script (one command per line)")).toBeNull();
-      expect(screen.queryByText("Dev servers")).toBeNull();
+      expect(screen.queryByText("Worktree cleanup script (one command per line)")).toBeNull();
+      expect(screen.queryByText("Actions")).toBeNull();
       expect(screen.queryByText("Files copied to worktrees (one path per line)")).toBeNull();
     } finally {
       rendered.unmount();

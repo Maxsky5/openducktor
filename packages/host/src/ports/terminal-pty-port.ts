@@ -8,10 +8,17 @@ export type TerminalGrid = {
 export type TerminalPtyLaunchPlan = {
   shell: string;
   args: readonly string[];
+  /**
+   * The adapter writes this script to a temporary `.cmd` file, runs it with `shell` instead of
+   * `args`, and removes the file after the process exits.
+   */
+  windowsBatchScript?: string;
   cwd: string;
   env: Readonly<Record<string, string>>;
   grid: TerminalGrid;
   commandNonce?: string;
+  /** The process runs one command and exits. Its exit code is a result, not a start failure. */
+  runsCommand?: boolean;
 };
 
 export type TerminalPtyExit = {

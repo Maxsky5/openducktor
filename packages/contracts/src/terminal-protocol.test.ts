@@ -29,7 +29,6 @@ describe("terminal protocol", () => {
         version: TERMINAL_PROTOCOL_VERSION,
         type: "activity_updated",
         activity: {
-          kind: "dev_server",
           command: "bun run dev --port 3000",
           summary: {
             terminalId: "dev-1",
@@ -38,6 +37,7 @@ describe("terminal protocol", () => {
             createdAt: "2026-10-04T12:00:00.000Z",
             lifecycle: "running",
             exit: null,
+            startedBy: "user",
             context: { repoPath: "/repo", taskId: "task-1" },
           },
         },

@@ -58,8 +58,6 @@ export function subscribeElectronHostEvent(
       for (const active of [...subscriptions]) {
         if (hostEvent.channel === "openducktor://run-event") {
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
-        } else if (hostEvent.channel === "openducktor://dev-server-event") {
-          if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (hostEvent.channel === "openducktor://workspace-session-updated") {
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (hostEvent.channel === "openducktor://azure-devops-connection-updated") {

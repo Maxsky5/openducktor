@@ -1,5 +1,4 @@
 import type { GitConflict } from "@/features/agent-studio-git";
-import type { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import type { AgentsPageBuildTools } from "./use-agents-page-build-tools";
 
 type BuildToolsSnapshot = AgentsPageBuildTools["buildToolsSnapshot"];
@@ -78,11 +77,6 @@ export const createBuildToolsSnapshotFixture = ({
     shouldBlockDiffLoading: false,
     resolutionTaskId: null,
   },
-  devServerTarget: {
-    repoPath: "/repo",
-    owner: { kind: "task", taskId: "task-1" },
-    enabled: true,
-  },
   refreshWorktree,
 });
 
@@ -144,27 +138,4 @@ export const createBuildToolsFixture = ({
 }: Partial<AgentsPageBuildTools> = {}): AgentsPageBuildTools => ({
   buildToolsSnapshot,
   gitActions,
-});
-
-export const createDevServerModelFixture = (): ReturnType<typeof useAgentStudioDevServerPanel> => ({
-  mode: "stopped",
-  isExpanded: false,
-  isLoading: false,
-  disabledReason: null,
-  repoPath: "/repo",
-  owner: { kind: "task", taskId: "task-1" },
-  workingDirectory: "/repo/.worktrees/task-1",
-  scripts: [],
-  selectedScriptId: null,
-  selectedScript: null,
-  error: null,
-  isStartPending: false,
-  isRetryPending: false,
-  isStopPending: false,
-  isRestartPending: false,
-  onSelectScript: () => {},
-  onStart: () => {},
-  onRetry: () => {},
-  onStop: () => {},
-  onRestart: () => {},
 });

@@ -8,12 +8,11 @@ import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
-import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
@@ -102,7 +101,6 @@ export const findLatestCleanupTarget = (
   });
 export const cleanupMergedTaskState = (
   dependencies: {
-    devServerService: DevServerService;
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
@@ -117,7 +115,6 @@ export const cleanupMergedTaskState = (
 ) =>
   Effect.gen(function* () {
     yield* runTaskRuntimeCleanup({
-      devServerService: dependencies.devServerService,
       progress: createTaskCleanupProgressState(),
       repoPath,
       taskIds: [taskId],
@@ -165,7 +162,6 @@ export const cleanupMergedTaskState = (
   });
 export const cleanupDirectMergeTaskState = (
   dependencies: {
-    devServerService: DevServerService;
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
@@ -246,57 +242,6 @@ export const resolveBuildStartPoint = (
         details: { repoPath, targetBranch: configuredTargetBranch },
       }),
     );
-  });
-export const rollbackFailedTaskWorktree = (
-  dependencies: ReturnType<typeof requireBuildStartDependencies>,
-  repoPath: string,
-  worktreePath: string,
-  branch: string,
-  createdTrackingRef: string | null,
-  managedWorktreeBasePath: string,
-) =>
-  Effect.gen(function* () {
-    const cleanupErrors: string[] = [];
-    if (createdTrackingRef) {
-      const deleteReferenceResult = yield* Effect.result(
-        dependencies.gitPort.deleteReference(repoPath, createdTrackingRef),
-      );
-      if (deleteReferenceResult._tag === "Failure") {
-        cleanupErrors.push(
-          `Also failed to delete created upstream tracking ref ${createdTrackingRef}: ${errorMessage(deleteReferenceResult.failure)}`,
-        );
-      }
-    }
-    const removeWorktreeResult = yield* Effect.result(
-      removeWorktreeAndFilesystemPath(
-        {
-          gitPort: dependencies.gitPort,
-          settingsConfig: dependencies.settingsConfig,
-          worktreeFiles: dependencies.worktreeFiles,
-        },
-        {
-          repoPath,
-          worktreePath,
-          force: true,
-          managedWorktreeBasePath,
-          missingOutsideManagedRootPathPolicy: "fail",
-        },
-      ),
-    );
-    if (removeWorktreeResult._tag === "Failure") {
-      cleanupErrors.push(
-        `Also failed to remove worktree ${worktreePath}: ${errorMessage(removeWorktreeResult.failure)}`,
-      );
-    }
-    const deleteBranchResult = yield* Effect.result(
-      dependencies.gitPort.deleteLocalBranch(repoPath, branch, true),
-    );
-    if (deleteBranchResult._tag === "Failure") {
-      cleanupErrors.push(
-        `Also failed to delete branch ${branch}: ${errorMessage(deleteBranchResult.failure)}`,
-      );
-    }
-    return cleanupErrors.length === 0 ? "" : `\n${cleanupErrors.join("\n")}`;
   });
 export const resolveRuntimeDescriptorForTaskSession = (
   runtimeDefinitionsService: RuntimeDefinitionsService,

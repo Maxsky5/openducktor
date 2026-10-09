@@ -37,8 +37,6 @@ export function SessionPreviewCommands({
     );
   if (commands.length === 0) return null;
   const countLabel = `${commands.length} active ${commands.length === 1 ? "command" : "commands"}`;
-  const terminals = commands.filter((command) => command.kind === "terminal");
-  const servers = commands.filter((command) => command.kind === "dev_server");
   return (
     <section aria-label="Active commands" className="shrink-0">
       <TooltipProvider>
@@ -64,10 +62,7 @@ export function SessionPreviewCommands({
             sideOffset={6}
             className="max-h-80 w-80 max-w-[calc(100vw-24px)] overflow-y-auto p-3 text-left"
           >
-            <div className="space-y-3">
-              <CommandList label="Dev servers" commands={servers} />
-              <CommandList label="Terminals" commands={terminals} />
-            </div>
+            <CommandList commands={commands} />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -75,33 +70,17 @@ export function SessionPreviewCommands({
   );
 }
 
-function CommandList({
-  label,
-  commands,
-}: {
-  label: string;
-  commands: readonly TerminalActivity[];
-}): ReactElement | null {
-  if (commands.length === 0) return null;
+function CommandList({ commands }: { commands: readonly TerminalActivity[] }): ReactElement {
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-medium opacity-70">
-        {label} · {commands.length}
-      </p>
+      <p className="text-[10px] font-medium opacity-70">Terminals · {commands.length}</p>
       <ul className="space-y-2">
-        {commands.map(({ summary, kind, command }) => (
+        {commands.map(({ summary, command }) => (
           <li key={summary.terminalId} className="space-y-0.5">
-            {kind === "dev_server" || summary.lifecycle !== "running" ? (
-              <div className="flex items-start justify-between gap-3">
-                {kind === "dev_server" ? (
-                  <span className="min-w-0 break-all text-xs font-medium">{summary.label}</span>
-                ) : null}
-                {summary.lifecycle !== "running" ? (
-                  <span className="shrink-0 text-[10px] opacity-70">
-                    {commandLifecycleLabel(summary.lifecycle)}
-                  </span>
-                ) : null}
-              </div>
+            {summary.lifecycle !== "running" ? (
+              <span className="block text-right text-[10px] opacity-70">
+                {commandLifecycleLabel(summary.lifecycle)}
+              </span>
             ) : null}
             <code className="block break-all font-mono text-[11px] leading-relaxed">{command}</code>
           </li>

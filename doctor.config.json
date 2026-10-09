@@ -18,7 +18,6 @@
           "src/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh.ts",
           "src/pages/agents/query-sync/use-navigation-url-sync.ts",
           "src/pages/agents/query-sync/use-repo-navigation-persistence.ts",
-          "src/pages/agents/right-panel/use-agent-studio-dev-server-panel.ts",
           "src/pages/agents/use-agent-studio-documents.ts",
           "src/pages/agents/use-agent-studio-git-conflict-controller.ts",
           "src/pages/agents/use-agent-studio-task-hydration.ts",
@@ -37,7 +36,6 @@
           "src/pages/agents/query-sync/use-agent-studio-query-session-sync.ts",
           "src/pages/agents/query-sync/use-navigation-url-sync.ts",
           "src/pages/agents/query-sync/use-repo-navigation-persistence.ts",
-          "src/pages/agents/right-panel/use-agent-studio-dev-server-panel.ts",
           "src/pages/agents/use-agent-studio-task-tabs-persistence.ts",
           "src/pages/agents/use-agent-studio-task-tabs-selection.ts",
           "src/state/operations/workspace/use-check-diagnostics-effects.ts"

@@ -1,53 +1,51 @@
 import type { TerminalSummary } from "@openducktor/contracts";
-
-import type {
-  TerminalGrid,
-  TerminalProducerHandle,
-  TerminalPtyHandle,
-} from "../../ports/terminal-pty-port";
+import { Deferred, Effect } from "effect";
+import type { TerminalGrid, TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import type { TerminalCommandResult } from "./terminal-command";
+import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalScreenState } from "./terminal-screen-state";
 import { TerminalSessionOutput } from "./terminal-session-output";
 import type { TerminalTitleTracker } from "./terminal-title-tracker";
 import { type SerialLane } from "../../effect/serial-gate";
 
-type TerminalSessionState = {
-  onForgotten?: () => void;
+/** The command of a command terminal. The result settles once, when the command ends. */
+export type TerminalCommandRun = {
+  phase: "command" | "shell";
+  readonly result: Deferred.Deferred<TerminalCommandResult>;
+};
+
+export type TerminalSession = {
   summary: TerminalSummary;
   output: TerminalSessionOutput;
   screen: TerminalScreenState;
   screenReleaseStarted: boolean;
   operations: SerialLane;
-};
-
-export type InteractiveTerminalSession = TerminalSessionState & {
-  readonly kind: "interactive";
+  grid: TerminalGrid;
   readonly shell: string;
   command: string | null;
-  resources: TerminalSessionResources<TerminalPtyHandle>;
+  readonly commandRun: TerminalCommandRun | null;
+  resources: TerminalSessionResources;
 };
 
-export type OutputTerminalSession = TerminalSessionState & {
-  readonly kind: "output";
-  readonly command: string;
-  resources: TerminalSessionResources<TerminalProducerHandle>;
-};
-
-export type TerminalSession = InteractiveTerminalSession | OutputTerminalSession;
-
-class TerminalSessionResources<Handle extends TerminalProducerHandle> {
-  private currentHandle: Handle | null = null;
+class TerminalSessionResources {
+  private currentHandle: TerminalPtyHandle | null = null;
   private disposed = false;
 
   constructor(private readonly titleTracker: TerminalTitleTracker) {}
 
-  get handle(): Handle | null {
+  get handle(): TerminalPtyHandle | null {
     return this.currentHandle;
   }
 
-  activate(handle: Handle): boolean {
+  activate(handle: TerminalPtyHandle): boolean {
     if (this.disposed) return false;
     this.currentHandle = handle;
     return true;
+  }
+
+  /** A command terminal releases its command process before its next process starts. */
+  releaseHandle(): void {
+    this.currentHandle = null;
   }
 
   consumeOutput(data: Uint8Array): void {
@@ -67,21 +65,16 @@ type TerminalSessionInput = {
   titleTracker: TerminalTitleTracker;
   operations: SerialLane;
   replayByteLimit: number;
+  shell: string;
   grid: TerminalGrid;
+  /** The activity command. A command terminal shows its command lines until the command ends. */
+  command: string | null;
+  commandRun: TerminalCommandRun | null;
 };
 
-export function createTerminalSession(
-  input: TerminalSessionInput & { kind: "interactive"; shell: string },
-): InteractiveTerminalSession;
-export function createTerminalSession(
-  input: TerminalSessionInput & { kind: "output"; command: string },
-): OutputTerminalSession;
-export function createTerminalSession(
-  input: TerminalSessionInput &
-    ({ kind: "interactive"; shell: string } | { kind: "output"; command: string }),
-): TerminalSession {
-  const screen = new TerminalScreenState(input.grid, input.kind === "output");
-  const state: TerminalSessionState = {
+export const createTerminalSession = (input: TerminalSessionInput): TerminalSession => {
+  const screen = new TerminalScreenState(input.grid);
+  return {
     summary: input.summary,
     output: new TerminalSessionOutput(input.summary.terminalId, input.replayByteLimit, () =>
       screen.snapshot(),
@@ -89,22 +82,18 @@ export function createTerminalSession(
     screen,
     screenReleaseStarted: false,
     operations: input.operations,
+    grid: input.grid,
+    shell: input.shell,
+    command: input.command,
+    commandRun: input.commandRun,
+    resources: new TerminalSessionResources(input.titleTracker),
   };
-  return input.kind === "interactive"
-    ? {
-        ...state,
-        kind: input.kind,
-        shell: input.shell,
-        command: null,
-        resources: new TerminalSessionResources<TerminalPtyHandle>(input.titleTracker),
-      }
-    : {
-        ...state,
-        kind: input.kind,
-        command: input.command,
-        resources: new TerminalSessionResources<TerminalProducerHandle>(input.titleTracker),
-      };
-}
+};
+
+export const copyTerminalSummary = (session: TerminalSession): TerminalSummary => ({
+  ...session.summary,
+  context: { ...session.summary.context },
+});
 
 export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "starting" ||
@@ -112,22 +101,38 @@ export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "closing" ||
   session.summary.lifecycle === "close_failed";
 
-export function activateTerminalSession(
-  session: InteractiveTerminalSession,
+export const isCommandRunning = (session: TerminalSession): boolean =>
+  session.commandRun?.phase === "command" && isLiveTerminal(session);
+
+/** Settles the command result once. Call it after queued output is parsed, before the screen is released. */
+export const settleCommandRun = (
+  session: TerminalSession,
+  result: (outputTail: readonly string[]) => TerminalCommandResult,
+): void => {
+  const run = session.commandRun;
+  if (!run || Deferred.isDoneUnsafe(run.result)) return;
+  const outputTail = session.screen.outputTail(TERMINAL_LIMITS.commandOutputTailLines);
+  Deferred.doneUnsafe(run.result, Effect.succeed(result(outputTail)));
+};
+
+/** Settles the command result after the screen parses the queued output. */
+export const settleCommandRunAfterOutput = (
+  session: TerminalSession,
+  result: (outputTail: readonly string[]) => TerminalCommandResult,
+): void => {
+  const run = session.commandRun;
+  if (!run || Deferred.isDoneUnsafe(run.result)) return;
+  void session.screen.drained().then(() => settleCommandRun(session, result));
+};
+
+export const activateTerminalSession = (
+  session: TerminalSession,
   handle: TerminalPtyHandle,
-): boolean;
-export function activateTerminalSession(
-  session: OutputTerminalSession,
-  handle: TerminalProducerHandle,
-): boolean;
-export function activateTerminalSession<Handle extends TerminalProducerHandle>(
-  session: TerminalSessionState & { resources: TerminalSessionResources<Handle> },
-  handle: NoInfer<Handle>,
-): boolean {
+): boolean => {
   if (session.summary.lifecycle !== "starting" || !session.resources.activate(handle)) return false;
   session.summary.lifecycle = "running";
   return true;
-}
+};
 
 export const beginTerminalClose = (session: TerminalSession): void => {
   session.summary.lifecycle = "closing";
@@ -145,8 +150,10 @@ export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
-  session.onForgotten?.();
-  void session.screen.drained().then(() => session.screen.dispose());
+  void session.screen.drained().then(() => {
+    settleCommandRun(session, closedResult);
+    session.screen.dispose();
+  });
 };
 
 export const exitTerminalSession = (
@@ -159,6 +166,7 @@ export const exitTerminalSession = (
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
+  settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
   session.summary.exit = {
     exitCode,
@@ -168,3 +176,8 @@ export const exitTerminalSession = (
   };
   return true;
 };
+
+const closedResult = (outputTail: readonly string[]): TerminalCommandResult => ({
+  type: "closed",
+  outputTail,
+});

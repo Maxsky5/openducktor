@@ -35,7 +35,6 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import {
@@ -47,6 +46,10 @@ import {
   type WorkspaceSessionServiceDependencies,
 } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import type {
+  WorktreeActionRunInput,
+  WorktreeActionRunner,
+} from "../actions/worktree-action-runner";
 
 const commitIdentity = [
   "-c",
@@ -89,7 +92,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     runGit(fixtureRepoPath, "config", "core.autocrlf", "false");
     runGit(fixtureRepoPath, "config", "core.eol", "lf");
     await writeFile(path.join(fixtureRepoPath, "tracked.txt"), "committed\n");
-    await writeFile(path.join(fixtureRepoPath, ".gitignore"), ".env\nhook-proof.txt\n");
+    await writeFile(path.join(fixtureRepoPath, ".gitignore"), ".env\n");
     runGit(fixtureRepoPath, "add", ".");
     runGit(fixtureRepoPath, ...commitIdentity, "commit", "-m", "Initial fixture");
     runGit(fixtureRepoPath, ...commitIdentity, "commit", "--allow-empty", "-m", "Current checkout");
@@ -112,9 +115,12 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  const setup = ({ hooks = true } = {}) => {
+  const setup = ({ actions = true } = {}) => {
     const starts: AgentSessionControlStartInput[] = [];
     const events: WorkspaceSession[] = [];
+    // Each run records the copied `.env` that the worktree held when its actions started.
+    const actionRuns: Array<WorktreeActionRunInput & { worktreePath: string; env: string | null }> =
+      [];
     const config = repoConfigSchema.parse({
       workspaceId: "fairnest",
       workspaceName: "Test",
@@ -123,34 +129,41 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       branchPrefix: "odt",
       worktreeBasePath: path.join(root, "worktrees"),
       worktreeCopyPaths: [".env"],
-      hooks: {
-        preStart: hooks
-          ? [
-              `${JSON.stringify(process.execPath)} -e ${JSON.stringify("require('node:fs').writeFileSync('hook-proof.txt', process.cwd())")}`,
-            ]
-          : [],
-        postComplete: [],
-      },
+      hooks: { postComplete: [] },
+      actions: actions
+        ? {
+            items: [
+              {
+                id: "install",
+                icon: "build",
+                name: "Install",
+                command: "bun install",
+                runOnWorktreeCreate: true,
+                waitBeforeAgentStart: true,
+              },
+            ],
+            defaultActionId: "install",
+          }
+        : { items: [], defaultActionId: null },
     });
+    const worktreeActions: WorktreeActionRunner = {
+      createRun: ({ worktreePath }) => ({
+        run: (input) =>
+          Effect.promise(async () => {
+            const env = await readFile(path.join(worktreePath, ".env"), "utf8").catch(() => null);
+            actionRuns.push({ ...input, worktreePath, env });
+          }),
+        stopTerminals: () => Effect.void,
+      }),
+    };
     const targetDependencies = {
       git: createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
       settingsConfig: createSettingsConfigAdapter({ configPath: path.join(root, "settings.json") }),
       worktreeFiles: createWorktreeFileAdapter(),
-      systemCommands: createSystemCommandRunner(),
+      worktreeActions,
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const dependencies: WorkspaceSessionServiceDependencies = {
-      devServerService: {
-        forgetWorkspaceSession: () => Effect.void,
-        stopWorkspaceSession: (input) =>
-          Effect.succeed({
-            ...input,
-            workingDirectory: null,
-            scripts: [],
-            revision: 0,
-            updatedAt: "2026-09-27T00:00:00.000Z",
-          }),
-      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -212,13 +225,22 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktree: { mode: "from_name", name: "named-chat", branchName: null },
       manualTitle: null,
     };
-    return { router, createInput, starts, events, targetDependencies, dependencies };
+    return {
+      router,
+      createInput,
+      starts,
+      events,
+      targetDependencies,
+      dependencies,
+      actionRuns,
+      config,
+    };
   };
 
   // This case copies a real repository and creates a worktree with Git on Windows.
   test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-    const h = setup({ hooks: false });
+    const h = setup({ actions: false });
     gitCommand("branch", "feature/existing", "main~1");
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
@@ -243,7 +265,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     "a failed %s leaves a competing chat's real worktree and files intact",
     async (operation) => {
       await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup({ hooks: false });
+      const h = setup({ actions: false });
       const archived = await Effect.runPromise(
         createSqliteWorkspaceSessionStore(database.contextProvider).create({
           workspaceId: "fairnest",
@@ -318,7 +340,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     15_000,
   );
 
-  test("creates from_name from a dirty checkout with copy, hook, and dirty-source isolation", async () => {
+  test("creates from_name from a dirty checkout with copy, worktree actions, and dirty-source isolation", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
     await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
@@ -339,7 +361,19 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await expect(readFile(path.join(directory, file), "utf8")).rejects.toThrow("ENOENT");
     }
     expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
-    expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
+    expect(h.actionRuns).toEqual([
+      {
+        context: {
+          kind: "workspace_session",
+          workspaceId: "fairnest",
+          sessionId: session.id,
+          repoPath: await realpath(repoPath),
+        },
+        worktreePath: directory,
+        actions: h.config.actions,
+        env: "TEST_VALUE=local\n",
+      },
+    ]);
     expect(
       gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
     ).toEqual([fixtureHead, `refs/heads/${branchName}`]);
@@ -351,7 +385,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
   });
 
   test("archives a from_name session and removes its worktree and branch", async () => {
-    const h = setup({ hooks: false });
+    const h = setup({ actions: false });
     const branchName = "feature/archive-review";
     const directory = path.join(root, "worktrees", "workspace-sessions", "archive-review");
     gitCommand("worktree", "add", "-b", branchName, directory);
@@ -459,7 +493,19 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       "new default branch content\n",
     );
     expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
-    expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
+    expect(h.actionRuns).toEqual([
+      {
+        context: {
+          kind: "workspace_session",
+          workspaceId: "fairnest",
+          sessionId: archived.id,
+          repoPath: await realpath(repoPath),
+        },
+        worktreePath: directory,
+        actions: h.config.actions,
+        env: "TEST_VALUE=local\n",
+      },
+    ]);
     await expect(readFile(path.join(directory, "untracked.txt"), "utf8")).rejects.toThrow();
   });
 
@@ -533,7 +579,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       const alias = path.join(root, "native-alias");
       gitCommand("worktree", "add", "-b", "feature/external", directory);
       await symlink(directory, alias, "junction");
-      const h = setup({ hooks: false });
+      const h = setup({ actions: false });
       const registry = createLiveSessionAdapterRegistry();
       const metadata = {
         externalSessionId: "external-alias",
@@ -797,7 +843,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
   test("keeps a protected default-branch worktree when removal is refused", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
-    const h = setup({ hooks: false });
+    const h = setup({ actions: false });
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
       worktree: { mode: "from_branch", name: "main-review", branchName: "main" },

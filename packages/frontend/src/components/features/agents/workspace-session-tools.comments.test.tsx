@@ -4,10 +4,6 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import {
-  buildState,
-  createDeferred,
-} from "@/features/dev-servers/use-agent-studio-dev-server-panel-test-fixtures";
 import { createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
@@ -20,7 +16,7 @@ import {
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
 const commentOwner = {
@@ -134,8 +130,6 @@ for (const contextMode of ["repository", "worktree"] as const) {
       configureShellBridge(
         createShellBridgeFixture({
           client: {
-            devServerGetState: async (_repo, owner) =>
-              buildState({ owner, workingDirectory, scripts: [] }),
             gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
             gitGetWorktreeStatus: read,
             gitGetWorktreeStatusSummary: async (_repo, _target, scope = "uncommitted") => {
@@ -148,12 +142,6 @@ for (const contextMode of ["repository", "worktree"] as const) {
                 snapshot: full.snapshot,
               };
             },
-          },
-          bridge: {
-            subscribeDevServerEvents: async () => ({
-              transportEpoch: "test:1",
-              unsubscribe: () => {},
-            }),
           },
         }),
       );

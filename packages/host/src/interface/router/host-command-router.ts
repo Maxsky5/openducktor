@@ -13,7 +13,6 @@ import {
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
-import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import {
   GitProviderCapabilityError,
   GitProviderRepositoryError,
@@ -29,7 +28,6 @@ export type { HostCommandArgs } from "../commands/command-inputs";
 export type HostCommandHandlerError =
   | RuntimeQueryError
   | CodexSessionHistoryError
-  | DevServerProcessStartExitError
   | FilesystemListDirectoryError
   | GitProviderCapabilityError
   | GitProviderRepositoryError

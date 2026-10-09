@@ -72,6 +72,7 @@ describe("Workspace Session metadata UI", () => {
           <WorkspaceSessionHeader
             workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
             record={session}
+            repoActions={null}
             viewControls={null}
             onArchive={() => {}}
             isArchiving={false}
@@ -189,6 +190,7 @@ describe("Workspace Session metadata UI", () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionHeader
+          repoActions={null}
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}
@@ -237,6 +239,7 @@ describe("Workspace Session metadata UI", () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionHeader
+          repoActions={null}
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}
@@ -432,6 +435,7 @@ describe("Workspace Session metadata UI", () => {
     const view = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceSessionHeader
+          repoActions={null}
           viewControls={null}
           onArchive={() => {}}
           isArchiving={false}

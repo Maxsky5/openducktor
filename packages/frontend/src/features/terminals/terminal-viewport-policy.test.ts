@@ -524,6 +524,45 @@ describe("InteractiveTerminal policies", () => {
     expect(writes).toEqual(["pasted", "typed"]);
   });
 
+  test.each([
+    { exitCode: 0, signal: null, expected: { text: "Exited with code 0.", isFailure: false } },
+    { exitCode: 1, signal: null, expected: { text: "Exited with code 1.", isFailure: true } },
+    {
+      exitCode: 0,
+      signal: "SIGTERM",
+      expected: { text: "Exited with code 0 (SIGTERM).", isFailure: true },
+    },
+    {
+      exitCode: null,
+      signal: null,
+      expected: { text: "Exited with code unknown.", isFailure: true },
+    },
+  ])(
+    "reports exit code $exitCode with signal $signal as a failure only when it is not clean",
+    ({ exitCode, signal, expected }) => {
+      const exits: unknown[] = [];
+      handleTerminalMetadataFrame(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "lifecycle",
+          terminalId: "terminal-1",
+          lifecycle: "exited",
+          exitCode,
+          signal,
+          finalSequence: 10,
+        },
+        {
+          onAttention: () => undefined,
+          onLifecycle: (_lifecycle, exit) => exits.push(exit),
+          onTitle: () => undefined,
+          onForgotten: () => undefined,
+          onFailure: () => undefined,
+        },
+      );
+      expect(exits).toEqual([expected]);
+    },
+  );
+
   test("passes screen restoration to the output sequencer", () => {
     const events: string[] = [];
     const handlers = {

@@ -260,6 +260,8 @@ The app shell also owns `contexts/DiffWorkerProvider.tsx`. Page and workspace sw
 
 `pages/agents/agent-studio-navigation-state.ts` resolves the committed task selection. Task and workspace views render one conversation without browser tabs. `components/features/agents/session-view-controls.tsx` supplies terminal and work-panel controls in the session header. The header stays visible during a file preview. Workspace session actions expose rename and archive. Archive uses the existing worktree confirmation and unsaved-edit guard.
 
+`components/features/repository-actions/session-repo-actions.tsx` supplies the repository action button in both session headers. It reads actions from the repository config query, so a settings save updates it without a reload. It runs an action through the page terminal model, which opens a new terminal tab. The terminal scope gives the reason when the session has no usable working directory.
+
 `pages/agents/agents-page-session-tabs.ts` owns workflow roles and session history choices. It does not own a task tab list.
 
 `agent-studio-state-writer.ts` orders saved navigation actions for one workspace. The host applies each action to the latest config under serialized writes. `use-agent-studio-workspace-state-save.ts` saves the selected task and session through this path. The UI preserves legacy `openTaskIds` in the existing record shape but does not edit them. Background starts appear through their durable session records. They do not write tab state or depend on the retired background-tab setting. A missing requested task keeps its URL and shows an unavailable view without replacing the saved selection.
@@ -291,7 +293,7 @@ Key event tracking by selected session identity. A short gap in loaded session s
 
 Files: `pages/agents/shell/use-agents-page-build-tools.ts`, `pages/agents/right-panel/use-agents-page-right-panel-model.ts`, and `pages/agents/shell/use-agent-studio-git-conflict-header-model.ts`.
 
-The page shell owns the build-tools snapshot and the git actions. The right panel model reads them and owns the dev server, file explorer, CI checks, and panel models.
+The page shell owns the build-tools snapshot and the git actions. The right panel model reads them and owns the file explorer, CI checks, and panel models.
 
 Rules:
 
@@ -300,7 +302,6 @@ Rules:
 - Show the git conflict quick action only while the right panel is open. Git data does not refresh while the panel is closed.
 - Keep git state through a right panel toggle or a Git tab close, so a running git action keeps its result. Both session kinds use `pages/agents/use-agent-studio-git-actions.ts`. Task workflow policy stays in the task adapter.
 - Show action errors, a force push confirmation, or a local git conflict only in the repository and working directory where the action ran. Pull/rebase confirmations also belong to the original branch identity. Reset confirmations also belong to the original branch identity, comparison target, and displayed snapshot.
-- Keep the dev server in the right panel, so its output does not render the page shell again.
 
 `pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
 

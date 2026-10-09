@@ -70,7 +70,7 @@ Before the reset:
 
 `reset_task` moves any non-closed task to `open`. It keeps the task ID and user fields.
 
-It clears workflow documents, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task dev servers, then removes task worktrees and related local branches.
+It clears workflow documents, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task terminals, then removes task worktrees and related local branches.
 
 Reject the action while a live role still owns task state. Reject it when branch cleanup is unsafe, such as when another worktree has the branch checked out.
 
@@ -78,7 +78,7 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 `close_task` moves any non-closed task to `closed` from the task detail sheet. It is an administrative override.
 
-The action keeps the task record, user fields, documents, QA reports, session history, pull request data, and direct merge data. It stops task dev servers and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
+The action keeps the task record, user fields, documents, QA reports, session history, pull request data, and direct merge data. It stops task terminals and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
 
 Reject it while a live role owns mutable task state. Reject an epic while a direct child is not closed.
 
@@ -86,9 +86,7 @@ Only the task detail sheet can show `close_task`. Do not show it on a Kanban car
 
 ## Merged pull requests
 
-Pull request sync records the merged pull request, stops task terminals and dev servers, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
-
-A successful dev server stop clears its process ownership and records `stopped` before terminal cleanup can forget its output source. A later process exit callback must not change a replacement server.
+Pull request sync records the merged pull request, stops task terminals, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
 

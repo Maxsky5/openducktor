@@ -12,11 +12,9 @@ import {
 import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
-const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
-let nextDevServerTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -84,12 +82,6 @@ export const createElectronShellBridge = (): ShellBridge => {
       electronApi.subscribe("openducktor://workspace-provider-setup-updated", listener),
     subscribeAzureDevOpsConnectionUpdates: async (listener) =>
       electronApi.subscribe(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, listener),
-    subscribeDevServerEvents: async (listener) => {
-      const unsubscribe = electronApi.subscribe(DEV_SERVER_EVENT_CHANNEL, listener);
-      const transportEpoch = `electron:${nextDevServerTransportEpoch}`;
-      nextDevServerTransportEpoch += 1;
-      return { transportEpoch, unsubscribe };
-    },
     observeAgentSessionLive: async (input, listener) => {
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const unsubscribe = electronApi.subscribe(

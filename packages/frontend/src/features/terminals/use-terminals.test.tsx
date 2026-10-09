@@ -1,9 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  TerminalCreateRequest,
-  TerminalListResponse,
-  TerminalSummary,
-} from "@openducktor/contracts";
+import type { RepoAction, TerminalListResponse, TerminalSummary } from "@openducktor/contracts";
+import { HostTerminalClientError } from "@openducktor/host-client";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -126,6 +123,52 @@ describe("useTerminals", () => {
     },
   );
 
+  test("keeps the panel closed for a host-started terminal until the user opens it", async () => {
+    const setup: TerminalSummary = {
+      ...existingTerminal(),
+      terminalId: "setup-terminal",
+      label: "Worktree setup",
+      lifecycle: "exited",
+      exit: {
+        exitCode: 0,
+        signal: null,
+        finalSequence: 10,
+        exitedAt: "2026-07-19T00:00:01.000Z",
+      },
+      startedBy: "host",
+    };
+    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals: [setup] })));
+    try {
+      await waitFor(() => expect(view.result.current.tabs[0]?.terminalId).toBe("setup-terminal"), {
+        timeout: 500,
+      });
+      expect(view.result.current.isVisible).toBe(false);
+
+      act(() => view.result.current.onToggle());
+
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.result.current.activeTabId).toBe(view.result.current.tabs[0]?.tabId ?? null);
+      expect(view.terminalCreate).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("opens the panel for a terminal that the user started", async () => {
+    const view = renderModel(
+      mock(async () => ({ hostInstanceId: "host-1", terminals: [existingTerminal()] })),
+    );
+    try {
+      await waitFor(
+        () => expect(view.result.current.tabs[0]?.terminalId).toBe("existing-terminal"),
+        { timeout: 500 },
+      );
+      expect(view.result.current.isVisible).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("blocks creation after failed discovery and retries the host list", async () => {
     const terminal = existingTerminal();
     const result = { hostInstanceId: "host-1", terminals: [terminal] };
@@ -221,6 +264,7 @@ describe("useTerminals", () => {
         createdAt: "2026-07-19T00:00:00.000Z",
         lifecycle: "running",
         exit: null,
+        startedBy: "user",
       },
     ];
     const filters: string[] = [];
@@ -251,6 +295,7 @@ describe("useTerminals", () => {
             createdAt: "2026-07-19T00:00:00.000Z",
             lifecycle: "running",
             exit: null,
+            startedBy: "user",
           };
           terminals.push(summary);
           return { ref: { terminalId }, summary };
@@ -340,76 +385,147 @@ describe("useTerminals", () => {
     }
   });
 
-  test("manages terminals for a non-task scope", async () => {
-    const unavailable = createUnavailableShellBridge();
-    const terminals: TerminalSummary[] = [];
-    const listFilters: string[] = [];
-    const createRequests: TerminalCreateRequest[] = [];
-    const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
-      hostClient: {
-        ...unavailable.client,
-        systemGetPlatform: async () => "darwin",
-        terminalList: async ({ filter }) => {
-          listFilters.push(filter.kind);
-          return { hostInstanceId: "host-1", terminals: [...terminals] };
-        },
-        terminalCreate: async (request) => {
-          createRequests.push(request);
-          const summary: TerminalSummary = {
-            terminalId: "terminal-free-chat",
-            label: request.workingDir,
-            context: request.context,
-            initialWorkingDir: request.workingDir,
-            createdAt: "2026-07-19T00:00:00.000Z",
-            lifecycle: "running",
-            exit: null,
-          };
-          terminals.push(summary);
-          return { ref: { terminalId: summary.terminalId }, summary };
-        },
-      },
-      terminalBridge: {
-        connect: async (_onFrame, onStateChange) => {
-          onStateChange("connected");
-          return { send: async () => undefined, close: () => undefined };
-        },
-      },
-    };
-    let latest: ReturnType<typeof useTerminals> | null = null;
-    const getLatest = (): ReturnType<typeof useTerminals> => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useTerminals(
-        {
-          scope: {
-            key: "free-chat:chat-1",
-            context: {},
-            workingDirectory: "/repo",
-            workingDirectoryError: "The chat working directory is unavailable.",
-          },
-          isScopeLoading: false,
-          mountedScopeKeys: ["free-chat:chat-1"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+  test("blocks a new start while discovery runs or failed", async () => {
+    const discovery = Promise.withResolvers<TerminalListResponse>();
+    const view = renderModel(mock(() => discovery.promise));
     try {
-      await waitFor(() => expect(getLatest().isLoading).toBe(false));
-      expect(listFilters).toEqual(["unassociated"]);
+      expect(view.result.current.startBlockedReason).toBe("Terminals are loading.");
 
-      act(() => getLatest().onCreate());
+      await act(async () => {
+        discovery.reject(new Error("Discovery failed."));
+        await discovery.promise.catch(() => undefined);
+      });
 
-      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-free-chat"));
-      expect(createRequests).toEqual([{ workingDir: "/repo", context: {} }]);
+      await waitFor(
+        () =>
+          expect(view.result.current.startBlockedReason).toBe(
+            "Terminal discovery failed. Retry it in the terminal panel.",
+          ),
+        { timeout: 500 },
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("blocks a new start at the terminal limit", async () => {
+    const terminals = Array.from({ length: 8 }, (_, index) => ({
+      ...existingTerminal(),
+      terminalId: `terminal-${index}`,
+    }));
+    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals })));
+    try {
+      await waitFor(() => expect(view.result.current.tabs).toHaveLength(8), { timeout: 500 });
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+
+      expect(view.result.current.startBlockedReason).toBe(
+        "Close a terminal to start another. The limit is 8 terminals.",
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("runs an action in a new visible tab and reads the host list again", async () => {
+    const terminal = { ...existingTerminal(), terminalId: "action-terminal", label: "bun test" };
+    let terminals: TerminalSummary[] = [];
+    const terminalList = mock(async () => ({
+      hostInstanceId: "host-1",
+      terminals: [...terminals],
+    }));
+    const view = renderModel(terminalList);
+    const run = Promise.withResolvers<{ ref: { terminalId: string }; summary: TerminalSummary }>();
+    view.terminalRunAction.mockImplementation(() => run.promise);
+    try {
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      expect(view.result.current.isVisible).toBe(false);
+      expect(view.result.current.startBlockedReason).toBeNull();
+      const listCalls = terminalList.mock.calls.length;
+
+      act(() => view.result.current.onRunAction(testAction()));
+
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.result.current.tabs).toHaveLength(1);
+      const [pendingTab] = view.result.current.tabs;
+      expect(pendingTab?.requestState).toBe("creating");
+      expect(pendingTab && "label" in pendingTab ? pendingTab.label : null).toBe("Run tests");
+      expect(view.result.current.activeTabId).toBe(pendingTab?.tabId ?? null);
+      // A second click on the action control cannot run the command again before this start ends.
+      expect(view.result.current.startBlockedReason).toBe("A terminal is starting.");
+      expect(view.terminalRunAction).toHaveBeenCalledWith({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+        actionId: "action-test",
+      });
+      expect(view.terminalCreate).not.toHaveBeenCalled();
+
+      await act(async () => {
+        terminals = [terminal];
+        run.resolve({ ref: { terminalId: terminal.terminalId }, summary: terminal });
+        await run.promise;
+      });
+      await waitFor(() => expect(view.result.current.tabs[0]?.terminalId).toBe("action-terminal"), {
+        timeout: 500,
+      });
+      expect(view.result.current.tabs).toHaveLength(1);
+      expect(terminalList.mock.calls.length).toBeGreaterThan(listCalls);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows a failed action tab and retries the same action", async () => {
+    const terminal = { ...existingTerminal(), terminalId: "action-terminal" };
+    const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }));
+    view.terminalRunAction
+      .mockImplementationOnce(async () => {
+        throw new HostTerminalClientError(
+          { code: "action_not_found", message: "The action lint does not exist." },
+          null,
+        );
+      })
+      .mockImplementationOnce(async () => ({
+        ref: { terminalId: terminal.terminalId },
+        summary: terminal,
+      }));
+    try {
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      await act(async () =>
+        view.result.current.onRunAction(testAction({ id: "lint", name: "Lint" })),
+      );
+      await waitFor(
+        () => expect(view.result.current.tabs[0]?.error).toBe("The action lint does not exist."),
+        { timeout: 500 },
+      );
+      const failedTab = view.result.current.tabs[0];
+      if (failedTab?.requestState !== "creation_failed") throw new Error("Expected a failed tab.");
+
+      await act(async () =>
+        view.result.current.onRetryCreate("/repo:task-1", failedTab.tabId, failedTab.actionId),
+      );
+
+      await waitFor(() => expect(view.result.current.tabs[0]?.terminalId).toBe("action-terminal"), {
+        timeout: 500,
+      });
+      expect(view.terminalRunAction).toHaveBeenCalledTimes(2);
+      expect(view.terminalRunAction.mock.calls[1]?.[0]).toMatchObject({ actionId: "lint" });
+      expect(view.terminalCreate).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows the scope reason when an action has no working directory", async () => {
+    const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }), null);
+    try {
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      expect(view.result.current.startBlockedReason).toBe("Task task-1 has no available worktree.");
+
+      act(() => view.result.current.onRunAction(testAction()));
+
+      expect(view.result.current.isVisible).toBe(true);
+      expect(view.result.current.tabs[0]?.error).toBe("Task task-1 has no available worktree.");
+      expect(view.terminalRunAction).not.toHaveBeenCalled();
     } finally {
       view.unmount();
     }
@@ -447,7 +563,7 @@ describe("useTerminals", () => {
         {
           scope: {
             key: scopeKey,
-            context: {},
+            context: { repoPath: "/repo", taskId: scopeKey },
             workingDirectory: "/repo",
             workingDirectoryError: "The working directory is unavailable.",
           },
@@ -501,18 +617,24 @@ function existingTerminal(): TerminalSummary {
     createdAt: "2026-07-19T00:00:00.000Z",
     lifecycle: "running",
     exit: null,
+    startedBy: "user",
   };
 }
 
-function renderModel(terminalList: TerminalDependencies["hostClient"]["terminalList"]) {
+function renderModel(
+  terminalList: TerminalDependencies["hostClient"]["terminalList"],
+  workingDirectory: string | null = "/repo",
+) {
   const unavailable = createUnavailableShellBridge();
   const terminalCreate = mock(unavailable.client.terminalCreate);
+  const terminalRunAction = mock(unavailable.client.terminalRunAction);
   const dependencies: TerminalDependencies = {
     hostClient: {
       ...unavailable.client,
       systemGetPlatform: async () => "darwin",
       terminalList,
       terminalCreate,
+      terminalRunAction,
     },
     terminalBridge: {
       connect: async (_onFrame, onStateChange) => {
@@ -536,13 +658,25 @@ function renderModel(terminalList: TerminalDependencies["hostClient"]["terminalL
         scope: {
           key: "/repo:task-1",
           context: { repoPath: "/repo", taskId: "task-1" },
-          workingDirectory: "/repo",
-          workingDirectoryError: "The working directory is unavailable.",
+          workingDirectory,
+          workingDirectoryError: "Task task-1 has no available worktree.",
         },
         isScopeLoading: false,
       },
       wrapper: IsolatedQueryWrapper,
     },
   );
-  return { ...view, terminalCreate };
+  return { ...view, terminalCreate, terminalRunAction };
+}
+
+function testAction(overrides: Partial<RepoAction> = {}): RepoAction {
+  return {
+    id: "action-test",
+    icon: "test",
+    name: "Run tests",
+    command: "bun test",
+    runOnWorktreeCreate: false,
+    waitBeforeAgentStart: false,
+    ...overrides,
+  };
 }

@@ -4,7 +4,7 @@ import {
   useSessionComparisonControl,
 } from "@/features/agent-studio-git/use-session-comparison";
 import { buildComparisonView } from "@/features/agent-studio-git/session-comparison-view";
-import type { DevServerOwner, GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
+import type { GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import {
@@ -19,6 +19,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import { collectUnmergedFilePaths, useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
@@ -104,7 +105,7 @@ export function useWorkspaceSessionTools({
   const directoryKey = JSON.stringify([repoPath, workingDirectory]);
   const ownerKey = JSON.stringify([workspaceId, sessionId]);
   const viewRef = useRef<WorkspaceToolsView | null>(null);
-  const owner = useMemo<Extract<DevServerOwner, { kind: "workspace_session" }>>(
+  const commentOwner = useMemo<Extract<InlineCommentOwner, { kind: "workspace_session" }>>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
   );
@@ -154,7 +155,7 @@ export function useWorkspaceSessionTools({
   const markerTarget = diffData.comparisonReference;
   // An in-flight diff can finish after the tools view closes.
   useGitCommentDraftValidation({
-    commentOwner: owner,
+    commentOwner,
     targetBranch: resolvedTarget,
     comparisonUnavailableReason: unavailableReason,
     scopeStatesByScope: diffData.scopeStatesByScope,
@@ -266,9 +267,7 @@ export function useWorkspaceSessionTools({
   const toolsContent = (
     <WorkspaceSessionGitTools
       key={JSON.stringify([repoPath, workingDirectory, branchKey])}
-      commentOwner={owner}
-      repoPath={repoPath}
-      devServerOwner={owner}
+      commentOwner={commentOwner}
       actions={actions}
       diffData={diffData}
       contextMode={contextMode}

@@ -194,13 +194,10 @@ export function SettingsRepositoryContent({
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
     selectedRepoBranchesError,
-    showRepoScriptValidationErrors,
-    selectedRepoDevServerValidationErrors,
     promptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     selectedRepoRuntimeAvailabilityErrors,
-    repoScriptValidationErrorCountByWorkspaceId,
     selectedRepoPromptRoleTabErrorCounts,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
@@ -218,9 +215,6 @@ export function SettingsRepositoryContent({
     workspaceCount: workspaceIds.length,
     hasSelectedRepository: selectedRepoConfig !== null,
   });
-  const selectedRepoScriptValidationErrorCount = selectedWorkspaceId
-    ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
-    : 0;
   const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
   const savedSettings = useQuery(settingsSnapshotQueryOptions()).data;
   const providerDirty = hasProviderEdits(snapshotDraft, savedSettings, selectedWorkspaceId);
@@ -243,9 +237,7 @@ export function SettingsRepositoryContent({
         selectedRepositorySection={repositorySection}
         disabled={isInteractionDisabled}
         selectedRepoPromptValidationErrorCount={selectedRepoPromptValidationErrorCount}
-        selectedRepoScriptValidationErrorCount={selectedRepoScriptValidationErrorCount}
         repoPromptErrorCountByWorkspaceId={promptValidationState.repoErrorCountByWorkspaceId}
-        repoScriptErrorCountByWorkspaceId={repoScriptValidationErrorCountByWorkspaceId}
         onSelectWorkspaceId={setSelectedWorkspaceId}
         onSelectSection={onRepositorySectionChange}
       />
@@ -272,8 +264,6 @@ export function SettingsRepositoryContent({
         {selectedRepoConfig && repositorySection === "scripts" ? (
           <RepositoryScriptsSection
             selectedRepoConfig={selectedRepoConfig}
-            selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
-            validationState={{ showDevServerValidationErrors: showRepoScriptValidationErrors }}
             loadingState={{ isLoadingSettings, isSaving }}
             focusRequest={contentFocusRequest}
             onFocusRequestHandled={onContentFocusRequestHandled}

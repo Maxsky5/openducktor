@@ -16,7 +16,7 @@ import {
 } from "@/lib/repo-agent-defaults";
 import { errorMessage } from "@/lib/errors";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
+import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import type {
   RepoAgentDefaultInput,
   RepoSettingsInput,
@@ -25,7 +25,6 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
-import { devServerQueryKeys } from "../../queries/dev-servers";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { getProductionTaskViewSync } from "../../queries/task-view-sync";
@@ -116,13 +115,6 @@ export function useRepoSettingsOperations({
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
-      const { hooks, devServers } = normalizeRepoScripts({
-        hooks: {
-          preStart: input.preStartHooks,
-          postComplete: input.postCompleteHooks,
-        },
-        devServers: input.devServers,
-      });
       const agentDefaults: RepoAgentDefaults = {};
       if (specDefault) {
         agentDefaults.spec = specDefault;
@@ -142,20 +134,14 @@ export function useRepoSettingsOperations({
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,
-        hooks,
-        devServers,
-        worktreeCopyPaths: input.worktreeCopyPaths.flatMap((path) => {
-          const trimmed = path.trim();
-          return trimmed ? [trimmed] : [];
-        }),
+        hooks: { postComplete: dropBlankLines(input.postCompleteHooks) },
+        actions: input.actions,
+        worktreeCopyPaths: dropBlankLines(input.worktreeCopyPaths),
         agentDefaults,
       });
 
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(workspaceId),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: devServerQueryKeys.repo(workspace.repoPath),
       });
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
@@ -252,11 +238,6 @@ export function useRepoSettingsOperations({
           queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
         });
       }
-      await Promise.all(
-        changes.changedDevServerRepoPaths.map((repoPath) =>
-          queryClient.invalidateQueries({ queryKey: devServerQueryKeys.repo(repoPath) }),
-        ),
-      );
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
       if (changes.kanbanDoneVisibleDaysChanged) {
         await getProductionTaskViewSync(queryClient).refreshAfterTaskRetentionChange(

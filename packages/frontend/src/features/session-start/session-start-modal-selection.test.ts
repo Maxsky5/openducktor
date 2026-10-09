@@ -42,9 +42,8 @@ const REPO_SETTINGS: RepoSettingsInput = {
   branchPrefix: "codex/",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
   postCompleteHooks: [],
-  devServers: [],
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
     spec: {

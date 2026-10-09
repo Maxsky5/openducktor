@@ -302,10 +302,9 @@ describe("use-agent-orchestrator-operations session state", () => {
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
       hooks: {
-        preStart: [],
         postComplete: [],
       },
-      devServers: [],
+      actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
       agentStudioState: { openTaskIds: [] },

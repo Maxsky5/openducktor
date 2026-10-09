@@ -23,7 +23,6 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,
         hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 0,
       },
       errors: { saveError: null, catalogError: null, runtimeExecutablesError: null },
       location: { section: "repositories", repositorySection: "configuration" },
@@ -47,7 +46,6 @@ describe("SettingsModalFooter", () => {
           reusablePromptFieldErrorCount: 3,
           runtimeAvailabilityErrorCount: 4,
           hasUnacknowledgedCodexDangerousSettings: true,
-          repoScriptFieldErrorCount: 5,
         },
         errors: {
           saveError,
@@ -72,7 +70,6 @@ describe("SettingsModalFooter", () => {
           expect(screen.getByText("1 prompt placeholder error.")).toBeTruthy();
         }
         expect(screen.queryByText("3 reusable prompt field errors.")).toBeNull();
-        expect(screen.queryByText("5 dev server field errors.")).toBeNull();
       } finally {
         renderer.unmount();
       }
@@ -88,7 +85,6 @@ describe("SettingsModalFooter", () => {
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,
         hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 0,
       },
     });
     try {
@@ -113,48 +109,6 @@ describe("SettingsModalFooter", () => {
       renderer.unmount();
     }
   });
-  test("keeps save enabled when only dev server fields are invalid", () => {
-    const renderer = renderFooter({
-      validationSummary: {
-        openCodePermissionErrorCount: 0,
-        promptPlaceholderErrorCount: 0,
-        customAgentRoleFieldErrorCount: 0,
-        reusablePromptFieldErrorCount: 0,
-        runtimeAvailabilityErrorCount: 0,
-        hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 2,
-      },
-    });
-
-    try {
-      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
-        false,
-      );
-    } finally {
-      renderer.unmount();
-    }
-  });
-
-  test("shows the dev server validation count in the footer", () => {
-    const renderer = renderFooter({
-      validationSummary: {
-        openCodePermissionErrorCount: 0,
-        promptPlaceholderErrorCount: 0,
-        customAgentRoleFieldErrorCount: 0,
-        reusablePromptFieldErrorCount: 0,
-        runtimeAvailabilityErrorCount: 0,
-        hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 2,
-      },
-    });
-
-    try {
-      expect(screen.getByText(/2 dev server field errors\./i)).toBeTruthy();
-    } finally {
-      renderer.unmount();
-    }
-  });
-
   test("disables save when reusable prompt fields are invalid", () => {
     const renderer = renderFooter({
       validationSummary: {
@@ -164,7 +118,6 @@ describe("SettingsModalFooter", () => {
         reusablePromptFieldErrorCount: 1,
         runtimeAvailabilityErrorCount: 0,
         hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 0,
       },
     });
 
@@ -187,7 +140,6 @@ describe("SettingsModalFooter", () => {
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 2,
         hasUnacknowledgedCodexDangerousSettings: false,
-        repoScriptFieldErrorCount: 0,
       },
     });
 
@@ -210,7 +162,6 @@ describe("SettingsModalFooter", () => {
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,
         hasUnacknowledgedCodexDangerousSettings: true,
-        repoScriptFieldErrorCount: 0,
       },
     });
 

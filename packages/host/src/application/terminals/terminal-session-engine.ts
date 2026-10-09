@@ -16,7 +16,12 @@ import {
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { TerminalServiceError } from "./terminal-service-error";
-import { isLiveTerminal, type TerminalSession } from "./terminal-session";
+import {
+  copyTerminalSummary,
+  isCommandRunning,
+  isLiveTerminal,
+  type TerminalSession,
+} from "./terminal-session";
 import {
   createTerminalSessionLifecycle,
   terminalFailure,
@@ -89,10 +94,14 @@ export const createTerminalSessionEngine = ({
         const unknownTerminalIds: string[] = [];
         for (const session of sessions.values()) {
           const context = session.summary.context;
-          if (session.kind === "output" || !isLiveTerminal(session) || !("repoPath" in context)) {
+          if (!isLiveTerminal(session) || !("repoPath" in context)) {
             continue;
           }
           if (normalizePathForComparison(context.repoPath) !== normalizedRepoPath) {
+            continue;
+          }
+          if (isCommandRunning(session)) {
+            activeTerminalIds.push(session.summary.terminalId);
             continue;
           }
           const handle = session.resources.handle;
@@ -117,7 +126,6 @@ export const createTerminalSessionEngine = ({
     list: (filter: TerminalListFilter): TerminalSummary[] => {
       pruneExited();
       return [...sessions.values()].flatMap((session) => {
-        if (session.kind === "output") return [];
         const matches =
           filter.kind === "all" ||
           (filter.kind === "unassociated" && !("repoPath" in session.summary.context)) ||
@@ -127,7 +135,7 @@ export const createTerminalSessionEngine = ({
               terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId })) ||
           (filter.kind === "workspace_session" &&
             terminalContextMatchesWorkspaceSession(session.summary.context, filter));
-        return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
+        return matches ? [copyTerminalSummary(session)] : [];
       });
     },
     preparePathInput: (
@@ -137,13 +145,6 @@ export const createTerminalSessionEngine = ({
       Effect.try({
         try: () => {
           const session = getSession(terminalId, "prepare_path_input");
-          if (session.kind === "output")
-            throw terminalFailure(
-              "invalid_input",
-              "prepare_path_input",
-              "Dev server output is read-only.",
-              terminalId,
-            );
           return formatTerminalPathInput(session.shell, paths);
         },
         catch: (cause) => {
@@ -230,23 +231,6 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "write"),
           catch: (cause) => terminalOperationFailure(cause, "write"),
         });
-        if (session.kind === "output")
-          return yield* terminalFailure(
-            "invalid_input",
-            "write",
-            "Dev server output is read-only. Use its Stop or Restart action.",
-            terminalId,
-          );
-        const handle = session.resources.handle;
-        if (!handle || !isLiveTerminal(session))
-          return yield* Effect.fail(
-            terminalFailure(
-              "terminal_not_found",
-              "write",
-              `Terminal is not running: ${terminalId}`,
-              terminalId,
-            ),
-          );
         if (data.byteLength === 0 || data.byteLength > TERMINAL_LIMITS.inputBytes)
           return yield* Effect.fail(
             terminalFailure(
@@ -256,14 +240,27 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
+        // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
-          handle
-            .write(data)
-            .pipe(
-              Effect.mapError((cause) =>
-                terminalFailure("invalid_input", "write", cause.message, terminalId, cause),
-              ),
-            ),
+          Effect.suspend(() => {
+            const handle = session.resources.handle;
+            if (!handle || !isLiveTerminal(session))
+              return Effect.fail(
+                terminalFailure(
+                  "terminal_not_found",
+                  "write",
+                  `Terminal is not running: ${terminalId}`,
+                  terminalId,
+                ),
+              );
+            return handle
+              .write(data)
+              .pipe(
+                Effect.mapError((cause) =>
+                  terminalFailure("invalid_input", "write", cause.message, terminalId, cause),
+                ),
+              );
+          }),
         );
       }),
     resize: (terminalId: string, grid: TerminalGrid): Effect.Effect<void, TerminalServiceError> =>
@@ -272,12 +269,8 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "resize"),
           catch: (cause) => terminalOperationFailure(cause, "resize"),
         });
-        const handle = session.resources.handle;
-        if (
-          session.kind === "interactive" &&
-          (!handle || !isLiveTerminal(session)) &&
-          session.summary.lifecycle !== "exited"
-        )
+        // A command terminal has no process for a short time between its command and its shell.
+        if (session.summary.lifecycle === "starting")
           return yield* Effect.fail(
             terminalFailure(
               "terminal_not_found",
@@ -303,14 +296,18 @@ export const createTerminalSessionEngine = ({
             ),
           );
         yield* session.operations.run(
-          (session.kind === "interactive" && session.resources.handle
-            ? session.resources.handle.resize(grid)
-            : Effect.void
-          ).pipe(
-            Effect.mapError((cause) =>
-              terminalFailure("invalid_grid", "resize", cause.message, terminalId, cause),
+          Effect.suspend(() =>
+            (session.resources.handle ? session.resources.handle.resize(grid) : Effect.void).pipe(
+              Effect.mapError((cause) =>
+                terminalFailure("invalid_grid", "resize", cause.message, terminalId, cause),
+              ),
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  session.grid = grid;
+                  session.screen.resize(grid);
+                }),
+              ),
             ),
-            Effect.tap(() => Effect.sync(() => session.screen.resize(grid))),
           ),
         );
       }),
@@ -385,16 +382,15 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "close"),
           catch: (cause) => terminalOperationFailure(cause, "close"),
         });
-        if (session.kind === "output")
-          return yield* Effect.fail(
-            terminalFailure(
-              "invalid_input",
-              "close",
-              "Use the dev server Stop action to close this output source.",
-              terminalId,
-            ),
-          );
         yield* closeSession(session, confirmTerminate);
+      }),
+    readOutputTail: (
+      terminalId: string,
+      lineCount: number,
+    ): Effect.Effect<readonly string[], TerminalServiceError> =>
+      Effect.try({
+        try: () => getSession(terminalId, "read_output_tail").screen.outputTail(lineCount),
+        catch: (cause) => terminalOperationFailure(cause, "read_output_tail"),
       }),
     closeByTaskScope: (scope: TerminalTaskScope): Effect.Effect<string[], TerminalServiceError> =>
       Effect.suspend(() => {

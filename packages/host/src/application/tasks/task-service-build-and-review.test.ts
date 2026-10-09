@@ -8,13 +8,27 @@ import {
   createBuildStartWorktreeFiles,
   createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
+  createBuildWorktreeActions,
   createRuntimeDefinitionsService,
   createTaskService,
   createTaskServiceWithMutationProgress,
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+
+const installAction = {
+  items: [
+    {
+      id: "install",
+      icon: "build" as const,
+      name: "Install",
+      command: "bun install",
+      runOnWorktreeCreate: true,
+      waitBeforeAgentStart: true,
+    },
+  ],
+  defaultActionId: "install",
+};
 
 const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   Effect.tryPromise({
@@ -659,12 +673,13 @@ describe("createTaskService build and review", () => {
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
         runtimeRegistry: createBuildStartRuntimeRegistry(calls),
         settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        systemCommands: createBuildSystemCommands(calls),
+        worktreeActions: createBuildWorktreeActions(calls),
         worktreeFiles: createBuildStartWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { preStart: ["bun test"], postComplete: [] },
+          hooks: { postComplete: [] },
+          actions: installAction,
           worktreeCopyPaths: [".env"],
         }),
       }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
@@ -702,9 +717,10 @@ describe("createTaskService build and review", () => {
           relativePaths: [".env"],
         },
         {
-          command: "bun",
-          args: ["test"],
-          options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
+          type: "runWorktreeActions",
+          context: { repoPath: "/repo", taskId: "task-1" },
+          worktreePath: "/worktrees/repo/task-1",
+          actions: installAction,
         },
         { type: "requireRuntime", runtimeKind: "opencode" },
         {
@@ -714,7 +730,7 @@ describe("createTaskService build and review", () => {
       ]),
     );
   });
-  test("rolls back the task worktree when pre-start hooks fail", async () => {
+  test("rolls back the task worktree when a worktree action fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       listTasks() {
@@ -857,22 +873,26 @@ describe("createTaskService build and review", () => {
           runtimeDefinitionsService: createRuntimeDefinitionsService(),
           runtimeRegistry: createBuildStartRuntimeRegistry(calls),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-          systemCommands: createBuildSystemCommands(calls, false),
+          worktreeActions: createBuildWorktreeActions(calls, {
+            failMessage: 'Worktree action "Install" exited with code 1.',
+          }),
           worktreeFiles: createBuildStartWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: ["bun test"], postComplete: [] },
+            hooks: { postComplete: [] },
+            actions: installAction,
           }),
         }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
       ),
-    ).rejects.toThrow("Worktree setup script command failed: bun test");
+    ).rejects.toThrow('Worktree action "Install" exited with code 1.');
     expect(calls).toEqual(
       expect.arrayContaining([
         {
-          command: "bun",
-          args: ["test"],
-          options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
+          type: "runWorktreeActions",
+          context: { repoPath: "/repo", taskId: "task-1" },
+          worktreePath: "/worktrees/repo/task-1",
+          actions: installAction,
         },
         {
           type: "deleteReference",
@@ -987,7 +1007,7 @@ describe("createTaskService build and review", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: ["sh -lc 'printf cleanup'"] },
+        hooks: { postComplete: ["sh -lc 'printf cleanup'"] },
       }),
     });
     const completed = await Effect.runPromise(
@@ -1029,7 +1049,7 @@ describe("createTaskService build and review", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: ["sh -lc 'printf cleanup'"] },
+        hooks: { postComplete: ["sh -lc 'printf cleanup'"] },
       }),
     });
 
@@ -1142,7 +1162,7 @@ describe("createTaskService build and review", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: ["  "] },
+            hooks: { postComplete: ["  "] },
           }),
         }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1248,7 +1268,7 @@ describe("createTaskService build and review", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: ["sh -lc 'echo cleanup failed >&2; exit 1'"] },
+            hooks: { postComplete: ["sh -lc 'echo cleanup failed >&2; exit 1'"] },
           }),
         }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1285,7 +1305,7 @@ describe("createTaskService build and review", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { preStart: [], postComplete: ["sh -lc 'exit 1'"] },
+          hooks: { postComplete: ["sh -lc 'exit 1'"] },
         }),
       })
         .buildCompleted({ repoPath: "/repo", taskId: "task-1" })
@@ -1390,7 +1410,7 @@ describe("createTaskService build and review", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: ["sh -lc 'exit 1'"] },
+            hooks: { postComplete: ["sh -lc 'exit 1'"] },
           }),
         }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1999,7 +2019,6 @@ describe("createTaskService build and review", () => {
     };
     const closed = await Effect.runPromise(
       createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
         gitPort: createBuildStartGitPort({ calls }),
         taskStore,
         terminalService: {
@@ -2025,10 +2044,6 @@ describe("createTaskService build and review", () => {
       {
         type: "acquireTerminalCleanup",
         input: { repoPath: "/repo", taskIds: ["task-1"] },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "closed" } },
       { type: "releaseTerminalCleanup" },

@@ -239,7 +239,7 @@ describe("createTaskService approval context", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         git: {
           provider: {
             id: "github",
@@ -444,7 +444,7 @@ describe("createTaskService approval context", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).getApprovalContext({ repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -635,7 +635,7 @@ describe("createTaskService approval context", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).getApprovalContext({ repoPath: "/repo", taskId: "task-1" }),
       ),

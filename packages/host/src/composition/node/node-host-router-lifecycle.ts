@@ -9,13 +9,11 @@ import type {
   TaskSyncService,
 } from "../../application/tasks/sync/task-sync-service";
 import type { TerminalService } from "../../application/terminals/terminal-service";
-import type { DisposableDevServerService } from "../../application/dev-servers/dev-server-service-types";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
-  createStopDevServersStep,
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
   createStopTerminalsStep,
@@ -43,7 +41,6 @@ export const createNodeHostRouterLifecycle = ({
   notifications,
   azureDevOpsConnection,
   workspaceProviderSetup,
-  devServerService,
   imageWorkers,
   lifecycleLogger,
   mcpHostBridge,
@@ -65,7 +62,6 @@ export const createNodeHostRouterLifecycle = ({
   workspaceProviderSetup: {
     shutdown(): Effect.Effect<void, import("../../effect/host-errors").HostError>;
   };
-  devServerService: DisposableDevServerService;
   imageWorkers: Pick<GeneratedImageWorkers, "shutdown">;
   lifecycleLogger: HostLifecycleLogger;
   mcpHostBridge: McpHostBridgeServer | null | undefined;
@@ -148,7 +144,6 @@ export const createNodeHostRouterLifecycle = ({
               { label: "Workspace provider setup", run: () => workspaceProviderSetup.shutdown() },
               { label: "image workers", run: () => imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
-              createStopDevServersStep(devServerService, lifecycleLogger),
               createStopRuntimesStep(runtimeRegistry, lifecycleLogger),
               createStopMcpHostBridgeStep(mcpHostBridge ?? undefined, lifecycleLogger),
               {

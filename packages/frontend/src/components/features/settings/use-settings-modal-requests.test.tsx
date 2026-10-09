@@ -9,7 +9,7 @@ test("keeps the active editor and pairs only its open and close callbacks", () =
   act(() => {
     hook.result.current.openSettings({
       onOpenChange: first,
-      deepLink: { kind: "repository-dev-servers", repositoryPath: "/repo" },
+      deepLink: { kind: "repository-actions", repositoryPath: "/repo" },
     });
     hook.result.current.openSettings({
       onOpenChange: second,

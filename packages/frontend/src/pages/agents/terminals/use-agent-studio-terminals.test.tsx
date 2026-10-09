@@ -22,6 +22,7 @@ const summaryForTask = (taskId: string): TerminalSummary => ({
   createdAt: "2026-07-13T00:00:00.000Z",
   lifecycle: "running",
   exit: null,
+  startedBy: "user",
 });
 
 const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
@@ -548,6 +549,7 @@ describe("useAgentStudioTerminals", () => {
         onHide: getLatest().onHide,
         onSelectTab: getLatest().onSelectTab,
         onCreate: getLatest().onCreate,
+        onRunAction: getLatest().onRunAction,
         onRetryCreate: getLatest().onRetryCreate,
         onReorderTab: getLatest().onReorderTab,
         onTitleChange: getLatest().onTitleChange,
@@ -568,6 +570,7 @@ describe("useAgentStudioTerminals", () => {
         onHide: getLatest().onHide,
         onSelectTab: getLatest().onSelectTab,
         onCreate: getLatest().onCreate,
+        onRunAction: getLatest().onRunAction,
         onRetryCreate: getLatest().onRetryCreate,
         onReorderTab: getLatest().onReorderTab,
         onTitleChange: getLatest().onTitleChange,

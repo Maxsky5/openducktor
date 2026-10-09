@@ -7,7 +7,7 @@ date: 2026-05-17
 
 ## Context
 
-`packages/host` is the transport-neutral host for Electron and the browser runner. It owns command routing, use cases, ports, adapters, runtime lifecycle, task storage, Git, file access, MCP bridges, dev servers, and shutdown.
+`packages/host` is the transport-neutral host for Electron and the browser runner. It owns command routing, use cases, ports, adapters, runtime lifecycle, task storage, Git, file access, MCP bridges, terminals, and shutdown.
 
 The old Promise-based code spread expected failures, dependency wiring, cleanup, and background work across `async` functions, `try` blocks, error objects, and manual port setup. Effect changes how host ports, services, adapters, command handlers, and tests model that work. This is an architecture choice, not a local code style.
 
@@ -37,7 +37,7 @@ This decision applies to `packages/host`. It does not replace public Zod contrac
 
 Host function types now show expected failures. A public transport converts those failures to errors for the caller.
 
-Ports remain independent from adapters. The composition root provides each adapter. Effect scopes and interruption manage runtime registries, dev servers, MCP bridges, task-store lifecycle, and background work.
+Ports remain independent from adapters. The composition root provides each adapter. Effect scopes and interruption manage runtime registries, terminals, MCP bridges, task-store lifecycle, and background work.
 
 Other packages can adopt these rules when they have the same I/O and lifecycle needs. Make each later migration a separate change.
 

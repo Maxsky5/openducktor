@@ -330,17 +330,6 @@ export const createPersistenceHarness = async (
   });
   const workspaceService = () =>
     createWorkspaceSessionService({
-      devServerService: {
-        forgetWorkspaceSession: () => Effect.void,
-        stopWorkspaceSession: (input) =>
-          Effect.succeed({
-            ...input,
-            workingDirectory: null,
-            scripts: [],
-            revision: 0,
-            updatedAt: "2026-09-27T00:00:00.000Z",
-          }),
-      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -359,10 +348,10 @@ export const createPersistenceHarness = async (
       git: createGitPortTestDouble({ canonicalizePath: (value) => Effect.succeed(value) }),
       settingsConfig: createSettingsConfigTestDouble({}),
       worktreeFiles: createWorktreeFilePortTestDouble({}),
-      systemCommands: {
-        resolveCommandPath: () => Effect.die(new Error("unused")),
-        versionCommand: () => Effect.die(new Error("unused")),
-        runCommandAllowFailure: () => Effect.die(new Error("unused")),
+      worktreeActions: {
+        createRun: () => {
+          throw new Error("unused");
+        },
       },
     });
   return {

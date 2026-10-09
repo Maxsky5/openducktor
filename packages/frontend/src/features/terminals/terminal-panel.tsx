@@ -24,8 +24,10 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { terminalTabLabel } from "./terminal-presentation-state";
 import { TerminalTabStrip } from "./terminal-tab-strip";
+import type { TerminalExitNotice } from "./terminal-viewport-policy";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
 
 export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
@@ -43,10 +45,13 @@ export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
     currentScopeKey.current = model.scopeKey;
     retryCreateRef.current = model.onRetryCreate;
   }, [model.onRetryCreate, model.scopeKey]);
-  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
-    if (ownerScopeKey !== currentScopeKey.current) return;
-    retryCreateRef.current(ownerScopeKey, tabId);
-  }, []);
+  const retryTerminalCreation = useCallback(
+    (ownerScopeKey: string, tabId: string, actionId: string | null): void => {
+      if (ownerScopeKey !== currentScopeKey.current) return;
+      retryCreateRef.current(ownerScopeKey, tabId, actionId);
+    },
+    [],
+  );
   useEffect(() => {
     if (!model.platformError) return;
     const toastId = "terminal:platform";
@@ -62,7 +67,7 @@ export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
     <Tabs
       {...(model.activeTabId ? { value: model.activeTabId } : {})}
       onValueChange={model.onSelectTab}
-      className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]"
+      className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--terminal-panel)] text-[var(--terminal-foreground)]"
     >
       <Header
         model={model}
@@ -149,7 +154,7 @@ export function TerminalPanel({ model, headerLeading }: Props): ReactElement {
 
 function Header({ model, headerLeading, onCloseTab }: HeaderProps): ReactElement {
   return (
-    <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
+    <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--terminal-border)] bg-[var(--terminal-surface)]">
       {headerLeading}
       <div className="min-w-0 flex-1">
         {model.tabs.length > 0 ? (
@@ -167,24 +172,23 @@ function Header({ model, headerLeading, onCloseTab }: HeaderProps): ReactElement
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="New terminal"
-              className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
-              onClick={model.onCreate}
-              disabled={
-                model.isLoading ||
-                model.discoveryError !== null ||
-                model.isCreating ||
-                model.tabs.length >= 8
-              }
-            >
-              <Plus />
-            </Button>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="New terminal"
+                className="size-8 text-(--terminal-foreground) shadow-none hover:bg-(--terminal-tab-inactive) hover:text-(--terminal-foreground)"
+                onClick={model.onCreate}
+                disabled={model.startBlockedReason !== null}
+              >
+                <Plus />
+              </Button>
+            </span>
           </TooltipTrigger>
-          <TooltipContent side="top">New terminal</TooltipContent>
+          <TooltipContent side="top" className="max-w-64">
+            {model.startBlockedReason ?? "New terminal"}
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     </div>
@@ -220,12 +224,12 @@ const TerminalViewport = memo(function TerminalViewport({
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
 }): ReactElement {
   const [attention, setAttention] = useState<string | null>(null);
-  const [exitText, setExitText] = useState<string | null>(null);
-  const notice = attention ?? exitText;
+  const [exitNotice, setExitNotice] = useState<TerminalExitNotice | null>(null);
+  const notice = attention === null ? exitNotice : { text: attention, isFailure: true };
   const handleLifecycle = useCallback(
-    (lifecycle: TerminalLifecycle, text: string | null) => {
+    (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => {
       if (tab.terminalId) onLifecycle(scopeKey, tab.terminalId, lifecycle);
-      if (text !== null) setExitText(text);
+      if (exit !== null) setExitNotice(exit);
     },
     [onLifecycle, scopeKey, tab.terminalId],
   );
@@ -249,7 +253,7 @@ const TerminalViewport = memo(function TerminalViewport({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onRetryCreate(scopeKey, tab.tabId)}
+            onClick={() => onRetryCreate(scopeKey, tab.tabId, tab.actionId)}
           >
             Retry terminal creation
           </Button>
@@ -261,7 +265,7 @@ const TerminalViewport = memo(function TerminalViewport({
     return (
       <div
         data-testid="terminal-starting-surface"
-        className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+        className="h-full min-h-0 bg-[var(--terminal-panel)]"
       />
     );
   }
@@ -269,7 +273,7 @@ const TerminalViewport = memo(function TerminalViewport({
     return (
       <div
         data-testid="terminal-unavailable-surface"
-        className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+        className="h-full min-h-0 bg-[var(--terminal-panel)]"
       />
     );
   }
@@ -280,12 +284,11 @@ const TerminalViewport = memo(function TerminalViewport({
           fallback={
             <div
               data-testid="terminal-loading-surface"
-              className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+              className="h-full min-h-0 bg-[var(--terminal-panel)]"
             />
           }
         >
           <LazyTerminalViewport
-            mode="interactive"
             terminalId={tab.terminalId}
             controller={controller}
             platform={platform}
@@ -302,9 +305,14 @@ const TerminalViewport = memo(function TerminalViewport({
         <p
           role="status"
           aria-label="Terminal status"
-          className="shrink-0 border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground"
+          className={cn(
+            "shrink-0 border-t border-border px-3 py-1.5 text-xs",
+            notice.isFailure
+              ? "bg-warning-surface text-warning-surface-foreground"
+              : "bg-muted text-muted-foreground",
+          )}
         >
-          {notice}
+          {notice.text}
         </p>
       ) : null}
     </div>

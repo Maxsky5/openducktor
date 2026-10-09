@@ -8,7 +8,6 @@ import {
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
@@ -23,7 +22,6 @@ describe("createTaskService direct merge", () => {
   test("requires worktree files before starting a local direct merge", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       systemCommands: createApprovalSystemCommands(),
@@ -32,7 +30,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
         defaultTargetBranch: { branch: "main" },
       }),
     });
@@ -210,7 +208,6 @@ describe("createTaskService direct merge", () => {
       },
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitProviderResolver: {
         resolve: () => Effect.die(new Error("direct merge must not resolve a Git provider")),
         resolveConfigured: () =>
@@ -278,7 +275,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
     await expect(
@@ -362,7 +359,6 @@ describe("createTaskService direct merge", () => {
     };
     const calls: unknown[] = [];
     const service = createTaskServiceWithMutationProgress({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: extendGitPort(
         createDirectMergeGitPort({
           calls,
@@ -400,7 +396,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -578,7 +574,6 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -642,7 +637,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).directMerge({
           repoPath: "/repo",
@@ -774,7 +769,6 @@ describe("createTaskService direct merge", () => {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
         cleanupTaskSessions: () => Effect.die(new Error("unexpected session cleanup")),
       },
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -803,10 +797,6 @@ describe("createTaskService direct merge", () => {
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/repo" },
       { type: "aheadBehind", workingDir: "/repo", targetBranch: "origin/main" },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
-      },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
@@ -925,7 +915,6 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: { "/repo": { name: "main", detached: false } },
@@ -1041,7 +1030,6 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService([]),
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,

@@ -64,9 +64,7 @@ type SettingsModalSaveOrchestration = {
   cancelRuntimeReview: () => void;
   isSaving: boolean;
   saveError: string | null;
-  showRepoScriptValidationErrors: boolean;
   clearSaveError: () => void;
-  markRepoScriptSaveAttempt: () => void;
   submit: () => Promise<boolean>;
 };
 
@@ -88,12 +86,7 @@ export const useSettingsModalSaveOrchestration = ({
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
-  const [resetInputs, setResetInputs] = useState({
-    hasRepoScriptValidationErrors: validation.repoScripts.hasErrors,
-    loadedSnapshot,
-    open,
-  });
+  const [previousOpen, setPreviousOpen] = useState(open);
   const saveInFlightRef = useRef(false);
   const {
     review: runtimeReview,
@@ -165,33 +158,12 @@ export const useSettingsModalSaveOrchestration = ({
     setSaveError(null);
   }, []);
 
-  const markRepoScriptSaveAttempt = useCallback((): void => {
-    setHasAttemptedRepoScriptSubmit(true);
-  }, []);
-
-  if (
-    resetInputs.open !== open ||
-    resetInputs.loadedSnapshot !== loadedSnapshot ||
-    resetInputs.hasRepoScriptValidationErrors !== validation.repoScripts.hasErrors
-  ) {
-    setResetInputs({
-      hasRepoScriptValidationErrors: validation.repoScripts.hasErrors,
-      loadedSnapshot,
-      open,
-    });
+  if (previousOpen !== open) {
+    setPreviousOpen(open);
 
     if (!open) {
       setSaveError(null);
-      setHasAttemptedRepoScriptSubmit(false);
       cancelRuntimeReview();
-    }
-
-    if (!validation.repoScripts.hasErrors) {
-      setHasAttemptedRepoScriptSubmit(false);
-    }
-
-    if (open && loadedSnapshot) {
-      setHasAttemptedRepoScriptSubmit(false);
     }
   }
 
@@ -206,9 +178,6 @@ export const useSettingsModalSaveOrchestration = ({
       setSaveError(reason);
       if (blocker.runtimeKind) {
         onRuntimeAvailabilityError(blocker.runtimeKind);
-      }
-      if (blocker.showRepoScriptErrors) {
-        setHasAttemptedRepoScriptSubmit(true);
       }
       toast.error("Cannot save settings", {
         description: reason,
@@ -316,10 +285,7 @@ export const useSettingsModalSaveOrchestration = ({
     cancelRuntimeReview,
     isSaving,
     saveError,
-    showRepoScriptValidationErrors:
-      hasAttemptedRepoScriptSubmit && validation.repoScripts.hasErrors,
     clearSaveError,
-    markRepoScriptSaveAttempt,
     submit,
   };
 };

@@ -5,15 +5,12 @@ const readCssVariable = (element: HTMLElement, name: string): string =>
   getComputedStyle(element).getPropertyValue(name).trim();
 
 export const createTerminalTheme = (container: HTMLElement): ITheme => ({
-  background: readCssVariable(container, "--dev-server-terminal-panel"),
-  foreground: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursor: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursorAccent: readCssVariable(container, "--dev-server-terminal-panel"),
-  selectionBackground: readCssVariable(container, "--dev-server-terminal-selection"),
-  selectionInactiveBackground: readCssVariable(
-    container,
-    "--dev-server-terminal-selection-inactive",
-  ),
+  background: readCssVariable(container, "--terminal-panel"),
+  foreground: readCssVariable(container, "--terminal-foreground"),
+  cursor: readCssVariable(container, "--terminal-foreground"),
+  cursorAccent: readCssVariable(container, "--terminal-panel"),
+  selectionBackground: readCssVariable(container, "--terminal-selection"),
+  selectionInactiveBackground: readCssVariable(container, "--terminal-selection-inactive"),
 });
 
 export const createTerminalOptions = (

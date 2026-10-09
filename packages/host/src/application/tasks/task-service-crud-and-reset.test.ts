@@ -7,7 +7,6 @@ import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createTaskService,
   createTaskServiceWithMutationProgress,
@@ -99,14 +98,13 @@ const createResetTaskStore = (
   ...overrides,
 });
 const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
-  devServerService: createDirectMergeDevServerService([]),
   gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
   settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
   taskStore,
   workspaceSettingsService: createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
-    hooks: { preStart: [], postComplete: [] },
+    hooks: { postComplete: [] },
   }),
 });
 describe("createTaskService task mutations and reset", () => {
@@ -495,7 +493,7 @@ describe("createTaskService task mutations and reset", () => {
     expect(error.code).toBe("TASK_POLICY_ERROR");
     expect(error.message).toBe("Only epics can have subtasks.");
   });
-  test("deletes a task without subtasks and stops task-scoped dev servers", async () => {
+  test("deletes a task without subtasks", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -588,14 +586,13 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
@@ -604,10 +601,6 @@ describe("createTaskService task mutations and reset", () => {
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "listBranches", workingDir: "/repo" },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
-      },
       {
         type: "delete",
         input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
@@ -703,14 +696,13 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: false }),
       ),
@@ -831,7 +823,6 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
             branches: {
@@ -855,7 +846,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
       ),
@@ -875,14 +866,6 @@ describe("createTaskService task mutations and reset", () => {
             { taskId: "task-1", sessions: [session] },
           ],
         },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "epic-1" } },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       {
         type: "removeWorktree",
@@ -1011,7 +994,6 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: {
             ...createDirectMergeGitPort({
               calls,
@@ -1031,7 +1013,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
@@ -1045,10 +1027,6 @@ describe("createTaskService task mutations and reset", () => {
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       {
         type: "removeWorktree",
@@ -1097,7 +1075,6 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: {
             ...createDirectMergeGitPort({
               calls,
@@ -1121,7 +1098,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
@@ -1135,10 +1112,6 @@ describe("createTaskService task mutations and reset", () => {
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       {
         type: "removeWorktree",
@@ -1241,14 +1214,13 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService([]),
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskStore,
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
@@ -1533,7 +1505,6 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -1564,7 +1535,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).resetImplementation({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
@@ -1579,10 +1550,6 @@ describe("createTaskService task mutations and reset", () => {
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       {
         type: "removeWorktree",
@@ -1832,7 +1799,6 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
             branches: {
@@ -1854,7 +1820,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).resetTask({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
@@ -1868,10 +1834,6 @@ describe("createTaskService task mutations and reset", () => {
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
-      },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
       },
       {
         type: "removeWorktree",
@@ -1982,7 +1944,6 @@ describe("createTaskService task mutations and reset", () => {
       clearQaReports: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
-      devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskActivityGuard: {
@@ -1993,7 +1954,7 @@ describe("createTaskService task mutations and reset", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -2025,7 +1986,6 @@ describe("createTaskService task mutations and reset", () => {
         ),
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -2045,7 +2005,7 @@ describe("createTaskService task mutations and reset", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -2079,7 +2039,6 @@ describe("createTaskService task mutations and reset", () => {
         getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
       };
       const service = createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
         gitPort: createDirectMergeGitPort({
           calls,
           branches: {
@@ -2094,7 +2053,7 @@ describe("createTaskService task mutations and reset", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
+          hooks: { postComplete: [] },
         }),
       });
 
@@ -2121,14 +2080,13 @@ describe("createTaskService task mutations and reset", () => {
       clearAgentSessionsByRoles: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
-      devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
+        hooks: { postComplete: [] },
       }),
     });
 
@@ -2286,14 +2244,13 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          devServerService: createDirectMergeDevServerService([]),
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskStore,
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [] },
+            hooks: { postComplete: [] },
           }),
         }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
       ),

@@ -8,7 +8,6 @@ import { createTaskStoreTestDouble } from "../../../test-support/task-store-test
 import type {
   AgentSessionRecord,
   CommitsAheadBehind,
-  DevServerCommandInput,
   GitBranch,
   GitCurrentBranch,
   RepoConfig,
@@ -31,7 +30,11 @@ import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskActivityGuardPort as RealTaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
-import type { DevServerService } from "../../dev-servers/dev-server-service";
+import {
+  WorktreeActionExitError,
+  type WorktreeActionRunner,
+  WorktreeKeptForRunningActionsError,
+} from "../../actions/worktree-action-runner";
 import { createRuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -169,6 +172,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
       ({
         acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
+    worktreeActions: rest.worktreeActions ?? createBuildWorktreeActions([]),
     toolDiscovery: resolvedToolDiscovery,
     taskStore: createTaskStorePort(taskStore),
   };
@@ -312,7 +316,7 @@ const createBuildWorkspaceSettingsService = (
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          devServers: [],
+          actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
@@ -338,6 +342,43 @@ const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPo
       });
     },
   });
+/** Records each worktree action run and each terminal stop in `calls`. */
+const createBuildWorktreeActions = (
+  calls: unknown[],
+  options: { failMessage?: string; stopFailMessage?: string } = {},
+): WorktreeActionRunner => ({
+  createRun: (target) => ({
+    run(input) {
+      return Effect.suspend(() => {
+        calls.push({ type: "runWorktreeActions", worktreePath: target.worktreePath, ...input });
+        if (options.failMessage === undefined) return Effect.void;
+        return Effect.fail(
+          new WorktreeActionExitError({
+            actionName: "Install",
+            exitCode: 1,
+            signal: null,
+            outputTail: [],
+            message: options.failMessage,
+          }),
+        );
+      });
+    },
+    stopTerminals: () =>
+      Effect.suspend(() => {
+        calls.push({ type: "stopWorktreeActionTerminals", ...target });
+        return options.stopFailMessage === undefined
+          ? Effect.void
+          : Effect.fail(
+              new WorktreeKeptForRunningActionsError({
+                ...target,
+                terminalIds: ["terminal-1"],
+                message: options.stopFailMessage,
+                cause: [],
+              }),
+            );
+      }),
+  }),
+});
 const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   createWorktreeFilePort({
     ensureDirectory(path) {
@@ -697,37 +738,6 @@ const createDirectMergeGitPort = ({
       return Effect.die(new Error("unexpected conflict abort"));
     },
   });
-const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =>
-  ({
-    getState() {
-      return Effect.die(new Error("unexpected dev server get state"));
-    },
-    inspectWorkspaceActivity() {
-      return Effect.die(new Error("unexpected dev server activity inspection"));
-    },
-    restart() {
-      return Effect.die(new Error("unexpected dev server restart"));
-    },
-    start() {
-      return Effect.die(new Error("unexpected dev server start"));
-    },
-    stop(input: DevServerCommandInput) {
-      return Effect.sync(() => {
-        calls.push({ type: "stopDevServers", input });
-        return {
-          repoPath: "/repo",
-          owner: { kind: "task", taskId: "task-1" },
-          workingDirectory: null,
-          scripts: [],
-          revision: 0,
-          updatedAt: "2026-05-10T11:30:00.000Z",
-        };
-      });
-    },
-    stopWorkspaceSession() {
-      return Effect.die(new Error("unexpected Workspace Session dev server stop"));
-    },
-  }) satisfies DevServerService;
 const createDirectMergeTaskWorktreeService = (
   workingDirectory: string | null,
 ): TaskWorktreeService => ({
@@ -915,7 +925,6 @@ const createPullRequestSyncSystemCommands = ({
 export type {
   AgentSessionRecord,
   CommitsAheadBehind,
-  DevServerService,
   GitBranch,
   GitCurrentBranch,
   GitPort,
@@ -943,7 +952,7 @@ export {
   createBuildStartWorktreeFiles,
   createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
+  createBuildWorktreeActions,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createPullRequestDetectSystemCommands,

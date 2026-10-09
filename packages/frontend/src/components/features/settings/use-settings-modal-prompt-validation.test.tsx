@@ -32,8 +32,8 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
+        hooks: { postComplete: [] },
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {
           "kickoff.build_implementation_start": {
@@ -52,8 +52,8 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
+        hooks: { postComplete: [] },
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},

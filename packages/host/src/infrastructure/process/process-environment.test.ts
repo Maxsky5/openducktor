@@ -668,7 +668,10 @@ describe("createProcessEnvironment", () => {
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
-            loginShellTimeoutMs: 1_000,
+            // The fixture shell can need more than 1 s to start under a parallel suite.
+            // The limit stays below the 5 s background child, so a probe that waits for
+            // inherited stdout still times out.
+            loginShellTimeoutMs: 3_000,
             platform: "linux",
             readUserShell: () => shellPath,
           }),

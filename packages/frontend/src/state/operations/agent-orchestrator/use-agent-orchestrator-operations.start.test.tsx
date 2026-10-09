@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { taskWorktreeQueryKeys, taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { terminalQueryKeys } from "@/state/queries/terminals";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -89,6 +90,35 @@ describe("use-agent-orchestrator-operations start and send", () => {
           }),
         ),
       ).resolves.toEqual({ workingDirectory: "/tmp/repo/worktree" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("successful workflow start reads the terminals of only its task again", async () => {
+    const dependencies = createTestDependencies();
+    const taskKey = terminalQueryKeys.task({ repoPath: "/tmp/repo", taskId: "task-1" });
+    const otherKey = terminalQueryKeys.task({ repoPath: "/tmp/repo", taskId: "task-2" });
+    for (const key of [taskKey, otherKey])
+      dependencies.queryClient.setQueryData(key, { hostInstanceId: "host-1", terminals: [] });
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async () => {
+        await harness.getLatest().operations.startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
+      });
+      expect(dependencies.queryClient.getQueryState(taskKey)?.isInvalidated).toBe(true);
+      expect(dependencies.queryClient.getQueryState(otherKey)?.isInvalidated).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -395,10 +425,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
       hooks: {
-        preStart: [],
         postComplete: [],
       },
-      devServers: [],
+      actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
       agentStudioState: { openTaskIds: [] },
@@ -547,10 +576,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
       hooks: {
-        preStart: [],
         postComplete: [],
       },
-      devServers: [],
+      actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
       agentStudioState: { openTaskIds: [] },
@@ -818,10 +846,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
         hooks: {
-          preStart: [],
           postComplete: [],
         },
-        devServers: [],
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
         agentStudioState: { openTaskIds: [] },

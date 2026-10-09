@@ -11,6 +11,7 @@ import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos
 import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
+import { invalidateTerminalList } from "@/state/queries/terminals";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
   ActiveWorkspace,
@@ -239,7 +240,13 @@ export function useAgentOrchestratorOperations({
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
         startWorkflowSession: async (input) => {
           try {
-            return await runtimeHostPort.agentSessionWorkflowStart(input);
+            const started = await runtimeHostPort.agentSessionWorkflowStart(input);
+            await invalidateTerminalList(queryClient, {
+              kind: "task",
+              repoPath: input.repoPath,
+              taskId: input.sessionScope.taskId,
+            });
+            return started;
           } finally {
             await queryClient.invalidateQueries({
               queryKey: taskWorktreeQueryKeys.taskWorktree({

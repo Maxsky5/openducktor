@@ -89,8 +89,8 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
           <div className="space-y-1.5">
             <p className="font-semibold">What happens next</p>
             <p className="leading-6">
-              The task will be marked Done, then OpenDucktor will stop any builder dev servers and
-              remove the builder worktree and local branch for this task.
+              The task will be marked Done, then OpenDucktor will stop the task terminals and remove
+              the builder worktree and local branch for this task.
             </p>
           </div>
         </div>

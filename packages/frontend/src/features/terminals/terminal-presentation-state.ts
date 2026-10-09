@@ -15,6 +15,8 @@ type PendingTerminalTab = {
   terminalId: null;
   summary: null;
   label: string;
+  /** The repository action that this tab runs, so a retry runs the same action. */
+  actionId: string | null;
   error: string | null;
   requestState: "creating" | "creation_failed" | "unsupported_runtime";
 };
@@ -30,6 +32,16 @@ type LostTerminalTab = {
 };
 
 export type TerminalTab = ReadyTerminalTab | PendingTerminalTab | LostTerminalTab;
+
+const isPendingTab = (tab: TerminalTab): tab is PendingTerminalTab =>
+  tab.requestState !== "ready" && tab.requestState !== "lost";
+
+/**
+ * Host-started terminals, such as worktree-creation actions, wait in the tab list. They do not open
+ * the terminal panel.
+ */
+export const isUserStartedTab = (tab: TerminalTab): boolean =>
+  tab.requestState !== "ready" || tab.summary.startedBy === "user";
 
 export const terminalTabLabel = (tab: TerminalTab): string =>
   tab.requestState === "ready" ? tab.summary.label : tab.label;
@@ -84,6 +96,7 @@ const terminalSummaryComparators = {
   createdAt: (left, right) => left.createdAt === right.createdAt,
   lifecycle: (left, right) => left.lifecycle === right.lifecycle,
   exit: (left, right) => terminalExitsEqual(left.exit, right.exit),
+  startedBy: (left, right) => left.startedBy === right.startedBy,
 } satisfies Record<keyof TerminalSummary, TerminalSummaryComparator>;
 
 const terminalSummaryFieldComparators = Object.values<TerminalSummaryComparator>(
@@ -118,7 +131,14 @@ export type TerminalPresentationEvent =
       hostInstanceId: string;
       summaries: TerminalSummary[];
     }
-  | { type: "creationStarted"; scopeKey: string; tabId: string; label: string; retry: boolean }
+  | {
+      type: "creationStarted";
+      scopeKey: string;
+      tabId: string;
+      label: string;
+      actionId: string | null;
+      retry: boolean;
+    }
   | {
       type: "creationFailed";
       scopeKey: string;
@@ -327,7 +347,7 @@ export const terminalPresentationReducer = (
     if (event.type === "creationStarted") {
       const tabs = event.retry
         ? scope.tabs.map((tab) => {
-            if (tab.tabId !== event.tabId || tab.requestState === "ready") return tab;
+            if (tab.tabId !== event.tabId || !isPendingTab(tab)) return tab;
             return { ...tab, requestState: "creating" as const, error: null };
           })
         : [
@@ -337,6 +357,7 @@ export const terminalPresentationReducer = (
               terminalId: null,
               summary: null,
               label: event.label,
+              actionId: event.actionId,
               error: null,
               requestState: "creating" as const,
             },
@@ -352,7 +373,7 @@ export const terminalPresentationReducer = (
       return {
         ...scope,
         tabs: scope.tabs.map((tab) => {
-          if (tab.tabId !== event.tabId || tab.requestState === "ready") return tab;
+          if (tab.tabId !== event.tabId || !isPendingTab(tab)) return tab;
           return { ...tab, requestState: event.requestState, error: event.error };
         }),
       };

@@ -1,4 +1,4 @@
-import type { DevServerOwner, GitTargetBranch } from "@openducktor/contracts";
+import type { GitTargetBranch } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
 } from "@/pages/agents/right-panel/agents-page-git-panel";
-import type { useAgentStudioDevServerPanel } from "@/features/dev-servers/use-agent-studio-dev-server-panel";
 import type { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type { useWorkspaceState } from "@/state/app-state-provider";
 import type {
@@ -49,8 +48,6 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   loadRepoSettings: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"];
 };
 
-type AgentStudioDevServerTarget = Parameters<typeof useAgentStudioDevServerPanel>[0];
-
 export type AgentStudioBuildToolsWorktreeSnapshot = {
   isEnabled: boolean;
   context: {
@@ -71,8 +68,6 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     comparisonReference?: string | null;
   };
   comparison?: ReturnType<typeof useSessionComparison>;
-  /** The right panel reads the dev server for this target. */
-  devServerTarget: AgentStudioDevServerTarget;
   openInTarget: BuildToolsOpenInTarget;
   refreshWorktree: GitDiffRefresh;
 };
@@ -91,7 +86,6 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     selectedView,
     isGitTabActive,
-    isRightPanelOpen,
   });
   const {
     sessionWorktreePath,
@@ -115,21 +109,6 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
       repoSettings?.defaultTargetBranch,
       selectedView.selectedTask?.targetBranch,
       selectedView.selectedTask?.targetBranchError,
-    ],
-  );
-  const devServerTarget = useMemo(
-    () =>
-      buildDevServerTarget(
-        buildToolsBootstrap.isDevServerEnabled,
-        buildToolsBootstrap.repoPath,
-        hasSelectedTask,
-        selectedView.selectedTask?.id ?? null,
-      ),
-    [
-      buildToolsBootstrap.isDevServerEnabled,
-      buildToolsBootstrap.repoPath,
-      hasSelectedTask,
-      selectedView.selectedTask?.id,
     ],
   );
   const { worktree, queriedPath, diffResolutionTaskId } = useBuildToolsWorktree({
@@ -235,7 +214,6 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
       worktree,
       diffData,
       comparison,
-      devServerTarget,
       openInTarget,
       refreshWorktree,
     }),
@@ -243,7 +221,6 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
       comparison,
       refreshWorktree,
       buildToolsBootstrap.sessionWorkingDirectory,
-      devServerTarget,
       diffData,
       gitPanelContextMode,
       hasSelectedTask,
@@ -522,16 +499,4 @@ function taskComparisonTarget(input: TaskComparisonInput) {
       (input.repoSettingsError ? errorMessage(input.repoSettingsError) : null),
     retryDefault: input.loadRepoSettings,
   };
-}
-
-function buildDevServerTarget(
-  enabled: boolean,
-  repoPath: string | null,
-  hasSelectedTask: boolean,
-  taskId: string | null,
-): AgentStudioDevServerTarget {
-  const path = enabled ? repoPath : null;
-  const owner: DevServerOwner | null =
-    enabled && hasSelectedTask && taskId ? { kind: "task", taskId } : null;
-  return { repoPath: path, owner, enabled: path !== null && owner !== null };
 }

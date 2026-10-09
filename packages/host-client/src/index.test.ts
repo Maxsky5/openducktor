@@ -1004,7 +1004,6 @@ describe("HostClient", () => {
       worktreeBasePath: "/tmp/worktrees",
       branchPrefix: "codex",
       hooks: {
-        preStart: ["echo pre"],
         postComplete: ["echo post"],
       },
       agentDefaults: {
@@ -1025,7 +1024,6 @@ describe("HostClient", () => {
             worktreeBasePath: "/tmp/worktrees",
             branchPrefix: "codex",
             hooks: {
-              preStart: ["echo pre"],
               postComplete: ["echo post"],
             },
             agentDefaults: {
@@ -1063,7 +1061,7 @@ describe("HostClient", () => {
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { preStart: [], postComplete: [] },
+              hooks: { postComplete: [] },
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},
@@ -1211,8 +1209,8 @@ describe("HostClient", () => {
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          devServers: [],
-          hooks: { preStart: [], postComplete: [] },
+          actions: { items: [], defaultActionId: null },
+          hooks: { postComplete: [] },
           worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
@@ -1250,8 +1248,8 @@ describe("HostClient", () => {
                 branchPrefix: "obp",
                 defaultTargetBranch: { remote: "origin", branch: "main" },
                 git: {},
-                devServers: [],
-                hooks: { preStart: [], postComplete: [] },
+                actions: { items: [], defaultActionId: null },
+                hooks: { postComplete: [] },
                 worktreeCopyPaths: [],
                 promptOverrides: {},
                 agentDefaults: {},

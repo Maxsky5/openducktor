@@ -34,9 +34,6 @@ export type WorkspaceSessionUpdateListener = (
 export type RuntimeChangeListener = (
   payload: HostEventPayload<"openducktor://runtime-changed"> | BrowserLiveControlEvent,
 ) => void;
-export type DevServerEventListener = (
-  payload: HostEventPayload<"openducktor://dev-server-event"> | BrowserLiveControlEvent,
-) => void;
 
 export type TaskStreamFrame = TaskEventStreamFrame;
 
@@ -44,11 +41,6 @@ export type TaskStreamSubscription = {
   subscriptionId: string;
   acknowledge(cursor: TaskEventCursor): Promise<void>;
   unsubscribe(): void | Promise<void>;
-};
-
-export type DevServerEventSubscription = {
-  transportEpoch: string;
-  unsubscribe: () => void;
 };
 
 export type HostBridge = {
@@ -64,9 +56,6 @@ export type HostBridge = {
   subscribeAzureDevOpsConnectionUpdates: (
     listener: AzureDevOpsConnectionUpdateListener,
   ) => Promise<() => void>;
-  subscribeDevServerEvents: (
-    listener: DevServerEventListener,
-  ) => Promise<DevServerEventSubscription>;
   observeAgentSessionLive: (
     input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
@@ -205,7 +194,6 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeRuntimeChanges: failUnavailable,
   subscribeRunEvents: failUnavailable,
   subscribeAzureDevOpsConnectionUpdates: failUnavailable,
-  subscribeDevServerEvents: failUnavailable,
   observeAgentSessionLive: failUnavailable,
   subscribeNotificationStream: failUnavailable,
   subscribeTaskStream: failUnavailable,

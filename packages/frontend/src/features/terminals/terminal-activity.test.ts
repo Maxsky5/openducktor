@@ -12,7 +12,6 @@ import { terminalActivityOwnerKey } from "./terminal-activity-store";
 import { createTerminalTransportController } from "./terminal-transport-controller";
 
 const command = (terminalId: string, context: TerminalContext): TerminalActivity => ({
-  kind: "terminal",
   command: "bun test",
   summary: {
     terminalId,
@@ -22,6 +21,7 @@ const command = (terminalId: string, context: TerminalContext): TerminalActivity
     lifecycle: "running",
     createdAt: "2026-10-04T12:00:00.000Z",
     exit: null,
+    startedBy: "user",
   },
 });
 
@@ -108,11 +108,7 @@ describe("terminal activity transport", () => {
       receive({
         version: TERMINAL_PROTOCOL_VERSION,
         type: "activity_updated",
-        activity: {
-          ...command("other-repo", otherRepo),
-          command: "bun run dev",
-          kind: "dev_server",
-        },
+        activity: { ...command("other-repo", otherRepo), command: "bun run dev" },
       });
       expect(controller.readActivity(key)).toBe(state);
       receive({

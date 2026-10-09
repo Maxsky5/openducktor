@@ -1,18 +1,18 @@
 import type { RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
+import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 import {
-  effectiveTargetBranchForTask,
-  resolveBuildStartPoint,
+  failOperationAfterRollback,
   rollbackFailedTaskWorktree,
-} from "./task-worktree-cleanup";
-import { runHookCommandsAllowFailure } from "./workflow-hooks";
+  type TaskStartRollbackError,
+} from "./task-worktree-rollback";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
 
 export type PreparedTaskWorktree = {
-  cleanup: () => ReturnType<typeof rollbackFailedTaskWorktree>;
+  rollback: () => Effect.Effect<void, TaskStartRollbackError>;
   worktreePath: string;
 };
 
@@ -77,17 +77,20 @@ export const prepareNewTaskWorktree = (
 
     let createdTrackingRef: string | null = null;
     let createdTaskWorktree = false;
-    const cleanup = (): ReturnType<typeof rollbackFailedTaskWorktree> =>
-      createdTaskWorktree
-        ? rollbackFailedTaskWorktree(
-            dependencies,
-            canonicalRepoPath,
-            worktreePath,
-            branch,
-            createdTrackingRef,
-            worktreeBase,
-          )
-        : Effect.succeed("");
+    const actionRun = dependencies.worktreeActions.createRun({ worktreePath, branch });
+    const rollback = (): Effect.Effect<void, TaskStartRollbackError> =>
+      Effect.gen(function* () {
+        if (!createdTaskWorktree) return;
+        yield* actionRun.stopTerminals();
+        yield* rollbackFailedTaskWorktree(
+          dependencies,
+          canonicalRepoPath,
+          worktreePath,
+          branch,
+          createdTrackingRef,
+          worktreeBase,
+        );
+      });
     const setupResult = yield* Effect.result(
       Effect.gen(function* () {
         const targetBranch = yield* effectiveTargetBranchForTask(
@@ -126,38 +129,22 @@ export const prepareNewTaskWorktree = (
           repoConfig.worktreeCopyPaths,
         );
 
-        const preStartHooks = repoConfig.hooks.preStart.map((hook) => hook.trim()).filter(Boolean);
-        const failure = yield* runHookCommandsAllowFailure(
-          dependencies.systemCommands,
-          preStartHooks,
-          worktreePath,
-        );
-        if (failure) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Worktree setup script command failed: ${failure.hook}\n${failure.stderr}`,
-              details: { taskId: task.id, hook: failure.hook },
-            }),
-          );
-        }
+        yield* actionRun.run({
+          context: { repoPath: canonicalRepoPath, taskId: task.id },
+          actions: repoConfig.actions,
+        });
       }).pipe(
-        // An interrupted setup has no caller that holds this cleanup yet.
-        Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
+        // An interrupted setup has no caller that holds this rollback yet.
+        Effect.onInterrupt(() => rollback().pipe(Effect.orDie)),
       ),
     );
 
     if (setupResult._tag === "Failure") {
-      const cleanupError = yield* cleanup();
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "task.build_start.prepare_worktree",
-          message: `${errorMessage(setupResult.failure)}${cleanupError}`,
-          cause: setupResult.failure,
-          details: { repoPath: canonicalRepoPath, taskId: task.id, worktreePath },
-        }),
-      );
+      return yield* failOperationAfterRollback(rollback(), setupResult.failure, {
+        operation: "task.build_start.prepare_worktree",
+        details: { repoPath: canonicalRepoPath, taskId: task.id, worktreePath },
+      });
     }
 
-    return { cleanup, worktreePath } satisfies PreparedTaskWorktree;
+    return { rollback, worktreePath } satisfies PreparedTaskWorktree;
   });

@@ -42,8 +42,8 @@ describe("host event contracts", () => {
     });
     expect(
       hostEventEnvelopeSchema.safeParse({
-        channel: "openducktor://dev-server-event",
-        payload: { type: "not-a-dev-event" },
+        channel: "openducktor://workspace-session-updated",
+        payload: { workspaceId: "repo" },
       }).success,
     ).toBe(false);
   });

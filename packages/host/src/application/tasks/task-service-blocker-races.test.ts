@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
-import {
-  createDirectMergeDevServerService,
-  createTaskService,
-  task,
-} from "./test-support/task-workflow-harness";
+import { createTaskService, task } from "./test-support/task-workflow-harness";
 
 describe("blocker and approval concurrency", () => {
   test.each(["blocker writing", "approval cleaning", "approval awaiting lock"] as const)(
@@ -33,7 +29,6 @@ describe("blocker and approval concurrency", () => {
                     return path;
                   }),
               }),
-              devServerService: createDirectMergeDevServerService([]),
               terminalService: {
                 acquireTaskCleanup: () =>
                   Effect.gen(function* () {

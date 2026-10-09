@@ -5,7 +5,11 @@ import { join, posix } from "node:path";
 import { Effect } from "effect";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import type { FilesystemPort } from "../../ports/filesystem-port";
-import { createTerminalLaunchPolicy } from "./terminal-launch-policy";
+import {
+  createTerminalLaunchPolicy,
+  type TerminalLaunchEnvironmentPort,
+} from "./terminal-launch-policy";
+import { TerminalServiceError } from "./terminal-service-error";
 
 const filesystem: FilesystemPort = {
   homeDirectory: () => "/home/user",
@@ -43,12 +47,12 @@ describe("terminal launch policy", () => {
       const plan = await Effect.runPromise(
         createTerminalLaunchPolicy({
           filesystem,
-          resolveEnvironment: createTerminalLaunchEnvironment({
+          environment: createTerminalLaunchEnvironment({
             readEnv: () => processEnv,
             platform: "darwin",
             readUserShell: () => null,
           }),
-        })({ workingDir: "/repo", context: {} }, { columns: 80, rows: 24 }),
+        }).shell({ workingDir: "/repo", context: {} }, { columns: 80, rows: 24 }),
       );
       expect(plan.cwd).toBe("/canonical/repo");
       expect(plan.shell).toBe(shellPath);
@@ -69,11 +73,11 @@ describe("terminal launch policy", () => {
         Effect.flip(
           createTerminalLaunchPolicy({
             filesystem: nonDirectory,
-            resolveEnvironment: createTerminalLaunchEnvironment({
+            environment: createTerminalLaunchEnvironment({
               readEnv: () => ({ SHELL: shellPath }),
               platform: "darwin",
             }),
-          })({ workingDir: "/file", context: {} }, { columns: 80, rows: 24 }),
+          }).shell({ workingDir: "/file", context: {} }, { columns: 80, rows: 24 }),
         ),
       );
 
@@ -81,5 +85,60 @@ describe("terminal launch policy", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  const shell = { shell: "/bin/zsh", args: ["-l"], env: { TERM: "xterm" } };
+  const environment: TerminalLaunchEnvironmentPort = {
+    shell: () => Effect.succeed(shell),
+    command: (commandLines) =>
+      Effect.succeed({
+        shell,
+        command: { shell: "/bin/zsh", args: ["-ilc", commandLines.join("\n")], env: {} },
+      }),
+  };
+
+  test("plans the command and the shell after it in the same directory and grid", async () => {
+    const plans = await Effect.runPromise(
+      createTerminalLaunchPolicy({ filesystem, environment }).command(
+        { workingDir: "/repo", context: {} },
+        { columns: 100, rows: 30 },
+        ["bun install", "bun test"],
+      ),
+    );
+
+    expect(plans).toEqual({
+      command: {
+        shell: "/bin/zsh",
+        args: ["-ilc", "bun install\nbun test"],
+        env: {},
+        cwd: "/canonical/repo",
+        grid: { columns: 100, rows: 30 },
+      },
+      shell: {
+        shell: "/bin/zsh",
+        args: ["-l"],
+        env: { TERM: "xterm" },
+        cwd: "/canonical/repo",
+        grid: { columns: 100, rows: 30 },
+      },
+    });
+  });
+
+  test("returns the command failure of the launch environment", async () => {
+    const unsupported = new TerminalServiceError({
+      code: "unsupported_shell",
+      operation: "start_command",
+      message: "Commands cannot run in the login shell /usr/bin/nu.",
+    });
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        createTerminalLaunchPolicy({
+          filesystem,
+          environment: { ...environment, command: () => Effect.fail(unsupported) },
+        }).command({ workingDir: "/repo", context: {} }, { columns: 80, rows: 24 }, ["ls"]),
+      ),
+    );
+
+    expect(failure).toBe(unsupported);
   });
 });

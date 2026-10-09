@@ -10,7 +10,6 @@ import {
   type CodexAppServerTransportRegistry,
   createCodexAppServerTransportRegistry,
 } from "../../adapters/codex/codex-app-server-transport-registry";
-import { createDevServerProcessAdapter } from "../../adapters/dev-servers/dev-server-process-adapter";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
@@ -38,10 +37,6 @@ import {
 import { createUserEnvironment } from "../../infrastructure/process/user-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
-import {
-  type DevServerProcessPort,
-  DevServerProcessPortTag,
-} from "../../ports/dev-server-process-port";
 import { type FilesystemPort, FilesystemPortTag } from "../../ports/filesystem-port";
 import { type GitPort, GitPortTag } from "../../ports/git-port";
 import {
@@ -64,13 +59,12 @@ import type {
   UserEnvironmentResolution,
 } from "../../ports/user-environment-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
-import { guardDevServerStart, guardRuntimeConfigInitializer } from "./user-path-guards";
+import { guardRuntimeConfigInitializer } from "./user-path-guards";
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
   codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexTransportRegistry: CodexAppServerTransportRegistry;
-  devServerProcesses: DevServerProcessPort;
   filesystem: FilesystemPort;
   git: GitPort;
   generatedImageFiles: GeneratedImageFilePort;
@@ -113,7 +107,6 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
   terminalPty: TerminalPtyPort;
 } & Partial<{
     clientVersion: string;
-    devServerProcesses: DevServerProcessPort;
     filesystem: FilesystemPort;
     git: GitPort;
     generatedImageFiles: GeneratedImageFilePort;
@@ -137,7 +130,6 @@ export class NodeHostDefaultPortsTag extends Context.Service<
 
 export type NodeHostDefaultPortServices =
   | CodexAppServerPortTag
-  | DevServerProcessPortTag
   | FilesystemPortTag
   | GitPortTag
   | GeneratedImageFilePortTag
@@ -229,10 +221,6 @@ const makeNodeHostDefaultPorts = (
           imageWorkers,
           codexAppServer,
           codexTransportRegistry,
-          devServerProcesses: guardDevServerStart(
-            input.devServerProcesses ?? createDevServerProcessAdapter({ readEnv }),
-            userEnvironment,
-          ),
           filesystem: input.filesystem ?? createFilesystemAdapter(),
           git:
             input.git ??
@@ -278,7 +266,6 @@ const makeNodeHostDefaultPortContext = (
       Context.empty().pipe(
         Context.add(NodeHostDefaultPortsTag, ports),
         Context.add(CodexAppServerPortTag, ports.codexAppServer),
-        Context.add(DevServerProcessPortTag, ports.devServerProcesses),
         Context.add(FilesystemPortTag, ports.filesystem),
         Context.add(GitPortTag, ports.git),
         Context.add(LocalAttachmentPortTag, ports.localAttachments),

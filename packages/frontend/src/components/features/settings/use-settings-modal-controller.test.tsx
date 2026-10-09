@@ -57,8 +57,8 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
+        hooks: { postComplete: [] },
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
@@ -71,8 +71,8 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
+        hooks: { postComplete: [] },
+        actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
@@ -1351,52 +1351,50 @@ describe("useSettingsModalController", () => {
     }
   });
 
-  test("blocks saving when a dev server draft has blank required fields", async () => {
+  test("keeps action edits in the draft until Save Settings and discards them when settings close", async () => {
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
-
+    const actions = {
+      items: [
+        {
+          id: "test",
+          icon: "test" as const,
+          name: "Test",
+          command: "bun test",
+          runOnWorktreeCreate: false,
+          waitBeforeAgentStart: false,
+        },
+      ],
+      defaultActionId: "test",
+    };
     const harness = createHookHarness(true);
 
     try {
       await harness.mount();
       await harness.waitFor((state) => state.snapshotDraft !== null);
+      await harness.run((state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({ ...repoConfig, actions }));
+      });
+      expect(harness.getLatest().selectedRepoConfig?.actions).toEqual(actions);
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+
+      await harness.update({ isOpen: false, shouldLoad: false });
+      await harness.update({ isOpen: true, shouldLoad: false });
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      expect(harness.getLatest().selectedRepoConfig?.actions).toEqual({
+        items: [],
+        defaultActionId: null,
+      });
 
       await harness.run((state) => {
-        state.updateSelectedRepoConfig((repoConfig) => ({
-          ...repoConfig,
-          devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
-        }));
+        state.updateSelectedRepoConfig((repoConfig) => ({ ...repoConfig, actions }));
       });
-
-      expect(harness.getLatest().hasRepoScriptValidationErrors).toBe(true);
-      expect(harness.getLatest().showRepoScriptValidationErrors).toBe(false);
-      expect(harness.getLatest().repoScriptValidationErrorCount).toBe(1);
-      expect(harness.getLatest().settingsSectionErrorCountById.repositories).toBe(1);
-      expect(harness.getLatest().selectedRepoDevServerValidationErrors).toEqual({
-        frontend: {
-          name: "Tab label is required.",
-        },
-      });
-
-      let didSave = true;
+      let saved = false;
       await harness.run(async (state) => {
-        didSave = await state.submit();
+        saved = await state.submit();
       });
 
-      expect(didSave).toBe(false);
-      expect(harness.getLatest().showRepoScriptValidationErrors).toBe(true);
-      expect(harness.getLatest().saveError).toBe(
-        "Fix 1 dev server field error in the selected repository before saving.",
-      );
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
-
-      await harness.run((state) => {
-        state.updateSelectedRepoConfig((repoConfig) => ({
-          ...repoConfig,
-          devServers: [{ id: "frontend", name: "Frontend", command: "pnpm dev" }],
-        }));
-      });
-
-      expect(harness.getLatest().saveError).toBeNull();
+      expect(saved).toBe(true);
+      expect(saveSettingsSnapshot.mock.calls[0]?.[0].workspaces.repo?.actions).toEqual(actions);
     } finally {
       await harness.unmount();
     }

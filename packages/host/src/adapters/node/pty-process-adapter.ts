@@ -16,6 +16,7 @@ import { Effect } from "effect";
 import { spawn } from "node-pty";
 import { createSerialLane } from "../../effect/serial-gate";
 import { prepareTerminalShell } from "./terminal-shell-integration";
+import { prepareWindowsBatch } from "./terminal-windows-batch";
 
 type NodePtyProcess = Pick<
   ReturnType<typeof spawn>,
@@ -57,7 +58,15 @@ export const createNodePtyPort = ({
   start: (input, handlers) =>
     Effect.uninterruptible(
       Effect.gen(function* () {
-        const { plan, dispose } = yield* prepareTerminalShell(input);
+        const batch =
+          input.windowsBatchScript === undefined
+            ? null
+            : yield* prepareWindowsBatch(input.windowsBatchScript);
+        const shell = yield* prepareTerminalShell(input).pipe(
+          Effect.tapError(() => batch?.dispose ?? Effect.void),
+        );
+        const { plan } = shell;
+        const dispose = batch ? shell.dispose.pipe(Effect.andThen(batch.dispose)) : shell.dispose;
         return yield* Effect.try({
           try: () => {
             let closed = false;
@@ -71,7 +80,7 @@ export const createNodePtyPort = ({
             let terminated = false;
             let outputPaused = false;
             const terminationPermit = createSerialLane();
-            const pty = nodePty.spawn(plan.shell, [...plan.args], {
+            const pty = nodePty.spawn(plan.shell, batch?.commandLine ?? [...plan.args], {
               cols: plan.grid.columns,
               cwd: plan.cwd,
               encoding: null,
@@ -90,8 +99,14 @@ export const createNodePtyPort = ({
             const exitSubscription = pty.onExit(({ exitCode, signal }) => {
               if (closed) return;
               closed = true;
-              nativeExit = { exitCode, signal: signal === undefined ? null : String(signal) };
-              if (!receivedOutput && (exitCode !== 0 || Boolean(signal)) && !cleanupPromise) {
+              // node-pty reports signal 0 when no signal ended the process.
+              nativeExit = { exitCode, signal: signal ? String(signal) : null };
+              if (
+                !plan.runsCommand &&
+                !receivedOutput &&
+                (exitCode !== 0 || Boolean(signal)) &&
+                !cleanupPromise
+              ) {
                 handlers.onFailure(
                   new TerminalPtyError({
                     code: "spawn_failed",

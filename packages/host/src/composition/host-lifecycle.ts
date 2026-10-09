@@ -1,10 +1,6 @@
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../adapters/mcp/mcp-host-bridge-server";
 import type {
-  DevServerServiceError,
-  DisposableDevServerService,
-} from "../application/dev-servers/dev-server-service";
-import type {
   TerminalService,
   TerminalServiceError,
 } from "../application/terminals/terminal-service";
@@ -23,7 +19,7 @@ export type HostLifecycleLogger = {
 
 export type HostShutdownStep = {
   label: string;
-  run: () => Effect.Effect<void, DevServerServiceError | HostError | TerminalServiceError>;
+  run: () => Effect.Effect<void, HostError | TerminalServiceError>;
 };
 
 class HostLifecycleLoggingError extends HostOperationError {}
@@ -128,30 +124,6 @@ export const runShutdownSteps = (
       );
     }
   });
-
-export const createStopDevServersStep = (
-  devServerService: DisposableDevServerService,
-  logger: HostLifecycleLogger,
-): HostShutdownStep => ({
-  label: "dev servers",
-  run() {
-    return Effect.gen(function* () {
-      const result = yield* devServerService.stopAll();
-      if (result.stoppedScripts.length === 0) {
-        yield* writeHostLifecycleLog(logger, "info", "No dev servers are running");
-        return;
-      }
-
-      for (const script of result.stoppedScripts) {
-        yield* writeHostLifecycleLog(
-          logger,
-          "info",
-          `Stopped dev server ${script.name} (${script.scriptId}) for ${script.owner.kind === "task" ? `task ${script.owner.taskId}` : `Workspace Session ${script.owner.sessionId}`} with pid ${script.pid}`,
-        );
-      }
-    });
-  },
-});
 
 export const createStopRuntimesStep = (
   runtimeRegistry: RuntimeRegistryPort,

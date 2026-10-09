@@ -35,6 +35,7 @@ import {
   customAgentRolesQueryOptions,
   updateWorkspaceSessionQueries,
 } from "@/state/queries/workspace-sessions";
+import { invalidateTerminalList } from "@/state/queries/terminals";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
@@ -87,6 +88,11 @@ export function WorkspaceSessionCreateDialog({
     mutationFn: (input: WorkspaceSessionCreateInput) => host.workspaceSessionCreate(input),
     onSuccess: (result, input) => {
       updateWorkspaceSessionQueries(queryClient, input.workspaceId, result.session);
+      void invalidateTerminalList(queryClient, {
+        kind: "workspace_session",
+        workspaceId: input.workspaceId,
+        sessionId: result.session.id,
+      });
       if (input.location === "local_worktree")
         void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
       if (mounted.current) onCreated(result.session);

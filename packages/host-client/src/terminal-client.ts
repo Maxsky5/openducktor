@@ -8,6 +8,7 @@ import {
   type TerminalListResponse,
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
+  type TerminalRunActionRequest,
   terminalCloseRequestSchema,
   terminalCloseResponseSchema,
   terminalCreateRequestSchema,
@@ -16,6 +17,7 @@ import {
   terminalListResponseSchema,
   terminalPreparePathInputRequestSchema,
   terminalPreparePathInputResponseSchema,
+  terminalRunActionRequestSchema,
 } from "@openducktor/contracts";
 import { HostInvokeError, type InvokeFn } from "./invoke-utils";
 import type { z } from "zod";
@@ -24,7 +26,8 @@ type TerminalRequest =
   | TerminalCreateRequest
   | TerminalListRequest
   | TerminalPreparePathInputRequest
-  | TerminalCloseRequest;
+  | TerminalCloseRequest
+  | TerminalRunActionRequest;
 
 export class HostTerminalClientError extends Error {
   readonly code: TerminalFailure["code"];
@@ -49,7 +52,8 @@ export class HostTerminalClient {
       | "terminal_create"
       | "terminal_list"
       | "terminal_prepare_path_input"
-      | "terminal_close",
+      | "terminal_close"
+      | "terminal_run_action",
   >(command: Command, request: TerminalRequest, schema: z.ZodType<Response>): Promise<Response> {
     try {
       return await this.invokeFn(command, request, schema);
@@ -64,6 +68,11 @@ export class HostTerminalClient {
   async terminalCreate(input: TerminalCreateRequest): Promise<TerminalCreateResponse> {
     const request = terminalCreateRequestSchema.parse(input);
     return this.invoke("terminal_create", request, terminalCreateResponseSchema);
+  }
+
+  async terminalRunAction(input: TerminalRunActionRequest): Promise<TerminalCreateResponse> {
+    const request = terminalRunActionRequestSchema.parse(input);
+    return this.invoke("terminal_run_action", request, terminalCreateResponseSchema);
   }
 
   async terminalList(input: TerminalListRequest): Promise<TerminalListResponse> {

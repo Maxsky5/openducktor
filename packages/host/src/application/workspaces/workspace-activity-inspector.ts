@@ -1,11 +1,10 @@
 import { Effect } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import type { TerminalService } from "../terminals/terminal-service";
 
 export type WorkspaceActivityBlocker = {
-  kind: "agent-session" | "dev-server" | "terminal";
+  kind: "agent-session" | "terminal";
   label: string;
 };
 
@@ -23,11 +22,9 @@ const toHostOperationError = (operation: string, message: string, cause: unknown
 
 export const createWorkspaceActivityInspector = ({
   agentSessionLiveStateService,
-  devServerService,
   terminalService,
 }: {
   agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
-  devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
   inspect: (repoPath) =>
@@ -51,24 +48,6 @@ export const createWorkspaceActivityInspector = ({
             label: `agent session ${session.ref.externalSessionId} is ${session.activity}`,
           });
         }
-      }
-
-      const devServerActivity = yield* devServerService
-        .inspectWorkspaceActivity({ repoPath })
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(
-              "workspace.inspectDevServers",
-              `Failed to inspect dev servers for ${repoPath}. Stop the running work and retry.`,
-              cause,
-            ),
-          ),
-        );
-      for (const owner of devServerActivity.activeOwners) {
-        blockers.push({
-          kind: "dev-server",
-          label: `dev server for ${owner.kind === "task" ? `task ${owner.taskId}` : `Workspace Session ${owner.sessionId}`} is active; stop its servers first`,
-        });
       }
 
       const terminalActivity = yield* terminalService

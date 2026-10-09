@@ -541,17 +541,6 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
-      devServerService: {
-        forgetWorkspaceSession: () => Effect.void,
-        stopWorkspaceSession: (input) =>
-          Effect.succeed({
-            ...input,
-            workingDirectory: null,
-            scripts: [],
-            revision: 0,
-            updatedAt: "2026-09-27T00:00:00.000Z",
-          }),
-      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -609,10 +598,10 @@ describe("Workspace Session persistence through the shared command module", () =
       worktreeFiles: createWorktreeFilePortTestDouble({
         resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
       }),
-      systemCommands: {
-        resolveCommandPath: () => Effect.die(new Error("unused")),
-        versionCommand: () => Effect.die(new Error("unused")),
-        runCommandAllowFailure: () => Effect.die(new Error("unused")),
+      worktreeActions: {
+        createRun: () => {
+          throw new Error("unused");
+        },
       },
     });
     const command = () =>

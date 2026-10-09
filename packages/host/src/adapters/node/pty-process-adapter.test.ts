@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { assertTerminalPtyConformance } from "../../testing/terminal-pty-conformance";
 import { Effect } from "effect";
@@ -125,6 +126,63 @@ describe("createNodePtyPort", () => {
       }
     },
   );
+  test("reports a silent command exit as a result and runs a Windows command from a temporary batch file", async () => {
+    let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
+    const spawnedArgs: Array<string[] | string> = [];
+    const spawnedScripts: string[] = [];
+    const events: string[] = [];
+    const port = createNodePtyPort({
+      processTreeTerminator: () => Effect.void,
+      nodePty: {
+        spawn: (_file, args) => {
+          spawnedArgs.push(args);
+          const batchPath = /""(.+)""$/u.exec(String(args))?.[1];
+          if (batchPath) spawnedScripts.push(readFileSync(batchPath, "utf8"));
+          return {
+            pid: 42,
+            onData: () => ({ dispose: () => undefined }),
+            onExit: (listener) => {
+              exitListener = listener;
+              return { dispose: () => undefined };
+            },
+            write: () => undefined,
+            resize: () => undefined,
+            pause: () => undefined,
+            resume: () => undefined,
+          };
+        },
+      },
+    });
+    await Effect.runPromise(
+      port.start(
+        {
+          shell: "cmd.exe",
+          args: [],
+          windowsBatchScript: "@echo off\r\nbun test\r\n",
+          cwd: "C:\\repo",
+          env: {},
+          grid: { columns: 80, rows: 24 },
+          runsCommand: true,
+        },
+        {
+          onOutput: () => undefined,
+          onFailure: (failure) => events.push(failure.message),
+          onExit: ({ exitCode, signal }) => events.push(`exit:${exitCode}:${signal}`),
+        },
+      ),
+    );
+    exitListener({ exitCode: 1, signal: 0 });
+    for (let attempt = 0; attempt < 100 && events.length === 0; attempt += 1) {
+      await Bun.sleep(5);
+    }
+    expect(spawnedScripts).toEqual(["@echo off\r\nbun test\r\n"]);
+    const [commandLine] = spawnedArgs;
+    expect(commandLine).toMatch(/^\/d \/s \/c "".+command\.cmd""$/u);
+    expect(events).toEqual(["exit:1:null"]);
+    // The exit is published after the batch file is removed.
+    expect(existsSync(/""(.+)""$/u.exec(String(commandLine))?.[1] ?? "")).toBe(false);
+  });
+
   test("maps raw output, resize, pause, resume, input, exit, and cleanup", async () => {
     const calls: string[] = [];
     let dataListener: (data: string | Buffer) => void = () => undefined;

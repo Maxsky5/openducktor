@@ -71,7 +71,7 @@ const createService = (
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { postComplete: [] },
     }),
   };
   if (guard) {

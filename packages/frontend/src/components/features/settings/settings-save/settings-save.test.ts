@@ -26,16 +26,21 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
   hooks: {
-    preStart: [" npm ci ", " "],
     postComplete: [" npm test ", ""],
   },
-  devServers: [
-    {
-      id: "frontend",
-      name: " Frontend ",
-      command: " bun run dev ",
-    },
-  ],
+  actions: {
+    items: [
+      {
+        id: "test",
+        icon: "test",
+        name: "Test",
+        command: "bun test",
+        runOnWorktreeCreate: true,
+        waitBeforeAgentStart: false,
+      },
+    ],
+    defaultActionId: "test",
+  },
   worktreeCopyPaths: [" .env ", " "],
   promptOverrides: {
     "kickoff.spec_initial": {
@@ -182,17 +187,8 @@ describe("settings save transforms", () => {
     expect(saveReady.branchPrefix).toBe("odt");
     expect(saveReady.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(saveReady.worktreeBasePath).toBe("/tmp/worktrees");
-    expect(saveReady.hooks).toEqual({
-      preStart: ["npm ci"],
-      postComplete: ["npm test"],
-    });
-    expect(saveReady.devServers).toEqual([
-      {
-        id: "frontend",
-        name: "Frontend",
-        command: "bun run dev",
-      },
-    ]);
+    expect(saveReady.hooks).toEqual({ postComplete: ["npm test"] });
+    expect(saveReady.actions).toEqual(createRepoConfig().actions);
     expect(saveReady.worktreeCopyPaths).toEqual([".env"]);
     expect(saveReady.promptOverrides).toEqual({
       "kickoff.spec_initial": {
@@ -325,64 +321,10 @@ describe("settings save transforms", () => {
   test("normalizes empty hook commands to empty arrays", () => {
     const saveReady = prepareRepoConfigForSave({
       ...createRepoConfig(),
-      hooks: {
-        preStart: ["   "],
-        postComplete: [""],
-      },
-      devServers: [],
+      hooks: { postComplete: ["   ", ""] },
     });
 
-    expect(saveReady.hooks).toEqual({
-      preStart: [],
-      postComplete: [],
-    });
-  });
-
-  test("normalizes empty dev server rows away", () => {
-    const saveReady = prepareRepoConfigForSave({
-      ...createRepoConfig(),
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
-    });
-
-    expect(saveReady.devServers).toEqual([]);
-  });
-
-  test("rejects blank dev server names when commands remain configured", () => {
-    expect(() =>
-      prepareRepoConfigForSave({
-        ...createRepoConfig(),
-        devServers: [{ id: "frontend", name: "   ", command: "bun run dev" }],
-      }),
-    ).toThrow("Dev server tab labels cannot be blank");
-  });
-
-  test("rejects blank dev server ids when commands remain configured", () => {
-    expect(() =>
-      prepareRepoConfigForSave({
-        ...createRepoConfig(),
-        devServers: [{ id: "   ", name: "Frontend", command: "bun run dev" }],
-      }),
-    ).toThrow("Dev server id cannot be blank.");
-  });
-
-  test("normalizes hook commands when configured", () => {
-    const saveReady = prepareRepoConfigForSave({
-      ...createRepoConfig(),
-      hooks: {
-        preStart: [" bun install "],
-        postComplete: [],
-      },
-      devServers: [],
-    });
-
-    expect(saveReady.hooks).toEqual({
-      preStart: ["bun install"],
-      postComplete: [],
-    });
+    expect(saveReady.hooks).toEqual({ postComplete: [] });
   });
 
   test("normalizes snapshot workspace map and global prompt overrides", () => {
@@ -416,15 +358,9 @@ describe("settings save transforms", () => {
       }),
     );
 
-    expect(snapshot.workspaces["repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
+    expect(snapshot.workspaces["repo-a"]?.hooks.postComplete).toEqual(["npm test"]);
     expect("theme" in snapshot).toBe(false);
-    expect(snapshot.workspaces["repo-a"]?.devServers).toEqual([
-      {
-        id: "frontend",
-        name: "Frontend",
-        command: "bun run dev",
-      },
-    ]);
+    expect(snapshot.workspaces["repo-a"]?.actions).toEqual(createRepoConfig().actions);
     expect(snapshot.chat.showThinkingMessages).toBe(true);
     expect(snapshot.reusablePrompts).toEqual([
       {

@@ -1,6 +1,7 @@
 import {
   type RepoConfig,
   type WorkspaceSessionExecutionTarget,
+  type WorkspaceSessionRefInput,
   type WorkspaceSessionWorktreeInput,
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
@@ -8,16 +9,19 @@ import { Cause, Effect, Exit } from "effect";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-import { runHookCommandsAllowFailure } from "../tasks/support/workflow-hooks";
+import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
 import { classifyWorkspaceCheckout, type WorkspaceCheckoutGitPort } from "./workspace-checkout";
+import {
+  runWorkspaceSessionWorktreeActions,
+  stopWorktreeActionTerminals,
+} from "./workspace-session-worktree-actions";
 
 export type WorkspaceSessionTargetDependencies = {
   git: GitPort;
   settingsConfig: SettingsConfigPort;
   worktreeFiles: WorktreeFilePort;
-  systemCommands: SystemCommandPort;
+  worktreeActions: WorktreeActionRunner;
 };
 
 export const validateWorkspaceSessionTarget = (
@@ -70,6 +74,7 @@ export const validateWorkspaceSessionTarget = (
 export const withWorkspaceSessionTarget = <A, E>(
   dependencies: WorkspaceSessionTargetDependencies,
   input: {
+    owner: WorkspaceSessionRefInput;
     worktree: WorkspaceSessionWorktreeInput | undefined;
     repoConfig: RepoConfig;
     location: WorkspaceSessionExecutionTarget["kind"];
@@ -78,7 +83,7 @@ export const withWorkspaceSessionTarget = <A, E>(
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const { git, settingsConfig, worktreeFiles, systemCommands } = dependencies;
+      const { git, settingsConfig, worktreeFiles } = dependencies;
       const { repoConfig } = input;
       const repoPath = yield* git.canonicalizePath(repoConfig.repoPath);
       if (!(yield* git.isGitRepository(repoPath))) {
@@ -154,6 +159,10 @@ export const withWorkspaceSessionTarget = <A, E>(
       yield* worktreeFiles.ensureDirectory(namespace);
       let acquired = false;
       let retained = false;
+      const actionRun = dependencies.worktreeActions.createRun({
+        worktreePath: workingDirectory,
+        branch,
+      });
       const retainTarget = () => {
         retained = true;
       };
@@ -188,19 +197,11 @@ export const withWorkspaceSessionTarget = <A, E>(
               workingDirectory,
               repoConfig.worktreeCopyPaths,
             );
-            const hookFailure = yield* runHookCommandsAllowFailure(
-              systemCommands,
-              repoConfig.hooks.preStart,
-              workingDirectory,
-            );
-            if (hookFailure) {
-              return yield* Effect.fail(
-                new HostOperationError({
-                  operation: "workspaceSession.preStart",
-                  message: `Workspace Session pre-start hook failed: ${hookFailure.hook}\n${hookFailure.stderr}`,
-                }),
-              );
-            }
+            yield* runWorkspaceSessionWorktreeActions(actionRun, {
+              owner: input.owner,
+              repoPath,
+              actions: repoConfig.actions,
+            });
             const canonicalPath = yield* git.canonicalizePath(workingDirectory);
             return yield* Effect.uninterruptible(
               use(
@@ -219,6 +220,10 @@ export const withWorkspaceSessionTarget = <A, E>(
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired || retained) return yield* Effect.failCause(result.cause);
 
+      yield* stopWorktreeActionTerminals(actionRun, {
+        operation: "workspaceSession.create.cleanup",
+        message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}`,
+      });
       const cleanup = yield* Effect.exit(
         Effect.gen(function* () {
           if (yield* git.isRegisteredWorktree(repoPath, workingDirectory)) {

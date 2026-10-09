@@ -28,13 +28,9 @@ import {
 } from "../../test-support/service-test-doubles";
 import {
   createWorkspaceActivityInspector,
+  type WorkspaceActivityBlocker,
   type WorkspaceActivityPort,
 } from "./workspace-activity-inspector";
-import { createDevServerRuntimeResolver } from "../dev-servers/dev-server-runtime-resolver";
-import {
-  inspectDevServerWorkspaceActivity,
-  type DevServerGroupRuntime,
-} from "../dev-servers/dev-server-state";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import {
   createWorkspaceLifecycleService,
@@ -106,9 +102,7 @@ const noActivity: WorkspaceActivityPort = {
   releaseSessions: () => Effect.void,
 };
 
-const activityWith = (
-  blockers: Array<{ kind: "agent-session" | "dev-server" | "terminal"; label: string }>,
-): WorkspaceActivityPort => ({
+const activityWith = (blockers: WorkspaceActivityBlocker[]): WorkspaceActivityPort => ({
   inspect: () => Effect.succeed(blockers),
   releaseSessions: () => Effect.void,
 });
@@ -291,36 +285,13 @@ describe("workspace lifecycle service", () => {
       const canonicalRepoPath = await realpath(directory);
       if (targetState === "deleted repository") await rm(directory, { recursive: true });
       const configuredRepoPath = canonicalRepoPath;
-      const config = repoConfig({
-        repoPath: configuredRepoPath,
-        devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
-      });
-      const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-      const resolveRuntime = createDevServerRuntimeResolver({
-        groups,
-        retiredOrder: { revision: null },
-        taskWorktreeService: undefined,
-        workspaceSessions: undefined,
-        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({}),
-      });
-      const { runtime } = await Effect.runPromise(
-        resolveRuntime(
-          { repoPath: configuredRepoPath, owner: { kind: "task", taskId: "task-1" } },
-          false,
-          config,
-        ),
-      );
-      runtime.unresolvedStops.add("web");
-      let terminalActivity: "active" | "unknown" | "idle" = "idle";
+      const config = repoConfig({ repoPath: configuredRepoPath });
+      let terminalActivity: "active" | "unknown" | "idle" = "active";
       const releaseSessions = mock(() => Effect.void);
       const activity = createWorkspaceActivityInspector({
         agentSessionLiveStateService: {
           list: () => Effect.succeed([]),
           releaseSession: () => Effect.void,
-        },
-        devServerService: {
-          inspectWorkspaceActivity: ({ repoPath }) =>
-            Effect.succeed(inspectDevServerWorkspaceActivity(groups, repoPath)),
         },
         terminalService: {
           inspectWorkspaceActivity: (repoPath) =>
@@ -353,11 +324,6 @@ describe("workspace lifecycle service", () => {
           ? service.closeWorkspace(input).pipe(Effect.asVoid)
           : service.removeWorkspace({ ...input, removeTaskWorktrees: false }).pipe(Effect.asVoid);
 
-      await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
-        "dev server for task task-1 is active",
-      );
-      groups.clear();
-      terminalActivity = "active";
       await expect(Effect.runPromise(lifecycle)).rejects.toThrow(
         "terminal terminal-1 is running a command",
       );
@@ -771,12 +737,12 @@ describe("workspace lifecycle service", () => {
     });
   });
 
-  test("removeWorkspace blocks on running dev servers", async () => {
+  test("removeWorkspace blocks on running terminals", async () => {
     const beginWorkspaceRemoval = mock(() =>
       Effect.succeed(removalRecord({ phase: "attachments" })),
     );
     const service = createService({
-      activity: activityWith([{ kind: "dev-server", label: "dev server for task-1 is running" }]),
+      activity: activityWith([{ kind: "terminal", label: "terminal t1 is running a command" }]),
       beginWorkspaceRemoval,
     });
 
@@ -788,7 +754,7 @@ describe("workspace lifecycle service", () => {
           removeTaskWorktrees: true,
         }),
       ),
-    ).rejects.toThrow("dev server for task-1 is running");
+    ).rejects.toThrow("terminal t1 is running a command");
     expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
   });
 

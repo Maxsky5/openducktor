@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
-  DevServerScriptState,
   PullRequest,
   PullRequestReviewContext,
   WorkspaceFileTree,
@@ -17,7 +16,6 @@ import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
 import { TaskExecutionSelectedFilePreview } from "./task-execution-file-preview";
-import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import type {
   TaskExecutionPanelModel,
@@ -40,7 +38,6 @@ let fileTreeSubscriber: (() => void) | null = null;
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
-const actualDevServerSettingsAction = await import("./agent-studio-dev-server-settings-action");
 const actualPrepareFileTreeInput = actualPierreTrees.prepareFileTreeInput;
 const actualPreparePresortedFileTreeInput = actualPierreTrees.preparePresortedFileTreeInput;
 let moduleSpies: Array<{ mockRestore: () => void }> = [];
@@ -98,9 +95,6 @@ beforeEach(async () => {
       });
       return { model };
     }),
-    spyOn(actualDevServerSettingsAction, "AgentStudioDevServerSettingsAction").mockImplementation(
-      () => createElement("button", { type: "button" }, "Configure dev server commands"),
-    ),
   ];
 
   ({ TaskExecutionPanel, TaskExecutionPanelToggleButton } = await import("./task-execution-panel"));
@@ -218,43 +212,6 @@ const createLoadedCiContext = ({
   refreshedAt: "2026-07-08T10:08:00Z",
 });
 
-const selectedScript: DevServerScriptState = {
-  scriptId: "frontend",
-  name: "Frontend",
-  command: "bun run dev",
-  startedCommand: "bun run dev",
-  status: "running",
-  pid: 123,
-  startedAt: "2026-03-19T10:00:00.000Z",
-  exitCode: null,
-  lastError: null,
-  terminalId: "terminal-output",
-};
-
-const devServerModel: AgentStudioDevServerPanelModel = {
-  mode: "active",
-  isExpanded: true,
-  isLoading: false,
-  disabledReason: null,
-  repoPath: "/repo",
-  owner: { kind: "task", taskId: "task-12" },
-  workingDirectory: "/tmp/worktree/task-12",
-  scripts: [selectedScript],
-  selectedScriptId: selectedScript.scriptId,
-  selectedScript,
-
-  error: null,
-  isStartPending: false,
-  isRetryPending: false,
-  isStopPending: false,
-  isRestartPending: false,
-  onSelectScript: () => {},
-  onStart: () => {},
-  onRetry: () => {},
-  onStop: () => {},
-  onRestart: () => {},
-};
-
 const basePanelModel = {
   tabs: [
     { id: "document", label: "Document" },
@@ -288,7 +245,6 @@ const basePanelModel = {
     isActive: false,
     queryInput: null,
   },
-  devServerModel: null,
 } satisfies TaskExecutionPanelModel;
 
 const renderPanel = (model: TaskExecutionPanelModel): string =>
@@ -540,7 +496,7 @@ describe("TaskExecutionPanel", () => {
     expect(htmlWithoutOpenThreads).toContain('aria-label="CI Checks, passing checks"');
   });
 
-  test("renders Git content as a tab without Dev Server content", () => {
+  test("renders Git content as a tab", () => {
     const html = renderPanel({
       ...basePanelModel,
       tabs: [
@@ -555,7 +511,6 @@ describe("TaskExecutionPanel", () => {
     expect(html).toContain("Current branch");
     expect(html).toContain("Compare with");
     expect(html).toContain("origin/main");
-    expect(html).not.toContain("agent-studio-dev-server-terminal");
   });
 
   test("renders a copyable file explorer working directory without a duplicate search input", () => {
@@ -873,34 +828,5 @@ describe("TaskExecutionPanel", () => {
       view.unmount();
       queryClient.clear();
     }
-  });
-
-  test("renders Dev Servers below the task execution panel", () => {
-    const html = renderPanel({
-      ...basePanelModel,
-      tabs: [
-        { id: "git", label: "Git" },
-        { id: "file_explorer", label: "File explorer" },
-      ],
-      activeTabId: "git",
-      documentModel: null,
-      ciChecksModel: null,
-      devServerModel,
-    });
-
-    expect(html).toContain("Git");
-    expect(html).toContain("origin/main");
-    expect(html).toContain("Stop");
-    expect(html).toContain("agent-studio-dev-server-terminal");
-    expect(html).not.toContain("Dev Servers</button>");
-  });
-
-  test("renders the dev server settings action in compact mode", () => {
-    const html = renderPanel({
-      ...basePanelModel,
-      devServerModel: { ...devServerModel, isExpanded: false },
-    });
-
-    expect(html).toContain("Configure dev server commands");
   });
 });

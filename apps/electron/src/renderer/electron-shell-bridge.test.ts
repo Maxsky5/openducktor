@@ -188,7 +188,6 @@ describe("electron shell bridge", () => {
     });
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const unsubscribeRuntimeChanges = await bridge.subscribeRuntimeChanges(listener);
-    const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
       { repoPath: "/repo" },
       listener,
@@ -209,7 +208,6 @@ describe("electron shell bridge", () => {
     ).toBe("typed:application/vnd.pierre.diffs-selections+json");
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://run-event", listener);
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://runtime-changed", listener);
-    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://dev-server-event", listener);
     expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
       { cursor: null },
       listener,
@@ -226,11 +224,9 @@ describe("electron shell bridge", () => {
 
     unsubscribeRunEvents();
     unsubscribeRuntimeChanges();
-    expect(devServerSubscription.transportEpoch).toMatch(/^electron:\d+$/);
-    devServerSubscription.unsubscribe();
     stopObservingLiveSessions();
     taskStreamSubscription.unsubscribe();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(4);
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
   });
 
   test("forwards task stream frames", async () => {

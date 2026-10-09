@@ -396,17 +396,93 @@ export const softGuardrailsSchema = z.object({
 export type SoftGuardrails = z.infer<typeof softGuardrailsSchema>;
 
 export const repoHooksSchema = z.object({
-  preStart: z.array(z.string()).default([]),
   postComplete: z.array(z.string()).default([]),
 });
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
-export const repoDevServerScriptSchema = z.object({
-  id: trimmedRequiredString("Dev server id"),
-  name: trimmedRequiredString("Dev server name"),
-  command: trimmedRequiredString("Dev server command"),
+export const REPO_ACTION_ICON_VALUES = [
+  "play",
+  "test",
+  "lint",
+  "configure",
+  "build",
+  "debug",
+] as const;
+export const repoActionIconSchema = z.enum(REPO_ACTION_ICON_VALUES);
+export type RepoActionIcon = z.infer<typeof repoActionIconSchema>;
+
+/**
+ * The lines that an action runs: each non-blank line that does not start with `#`. The lines share
+ * one shell process, and a line runs only after the previous line succeeds. Comment lines are
+ * skipped, because an interactive zsh runs `#` as a command.
+ */
+export const repoActionCommandLines = (command: string): string[] =>
+  command
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+
+export const repoActionSchema = z.object({
+  id: trimmedRequiredString("Action id"),
+  icon: repoActionIconSchema,
+  name: trimmedRequiredString("Action name"),
+  command: trimmedRequiredString("Action command").refine(
+    (command) => repoActionCommandLines(command).length > 0,
+    "Add a command line. Lines that start with # are comments.",
+  ),
+  runOnWorktreeCreate: z.boolean(),
+  waitBeforeAgentStart: z.boolean(),
 });
-export type RepoDevServerScript = z.infer<typeof repoDevServerScriptSchema>;
+export type RepoAction = z.infer<typeof repoActionSchema>;
+
+// List order is the session menu order and the worktree-creation run order.
+export const repoActionsSchema = z
+  .object({
+    items: z.array(repoActionSchema),
+    defaultActionId: z.string().min(1).nullable(),
+  })
+  .superRefine((actions, context) => {
+    const seenIds = new Set<string>();
+    for (const [index, action] of actions.items.entries()) {
+      if (seenIds.has(action.id)) {
+        context.addIssue({
+          code: "custom",
+          message: `Duplicate action id: ${action.id}`,
+          path: ["items", index, "id"],
+        });
+      }
+      seenIds.add(action.id);
+      if (action.waitBeforeAgentStart && !action.runOnWorktreeCreate) {
+        context.addIssue({
+          code: "custom",
+          message: `Action "${action.name}" can make the agent wait only when it runs on worktree creation.`,
+          path: ["items", index, "waitBeforeAgentStart"],
+        });
+      }
+    }
+    if (actions.items.length === 0) {
+      if (actions.defaultActionId !== null) {
+        context.addIssue({
+          code: "custom",
+          message: "A repository with no actions cannot have a default action.",
+          path: ["defaultActionId"],
+        });
+      }
+    } else if (actions.defaultActionId === null || !seenIds.has(actions.defaultActionId)) {
+      context.addIssue({
+        code: "custom",
+        message: "The default action must be one of the repository actions.",
+        path: ["defaultActionId"],
+      });
+    }
+  });
+export type RepoActions = z.infer<typeof repoActionsSchema>;
+
+const createEmptyRepoActions = (): RepoActions => ({ items: [], defaultActionId: null });
+
+const persistedRepoActionsSchema = repoActionsSchema
+  .safeExtend({ items: z.array(repoActionSchema.strict()) })
+  .strict();
 
 export const agentModelDefaultSchema = z.object({
   runtimeKind: runtimeKindSchema,
@@ -473,23 +549,8 @@ export const repoConfigSchema = z.object({
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema.default(DEFAULT_REPO_TARGET_BRANCH),
   git: repoGitConfigSchema.default({}),
-  hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
-  devServers: z
-    .array(repoDevServerScriptSchema)
-    .superRefine((devServers, context) => {
-      const seenIds = new Set<string>();
-      for (const [index, devServer] of devServers.entries()) {
-        if (seenIds.has(devServer.id)) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Duplicate dev server id: ${devServer.id}`,
-            path: [index, "id"],
-          });
-        }
-        seenIds.add(devServer.id);
-      }
-    })
-    .default([]),
+  hooks: repoHooksSchema.default({ postComplete: [] }),
+  actions: repoActionsSchema.default(createEmptyRepoActions),
   worktreeCopyPaths: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({
@@ -509,11 +570,8 @@ const persistedRepoConfigSchema = repoConfigSchema
     defaultModel: nullableToOptional(persistedAgentModelDefaultSchema),
     defaultTargetBranch: gitTargetBranchSchema.strict().default(DEFAULT_REPO_TARGET_BRANCH),
     git: persistedRepoGitConfigSchema.default({}),
-    hooks: repoHooksSchema.strict().default({ preStart: [], postComplete: [] }),
-    devServers: z
-      .array(repoDevServerScriptSchema.strict())
-      .pipe(repoConfigSchema.shape.devServers.removeDefault())
-      .default([]),
+    hooks: repoHooksSchema.strict().default({ postComplete: [] }),
+    actions: persistedRepoActionsSchema.default(createEmptyRepoActions),
     promptOverrides: persistedPromptOverridesSchema.default({}),
     agentDefaults: persistedRepoAgentDefaultsSchema.default({
       spec: undefined,
@@ -547,7 +605,7 @@ export const workspaceRepoConfigInputSchema = repoConfigSchema
     branchPrefix: true,
     defaultTargetBranch: true,
     git: true,
-    devServers: true,
+    actions: true,
     worktreeCopyPaths: true,
     agentDefaults: true,
     promptOverrides: true,

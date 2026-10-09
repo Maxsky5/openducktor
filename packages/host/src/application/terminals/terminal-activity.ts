@@ -3,7 +3,7 @@ import {
   type TerminalActivity,
   type TerminalActivityMessage,
 } from "@openducktor/contracts";
-import { isLiveTerminal, type TerminalSession } from "./terminal-session";
+import { copyTerminalSummary, isLiveTerminal, type TerminalSession } from "./terminal-session";
 
 /** Metadata observers never attach to terminal output or inspect the process tree. */
 export const createTerminalActivity = (sessions: ReadonlyMap<string, TerminalSession>) => {
@@ -11,8 +11,7 @@ export const createTerminalActivity = (sessions: ReadonlyMap<string, TerminalSes
   const read = (session: TerminalSession): TerminalActivity | null => {
     if (!isLiveTerminal(session) || session.command === null) return null;
     return {
-      summary: { ...session.summary, context: { ...session.summary.context } },
-      kind: session.kind === "interactive" ? "terminal" : "dev_server",
+      summary: copyTerminalSummary(session),
       command: session.command,
     };
   };

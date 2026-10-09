@@ -9,7 +9,6 @@ import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
@@ -40,7 +39,6 @@ const createHarness = ({
       countLiveSessions,
       cleanupTaskSessions: () => Effect.die(new Error("must not stop sessions")),
     },
-    devServerService: createDirectMergeDevServerService(calls),
     terminalService: {
       acquireTaskCleanup: () =>
         Effect.sync(() => calls.push("cleanup")).pipe(

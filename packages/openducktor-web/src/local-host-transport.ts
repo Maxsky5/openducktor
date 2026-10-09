@@ -13,12 +13,7 @@ import {
   type TaskEventCursor,
 } from "@openducktor/contracts";
 import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
-import type {
-  AzureDevOpsConnectionUpdateListener,
-  DevServerEventListener,
-  DevServerEventSubscription,
-  RunEventListener,
-} from "@openducktor/frontend";
+import type { AzureDevOpsConnectionUpdateListener, RunEventListener } from "@openducktor/frontend";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
@@ -67,7 +62,6 @@ type BrowserSseListenerRegistration = {
 };
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
-const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
@@ -551,7 +545,7 @@ export const subscribeLocalHostRunEvents = async (
 export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
   listener: AzureDevOpsConnectionUpdateListener,
 ): Promise<() => void> => {
-  const subscription = await runWebBoundary(
+  return runWebBoundary(
     subscribeReadyLocalHostEventsEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
       if (
         !isBrowserSseControlEvent(event) &&
@@ -561,12 +555,11 @@ export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
       }
     }),
   );
-  return subscription.unsubscribe;
 };
 export const subscribeLocalHostWorkspaceProviderSetupUpdates = async (
   listener: (payload: HostEventPayload<"openducktor://workspace-provider-setup-updated">) => void,
 ): Promise<() => void> => {
-  const subscription = await runWebBoundary(
+  return runWebBoundary(
     subscribeReadyLocalHostEventsEffect(
       "openducktor://workspace-provider-setup-updated",
       (event) => {
@@ -578,7 +571,6 @@ export const subscribeLocalHostWorkspaceProviderSetupUpdates = async (
       },
     ),
   );
-  return subscription.unsubscribe;
 };
 
 const subscribeReadyLocalHostEventsEffect = (
@@ -586,7 +578,7 @@ const subscribeReadyLocalHostEventsEffect = (
   listener: BrowserSseListener,
   onReplayGap?: (message: string) => void,
   eventName = "message",
-): Effect.Effect<DevServerEventSubscription, WebError> =>
+): Effect.Effect<() => void, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
     const subscription = yield* subscribeSseChannelEffect(
@@ -641,16 +633,13 @@ const subscribeReadyLocalHostEventsEffect = (
       subscription.unsubscribe();
       return yield* causeToWebBoundaryError(readyExit.cause);
     }
-    return {
-      transportEpoch: readyExit.value,
-      unsubscribe: subscription.unsubscribe,
-    };
+    return subscription.unsubscribe;
   });
 
 export const subscribeLocalHostWorkspaceSessionUpdates = async (
   listener: import("@openducktor/frontend/lib/shell-bridge").WorkspaceSessionUpdateListener,
 ): Promise<() => void> => {
-  const subscription = await runWebBoundary(
+  return runWebBoundary(
     subscribeReadyLocalHostEventsEffect("openducktor://workspace-session-updated", (event) => {
       if (isBrowserSseControlEvent(event)) {
         listener(event);
@@ -659,34 +648,16 @@ export const subscribeLocalHostWorkspaceSessionUpdates = async (
       }
     }),
   );
-  return subscription.unsubscribe;
 };
 
 export const subscribeLocalHostRuntimeChanges = async (
   listener: RuntimeChangeListener,
 ): Promise<() => void> => {
-  const subscription = await runWebBoundary(
+  return runWebBoundary(
     subscribeReadyLocalHostEventsEffect(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {
       if (isBrowserSseControlEvent(event)) {
         listener(event);
       } else if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) {
-        listener(event.payload);
-      }
-    }),
-  );
-  return subscription.unsubscribe;
-};
-
-export const subscribeLocalHostDevServerEvents = async (
-  listener: DevServerEventListener,
-): Promise<DevServerEventSubscription> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, (event) => {
-      if (isBrowserSseControlEvent(event)) {
-        listener(event);
-        return;
-      }
-      if (event.channel === DEV_SERVER_EVENT_CHANNEL) {
         listener(event.payload);
       }
     }),
@@ -722,7 +693,7 @@ export const observeLocalHostAgentSessions = async (
             }
           });
       };
-      const subscription = yield* subscribeReadyLocalHostEventsEffect(
+      const unsubscribe = yield* subscribeReadyLocalHostEventsEffect(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
           if (isBrowserSseControlEvent(event)) {
@@ -755,12 +726,12 @@ export const observeLocalHostAgentSessions = async (
         }),
       );
       if (initialRefreshExit._tag === "Failure") {
-        subscription.unsubscribe();
+        unsubscribe();
         return yield* causeToWebBoundaryError(initialRefreshExit.cause);
       }
       return () => {
         closed = true;
-        subscription.unsubscribe();
+        unsubscribe();
       };
     }),
   );

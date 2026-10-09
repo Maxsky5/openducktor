@@ -3,7 +3,6 @@ import { memo, type ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
-import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import {
   SharedToolsPanel,
   SharedToolsPanelToggleButton,
@@ -40,7 +39,6 @@ export type TaskExecutionPanelModel = {
   gitModel: AgentStudioGitPanelModel;
   fileExplorerModel: TaskExecutionFileExplorerPanelModel;
   ciChecksModel: TaskExecutionCiChecksPanelModel | null;
-  devServerModel: AgentStudioDevServerPanelModel | null;
 };
 
 const tabIcons = {
@@ -102,7 +100,6 @@ export function TaskExecutionPanel({ model }: { model: TaskExecutionPanelModel }
         headerActions: gitModel.pullRequest ? (
           <TaskPullRequestLink pullRequest={gitModel.pullRequest} className="shrink-0" />
         ) : null,
-        devServerModel: model.devServerModel,
       }}
     />
   );

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
+import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
 import { WorkflowRail } from "@/components/features/agents/agent-studio-header-workflow-rail";
 import { SessionOpenInAction } from "@/components/features/agents/session-open-in-action";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
@@ -281,6 +282,11 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     () => (
       <AgentStudioHeader
         model={chatHeaderModel}
+        repoActions={
+          activeWorkspace ? (
+            <SessionRepoActions workspace={activeWorkspace} terminal={terminalPanel} />
+          ) : null
+        }
         openIn={
           <SessionOpenInAction
             contextMode={openInContextMode}
@@ -299,6 +305,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       />
     ),
     [
+      activeWorkspace,
       chatHeaderModel,
       openInContextMode,
       openInTargetPath,

@@ -1,11 +1,13 @@
 import {
   type TerminalCloseRequest,
+  type TerminalContext,
   type TerminalCreateRequest,
   type TerminalCreateResponse,
   type TerminalListFilter,
   type TerminalListResponse,
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
+  type TerminalStartedBy,
   type TerminalSummary,
   type TerminalActivityMessage,
   terminalCloseRequestSchema,
@@ -15,9 +17,12 @@ import {
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
-import { TerminalPtyError } from "../../ports/terminal-pty-port";
-import type { TerminalOutputSourcePort } from "../../ports/terminal-output-source-port";
-import { createTerminalAdmission } from "./terminal-admission";
+import { createTerminalAdmission, type TerminalAdmissionReservation } from "./terminal-admission";
+import type {
+  StartedCommandTerminal,
+  TerminalCommandRequest,
+  TerminalCommandService,
+} from "./terminal-command";
 import { type TerminalTaskScope, type TerminalWorkspaceSessionScope } from "./terminal-context";
 import {
   createTerminalLaunchPolicy,
@@ -39,7 +44,7 @@ export type TerminalAttachInput = TerminalSessionAttachInput;
 
 export type TerminalCloseByTaskResult = { closedTerminalIds: string[] };
 
-export type TerminalService = TerminalOutputSourcePort & {
+export type TerminalService = {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
@@ -75,7 +80,7 @@ export type TerminalService = TerminalOutputSourcePort & {
 type CreateTerminalServiceInput = TerminalTargetServices & {
   withProcessStartAdmission?: WithProcessStartAdmission;
   ptyPort: TerminalPtyPort;
-  resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
+  launchEnvironment: TerminalLaunchEnvironmentPort;
   now?: () => Date;
   idFactory?: () => string;
   hostInstanceIdFactory?: () => string;
@@ -89,12 +94,12 @@ export const createTerminalService = ({
   taskWorktrees,
   workspaceSessions,
   ptyPort,
-  resolveLaunchEnvironment,
+  launchEnvironment,
   now = () => new Date(),
   idFactory = () => globalThis.crypto.randomUUID(),
   hostInstanceIdFactory = () => globalThis.crypto.randomUUID(),
   scheduleTitleSettlement,
-}: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
+}: CreateTerminalServiceInput): Effect.Effect<TerminalService & TerminalCommandService> =>
   Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
     const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = { now, ptyPort };
@@ -102,10 +107,7 @@ export const createTerminalService = ({
       engineInput.scheduleTitleSettlement = scheduleTitleSettlement;
     }
     const engine = createTerminalSessionEngine(engineInput);
-    const launch = createTerminalLaunchPolicy({
-      filesystem,
-      resolveEnvironment: resolveLaunchEnvironment,
-    });
+    const launch = createTerminalLaunchPolicy({ filesystem, environment: launchEnvironment });
     const admission = createTerminalAdmission({
       countLive: engine.countLive,
       countLiveForContext: engine.countLiveForContext,
@@ -124,101 +126,112 @@ export const createTerminalService = ({
         Effect.map((repoPath) => ({ repoPath, taskIds: scope.taskIds })),
       );
 
-    const service: TerminalService = {
-      hostInstanceId,
-      openOutputSource: ({ context, workingDir, label, command, onForgotten }) =>
-        Effect.gen(function* () {
-          const reservation = yield* admission.beginCreation(context);
-          return yield* Effect.gen(function* () {
-            yield* reservation.bind(context);
-            const source = yield* engine.openOutputSource(
-              {
-                terminalId: idFactory(),
-                label,
-                context,
-                initialWorkingDir: workingDir,
-                createdAt: now().toISOString(),
-                lifecycle: "starting",
-                exit: null,
-              },
-              command,
-              () => {
-                reservation.release();
-                onForgotten();
-              },
-            );
-            return {
-              ...source,
-              activate: (handle: Parameters<typeof source.activate>[0]) =>
-                source
-                  .activate(handle)
-                  .pipe(Effect.ensuring(Effect.sync(() => reservation.release()))),
-              exit: (exit: Parameters<typeof source.exit>[0]) => {
-                source.exit(exit);
-                reservation.release();
-              },
-              release: () => {
-                source.release();
-                reservation.release();
-              },
-            };
-          }).pipe(Effect.onError(() => Effect.sync(() => reservation.release())));
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalPtyError({
-                code: "spawn_failed",
-                operation: "start",
+    // Task contexts bind after target resolution gives their canonical repository path.
+    const withCreationReservation = <A>(
+      context: TerminalContext,
+      use: (reservation: TerminalAdmissionReservation) => Effect.Effect<A, TerminalServiceError>,
+    ): Effect.Effect<A, TerminalServiceError> =>
+      Effect.acquireUseRelease(
+        admission.beginCreation("taskId" in context ? undefined : context),
+        use,
+        (reservation) => Effect.sync(() => reservation.release()),
+      );
+
+    const newSummary = (
+      context: TerminalContext,
+      label: string,
+      initialWorkingDir: string,
+      startedBy: TerminalStartedBy,
+    ): TerminalSummary => ({
+      terminalId: idFactory(),
+      label,
+      context,
+      initialWorkingDir,
+      createdAt: now().toISOString(),
+      lifecycle: "starting",
+      exit: null,
+      startedBy,
+    });
+
+    // A repository owner starts processes only while its workspace accepts them.
+    const withRepositoryAdmission = <A>(
+      context: TerminalContext,
+      operation: "create" | "start_command",
+      start: Effect.Effect<A, TerminalServiceError>,
+    ): Effect.Effect<A, TerminalServiceError> => {
+      if (!("repoPath" in context) || !withProcessStartAdmission) return start;
+      return withProcessStartAdmission(context.repoPath, start).pipe(
+        Effect.mapError((cause) =>
+          cause instanceof TerminalServiceError
+            ? cause
+            : new TerminalServiceError({
+                code: "invalid_input",
+                operation,
                 message: cause.message,
                 cause,
+                workingDir: context.repoPath,
               }),
-          ),
         ),
+      );
+    };
+
+    const startShellTerminal = (
+      reservation: TerminalAdmissionReservation,
+      context: TerminalContext,
+      workingDir: string,
+    ): Effect.Effect<TerminalCreateResponse, TerminalServiceError> =>
+      withRepositoryAdmission(
+        context,
+        "create",
+        Effect.gen(function* () {
+          yield* reservation.bind(context);
+          const plan = yield* launch.shell({ workingDir, context }, DEFAULT_GRID);
+          return yield* engine.startShell(newSummary(context, plan.cwd, plan.cwd, "user"), plan);
+        }),
+      );
+
+    const startCommandTerminal = (
+      reservation: TerminalAdmissionReservation,
+      request: TerminalCommandRequest,
+    ): Effect.Effect<StartedCommandTerminal, TerminalServiceError> =>
+      withRepositoryAdmission(
+        request.context,
+        "start_command",
+        Effect.gen(function* () {
+          yield* reservation.bind(request.context);
+          const plans = yield* launch.command(request, DEFAULT_GRID, request.commandLines);
+          return yield* engine.startCommand(
+            newSummary(request.context, request.label, plans.shell.cwd, request.startedBy),
+            request,
+            plans,
+          );
+        }),
+      );
+
+    const service: TerminalService & TerminalCommandService = {
+      hostInstanceId,
       create: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);
-          return yield* Effect.acquireUseRelease(
-            admission.beginCreation("taskId" in input.context ? undefined : input.context),
-            (reservation) =>
-              Effect.gen(function* () {
-                const resolved = yield* target.resolve(input);
-                const { context, workingDir } = resolved;
-                const start = Effect.gen(function* () {
-                  yield* reservation.bind(context);
-                  const plan = yield* launch({ workingDir, context }, DEFAULT_GRID);
-                  const terminalId = idFactory();
-                  const summary: TerminalSummary = {
-                    terminalId,
-                    label: plan.cwd,
-                    context,
-                    initialWorkingDir: plan.cwd,
-                    createdAt: now().toISOString(),
-                    lifecycle: "starting",
-                    exit: null,
-                  };
-                  const started = yield* engine.start(summary, plan);
-                  return { ref: { terminalId }, summary: started };
-                });
-                if (!("repoPath" in context) || !withProcessStartAdmission) {
-                  return yield* start;
-                }
-                return yield* withProcessStartAdmission(context.repoPath, start).pipe(
-                  Effect.mapError((cause) =>
-                    cause instanceof TerminalServiceError
-                      ? cause
-                      : new TerminalServiceError({
-                          code: "invalid_input",
-                          operation: "create",
-                          message: cause.message,
-                          cause,
-                          workingDir: context.repoPath,
-                        }),
-                  ),
-                );
-              }),
-            (reservation) => Effect.sync(() => reservation.release()),
+          return yield* withCreationReservation(input.context, (reservation) =>
+            Effect.gen(function* () {
+              const { context, workingDir } = yield* target.resolve(input);
+              return yield* startShellTerminal(reservation, context, workingDir);
+            }),
           );
         }),
+      startCommand: (request) =>
+        withCreationReservation(request.context, (reservation) =>
+          Effect.gen(function* () {
+            const resolved = yield* target.resolveOwned(request);
+            return yield* startCommandTerminal(reservation, { ...request, ...resolved });
+          }),
+        ),
+      startCommandInPreparedTarget: (request) =>
+        withCreationReservation(request.context, (reservation) =>
+          startCommandTerminal(reservation, request),
+        ),
+      readOutputTail: engine.readOutputTail,
       list: (rawFilter) =>
         Effect.gen(function* () {
           const filter = terminalListFilterSchema.parse(rawFilter);

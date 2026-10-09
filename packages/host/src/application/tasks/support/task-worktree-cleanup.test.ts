@@ -6,33 +6,24 @@ import {
   type RuntimeSupportedScope,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
-import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
-  createBuildStartGitPort,
-  createBuildStartRuntimeRegistry,
   createBuildStartWorktreeFiles,
-  createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
-  createRuntimeDefinitionsService,
   extendGitPort,
   task,
 } from "../test-support/task-workflow-harness";
-import { requireBuildStartDependencies } from "./required-task-dependencies";
 import { createTaskWorktreeService } from "../worktrees/task-worktree-service";
 import {
   cleanupMergedTaskState,
   findLatestCleanupTarget,
   loadTaskBranchCleanup,
   resolveRuntimeDescriptorForTaskSession,
-  rollbackFailedTaskWorktree,
 } from "./task-worktree-cleanup";
 
 const taskStoreWithTasks = (
@@ -72,7 +63,6 @@ const taskStoreWithTasks = (
   }) satisfies RealTaskStorePort;
 
 const emptyHooks = {
-  preStart: [],
   postComplete: [],
 };
 
@@ -329,7 +319,6 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            devServerService: createDirectMergeDevServerService(calls),
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -358,10 +347,6 @@ describe("task worktree cleanup", () => {
 
     expect(calls).toEqual([
       { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
-      {
-        type: "stopDevServers",
-        input: { repoPath: "/repo", owner: { kind: "task", taskId: "task-1" } },
-      },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "removeWorktree",
@@ -384,7 +369,6 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            devServerService: createDirectMergeDevServerService(calls),
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -444,7 +428,6 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              devServerService: createDirectMergeDevServerService(calls),
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -508,7 +491,6 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              devServerService: createDirectMergeDevServerService(calls),
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -551,7 +533,6 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              devServerService: createDirectMergeDevServerService(calls),
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -583,72 +564,6 @@ describe("task worktree cleanup", () => {
 
     expect(calls).not.toContainEqual(
       expect.objectContaining({ type: "deleteLocalBranch", branch: "odt/task-1" }),
-    );
-  });
-
-  test("returns actionable rollback cleanup errors for every failed cleanup step", async () => {
-    const calls: unknown[] = [];
-    const failingWorktreeFiles: WorktreeFilePort = {
-      ...createBuildStartWorktreeFiles(calls),
-      removePathIfPresent(path) {
-        return Effect.fail(
-          new HostOperationError({
-            operation: "test.removePathIfPresent",
-            message: `cannot remove ${path}`,
-          }),
-        );
-      },
-    };
-    const rollbackMessage = await Effect.runPromise(
-      rollbackFailedTaskWorktree(
-        requireBuildStartDependencies(
-          extendGitPort(createBuildStartGitPort({ calls }), {
-            deleteReference(repoPath, reference) {
-              calls.push({ type: "deleteReference", repoPath, reference });
-              return Effect.fail(
-                new HostOperationError({
-                  operation: "test.deleteReference",
-                  message: "cannot delete tracking ref",
-                }),
-              );
-            },
-            deleteLocalBranch(repoPath, branch, force) {
-              calls.push({ type: "deleteLocalBranch", repoPath, branch, force });
-              return Effect.fail(
-                new HostOperationError({
-                  operation: "test.deleteLocalBranch",
-                  message: "cannot delete branch",
-                }),
-              );
-            },
-          }),
-          createRuntimeDefinitionsService(),
-          createBuildStartRuntimeRegistry(calls),
-          createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          createBuildSystemCommands(calls),
-          failingWorktreeFiles,
-          createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: emptyHooks,
-          }),
-        ),
-        "/repo",
-        "/worktrees/repo/task-1",
-        "odt/task-1",
-        "refs/remotes/origin/odt/task-1",
-        "/worktrees/repo",
-      ),
-    );
-
-    expect(rollbackMessage).toContain(
-      "Also failed to delete created upstream tracking ref refs/remotes/origin/odt/task-1: cannot delete tracking ref",
-    );
-    expect(rollbackMessage).toContain(
-      "Also failed to remove worktree /worktrees/repo/task-1: git worktree removal left filesystem path cleanup incomplete for /worktrees/repo/task-1",
-    );
-    expect(rollbackMessage).toContain(
-      "Also failed to delete branch odt/task-1: cannot delete branch",
     );
   });
 

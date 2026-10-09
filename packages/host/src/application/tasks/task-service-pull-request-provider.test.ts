@@ -12,7 +12,6 @@ import { createGitProviderResolver } from "../git/git-provider-resolver";
 import {
   createBuildSettingsConfig,
   createBuildWorkspaceSettingsService,
-  createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
@@ -116,7 +115,7 @@ const gitlabDescriptor: GitProviderDescriptor = {
 const workspaceSettingsService = createBuildWorkspaceSettingsService({
   workspaceId: "repo",
   repoPath: "/repo",
-  hooks: { preStart: [], postComplete: [] },
+  hooks: { postComplete: [] },
   git: {
     provider: {
       id: "gitlab",
@@ -444,7 +443,6 @@ describe("createTaskService Pull Request provider ports", () => {
         }),
     };
     const service = createTaskService({
-      devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [] }),
       gitProviderResolver,
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),

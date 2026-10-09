@@ -30,8 +30,8 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { preStart: [], postComplete: [] },
-  devServers: [],
+  hooks: { postComplete: [] },
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
@@ -749,7 +749,7 @@ describe("createWorkspaceSettingsService", () => {
         workspaces: {
           repo: {
             ...repoConfig("repo", "/repos/repo"),
-            hooks: { preStart: ["bun test"], postComplete: [] },
+            hooks: { postComplete: ["bun lint"] },
             worktreeBasePath: "/old-worktrees",
           },
         },
@@ -767,7 +767,7 @@ describe("createWorkspaceSettingsService", () => {
     const saved = await Effect.runPromise(
       service.saveRepoSettings("repo", {
         worktreeBasePath: "   ",
-        hooks: { preStart: [" bun lint ", ""], postComplete: [" bun test "] },
+        hooks: { postComplete: [" bun test ", ""] },
       }),
     );
     const repo = await Effect.runPromise(service.getRepoConfig("repo"));
@@ -776,11 +776,130 @@ describe("createWorkspaceSettingsService", () => {
     expect(repo.branchPrefix).toBe("feature");
     expect(repo.worktreeBasePath).toBeUndefined();
     expect(repo.worktreeCopyPaths).toEqual([".env"]);
-    expect(repo.hooks).toEqual({
-      preStart: ["bun lint"],
-      postComplete: ["bun test"],
-    });
+    expect(repo.hooks).toEqual({ postComplete: ["bun test"] });
   });
+  test("saves repository actions and keeps them when a later save omits them", async () => {
+    const actions: RepoConfig["actions"] = {
+      items: [
+        {
+          id: "dev",
+          icon: "play",
+          name: "Dev",
+          command: "bun run dev",
+          runOnWorktreeCreate: false,
+          waitBeforeAgentStart: false,
+        },
+        {
+          id: "install",
+          icon: "build",
+          name: "Install",
+          command: "bun install",
+          runOnWorktreeCreate: true,
+          waitBeforeAgentStart: true,
+        },
+      ],
+      defaultActionId: "dev",
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+        workspaceOrder: ["repo"],
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(service.saveRepoSettings("repo", { actions }));
+    expect((await Effect.runPromise(service.getRepoConfig("repo"))).actions).toEqual(actions);
+
+    await Effect.runPromise(service.saveRepoSettings("repo", { branchPrefix: "feature" }));
+    const repo = await Effect.runPromise(service.getRepoConfig("repo"));
+    expect(repo.branchPrefix).toBe("feature");
+    expect(repo.actions).toEqual(actions);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces.repo?.actions).toEqual(actions);
+  });
+  test.each<{ reason: string; actions: RepoConfig["actions"]; message: string }>([
+    {
+      reason: "duplicate action ids",
+      actions: {
+        items: [
+          {
+            id: "dev",
+            icon: "play",
+            name: "Dev",
+            command: "bun run dev",
+            runOnWorktreeCreate: false,
+            waitBeforeAgentStart: false,
+          },
+          {
+            id: "dev",
+            icon: "test",
+            name: "Test",
+            command: "bun test",
+            runOnWorktreeCreate: false,
+            waitBeforeAgentStart: false,
+          },
+        ],
+        defaultActionId: "dev",
+      },
+      message: "Duplicate action id: dev",
+    },
+    {
+      reason: "a default action outside the list",
+      actions: {
+        items: [
+          {
+            id: "dev",
+            icon: "play",
+            name: "Dev",
+            command: "bun run dev",
+            runOnWorktreeCreate: false,
+            waitBeforeAgentStart: false,
+          },
+        ],
+        defaultActionId: "missing",
+      },
+      message: "The default action must be one of the repository actions.",
+    },
+    {
+      reason: "a wait on an action that does not run on worktree creation",
+      actions: {
+        items: [
+          {
+            id: "dev",
+            icon: "play",
+            name: "Dev",
+            command: "bun run dev",
+            runOnWorktreeCreate: false,
+            waitBeforeAgentStart: true,
+          },
+        ],
+        defaultActionId: "dev",
+      },
+      message: "can make the agent wait only when it runs on worktree creation.",
+    },
+  ])(
+    "rejects repository actions with $reason without writing config",
+    async ({ actions, message }) => {
+      const settingsConfig = createFakeSettingsConfig({
+        config: globalConfig({
+          workspaces: { repo: repoConfig("repo", "/repos/repo") },
+          workspaceOrder: ["repo"],
+        }),
+        existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+      });
+      const service = createWorkspaceSettingsService(settingsConfig);
+
+      await expect(
+        Effect.runPromise(service.saveRepoSettings("repo", { actions })),
+      ).rejects.toThrow(message);
+      expect(settingsConfig.writtenConfigs).toEqual([]);
+      expect((await Effect.runPromise(service.getRepoConfig("repo"))).actions).toEqual({
+        items: [],
+        defaultActionId: null,
+      });
+    },
+  );
   test("loads repo config by canonical repository path", async () => {
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({

@@ -183,7 +183,12 @@ const renderWorkflow = (props: Partial<ComponentProps<typeof WorkflowRail>> = {}
 describe("AgentStudioHeader", () => {
   test("renders the task title and session controls", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: buildModel(),
+      }),
     );
 
     expect(html).toContain("Rework Agent Studio UI");
@@ -203,6 +208,7 @@ describe("AgentStudioHeader", () => {
   test("falls back to generic header title when task title is missing", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -220,6 +226,7 @@ describe("AgentStudioHeader", () => {
     const onOpenTaskDetails = mock(() => {});
     const view = render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: { ...model, onOpenTaskDetails },
@@ -240,7 +247,12 @@ describe("AgentStudioHeader", () => {
 
   test("shows the selected session in the history tooltip", async () => {
     const view = render(
-      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: buildModel(),
+      }),
     );
     try {
       const trigger = view.getByRole("button", {
@@ -259,6 +271,7 @@ describe("AgentStudioHeader", () => {
     const onValueChange = mock(() => {});
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -314,6 +327,7 @@ describe("AgentStudioHeader", () => {
 
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -342,6 +356,7 @@ describe("AgentStudioHeader", () => {
     const onValueChange = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -420,6 +435,7 @@ describe("AgentStudioHeader", () => {
     const onPrepareMessageFirstSession = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -449,6 +465,7 @@ describe("AgentStudioHeader", () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -473,6 +490,7 @@ describe("AgentStudioHeader", () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -536,6 +554,7 @@ describe("AgentStudioHeader", () => {
   test("renders the wider quick-actions popover with the taller result list", async () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -582,6 +601,7 @@ describe("AgentStudioHeader", () => {
   test("filters quick actions by action label instead of description text", async () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -629,7 +649,12 @@ describe("AgentStudioHeader", () => {
 
   test("closes quick-actions menu when actions become unavailable", async () => {
     const { rerender } = render(
-      createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: buildModel(),
+      }),
     );
 
     await act(async () => {
@@ -640,6 +665,7 @@ describe("AgentStudioHeader", () => {
     await act(async () => {
       rerender(
         createElement(AgentStudioHeader, {
+          repoActions: null,
           viewControls: null,
           openIn: null,
           model: {
@@ -654,7 +680,12 @@ describe("AgentStudioHeader", () => {
 
     await act(async () => {
       rerender(
-        createElement(AgentStudioHeader, { viewControls: null, openIn: null, model: buildModel() }),
+        createElement(AgentStudioHeader, {
+          repoActions: null,
+          viewControls: null,
+          openIn: null,
+          model: buildModel(),
+        }),
       );
     });
 
@@ -666,6 +697,7 @@ describe("AgentStudioHeader", () => {
     const onResolveGitConflictQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -753,6 +785,7 @@ describe("AgentStudioHeader", () => {
   test("hides the task details button when no task is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -770,6 +803,7 @@ describe("AgentStudioHeader", () => {
   test("disables controls when studio is blocked", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -794,6 +828,7 @@ describe("AgentStudioHeader", () => {
     const model = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
@@ -814,6 +849,7 @@ describe("AgentStudioHeader", () => {
   test("disables quick action launch while a session is starting without showing a loader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
+        repoActions: null,
         viewControls: null,
         openIn: null,
         model: {

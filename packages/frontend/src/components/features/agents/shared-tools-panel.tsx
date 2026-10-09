@@ -1,15 +1,8 @@
 import { PanelRightClose, PanelRightOpen, type LucideIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  AgentStudioDevServerPanel,
-  type AgentStudioDevServerPanelModel,
-} from "./agent-studio-dev-server-panel";
-import { AgentStudioDevServerSettingsAction } from "./agent-studio-dev-server-settings-action";
-import { shouldUseExpandedDevServerLayout } from "./agent-studio-right-panel-layout";
 
 export type SharedToolsTab<Id extends string> = {
   id: Id;
@@ -27,53 +20,7 @@ export type SharedToolsPanelModel<Id extends string> = {
   tabListLabel: string;
   testIdPrefix: string;
   headerActions: ReactNode;
-  devServerModel?: AgentStudioDevServerPanelModel | null;
 };
-
-export function SharedToolsPanel<Id extends string>({
-  model,
-}: {
-  model: SharedToolsPanelModel<Id>;
-}) {
-  const [devServerSettingsIsOpen, setDevServerSettingsIsOpen] = useState(false);
-  if (!model.devServerModel) return <SharedToolsPanelTabs model={model} />;
-  const expanded = shouldUseExpandedDevServerLayout({
-    devServerIsExpanded: model.devServerModel.isExpanded,
-    devServerSettingsIsOpen,
-  });
-  const devServer =
-    model.devServerModel.isExpanded === expanded
-      ? model.devServerModel
-      : { ...model.devServerModel, isExpanded: expanded };
-  if (!expanded)
-    return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <SharedToolsPanelTabs model={model} />
-        </div>
-        <AgentStudioDevServerPanel
-          model={devServer}
-          compactAction={
-            <AgentStudioDevServerSettingsAction
-              repositoryPath={model.devServerModel.repoPath}
-              onOpenChange={setDevServerSettingsIsOpen}
-            />
-          }
-        />
-      </div>
-    );
-  return (
-    <ResizablePanelGroup direction="vertical">
-      <ResizablePanel defaultSize="60%" minSize="30%">
-        <SharedToolsPanelTabs model={model} />
-      </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize="40%" minSize="20%">
-        <AgentStudioDevServerPanel model={devServer} />
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  );
-}
 
 export const sharedToolsPanelToggleButtonClassName =
   "size-7 text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:text-foreground";
@@ -113,7 +60,11 @@ export function SharedToolsPanelToggleButton({
   );
 }
 
-function SharedToolsPanelTabs<Id extends string>({ model }: { model: SharedToolsPanelModel<Id> }) {
+export function SharedToolsPanel<Id extends string>({
+  model,
+}: {
+  model: SharedToolsPanelModel<Id>;
+}) {
   return (
     <TooltipProvider>
       <Tabs

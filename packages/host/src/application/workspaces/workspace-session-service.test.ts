@@ -38,6 +38,11 @@ import {
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import {
+  WorktreeActionExitError,
+  type WorktreeActionRunInput,
+  WorktreeKeptForRunningActionsError,
+} from "../actions/worktree-action-runner";
+import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -80,7 +85,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   const setup = () => {
     const calls: string[] = [];
     const starts: AgentSessionControlStartInput[] = [];
-    const forgottenDevServerSessions: string[] = [];
+    const actionRuns: Array<WorktreeActionRunInput & { worktreePath: string }> = [];
     const titles: string[] = [];
     const paths = new Set<string>();
     const branches = new Set<string>();
@@ -91,7 +96,20 @@ describe("host-owned Workspace Session lifecycle", () => {
       repoPath: database.repoPath,
       branchPrefix: "odt",
       worktreeCopyPaths: [".env"],
-      hooks: { preStart: ["setup --local"], postComplete: [] },
+      hooks: { postComplete: [] },
+      actions: {
+        items: [
+          {
+            id: "setup",
+            icon: "configure",
+            name: "Setup",
+            command: "setup --local",
+            runOnWorktreeCreate: true,
+            waitBeforeAgentStart: true,
+          },
+        ],
+        defaultActionId: "setup",
+      },
     });
     const roles = [{ id: "role-1", name: "Reviewer", systemPrompt: "Original prompt." }];
     const state = {
@@ -103,7 +121,8 @@ describe("host-owned Workspace Session lifecycle", () => {
       failRenameSave: false,
       failRenameRollback: false,
       titleNotAttached: false,
-      failHook: false,
+      failActions: false,
+      failCloseTerminals: false,
       failCleanup: false,
       failDelete: false,
       failArchive: false,
@@ -125,20 +144,6 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
-      devServerService: {
-        stopWorkspaceSession: (input) =>
-          Effect.succeed({
-            ...input,
-            workingDirectory: null,
-            scripts: [],
-            revision: 0,
-            updatedAt: "2026-09-27T00:00:00.000Z",
-          }),
-        forgetWorkspaceSession: (input) =>
-          Effect.sync(() => {
-            forgottenDevServerSessions.push(input.owner.sessionId);
-          }),
-      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -252,17 +257,38 @@ describe("host-owned Workspace Session lifecycle", () => {
             paths.delete(value);
           }),
       }),
-      systemCommands: {
-        resolveCommandPath: () => Effect.die(new Error("Unexpected command lookup")),
-        versionCommand: () => Effect.die(new Error("Unexpected version command")),
-        runCommandAllowFailure: (command, args, options) =>
-          Effect.sync(() => {
-            calls.push("hook");
-            expect(command).toBe("setup");
-            expect(args).toEqual(["--local"]);
-            expect(options?.cwd).toBe(state.worktree);
-            return { ok: !state.failHook, stdout: "", stderr: state.failHook ? "hook failed" : "" };
-          }),
+      worktreeActions: {
+        createRun: (target) => ({
+          run: (request) =>
+            Effect.suspend(() => {
+              calls.push("actions");
+              actionRuns.push({ ...request, worktreePath: target.worktreePath });
+              if (!state.failActions) return Effect.void;
+              return Effect.fail(
+                new WorktreeActionExitError({
+                  actionName: "Setup",
+                  exitCode: 1,
+                  signal: null,
+                  outputTail: [],
+                  message: 'Worktree action "Setup" exited with code 1.',
+                }),
+              );
+            }),
+          stopTerminals: () =>
+            Effect.suspend(() => {
+              calls.push("close-action-terminals");
+              return state.failCloseTerminals
+                ? Effect.fail(
+                    new WorktreeKeptForRunningActionsError({
+                      ...target,
+                      terminalIds: ["terminal-1"],
+                      message: `Failed to stop worktree action terminals: terminal busy\nOpenDucktor kept the worktree at ${target.worktreePath} and the branch ${target.branch}.`,
+                      cause: [],
+                    }),
+                  )
+                : Effect.void;
+            }),
+        }),
       },
       runtime: {
         requireReady: () =>
@@ -336,7 +362,8 @@ describe("host-owned Workspace Session lifecycle", () => {
       dependencies,
       calls,
       starts,
-      forgottenDevServerSessions,
+      actionRuns,
+      config,
       titles,
       state,
       roles,
@@ -806,7 +833,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const h = setup();
     h.state.changed = true;
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    expect(h.calls).toEqual(["worktree", "copy", "hook", "save"]);
+    expect(h.calls).toEqual(["worktree", "copy", "actions", "save"]);
     expect(h.state.worktree).toBe(
       path.join(database.configDir, "worktrees", "workspace-sessions", "my-feature"),
     );
@@ -815,6 +842,75 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.state.createBranch).toBe(true);
     expect(h.state.startPoint).toBe("HEAD");
     expect(h.paths.has(h.state.worktree)).toBe(true);
+    expect(h.actionRuns).toEqual([
+      {
+        context: {
+          kind: "workspace_session",
+          workspaceId: "fairnest",
+          sessionId: session.id,
+          repoPath: database.repoPath,
+        },
+        worktreePath: h.state.worktree,
+        actions: h.config.actions,
+      },
+    ]);
+  });
+
+  test("does not run worktree actions in the current checkout", async () => {
+    const h = setup();
+    await Effect.runPromise(h.service.create(input()));
+    expect(h.actionRuns).toEqual([]);
+    expect(h.calls).not.toContain("actions");
+  });
+
+  test("removes the new worktree and reports the action message when a worktree action fails", async () => {
+    const h = setup();
+    h.state.failActions = true;
+    const error = await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
+    expect(error).toMatchObject({
+      operation: "workspaceSession.worktreeActions",
+      message: 'Worktree action "Setup" exited with code 1.',
+    });
+    expect(h.calls).toEqual([
+      "worktree",
+      "copy",
+      "actions",
+      "close-action-terminals",
+      "remove-worktree",
+      "delete-branch",
+    ]);
+    expect(h.paths.size).toBe(0);
+    expect(h.branches.size).toBe(0);
+    expect(await Effect.runPromise(h.service.listActive("fairnest"))).toEqual([]);
+  });
+
+  test("closes worktree action terminals before Git cleanup when the chat save fails", async () => {
+    const h = setup();
+    h.state.failSave = true;
+    await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
+      "database write failed",
+    );
+    expect(h.calls).toEqual([
+      "worktree",
+      "copy",
+      "actions",
+      "save",
+      "close-action-terminals",
+      "remove-worktree",
+      "delete-branch",
+    ]);
+  });
+
+  test("keeps the new worktree and branch when an action terminal cannot stop", async () => {
+    const h = setup();
+    h.state.failSave = true;
+    h.state.failCloseTerminals = true;
+    await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
+      /database write failed[\s\S]*Failed to stop worktree action terminals: terminal busy\nOpenDucktor kept the worktree at .* and the branch odt\/my-feature\./,
+    );
+    expect(h.calls).toEqual(["worktree", "copy", "actions", "save", "close-action-terminals"]);
+    expect(h.paths.size).toBe(1);
+    expect(h.branches.size).toBe(1);
   });
 
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
@@ -825,7 +921,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(session.executionTarget.workingDirectory).toBe(
       "C:\\worktrees\\workspace-sessions\\my-feature",
     );
-    expect(h.calls).toEqual(["worktree", "copy", "hook", "save"]);
+    expect(h.calls).toEqual(["worktree", "copy", "actions", "save"]);
   });
 
   test("uses an explicit new branch name without changing the worktree name", async () => {
@@ -866,7 +962,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         worktree: { mode, name: "my-feature", branchName: "odt/my-feature" },
       });
       expect(session.executionTarget.kind).toBe("local_worktree");
-      expect(h.calls).toEqual(["worktree", "copy", "hook", "save"]);
+      expect(h.calls).toEqual(["worktree", "copy", "actions", "save"]);
       expect(h.starts).toEqual([]);
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       const started = await router.invoke("workspace_session_start", ref);
@@ -962,150 +1058,6 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(await Effect.runPromise(h.service.listActive("fairnest"))).toEqual([]);
   });
 
-  test("stops only the selected session before removing its worktree and keeps it when stop fails", async () => {
-    const h = setup();
-    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    const ref = { workspaceId: "fairnest", sessionId: session.id };
-    let failStop = true;
-    const service = createWorkspaceSessionService({
-      ...h.dependencies,
-      devServerService: {
-        forgetWorkspaceSession: h.dependencies.devServerService.forgetWorkspaceSession,
-        stopWorkspaceSession: (input) =>
-          Effect.suspend(() => {
-            h.calls.push(
-              `stop-dev:${input.owner.kind === "workspace_session" ? input.owner.sessionId : "wrong-owner"}`,
-            );
-            return failStop
-              ? Effect.fail(
-                  new HostOperationError({
-                    operation: "test.stop",
-                    message: "dev server stop failed",
-                  }),
-                )
-              : Effect.succeed({
-                  ...input,
-                  workingDirectory: session.executionTarget.workingDirectory,
-                  scripts: [],
-                  revision: 0,
-                  updatedAt: "2026-09-27T00:00:00.000Z",
-                });
-          }),
-      },
-    });
-    const archiveInput = {
-      ...ref,
-      confirmStop: true,
-      removeWorktree: true,
-      worktreeConfirmation: {
-        workingDirectory: session.executionTarget.workingDirectory,
-        branchName: "odt/my-feature",
-      },
-    };
-    h.calls.length = 0;
-    await expect(Effect.runPromise(service.archive(archiveInput))).rejects.toThrow(
-      "dev server stop failed",
-    );
-    expect((await Effect.runPromise(service.get(ref))).archivedAt).toBeNull();
-    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
-    expect(h.calls).toEqual([`stop-dev:${session.id}`]);
-    expect(h.forgottenDevServerSessions).toEqual([]);
-    failStop = false;
-    await Effect.runPromise(service.archive(archiveInput));
-    expect(h.forgottenDevServerSessions).toEqual([session.id]);
-    expect(h.calls.indexOf(`stop-dev:${session.id}`)).toBeLessThan(
-      h.calls.indexOf("remove-worktree"),
-    );
-  });
-
-  test.each([
-    ["create", "my-feature"],
-    ["create", "other-directory"],
-    ["restore", "my-feature"],
-    ["restore", "other-directory"],
-  ] as const)("failed %s preserves a competing creation at %s", async (operation, name) => {
-    const h = setup();
-    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    const ref = { workspaceId: "fairnest", sessionId: session.id };
-    const archived = await Effect.runPromise(
-      h.service.archive({
-        ...ref,
-        confirmStop: true,
-        removeWorktree: true,
-        worktreeConfirmation: {
-          workingDirectory: session.executionTarget.workingDirectory,
-          branchName: "odt/my-feature",
-        },
-      }),
-    );
-    h.calls.length = 0;
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const entered = yield* Deferred.make<void>();
-          const release = yield* Deferred.make<void>();
-          let first = true;
-          const service = createWorkspaceSessionService({
-            ...h.dependencies,
-            git: {
-              ...h.dependencies.git,
-              createWorktree: (...args) =>
-                Effect.suspend(() => {
-                  if (!first) return h.dependencies.git.createWorktree(...args);
-                  first = false;
-                  return Deferred.succeed(entered, undefined).pipe(
-                    Effect.andThen(Deferred.await(release)),
-                    Effect.andThen(
-                      Effect.fail(
-                        new HostOperationError({
-                          operation: "git.worktree.add",
-                          message: "Another request created the branch",
-                        }),
-                      ),
-                    ),
-                  );
-                }),
-            },
-          });
-          // Always release acquisition before the scope interrupts its child.
-          const loser = yield* Effect.acquireRelease(
-            Effect.forkScoped(
-              operation === "create"
-                ? service.create(worktreeInput()).pipe(Effect.asVoid)
-                : service.restore(ref).pipe(Effect.asVoid),
-            ),
-            () => Deferred.succeed(release, undefined),
-          );
-          yield* Deferred.await(entered);
-          const winner = yield* service.create({
-            ...worktreeInput(),
-            worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
-          });
-          yield* Deferred.succeed(release, undefined);
-          const failed = yield* Fiber.await(loser);
-          expect(Exit.isFailure(failed)).toBe(true);
-          if (Exit.isFailure(failed)) {
-            expect(Cause.pretty(failed.cause)).toContain("Another request created the branch");
-          }
-          expect(yield* service.get({ ...ref, sessionId: winner.session.id })).toEqual(
-            winner.session,
-          );
-        }),
-      ),
-    );
-    expect(h.paths.size).toBe(1);
-    expect(
-      h.paths.has(path.join(database.configDir, "worktrees", "workspace-sessions", name)),
-    ).toBe(true);
-    expect(
-      h.registered.has(path.join(database.configDir, "worktrees", "workspace-sessions", name)),
-    ).toBe(true);
-    expect(h.branches.has("refs/heads/odt/my-feature")).toBe(true);
-    expect(h.calls).not.toContain("remove-worktree");
-    expect(h.calls).not.toContain("delete-branch");
-    expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
-  });
-
   test("retains the saved target when cancellation arrives during persistence", async () => {
     const h = setup();
     const cancellation = new AbortController();
@@ -1179,7 +1131,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     },
   );
 
-  test.each(["partialCreate", "failHook", "failSave"] as const)(
+  test.each(["partialCreate", "failActions", "failSave"] as const)(
     "preserves an existing branch when creation fails at %s",
     async (failure) => {
       const h = setup();
@@ -1298,7 +1250,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.calls).toEqual([]);
   });
 
-  test.each(["failHook", "failSave"] as const)(
+  test.each(["failActions", "failSave"] as const)(
     "rolls back all created Git resources after %s",
     async (failure) => {
       const h = setup();
@@ -1816,7 +1768,6 @@ describe("host-owned Workspace Session lifecycle", () => {
         ),
       ).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
-      expect(h.forgottenDevServerSessions).toEqual([]);
       h.state[failure] = false;
       const archived = await Effect.runPromise(
         h.service.archive({
@@ -1830,7 +1781,6 @@ describe("host-owned Workspace Session lifecycle", () => {
         }),
       );
       expect(archived.archivedAt).not.toBeNull();
-      expect(h.forgottenDevServerSessions).toEqual([session.id]);
       expect(archived.executionTarget).toMatchObject({
         kind: "local_worktree",
         worktreeState: "removed",
@@ -1866,7 +1816,40 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.calls).not.toContain("delete-branch");
   });
 
-  test.each(["failHook", "failRestore"] as const)(
+  test("restore runs worktree actions for the chat in its restored worktree", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    h.actionRuns.length = 0;
+    h.calls.length = 0;
+    await Effect.runPromise(h.service.restore(ref));
+    expect(h.calls).toEqual(["worktree", "copy", "actions"]);
+    expect(h.actionRuns).toEqual([
+      {
+        context: {
+          kind: "workspace_session",
+          workspaceId: "fairnest",
+          sessionId: session.id,
+          repoPath: database.repoPath,
+        },
+        worktreePath: session.executionTarget.workingDirectory,
+        actions: h.config.actions,
+      },
+    ]);
+  });
+
+  test.each(["failActions", "failRestore"] as const)(
     "restore rolls back new Git resources after %s",
     async (failure) => {
       const h = setup();
@@ -1884,14 +1867,50 @@ describe("host-owned Workspace Session lifecycle", () => {
         }),
       );
       h.state[failure] = true;
+      h.calls.length = 0;
       await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
+      expect(h.calls).toEqual([
+        "worktree",
+        "copy",
+        "actions",
+        "close-action-terminals",
+        "remove-worktree",
+        "delete-branch",
+      ]);
       expect(h.paths.size).toBe(0);
       expect(h.branches.size).toBe(0);
       h.state[failure] = false;
       expect((await Effect.runPromise(h.service.restore(ref))).archivedAt).toBeNull();
     },
   );
+
+  test("restore keeps the new worktree and branch when an action terminal cannot stop", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const archived = await Effect.runPromise(
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    h.state.failActions = true;
+    h.state.failCloseTerminals = true;
+    h.calls.length = 0;
+    await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
+      /Workspace Session restore failed[\s\S]*terminal busy[\s\S]*OpenDucktor kept the worktree at .* and the branch odt\/my-feature/,
+    );
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
+    expect(h.calls).toEqual(["worktree", "copy", "actions", "close-action-terminals"]);
+    expect(h.paths.size).toBe(1);
+    expect(h.branches.size).toBe(1);
+  });
 
   test("rejects removal of the checkout or a worktree that changed branches", async () => {
     const h = setup();
@@ -1945,10 +1964,10 @@ describe("host-owned Workspace Session lifecycle", () => {
         },
       }),
     );
-    h.state.failHook = true;
+    h.state.failActions = true;
     h.state.failCleanup = true;
     await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
-      /hook failed[\s\S]*worktree removal failed/,
+      /Worktree action "Setup" exited with code 1\.[\s\S]*worktree removal failed/,
     );
     expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
   });

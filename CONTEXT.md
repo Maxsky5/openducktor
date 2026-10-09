@@ -465,7 +465,7 @@ _Avoid_: Human Approval, Task Completion Path, PR text
 ### Build Tools And Git
 
 **Build Tools**:
-The **Sessions Page** area for inspecting and operating on implementation context, including **Git Panel**, **Dev Server**, and **Open In**. **Build Tools** are usually tied to a **Build Worktree**.
+The **Sessions Page** area for inspecting and operating on implementation context, including **Git Panel** and **Open In**. **Build Tools** are usually tied to a **Build Worktree**.
 _Avoid_: Builder Agent, Workflow MCP Tool, Runtime
 
 **Git Panel**:
@@ -548,13 +548,9 @@ _Avoid_: Change Request, QA Report, Chat Composer message
 The **Sessions Page** action that opens the current repository or **Build Worktree** in an external tool such as a terminal, editor, or file manager.
 _Avoid_: Runtime, Tool Call, File Reference
 
-**Dev Server**:
-A development server process used during implementation work. The **Repository** holds **Dev Server** scripts. A task runs its own group in its **Build Worktree**. A **Workspace Session** runs its own group in its saved repository root or worktree directory.
-_Avoid_: Runtime, Agent Session
-
-**Dev Server Script**:
-One configured command inside a **Dev Server** group, such as a frontend or backend development command. A **Dev Server Script** has its own status and terminal output.
-_Avoid_: Slash Command, Tool Call, Workflow Action
+**Action**:
+A named shell command that the **Repository** holds, such as an install, test, or development server command. The user runs an **Action** from the **Sessions Page** top bar, and each run opens a new interactive terminal in the task worktree or the **Workspace Session** directory. An **Action** can also run when OpenDucktor creates a worktree, and it can make the agent wait until it succeeds. Such a run does not open the terminal panel, but its terminal shows the output when the user opens the panel. One **Action** is the default **Action** of the **Repository**.
+_Avoid_: Workflow Action, Dev Server, worktree setup script, Slash Command
 
 ### Tools And Boundaries
 

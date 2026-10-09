@@ -9,8 +9,21 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Exit, Fiber } from "effect";
+import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import {
+  createBuildSettingsConfig,
+  createBuildStartGitPort,
+  createBuildStartRuntimeRegistry,
+  createBuildStartWorktreeFiles,
+  createBuildWorkspaceSettingsService,
+  createBuildWorktreeActions,
+  createRuntimeDefinitionsService,
+  task as harnessTask,
+} from "../tasks/test-support/task-workflow-harness";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import { createTaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import { createAgentSessionCommandService as createControlService } from "./agent-session-command-service";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
@@ -273,7 +286,7 @@ describe("createAgentSessionCommandService", () => {
           prepare: () =>
             Effect.succeed({
               canonicalRepoPath: "/repo",
-              cleanup: () =>
+              rollback: () =>
                 Effect.sync(() => {
                   calls.push("cleanup-worktree");
                   return "";
@@ -377,7 +390,7 @@ describe("createAgentSessionCommandService", () => {
             calls.push("prepare");
             return {
               canonicalRepoPath: "/repo",
-              cleanup: () => Effect.succeed(""),
+              rollback: () => Effect.void,
               preparedStatus: preparedTask.status,
               role: "build" as const,
               runtimeKind: "opencode" as const,
@@ -459,7 +472,7 @@ describe("createAgentSessionCommandService", () => {
         prepare: () =>
           Effect.succeed({
             canonicalRepoPath: "/repo",
-            cleanup: () =>
+            rollback: () =>
               Effect.sync(() => {
                 calls.push("cleanup-worktree");
                 return "";
@@ -505,6 +518,78 @@ describe("createAgentSessionCommandService", () => {
     expect(calls).toEqual(["stop-runtime", "cleanup-worktree"]);
   });
 
+  test("closes worktree action terminals before it removes a new worktree when the runtime start fails", async () => {
+    const calls: unknown[] = [];
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
+    const service = createAgentSessionCommandService({
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
+      taskLifecycle,
+      taskSessionStart: createTaskSessionStartPreparationService({
+        taskStore: createTaskStoreTestDouble({
+          getTask: () => Effect.succeed(harnessTask({ status: "ready_for_dev" })),
+        }),
+        gitPort: createBuildStartGitPort({ calls }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        worktreeActions: createBuildWorktreeActions(calls),
+        worktreeFiles: createBuildStartWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { postComplete: [] },
+        }),
+        runtimeDefinitionsService: createRuntimeDefinitionsService(),
+        runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+        taskSessionLifecycleCoordinator: taskLifecycle,
+      }),
+      runtime: {
+        startSession: () =>
+          Effect.fail(
+            new HostOperationError({ operation: "test.start", message: "runtime start failed" }),
+          ),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.die(new Error("unexpected list")),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).rejects.toThrow("runtime start failed");
+    const types = calls.map(
+      (call) => z.object({ type: z.string() }).safeParse(call).data?.type ?? null,
+    );
+    expect(types).toContain("runWorktreeActions");
+    expect(types).toContain("stopWorktreeActionTerminals");
+    expect(types.indexOf("stopWorktreeActionTerminals")).toBeLessThan(
+      types.indexOf("removeWorktree"),
+    );
+    expect(calls).toContainEqual({
+      type: "removeWorktree",
+      repoPath: "/repo",
+      worktreePath: "/worktrees/repo/task-1",
+      force: true,
+    });
+  });
+
   test("keeps a new worktree when session storage and runtime stop both fail", async () => {
     const calls: string[] = [];
     const preparedTask = task("ready_for_dev");
@@ -514,7 +599,7 @@ describe("createAgentSessionCommandService", () => {
         prepare: () =>
           Effect.succeed({
             canonicalRepoPath: "/repo",
-            cleanup: () =>
+            rollback: () =>
               Effect.sync(() => {
                 calls.push("cleanup-worktree");
                 return "";
@@ -579,7 +664,7 @@ describe("createAgentSessionCommandService", () => {
         prepare: () =>
           Effect.succeed({
             canonicalRepoPath: "/repo",
-            cleanup: () =>
+            rollback: () =>
               Effect.sync(() => {
                 calls.push("cleanup-worktree");
                 return "";

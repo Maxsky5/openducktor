@@ -51,8 +51,8 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { preStart: [], postComplete: [] },
-  devServers: [],
+  hooks: { postComplete: [] },
+  actions: { items: [], defaultActionId: null },
   promptOverrides: {
     "permission.read_only.reject": {
       template: "Custom read-only rejection for {{role}}.",

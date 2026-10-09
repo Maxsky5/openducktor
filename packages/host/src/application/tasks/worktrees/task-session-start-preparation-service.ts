@@ -2,13 +2,13 @@ import type { AgentRole, RuntimeKind, TaskCard, TaskStatus } from "@openducktor/
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import type { WorktreeActionRunner } from "../../actions/worktree-action-runner";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -18,6 +18,7 @@ import {
 import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { resolveRuntimeDescriptorForTaskSession } from "../support/task-worktree-cleanup";
+import { failOperationAfterRollback } from "../support/task-worktree-rollback";
 import {
   prepareNewTaskWorktree,
   type PreparedTaskWorktree,
@@ -28,7 +29,7 @@ import type { TaskSessionLifecycleCoordinator } from "./task-session-lifecycle-c
 
 export type PreparedTaskSessionStart = {
   canonicalRepoPath: string;
-  cleanup: PreparedTaskWorktree["cleanup"];
+  rollback: PreparedTaskWorktree["rollback"];
   preparedStatus: TaskStatus;
   role: AgentRole;
   runtimeKind: RuntimeKind;
@@ -52,7 +53,7 @@ export type TaskSessionStartPreparationDependencies = {
   gitPort?: GitPort;
   taskStore: TaskStorePort;
   settingsConfig?: SettingsConfigPort;
-  systemCommands?: SystemCommandPort;
+  worktreeActions?: WorktreeActionRunner;
   workspaceSettingsService?: WorkspaceSettingsService;
   runtimeDefinitionsService?: RuntimeDefinitionsService;
   runtimeRegistry?: RuntimeRegistryPort;
@@ -67,7 +68,7 @@ export const createTaskSessionStartPreparationService = ({
   gitPort,
   taskStore,
   settingsConfig,
-  systemCommands,
+  worktreeActions,
   workspaceSettingsService,
   runtimeDefinitionsService,
   runtimeRegistry,
@@ -86,7 +87,7 @@ export const createTaskSessionStartPreparationService = ({
             runtimeDefinitionsService,
             runtimeRegistry,
             settingsConfig,
-            systemCommands,
+            worktreeActions,
             worktreeFiles,
             workspaceSettingsService,
           ),
@@ -164,8 +165,7 @@ export const createTaskSessionStartPreparationService = ({
           );
         }
 
-        let cleanup: PreparedTaskWorktree["cleanup"] = () => Effect.succeed("");
-        const cleanupFailedPreparation = () => cleanup();
+        let rollback: PreparedTaskWorktree["rollback"] = () => Effect.void;
         const prepared = yield* Effect.result(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
@@ -204,40 +204,33 @@ export const createTaskSessionStartPreparationService = ({
                     worktreePath,
                     branch,
                   );
-                  cleanup = () =>
+                  rollback = () =>
                     Effect.scoped(
                       taskSessionLifecycleCoordinator
                         .acquireWorktreeLifecycle([worktreePath])
-                        .pipe(Effect.andThen(newWorktree.cleanup())),
+                        .pipe(Effect.andThen(newWorktree.rollback())),
                     );
                 }
               }),
             );
             return {
               canonicalRepoPath,
-              cleanup,
+              rollback,
               preparedStatus: task.status,
               role,
               runtimeKind: descriptor.kind,
               task,
               workingDirectory: worktreePath,
             } satisfies PreparedTaskSessionStart;
-          }).pipe(
-            Effect.onInterrupt(() => cleanupFailedPreparation().pipe(Effect.orDie, Effect.asVoid)),
-          ),
+          }).pipe(Effect.onInterrupt(() => rollback().pipe(Effect.orDie))),
         );
         if (prepared._tag === "Success") {
           return prepared.success;
         }
-        const cleanupError = yield* cleanupFailedPreparation();
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "task.session_start.prepare",
-            message: `${errorMessage(prepared.failure)}${cleanupError}`,
-            cause: prepared.failure,
-            details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
-          }),
-        );
+        return yield* failOperationAfterRollback(rollback(), prepared.failure, {
+          operation: "task.session_start.prepare",
+          details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
+        });
       });
     },
     complete(

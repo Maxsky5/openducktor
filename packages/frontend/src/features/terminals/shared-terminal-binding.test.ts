@@ -12,14 +12,14 @@ describe("shared terminal binding", () => {
     const root = document.documentElement;
     const originalClass = root.className;
     const container = document.createElement("div");
-    container.style.setProperty("--dev-server-terminal-foreground", "#eeeeee");
-    container.style.setProperty("--dev-server-terminal-panel", "#171717");
+    container.style.setProperty("--terminal-foreground", "#eeeeee");
+    container.style.setProperty("--terminal-panel", "#171717");
     document.body.append(container);
     const binding = createTerminalBinding(container, createTerminalOptions(container, {}));
     const resize = spyOn(binding.terminal, "resize");
     try {
-      container.style.setProperty("--dev-server-terminal-foreground", "#202020");
-      container.style.setProperty("--dev-server-terminal-panel", "#ffffff");
+      container.style.setProperty("--terminal-foreground", "#202020");
+      container.style.setProperty("--terminal-panel", "#ffffff");
       root.classList.toggle("dark");
       await Bun.sleep(0);
       expect(binding.terminal.options.theme?.foreground).toBe("#202020");

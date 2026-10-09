@@ -20,7 +20,7 @@ export const useWorkspaceSessionTerminals = ({
     [sessions, workspace.workspaceId],
   );
   const scope = useMemo((): TerminalScope | null => {
-    if (!selected || selected.archivedAt !== null) return null;
+    if (!selected) return null;
     return {
       key: scopeKey(workspace.workspaceId, selected.id),
       context: {
@@ -29,9 +29,31 @@ export const useWorkspaceSessionTerminals = ({
         sessionId: selected.id,
         repoPath: workspace.repoPath,
       },
-      workingDirectory: selected.executionTarget.workingDirectory,
-      workingDirectoryError: "This chat has no saved directory. Reopen or restore the chat.",
+      ...chatWorkingDirectory(selected),
     };
   }, [selected, workspace.repoPath, workspace.workspaceId]);
   return useTerminals({ scope, isScopeLoading: false, mountedScopeKeys });
 };
+
+function chatWorkingDirectory(
+  record: WorkspaceSession,
+): Pick<TerminalScope, "workingDirectory" | "workingDirectoryError"> {
+  if (record.archivedAt !== null) {
+    return {
+      workingDirectory: null,
+      workingDirectoryError: "This chat is archived. Restore the chat to use terminals.",
+    };
+  }
+  const target = record.executionTarget;
+  if (target.kind === "local_worktree" && target.worktreeState === "removed") {
+    return {
+      workingDirectory: null,
+      workingDirectoryError:
+        "The worktree of this chat was removed. Restore the chat to create the worktree again.",
+    };
+  }
+  return {
+    workingDirectory: target.workingDirectory,
+    workingDirectoryError: "This chat has no saved directory. Reopen or restore the chat.",
+  };
+}

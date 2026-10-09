@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
+import { invalidateTerminalList } from "@/state/queries/terminals";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
@@ -35,6 +36,7 @@ export function useDelegationOperations({
         throw new Error("Active workspace is required.");
       }
       await startDelegatedBuild(repo, taskId, workspaceId, loadRepoRuntimeCatalog);
+      await invalidateTerminalList(appQueryClient, { kind: "task", repoPath: repo, taskId });
       await refreshTaskData(repo, taskId);
     },
     [activeWorkspace, loadRepoRuntimeCatalog, refreshTaskData],

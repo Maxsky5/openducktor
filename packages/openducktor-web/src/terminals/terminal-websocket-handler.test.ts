@@ -678,8 +678,10 @@ describe("terminalWebSocketHandler", () => {
           store: { get: () => unusedDependency("getWorkspaceSession") },
         },
         ptyPort: unusedPtyPort,
-        resolveLaunchEnvironment: () =>
-          Effect.succeed({ shell: "/bin/sh", args: [], env: { PATH: "/usr/bin" } }),
+        launchEnvironment: {
+          shell: () => unusedDependency("shell"),
+          command: () => unusedDependency("command"),
+        },
         hostInstanceIdFactory: () => "host-1",
       }),
     );

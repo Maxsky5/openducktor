@@ -2,7 +2,6 @@ import { HostDependencyError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 
@@ -13,21 +12,16 @@ const missingTaskDependency = (message: string): HostDependencyError =>
   });
 
 type TaskCleanupDependencies = {
-  devServerService: DevServerService;
   gitPort: GitPort;
   settingsConfig: SettingsConfigPort;
   workspaceSettingsService: WorkspaceSettingsService;
 };
 
 export const requireTaskDeleteDependencies = (
-  devServerService: DevServerService | undefined,
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
 ): TaskCleanupDependencies => {
-  if (!devServerService) {
-    throw missingTaskDependency("Dev server service is required for task_delete.");
-  }
   if (!gitPort) {
     throw missingTaskDependency("Git port is required for task_delete.");
   }
@@ -38,18 +32,14 @@ export const requireTaskDeleteDependencies = (
     throw missingTaskDependency("Workspace settings service is required for task_delete.");
   }
 
-  return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
+  return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
 export const requireTaskCloseDependencies = (
-  devServerService: DevServerService | undefined,
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
 ): TaskCleanupDependencies => {
-  if (!devServerService) {
-    throw missingTaskDependency("Dev server service is required for task_close.");
-  }
   if (!gitPort) {
     throw missingTaskDependency("Git port is required for task_close.");
   }
@@ -60,7 +50,7 @@ export const requireTaskCloseDependencies = (
     throw missingTaskDependency("Workspace settings service is required for task_close.");
   }
 
-  return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
+  return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
 export const requireTaskCloseWorktreeService = (

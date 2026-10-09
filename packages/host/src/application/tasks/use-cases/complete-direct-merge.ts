@@ -8,7 +8,6 @@ import { cleanupDirectMergeTaskState } from "../support/task-worktree-cleanup";
 import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 
 export const createTaskCompleteDirectMergeUseCase = ({
-  devServerService,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -23,7 +22,6 @@ export const createTaskCompleteDirectMergeUseCase = ({
       const { repoPath, taskId } = input;
       const dependencies = requireMergedTaskCleanupDependencies(
         {
-          devServerService,
           gitPort,
           settingsConfig,
           taskWorktreeService,

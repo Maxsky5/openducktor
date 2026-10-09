@@ -33,6 +33,7 @@ import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog"
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
+import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
 import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
@@ -312,6 +313,7 @@ function WorkspaceSessionActiveContent({
         key={selected.id}
         workspace={workspace}
         record={selected}
+        repoActions={<SessionRepoActions workspace={workspace} terminal={terminalModel} />}
         viewControls={viewControls}
         onArchive={onArchive}
         isArchiving={isArchiving}

@@ -6,6 +6,7 @@ import {
   type PersistedGlobalConfigV3,
   persistedGlobalConfigV3Schema,
   persistedGlobalConfigV4Schema,
+  repoActionCommandLines,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -94,19 +95,82 @@ const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): J
     : { ...workspace, git: { ...git, provider } };
 };
 
-const migrateRepositoryGitConfigs = (payload: PersistedConfigObject) => {
+const migrateWorkspaces = (
+  payload: PersistedConfigObject,
+  migrate: (workspaceId: string, workspace: JSONType) => JSONType,
+) => {
   if (!isPersistedConfigObject(payload.workspaces)) {
     return payload;
   }
   return {
     ...payload,
     workspaces: Object.fromEntries(
-      Object.entries(payload.workspaces).map(([id, workspace]) => [
-        id,
-        migrateRepositoryGitConfig(id, workspace),
-      ]),
+      Object.entries(payload.workspaces).map(([id, workspace]) => [id, migrate(id, workspace)]),
     ),
   };
+};
+
+const WORKTREE_SETUP_ACTION_ID = "worktree-setup";
+const legacyPreStartSchema = z.array(z.string());
+// The dev server schema trimmed each id, so a hand-edited id can have outer spaces.
+const legacyDevServersSchema = z.array(z.looseObject({ id: z.string().trim() }));
+
+const uniqueActionId = (baseId: string, takenIds: ReadonlySet<string>): string => {
+  let id = baseId;
+  for (let suffix = 1; takenIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
+  return id;
+};
+
+// Converts the worktree setup script and dev servers into repository actions.
+const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSONType => {
+  if (!isPersistedConfigObject(workspace)) return workspace;
+  const hooks = workspace.hooks;
+  const hasPreStart = isPersistedConfigObject(hooks) && Object.hasOwn(hooks, "preStart");
+  const hasDevServers = Object.hasOwn(workspace, "devServers");
+  if (!hasPreStart && !hasDevServers) return workspace;
+  if (Object.hasOwn(workspace, "actions")) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" contains both actions and legacy dev server or worktree setup settings.`,
+    });
+  }
+  const { devServers = [], ...migrated } = workspace;
+  const legacyDevServers = legacyDevServersSchema.safeParse(devServers);
+  const preStart = legacyPreStartSchema.safeParse(hasPreStart ? hooks.preStart : []);
+  if (!legacyDevServers.success || !preStart.success) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" has invalid legacy dev server or worktree setup settings.`,
+    });
+  }
+  const devServerItems = legacyDevServers.data.map((devServer) => ({
+    ...devServer,
+    icon: "play",
+    runOnWorktreeCreate: false,
+    waitBeforeAgentStart: false,
+  }));
+  const items: JSONType[] = [...devServerItems];
+  const setupLines = preStart.data.map((line) => line.trim()).filter(Boolean);
+  let setupActionId: string | null = null;
+  // A setup script with only comment lines ran nothing, so it becomes no action.
+  if (repoActionCommandLines(setupLines.join("\n")).length > 0) {
+    setupActionId = uniqueActionId(
+      WORKTREE_SETUP_ACTION_ID,
+      new Set(devServerItems.map((devServer) => devServer.id)),
+    );
+    items.unshift({
+      id: setupActionId,
+      icon: "configure",
+      name: "Worktree setup",
+      command: setupLines.join("\n"),
+      runOnWorktreeCreate: true,
+      waitBeforeAgentStart: true,
+    });
+  }
+  const defaultActionId = devServerItems[0]?.id ?? setupActionId;
+  if (hasPreStart) {
+    const { preStart: _preStart, ...currentHooks } = hooks;
+    migrated.hooks = currentHooks;
+  }
+  return { ...migrated, actions: { items, defaultActionId } };
 };
 
 const migratePersistedConfig = (payload: PersistedConfigObject) => {
@@ -127,7 +191,10 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
       }),
     );
   }
-  return migrateRepositoryGitConfigs(migrateReusablePrompts(migrated));
+  return migrateWorkspaces(
+    migrateWorkspaces(migrateReusablePrompts(migrated), migrateRepositoryGitConfig),
+    migrateRepositoryActions,
+  );
 };
 
 const parseSupportedConfigObject = (

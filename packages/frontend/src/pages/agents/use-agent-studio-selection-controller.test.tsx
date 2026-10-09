@@ -132,9 +132,8 @@ const repoSettings: RepoSettingsInput = {
     profileId: "",
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
   postCompleteHooks: [],
-  devServers: [],
+  actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
     spec: null,

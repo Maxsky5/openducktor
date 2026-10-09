@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildDevServerDraftValidationMap,
   buildReusablePromptValidationErrors,
-  countDevServerDraftValidationErrors,
-  hasConfiguredHookCommands,
-  normalizeDevServers,
-  normalizeHooks,
-  normalizeRepoScripts,
+  dropBlankLines,
   parseHookLines,
   prepareReusablePromptsForSave,
 } from "./settings-read-model";
@@ -21,96 +16,9 @@ describe("settings-read-model", () => {
     ]);
   });
 
-  test("hasConfiguredHookCommands ignores blank draft rows", () => {
-    expect(
-      hasConfiguredHookCommands({
-        preStart: ["", ""],
-        postComplete: [""],
-      }),
-    ).toBe(false);
-
-    expect(
-      hasConfiguredHookCommands({
-        preStart: ["bun install", ""],
-        postComplete: [],
-      }),
-    ).toBe(true);
-
-    expect(
-      hasConfiguredHookCommands({
-        preStart: ["   "],
-        postComplete: [],
-      }),
-    ).toBe(false);
-  });
-
-  test("normalizeHooks trims commands and removes blank rows", () => {
-    expect(
-      normalizeHooks({
-        preStart: [" bun install ", " "],
-        postComplete: ["npm test"],
-      }),
-    ).toEqual({
-      preStart: ["bun install"],
-      postComplete: ["npm test"],
-    });
-
-    expect(
-      normalizeHooks({
-        preStart: [" "],
-        postComplete: [""],
-      }),
-    ).toEqual({
-      preStart: [],
-      postComplete: [],
-    });
-  });
-
-  test("builds validation errors for incomplete dev server drafts", () => {
-    expect(
-      buildDevServerDraftValidationMap([
-        { id: "frontend", name: "", command: " bun run dev " },
-        { id: "backend", name: "Backend", command: "   " },
-        { id: "   ", name: "", command: "bun run api" },
-      ]),
-    ).toEqual({
-      frontend: {
-        name: "Tab label is required.",
-      },
-    });
-    expect(
-      countDevServerDraftValidationErrors([
-        { id: "frontend", name: "", command: " bun run dev " },
-        { id: "backend", name: "Backend", command: "   " },
-        { id: "   ", name: "", command: "bun run api" },
-      ]),
-    ).toBe(3);
-  });
-
-  test("normalizeDevServers trims entries, skips blank commands, and rejects invalid configured rows", () => {
-    expect(
-      normalizeDevServers([{ id: "frontend", name: " Frontend ", command: " bun run dev " }]),
-    ).toEqual([{ id: "frontend", name: "Frontend", command: "bun run dev" }]);
-    expect(normalizeDevServers([{ id: "frontend", name: "Frontend", command: "   " }])).toEqual([]);
-
-    expect(() =>
-      normalizeDevServers([{ id: "frontend", name: "   ", command: "bun run dev" }]),
-    ).toThrow("Dev server tab labels cannot be blank");
-    expect(() =>
-      normalizeDevServers([{ id: "   ", name: "Frontend", command: "bun run dev" }]),
-    ).toThrow("Dev server id cannot be blank.");
-  });
-
-  test("normalizeRepoScripts normalizes hooks and dev server scripts", () => {
-    expect(
-      normalizeRepoScripts({
-        hooks: { preStart: [" bun install "], postComplete: [] },
-        devServers: [{ id: "frontend", name: " Frontend ", command: " bun run dev " }],
-      }),
-    ).toEqual({
-      hooks: { preStart: ["bun install"], postComplete: [] },
-      devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-    });
+  test("dropBlankLines trims lines and removes blank rows", () => {
+    expect(dropBlankLines([" npm test ", " ", ""])).toEqual(["npm test"]);
+    expect(dropBlankLines([" "])).toEqual([]);
   });
 
   test("validates reusable prompt required fields, names, and duplicates", () => {

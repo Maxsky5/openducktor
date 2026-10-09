@@ -22,6 +22,7 @@ import { WorkspaceSessionRenameDialog } from "./workspace-session-rename-dialog"
 type Props = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
+  repoActions: ReactNode;
   viewControls: ReactNode;
   onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
   isArchiving: boolean;
@@ -30,6 +31,7 @@ type Props = {
 export function WorkspaceSessionHeader({
   workspace,
   record,
+  repoActions,
   viewControls,
   onArchive,
   isArchiving,
@@ -63,6 +65,7 @@ export function WorkspaceSessionHeader({
         }
         actions={
           <>
+            {repoActions}
             {record.roleSnapshot ? (
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -13,7 +13,7 @@ describe("getOpenState", () => {
     expect(
       getOpenState(
         {
-          kind: "repository-dev-servers",
+          kind: "repository-actions",
           repositoryPath: "/repo-two",
         },
         INITIAL_NAVIGATION,
@@ -29,7 +29,7 @@ describe("getOpenState", () => {
         repositorySection: "scripts",
       },
       focusRequest: {
-        kind: "repository-dev-servers",
+        kind: "repository-actions",
       },
     });
   });
