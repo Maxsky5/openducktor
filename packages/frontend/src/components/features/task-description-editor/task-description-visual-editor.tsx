@@ -189,6 +189,7 @@ export default function TaskDescriptionVisualEditor({
       preventDefault();
       return;
     }
+    if (!onUpload) return;
     const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (images.length === 0) return;
     preventDefault();

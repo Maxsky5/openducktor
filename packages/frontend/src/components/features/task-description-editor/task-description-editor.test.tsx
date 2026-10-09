@@ -111,6 +111,27 @@ describe("TaskDescriptionEditor", () => {
     // This test mounts Tiptap and checks three full editor renders.
   }, 5_000);
 
+  test.each(["paste", "drop"] as const)(
+    "leaves image %s events alone without an upload handler and blocks them when locked",
+    async (kind) => {
+      const props = { ...createProps(), onUpload: undefined, markdown: "Draft", onChange: mock() };
+      const view = render(<TaskDescriptionEditor {...props} />);
+      const content = await waitFor(() => requireElement(view.container, ".tiptap"));
+      const surface = content.parentElement;
+      if (!surface) throw new Error("Expected the editor surface");
+      const image = new File([new Uint8Array([1])], "draft.png", { type: "image/png" });
+      const data = { files: [image], getData: () => "" };
+      const eventData = kind === "paste" ? { clipboardData: data } : { dataTransfer: data };
+
+      // Tiptap handles text on its child. Check whether the upload surface cancels the event.
+      expect(fireEvent[kind](surface, eventData)).toBe(true);
+
+      view.rerender(<TaskDescriptionEditor {...props} disabled />);
+      await waitFor(() => expect(content.getAttribute("contenteditable")).toBe("false"));
+      expect(fireEvent[kind](surface, eventData)).toBe(false);
+    },
+  );
+
   test.each([
     ["Inline math", "LaTeX formula", "x^2", "Insert formula"],
     ["Link", "Link destination", "https://example.com", "Insert link"],

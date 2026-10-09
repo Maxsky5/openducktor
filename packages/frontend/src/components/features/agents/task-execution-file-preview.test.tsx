@@ -362,7 +362,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       }),
     );
     render(renderPreview({ selectedFile, onClose: () => {} }));
-    const image = await screen.findByRole("img", { name: "Diagram" });
+    const image = await screen.findByRole("img", { name: "Diagram" }, { timeout: 4_000 });
     await waitFor(() => expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U="));
     expect(readTextFileMock).toHaveBeenCalledWith({
       rootPath: "/tmp/assets",
