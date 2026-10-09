@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type PropsWithChildren, type ReactElement, useEffect, useRef } from "react";
+import { type PropsWithChildren, type ReactElement, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
 import { getAutopilotRule } from "@/features/autopilot/autopilot-catalog";
@@ -10,37 +10,30 @@ import {
   toTaskMap,
 } from "@/features/autopilot/autopilot-events";
 import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
-import { useSessionStartWorkflowRunner } from "@/features/session-start/use-session-start-workflow-runner";
+import { useNotificationContext } from "@/state/notifications/notification-context";
 import { errorMessage } from "@/lib/errors";
-import {
-  useAgentOperationsContext,
-  useRuntimeDefinitionsContext,
-  useTaskSnapshotContext,
-  useWorkspaceStateContext,
-} from "../app-state-contexts";
-import { loadTaskWorktree } from "../operations/agent-orchestrator/runtime/runtime";
-import { loadAgentSessionListFromQuery } from "../queries/agent-sessions";
+import { useTaskSnapshotContext, useWorkspaceStateContext } from "../app-state-contexts";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
+import { host } from "../operations/shared/host";
+import { withWorktreeRefresh } from "@/features/session-start/with-worktree-refresh";
 
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
+  const client = useMemo(
+    () => ({
+      agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, host.agentSessionWorkflowLaunch),
+      agentSessionWorkflowLaunchRead: host.agentSessionWorkflowLaunchRead,
+      agentSessionWorkflowLaunchRecover: host.agentSessionWorkflowLaunchRecover,
+    }),
+    [queryClient],
+  );
+  const { sessionStartNotifications } = useNotificationContext();
   const { activeWorkspace } = useWorkspaceStateContext();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTaskSnapshotContext();
-  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
-  const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
-  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
-    workspaceId: activeWorkspace?.workspaceId ?? null,
-    startAgentSession,
-    sendAgentMessage,
-  });
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const previousRepoRef = useRef<string | null>(null);
-  const previousTasksByIdRef = useRef<Map<string, TaskCard> | null>(null);
-
-  if (previousTasksByIdRef.current === null) {
-    previousTasksByIdRef.current = new Map();
-  }
+  const previousTasksByIdRef = useRef(new Map<string, TaskCard>());
 
   useEffect(() => {
     if (!workspaceRepoPath || !activeWorkspace) {
@@ -50,9 +43,6 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     }
 
     const nextTasksById = toTaskMap(tasks);
-    if (previousTasksByIdRef.current === null) {
-      throw new Error("Autopilot task baseline ref was not initialized.");
-    }
     if (previousRepoRef.current !== workspaceRepoPath) {
       previousRepoRef.current = workspaceRepoPath;
       previousTasksByIdRef.current = nextTasksById;
@@ -83,15 +73,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
                 activeWorkspace,
                 task: observedEvent.task,
                 actionId,
-                alwaysStartQaReviewsFresh: autopilotSettings.alwaysStartQaReviewsFresh,
-                queryClient,
-                loadTaskSessionRecords: (repoPath, taskId) =>
-                  loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {
-                    forceFresh: true,
-                  }),
-                loadRepoRuntimeCatalog,
-                resolveTaskWorktree: loadTaskWorktree,
-                runSessionStartWorkflow,
+                client,
+                notifications: sessionStartNotifications,
               });
 
               if (outcome.kind === "skipped") {
@@ -118,11 +101,10 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       }),
     );
   }, [
+    client,
     workspaceRepoPath,
     activeWorkspace,
-    loadRepoRuntimeCatalog,
-    queryClient,
-    runSessionStartWorkflow,
+    sessionStartNotifications,
     settingsSnapshotQuery.data?.autopilot,
     tasks,
   ]);

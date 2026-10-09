@@ -1,376 +1,101 @@
-import type { AgentSessionRecord, AutopilotActionId, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentRuntimeCatalog,
-  RuntimeWorkingDirectoryRef,
-} from "@openducktor/core";
-import type { QueryClient } from "@tanstack/react-query";
-import type {
-  ResolvedSessionStartDecision,
-  RunSessionStartWorkflow,
-} from "@/features/session-start";
-import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { errorMessage } from "@/lib/errors";
-import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
-import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
-import { loadRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
-import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
-import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AutopilotActionId, TaskCard, WorkflowLaunchRequest } from "@openducktor/contracts";
+import {
+  submitWorkflowLaunch,
+  WorkflowLaunchFailure,
+} from "../session-start/session-start-workflow";
+import { presentWorkflowLaunchOutcome } from "../session-start/session-start-message-recovery";
+import { host } from "@/state/operations/shared/host";
+import { AUTOPILOT_ACTION_DEFINITIONS } from "./autopilot-catalog";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { getSessionLaunchAction } from "../session-start/session-start-launch-options";
-import { AUTOPILOT_ACTION_DEFINITIONS, type AutopilotActionDefinition } from "./autopilot-catalog";
-
-type AutopilotActionOutcome =
-  | {
-      kind: "started";
-      message: string;
-      postStartActionError: Error | null;
-    }
-  | {
-      kind: "skipped";
-      message: string;
-    };
-
-type ExecuteAutopilotActionArgs = {
-  activeWorkspace: ActiveWorkspace;
-  task: TaskCard;
-  actionId: AutopilotActionId;
-  alwaysStartQaReviewsFresh: boolean;
-  queryClient: QueryClient;
-  loadTaskSessionRecords: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
-  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
-  resolveTaskWorktree: (
-    repoPath: string,
-    taskId: string,
-  ) => Promise<{
-    workingDirectory: string;
-  } | null>;
-  runSessionStartWorkflow: RunSessionStartWorkflow;
-};
-
-type ResolvedAutopilotStart = {
-  kind: "start";
-  startMode: "fresh" | "reuse" | "fork";
-  sourceSession?: AgentSessionIdentity | null;
-  targetWorkingDirectory?: string | null;
-  preferredSelection?: AgentModelSelection | null;
-};
-
-type SkippedAutopilotStart = {
-  kind: "skipped";
-  message: string;
-};
-
-type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
-
-const ROLE_LABELS = AGENT_ROLE_LABELS;
-
-const getPullRequestStartError = async ({
-  actionId,
-  activeWorkspace,
-  queryClient,
-}: Pick<ExecuteAutopilotActionArgs, "actionId" | "activeWorkspace" | "queryClient">): Promise<
-  string | null
-> => {
-  if (actionId !== "startGeneratePullRequest") {
-    return null;
-  }
-
-  let context;
-  try {
-    context = await queryClient.fetchQuery(
-      repositoryGitProviderContextQueryOptions(activeWorkspace.repoPath),
-    );
-  } catch (error) {
-    const cause = error instanceof Error ? error : new Error(errorMessage(error));
-    return gitProviderReadError(cause);
-  }
-  if (!context?.descriptor.capabilities.supportsPullRequests) {
-    return "The current Git provider does not support Pull Requests.";
-  }
-
-  return pullRequestHealthError(context);
-};
-
-const findLatestSessionRecordByRole = (
-  sessions: AgentSessionRecord[],
-  role: AgentRole,
-): AgentSessionRecord | null => {
-  const matchingSessions = sessions
-    .filter((session) => session.role === role)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-
-  return matchingSessions[0] ?? null;
-};
-
-const toAgentModelSelection = (
-  selection: AgentSessionRecord["selectedModel"],
-): AgentModelSelection | null => {
-  if (!selection) {
-    return null;
-  }
-
-  const normalizedSelection: AgentModelSelection = {
-    runtimeKind: selection.runtimeKind,
-    providerId: selection.providerId,
-    modelId: selection.modelId,
-  };
-  if (selection.variant) {
-    normalizedSelection.variant = selection.variant;
-  }
-  if (selection.profileId) {
-    normalizedSelection.profileId = selection.profileId;
-  }
-  return normalizedSelection;
-};
-
-const resolveAutopilotSelection = async ({
-  activeWorkspace,
-  role,
-  preferredSelection,
-  queryClient,
-  loadRepoRuntimeCatalog,
-}: {
-  activeWorkspace: ActiveWorkspace;
-  role: AgentRole;
-  preferredSelection?: AgentModelSelection | null;
-  queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
-}): Promise<AgentModelSelection> => {
-  if (preferredSelection) {
-    return preferredSelection;
-  }
-
-  const repoConfig = await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId);
-  return resolveRequiredDefaultSessionSelection({
-    role,
-    repoSettings: toRepoSettingsInput(repoConfig),
-    repoPath: activeWorkspace.repoPath,
-    loadRepoRuntimeCatalog: (runtimeRef) =>
-      loadRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
-  });
-};
-
-const isSkippableAutopilotError = (action: AutopilotActionDefinition, cause: unknown): boolean => {
-  if (!(cause instanceof Error)) {
-    return false;
-  }
-
-  return (
-    action.startPolicy.kind === "launchAction" &&
-    action.startPolicy.missingBuildTargetOutcome === "skip" &&
-    cause.message.includes(MISSING_BUILD_TARGET_ERROR)
-  );
-};
-
-const resolveAutopilotStart = async ({
-  activeWorkspace,
-  action,
-  task,
-  alwaysStartQaReviewsFresh,
-  loadTaskSessionRecords,
-  resolveTaskWorktree,
-}: Pick<
-  ExecuteAutopilotActionArgs,
-  | "activeWorkspace"
-  | "task"
-  | "alwaysStartQaReviewsFresh"
-  | "loadTaskSessionRecords"
-  | "resolveTaskWorktree"
-> & {
-  action: AutopilotActionDefinition;
-}): Promise<AutopilotStartResolution> => {
-  const forceFreshQa = action.id === "startQa" && alwaysStartQaReviewsFresh;
-  const taskSessions = forceFreshQa
-    ? []
-    : await loadTaskSessionRecords(activeWorkspace.repoPath, task.id);
-  const latestRoleSession = findLatestSessionRecordByRole(taskSessions, action.role);
-
-  if (action.startPolicy.kind === "latestRoleSession") {
-    if (!latestRoleSession) {
-      return {
-        kind: "skipped",
-        message: `No ${ROLE_LABELS[action.role]} session is available to ${action.startPolicy.startMode} for task "${task.id}".`,
-      };
-    }
-
-    return {
-      kind: "start",
-      startMode: action.startPolicy.startMode,
-      sourceSession: toAgentSessionIdentity(latestRoleSession),
-      preferredSelection: toAgentModelSelection(latestRoleSession.selectedModel),
-    };
-  }
-
-  const { allowedStartModes } = getSessionLaunchAction(action.launchActionId);
-  if (!allowedStartModes.includes("reuse")) {
-    return {
-      kind: "start",
-      startMode: "fresh",
-    };
-  }
-
-  const continuationTarget = await resolveTaskWorktree(activeWorkspace.repoPath, task.id);
-  if (!continuationTarget) {
-    if (action.role === "qa" && allowedStartModes.includes("fresh")) {
-      return {
-        kind: "start",
-        startMode: "fresh",
-      };
-    }
-    throw new Error(MISSING_BUILD_TARGET_ERROR);
-  }
-
-  if (
-    latestRoleSession &&
-    normalizeWorkingDirectory(latestRoleSession.workingDirectory) ===
-      normalizeWorkingDirectory(continuationTarget.workingDirectory)
-  ) {
-    return {
-      kind: "start",
-      startMode: "reuse",
-      sourceSession: toAgentSessionIdentity(latestRoleSession),
-      targetWorkingDirectory: continuationTarget.workingDirectory,
-    };
-  }
-
-  return {
-    kind: "start",
-    startMode: "fresh",
-    targetWorkingDirectory: continuationTarget.workingDirectory,
-  };
-};
-
-const requireAutopilotSourceSession = (
-  resolution: ResolvedAutopilotStart,
-): AgentSessionIdentity => {
-  if (resolution.sourceSession) {
-    return resolution.sourceSession;
-  }
-  throw new Error(`${resolution.startMode} autopilot start requires a source session.`);
-};
-
-const toSessionStartDecision = ({
-  resolution,
-  selectedModel,
-}: {
-  resolution: ResolvedAutopilotStart;
-  selectedModel: AgentModelSelection | null;
-}): ResolvedSessionStartDecision => {
-  if (resolution.startMode === "reuse") {
-    return {
-      startMode: "reuse",
-      sourceSession: requireAutopilotSourceSession(resolution),
-    };
-  }
-
-  if (!selectedModel) {
-    throw new Error(`${resolution.startMode} autopilot start requires a selected model.`);
-  }
-
-  if (resolution.startMode === "fork") {
-    return {
-      startMode: "fork",
-      sourceSession: requireAutopilotSourceSession(resolution),
-      selectedModel,
-    };
-  }
-
-  return {
-    startMode: "fresh",
-    selectedModel,
-  };
-};
+import type {
+  SessionStartNotificationPublisher,
+  SessionStartNotificationInput,
+} from "../session-start/session-start-orchestration";
+import { SessionStartWorkflowError } from "../session-start/session-start-orchestration";
 
 export const executeAutopilotAction = async ({
   activeWorkspace,
   task,
   actionId,
-  alwaysStartQaReviewsFresh,
-  queryClient,
-  loadTaskSessionRecords,
-  loadRepoRuntimeCatalog,
-  resolveTaskWorktree,
-  runSessionStartWorkflow,
-}: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
+  client = host,
+  notifications,
+}: {
+  activeWorkspace: ActiveWorkspace;
+  task: Pick<TaskCard, "id" | "title">;
+  actionId: AutopilotActionId;
+  client?: Pick<
+    typeof host,
+    | "agentSessionWorkflowLaunch"
+    | "agentSessionWorkflowLaunchRead"
+    | "agentSessionWorkflowLaunchRecover"
+  >;
+  notifications?: SessionStartNotificationPublisher;
+}) => {
+  const request: WorkflowLaunchRequest = {
+    launchAttemptId: crypto.randomUUID(),
+    workspaceId: activeWorkspace.workspaceId,
+    repoPath: activeWorkspace.repoPath,
+    taskId: task.id,
+    policy: { kind: "automatic", actionId },
+    instruction: { kind: "kickoff" },
+  };
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
-
-  try {
-    const pullRequestError = await getPullRequestStartError({
-      actionId,
-      activeWorkspace,
-      queryClient,
-    });
-    if (pullRequestError) {
-      return {
-        kind: "skipped",
-        message: pullRequestError,
+  const notification = {
+    launchAttemptId: request.launchAttemptId,
+    workspaceId: request.workspaceId,
+    taskId: task.id,
+    taskTitle: task.title,
+    role: action.role,
+  };
+  const reportFailure = (cause: unknown, message: string): void => {
+    try {
+      notifications?.reportFailure(cause, notification);
+    } catch (reportCause) {
+      console.error(message, reportCause);
+    }
+  };
+  const outcome = await submitWorkflowLaunch(request, client);
+  if (outcome.phase === "skipped")
+    return { kind: "skipped" as const, message: outcome.skipReason ?? "Workflow launch skipped." };
+  if (outcome.failure || outcome.phase === "canceled") {
+    const failure = new WorkflowLaunchFailure(outcome);
+    const message = failure.message;
+    let handled = false;
+    try {
+      handled = presentWorkflowLaunchOutcome(outcome, client);
+    } catch (cause) {
+      reportFailure(cause, "Cannot report workflow presentation failure.");
+    }
+    try {
+      const notificationInput: SessionStartNotificationInput = {
+        ...notification,
+        inAppFeedbackHandled: handled,
       };
+      if (outcome.session) notificationInput.session = outcome.session;
+      const published =
+        (await notifications?.publishSessionError(notificationInput, message)) ?? false;
+      handled ||= published;
+    } catch (cause) {
+      reportFailure(cause, "Cannot report workflow notification failure.");
     }
-
-    const startResolution = await resolveAutopilotStart({
-      activeWorkspace,
-      action,
-      task,
-      alwaysStartQaReviewsFresh,
-      loadTaskSessionRecords,
-      resolveTaskWorktree,
-    });
-    if (startResolution.kind === "skipped") {
-      return startResolution;
-    }
-    let selectedModel: AgentModelSelection | null = null;
-    if (startResolution.startMode !== "reuse") {
-      const selectionInput: Parameters<typeof resolveAutopilotSelection>[0] = {
-        activeWorkspace,
-        role: action.role,
-        queryClient,
-        loadRepoRuntimeCatalog,
-      };
-      if (startResolution.preferredSelection !== undefined) {
-        selectionInput.preferredSelection = startResolution.preferredSelection;
-      }
-      selectedModel = await resolveAutopilotSelection(selectionInput);
-    }
-
-    const request: Parameters<typeof runSessionStartWorkflow>[0]["request"] = {
-      taskId: task.id,
-      role: action.role,
-      launchActionId: action.launchActionId,
-      postStartAction: "kickoff",
-    };
-    if (startResolution.targetWorkingDirectory !== undefined) {
-      request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
-    }
-    if (actionId === "startQa" && alwaysStartQaReviewsFresh) {
-      request.queueIfBusy = true;
-    }
-    const workflow = await runSessionStartWorkflow({
-      request,
-      decision: toSessionStartDecision({
-        resolution: startResolution,
-        selectedModel,
-      }),
-      task,
-    });
-
+    const error = new SessionStartWorkflowError(failure, handled);
+    if (!outcome.ownershipSaved) throw error;
     return {
-      kind: "started",
+      kind: "started" as const,
       message: `Started ${action.label} for ${task.id}.`,
-      postStartActionError: workflow.postStartActionError,
+      postStartActionError: error,
     };
-  } catch (error) {
-    if (isSkippableAutopilotError(action, error)) {
-      return {
-        kind: "skipped",
-        message: errorMessage(error),
-      };
-    }
-    throw error;
   }
+  if (outcome.session) {
+    try {
+      notifications?.publishSessionStarted({ ...notification, session: outcome.session });
+    } catch (cause) {
+      reportFailure(cause, "Cannot report workflow notification failure.");
+    }
+  }
+  return {
+    kind: "started" as const,
+    message: `Started ${action.label} for ${task.id}.`,
+    postStartActionError: null,
+  };
 };

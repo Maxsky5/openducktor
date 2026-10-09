@@ -17,12 +17,25 @@ import {
   parseCodexAppServerRequestResult,
   type CodexAppServerClientRequestMap,
 } from "@openducktor/contracts";
+import { isCodexRpcError } from "./codex-app-server-shared";
+import { CodexMessageRejectedError } from "./codex-message-rejected-error";
 
 const requestCodex = async <Method extends CodexJsonRpcRequest["method"]>(
   transport: CodexJsonRpcTransport,
   request: Extract<CodexJsonRpcRequest, { method: Method }>,
 ): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
-  const result = await transport.request(request);
+  let result;
+  try {
+    result = await transport.request(request);
+  } catch (cause) {
+    if (
+      cause instanceof Error &&
+      (request.method === "turn/start" || request.method === "turn/steer") &&
+      isCodexRpcError(cause, request.method)
+    )
+      throw new CodexMessageRejectedError(cause);
+    throw cause;
+  }
   return parseCodexAppServerRequestResult(request.method, result);
 };
 

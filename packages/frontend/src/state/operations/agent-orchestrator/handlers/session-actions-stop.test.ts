@@ -548,10 +548,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      loadSourceSession: async () => {
-        callOrder.push("force-read-model-refresh");
-        return null;
-      },
       refreshTaskData: async () => {
         callOrder.push("refresh-task-data");
       },
@@ -597,10 +593,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      loadSourceSession: async () => {
-        loadSourceSessionCalls += 1;
-        return null;
-      },
       refreshTaskData: async (repoPath, taskIdOrIds) => {
         refreshTaskDataCalls.push([repoPath, taskIdOrIds]);
       },

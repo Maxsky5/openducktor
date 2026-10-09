@@ -1,23 +1,16 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type {
-  AgentSessionControlSummary,
-  AgentWorkflowSessionStartInput,
-} from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
-  replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
-  createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { closeProjectedBackgroundQuestions } from "../session-read-model/agent-session-live-projection";
@@ -106,14 +99,12 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     workspaceRepoPath: "/tmp/repo",
     workspaceId: "workspace-1",
     adapter,
-    replaceSession: (session) => {
-      sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
-    },
+
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },
     currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-    sessionStartGateRef: { current: createSessionStartGate() },
+
     sessionTurnState: sessionTurnState.sessionTurnState,
     updateSession: (identity, updater) => {
       const current = getAgentSession(sessionsRef.current, identity);
@@ -135,23 +126,18 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
         requestIds,
       );
     },
-    canonicalizePath: async (path) => path,
-    startWorkflowSession: defaultStartWorkflowSession,
-    loadTaskDocuments: async () => ({
-      specMarkdown: "",
-      planMarkdown: "",
-      qaMarkdown: "",
-    }),
+
+    launchWorkflow: async () => {
+      throw new Error("Unexpected workflow launch.");
+    },
+
     loadRepoPromptOverrides: async () => ({}),
-    loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+
     liveSessionHost: {
       agentSessionLiveReplyApproval: async () => {},
       agentSessionLiveReplyQuestion: async () => {},
     },
-    loadSourceSession: async ({ sourceSession }) =>
-      getAgentSession(sessionsRef.current, sourceSession),
-    loadAgentSessionHistory: async () => null,
-    refreshSessionRecords: async () => {},
+
     refreshTaskData: async () => {},
     invalidateSessionStopQueries: async () => {},
   };
@@ -162,13 +148,3 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     adapter,
   });
 };
-
-const defaultStartWorkflowSession = async (
-  input: AgentWorkflowSessionStartInput,
-): Promise<AgentSessionControlSummary> => ({
-  externalSessionId: "session-1",
-  runtimeKind: input.runtimeKind,
-  workingDirectory: input.targetWorkingDirectory ?? "/tmp/repo",
-  startedAt: "2026-02-22T08:10:00.000Z",
-  status: "idle",
-});

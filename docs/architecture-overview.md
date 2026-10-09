@@ -47,22 +47,19 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 
 ## Start an agent session
 
-1. The task content of the Sessions page calls `startAgentSession` in `use-agent-orchestrator-operations.ts`.
-2. `start-session.ts` applies `fresh`, `reuse`, or `fork` rules.
-3. `session-start-launch-options.ts` resolves the mode for the selected launch action.
-4. A fresh or forked session reads task documents, resolves the runtime, and reads the repository default model.
-5. Every fresh workflow role uses the task-session bootstrap. The first role creates the canonical task worktree, copies the configured files, and runs the worktree-creation actions. Later roles check and reuse that worktree. The runtime stays repository-scoped, but the session uses the worktree. Only Builder completion moves the task to `in_progress`.
-6. The host starts the selected runtime. Descriptors and `RuntimeInstanceSummary` form the shared contract. OpenCode uses `local_http`; Codex uses stdio app-server; Claude uses a host service.
-7. A managed runtime MCP process gets the host bridge URL and token. It cannot pass `workspaceId`. An external client can pass `workspaceId`. Neither path gets a database path.
-8. The host starts, resumes, or forks through the registered live-session adapter.
-9. Renderer attachment sends one snapshot first, then ordered changes and transcript events on the same channel.
-10. On send, the adapter applies the role policy and writes the native request.
-11. For a workflow session, the host stores the durable session record from the successful runtime control result before it returns the result to the frontend. Live activity, pending input, context, routes, and reply IDs remain in host memory.
+The host owns complete workflow launches.
+
+1. The frontend sends one request with the requested workspace, task, action, user choices, and instruction.
+2. The host validates the request and starts an independent worker.
+   A fresh workflow role creates or reuses the task worktree and runs its worktree-creation actions through terminals.
+3. The worker starts, resumes, or forks the selected native session and saves task ownership.
+4. The worker submits the first instruction and reports acceptance with the saved session identity.
+5. Renderer attachment receives ordered live state and transcript events through the existing channel.
 
 Session rules:
 
 - `spec`, `planner`, and `qa` reject mutating permission requests. If the reply fails, keep the request open and emit a system error.
-- Before host control succeeds, stale workspace protection stops session preparation. After host control succeeds, cleanup can stop the runtime, but it must keep the stored task session and its worktree resources.
+- A frontend workspace change does not cancel an admitted workflow launch. Explicit cancellation joins submission and retains saved task ownership.
 - Register and start the live adapter before the runtime can emit events. Release it when the runtime stops.
 - Read transcript history only for the selected session. A history read does not discover pending input or delay live state.
 

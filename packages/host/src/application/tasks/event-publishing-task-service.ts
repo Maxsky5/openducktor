@@ -1,5 +1,7 @@
 import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { TaskMutationCommittedError } from "./task-mutation-committed-error";
+import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import type { TaskSyncService } from "./sync/task-sync-service";
 import {
@@ -21,6 +23,18 @@ export type CreateEventPublishingTaskServiceInput = {
 };
 
 export type EventPublishingTaskService = TaskService & {
+  transitionTaskDeferredPublication: (
+    input: Parameters<TaskService["transitionTask"]>[0],
+  ) => Effect.Effect<
+    {
+      task: import("@openducktor/contracts").TaskCard;
+      publish: Effect.Effect<void, TaskServiceError>;
+    },
+    TaskServiceError
+  >;
+  agentSessionUpsertDeferredPublication: (
+    input: Parameters<TaskService["agentSessionUpsert"]>[0],
+  ) => Effect.Effect<{ publish: Effect.Effect<void, TaskServiceError> }, TaskServiceError>;
   agentSessionUpdateModelDeferredPublication: (
     input: Parameters<TaskService["agentSessionUpdateModel"]>[0],
   ) => Effect.Effect<
@@ -83,12 +97,18 @@ export const createEventPublishingTaskService = ({
         }
         return yield* Effect.fail(result.failure);
       }
-      yield* taskSyncService.publishTasksUpdated(
-        repoPath,
-        successChanges(result.success),
-        operation,
-        statusChanges,
-      );
+      yield* taskSyncService
+        .publishTasksUpdated(repoPath, successChanges(result.success), operation, statusChanges)
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new TaskMutationCommittedError({
+                operation,
+                message: cause.message,
+                cause: cause.cause ?? cause,
+              }),
+          ),
+        );
       return result.success;
     }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
@@ -128,12 +148,69 @@ export const createEventPublishingTaskService = ({
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
     agentSessionsList: (input) => taskService.agentSessionsList(input),
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),
-    agentSessionUpsert: (input) =>
-      publishAfterMutation(
-        "agent-session-create",
+    transitionTaskDeferredPublication: (input) =>
+      taskSyncService.runMutation(
         input.repoPath,
-        changeForTask(input.taskId),
-        taskService.agentSessionUpsert(input),
+        Effect.gen(function* () {
+          const { result, statusChanges } = yield* collectTaskStatusChanges(
+            taskService.transitionTask(input),
+          );
+          if (result._tag === "Failure") return yield* Effect.fail(result.failure);
+          return {
+            task: result.success,
+            publish: taskSyncService.runMutation(
+              input.repoPath,
+              taskSyncService.publishTasksUpdated(
+                input.repoPath,
+                changeForTask(input.taskId),
+                "transition-task",
+                statusChanges,
+              ),
+            ),
+          };
+        }),
+      ),
+    agentSessionUpsertDeferredPublication: (input) =>
+      taskSyncService.runMutation(
+        input.repoPath,
+        taskService.agentSessionUpsert(input).pipe(
+          Effect.map(() => ({
+            publish: taskSyncService.runMutation(
+              input.repoPath,
+              taskSyncService.publishTasksUpdated(
+                input.repoPath,
+                changeForTask(input.taskId),
+                "agent-session-create",
+                [],
+              ),
+            ),
+          })),
+        ),
+      ),
+    agentSessionUpsert: (input) =>
+      taskSyncService.runMutation(
+        input.repoPath,
+        taskService.agentSessionUpsert(input).pipe(
+          Effect.tap(() =>
+            taskSyncService
+              .publishTasksUpdated(
+                input.repoPath,
+                changeForTask(input.taskId),
+                "agent-session-create",
+                [],
+              )
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new TaskSessionOwnershipCommittedError({
+                      operation: "task-session.publish-ownership",
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              ),
+          ),
+        ),
       ),
     agentSessionUpdateModel: (input) =>
       agentSessionUpdateModelDeferredPublication(input).pipe(

@@ -10,6 +10,7 @@ import {
   hydrateAgentChatDraft,
   readAgentChatDraftVersion,
   setAgentChatDraft,
+  subscribeAgentChatDraftClear,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -63,9 +64,10 @@ export const createAgentStudioChatDraftPersistence = ({
   return {
     targetKey: toAgentChatDraftStorageKey(identity),
     hydrate: () => hydrateAgentChatDraft(identity, taskId),
-    set: (draft) => setAgentChatDraft(identity, taskId, draft),
+    set: (draft, options) => setAgentChatDraft(identity, taskId, draft, options),
     readVersion: () => readAgentChatDraftVersion(identity),
     clear: (options) => clearAgentChatDraft(identity, options),
     flush: () => flushAgentChatDraft(identity),
+    subscribeClear: (onClear) => subscribeAgentChatDraftClear(identity, onClear),
   };
 };

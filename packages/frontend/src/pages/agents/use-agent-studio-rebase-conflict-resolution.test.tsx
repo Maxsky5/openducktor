@@ -3,8 +3,6 @@ import { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import {
-  type SendAgentMessage,
-  type SessionStartWorkflowIntent,
   type SessionStartWorkflowResult,
   startSessionWorkflow,
 } from "@/features/session-start/session-start-workflow";
@@ -593,6 +591,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
   });
 });
 
+type SendAgentMessage =
+  import("@/types/state-slices").AgentOperationsContextValue["sendAgentMessage"];
+
 type RetryHarness = {
   args: HookArgs;
   harness: ReturnType<typeof createHookHarness>;
@@ -629,27 +630,56 @@ function createRetryHarness(
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         status: "idle",
       });
-      const intent: SessionStartWorkflowIntent = {
-        taskId: request.taskId,
-        role: request.role,
-        launchActionId: request.launchActionId,
-        startMode: request.initialStartMode ?? "fresh",
-        sourceSession: request.initialSourceSession ?? null,
-        targetWorkingDirectory: request.targetWorkingDirectory ?? null,
-        postStartAction: request.postStartAction,
-        message: request.message,
-      };
-      if (request.assertCanSubmit) intent.assertCanSubmit = request.assertCanSubmit;
+      const identity = toAgentSessionIdentity(builder);
+      let retained: import("@openducktor/contracts").WorkflowLaunchSnapshot;
+      const parts = [{ kind: "text" as const, text: request.message }];
       const workflow = await startSessionWorkflow({
-        queryClient,
-        workspaceId: args.workspaceId,
-        task: args.selection.view.selectedTask,
-        selection: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-        intent,
-        startAgentSession: async () => toAgentSessionIdentity(builder),
-        sendAgentMessage: async (session, parts, options) => {
-          options?.assertCanSubmit?.(builder);
-          return send(session, parts);
+        workspaceId: args.workspaceId!,
+        repoPath: "/repo",
+        launchAttemptId: `attempt-${workflows.length + 1}`,
+        request,
+        decision: {
+          startMode: "fresh",
+          selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+        },
+        readSessionSnapshot: () => builder,
+        client: {
+          agentSessionWorkflowLaunchRead: async () => [retained],
+          agentSessionWorkflowLaunch: async (launch) => {
+            retained = {
+              launchAttemptId: launch.launchAttemptId,
+              workspaceId: launch.workspaceId,
+              repoPath: launch.repoPath,
+              taskId: launch.taskId,
+              role: "build",
+              phase: "failed",
+              acceptance: "rejected",
+              ownershipSaved: true,
+              completedPreStartActions: [],
+              recoveryAllowed: true,
+              session: { ...identity, startedAt: builder.startedAt, status: "idle" },
+            };
+            try {
+              await send(identity, parts);
+            } catch (cause) {
+              retained.failure = {
+                message: cause instanceof Error ? cause.message : String(cause),
+                stage: "send",
+                cleanupErrors: [],
+              };
+            }
+            return retained;
+          },
+          agentSessionWorkflowLaunchRecover: async () => {
+            const receipt = await send(identity, parts);
+            return {
+              ...retained,
+              phase: "completed",
+              acceptance: "accepted",
+              failure: undefined,
+              acceptedMessage: receipt!.acceptedMessage,
+            };
+          },
         },
       });
       workflows.push(workflow);

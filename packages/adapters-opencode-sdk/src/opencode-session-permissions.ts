@@ -18,6 +18,7 @@ import {
 import type { OpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
+import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 
 type RestoreSessionPermissionsInput = {
   client: SessionRecord["client"];
@@ -195,10 +196,13 @@ export const resolvePermissionOwnership = async (
 
 export const assertTurnPermissionsReady = (session: SessionRecord): void => {
   if (session.permissionSetupInFlight)
-    throw new Error(
-      `Cannot start a turn while restoring permissions for OpenCode session '${session.externalSessionId}' in '${session.input.workingDirectory}'. Wait for attachment to finish and retry.`,
+    throw new OpenCodeMessageRejectedError(
+      new Error(
+        `Cannot start a turn while restoring permissions for OpenCode session '${session.externalSessionId}' in '${session.input.workingDirectory}'. Wait for attachment to finish and retry.`,
+      ),
     );
-  if (session.permissionSetupError) throw session.permissionSetupError;
+  if (session.permissionSetupError)
+    throw new OpenCodeMessageRejectedError(session.permissionSetupError);
 };
 
 /** Each caller must finish its own setup so overlapping attaches cannot unblock a turn early. */

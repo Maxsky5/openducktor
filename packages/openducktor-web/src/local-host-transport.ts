@@ -532,12 +532,12 @@ export const subscribeLocalHostRunEvents = async (
 ): Promise<() => void> => {
   return runWebBoundary(
     Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, (event) => {
-        if (!isBrowserSseControlEvent(event) && event.channel === RUN_EVENT_CHANNEL) {
+      return yield* subscribeReadyLocalHostEventsEffect(RUN_EVENT_CHANNEL, (event) => {
+        if (isBrowserSseControlEvent(event)) listener(event);
+        else if (event.channel === RUN_EVENT_CHANNEL) {
           listener(event.payload);
         }
-      })).unsubscribe;
+      });
     }),
   );
 };

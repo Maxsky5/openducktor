@@ -5,7 +5,13 @@ import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import { resolveSessionStartKickoffPromptContext } from "./session-start-prompt-context";
 import { kickoffPromptForTemplate } from "./session-start-prompts";
-import type { SessionStartWorkflowIntent } from "./session-start-workflow";
+import type { SessionStartFlowRequest, ResolvedSessionStartDecision } from "./session-start-types";
+
+type KickoffPreview = Pick<
+  SessionStartFlowRequest,
+  "taskId" | "role" | "launchActionId" | "message"
+> &
+  Pick<ResolvedSessionStartDecision, "targetBranch" | "kickoffPrompt">;
 
 export const resolveSessionStartKickoff = async ({
   queryClient,
@@ -14,10 +20,7 @@ export const resolveSessionStartKickoff = async ({
   workspaceId,
 }: {
   queryClient: QueryClient;
-  intent: Pick<
-    SessionStartWorkflowIntent,
-    "taskId" | "role" | "launchActionId" | "message" | "targetBranch" | "kickoffPrompt"
-  >;
+  intent: KickoffPreview;
   task: TaskCard | null;
   workspaceId: string | null;
 }): Promise<string> => {
@@ -81,7 +84,7 @@ export const createSessionStartKickoffResolver = ({
   workspaceId: string | null;
   task: TaskCard | null;
   request: Pick<
-    SessionStartWorkflowIntent,
+    SessionStartFlowRequest,
     "taskId" | "role" | "launchActionId" | "message" | "postStartAction"
   >;
 }):

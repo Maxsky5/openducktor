@@ -1,5 +1,5 @@
 import type { SessionStartWorkflowResult } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentUserMessagePart } from "@openducktor/core";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type AgentStudioSendTargetInput = {
@@ -7,30 +7,11 @@ type AgentStudioSendTargetInput = {
   canStartNewSession: boolean;
 };
 
-export type StartSessionForMessage = () => Promise<SessionStartWorkflowResult | undefined>;
-
-type ResolveAgentStudioSendTargetInput = AgentStudioSendTargetInput & {
-  startSession: StartSessionForMessage;
-};
+export type StartSessionForMessage = (
+  parts: AgentUserMessagePart[],
+) => Promise<SessionStartWorkflowResult | undefined>;
 
 export const canResolveAgentStudioSendTargetSession = ({
   selectedSessionIdentity,
   canStartNewSession,
 }: AgentStudioSendTargetInput): boolean => selectedSessionIdentity !== null || canStartNewSession;
-
-export const resolveAgentStudioSendTargetSession = async ({
-  selectedSessionIdentity,
-  canStartNewSession,
-  startSession,
-}: ResolveAgentStudioSendTargetInput): Promise<AgentSessionIdentity | null> => {
-  if (selectedSessionIdentity !== null) {
-    return selectedSessionIdentity;
-  }
-
-  if (!canStartNewSession) {
-    return null;
-  }
-
-  const startedSession = await startSession();
-  return startedSession ? toAgentSessionIdentity(startedSession) : null;
-};

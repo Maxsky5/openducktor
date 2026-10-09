@@ -20,7 +20,9 @@ import type {
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import type { BrowserLiveControlEvent } from "@/types";
 
-export type RunEventListener = (payload: HostEventPayload<"openducktor://run-event">) => void;
+export type RunEventListener = (
+  payload: HostEventPayload<"openducktor://run-event"> | BrowserLiveControlEvent,
+) => void;
 export type AzureDevOpsConnectionUpdateListener = (
   payload: HostEventPayload<"openducktor://azure-devops-connection-updated">,
 ) => void;

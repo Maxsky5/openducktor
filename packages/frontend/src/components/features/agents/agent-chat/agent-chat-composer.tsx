@@ -846,7 +846,8 @@ export function AgentChatComposer({
       const result = await submitDraft(submittedDraft);
       if (result !== true && result !== false) {
         restoreSubmittedDraft(submittedSnapshot, result);
-        toast.error("Unable to send message", { description: result.error.message });
+        if (!result.inAppFeedbackHandled)
+          toast.error("Unable to send message", { description: result.error.message });
         return;
       }
       if (!result) {

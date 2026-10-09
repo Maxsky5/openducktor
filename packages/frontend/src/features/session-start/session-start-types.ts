@@ -1,6 +1,10 @@
-import type { GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  GitTargetBranch,
+  RuntimeKind,
+  AgentSessionUserMessagePart,
+} from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export type SessionStartExistingSessionOption = {
@@ -52,3 +56,23 @@ export type NewSessionStartDecision =
   | ReuseSessionStartDecision
   | ForkSessionStartDecision
   | null;
+
+export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
+
+export type SessionStartPostAction = "none" | "kickoff" | "send_message";
+
+export type SessionStartBeforeAction = {
+  action: "human_request_changes";
+  note: string;
+};
+
+export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
+  initialStartMode?: AgentSessionStartMode;
+  postStartAction: SessionStartPostAction;
+  queueIfBusy?: boolean;
+  message?: string;
+  parts?: AgentSessionUserMessagePart[];
+  assertBeforeLaunch?: () => void;
+  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
+  beforeStartAction?: SessionStartBeforeAction;
+};

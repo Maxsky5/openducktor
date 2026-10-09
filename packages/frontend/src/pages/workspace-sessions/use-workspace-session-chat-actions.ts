@@ -1,5 +1,9 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
+import {
+  type AgentModelSelection,
+  type AgentUserMessagePart,
+  normalizeAgentUserMessageParts,
+} from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -7,9 +11,8 @@ import { toast } from "sonner";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
@@ -28,7 +31,10 @@ import type {
 } from "@/types/agent-orchestrator";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
-import { startWorkspaceSession } from "./start-workspace-session";
+import { launchWorkspaceSession } from "./launch-workspace-session";
+import { presentWorkspaceSessionLaunch } from "./use-workspace-session-launch-recovery";
+import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 
 type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>[0], "draft"> & {
   canSend: boolean;
@@ -86,38 +92,6 @@ export function useWorkspaceSessionChatActions(
     latestRecord.current = record;
   }, [record]);
 
-  const ensureSession = async () => {
-    let identity = workspaceSessionIdentity(record);
-    if (!identity) {
-      setStarting(true);
-      ownedStartup.current = true;
-      const started = await startWorkspaceSession(
-        { workspaceId: workspace.workspaceId, sessionId: record.id },
-        record,
-        store,
-        isCurrentWorkspace,
-      );
-      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, started.session);
-      identity = started.identity;
-      if (
-        identity.runtimeKind !== record.runtimeKind ||
-        identity.workingDirectory !== record.executionTarget.workingDirectory
-      )
-        throw new Error(
-          "The started chat does not match its saved runtime or directory. Restore the saved target before sending.",
-        );
-    }
-    return identity;
-  };
-
-  const getStartOwner = (identity: AgentSessionIdentity) => {
-    if (!ownedStartup.current) return null;
-    const session = store.getSessionSnapshot(identity);
-    if (!session)
-      throw new Error("The started chat is missing. Reload session data before sending.");
-    return createAgentMessageStartOwner(session);
-  };
-
   const sendStandaloneMessage = async (
     parts: AgentUserMessagePart[],
     options: AgentMessageSendOptions & { assertCurrent: () => void },
@@ -131,7 +105,7 @@ export function useWorkspaceSessionChatActions(
     sending.current = true;
     setSending(true);
     try {
-      const identity = await ensureSession();
+      const identity = workspaceSessionIdentity(record);
       const assertCurrent = () => {
         options.assertCurrent();
         if (recipientVersion.current !== version || !isMounted() || !isCurrentWorkspace())
@@ -139,11 +113,38 @@ export function useWorkspaceSessionChatActions(
         const currentIdentity = workspaceSessionIdentity(latestRecord.current);
         if (
           latestRecord.current.archivedAt !== null ||
-          (currentIdentity && !matchesAgentSessionIdentity(currentIdentity, identity))
+          (identity && currentIdentity && !matchesAgentSessionIdentity(currentIdentity, identity))
         )
           throw new GitConflictRequestCancelled();
       };
       assertCurrent();
+      if (!identity) {
+        setStarting(true);
+        ownedStartup.current = true;
+        const outcome = await launchWorkspaceSession(
+          {
+            launchAttemptId: crypto.randomUUID(),
+            workspaceId: workspace.workspaceId,
+            repoPath: workspace.repoPath,
+            sessionId: record.id,
+            parts: normalizeAgentUserMessageParts(parts),
+          },
+          record,
+          store,
+          queryClient,
+        );
+        presentWorkspaceSessionLaunch(outcome, title);
+        if (outcome.acceptance !== "accepted" || !outcome.session || !outcome.acceptedMessage)
+          throw new Error(
+            outcome.failure?.message ??
+              "The host did not confirm the conflict message. Inspect this launch before sending again.",
+          );
+        return {
+          recipient: toAgentSessionIdentity(outcome.session),
+          acceptedMessage: outcome.acceptedMessage,
+          postAcceptanceFailure: outcome.failure?.message ?? null,
+        };
+      }
       const sendOptions: AgentMessageSendOptions = {
         sessionScope: { kind: "repository" },
         assertCanSubmit: (session, ownsStart) => {
@@ -153,8 +154,6 @@ export function useWorkspaceSessionChatActions(
           options.assertCanSubmit?.(session, ownsStart);
         },
       };
-      const ownsStart = getStartOwner(identity);
-      if (ownsStart) sendOptions.ownsStart = ownsStart;
       const receipt = await operations.sendAgentMessage(identity, parts, sendOptions);
       if (!receipt)
         throw new Error(
@@ -217,7 +216,7 @@ export function useWorkspaceSessionChatActions(
   const sendDraft = async (
     draft: AgentChatComposerDraft,
     options: DraftSendOptions,
-  ): Promise<boolean> => {
+  ): Promise<AgentChatSendResult> => {
     if (
       sending.current ||
       savingModel.current ||
@@ -229,20 +228,61 @@ export function useWorkspaceSessionChatActions(
     sending.current = true;
     setSending(true);
     setError(null);
+    let launchSubmitted = false;
     try {
       const parts = await resolveAgentStudioSendDraftParts({ ...options, draft });
       if (!parts) return false;
       if (!isMounted() || !isCurrentWorkspace())
         throw new Error("The original chat is no longer available. Reopen it to send your draft.");
-      const identity = await ensureSession();
+      const identity = workspaceSessionIdentity(record);
+      if (!identity) {
+        setStarting(true);
+        ownedStartup.current = true;
+        launchSubmitted = true;
+        const outcome = await launchWorkspaceSession(
+          {
+            launchAttemptId: crypto.randomUUID(),
+            workspaceId: workspace.workspaceId,
+            repoPath: workspace.repoPath,
+            sessionId: record.id,
+            parts: normalizeAgentUserMessageParts(parts),
+          },
+          record,
+          store,
+          queryClient,
+        );
+        presentWorkspaceSessionLaunch(outcome, title);
+        if (outcome.failure) {
+          const message =
+            outcome.failure.message +
+            (outcome.acceptance === "unknown"
+              ? " Inspect the saved session before sending another instruction."
+              : "");
+          if (isMounted()) setError(message);
+        }
+        if (outcome.recoveryAllowed) {
+          const persistence = createWorkspaceSessionChatDraftPersistence(
+            workspace.workspaceId,
+            record.id,
+          );
+          return {
+            kind: "recover_draft",
+            originKey: persistence.targetKey,
+            recoveryKey: persistence.targetKey,
+            persistence,
+            launchAttemptId: outcome.launchAttemptId,
+            error: new Error(outcome.failure?.message ?? "First message failed."),
+            inAppFeedbackHandled: true,
+          };
+        }
+        return outcome.acceptance === "accepted" || outcome.acceptance === "unknown";
+      }
       if (!isMounted() || !isCurrentWorkspace())
         throw new Error("The original chat is no longer available. Reopen it to send your draft.");
       if (options.assertCanSubmit) {
         const sendOptions: AgentMessageSendOptions = {
           assertCanSubmit: options.assertCanSubmit,
         };
-        const ownsStart = getStartOwner(identity);
-        if (ownsStart) sendOptions.ownsStart = ownsStart;
         await operations.sendAgentMessage(identity, parts, sendOptions);
       } else await operations.sendAgentMessage(identity, parts);
       return true;
@@ -253,7 +293,8 @@ export function useWorkspaceSessionChatActions(
         toast.error(`Could not send to "${title}"`, {
           description: message,
         });
-      return false;
+      // An unreadable launch may still send. Keep its instruction out of the composer.
+      return launchSubmitted;
     } finally {
       ownedStartup.current = false;
       sending.current = false;

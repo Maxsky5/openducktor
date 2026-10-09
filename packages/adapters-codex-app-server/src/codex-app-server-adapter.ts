@@ -815,7 +815,10 @@ export class CodexAppServerAdapter
     return summary;
   }
 
-  async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
+  async sendUserMessage(
+    input: SendAgentUserMessageInput,
+    options: { requireNativeAdmission?: boolean } = {},
+  ): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
     resolveCodexSessionScopePolicy(
       input.sessionScope,
@@ -833,15 +836,26 @@ export class CodexAppServerAdapter
     );
     return session instanceof Promise
       ? session.then((boundSession) =>
-          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation),
+          this.sendUserMessageFromBoundSession(
+            input,
+            boundSession,
+            systemInvocation,
+            options.requireNativeAdmission,
+          ),
         )
-      : this.sendUserMessageFromBoundSession(input, session, systemInvocation);
+      : this.sendUserMessageFromBoundSession(
+          input,
+          session,
+          systemInvocation,
+          options.requireNativeAdmission,
+        );
   }
 
   private async sendUserMessageFromBoundSession(
     input: SendAgentUserMessageInput,
     session: CodexSessionState,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
+    requireNativeAdmission = false,
   ): Promise<AcceptedAgentUserMessage> {
     let resolvedQuestionRequestIds: readonly string[];
     if (systemInvocation.kind === "manual_session_compaction") {
@@ -876,7 +890,7 @@ export class CodexAppServerAdapter
       input.parts,
       acceptedUserMessage,
       input.model,
-      resolvedQuestionRequestIds.length > 0,
+      requireNativeAdmission || resolvedQuestionRequestIds.length > 0,
       resolvedQuestionRequestIds,
     );
     this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);

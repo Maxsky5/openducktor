@@ -2,7 +2,6 @@ import type { AgentChatSendResult } from "@/components/features/agents/agent-cha
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type {
   GitBranch,
-  GitTargetBranch,
   ReusablePrompt,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
@@ -69,8 +68,6 @@ type UseAgentStudioSessionActionsArgs = {
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
@@ -134,8 +131,6 @@ export function useAgentStudioSessionActions({
   runSessionStartWorkflow,
   sendAgentMessage,
   continueInterruptedTurn,
-  humanRequestChangesTask,
-  setTaskTargetBranch,
   replyAgentApproval,
   answerAgentQuestion,
   scheduleQueryUpdate,
@@ -177,12 +172,8 @@ export function useAgentStudioSessionActions({
     workspaceId: activeWorkspaceId,
     workspaceRepoPath,
     runSessionStartWorkflow,
-    humanRequestChangesTask,
     scheduleQueryUpdate,
   };
-  if (setTaskTargetBranch) {
-    sessionStartInput.setTaskTargetBranch = setTaskTargetBranch;
-  }
 
   const {
     isStarting,

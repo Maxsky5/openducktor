@@ -1,4 +1,7 @@
-import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
+import {
+  OpenCodeMessageRejectedError,
+  type OpencodeSessionRuntimeConnection,
+} from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
@@ -16,7 +19,10 @@ import { toAgentSessionControlSummary } from "../../application/agent-sessions/a
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
@@ -240,10 +246,16 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.tryPromise({
           try: () => connection.sendUserMessage(request),
           catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.send-user-message", {
-              runtimeId: runtime.runtimeId,
-              externalSessionId: input.externalSessionId,
-            }),
+            cause instanceof OpenCodeMessageRejectedError
+              ? new AgentSessionMessageRejectedError({
+                  operation: "opencode-live-session.send-user-message",
+                  message: cause.message,
+                  cause,
+                })
+              : toHostOperationError(cause, "opencode-live-session.send-user-message", {
+                  runtimeId: runtime.runtimeId,
+                  externalSessionId: input.externalSessionId,
+                }),
         }).pipe(
           Effect.flatMap((event) =>
             parseOutput(

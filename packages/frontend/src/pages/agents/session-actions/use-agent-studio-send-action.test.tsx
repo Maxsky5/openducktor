@@ -315,47 +315,6 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
-  test("tracks a new-session send across draft and target session contexts", async () => {
-    const sendDeferred = createDeferred<void>();
-    const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
-    const initialArgs: HookArgs = {
-      ...createBaseArgs(),
-      selectedSessionIdentity: createSelectedSessionIdentity(null),
-      startSession,
-      sendAgentMessage,
-    };
-    const harness = createHookHarness(useAgentStudioSendAction, initialArgs);
-
-    await harness.mount();
-    let sendPromise: Promise<AgentChatSendResult> | undefined;
-    await harness.run((state) => {
-      sendPromise = state.onSend(createDraft("hello"));
-    });
-
-    await harness.waitFor((state) => state.isSending);
-    await harness.update({
-      ...createBaseArgs(),
-      selectedSessionIdentity: createSelectedSessionIdentity("session-new"),
-      startSession,
-      sendAgentMessage,
-    });
-    await harness.waitFor((state) => state.isSending);
-
-    await harness.run(async () => {
-      sendDeferred.resolve();
-      await sendPromise;
-    });
-    await harness.waitFor((state) => !state.isSending);
-
-    expect(startSession).toHaveBeenCalledWith();
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
-      { kind: "text", text: "hello" },
-    ]);
-
-    await harness.unmount();
-  });
-
   test("tracks a new-session send before session start resolves", async () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionWorkflowResult>>();
     const startSession = mock(() => startDeferred.promise);
@@ -381,11 +340,8 @@ describe("useAgentStudioSendAction", () => {
     });
     await harness.waitFor((state) => !state.isSending);
 
-    expect(startSession).toHaveBeenCalledWith();
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
-      { kind: "text", text: "first" },
-    ]);
+    expect(startSession).toHaveBeenCalledWith([{ kind: "text", text: "first" }]);
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

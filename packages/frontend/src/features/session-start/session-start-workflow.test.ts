@@ -1,988 +1,201 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { RepoConfig } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
-import {
-  createDeferred,
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
-import { startSessionWorkflow, type SessionStartWorkflowIntent } from "./session-start-workflow";
+import { expect, mock, test } from "bun:test";
+import type { WorkflowLaunchRequest, WorkflowLaunchSnapshot } from "@openducktor/contracts";
+import { startSessionWorkflow, WorkflowLaunchFailure } from "./session-start-workflow";
+import type { ResolvedSessionStartDecision } from "./session-start-types";
 
-type SendAgentMessage = NonNullable<Parameters<typeof startSessionWorkflow>[0]["sendAgentMessage"]>;
-
-const createSendAgentMessageMock = () =>
-  mock(
-    async (_session: Parameters<SendAgentMessage>[0], _segments: Parameters<SendAgentMessage>[1]) =>
-      null,
-  );
-
-const BUILD_SELECTION = {
-  runtimeKind: "opencode" as const,
+const session = {
+  externalSessionId: "saved",
+  runtimeKind: "codex" as const,
+  workingDirectory: "/repo/worktrees/task",
+  startedAt: "2026-10-03T12:00:00.000Z",
+  status: "idle" as const,
+};
+const selectedModel = {
+  runtimeKind: "codex" as const,
   providerId: "openai",
   modelId: "gpt-5",
-  variant: "default",
-  profileId: "build-agent",
-};
-
-const CODEX_BUILD_SELECTION = {
-  ...BUILD_SELECTION,
-  runtimeKind: "codex" as const,
-  providerId: "codex",
   variant: "medium",
 };
-
-const sessionIdentity = (
-  externalSessionId: string,
-  runtimeKind: "opencode" | "codex" = "opencode",
-) => ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+const args = {
+  workspaceId: "workspace",
+  repoPath: "/repo",
+  launchAttemptId: "attempt",
+  request: {
+    taskId: "task",
+    role: "build" as const,
+    launchActionId: "build_implementation_start" as const,
+    postStartAction: "kickoff" as const,
+  },
+  decision: {
+    startMode: "fresh" as const,
+    selectedModel,
+    kickoffPrompt: "\n  exact kickoff\n",
+  },
+};
+const outcome = (request: WorkflowLaunchRequest): WorkflowLaunchSnapshot => ({
+  launchAttemptId: request.launchAttemptId,
+  workspaceId: request.workspaceId,
+  repoPath: request.repoPath,
+  taskId: request.taskId,
+  role: "build",
+  phase: "completed",
+  acceptance: "accepted",
+  ownershipSaved: true,
+  completedPreStartActions: [],
+  session,
 });
 
-test("registers a fresh Codex session before sending its kickoff", async () => {
-  const order: string[] = [];
-  const identity = sessionIdentity("new-codex", "codex");
-  const startAgentSession = mock(async () => {
-    order.push("registered");
-    return identity;
-  });
-  const sendAgentMessage = mock(async () => {
-    order.push("kickoff");
-    return null;
-  });
-
+test("submits the captured identity, model, edited text, and pre-start intent in one host command", async () => {
+  const launch = mock(async (request: WorkflowLaunchRequest) => outcome(request));
   await startSessionWorkflow({
-    queryClient: new QueryClient(),
-    workspaceId: "workspace-1",
-    task: null,
-    intent: {
-      taskId: "TASK-1",
-      role: "build",
-      launchActionId: "build_implementation_start",
-      startMode: "fresh",
-      postStartAction: "kickoff",
-      kickoffPrompt: "Start the task.",
+    ...args,
+    decision: { ...args.decision, targetBranch: { branch: "main", remote: "origin" } },
+    client: {
+      agentSessionWorkflowLaunchRead: async () => [],
+      agentSessionWorkflowLaunch: launch,
+      agentSessionWorkflowLaunchRecover: async () => {
+        throw new Error("unexpected recovery");
+      },
     },
-    selection: CODEX_BUILD_SELECTION,
-    startAgentSession,
-    sendAgentMessage,
   });
-
-  expect(order).toEqual(["registered", "kickoff"]);
-  expect(startAgentSession).toHaveBeenCalledWith(
-    expect.objectContaining({ holdForPostStartMessage: true }),
-  );
-  expect(sendAgentMessage).toHaveBeenCalledWith(
-    identity,
-    [{ kind: "text", text: "Start the task." }],
-    { preserveTextWhitespace: true },
-  );
+  expect(launch.mock.calls[0]?.[0]).toEqual({
+    launchAttemptId: "attempt",
+    workspaceId: "workspace",
+    repoPath: "/repo",
+    taskId: "task",
+    policy: {
+      kind: "manual",
+      actionId: "build_implementation_start",
+      decision: { startMode: "fresh", selectedModel: selectedModel },
+    },
+    instruction: { kind: "kickoff", text: "\n  exact kickoff\n" },
+    targetBranch: { branch: "main", remote: "origin" },
+  });
 });
 
-test.each([true, false])(
-  "default prompt read failure with confirmed text: %s",
-  async (confirmed) => {
-    const queryClient = new QueryClient();
-    const reads = spyOn(queryClient, "fetchQuery").mockRejectedValue(
-      new Error("Prompt settings unavailable"),
-    );
-    const start = mock(async () => sessionIdentity("confirmed"));
-    const send = createSendAgentMessageMock();
-    const mutate = mock(async () => {});
-    const kickoffFields: Pick<SessionStartWorkflowIntent, "kickoffPrompt"> = {};
-    if (confirmed) kickoffFields.kickoffPrompt = "  confirmed\n{{literal}}\n";
-    try {
-      const result = startSessionWorkflow({
-        queryClient,
-        workspaceId: "workspace-1",
-        task: null,
-        intent: {
-          taskId: "TASK-1",
-          role: "build",
-          launchActionId: "build_implementation_start",
-          startMode: "fresh",
-          postStartAction: "kickoff",
-          targetBranch: { branch: "main" },
-          ...kickoffFields,
+test.each(["accepted", "unknown", "rejected", "not_submitted"] as const)(
+  "offers host recovery only for known non-acceptance: %s",
+  async (acceptance) => {
+    const recovery = mock(async (_ref: import("@openducktor/contracts").WorkflowLaunchRef) =>
+      outcome({
+        launchAttemptId: args.launchAttemptId,
+        workspaceId: args.workspaceId,
+        repoPath: args.repoPath,
+        taskId: "task",
+        policy: {
+          kind: "manual",
+          actionId: args.request.launchActionId,
+          decision: { startMode: "fresh", selectedModel: selectedModel },
         },
-        selection: BUILD_SELECTION,
-        startAgentSession: start,
-        sendAgentMessage: send,
-        persistTaskTargetBranch: mutate,
-      });
-      if (confirmed) {
-        await result;
-        expect(reads).not.toHaveBeenCalled();
-        expect(start).toHaveBeenCalledTimes(1);
-        expect(send).toHaveBeenCalledWith(
-          sessionIdentity("confirmed"),
-          [{ kind: "text", text: "  confirmed\n{{literal}}\n" }],
-          { preserveTextWhitespace: true },
-        );
-      } else {
-        await expect(result).rejects.toThrow("Prompt settings unavailable");
-        expect(start).not.toHaveBeenCalled();
-        expect(send).not.toHaveBeenCalled();
-        expect(mutate).not.toHaveBeenCalled();
-      }
-    } finally {
-      reads.mockRestore();
-      queryClient.clear();
+        instruction: { kind: "kickoff" },
+      }),
+    );
+    const result = await startSessionWorkflow({
+      ...args,
+      client: {
+        agentSessionWorkflowLaunchRead: async () => [],
+        agentSessionWorkflowLaunch: async (request) => ({
+          ...outcome(request),
+          phase: "failed",
+          acceptance,
+          recoveryAllowed: acceptance === "rejected" || acceptance === "not_submitted",
+          failure: { message: "Exact native failure", stage: "send", cleanupErrors: [] },
+        }),
+        agentSessionWorkflowLaunchRecover: recovery,
+      },
+    });
+    expect(result.externalSessionId).toBe("saved");
+    expect(result.postStartActionError?.message).toBe(
+      "Exact native failure" +
+        (acceptance === "unknown"
+          ? " Runtime acceptance is unknown. Inspect the saved session before sending another instruction."
+          : ""),
+    );
+    expect(result.postStartActionError).toBeInstanceOf(WorkflowLaunchFailure);
+    if (result.postStartActionError instanceof WorkflowLaunchFailure) {
+      expect(result.postStartActionError.outcome.acceptance).toBe(acceptance);
+      expect(result.postStartActionError.outcome.failure?.message).toBe("Exact native failure");
+      expect(result.postStartActionError.outcome.session?.externalSessionId).toBe("saved");
+    }
+    expect(Boolean(result.retryPostStartMessage)).toBe(
+      acceptance === "rejected" || acceptance === "not_submitted",
+    );
+    if (result.retryPostStartMessage) {
+      await result.retryPostStartMessage();
+      expect(recovery.mock.calls[0]).toEqual([
+        { workspaceId: "workspace", repoPath: "/repo", taskId: "task", launchAttemptId: "attempt" },
+      ]);
     }
   },
 );
 
-test.each(["feedback", "branch"] as const)(
-  "finishes the captured launch after context changes during the %s mutation",
-  async (mutation) => {
-    const entered = createDeferred<void>();
-    const completed = createDeferred<void>();
-    let isCurrent = true;
-    const mutate = mock(async () => {
-      entered.resolve();
-      await completed.promise;
-    });
-    const start = mock(async () => sessionIdentity("original"));
-    const launch = startSessionWorkflow({
-      queryClient: new QueryClient(),
-      workspaceId: "workspace-1",
-      task: null,
-      isCurrent: () => isCurrent,
-      intent: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "none",
-        ...(mutation === "feedback"
-          ? { beforeStartAction: { action: "human_request_changes" as const, note: "Rework" } }
-          : { targetBranch: { branch: "main" } }),
+test.each(["fresh", "reuse", "fork"] as const)(
+  "submits the %s decision with its edited kickoff and launch options",
+  async (startMode) => {
+    const sourceSession = {
+      externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
+    };
+    const targetBranch = { branch: "release", remote: "origin" };
+    const beforeStartAction = { action: "human_request_changes" as const, note: "Fix the result" };
+    const decision = (
+      startMode === "reuse"
+        ? { startMode, sourceSession }
+        : startMode === "fork"
+          ? { startMode, sourceSession, selectedModel }
+          : { startMode, selectedModel }
+    ) satisfies ResolvedSessionStartDecision;
+    const launch = mock(async (request: WorkflowLaunchRequest) => outcome(request));
+    await startSessionWorkflow({
+      ...args,
+      decision: { ...decision, targetBranch, kickoffPrompt: "\n  edited text\n" },
+      request: {
+        ...args.request,
+        message: "Review feedback",
+        targetWorkingDirectory: "/repo/selected",
+        queueIfBusy: true,
+        beforeStartAction,
       },
-      selection: BUILD_SELECTION,
-      startAgentSession: start,
-      humanRequestChangesTask: mutate,
-      persistTaskTargetBranch: mutate,
+      client: {
+        agentSessionWorkflowLaunch: launch,
+        agentSessionWorkflowLaunchRead: async () => [],
+        agentSessionWorkflowLaunchRecover: async () => {
+          throw new Error("Unexpected recovery");
+        },
+      },
     });
-    await entered.promise;
-    isCurrent = false;
-    completed.resolve();
-    await expect(launch).resolves.toEqual({
-      ...sessionIdentity("original"),
-      postStartActionError: null,
-    });
-    expect(mutate).toHaveBeenCalledTimes(1);
-    expect(start).toHaveBeenCalledWith({
-      taskId: "TASK-1",
-      role: "build",
-      startMode: "fresh",
-      selectedModel: BUILD_SELECTION,
-      holdForPostStartMessage: false,
-    });
+    const expected: WorkflowLaunchRequest = {
+      workspaceId: args.workspaceId,
+      repoPath: args.repoPath,
+      taskId: args.request.taskId,
+      launchAttemptId: args.launchAttemptId,
+      policy: { kind: "manual", actionId: args.request.launchActionId, decision },
+      instruction: { kind: "kickoff", text: "\n  edited text\n", feedback: "Review feedback" },
+      targetBranch,
+      targetWorkingDirectory: "/repo/selected",
+      beforeStartAction,
+    };
+    if (startMode === "fresh") expected.queueIfBusy = true;
+    expect(launch.mock.calls[0]?.[0]).toEqual(expected);
   },
 );
 
-test("cancels a stale launch before any task mutation", async () => {
-  const mutate = mock(async () => {});
-  const start = mock(async () => sessionIdentity("never"));
+test("a transport error does not launch again or resend", async () => {
+  const launch = mock(async () => {
+    throw new Error("Disconnected");
+  });
   await expect(
     startSessionWorkflow({
-      queryClient: new QueryClient(),
-      workspaceId: "workspace-1",
-      task: null,
-      isCurrent: () => false,
-      intent: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "none",
-        beforeStartAction: { action: "human_request_changes", note: "Rework" },
+      ...args,
+      client: {
+        agentSessionWorkflowLaunchRead: async () => [],
+        agentSessionWorkflowLaunch: launch,
+        agentSessionWorkflowLaunchRecover: async () => {
+          throw new Error("unexpected recovery");
+        },
       },
-      selection: BUILD_SELECTION,
-      startAgentSession: start,
-      humanRequestChangesTask: mutate,
     }),
-  ).rejects.toThrow("selected context changed");
-  expect(mutate).not.toHaveBeenCalled();
-  expect(start).not.toHaveBeenCalled();
-});
-
-describe("session-start-workflow", () => {
-  test("aborts before session creation when the before-start action fails", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const humanRequestChangesTask = mock(async () => {
-      throw new Error("cannot request changes");
-    });
-
-    await expect(
-      startSessionWorkflow({
-        workspaceId: "workspace-1",
-        queryClient: new QueryClient(),
-        intent: {
-          taskId: "TASK-1",
-          role: "build",
-          launchActionId: "build_implementation_start",
-          startMode: "fresh",
-          postStartAction: "none",
-          beforeStartAction: {
-            action: "human_request_changes",
-            note: "Need more work",
-          },
-        },
-        selection: BUILD_SELECTION,
-        task: null,
-        startAgentSession,
-        humanRequestChangesTask,
-      }),
-    ).rejects.toThrow("cannot request changes");
-
-    expect(startAgentSession).not.toHaveBeenCalled();
-  });
-
-  test("forwards explicit target working directory for fresh starts", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
-
-    const result = await startSessionWorkflow({
-      workspaceId: "workspace-1",
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "none",
-        targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
-      },
-      selection: BUILD_SELECTION,
-      task: null,
-      startAgentSession,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-new"),
-      postStartActionError: null,
-    });
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
-        holdForPostStartMessage: false,
-      }),
-    );
-  });
-
-  test("uses the just-selected target branch for pull request kickoff prompts", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-pr"));
-
-    const result = await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-2",
-        role: "build",
-        launchActionId: "build_pull_request_generation",
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "builder-session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-        targetBranch: {
-          remote: "upstream",
-          branch: "release/2026.04",
-        },
-        postStartAction: "kickoff",
-      },
-      selection: null,
-      task: createTaskCardFixture({
-        id: "TASK-2",
-        title: "Generate PR",
-        description: "desc",
-        status: "in_progress",
-        priority: 1,
-        targetBranch: {
-          remote: "origin",
-          branch: "main",
-        },
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-pr"),
-      postStartActionError: null,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("Pull request base:\nrelease/2026.04"),
-      }),
-    ]);
-    const sentText =
-      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
-    expect(sentText).not.toContain("upstream/release/2026.04");
-  });
-
-  test("ignores the remote when building the pull request kickoff prompt", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-pr-origin"));
-
-    await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-ORIGIN",
-        role: "build",
-        launchActionId: "build_pull_request_generation",
-        startMode: "reuse",
-        sourceSession: sessionIdentity("builder-session-origin"),
-        postStartAction: "kickoff",
-      },
-      selection: null,
-      task: createTaskCardFixture({
-        id: "TASK-ORIGIN",
-        title: "Generate origin PR",
-        targetBranch: {
-          remote: "origin",
-          branch: "main",
-        },
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    const sentText =
-      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
-    expect(sentText).toContain("Pull request base:\nmain");
-    expect(sentText).not.toContain("origin/main");
-  });
-
-  test.each([undefined, " confirmed PR instruction "])(
-    "uses the repository default target for a forked pull request kickoff (%s)",
-    async (kickoffPrompt) => {
-      const queryClient = new QueryClient();
-      const repoConfig = {
-        workspaceId: "workspace-pr",
-        workspaceName: "PR workspace",
-        repoPath: "/repo",
-        branchPrefix: "odt",
-        defaultTargetBranch: {
-          remote: "upstream",
-          branch: "develop",
-        },
-        git: {},
-        hooks: { postComplete: [] },
-        actions: { items: [], defaultActionId: null },
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentStudioState: { openTaskIds: [] },
-        agentDefaults: {},
-      } satisfies RepoConfig;
-      queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
-      queryClient.setQueryData(
-        workspaceQueryKeys.settingsSnapshot(),
-        createSettingsSnapshotFixture({
-          workspaces: {
-            "workspace-pr": repoConfig,
-          },
-        }),
-      );
-      const sendAgentMessage = createSendAgentMessageMock();
-      const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
-      const sourceSession = sessionIdentity("builder-session-fork");
-
-      const kickoffFields: Pick<SessionStartWorkflowIntent, "kickoffPrompt"> = {};
-      if (kickoffPrompt !== undefined) kickoffFields.kickoffPrompt = kickoffPrompt;
-      await startSessionWorkflow({
-        workspaceId: "workspace-pr",
-        queryClient,
-        intent: {
-          taskId: "TASK-FORK",
-          role: "build",
-          launchActionId: "build_pull_request_generation",
-          startMode: "fork",
-          sourceSession,
-          postStartAction: "kickoff",
-          ...kickoffFields,
-        },
-        selection: BUILD_SELECTION,
-        task: createTaskCardFixture({
-          id: "TASK-FORK",
-          title: "Fork for pull request",
-        }),
-        startAgentSession,
-        sendAgentMessage,
-      });
-
-      expect(startAgentSession).toHaveBeenCalledWith({
-        taskId: "TASK-FORK",
-        role: "build",
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession,
-        holdForPostStartMessage: true,
-      });
-      expect(sendAgentMessage.mock.calls[0]?.[1]).toEqual([
-        expect.objectContaining({
-          kind: "text",
-          text: kickoffPrompt ?? expect.stringContaining("Pull request base:\ndevelop"),
-        }),
-      ]);
-    },
-  );
-
-  test.each(["@{upstream}"])(
-    "rejects invalid repository default PR target %s with confirmed text",
-    async (branch) => {
-      const queryClient = new QueryClient();
-      const repoConfig = {
-        workspaceId: "workspace-pr",
-        workspaceName: "PR workspace",
-        repoPath: "/repo",
-        branchPrefix: "odt",
-        defaultTargetBranch: {
-          remote: "upstream",
-          branch,
-        },
-        git: {},
-        hooks: { postComplete: [] },
-        actions: { items: [], defaultActionId: null },
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentStudioState: { openTaskIds: [] },
-        agentDefaults: {},
-      } satisfies RepoConfig;
-      queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
-      queryClient.setQueryData(
-        workspaceQueryKeys.settingsSnapshot(),
-        createSettingsSnapshotFixture({
-          workspaces: {
-            "workspace-pr": repoConfig,
-          },
-        }),
-      );
-      const sendAgentMessage = createSendAgentMessageMock();
-      const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
-      const sourceSession = sessionIdentity("builder-session-fork");
-
-      const mutate = mock(async () => undefined);
-      await expect(
-        startSessionWorkflow({
-          workspaceId: "workspace-pr",
-          queryClient,
-          intent: {
-            taskId: "TASK-FORK",
-            role: "build",
-            launchActionId: "build_pull_request_generation",
-            startMode: "fork",
-            sourceSession,
-            postStartAction: "kickoff",
-            kickoffPrompt: "confirmed PR instruction",
-            beforeStartAction: { action: "human_request_changes", note: "review" },
-          },
-          selection: BUILD_SELECTION,
-          task: createTaskCardFixture({ id: "TASK-FORK" }),
-          startAgentSession,
-          sendAgentMessage,
-          humanRequestChangesTask: mutate,
-          persistTaskTargetBranch: mutate,
-        }),
-      ).rejects.toThrow("requires an explicit target branch");
-      expect(startAgentSession).not.toHaveBeenCalled();
-      expect(sendAgentMessage).not.toHaveBeenCalled();
-      expect(mutate).not.toHaveBeenCalled();
-    },
-  );
-
-  test("rejects upstream-relative targets before creating a pull request session", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-pr-upstream"));
-
-    await expect(
-      startSessionWorkflow({
-        workspaceId: null,
-        queryClient: new QueryClient(),
-        intent: {
-          taskId: "TASK-UPSTREAM",
-          role: "build",
-          launchActionId: "build_pull_request_generation",
-          startMode: "reuse",
-          sourceSession: sessionIdentity("builder-session-upstream"),
-          targetBranch: {
-            branch: "@{upstream}",
-          },
-          postStartAction: "kickoff",
-        },
-        selection: null,
-        task: createTaskCardFixture({
-          id: "TASK-UPSTREAM",
-          title: "Generate upstream PR",
-        }),
-        startAgentSession,
-        sendAgentMessage,
-      }),
-    ).rejects.toThrow(
-      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
-    );
-
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-  });
-
-  test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
-
-    const result = await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-3",
-        role: "build",
-        launchActionId: "build_after_human_request_changes",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-        message: "Update the acceptance criteria and rerun the desktop tests.",
-        beforeStartAction: {
-          action: "human_request_changes",
-          note: "Update the acceptance criteria and rerun the desktop tests.",
-        },
-      },
-      selection: BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-3",
-        title: "Address human review",
-        description: "desc",
-        status: "human_review",
-        priority: 1,
-      }),
-      startAgentSession,
-      sendAgentMessage,
-      humanRequestChangesTask: mock(async () => undefined),
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-build-new"),
-      postStartActionError: null,
-    });
-    const sentText =
-      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
-    expect(sentText).toContain("Requested changes from human review:");
-    expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
-    expect(sentText).toContain("Use taskId TASK-3 for every task-bound odt_* tool call.");
-  });
-
-  test("holds fresh kickoff starts until the kickoff message send owns status", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
-
-    await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-4",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-      },
-      selection: BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-4",
-        title: "Start implementation",
-        description: "desc",
-        status: "ready_for_dev",
-        priority: 1,
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        holdForPostStartMessage: true,
-      }),
-    );
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      sessionIdentity("session-build-new"),
-      expect.arrayContaining([expect.objectContaining({ kind: "text" })]),
-    );
-  });
-
-  test("holds message-first fresh starts until the composer send owns status", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-message-first"));
-
-    await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-4",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "none",
-        holdForPostStartMessage: true,
-      },
-      selection: BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-4",
-        title: "Start implementation",
-        description: "desc",
-        status: "ready_for_dev",
-        priority: 1,
-      }),
-      startAgentSession,
-    });
-
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        holdForPostStartMessage: true,
-      }),
-    );
-  });
-
-  test("does not complete a kickoff start before the kickoff message send settles", async () => {
-    let resolveSendStarted: () => void = () => {};
-    let resolveSend: () => void = () => {};
-    const sendStarted = new Promise<void>((resolve) => {
-      resolveSendStarted = resolve;
-    });
-    const sendFinished = new Promise<void>((resolve) => {
-      resolveSend = resolve;
-    });
-    const sendAgentMessage = mock(async () => {
-      resolveSendStarted();
-      return sendFinished.then(() => null);
-    });
-    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
-
-    const workflow = startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-4",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-      },
-      selection: BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-4",
-        title: "Start implementation",
-        description: "desc",
-        status: "ready_for_dev",
-        priority: 1,
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-    let completed = false;
-    void workflow.then(() => {
-      completed = true;
-    });
-
-    await sendStarted;
-
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(completed).toBe(false);
-
-    resolveSend();
-    await expect(workflow).resolves.toEqual({
-      ...sessionIdentity("session-build-new"),
-      postStartActionError: null,
-    });
-    expect(completed).toBe(true);
-  });
-
-  test("aborts before session creation when kickoff message construction fails", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
-
-    await expect(
-      startSessionWorkflow({
-        workspaceId: null,
-        queryClient: new QueryClient(),
-        intent: {
-          taskId: "TASK-5",
-          role: "build",
-          launchActionId: "build_after_human_request_changes",
-          startMode: "fresh",
-          postStartAction: "kickoff",
-        },
-        selection: BUILD_SELECTION,
-        task: createTaskCardFixture({
-          id: "TASK-5",
-          title: "Start implementation",
-          description: "desc",
-          status: "human_review",
-          priority: 1,
-        }),
-        startAgentSession,
-        sendAgentMessage,
-      }),
-    ).rejects.toThrow("Feedback message is required before sending.");
-
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-  });
-
-  test("sends Codex fresh kickoff through the standard post-start message path", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-codex", "codex"));
-
-    const result = await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-4",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-      },
-      selection: CODEX_BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-4",
-        title: "Implement Codex",
-        description: "desc",
-        status: "ready_for_dev",
-        priority: 1,
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-codex", "codex"),
-      postStartActionError: null,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-codex", "codex"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("taskId TASK-4"),
-      }),
-    ]);
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        selectedModel: CODEX_BUILD_SELECTION,
-        holdForPostStartMessage: true,
-      }),
-    );
-  });
-
-  test("sends Codex reuse kickoff through the standard post-start message path", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-codex-reuse", "codex"));
-
-    const result = await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      intent: {
-        taskId: "TASK-5",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "session-codex-reuse",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-        postStartAction: "kickoff",
-      },
-      selection: CODEX_BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-5",
-        title: "Continue Codex",
-        description: "desc",
-        status: "in_progress",
-        priority: 1,
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(result).toEqual({
-      ...sessionIdentity("session-codex-reuse", "codex"),
-      postStartActionError: null,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-codex-reuse", "codex"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("taskId TASK-5"),
-      }),
-    ]);
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "session-codex-reuse",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-        },
-      }),
-    );
-  });
-});
-
-describe("confirmed kickoff", () => {
-  test("sends exact custom text once", async () => {
-    const sendAgentMessage = createSendAgentMessageMock();
-    const text = "  Custom instruction\n{{task.title}}\n ";
-    await startSessionWorkflow({
-      workspaceId: null,
-      queryClient: new QueryClient(),
-      task: null,
-      intent: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        startMode: "fresh",
-        postStartAction: "kickoff",
-        kickoffPrompt: text,
-      },
-      selection: BUILD_SELECTION,
-      startAgentSession: async () => sessionIdentity("custom"),
-      sendAgentMessage,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      sessionIdentity("custom"),
-      [{ kind: "text", text }],
-      { preserveTextWhitespace: true },
-    );
-  });
-  test("rejects blank custom text before mutations", async () => {
-    const persistTaskTargetBranch = mock(async () => undefined);
-    const startAgentSession = mock(async () => sessionIdentity("custom"));
-    await expect(
-      startSessionWorkflow({
-        workspaceId: null,
-        queryClient: new QueryClient(),
-        task: null,
-        intent: {
-          taskId: "TASK-1",
-          role: "build",
-          launchActionId: "build_implementation_start",
-          startMode: "fresh",
-          postStartAction: "kickoff",
-          kickoffPrompt: " \n",
-          targetBranch: { branch: "main" },
-        },
-        selection: BUILD_SELECTION,
-        startAgentSession,
-        persistTaskTargetBranch,
-        sendAgentMessage: createSendAgentMessageMock(),
-      }),
-    ).rejects.toThrow("Kickoff prompt must not be blank.");
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(persistTaskTargetBranch).not.toHaveBeenCalled();
-  });
-});
-
-test.each(["fresh", "reuse", "fork"] as const)(
-  "custom kickoff preserves validation and send failure identity in %s mode",
-  async (startMode) => {
-    const send = mock<SendAgentMessage>(async () => {
-      throw new Error("send failed");
-    });
-    const result = await startSessionWorkflow({
-      queryClient: new QueryClient(),
-      workspaceId: null,
-      task: null,
-      intent: {
-        taskId: "TASK-1",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        postStartAction: "kickoff",
-        startMode,
-        sourceSession: sessionIdentity("source"),
-        kickoffPrompt: " exact\nmessage ",
-      },
-      selection: BUILD_SELECTION,
-      startAgentSession: async () => sessionIdentity("kept"),
-      sendAgentMessage: send,
-    });
-    expect(result.externalSessionId).toBe("kept");
-    expect(result.postStartActionError?.message).toBe("send failed");
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send.mock.calls[0]).toEqual([
-      sessionIdentity("kept"),
-      [{ kind: "text", text: " exact\nmessage " }],
-      { preserveTextWhitespace: true },
-    ]);
-  },
-);
-
-test.each(["build_after_human_request_changes", "build_pull_request_generation"] as const)(
-  "custom kickoff cannot bypass prerequisites for %s",
-  async (launchActionId) => {
-    const startAgentSession = mock(async () => sessionIdentity("never"));
-    const mutate = mock(async () => {});
-    await expect(
-      startSessionWorkflow({
-        queryClient: new QueryClient(),
-        workspaceId: null,
-        task: null,
-        intent: {
-          taskId: "TASK-1",
-          role: "build",
-          launchActionId,
-          postStartAction: "kickoff",
-          startMode: "fresh",
-          kickoffPrompt: "custom",
-          targetBranch: { branch: "@{upstream}" },
-          beforeStartAction: { action: "human_request_changes", note: "review" },
-        },
-        selection: BUILD_SELECTION,
-        startAgentSession,
-        sendAgentMessage: createSendAgentMessageMock(),
-        humanRequestChangesTask: mutate,
-        persistTaskTargetBranch: mutate,
-      }),
-    ).rejects.toThrow();
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(mutate).not.toHaveBeenCalled();
-  },
-);
-
-test("retry sends the retained kickoff to the created session without another start", async () => {
-  let fail = true;
-  const start = mock(async () => sessionIdentity("kept"));
-  const send = mock<SendAgentMessage>(async () => {
-    if (fail) throw new Error("failed");
-    return null;
-  });
-  const result = await startSessionWorkflow({
-    queryClient: new QueryClient(),
-    workspaceId: null,
-    task: null,
-    intent: {
-      taskId: "TASK-1",
-      role: "build",
-      launchActionId: "build_implementation_start",
-      startMode: "fresh",
-      postStartAction: "kickoff",
-      kickoffPrompt: "retain this",
-    },
-    selection: BUILD_SELECTION,
-    startAgentSession: start,
-    sendAgentMessage: send,
-  });
-  fail = false;
-  await result.retryPostStartMessage?.();
-  expect(start).toHaveBeenCalledTimes(1);
-  expect(send).toHaveBeenCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith(
-    sessionIdentity("kept"),
-    [{ kind: "text", text: "retain this" }],
-    { preserveTextWhitespace: true },
-  );
+  ).rejects.toThrow("Disconnected");
+  expect(launch).toHaveBeenCalledTimes(1);
 });

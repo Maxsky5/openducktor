@@ -1,38 +1,36 @@
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
   type NotificationOccurrence,
+  type WorkflowLaunchSnapshot,
 } from "@openducktor/contracts";
+import { createHostClient } from "@openducktor/host-client";
+import type { RunEventListener } from "@/lib/shell-bridge";
+import { observeWorkflowLaunches } from "./workflow-launch-observation";
+import { presentWorkflowLaunchOutcome } from "./session-start-message-recovery";
 import { QueryClient } from "@tanstack/react-query";
-import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
 import {
   createNotificationPolicy,
   type NotificationDispatchContext,
 } from "@/features/notifications/notification-policy";
-import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
-import { createMessageCardElement } from "@/components/features/agents/agent-chat/agent-chat-message-card-test-harness";
-import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
-import {
-  findNotificationAttentionTarget,
-  navigateToNotificationTarget,
-} from "@/features/notifications/notification-navigation-logic";
-import {
-  findSessionMessageForTest,
-  sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
+import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import {
   buildSession,
   createSessionActions,
   createSessionsRef,
   getSession,
 } from "@/state/operations/agent-orchestrator/handlers/session-actions.test-helpers";
+import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
+import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
-  createSessionStartWorkflowRunner,
   isSessionStartFailureFeedbackHandled,
   type SessionStartNotificationPublisher,
   SessionStartWorkflowError,
+  createSessionStartWorkflowRunner as createRunner,
 } from "./session-start-orchestration";
 import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 
@@ -69,6 +67,148 @@ const baseInput = {
 
 describe("session-start notifications", () => {
   test.each([
+    ["unknown", "before"],
+    ["unknown", "after"],
+    ["accepted", "before"],
+    ["accepted", "after"],
+    ["not_submitted", "before"],
+    ["not_submitted", "after"],
+    ["rejected", "before"],
+    ["rejected", "after"],
+  ] as const)(
+    "manual %s failure shares feedback when observation arrives %s its result",
+    async (acceptance, order) => {
+      const queryClient = new QueryClient();
+      let listener: RunEventListener = () => {};
+      let retained: WorkflowLaunchSnapshot | undefined;
+      const client = createHostClient(async () => {
+        throw new Error("Unexpected host read");
+      });
+      client.agentSessionWorkflowLaunchRead = async () => [];
+      client.agentSessionWorkflowLaunchRecover = async () => {
+        throw new Error("Recovery must stay explicit");
+      };
+      client.agentSessionWorkflowLaunch = async (request) => {
+        retained = {
+          launchAttemptId: request.launchAttemptId,
+          workspaceId: request.workspaceId,
+          repoPath: request.repoPath,
+          taskId: request.taskId,
+          role: "build",
+          phase: "failed",
+          acceptance,
+          ownershipSaved: acceptance !== "not_submitted",
+          completedPreStartActions: [],
+          recoveryAllowed: acceptance === "rejected",
+          failure: { stage: "send", message: "Exact launch failure", cleanupErrors: [] },
+        };
+        if (retained.ownershipSaved)
+          retained.session = { ...session, startedAt: "2026-10-03T12:00:00.000Z", status: "idle" };
+        if (order === "before")
+          listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
+        return retained;
+      };
+      const settings = createDefaultNotificationSettings();
+      settings.kinds["agent.session_error"] = { enabled: true, target: "both", sound: "inherit" };
+      settings.osFocus = "always_send";
+      settings.soundFocus = "always_play";
+      settings.volumePercent = 50;
+      const genericFeedback = mock(async () => {});
+      const os = mock(async () => ({ status: "shown" as const }));
+      const sound = mock(async () => {});
+      const policy = createNotificationPolicy({
+        inApp: { deliver: genericFeedback },
+        os: { deliver: os },
+        sound: { play: sound },
+        onFailure: () => {},
+      });
+      const localFeedback = spyOn(toast, "error").mockImplementation(() => "launch-toast");
+      const stop = await observeWorkflowLaunches({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        queryClient,
+        bridge: {
+          client,
+          subscribeRunEvents: async (next) => {
+            listener = next;
+            return () => {};
+          },
+        },
+        onSnapshot: (snapshot) => {
+          presentWorkflowLaunchOutcome(snapshot, client);
+        },
+        onError: (cause) => {
+          throw cause;
+        },
+      });
+      try {
+        const runner = createRunner({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          client,
+          notifications: {
+            publishSessionStarted: () => {
+              throw new Error("A failed launch cannot publish Started");
+            },
+            publishSessionError: async (input, message) => {
+              const occurrence = buildSessionStartErrorOccurrence(
+                { repoPath: "/repo", repositoryLabel: "Repo" },
+                input,
+                message,
+              );
+              const local = await policy.dispatch(
+                occurrence,
+                { phase: "local", inAppFeedbackHandled: input.inAppFeedbackHandled === true },
+                settings,
+              );
+              if (local.externalPlan)
+                await policy.dispatch(
+                  occurrence,
+                  { phase: "external", appFocused: true },
+                  settings,
+                );
+              return local.inAppDelivered;
+            },
+            reportFailure: (cause) => {
+              throw cause;
+            },
+          },
+        });
+        const error = await runner(baseInput).then(
+          (result) => result.postStartActionError,
+          (cause) => cause,
+        );
+        if (order === "after")
+          listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
+        expect(isSessionStartFailureFeedbackHandled(error)).toBe(true);
+        expect(localFeedback).toHaveBeenCalled();
+        const ids = new Set(localFeedback.mock.calls.map(([, options]) => options?.id));
+        expect(ids.size).toBe(1);
+        expect([...ids][0]).toBe(
+          JSON.stringify([
+            "workflow-launch",
+            "workspace-1",
+            "/repo",
+            "task-1",
+            retained!.launchAttemptId,
+          ]),
+        );
+        expect(localFeedback.mock.calls.at(-1)?.[1]?.action !== undefined).toBe(
+          acceptance === "rejected",
+        );
+        expect(genericFeedback).not.toHaveBeenCalled();
+        expect(os).toHaveBeenCalledTimes(1);
+        expect(sound).toHaveBeenCalledTimes(1);
+      } finally {
+        stop();
+        queryClient.clear();
+        localFeedback.mockRestore();
+      }
+    },
+  );
+
+  test.each([
     "disabled",
     "os_suppressed",
     "in_app",
@@ -101,7 +241,11 @@ describe("session-start notifications", () => {
           { repoPath: "/repo", repositoryLabel: "Repo" },
           input,
         );
-        const local = await policy.dispatch(occurrence, { phase: "local" }, settings);
+        const local = await policy.dispatch(
+          occurrence,
+          { phase: "local", inAppFeedbackHandled: input.inAppFeedbackHandled === true },
+          settings,
+        );
         if (local.externalPlan)
           await policy.dispatch(occurrence, { phase: "external", appFocused: true }, settings);
         return local.inAppDelivered;
@@ -125,19 +269,19 @@ describe("session-start notifications", () => {
           startInBackground: true,
           roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
           runSessionStartWorkflow,
-          humanRequestChangesTask: async () => {},
           openSessionInAgentStudio: () => {},
         });
         expect(started).toMatchObject(session);
         expect(showError).toHaveBeenCalledTimes(1);
         expect(showError).toHaveBeenCalledWith(
-          "Session started, but the first message failed.",
+          "First message failed for task-1.",
           expect.objectContaining({
             description: "First message failed",
             action: expect.objectContaining({ label: "Retry message" }),
           }),
         );
         expect(deliverOs).not.toHaveBeenCalled();
+        expect(deliverInApp).not.toHaveBeenCalled();
         expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
       } finally {
         showError.mockRestore();
@@ -208,11 +352,12 @@ describe("session-start notifications", () => {
     }
 
     expect(rejected).toBeInstanceOf(SessionStartWorkflowError);
-    expect(rejected).toHaveProperty("originalCause", startFailure);
+    expect(rejected).toHaveProperty("originalCause.message", startFailure.message);
     expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
     expect(notifications.publishSessionError).toHaveBeenCalledWith(
       {
         launchAttemptId: "launch-error",
+        inAppFeedbackHandled: true,
         workspaceId: "workspace-1",
         taskId: "task-1",
         taskTitle: "Build notifications",
@@ -247,7 +392,7 @@ describe("session-start notifications", () => {
     expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
   });
 
-  test("leaves feedback to the caller when no in-app notification appears", async () => {
+  test("keeps shared failure feedback when the notification policy delivers no toast", async () => {
     const notifications = createPublisher();
     notifications.publishSessionError = mock(async () => false);
     const runner = createSessionStartWorkflowRunner({
@@ -267,10 +412,10 @@ describe("session-start notifications", () => {
       rejected = cause;
     }
 
-    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
   });
 
-  test("leaves feedback to the caller when the error notification cannot publish", async () => {
+  test("keeps shared failure feedback when the error notification cannot publish", async () => {
     const notifications = createPublisher();
     notifications.publishSessionError = mock(() => {
       throw new Error("notification failed");
@@ -292,7 +437,7 @@ describe("session-start notifications", () => {
       rejected = cause;
     }
 
-    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
     expect(notifications.reportFailure).toHaveBeenCalledWith(
       expect.objectContaining({ message: "notification failed" }),
       expect.objectContaining({ launchAttemptId: "launch-notification-error" }),
@@ -302,6 +447,52 @@ describe("session-start notifications", () => {
   test("does not treat unrelated errors as handled session-start failures", () => {
     expect(isSessionStartFailureFeedbackHandled(new Error("other failure"))).toBe(false);
   });
+
+  test.each(["presenter", "callback"] as const)(
+    "reports a failed %s and still publishes launch failure notifications",
+    async (source) => {
+      const failure = new Error("Feedback failed");
+      const notifications = createPublisher();
+      notifications.publishSessionError = mock(async () => false);
+      const runner = createSessionStartWorkflowRunner({
+        queryClient: new QueryClient(),
+        workspaceId: "workspace-1",
+        startAgentSession: async () => session,
+        sendAgentMessage: async () => {
+          throw new Error("Send rejected");
+        },
+        notifications,
+      });
+      const showError = spyOn(toast, "error").mockImplementation(() => {
+        if (source === "presenter") throw failure;
+        return "launch-toast";
+      });
+      const callback = mock(() => {
+        if (source === "callback") throw failure;
+      });
+      try {
+        const result = await runner({
+          ...baseInput,
+          request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
+          onPostStartMessageFailure: callback,
+        });
+        expect(callback).toHaveBeenCalledTimes(1);
+        expect(notifications.reportFailure).toHaveBeenCalledWith(failure, expect.anything());
+        expect(notifications.publishSessionError).toHaveBeenCalledTimes(1);
+        expect(notifications.publishSessionError).toHaveBeenCalledWith(
+          source === "presenter"
+            ? expect.not.objectContaining({ inAppFeedbackHandled: true })
+            : expect.objectContaining({ inAppFeedbackHandled: true }),
+          "Send rejected",
+        );
+        expect(isSessionStartFailureFeedbackHandled(result.postStartActionError)).toBe(
+          source === "callback",
+        );
+      } finally {
+        showError.mockRestore();
+      }
+    },
+  );
 
   test("publishes only Session Error when the post-start message fails", async () => {
     const notifications = createPublisher();
@@ -430,7 +621,7 @@ describe("session-start notifications", () => {
     );
   });
 
-  test("focuses the exact rendered error after a post-start message failure", async () => {
+  test("opens the saved session after a host launch failure without an inline error target", async () => {
     const adapter = createTestOpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     adapter.sendUserMessage = async () => {
@@ -479,9 +670,9 @@ describe("session-start notifications", () => {
       const occurrence = occurrences[0];
       expect(occurrence?.kind).toBe("agent.session_error");
       const target = occurrence?.navigationTarget;
-      expect(target?.type).toBe("session_error");
-      if (target?.type !== "session_error") {
-        throw new Error("Expected a Session Error navigation target.");
+      expect(target?.type).toBe("agent_session");
+      if (target?.type !== "agent_session") {
+        throw new Error("Expected an Agent Session navigation target.");
       }
 
       let href = "";
@@ -508,27 +699,11 @@ describe("session-start notifications", () => {
         },
       });
 
-      const renderedFailure = findSessionMessageForTest(getSession(sessionsRef), (message) =>
-        message.content.includes("Failed to send message:"),
-      );
-      expect(renderedFailure).toBeDefined();
-      if (!renderedFailure) {
-        throw new Error("Expected the failed send to append an error card.");
-      }
-      document.body.innerHTML = renderToStaticMarkup(
-        createMessageCardElement({ message: renderedFailure }),
-      );
-      const attentionId = new URL(href, "http://localhost").searchParams.get("attentionId");
-      const focusedCard = findNotificationAttentionTarget("error", attentionId ?? "");
-      expect(focusedCard).not.toBeNull();
-      const focus = mock(() => {});
-      if (focusedCard) focusedCard.focus = focus;
-      focusedCard?.focus();
-      expect(focus).toHaveBeenCalledTimes(1);
-      expect(sessionMessagesToArray(getSession(sessionsRef))).toContain(renderedFailure);
+      const location = new URL(href, "http://localhost");
+      expect(location.searchParams.get("session")).toBe(session.externalSessionId);
+      expect(location.searchParams.has("attentionId")).toBe(false);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
-      document.body.replaceChildren();
     }
   });
 });

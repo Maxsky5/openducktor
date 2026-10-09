@@ -1,17 +1,44 @@
 import { Effect } from "effect";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
+import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
+import { toHostOperationError } from "../../effect/host-errors";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
+import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
+import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
+import { createWorkspaceSessionLaunchCommandHandlers } from "../../interface/commands/workspace-session-launch-command-handlers";
 
 type Input = Parameters<typeof createWorkspaceSessionService>[0] &
   Parameters<typeof createWorkspaceSessionImportService>[0] & {
+    live: Parameters<typeof createWorkspaceSessionLaunchService>[0]["live"];
     eventBus: CreateNodeHostCommandRouterInput["eventBus"];
+    commands: Parameters<typeof createWorkspaceSessionLaunchService>[0]["commands"];
+    resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
   };
 
-export const createNodeWorkspaceSessionServices = ({ eventBus, ...dependencies }: Input) => {
+export const createNodeWorkspaceSessionServices = ({
+  eventBus,
+  commands,
+  ...dependencies
+}: Input) => {
   const workspaceSessionService = createWorkspaceSessionService(dependencies);
   const workspaceSessionImports = createWorkspaceSessionImportService(dependencies);
-  // A runtime replacement or loss invalidates discovery bound to the old generation.
+  const workspaceSessionLaunchService = createWorkspaceSessionLaunchService({
+    ...dependencies,
+    commands,
+    publish: (snapshot) =>
+      Effect.try({
+        try: () =>
+          eventBus?.publish({
+            channel: "openducktor://run-event",
+            payload: {
+              type: "workspace_session_launch_updated",
+              snapshot: JSON.stringify(snapshot),
+            },
+          }),
+        catch: (cause) => toHostOperationError(cause, "workspace-session-launch.publish"),
+      }),
+  });
   const unsubscribeImportCatalogs = eventBus?.subscribe(
     "openducktor://runtime-changed",
     (envelope) => {
@@ -26,5 +53,18 @@ export const createNodeWorkspaceSessionServices = ({ eventBus, ...dependencies }
       );
     },
   );
-  return { workspaceSessionService, workspaceSessionImports, unsubscribeImportCatalogs };
+  return {
+    handlers: {
+      ...createWorkspaceSessionCommandHandlers(
+        workspaceSessionService,
+        dependencies.publishUpdated,
+      ),
+      ...createWorkspaceSessionImportCommandHandlers(workspaceSessionImports),
+      ...createWorkspaceSessionLaunchCommandHandlers(workspaceSessionLaunchService),
+    },
+    workspaceSessionService,
+    workspaceSessionImports,
+    workspaceSessionLaunchService,
+    unsubscribeImportCatalogs,
+  };
 };

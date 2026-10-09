@@ -1,337 +1,210 @@
-import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentSessionStartMode,
-  AgentUserMessagePart,
-} from "@openducktor/core";
-import type { QueryClient } from "@tanstack/react-query";
+  WorkflowLaunchRequest,
+  WorkflowLaunchRef,
+  WorkflowLaunchSnapshot,
+  WorkflowLaunchDecision,
+} from "@openducktor/contracts";
 import type {
-  AgentMessageSendOptions,
   AgentMessageSendReceipt,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
-import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
-import type { SessionLaunchActionId } from "./session-start-launch-options";
-import { FEEDBACK_MESSAGE_REQUIRED_ERROR } from "./session-start-prompt-context";
-import { resolveSessionStartKickoff } from "./session-start-kickoff";
+import { host } from "@/state/operations/shared/host";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { updateSessionLaunchDraft } from "./session-launch-draft-recovery";
 
-export type SendAgentMessage = (
-  session: AgentSessionIdentity,
-  parts: AgentUserMessagePart[],
-  options?: AgentMessageSendOptions,
-) => Promise<AgentMessageSendReceipt | null>;
-
-export type SessionStartPostAction = "none" | "kickoff" | "send_message";
-
-export type SessionStartBeforeAction = {
-  action: "human_request_changes";
-  note: string;
-};
-
-export type SessionStartWorkflowIntent = {
-  taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
-  startMode: AgentSessionStartMode;
-  sourceSession?: AgentSessionIdentity | null;
-  targetBranch?: GitTargetBranch;
-  targetWorkingDirectory?: string | null;
-  postStartAction: SessionStartPostAction;
-  holdForPostStartMessage?: boolean;
-  queueIfBusy?: boolean;
-  message?: string;
-  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
-  kickoffPrompt?: string;
-  beforeStartAction?: SessionStartBeforeAction;
-};
+import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
+export type { SessionStartBeforeAction, SessionStartPostAction } from "./session-start-types";
 
 export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartActionError: Error | null;
-  postStartMessageReceipt?: AgentMessageSendReceipt;
   retryPostStartMessage?: () => Promise<void>;
+  postStartMessageReceipt?: AgentMessageSendReceipt;
 };
+
+export type WorkflowLaunchClient = Pick<
+  typeof host,
+  | "agentSessionWorkflowLaunch"
+  | "agentSessionWorkflowLaunchRecover"
+  | "agentSessionWorkflowLaunchRead"
+>;
 
 type StartSessionWorkflowArgs = {
-  isCurrent?: () => boolean;
-  queryClient: QueryClient;
-  intent: SessionStartWorkflowIntent;
-  selection: AgentModelSelection | null;
-  task: TaskCard | null;
-  workspaceId: string | null;
-  persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  startAgentSession: StartAgentSession;
-  sendAgentMessage?: SendAgentMessage;
-  postStartErrorAttentionId?: string;
-  humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
+  request: SessionStartFlowRequest;
+  decision: ResolvedSessionStartDecision;
+  workspaceId: string;
+  repoPath: string;
+  launchAttemptId: string;
+  client?: WorkflowLaunchClient;
+  readSessionSnapshot?: (identity: AgentSessionIdentity) => AgentSessionState | null;
 };
 
-/** Checks the launch before changing task state, then starts the session and sends its first message. */
+/** The host completes the launch even if the browser leaves or changes its selection. */
 export const startSessionWorkflow = async ({
-  isCurrent,
-  queryClient,
-  intent,
-  selection,
-  task,
+  request,
+  decision,
   workspaceId,
-  persistTaskTargetBranch,
-  startAgentSession,
-  sendAgentMessage,
-  postStartErrorAttentionId,
-  humanRequestChangesTask,
+  repoPath,
+  launchAttemptId,
+  client = host,
+  readSessionSnapshot,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
-  const requireCurrentContext = (): void => {
-    if (isCurrent && !isCurrent())
-      throw new Error("Session start canceled because the selected context changed.");
-  };
-  requireCurrentContext();
-  if (intent.startMode !== "reuse") requireSelectedModel(selection, intent.startMode);
-  if (intent.startMode !== "fresh") requireSourceSession(intent.sourceSession, intent.startMode);
-  const beforeStartActionArgs: Parameters<typeof runBeforeStartAction>[0] = {
-    intent,
-    persistTaskTargetBranch,
-  };
-
-  if (humanRequestChangesTask) {
-    beforeStartActionArgs.humanRequestChangesTask = humanRequestChangesTask;
+  request.assertBeforeLaunch?.();
+  if (request.assertCanSubmit && decision.startMode === "reuse") {
+    const source = readSessionSnapshot?.(decision.sourceSession);
+    if (!source)
+      throw new Error("The selected session is missing. Reload session data before sending.");
+    request.assertCanSubmit(source);
   }
-
-  const postStartMessageSender =
-    intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
-  const postStartMessage =
-    intent.postStartAction === "none"
-      ? null
-      : await buildPostStartMessage({
-          queryClient,
-          intent,
-          task,
-          workspaceId,
-        });
-
-  requireCurrentContext();
-  await runBeforeStartAction(beforeStartActionArgs);
-
-  let heldStart: AgentSessionState | null = null;
-  const startOptions: Parameters<typeof startSessionFromIntent>[0] = {
-    intent,
-    selection,
-    startAgentSession,
-    holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
+  let hostDecision: WorkflowLaunchDecision;
+  if (decision.startMode === "reuse") {
+    hostDecision = { startMode: "reuse", sourceSession: decision.sourceSession };
+  } else {
+    const selection = decision.selectedModel;
+    if (!selection.runtimeKind)
+      throw new Error("Session start requires a selected runtime and model.");
+    const selectedModel = { ...selection, runtimeKind: selection.runtimeKind };
+    hostDecision =
+      decision.startMode === "fork"
+        ? { startMode: "fork", sourceSession: decision.sourceSession, selectedModel }
+        : { startMode: "fresh", selectedModel };
+  }
+  const launch: WorkflowLaunchRequest = {
+    launchAttemptId,
+    workspaceId,
+    repoPath,
+    taskId: request.taskId,
+    policy: { kind: "manual", actionId: request.launchActionId, decision: hostDecision },
+    instruction: { kind: "none" },
   };
-  if (intent.assertCanSubmit)
-    startOptions.claimStart = (session) => {
-      heldStart = session;
+  if (request.postStartAction === "send_message")
+    launch.instruction = {
+      kind: "message",
+      parts: request.parts ?? [{ kind: "text", text: request.message ?? "" }],
     };
-  const session = await startSessionFromIntent(startOptions);
-
-  if (intent.postStartAction === "none") {
-    return {
-      ...session,
-      postStartActionError: null,
+  if (request.postStartAction === "kickoff") {
+    launch.instruction = { kind: "kickoff" };
+    if (decision.kickoffPrompt !== undefined) launch.instruction.text = decision.kickoffPrompt;
+    if (request.message) launch.instruction.feedback = request.message;
+  }
+  if (decision.targetBranch) launch.targetBranch = decision.targetBranch;
+  if (request.targetWorkingDirectory)
+    launch.targetWorkingDirectory = request.targetWorkingDirectory;
+  if (request.beforeStartAction) launch.beforeStartAction = request.beforeStartAction;
+  if (decision.startMode === "fresh" && request.queueIfBusy) launch.queueIfBusy = true;
+  const ref = { launchAttemptId, workspaceId, repoPath, taskId: request.taskId };
+  const result = workflowLaunchResult(await submitWorkflowLaunch(launch, client), ref, client);
+  const recover = result.retryPostStartMessage;
+  if (recover && (request.assertBeforeLaunch || request.assertCanSubmit))
+    result.retryPostStartMessage = async () => {
+      request.assertBeforeLaunch?.();
+      if (request.assertCanSubmit) {
+        const session = readSessionSnapshot?.(result);
+        if (!session)
+          throw new Error("The selected session is missing. Reload session data before sending.");
+        request.assertCanSubmit(session);
+      }
+      await recover();
     };
-  }
+  return result;
+};
 
-  if (!postStartMessageSender) {
-    throw new Error("Post-start messaging is unavailable.");
-  }
-  if (postStartMessage === null) {
-    throw new Error("Post-start message is unavailable.");
-  }
-
-  const ownsStart = heldStart ? createAgentMessageStartOwner(heldStart) : null;
-  let postStartMessageReceipt: AgentMessageSendReceipt | null = null;
-  const runPostStartAction = async (): Promise<Error | null> => {
+export const submitWorkflowLaunch = async (
+  request: WorkflowLaunchRequest,
+  client: Pick<
+    WorkflowLaunchClient,
+    "agentSessionWorkflowLaunch" | "agentSessionWorkflowLaunchRead"
+  >,
+): Promise<WorkflowLaunchSnapshot> => {
+  const { launchAttemptId, workspaceId, repoPath, taskId } = request;
+  const ref = { launchAttemptId, workspaceId, repoPath, taskId };
+  let outcome: WorkflowLaunchSnapshot;
+  try {
+    outcome = await client.agentSessionWorkflowLaunch(request);
+  } catch (cause) {
+    let retained: WorkflowLaunchSnapshot | undefined;
     try {
-      const parts: AgentUserMessagePart[] = [
-        {
-          kind: "text",
-          text: postStartMessage,
-        },
-      ];
-      const sendOptions: AgentMessageSendOptions = {};
-      if (intent.assertCanSubmit) {
-        sendOptions.assertCanSubmit = intent.assertCanSubmit;
-        if (ownsStart) sendOptions.ownsStart = ownsStart;
-      }
-      if (intent.postStartAction === "kickoff" && intent.kickoffPrompt !== undefined) {
-        sendOptions.preserveTextWhitespace = true;
-      }
-      if (postStartErrorAttentionId) {
-        sendOptions.errorAttentionId = postStartErrorAttentionId;
-      }
-      if (Object.keys(sendOptions).length > 0) {
-        postStartMessageReceipt = await postStartMessageSender(session, parts, sendOptions);
-      } else {
-        postStartMessageReceipt = await postStartMessageSender(session, parts);
-      }
-      return null;
-    } catch (error) {
-      return toError(error);
+      [retained] = await client.agentSessionWorkflowLaunchRead(ref);
+    } catch (readCause) {
+      throw new WorkflowLaunchObservationError(
+        ref,
+        cause instanceof Error ? cause : new Error(String(cause)),
+        readCause instanceof Error ? readCause : new Error(String(readCause)),
+      );
     }
-  };
+    if (!retained || ["queued", "preparing", "sending"].includes(retained.phase))
+      throw new WorkflowLaunchObservationError(
+        ref,
+        cause instanceof Error ? cause : new Error(String(cause)),
+      );
+    outcome = retained;
+  }
+  return outcome;
+};
 
-  const postStartActionError = await runPostStartAction();
-  if (!postStartActionError) {
-    const result: SessionStartWorkflowResult = {
-      ...session,
-      postStartActionError: null,
+export const workflowLaunchResult = (
+  outcome: WorkflowLaunchSnapshot,
+  ref: WorkflowLaunchRef,
+  client: Pick<WorkflowLaunchClient, "agentSessionWorkflowLaunchRecover">,
+): SessionStartWorkflowResult => {
+  if (!outcome.session || !outcome.ownershipSaved) throw new WorkflowLaunchFailure(outcome);
+  const result: SessionStartWorkflowResult = {
+    ...outcome.session,
+    postStartActionError:
+      outcome.failure || outcome.phase === "canceled" ? new WorkflowLaunchFailure(outcome) : null,
+  };
+  if (outcome.acceptance === "accepted" && outcome.acceptedMessage) {
+    result.postStartMessageReceipt = {
+      recipient: toAgentSessionIdentity(outcome.session),
+      acceptedMessage: outcome.acceptedMessage,
+      postAcceptanceFailure: result.postStartActionError?.message ?? null,
     };
-    if (postStartMessageReceipt) result.postStartMessageReceipt = postStartMessageReceipt;
-    return result;
   }
-  let retryPending = false;
-  return {
-    ...session,
-    postStartActionError,
-    retryPostStartMessage: async () => {
-      if (retryPending || postStartMessageReceipt) return;
-      retryPending = true;
-      try {
-        const failure = await runPostStartAction();
-        if (failure) throw failure;
-      } finally {
-        retryPending = false;
-      }
-    },
-  };
-};
-
-const requirePostStartMessageSender = (
-  sendAgentMessage: StartSessionWorkflowArgs["sendAgentMessage"],
-): NonNullable<StartSessionWorkflowArgs["sendAgentMessage"]> => {
-  if (!sendAgentMessage) {
-    throw new Error("Post-start messaging is unavailable.");
-  }
-
-  return sendAgentMessage;
-};
-
-const startSessionFromIntent = ({
-  intent,
-  selection,
-  startAgentSession,
-  holdForPostStartMessage,
-  claimStart,
-}: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
-  holdForPostStartMessage: boolean;
-  claimStart?: (session: AgentSessionState) => void;
-}): Promise<AgentSessionIdentity> => {
-  if (intent.startMode === "reuse") {
-    return startAgentSession({
-      taskId: intent.taskId,
-      role: intent.role,
-      startMode: "reuse",
-      sourceSession: requireSourceSession(intent.sourceSession, "reuse"),
-    });
-  }
-
-  if (intent.startMode === "fork") {
-    const forkRequest: Extract<StartAgentSessionInput, { startMode: "fork" }> = {
-      taskId: intent.taskId,
-      role: intent.role,
-      startMode: "fork",
-      selectedModel: requireSelectedModel(selection, "fork"),
-      sourceSession: requireSourceSession(intent.sourceSession, "fork"),
-      holdForPostStartMessage,
+  if (outcome.recoveryAllowed === true) {
+    result.retryPostStartMessage = async () => {
+      const recovered = await client.agentSessionWorkflowLaunchRecover({
+        launchAttemptId: ref.launchAttemptId,
+        workspaceId: ref.workspaceId,
+        repoPath: ref.repoPath,
+        taskId: ref.taskId,
+      });
+      updateSessionLaunchDraft(recovered);
+      if (recovered.failure || recovered.phase !== "completed")
+        throw new WorkflowLaunchFailure(recovered);
     };
-    if (claimStart) forkRequest.claimStart = claimStart;
-    return startAgentSession(forkRequest);
   }
-
-  const freshRequest: Extract<StartAgentSessionInput, { startMode: "fresh" }> = {
-    taskId: intent.taskId,
-    role: intent.role,
-    startMode: "fresh" as const,
-    selectedModel: requireSelectedModel(selection, "fresh"),
-    holdForPostStartMessage,
-  };
-  if (claimStart) freshRequest.claimStart = claimStart;
-  if (intent.queueIfBusy) {
-    freshRequest.queueIfBusy = true;
-  }
-  if (intent.targetWorkingDirectory !== undefined) {
-    return startAgentSession({
-      ...freshRequest,
-      targetWorkingDirectory: intent.targetWorkingDirectory,
-    });
-  }
-
-  return startAgentSession(freshRequest);
+  return result;
 };
 
-const requireSelectedModel = (
-  selection: AgentModelSelection | null,
-  startMode: "fresh" | "fork",
-): AgentModelSelection => {
-  if (selection) {
-    return selection;
+export class WorkflowLaunchFailure extends Error {
+  constructor(readonly outcome: WorkflowLaunchSnapshot) {
+    const message =
+      outcome.failure?.message ??
+      outcome.skipReason ??
+      (outcome.phase === "canceled"
+        ? "Workflow launch was canceled."
+        : "Workflow launch did not complete.");
+    const cleanup = outcome.failure?.cleanupErrors ?? [];
+    const guidance =
+      outcome.acceptance === "unknown"
+        ? " Runtime acceptance is unknown. Inspect the saved session before sending another instruction."
+        : "";
+    super(message + (cleanup.length ? ` Cleanup failed: ${cleanup.join("; ")}` : "") + guidance);
+    this.name = "WorkflowLaunchFailure";
   }
-  throw new Error(
-    `${startMode === "fork" ? "Fork" : "Fresh"} session start requires a selected model.`,
-  );
-};
+}
 
-const requireSourceSession = (
-  sourceSession: AgentSessionIdentity | null | undefined,
-  startMode: "reuse" | "fork",
-): AgentSessionIdentity => {
-  if (sourceSession) {
-    return sourceSession;
+/** Keep the attempt ID for inspection after reconnect. This error does not permit another send. */
+export class WorkflowLaunchObservationError extends Error {
+  constructor(
+    readonly launch: WorkflowLaunchRef,
+    readonly transportCause: Error,
+    readonly readCause?: Error,
+  ) {
+    super(
+      `${transportCause.message}. Inspect workflow launch '${launch.launchAttemptId}' after reconnect before sending another instruction.`,
+      { cause: transportCause },
+    );
+    this.name = "WorkflowLaunchObservationError";
   }
-  throw new Error(
-    `${startMode === "fork" ? "Fork" : "Reuse"} session start requires a source session.`,
-  );
-};
-
-const toError = (cause: unknown): Error => {
-  return cause instanceof Error ? cause : new Error(String(cause));
-};
-
-const buildPostStartMessage = async ({
-  queryClient,
-  intent,
-  task,
-  workspaceId,
-}: Pick<StartSessionWorkflowArgs, "queryClient" | "task" | "workspaceId"> & {
-  intent: SessionStartWorkflowIntent;
-}): Promise<string> => {
-  if (intent.postStartAction === "send_message") {
-    const message = intent.message?.trim() ?? "";
-    if (!message) {
-      throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
-    }
-    return message;
-  }
-
-  return resolveSessionStartKickoff({ queryClient, intent, task, workspaceId });
-};
-
-const runBeforeStartAction = async ({
-  intent,
-  humanRequestChangesTask,
-  persistTaskTargetBranch,
-}: Pick<StartSessionWorkflowArgs, "humanRequestChangesTask"> & {
-  persistTaskTargetBranch?: StartSessionWorkflowArgs["persistTaskTargetBranch"];
-  intent: SessionStartWorkflowIntent;
-}): Promise<void> => {
-  const beforeStartAction = intent.beforeStartAction;
-  if (!beforeStartAction) {
-    if (!intent.targetBranch || !persistTaskTargetBranch) {
-      return;
-    }
-
-    await persistTaskTargetBranch(intent.taskId, intent.targetBranch);
-    return;
-  }
-  if (!humanRequestChangesTask) {
-    throw new Error("Human request changes action is unavailable.");
-  }
-
-  await humanRequestChangesTask(intent.taskId, beforeStartAction.note);
-
-  if (intent.targetBranch && persistTaskTargetBranch) {
-    await persistTaskTargetBranch(intent.taskId, intent.targetBranch);
-  }
-};
+}

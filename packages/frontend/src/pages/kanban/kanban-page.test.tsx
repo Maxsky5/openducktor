@@ -1,3 +1,4 @@
+import { createWorkflowLaunchClient } from "@/test-utils/workflow-launch-client";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
@@ -852,7 +853,26 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
+    const launchClient = createWorkflowLaunchClient({
+      queryClient: createQueryClient(),
+      workspaceId: "repo",
+      startAgentSession: startAgentSessionMock,
+      sendAgentMessage: sendAgentMessageMock,
+    });
+    const savedLaunch = hostClient.agentSessionWorkflowLaunch;
+    const savedRead = hostClient.agentSessionWorkflowLaunchRead;
+    const savedRecover = hostClient.agentSessionWorkflowLaunchRecover;
+    hostClient.agentSessionWorkflowLaunch = launchClient.agentSessionWorkflowLaunch;
+    hostClient.agentSessionWorkflowLaunchRead = launchClient.agentSessionWorkflowLaunchRead;
+    hostClient.agentSessionWorkflowLaunchRecover = launchClient.agentSessionWorkflowLaunchRecover;
     toastSpies = [
+      {
+        mockRestore: () => {
+          hostClient.agentSessionWorkflowLaunch = savedLaunch;
+          hostClient.agentSessionWorkflowLaunchRead = savedRead;
+          hostClient.agentSessionWorkflowLaunchRecover = savedRecover;
+        },
+      },
       spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
       spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
     ];
@@ -1338,7 +1358,7 @@ describe("KanbanPage session start modal flow", () => {
       "config unavailable",
     );
     expect(toastErrorMock).toHaveBeenCalledWith(
-      "Session started, but the first message failed.",
+      "First message failed for TASK-123.",
       expect.objectContaining({ action: expect.objectContaining({ label: "Retry message" }) }),
     );
 
@@ -1366,11 +1386,19 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitForMockCall(startAgentSessionMock);
     expect(publishSessionErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: "TASK-123", role: "build" }),
+      expect.objectContaining({ taskId: "TASK-123", role: "build", inAppFeedbackHandled: true }),
       "Worktree path already exists for task TASK-123",
     );
     expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty("session");
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Workflow launch failed for TASK-123.",
+      expect.objectContaining({
+        description: "Worktree path already exists for task TASK-123",
+        id: expect.any(String),
+        action: undefined,
+      }),
+    );
     expect(renderer.getLocation()).toBe("/");
 
     await act(async () => {

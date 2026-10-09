@@ -1,4 +1,13 @@
 import {
+  type WorkflowLaunchRequest,
+  type WorkflowLaunchRead,
+  type WorkflowLaunchRef,
+  workflowLaunchRequestSchema,
+  workflowLaunchReadSchema,
+  workflowLaunchRefSchema,
+  workflowLaunchSnapshotSchema,
+} from "@openducktor/contracts";
+import {
   type AgentGeneratedImageBatch,
   type AgentGeneratedImageBatchInput,
   type AgentGeneratedImageDescribeInput,
@@ -98,6 +107,34 @@ export class HostAgentSessionLiveClient {
     );
   }
 
+  async agentSessionWorkflowLaunch(input: WorkflowLaunchRequest) {
+    return this.invokeFn(
+      "agent_session_workflow_launch",
+      workflowLaunchRequestSchema.parse(input),
+      workflowLaunchSnapshotSchema,
+    );
+  }
+  async agentSessionWorkflowLaunchRead(input: WorkflowLaunchRead) {
+    return this.invokeFn(
+      "agent_session_workflow_launch_read",
+      workflowLaunchReadSchema.parse(input),
+      arrayResultSchema(workflowLaunchSnapshotSchema, "agent_session_workflow_launch_read"),
+    );
+  }
+  async agentSessionWorkflowLaunchRecover(input: WorkflowLaunchRef) {
+    return this.invokeFn(
+      "agent_session_workflow_launch_recover",
+      workflowLaunchRefSchema.parse(input),
+      workflowLaunchSnapshotSchema,
+    );
+  }
+  async agentSessionWorkflowLaunchCancel(input: WorkflowLaunchRef) {
+    return this.invokeFn(
+      "agent_session_workflow_launch_cancel",
+      workflowLaunchRefSchema.parse(input),
+      workflowLaunchSnapshotSchema,
+    );
+  }
   async agentSessionWorkflowStart(
     input: AgentWorkflowSessionStartInput,
   ): Promise<AgentSessionControlSummary> {

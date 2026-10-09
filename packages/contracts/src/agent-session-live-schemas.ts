@@ -152,6 +152,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .extend({
       type: z.literal("task_session_records_updated"),
       repoPath: nonEmptyStringSchema,
+      liveSession: agentSessionLiveSnapshotSchema.optional(),
     })
     .strict(),
   z

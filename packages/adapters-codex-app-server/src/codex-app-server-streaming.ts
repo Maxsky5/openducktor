@@ -284,6 +284,7 @@ const emitFinalAgentMessage = (
   timestamp: string,
   tokenUsage?: CodexTokenUsageTotals,
   model?: AgentModelSelection,
+  durationMs?: number,
 ): void => {
   const itemId = item.id;
   const text = item.text;
@@ -304,6 +305,7 @@ const emitFinalAgentMessage = (
     if (model) {
       event.model = model;
     }
+    if (durationMs !== undefined) event.durationMs = durationMs;
     emitCodexSessionEvent(context, session.threadId, event);
   }
 };
@@ -591,12 +593,20 @@ const clearTurnScopedStreamingState = (
 const flushBufferedFinalAgentMessage = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  turnId: string,
+  turn: CodexAppServerTurn,
 ): void => {
+  const turnId = turn.id;
   const turnKey = codexTurnKey(session.threadId, turnId);
   const bufferedAgentMessage = context.completedAgentMessagesByTurnKey.get(turnKey);
   if (!bufferedAgentMessage) {
     return;
+  }
+  const durationMs = turn.durationMs;
+  if (durationMs === null) {
+    throw new Error("Completed Codex turn with a final assistant message is missing durationMs.");
+  }
+  if (!Number.isSafeInteger(durationMs) || durationMs < 0) {
+    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
   }
   emitFinalAgentMessage(
     context,
@@ -605,39 +615,8 @@ const flushBufferedFinalAgentMessage = (
     bufferedAgentMessage.timestamp,
     context.tokenUsageByTurnKey.get(turnKey),
     bufferedAgentMessage.model ?? modelForTurn(context, session, turnId),
+    durationMs,
   );
-};
-
-const emitCodexCompletedTurnTiming = (
-  context: CodexStreamingContext,
-  session: CodexSessionState,
-  completedAgentMessage: CompletedAgentMessage,
-  turn: CodexAppServerTurn,
-): void => {
-  const durationMs = turn.durationMs;
-  if (durationMs === null) {
-    throw new Error("Completed Codex turn with a final assistant message is missing durationMs.");
-  }
-  if (!Number.isSafeInteger(durationMs) || durationMs < 0) {
-    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
-  }
-
-  const completedAtMs = Date.parse(completedAgentMessage.timestamp);
-  if (Number.isNaN(completedAtMs)) {
-    throw new Error("Completed Codex assistant message has an invalid timestamp.");
-  }
-
-  const activityStartedAtDate = new Date(completedAtMs - durationMs);
-  if (Number.isNaN(activityStartedAtDate.getTime())) {
-    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
-  }
-  const activityStartedAt = activityStartedAtDate.toISOString();
-  emitCodexSessionEvent(context, session.threadId, {
-    type: "session_status",
-    externalSessionId: session.threadId,
-    timestamp: activityStartedAt,
-    status: { type: "busy", message: null },
-  });
 };
 
 export const handleCodexPendingNotifications = async (
@@ -850,13 +829,7 @@ export const handleCodexPendingNotifications = async (
               : "turn_ended",
       });
       if (turn.status === "completed") {
-        const completedAgentMessage = context.completedAgentMessagesByTurnKey.get(
-          codexTurnKey(session.threadId, turnId),
-        );
-        if (completedAgentMessage) {
-          emitCodexCompletedTurnTiming(context, session, completedAgentMessage, turn);
-        }
-        flushBufferedFinalAgentMessage(context, session, turnId);
+        flushBufferedFinalAgentMessage(context, session, turn);
         clearTurnScopedStreamingState(context, session.threadId, turnId);
       } else {
         clearTurnScopedStreamingState(context, session.threadId, turnId);

@@ -25,7 +25,6 @@ import { useKanbanSessionStartFlow } from "@/pages/kanban/use-kanban-session-sta
 import { useTaskApprovalFlow } from "@/pages/kanban/use-task-approval-flow";
 import { useTaskResetFlow } from "@/pages/kanban/use-task-reset-flow";
 import {
-  useAgentOperations,
   useAgentSessionSummaries,
   useTasksState,
   useWorkspaceState,
@@ -74,7 +73,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
-  const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
     tasks,
@@ -88,13 +86,9 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     resetTask,
     resetTaskImplementation,
     humanApproveTask,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
   } = useTasksState();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
-    startAgentSession,
-    sendAgentMessage,
   });
 
   const {
@@ -119,8 +113,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     sessions,
     navigate,
     workspaceRepoPath,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
     runSessionStartWorkflow,
   });
 

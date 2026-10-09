@@ -72,14 +72,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
-    humanRequestChangesTask,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
     setTaskTargetBranch,
   } = useTasksState();
   const {
-    startAgentSession,
     sendAgentMessage,
     continueInterruptedTurn,
     stopAgentSession,
@@ -90,8 +88,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   } = useAgentOperations();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
-    startAgentSession,
-    sendAgentMessage,
   });
   const sessions = useAgentSessionSummaries();
 
@@ -140,8 +136,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         replyAgentApproval,
         answerAgentQuestion,
       },
-      humanRequestChangesTask,
-      setTaskTargetBranch,
     });
   const buildTools = useAgentsPageBuildTools({
     activeWorkspace,

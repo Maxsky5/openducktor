@@ -1,3 +1,4 @@
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { expect, mock, spyOn, test } from "bun:test";
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -11,7 +12,6 @@ import { buildSessionStartErrorOccurrence } from "@/features/notifications/sessi
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { createSessionStartWorkflowRunner } from "./session-start-orchestration";
 import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
 
 test("renders Retry below the recovery error at full width", async () => {
@@ -166,7 +166,6 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
         startInBackground: false,
         roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
         runSessionStartWorkflow,
-        humanRequestChangesTask: async () => {},
         openSessionInAgentStudio: () => {},
       });
       expect(genericToast).not.toHaveBeenCalled();

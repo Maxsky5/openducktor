@@ -46,6 +46,7 @@ export type PersistedAgentChatDraftPayload = {
   workingDirectory: string;
   taskId: string;
   updatedAt: string;
+  launchAttemptId?: string | undefined;
   draft: {
     segments: AgentChatComposerSegment[];
     attachments: PersistedAgentChatDraftAttachment[];
@@ -61,6 +62,7 @@ export type SerializedAgentChatDraftResult =
 export type RestoredAgentChatDraft = {
   taskId: string | null;
   updatedAt: string;
+  launchAttemptId?: string | undefined;
   draft: AgentChatComposerDraft;
 };
 
@@ -138,6 +140,7 @@ const persistedAgentChatDraftPayloadSchema = z.object({
   workingDirectory: nonEmptyStringSchema,
   taskId: nonEmptyStringSchema,
   updatedAt: nonEmptyStringSchema,
+  launchAttemptId: nonEmptyStringSchema.optional(),
   draft: z.object({
     segments: z.array(persistedSegmentSchema),
     attachments: z.array(attachmentSchema),
@@ -150,6 +153,7 @@ const persistedWorkspaceChatDraftPayloadSchema = z.object({
   workspaceSessionId: nonEmptyStringSchema,
   taskId: z.null(),
   updatedAt: nonEmptyStringSchema,
+  launchAttemptId: nonEmptyStringSchema.optional(),
   draft: persistedAgentChatDraftPayloadSchema.shape.draft,
 });
 
@@ -193,11 +197,13 @@ export const serializeAgentChatDraftPayload = ({
   taskId,
   draft,
   updatedAt,
+  launchAttemptId,
 }: {
   identity: AgentChatDraftIdentity;
   taskId: string | null;
   draft: AgentChatComposerDraft;
   updatedAt: string;
+  launchAttemptId?: string | undefined;
 }): SerializedAgentChatDraftResult => {
   if (!draftHasMeaningfulContent(draft)) {
     return { status: "empty" };
@@ -231,6 +237,7 @@ export const serializeAgentChatDraftPayload = ({
   const payload = {
     ...owner,
     updatedAt,
+    launchAttemptId,
     draft: {
       segments: draft.segments,
       attachments,
@@ -341,6 +348,7 @@ export const parseAgentChatDraftPayload = ({
     value: {
       taskId: payload.taskId,
       updatedAt: payload.updatedAt,
+      launchAttemptId: payload.launchAttemptId,
       draft: { segments, attachments },
     },
   };
@@ -408,15 +416,23 @@ export const writeAgentChatDraftToStorage = ({
   taskId,
   draft,
   updatedAt,
+  launchAttemptId,
 }: {
   storage: Pick<Storage, "setItem" | "removeItem">;
   identity: AgentChatDraftIdentity;
   taskId: string | null;
   draft: AgentChatComposerDraft;
   updatedAt: string;
+  launchAttemptId?: string | undefined;
 }): SerializedAgentChatDraftResult => {
   const key = toAgentChatDraftStorageKey(identity);
-  const result = serializeAgentChatDraftPayload({ identity, taskId, draft, updatedAt });
+  const result = serializeAgentChatDraftPayload({
+    identity,
+    taskId,
+    draft,
+    updatedAt,
+    launchAttemptId,
+  });
   if (result.status !== "serialized") {
     removeDraftStoragePayload(storage, key);
     return result;

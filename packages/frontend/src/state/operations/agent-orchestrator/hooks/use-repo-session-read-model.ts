@@ -806,6 +806,28 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
+      if (envelope.type === "task_session_records_updated") {
+        commitProjected((current) => {
+          const owned = applyWorkflowSessionRecords({
+            projected: current,
+            associationEvidence: current,
+            records: {
+              loadedTaskIds: new Set([envelope.taskId]),
+              records: envelope.agentSessions.map((record) => ({
+                taskId: envelope.taskId,
+                record,
+              })),
+            },
+          });
+          return envelope.liveSession
+            ? applyAgentSessionLiveDelta({
+                current: owned,
+                envelope: { type: "session_upsert", session: envelope.liveSession },
+              })
+            : owned;
+        });
+        return;
+      }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         retainLivePolicyNotices(envelope);
         const upsert = envelope.type === "session_upsert";

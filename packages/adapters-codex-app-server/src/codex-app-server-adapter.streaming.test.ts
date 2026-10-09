@@ -1264,6 +1264,7 @@ describe("CodexAppServerAdapter streaming", () => {
         type: "assistant_message",
         message: "Done before idle.",
         totalTokens: 321,
+        durationMs: 1_200,
       }),
     );
     const assistantMessageIndex = events.findIndex((event) => event.type === "assistant_message");
@@ -1276,6 +1277,8 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    // Completion timing must not restart the turn through a backdated busy event.
+    expect(events.filter((event) => event.type === "session_status")).toEqual([]);
     expect(
       mutations.flatMap((mutation) => mutation.snapshots.map((snapshot) => snapshot.activity)),
     ).toContain("idle");

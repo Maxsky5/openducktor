@@ -1,15 +1,28 @@
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
-import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
+import {
+  WorkflowLaunchFailure,
+  WorkflowLaunchObservationError,
+} from "@/features/session-start/session-start-workflow";
+import {
+  agentStudioChatDraftScopeKey,
+  createAgentStudioChatDraftPersistence,
+} from "../agent-studio-chat-draft";
+import type {
+  AgentChatSendRecovery,
+  AgentChatSendResult,
+} from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ReusablePrompt } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
   type AgentRole,
   classifySystemSlashCommandInvocation,
+  normalizeAgentUserMessageParts,
 } from "@openducktor/core";
 import { useCallback } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   buildAgentStudioSessionActivityKey,
@@ -18,7 +31,6 @@ import {
 import { resolveAgentStudioSendDraftParts } from "./agent-studio-send-draft";
 import {
   canResolveAgentStudioSendTargetSession,
-  resolveAgentStudioSendTargetSession,
   type StartSessionForMessage,
 } from "./agent-studio-send-target";
 import type { AgentStudioSessionActionState } from "./agent-studio-session-action-state";
@@ -133,11 +145,11 @@ export function useAgentStudioSendAction({
         }
         // A needed model change waits for this send, so viewing a session never resumes it.
         if (!(await prepareSelectedSessionModelForSend())) return false;
-        const targetSession = await resolveAgentStudioSendTargetSession({
-          selectedSessionIdentity,
-          canStartNewSession,
-          startSession,
-        });
+        const started = selectedSessionIdentity
+          ? null
+          : await startSession(normalizeAgentUserMessageParts(messageParts));
+        const targetSession =
+          selectedSessionIdentity ?? (started ? toAgentSessionIdentity(started) : null);
         if (!targetSession) {
           return false;
         }
@@ -151,11 +163,20 @@ export function useAgentStudioSendAction({
           session: targetSession,
         });
         activity.add(targetComposerContextKey);
-        await sendAgentMessage(targetSession, messageParts);
+        if (started?.postStartActionError) throw started.postStartActionError;
+        if (selectedSessionIdentity) await sendAgentMessage(targetSession, messageParts);
         return true;
       } catch (cause) {
+        const failure = cause instanceof SessionStartWorkflowError ? cause.originalCause : cause;
+        // The host can keep sending after the response is lost. Do not restore that draft.
+        if (
+          failure instanceof WorkflowLaunchObservationError ||
+          (failure instanceof WorkflowLaunchFailure &&
+            ["accepted", "unknown"].includes(failure.outcome.acceptance))
+        )
+          return true;
         if (createdSession) {
-          return {
+          const recovery: AgentChatSendRecovery = {
             kind: "recover_draft",
             originKey: agentStudioChatDraftScopeKey(workspaceId, { taskId, role, session: null }),
             recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
@@ -165,6 +186,16 @@ export function useAgentStudioSendAction({
             }),
             error: cause instanceof Error ? cause : new Error(String(cause)),
           };
+          if (failure instanceof WorkflowLaunchFailure && failure.outcome.recoveryAllowed) {
+            recovery.launchAttemptId = failure.outcome.launchAttemptId;
+            recovery.inAppFeedbackHandled = true;
+            recovery.persistence = createAgentStudioChatDraftPersistence({
+              workspaceId,
+              taskId,
+              session: createdSession,
+            });
+          }
+          return recovery;
         }
         throw cause;
       } finally {

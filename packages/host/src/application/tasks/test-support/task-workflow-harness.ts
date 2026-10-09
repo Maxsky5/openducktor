@@ -114,7 +114,7 @@ const unexpectedRuntimeRegistryCall = (operation: string) =>
       message: `Unexpected runtime registry call: ${operation}`,
     }),
   );
-const createRuntimeRegistryPort = <Overrides extends Partial<RuntimeRegistryPort>>(
+export const createRuntimeRegistryPort = <Overrides extends Partial<RuntimeRegistryPort>>(
   port: Overrides,
 ): RuntimeRegistryPort => ({
   status: () => Effect.die(new Error("Unexpected runtime registry call: status")),

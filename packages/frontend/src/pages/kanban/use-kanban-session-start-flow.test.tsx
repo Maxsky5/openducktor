@@ -1,3 +1,4 @@
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
@@ -9,10 +10,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
-import {
-  createSessionStartWorkflowRunner,
-  resolveBuildContinuationLaunchAction,
-} from "@/features/session-start";
+import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
@@ -266,8 +264,6 @@ const createBaseArgs = (): HookArgs => ({
     }),
   ],
   navigate: mock(() => {}),
-  humanRequestChangesTask: async () => {},
-  setTaskTargetBranch: async () => {},
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
 });
 
@@ -593,11 +589,9 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("build starts persist the selected task target branch before starting the session", async () => {
+  test("build starts submit the selected target branch to the host", async () => {
+    let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
     const callOrder: string[] = [];
-    const setTaskTargetBranch = mock(async () => {
-      callOrder.push("target-branch");
-    });
     const startAgentSession = mock(async () => {
       callOrder.push("start-session");
       return sessionIdentity("builder-session-new");
@@ -619,8 +613,12 @@ describe("useKanbanSessionStartFlow", () => {
       },
     };
     args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
-    args.setTaskTargetBranch = setTaskTargetBranch;
-    args.runSessionStartWorkflow = createRunSessionStartWorkflow({ startAgentSession });
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({
+      startAgentSession,
+      onRequest: (request) => {
+        submitted = request;
+      },
+    });
 
     const harness = createHookHarness(args);
     await harness.mount();
@@ -642,11 +640,8 @@ describe("useKanbanSessionStartFlow", () => {
       await Promise.resolve();
     });
 
-    expect(setTaskTargetBranch).toHaveBeenCalledWith("TASK-1", {
-      remote: "origin",
-      branch: "release/2026.04",
-    });
-    expect(callOrder).toEqual(["target-branch", "start-session"]);
+    expect(submitted?.targetBranch).toEqual({ remote: "origin", branch: "release/2026.04" });
+    expect(callOrder).toEqual(["start-session"]);
 
     await harness.unmount();
   });
@@ -817,12 +812,10 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("human review feedback opens the shared start modal with reuse selected by default when builder sessions exist", async () => {
-    const humanRequestChangesTask = mock(async () => {});
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => null);
     const harness = createHookHarness({
       ...createBaseArgs(),
-      humanRequestChangesTask,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
         sendAgentMessage,
@@ -864,7 +857,6 @@ describe("useKanbanSessionStartFlow", () => {
         sourceSession: expect.objectContaining({ externalSessionId: "builder-session-1" }),
       }),
     ]);
-    expect(humanRequestChangesTask).not.toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
 

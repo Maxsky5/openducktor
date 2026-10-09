@@ -1,6 +1,5 @@
+import type { TaskCard } from "@openducktor/contracts";
 import type { SessionStartWorkflowResult } from "@/features/session-start";
-import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
-import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { toast } from "sonner";
 import type {
@@ -20,8 +19,6 @@ type StartKanbanSessionFlowInput = {
   roleLabels: Record<AgentRole, string>;
   workspaceId: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   openSessionInAgentStudio: (
     intent: KanbanSessionStartIntent,
     session: AgentSessionIdentity,
@@ -35,8 +32,6 @@ export const startKanbanSessionFlow = async ({
   startInBackground,
   tasks,
   runSessionStartWorkflow,
-  humanRequestChangesTask,
-  setTaskTargetBranch,
   openSessionInAgentStudio,
 }: StartKanbanSessionFlowInput): Promise<SessionStartWorkflowResult> => {
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
@@ -44,13 +39,8 @@ export const startKanbanSessionFlow = async ({
     request,
     decision,
     task,
-    humanRequestChangesTask,
-    onPostStartMessageFailure: showSessionStartMessageRecovery,
   };
   if (isCurrent) workflowInput.isCurrent = isCurrent;
-  if (setTaskTargetBranch) {
-    workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
-  }
   const workflow = await runSessionStartWorkflow(workflowInput);
   if (
     workflow.postStartActionError &&

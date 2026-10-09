@@ -125,7 +125,7 @@ export const createTestDependencies = (
     },
     runtimeHostPort: {
       gitCanonicalizePath: async (path) => path,
-      agentSessionWorkflowStart: (...args) => host.agentSessionWorkflowStart(...args),
+      agentSessionWorkflowLaunch: (...args) => host.agentSessionWorkflowLaunch(...args),
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {

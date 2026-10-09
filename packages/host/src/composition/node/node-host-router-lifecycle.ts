@@ -1,5 +1,6 @@
 import type { WorkspaceSettingsError } from "../../application/workspaces/workspace-settings-service";
 import type { NotificationService } from "../../application/notifications/notification-service";
+import type { WorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
 import { Effect } from "effect";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
@@ -39,6 +40,7 @@ export const createNodeHostRouterLifecycle = ({
   shutdownWorkspaceSessionPersistence,
   unsubscribeImportCatalogs,
   notifications,
+  workflowLaunchService,
   azureDevOpsConnection,
   workspaceProviderSetup,
   imageWorkers,
@@ -58,6 +60,7 @@ export const createNodeHostRouterLifecycle = ({
   unsubscribeImportCatalogs: (() => void) | undefined;
   notifications: Pick<NotificationService, "initialize" | "dispose">;
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
+  workflowLaunchService?: Pick<WorkflowLaunchService, "shutdown">;
   azureDevOpsConnection?: Pick<AzureDevOpsConnectionPort, "shutdown"> | undefined;
   workspaceProviderSetup: {
     shutdown(): Effect.Effect<void, import("../../effect/host-errors").HostError>;
@@ -136,6 +139,10 @@ export const createNodeHostRouterLifecycle = ({
               { label: "workspace file reads", run: shutdownWorkspaceFiles },
               { label: "notifications", run: notifications.dispose },
               { label: "workspace session imports", run: shutdownWorkspaceImports },
+              ...(workflowLaunchService
+                ? [{ label: "workflow launches", run: () => workflowLaunchService.shutdown() }]
+                : []),
+              // Launch workers can still start title saves while they stop.
               { label: "workspace session renames", run: shutdownWorkspaceSessionPersistence },
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
               ...(azureDevOpsConnection

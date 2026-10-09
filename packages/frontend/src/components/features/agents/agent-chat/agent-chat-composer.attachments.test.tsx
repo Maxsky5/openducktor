@@ -726,16 +726,11 @@ describe("first-message composer recovery", () => {
         externalSessionId: "created",
         workingDirectory: "/repo/task-1",
       };
-      let attempts = 0;
-      const send = mock(async () => {
-        attempts += 1;
-        if (attempts === 1) {
-          await firstSend.promise;
-          throw new Error("first send failed");
-        }
-        return null;
+      const send = mock(async () => null);
+      const start = mock(async (_parts: import("@openducktor/core").AgentUserMessagePart[]) => {
+        await firstSend.promise;
+        return { ...created, postStartActionError: new Error("first send failed") };
       });
-      const start = mock(async () => ({ ...created, postStartActionError: null }));
       function RecoveryComposer({ taskId }: { taskId: string }) {
         const [session, setSession] = useState<AgentSessionIdentity | null>(null);
         const selected = taskId === "task-1" ? session : null;
@@ -759,8 +754,8 @@ describe("first-message composer recovery", () => {
           selectedModelDescriptor: null,
           supportsAttachments: false,
           sendAgentMessage: send,
-          startSession: async () => {
-            const result = await start();
+          startSession: async (parts) => {
+            const result = await start(parts);
             setSession(created);
             return result;
           },
@@ -786,8 +781,9 @@ describe("first-message composer recovery", () => {
       try {
         typeIntoComposer(container, "retry my first message");
         fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-        await waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 300 });
-        expect(start).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(start).toHaveBeenCalledTimes(1), { timeout: 300 });
+        expect(start).toHaveBeenCalledWith([{ kind: "text", text: "retry my first message" }]);
+        expect(send).not.toHaveBeenCalled();
         if (switchTask) {
           rerender(<RecoveryComposer taskId="task-2" />);
           typeIntoComposer(container, "new task draft");
@@ -809,7 +805,7 @@ describe("first-message composer recovery", () => {
           { timeout: 300 },
         );
         fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
-        await waitFor(() => expect(send).toHaveBeenCalledTimes(2), { timeout: 300 });
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 300 });
         expect(start).toHaveBeenCalledTimes(1);
         expect(send).toHaveBeenLastCalledWith(created, [
           { kind: "text", text: "retry my first message" },

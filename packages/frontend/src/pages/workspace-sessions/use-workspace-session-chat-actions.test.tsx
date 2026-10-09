@@ -1,5 +1,9 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import type {
+  WorkspaceSession,
+  WorkspaceSessionLaunchRequest,
+  WorkspaceSessionLaunchSnapshot,
+} from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,8 +19,7 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import type { AgentMessageSendReceipt, AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import { createSendAgentMessage } from "@/state/operations/agent-orchestrator/handlers/send-agent-message";
-import { createSessionTurnMetadata } from "@/state/operations/agent-orchestrator/support/session-turn-metadata";
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -101,7 +104,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
 );
 
 test.each([false, true])(
-  "a late draft startup remains saved without sending after context changes, workspace changed=%s",
+  "a submitted conflict launch completes after context changes, workspace changed=%s",
   async (workspaceChanged) => {
     const record = createWorkspaceSessionRecord();
     const bound = { ...record, externalSessionId: "started-draft" };
@@ -129,7 +132,9 @@ test.each([false, true])(
             },
           })
           .then(
-            () => {},
+            (receipt) => {
+              outcome = receipt;
+            },
             (cause) => {
               outcome = cause;
             },
@@ -143,7 +148,12 @@ test.each([false, true])(
         startup.resolve();
         await pending;
       });
-      expect(outcome).toBeInstanceOf(GitConflictRequestCancelled);
+      expect(outcome).toEqual(
+        expect.objectContaining({
+          recipient: workspaceSessionIdentity(bound),
+          acceptedMessage: expect.any(Object),
+        }),
+      );
       expect(send).not.toHaveBeenCalled();
       expect(
         view.queryClient.getQueryData<WorkspaceSession[]>(
@@ -241,7 +251,7 @@ test.each([
     start,
     createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
   );
-  let result!: Promise<boolean>;
+  let result!: Promise<AgentChatSendResult>;
   try {
     act(() => {
       result = view.actions.sendDraft(
@@ -267,7 +277,7 @@ test.each([
       await result;
     });
     expect(start).toHaveBeenCalledTimes(change === "hidden" && !alreadyBound ? 1 : 0);
-    expect(send).toHaveBeenCalledTimes(change === "hidden" ? 1 : 0);
+    expect(send).toHaveBeenCalledTimes(change === "hidden" && alreadyBound ? 1 : 0);
     expect(await result).toBe(change === "hidden");
   } finally {
     view.dispose();
@@ -301,7 +311,7 @@ test.each([
     start,
     createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
   );
-  let result!: Promise<boolean>;
+  let result!: Promise<AgentChatSendResult>;
   try {
     await act(async () => {
       result = view.actions.sendDraft(
@@ -321,7 +331,7 @@ test.each([
       else pending.reject(new Error("Request failed. Reopen the chat to retry."));
       await result;
     });
-    expect(await result).toBe(phase === "send" && outcome === "accepted");
+    expect(await result).toBe(phase === "start" || outcome === "accepted");
     expect(send).toHaveBeenCalledTimes(phase === "send" ? 1 : 0);
     if (phase === "start" && outcome === "accepted") {
       expect(
@@ -335,11 +345,10 @@ test.each([
     }
     if (outcome === "rejected") {
       expect(failure).toHaveBeenCalledWith('Could not send to "Test chat"', {
-        description: "Request failed. Reopen the chat to retry.",
-      });
-    } else if (phase === "start") {
-      expect(failure).toHaveBeenCalledWith('Could not send to "Test chat"', {
-        description: "The original chat is no longer available. Reopen it to send your draft.",
+        description:
+          phase === "start"
+            ? expect.stringContaining("Inspect launch")
+            : "Request failed. Reopen the chat to retry.",
       });
     } else expect(failure).not.toHaveBeenCalled();
   } finally {
@@ -463,9 +472,9 @@ test.each([
     configureShellBridge(
       createShellBridgeFixture({
         client: {
-          workspaceSessionStart: async () => {
-            if (action === "start") await pending.promise;
-            return { session: bound, runtimeSession: null };
+          workspaceSessionLaunch: async (request) => {
+            await pending.promise;
+            return launchOutcome(request, bound);
           },
           workspaceSessionSetDraftModel: async () => {
             await pending.promise;
@@ -474,7 +483,7 @@ test.each([
         },
       }),
     );
-    let sendResult: Promise<boolean> | undefined;
+    let sendResult: Promise<AgentChatSendResult> | undefined;
     let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
     const Probe = () => {
       actions = useWorkspaceSessionChatActions(workspace, record, () => true);
@@ -521,13 +530,14 @@ test.each([
       expect(actions.isSending).toBe(false);
       expect(actions.isStarting).toBe(false);
       expect(actions.isSavingModel).toBe(false);
-      if (workspaceChanged)
-        expect(actions.error).toBe(
-          "The original chat is no longer available. Reopen it to send your draft.",
-        );
-      else expect(actions.error).toBe(outcome === "rejected" ? "Request failed" : null);
-      if (action !== "model")
-        expect(await sendResult).toBe(outcome === "accepted" && !workspaceChanged);
+      expect(actions.error).toEqual(
+        outcome === "rejected"
+          ? action === "model"
+            ? "Request failed"
+            : expect.stringContaining("Inspect launch")
+          : null,
+      );
+      if (action !== "model") expect(await sendResult).toBe(true);
       if (workspaceChanged) expect(store.listSessionSnapshots()).toEqual([]);
     } finally {
       rendered.unmount();
@@ -537,95 +547,46 @@ test.each([
   },
 );
 
-test.each([
-  ["rejected", false],
-  ["accepted", false],
-  ["rejected", true],
-  ["accepted", true],
-] as const)(
-  "first send preserves the %s result, already bound=%s",
-  async (outcome, alreadyBound) => {
+test.each(["accepted", "rejected", "unknown", "unreadable", "pending"] as const)(
+  "keeps the host first-send outcome: %s",
+  async (acceptance) => {
     const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
-    const draftRecord = createWorkspaceSessionRecord();
-    const boundRecord = { ...draftRecord, externalSessionId: "native" };
+    const record = createWorkspaceSessionRecord();
+    const bound = { ...record, externalSessionId: "native" };
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(workspaceSessionQueryKeys.list(workspace.workspaceId, false), [
-      draftRecord,
-    ]);
-    let starts = 0;
-    let sends = 0;
-    const sendAgentMessage = createSendAgentMessage({
-      workspaceRepoPath: "/repo",
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/repo" },
-      readSessionSnapshot: store.getSessionSnapshot,
-      updateSession: store.updateSession,
-      prepareSessionSend: async () => ({}),
-      turnMetadata: createSessionTurnMetadata(),
-      clearSessionTurnState: () => {},
-      recordTurnUserMessageTimestamp: () => undefined,
-      adapter: {
-        resumeSession: async () => {
-          throw new Error("Unexpected resume");
-        },
-        sendUserMessage: async (input) => {
-          sends += 1;
-          expect(input.externalSessionId).toBe("native");
-          expect(store.getSessionSnapshot(input)?.historyLoadState).toBe(
-            alreadyBound ? "not_requested" : "loaded",
-          );
-          expect(input.parts).toEqual([{ kind: "text", text: "Hello" }]);
-          const acceptedMessage = {
-            type: "user_message" as const,
-            externalSessionId: "native",
-            messageId: "accepted-1",
-            timestamp: "2026-09-12T10:00:00Z",
-            message: "Hello",
-            parts: [],
-            state: "read" as const,
-          };
-          if (outcome === "accepted")
-            throw new HostInvokeError(
-              "The runtime accepted the message, but the session update failed.",
-              {
-                kind: "agent_session_message_accepted",
-                sessionRef: {
-                  repoPath: "/repo",
-                  runtimeKind: "codex",
-                  workingDirectory: "/repo",
-                  externalSessionId: "native",
-                },
-                acceptedMessage,
-                stage: "record_message",
-              },
-            );
-          if (sends === 1) throw new Error("Send rejected");
-          return acceptedMessage;
-        },
-      },
-    });
-    const operations = createOperations({
-      sendAgentMessage,
-      continueInterruptedTurn: async () => undefined,
+    const browserSend = mock(async () => null);
+    const launch = mock(async (request: WorkspaceSessionLaunchRequest) => {
+      if (acceptance === "unreadable" || acceptance === "pending") throw new Error("Disconnected");
+      const snapshot = launchOutcome(request, bound);
+      if (acceptance !== "accepted")
+        return {
+          ...snapshot,
+          phase: "failed" as const,
+          acceptance,
+          recoveryAllowed: acceptance === "rejected",
+          acceptedMessage: undefined,
+          failure: { message: "Send failed", stage: "send", cleanupErrors: [] },
+        };
+      return snapshot;
     });
     configureShellBridge(
       createShellBridgeFixture({
         client: {
-          workspaceSessionStart: async () => {
-            starts += 1;
-            return {
-              session: boundRecord,
-              runtimeSession: alreadyBound
-                ? null
-                : {
-                    externalSessionId: "native",
-                    runtimeKind: "codex",
-                    workingDirectory: "/repo",
-                    startedAt: new Date(1000).toISOString(),
-                    status: "idle",
-                  },
-            };
+          workspaceSessionLaunch: launch,
+          workspaceSessionLaunchRead: async (ref) => {
+            if (acceptance === "unreadable") throw new Error("Read failed");
+            return [
+              {
+                ...launchOutcome(
+                  { ...ref, launchAttemptId: ref.launchAttemptId!, parts: [] },
+                  bound,
+                ),
+                phase: "sending",
+                acceptance: "unknown",
+                acceptedMessage: undefined,
+              },
+            ];
           },
         },
       }),
@@ -633,65 +594,62 @@ test.each([
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
         <AgentSessionsContext value={store}>
-          <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+          <AgentOperationsContext
+            value={createOperations({
+              sendAgentMessage: browserSend,
+              continueInterruptedTurn: async () => {},
+            })}
+          >
+            {children}
+          </AgentOperationsContext>
         </AgentSessionsContext>
       </QueryClientProvider>
     );
-    const view = renderHook(
-      ({ record }) => useWorkspaceSessionChatActions(workspace, record, () => true),
-      {
-        wrapper,
-        initialProps: { record: draftRecord },
-      },
-    );
-    const options = {
-      canSend: true,
-      reusablePrompts: [],
-      selectedModelDescriptor: null,
-      supportsAttachments: false,
-    };
-    const draft = { segments: [createTextSegment("Hello")] };
+    const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
+      wrapper,
+    });
     try {
-      expect(starts).toBe(0);
       await act(async () => {
-        expect(await view.result.current.sendDraft({ segments: [] }, options)).toBe(false);
+        const result = await view.result.current.sendDraft(
+          { segments: [createTextSegment("Hello")] },
+          {
+            canSend: true,
+            reusablePrompts: [],
+            selectedModelDescriptor: null,
+            supportsAttachments: false,
+          },
+        );
+        if (acceptance === "rejected")
+          expect(result).toMatchObject({
+            kind: "recover_draft",
+            launchAttemptId: launch.mock.calls[0]?.[0].launchAttemptId,
+          });
+        else expect(result).toBe(true);
       });
-      expect(starts).toBe(0);
-      await act(async () => {
-        const first = view.result.current.sendDraft(draft, options);
-        expect(await view.result.current.sendDraft(draft, options)).toBe(false);
-        expect(await first).toBe(outcome === "accepted");
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect(launch.mock.calls[0]?.[0]).toMatchObject({
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        sessionId: "draft",
+        parts: [{ kind: "text", text: "Hello" }],
       });
-      if (outcome === "accepted") {
-        expect(starts).toBe(1);
-        expect(sends).toBe(1);
-        expect(view.result.current.error).toBeNull();
-        const current = store.getSessionSnapshot({
-          runtimeKind: "codex",
-          workingDirectory: "/repo",
-          externalSessionId: "native",
-        });
-        expect(current?.status).toBe("running");
-        if (!current) throw new Error("Missing accepted session");
-        expect(
-          sessionMessagesToArray(current).filter((message) => message.role === "user"),
-        ).toHaveLength(1);
-        expect(
-          sessionMessagesToArray(current).some((message) =>
-            message.content.includes("runtime accepted"),
-          ),
-        ).toBe(true);
-        return;
-      }
-      expect(view.result.current.error).toBe("Send rejected");
-      expect(view.result.current.isSending).toBe(false);
-      expect(draft.segments[0]?.text).toBe("Hello");
-      view.rerender({ record: boundRecord });
-      await act(async () => {
-        expect(await view.result.current.sendDraft(draft, options)).toBe(true);
-      });
-      expect(starts).toBe(1);
-      expect(sends).toBe(2);
+      expect(browserSend).not.toHaveBeenCalled();
+      const unresolved = acceptance === "unreadable" || acceptance === "pending";
+      expect(store.listSessionSnapshots()).toHaveLength(unresolved ? 0 : 1);
+      const session = store.listSessionSnapshots()[0];
+      const messages = session ? sessionMessagesToArray(session) : [];
+      expect(messages.filter((message) => message.role === "user")).toHaveLength(
+        acceptance === "accepted" ? 1 : 0,
+      );
+      expect(view.result.current.error).toEqual(
+        acceptance === "accepted"
+          ? null
+          : acceptance === "unknown"
+            ? "Send failed Inspect the saved session before sending another instruction."
+            : unresolved
+              ? expect.stringContaining("Inspect launch")
+              : "Send failed",
+      );
     } finally {
       view.unmount();
       queryClient.clear();
@@ -980,7 +938,13 @@ function renderChatPanes(
     createSettingsSnapshotFixture(),
   );
   queryClient.setQueryData(workspaceSessionQueryKeys.list(workspace.workspaceId, false), [record]);
-  configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionStart: start } }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionLaunch: async (request) => launchOutcome(request, (await start()).session),
+      },
+    }),
+  );
   let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation((props) => {
     const current = useWorkspaceSessionChatActions(props.workspace, props.record, props.isMounted);
@@ -1024,6 +988,39 @@ function renderChatPanes(
       chat.mockRestore();
       queryClient.clear();
       configureShellBridge(createUnavailableShellBridge());
+    },
+  };
+}
+
+function launchOutcome(
+  request: WorkspaceSessionLaunchRequest,
+  record: WorkspaceSession,
+): WorkspaceSessionLaunchSnapshot {
+  const session = {
+    externalSessionId: record.externalSessionId!,
+    runtimeKind: record.runtimeKind,
+    workingDirectory: record.executionTarget.workingDirectory,
+    startedAt: new Date(record.createdAt).toISOString(),
+    status: "idle" as const,
+  };
+  return {
+    launchAttemptId: request.launchAttemptId,
+    workspaceId: request.workspaceId,
+    repoPath: request.repoPath,
+    sessionId: record.id,
+    phase: "completed",
+    acceptance: "accepted",
+    ownershipSaved: true,
+    record,
+    session,
+    acceptedMessage: {
+      type: "user_message",
+      externalSessionId: session.externalSessionId,
+      messageId: request.launchAttemptId,
+      timestamp: session.startedAt,
+      message: "Hello",
+      parts: [],
+      state: "read",
     },
   };
 }

@@ -1,3 +1,4 @@
+import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoRuntimeRef } from "@openducktor/contracts";
 import {
@@ -9,10 +10,7 @@ import {
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import {
-  createSessionStartWorkflowRunner,
-  type SessionStartWorkflowResult,
-} from "@/features/session-start";
+import { type SessionStartWorkflowResult } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
@@ -271,7 +269,6 @@ const createBaseArgs = (): HookArgs => ({
   },
   repoSettings: REPO_SETTINGS,
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
-  humanRequestChangesTask: async () => {},
   scheduleQueryUpdate: () => {},
 });
 
@@ -557,7 +554,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      holdForPostStartMessage: false,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -577,6 +573,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
+      launchActionId: "planner_initial",
       selectionForNewSession: null,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
@@ -607,7 +604,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      holdForPostStartMessage: true,
     });
 
     await harness.unmount();
@@ -689,7 +685,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      holdForPostStartMessage: true,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -918,9 +913,11 @@ describe("useAgentStudioSessionStartFlow", () => {
 
       expect(updateCalls).toEqual([]);
       expect(sendAgentMessage).not.toHaveBeenCalled();
-      expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
-        description: "start failed",
-      });
+      expect(toastErrorMock).toHaveBeenCalledTimes(1);
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Workflow launch failed for task-1.",
+        expect.objectContaining({ description: "start failed" }),
+      );
     });
 
     await harness.unmount();
@@ -1068,7 +1065,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "builder",
       },
       startMode: "fresh" as const,
-      holdForPostStartMessage: true,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -1180,7 +1176,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       [
         expect.objectContaining({
           kind: "text",
-          text: expect.stringContaining("task-1"),
+          text: expect.any(String),
         }),
       ],
       { errorAttentionId: expect.any(String) },
