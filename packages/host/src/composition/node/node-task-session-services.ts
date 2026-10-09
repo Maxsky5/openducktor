@@ -137,7 +137,12 @@ export const createNodeTaskSessionServices = ({
       resolver: taskServiceInput.gitProviderResolver,
       workspaceSettingsService: taskServiceInput.workspaceSettingsService,
     }),
-    runtime: agentSessionLiveStateService,
+    runtime: {
+      ...agentSessionLiveStateService,
+      sendUserMessage: agentSessionCommandService.sendUserMessage,
+      resumeSession: agentSessionCommandService.resumeSession,
+      updateSessionSpeed: agentSessionCommandService.updateSessionSpeed,
+    },
     lifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
     sessions: createTaskSessionOperations({
       canonicalizeRepoPath,

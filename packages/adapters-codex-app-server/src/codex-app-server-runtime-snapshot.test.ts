@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { agentSessionStatusFromActivity, SessionTurnAdmission } from "@openducktor/core";
 import {
   toRefreshedRuntimeSnapshot,
   toRuntimeSnapshotFromThread,
@@ -13,6 +13,7 @@ import type { CodexSessionState } from "./types";
 
 const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessionState => {
   const session: CodexSessionState = {
+    turnAdmission: new SessionTurnAdmission(),
     summary: {
       externalSessionId: "thread-1",
       sessionAssociation: { kind: "unbound" },

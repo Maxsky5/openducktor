@@ -58,6 +58,9 @@ const createHarness = async (
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
     supportsSessionControl: true,
+    holdSessionTurns: () => Effect.die(new Error("Unexpected settings hold")),
+    setSessionSpeedState: () => Effect.die(new Error("Unexpected settings state")),
+    updateSessionSpeed: () => Effect.die(new Error("Unexpected speed change")),
     beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
     releaseGeneratedImageBatch: () =>
       Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
@@ -172,6 +175,7 @@ const createHarness = async (
         {
           ...service,
           startWorkflowSession,
+          updateSessionSpeed: () => Effect.die(new Error("Unexpected speed command")),
         },
         attachmentResolver,
       ),

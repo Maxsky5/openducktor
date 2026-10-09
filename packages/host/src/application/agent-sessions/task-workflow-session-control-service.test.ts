@@ -1,4 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
+import {
+  agentModelCatalogSchema,
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
+import { describe, expect, mock, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlSendInput,
@@ -25,6 +33,20 @@ import {
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import { createAgentSessionCommandService as createControlService } from "./agent-session-command-service";
+import type { TaskSessionModelPersistence } from "./task-workflow-session-policy";
+import { holdSessionSettings } from "./agent-session-settings-admission";
+import type { ModelInfo, Query } from "@anthropic-ai/claude-agent-sdk";
+import {
+  createClaudeSession,
+  createClaudeQueryFixture,
+} from "../../adapters/claude/claude-agent-sdk-session-io.test-support";
+import { createClaudeAgentSdkSessionStore } from "../../adapters/claude/claude-agent-sdk-session-store";
+import { observeClaudeSpeed } from "../../adapters/claude/claude-session-speed-observation";
+import { ClaudeSessionSpeedControl } from "../../adapters/claude/claude-session-speed-control";
+import { updateClaudeSessionModel } from "../../adapters/claude/claude-session-model-update";
+import { createClaudeSessionSettingsControls } from "../../adapters/agent-sessions/claude-session-settings-controls";
+import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
+import { toClaudeModelDescriptor } from "../../adapters/claude/claude-agent-sdk-catalog";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
@@ -36,6 +58,7 @@ type TestControlServiceInput = Omit<
     "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
   >;
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
+  persistTaskModel?: TaskSessionModelPersistence;
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
 };
@@ -46,6 +69,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       prepare: () => Effect.die(new Error("unexpected task session preparation")),
       complete: () => Effect.die(new Error("unexpected task session completion")),
     },
+    persistTaskModel: () => Effect.die(new Error("unexpected stored model update")),
     ...input,
     runtime: {
       loadContext: () => Effect.die(new Error("unexpected context read")),
@@ -61,22 +85,15 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       prepareResume: (request) => Effect.succeed({ input: request, save: () => Effect.void }),
       prepareSend: (request) => Effect.succeed(request),
       recordAcceptedMessage: () => Effect.void,
+      prepareSpeedUpdate: () => Effect.die(new Error("Unexpected speed preparation")),
       prepareModelUpdate: (request) =>
-        Effect.succeed({ input: request, previousModel: null, save: Effect.succeed(Effect.void) }),
+        Effect.succeed({
+          input: request,
+          previousModel: null,
+          previousSpeed: "standard",
+          save: () => Effect.succeed(Effect.void),
+        }),
     },
-    persistTaskModel: (request) =>
-      input.tasks.agentSessionUpdateModel(request).pipe(
-        Effect.mapError((cause) =>
-          cause instanceof HostOperationError
-            ? cause
-            : new HostOperationError({
-                operation: "test.update-model",
-                message: cause.message,
-                cause,
-              }),
-        ),
-        Effect.map((updated) => ({ updated, publish: Effect.void })),
-      ),
     tasks: {
       transitionTask: () => Effect.die(new Error("unexpected task transition")),
       ...input.tasks,
@@ -96,7 +113,7 @@ const workflowStart: AgentWorkflowSessionStartInput = {
   },
 };
 
-const summary: AgentSessionControlSummary = {
+const summary: Omit<AgentSessionControlSummary, "speed"> = {
   externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
@@ -203,16 +220,52 @@ const createModelUpdateService = ({
   selectedModel = storedModel,
   runtimeKind = "opencode",
   updateRuntimeModel,
-  updateStoredModel,
+  persistTaskModel,
 }: {
   selectedModel?: AgentSessionRecord["selectedModel"];
   runtimeKind?: AgentSessionRecord["runtimeKind"];
   updateRuntimeModel: ControlDeps["runtime"]["updateSessionModel"];
-  updateStoredModel: ControlDeps["tasks"]["agentSessionUpdateModel"];
+  persistTaskModel: TaskSessionModelPersistence;
 }) =>
   createAgentSessionCommandService({
     ...createControlDeps(),
     runtime: {
+      withSessionSettings: (_input, operation) =>
+        operation(
+          createAgentSessionRuntimeAdapterTestDouble(
+            { runtimeId: "runtime-1", runtimeKind: "codex" },
+            {
+              readSnapshot: (ref) => Effect.succeed({ type: "missing" as const, ref }),
+              setSessionSpeedState: () => Effect.void,
+              updateSessionModel: updateRuntimeModel,
+              updateSessionSpeed: () => Effect.succeed({ reportedChoice: "standard" }),
+              queries: {
+                ...unexpectedRuntimeQueries,
+                loadRuntimeCatalog: () =>
+                  Effect.succeed({
+                    models: {
+                      status: "available" as const,
+                      catalog: {
+                        runtime: CODEX_RUNTIME_DESCRIPTOR,
+                        models: [
+                          {
+                            id: "gpt-5.6-sol",
+                            providerId: "openai",
+                            providerName: "Codex",
+                            modelId: "gpt-5.6-sol",
+                            modelName: "GPT",
+                            variants: [],
+                            speedLevels: [{ id: "standard", label: "Standard" }],
+                          },
+                        ],
+                        defaultModelsByProvider: {},
+                      },
+                    },
+                  }),
+              },
+            },
+          ),
+        ),
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: () => Effect.die(new Error("unexpected resume")),
       continueInterruptedTurn: () => Effect.die(new Error("unexpected continue interrupted turn")),
@@ -226,16 +279,757 @@ const createModelUpdateService = ({
       agentSessionsList: () =>
         Effect.succeed([{ ...summary, runtimeKind, role: "build", selectedModel }]),
       agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-      agentSessionUpdateModel: updateStoredModel,
     },
+    persistTaskModel,
   });
 
 describe("createAgentSessionCommandService", () => {
+  test.each([true, false])(
+    "keeps the known model when task speed recovery retries a failed save (live model: %s)",
+    async (hasLiveModel) => {
+      const nativeModel = { providerId: "openai", modelId: "gpt-5.6-sol", variant: "high" };
+      let record: AgentSessionRecord = {
+        ...summary,
+        runtimeKind: "codex",
+        role: "build",
+        selectedModel: { ...storedModel, runtimeKind: "codex" },
+        speed: "standard",
+      };
+      const previousModel = record.selectedModel;
+      const admission = new SessionTurnAdmission();
+      admission.setBlocked(true);
+      let speed = initialSpeedState(null, "uncertain");
+      let failSave = true;
+      const published: AgentSessionRecord[] = [];
+      const sends: AgentSessionControlSendInput[] = [];
+      const adapter = createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: "runtime-1", runtimeKind: "codex" },
+        {
+          holdSessionTurns: () =>
+            Effect.promise(() => admission.hold()).pipe(
+              Effect.map((release) => Effect.sync(release)),
+            ),
+          readSnapshot: (ref) =>
+            Effect.sync(() => ({
+              type: "live" as const,
+              session: {
+                ref,
+                activity: "idle" as const,
+                title: "Build session",
+                startedAt: summary.startedAt,
+                pendingApprovals: [],
+                pendingQuestions: [],
+                contextUsage: null,
+                model: hasLiveModel ? nativeModel : undefined,
+                speed,
+              },
+            })),
+          setSessionSpeedState: (_ref, next) =>
+            Effect.sync(() => {
+              speed = next;
+              admission.setBlocked(next.synchronization !== "confirmed" || next.choice === null);
+            }),
+          updateSessionSpeed: (input) => Effect.succeed({ reportedChoice: input.speed }),
+        },
+      );
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          withSessionSettings: (input, operation) => holdSessionSettings(adapter, input, operation),
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () => Effect.die(new Error("unexpected continuation")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: (input) =>
+            Effect.promise(() =>
+              admission.run(async () => {
+                sends.push(input);
+                return acceptedUserMessage;
+              }),
+            ),
+          updateSessionModel: () => Effect.die(new Error("unexpected model change")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.sync(() => [record]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected upsert")),
+        },
+        persistTaskModel: (input) =>
+          Effect.gen(function* () {
+            if (failSave)
+              return yield* new HostOperationError({
+                operation: "test.store",
+                message: "store failed",
+              });
+            record = { ...record, selectedModel: input.selectedModel, speed: input.speed };
+            return {
+              updated: true,
+              publish: Effect.sync(() => {
+                published.push(record);
+              }),
+            };
+          }),
+      });
+      const input = {
+        repoPath: "/repo",
+        runtimeKind: "codex" as const,
+        externalSessionId: "session-1",
+        workingDirectory: "/repo/worktree",
+        sessionScope: workflowStart.sessionScope,
+        speed: "standard",
+      };
+      await expect(Effect.runPromise(service.updateSessionSpeed(input))).rejects.toThrow(
+        "store failed",
+      );
+      expect(record.selectedModel).toEqual(previousModel);
+      expect(published).toEqual([]);
+      expect(speed.synchronization).toBe("uncertain");
+      await expect(admission.run(async () => "new turn")).rejects.toThrow();
+
+      failSave = false;
+      await Effect.runPromise(service.updateSessionSpeed(input));
+      const expectedModel = hasLiveModel
+        ? { ...nativeModel, runtimeKind: "codex" as const, profileId: "build" }
+        : previousModel;
+      expect(record.selectedModel).toEqual(expectedModel);
+      expect(published).toEqual([expect.objectContaining({ selectedModel: expectedModel })]);
+      expect(speed).toMatchObject({ choice: "standard", synchronization: "confirmed" });
+      await Effect.runPromise(service.sendUserMessage({ ...workflowSend, runtimeKind: "codex" }));
+      expect(sends).toEqual([expect.objectContaining({ model: expectedModel, speed: "standard" })]);
+    },
+  );
+
+  test.each([
+    { modelChanged: true, savedChoice: "standard", nativeChoice: "standard", failure: null },
+    { modelChanged: true, savedChoice: "fast", nativeChoice: "standard", failure: "save" },
+    { modelChanged: true, savedChoice: "standard", nativeChoice: "fast", failure: "save" },
+    { modelChanged: true, savedChoice: "fast", nativeChoice: "standard", failure: "restore" },
+    { modelChanged: true, savedChoice: "standard", nativeChoice: null, failure: "save" },
+  ] as const)(
+    "a cold speed change keeps attached settings: %j",
+    async ({ modelChanged, savedChoice, nativeChoice, failure }) => {
+      const model = {
+        runtimeKind: "claude" as const,
+        providerId: "claude",
+        modelId: "opus",
+        variant: "low",
+        profileId: "build",
+      };
+      const attachedModel = modelChanged
+        ? { ...model, modelId: "claude-opus-5-5", variant: "high" }
+        : model;
+      let record: AgentSessionRecord = {
+        ...summary,
+        runtimeKind: "claude",
+        role: "build",
+        selectedModel: model,
+        speed: savedChoice,
+      };
+      const store = createClaudeAgentSdkSessionStore();
+      const state = createClaudeLiveSessionState((ref) => store.get(ref.externalSessionId)?.model);
+      let nativeFast: boolean | undefined =
+        nativeChoice === null ? undefined : nativeChoice === "fast";
+      const flags = mock(async ({ fastMode }: Parameters<Query["applyFlagSettings"]>[0]) => {
+        if (failure === "restore" && fastMode === false) throw new Error("restore failed");
+        if (fastMode !== undefined) nativeFast = fastMode ?? undefined;
+      });
+      const control = new ClaudeSessionSpeedControl({
+        findSession: (id) => store.get(id),
+        requireSession: (id) => {
+          const session = store.get(id);
+          if (!session) throw new Error("Session not attached");
+          return session;
+        },
+        createSession: (input, runtimeId) =>
+          Effect.sync(() => {
+            const session = createClaudeSession({
+              input,
+              runtimeId,
+              model: attachedModel,
+              summary: {
+                ...createClaudeSession().summary,
+                speed: initialSpeedState(
+                  nativeChoice,
+                  nativeChoice === null ? "unapplied" : "confirmed",
+                ),
+              },
+              query: createClaudeQueryFixture({
+                supportedModels: async () => [
+                  {
+                    value: "opus",
+                    resolvedModel: "claude-opus-5-5",
+                    displayName: "Opus",
+                    description: "Opus",
+                    supportsFastMode: true,
+                  },
+                ],
+                applyFlagSettings: flags,
+              }),
+            });
+            store.set(session);
+            const report: Parameters<typeof observeClaudeSpeed>[1] = {
+              fast_mode_state: nativeChoice === "fast" ? "on" : "off",
+            };
+            if (nativeChoice === null) report.fast_mode_disabled_reason = "network_error";
+            const observation = observeClaudeSpeed(session, report, false);
+            state.applyEvent(session, {
+              type: "session_speed_changed",
+              externalSessionId: session.externalSessionId,
+              timestamp: session.startedAt,
+              observation,
+            });
+            record = { ...record, selectedModel: attachedModel, speed: nativeChoice };
+            return session.summary;
+          }),
+        now: () => "2026-10-09T00:00:00Z",
+        emit: () => {},
+        onBackgroundFailure: () => Effect.void,
+      });
+      const adapter = createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: "runtime-1", runtimeKind: "claude" },
+        {
+          ...createClaudeSessionSettingsControls({
+            service: {
+              holdSessionTurns: control.holdSessionTurns.bind(control),
+              setSessionSpeedState: control.setSessionSpeedState.bind(control),
+              updateSessionSpeed: control.updateSessionSpeed.bind(control),
+              updateSessionModel: () => Effect.die(new Error("unexpected model change")),
+            },
+            runtimeId: "runtime-1",
+            state,
+            sessionError: (operation) => (cause) =>
+              new HostOperationError({
+                operation,
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+            commit: (_operation, mutation) => Effect.sync(() => mutation().value),
+            runControlMutation: (effect) => effect,
+          }),
+          readSnapshot: (ref) => Effect.sync(() => state.readSnapshot(ref)),
+        },
+      );
+      const save = mock<TaskSessionModelPersistence>((input) =>
+        Effect.gen(function* () {
+          if (failure)
+            return yield* new HostOperationError({
+              operation: "test.store",
+              message: "store failed",
+            });
+          record = {
+            ...record,
+            selectedModel: input.selectedModel,
+            speed: input.speed,
+          };
+          return { updated: true, publish: Effect.void };
+        }),
+      );
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          withSessionSettings: (input, operation) => holdSessionSettings(adapter, input, operation),
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () => Effect.die(new Error("unexpected continuation")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected model change")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.sync(() => [record]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected upsert")),
+        },
+        persistTaskModel: save,
+      });
+      const requested = nativeChoice === "standard" ? "fast" : "standard";
+      const result = await Effect.runPromise(
+        Effect.result(
+          service.updateSessionSpeed({
+            repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "session-1",
+            runtimeKind: "claude",
+            sessionScope: workflowStart.sessionScope,
+            speed: requested,
+          }),
+        ),
+      );
+      const session = store.get("session-1")!;
+      if (failure) {
+        const uncertain = failure === "restore" || nativeChoice === null;
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            message: uncertain ? expect.stringContaining("could not be confirmed") : "store failed",
+          },
+        });
+        expect(record.speed).toBe(nativeChoice);
+        expect(session.summary.speed).toMatchObject({
+          choice: nativeChoice,
+          synchronization: uncertain ? "uncertain" : "confirmed",
+        });
+        expect(nativeFast).toBe(uncertain ? requested === "fast" : nativeChoice === "fast");
+        if (uncertain)
+          await expect(session.turnAdmission.run(async () => "admitted")).rejects.toThrow();
+        else expect(await session.turnAdmission.run(async () => "admitted")).toBe("admitted");
+      } else {
+        expect(result).toMatchObject({
+          _tag: "Success",
+          success: { choice: requested, synchronization: "confirmed" },
+        });
+        expect(nativeFast).toBe(requested === "fast");
+        expect(record.speed).toBe(requested);
+      }
+      expect(flags).toHaveBeenCalledWith({ fastMode: requested === "fast" });
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ speed: requested, selectedModel: attachedModel }),
+      );
+      expect(record.selectedModel).toEqual(attachedModel);
+      store.close(session);
+    },
+  );
+  test.each([
+    ...[
+      { modelId: "opus-2", variant: "high", processing: "standard", saveFails: false },
+      { modelId: "opus", variant: "low", processing: "standard", saveFails: false },
+      { modelId: "opus-2", variant: "high", processing: "cooldown", saveFails: false },
+      { modelId: "opus", variant: "low", processing: "cooldown", saveFails: false },
+      { modelId: "opus-2", variant: "high", processing: "standard", saveFails: true },
+      { modelId: "opus", variant: "low", processing: "standard", saveFails: true },
+      { modelId: "sonnet", variant: "high", processing: "standard", saveFails: false },
+      { modelId: "sonnet", variant: "high", processing: "standard", saveFails: true },
+    ].map((path) => ({
+      ...path,
+      cold: false,
+      nativeChoice: "fast",
+      modelChanged: false,
+      applyFails: false,
+    })),
+    ...[
+      { modelId: "opus-2", nativeChoice: "standard", saveFails: false },
+      { modelId: "opus-2", nativeChoice: "fast", saveFails: false },
+      { modelId: "opus-2", nativeChoice: null, saveFails: false },
+      { modelId: "sonnet", nativeChoice: "fast", saveFails: false },
+      { modelId: "opus-2", nativeChoice: "fast", saveFails: true },
+      { modelId: "sonnet", nativeChoice: "fast", saveFails: true },
+    ].map((path) => ({
+      ...path,
+      cold: true,
+      variant: "high",
+      processing: "cooldown",
+      modelChanged: false,
+      applyFails: false,
+    })),
+    ...[
+      { saveFails: true, applyFails: false },
+      { saveFails: false, applyFails: true },
+    ].map((path) => ({
+      ...path,
+      cold: true,
+      modelChanged: true,
+      modelId: "opus-2",
+      variant: "low",
+      processing: "cooldown",
+      nativeChoice: "fast",
+    })),
+  ])(
+    "keeps Claude speed through $modelId/$variant (cold: $cold, choice: $nativeChoice, save fails: $saveFails)",
+    async ({
+      modelId,
+      variant,
+      processing,
+      saveFails,
+      cold,
+      nativeChoice,
+      modelChanged,
+      applyFails,
+    }) => {
+      const originalModel = {
+        providerId: "claude",
+        modelId: "opus",
+        profileId: "build",
+        variant: "high",
+      };
+      const attachedModel = modelChanged
+        ? { ...originalModel, modelId: "opus-2", variant: "medium" }
+        : originalModel;
+      const nextModel = { ...originalModel, modelId, variant };
+      const unsupported = modelId === "sonnet";
+      const nativeModels = ["opus", "opus-2", "sonnet"].map((value) => {
+        const model: ModelInfo = { value, displayName: value, description: value };
+        if (value !== "sonnet") model.supportsFastMode = true;
+        return model;
+      });
+      const catalog = agentModelCatalogSchema.parse({
+        runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+        models: nativeModels.map((model) => ({
+          ...toClaudeModelDescriptor(model),
+          variants: ["high", "low"],
+        })),
+        defaultModelsByProvider: {},
+      });
+      let nativeEffort = attachedModel.variant;
+      let nativeModel = attachedModel.modelId;
+      const flags = mock(async (settings: Parameters<Query["applyFlagSettings"]>[0]) => {
+        if (applyFails && settings.effortLevel === "low") throw new Error("apply failed");
+        if (settings.effortLevel !== undefined) nativeEffort = settings.effortLevel ?? "";
+      });
+      const session = createClaudeSession({
+        input: {
+          repoPath: "/repo",
+          workingDirectory: "/repo/worktree",
+          runtimeKind: "claude",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: workflowStart.sessionScope,
+          systemPrompt: "Build",
+          model: originalModel,
+        },
+        model: attachedModel,
+        summary: {
+          ...createClaudeSession().summary,
+          speed: initialSpeedState(nativeChoice, nativeChoice === null ? "unapplied" : "confirmed"),
+        },
+        query: createClaudeQueryFixture({
+          supportedModels: async () => nativeModels,
+          applyFlagSettings: flags,
+          setModel: async (model) => {
+            nativeModel = model ?? "";
+          },
+        }),
+      });
+      let report: Parameters<typeof observeClaudeSpeed>[1] = { fast_mode_state: "cooldown" };
+      if (processing === "standard")
+        report = { fast_mode_state: "off", fast_mode_disabled_reason: "extra_usage_disabled" };
+      if (nativeChoice === "standard") report = { fast_mode_state: "off" };
+      observeClaudeSpeed(session, report, false);
+      const previous = session.summary.speed;
+      const restoreFails = unsupported && previous.availability.status === "blocked";
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      let record: AgentSessionRecord = {
+        ...summary,
+        runtimeKind: "claude",
+        role: "build",
+        selectedModel: { ...originalModel, runtimeKind: "claude" },
+        speed: cold ? null : "fast",
+      };
+      const state = createClaudeLiveSessionState(
+        (ref) => sessionStore.get(ref.externalSessionId)?.model,
+      );
+      const attach = () => {
+        sessionStore.set(session);
+        record = {
+          ...record,
+          selectedModel: { ...attachedModel, runtimeKind: "claude" },
+          speed: nativeChoice,
+        };
+        state.applyControlSummary("/repo", {
+          ...session.summary,
+          workingDirectory: "/repo/worktree",
+          speed: previous,
+        });
+        return session.summary;
+      };
+      if (!cold) attach();
+      const control = new ClaudeSessionSpeedControl({
+        findSession: (id) => sessionStore.get(id),
+        requireSession: () => session,
+        createSession: () =>
+          cold ? Effect.sync(attach) : Effect.die(new Error("unexpected attach")),
+        now: () => "2026-10-08T00:00:00Z",
+        emit: () => {},
+        onBackgroundFailure: () => Effect.void,
+      });
+      const adapter = createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: session.runtimeId, runtimeKind: "claude" },
+        {
+          ...createClaudeSessionSettingsControls({
+            service: {
+              holdSessionTurns: control.holdSessionTurns.bind(control),
+              setSessionSpeedState: control.setSessionSpeedState.bind(control),
+              updateSessionSpeed: control.updateSessionSpeed.bind(control),
+              updateSessionModel: (input) =>
+                updateClaudeSessionModel(input, {
+                  sessionStore,
+                  attach: () => Effect.die(new Error("unexpected attach")),
+                }),
+            },
+            runtimeId: session.runtimeId,
+            state,
+            sessionError: (operation) => (cause) =>
+              new HostOperationError({
+                operation,
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+            commit: (_operation, mutation) => Effect.sync(() => mutation().value),
+            runControlMutation: (effect) => effect,
+          }),
+          readSnapshot: (ref) => Effect.sync(() => state.readSnapshot(ref)),
+          queries: {
+            ...unexpectedRuntimeQueries,
+            loadRuntimeCatalog: () =>
+              Effect.succeed({ models: { status: "available" as const, catalog } }),
+          },
+        },
+      );
+      const saves: unknown[] = [];
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          withSessionSettings: (input, operation) => holdSessionSettings(adapter, input, operation),
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () => Effect.die(new Error("unexpected continuation")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected direct model update")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.sync(() => [record]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected upsert")),
+        },
+        persistTaskModel: (input) =>
+          Effect.gen(function* () {
+            expect(session.turnAdmission?.isClosed).toBe(true);
+            expect(session.summary.speed.synchronization).toBe("pending");
+            if (saveFails)
+              return yield* new HostOperationError({
+                operation: "test.store",
+                message: "store failed",
+              });
+            saves.push(input);
+            record = { ...record, selectedModel: input.selectedModel, speed: input.speed };
+            return { updated: true, publish: Effect.void };
+          }),
+      });
+      const result = await Effect.runPromise(
+        Effect.result(
+          service.updateSessionModel({
+            ...workflowModelUpdate,
+            runtimeKind: "claude",
+            model: nextModel,
+          }),
+        ),
+      );
+      if (saveFails || applyFails) {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            message: restoreFails
+              ? expect.stringContaining("could not be confirmed")
+              : applyFails
+                ? "apply failed"
+                : "store failed",
+          },
+        });
+        expect(saves).toEqual([]);
+        expect(session.model).toEqual(attachedModel);
+        expect(nativeModel).toBe(attachedModel.modelId);
+        expect(nativeEffort).toBe(attachedModel.variant);
+        expect(record.selectedModel).toEqual({ ...attachedModel, runtimeKind: "claude" });
+        expect(record.speed).toBe(nativeChoice);
+      } else {
+        expect(result._tag).toBe("Success");
+        expect(saves).toEqual([
+          expect.objectContaining({
+            speed: unsupported ? "standard" : nativeChoice,
+            selectedModel: { ...nextModel, runtimeKind: "claude" },
+          }),
+        ]);
+        expect(session.model).toEqual(nextModel);
+      }
+      if (unsupported) {
+        const expectedFlags = [{ fastMode: false }];
+        if (saveFails && !restoreFails) expectedFlags.push({ fastMode: true });
+        expect(flags.mock.calls.map(([settings]) => settings)).toEqual(expectedFlags);
+        let expectedProcessing = { status: "off" };
+        if (saveFails)
+          expectedProcessing = restoreFails ? previous.processing : { status: "unknown" };
+        expect(session.summary.speed).toMatchObject({
+          choice: saveFails ? "fast" : "standard",
+          synchronization: saveFails && restoreFails ? "uncertain" : "confirmed",
+          processing: expectedProcessing,
+        });
+        if (saveFails && restoreFails)
+          await expect(session.turnAdmission!.run(async () => "admitted")).rejects.toThrow();
+        else expect(await session.turnAdmission!.run(async () => "admitted")).toBe("admitted");
+      } else {
+        expect(session.summary.speed).toEqual(previous);
+        if (nativeChoice === null)
+          await expect(session.turnAdmission!.run(async () => "admitted")).rejects.toThrow(
+            "pending",
+          );
+        else expect(await session.turnAdmission!.run(async () => "admitted")).toBe("admitted");
+        expect(flags.mock.calls.filter(([settings]) => "fastMode" in settings)).toEqual(
+          nativeChoice === "standard" ? [[{ fastMode: false }]] : [],
+        );
+      }
+      expect(state.readSnapshot({ ...workflowModelUpdate, runtimeKind: "claude" })).toMatchObject({
+        type: "live",
+        session: { speed: session.summary.speed },
+      });
+      sessionStore.close(session);
+    },
+  );
+
+  test.each([
+    { nativeChoice: "standard", saveFails: false },
+    { nativeChoice: "fast", saveFails: false },
+    { nativeChoice: null, saveFails: false },
+    { nativeChoice: "standard", saveFails: true },
+  ])(
+    "confirms an imported choice before interrupted work: %j",
+    async ({ nativeChoice, saveFails }) => {
+      const entered = Promise.withResolvers<void>();
+      const commit = Promise.withResolvers<void>();
+      const admission = new SessionTurnAdmission();
+      let state = initialSpeedState(nativeChoice, "confirmed");
+      let durable: string | null = null;
+      const continued: unknown[] = [];
+      const selectedModel = { ...storedModel, runtimeKind: "codex" as const };
+      const adapter = createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: "runtime-1", runtimeKind: "codex" },
+        {
+          holdSessionTurns: () =>
+            Effect.promise(() => admission.hold()).pipe(
+              Effect.map((release) => Effect.sync(release)),
+            ),
+          readSnapshot: (ref) =>
+            Effect.succeed({
+              type: "live" as const,
+              session: {
+                ref,
+                activity: "idle" as const,
+                title: "Build session",
+                startedAt: summary.startedAt,
+                pendingApprovals: [],
+                pendingQuestions: [],
+                contextUsage: null,
+                speed: state,
+              },
+            }),
+          setSessionSpeedState: (_ref, next) =>
+            Effect.sync(() => {
+              state = next;
+              admission.setBlocked(next.synchronization !== "confirmed" || next.choice === null);
+            }),
+          queries: {
+            ...unexpectedRuntimeQueries,
+            loadRuntimeCatalog: () =>
+              Effect.succeed({
+                models: {
+                  status: "available" as const,
+                  catalog: {
+                    runtime: CODEX_RUNTIME_DESCRIPTOR,
+                    models: [
+                      {
+                        id: "gpt-5",
+                        providerId: "openai",
+                        providerName: "OpenAI",
+                        modelId: "gpt-5",
+                        modelName: "GPT",
+                        variants: [],
+                        speedLevels: [
+                          { id: "standard", label: "Standard" },
+                          { id: "fast", label: "Fast" },
+                        ],
+                      },
+                    ],
+                    defaultModelsByProvider: {},
+                  },
+                },
+              }),
+          },
+        },
+      );
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          withSessionSettings: (input, operation) => holdSessionSettings(adapter, input, operation),
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected reattach")),
+          continueInterruptedTurn: (input) =>
+            Effect.sync(() => {
+              expect(durable).toBe(nativeChoice);
+              expect(admission.isClosed).toBe(false);
+              continued.push(input);
+              return { ...summary, runtimeKind: "codex" as const, speed: state };
+            }),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () =>
+            Effect.succeed([
+              {
+                ...summary,
+                runtimeKind: "codex" as const,
+                role: "build" as const,
+                selectedModel,
+                speed: durable,
+              },
+            ]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected session upsert")),
+        },
+        persistTaskModel: ({ speed }) =>
+          Effect.gen(function* () {
+            entered.resolve();
+            yield* Effect.promise(() => commit.promise);
+            if (saveFails)
+              return yield* new HostOperationError({
+                operation: "test.store",
+                message: "store failed",
+              });
+            durable = speed ?? null;
+            return { updated: true, publish: Effect.void };
+          }),
+      });
+      const pending = Effect.runPromise(
+        Effect.result(
+          service.resumeSession({
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "session-1",
+            sessionScope: workflowStart.sessionScope,
+            resumeMode: "continue_interrupted_turn",
+          }),
+        ),
+      );
+      if (nativeChoice !== null) {
+        await entered.promise;
+        expect(continued).toHaveLength(0);
+        await expect(admission.run(async () => "new turn")).rejects.toThrow("pending");
+        commit.resolve();
+      }
+      const result = await pending;
+      if (nativeChoice === null || saveFails) {
+        expect(result._tag).toBe("Failure");
+        expect(continued).toHaveLength(0);
+        expect(durable).toBeNull();
+      } else {
+        expect(result._tag).toBe("Success");
+        expect(continued).toEqual([
+          expect.objectContaining({ speed: nativeChoice, model: selectedModel }),
+        ]);
+      }
+    },
+  );
+
   test("rejects workflow startup while direct merge runs", async () => {
     const deps = createControlDeps();
     const service = createAgentSessionCommandService({
       ...deps,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -249,7 +1043,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
     await Effect.runPromise(
@@ -300,6 +1093,7 @@ describe("createAgentSessionCommandService", () => {
           complete: () => Effect.die(new Error("unexpected completion")),
         },
         runtime: {
+          withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
           startSession: () =>
             Effect.gen(function* () {
               calls.push("runtime-created");
@@ -346,7 +1140,6 @@ describe("createAgentSessionCommandService", () => {
               calls.push("store-committed");
               return true;
             }),
-          agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
         },
       });
       const fiber = Effect.runFork(service.startWorkflowSession(workflowStart));
@@ -410,6 +1203,7 @@ describe("createAgentSessionCommandService", () => {
           }),
       },
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () =>
           Effect.sync(() => {
             calls.push("runtime");
@@ -435,7 +1229,6 @@ describe("createAgentSessionCommandService", () => {
             expect(overlap._tag).toBe("Failure");
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
         transitionTask: () =>
           Effect.sync(() => {
             calls.push("transition");
@@ -486,6 +1279,7 @@ describe("createAgentSessionCommandService", () => {
         complete: () => Effect.die(new Error("unexpected completion")),
       },
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -500,7 +1294,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -547,6 +1340,7 @@ describe("createAgentSessionCommandService", () => {
           Effect.fail(
             new HostOperationError({ operation: "test.start", message: "runtime start failed" }),
           ),
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
           Effect.die(new Error("unexpected continue interrupted turn")),
@@ -559,7 +1353,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -613,6 +1406,7 @@ describe("createAgentSessionCommandService", () => {
         complete: () => Effect.die(new Error("unexpected completion")),
       },
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -637,7 +1431,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () =>
           Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -681,6 +1474,7 @@ describe("createAgentSessionCommandService", () => {
           ),
       },
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -694,7 +1488,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
         agentSessionUpsert: () => Effect.succeed(true),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
       },
     });
 
@@ -717,6 +1510,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -734,7 +1528,6 @@ describe("createAgentSessionCommandService", () => {
             storeCount += 1;
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -757,6 +1550,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: (input) =>
           Effect.succeed({
@@ -785,7 +1579,6 @@ describe("createAgentSessionCommandService", () => {
             stored.push(session);
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -823,6 +1616,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected reattach resume")),
         continueInterruptedTurn: (input) =>
@@ -840,7 +1634,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build" as const, selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -874,6 +1667,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () =>
           Effect.sync(() => {
@@ -898,7 +1692,6 @@ describe("createAgentSessionCommandService", () => {
             },
           ]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -922,6 +1715,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -939,7 +1733,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -965,6 +1758,7 @@ describe("createAgentSessionCommandService", () => {
       ...createControlDeps(),
       taskReader: { getTask: () => Effect.succeed(task("closed")) },
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -983,7 +1777,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -1004,11 +1797,12 @@ describe("createAgentSessionCommandService", () => {
   });
 
   test("sends a workflow message through its stored session", async () => {
-    const runtimeInputs: AgentSessionControlSendInput[] = [];
+    const runtimeInputs: (AgentSessionControlSendInput & { speed?: string | null })[] = [];
     const service = createAgentSessionCommandService({
       canonicalizeRepoPath: () => Effect.succeed("/repo"),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1027,7 +1821,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle: createTaskSessionLifecycleCoordinator(),
     });
@@ -1038,6 +1831,7 @@ describe("createAgentSessionCommandService", () => {
     expect(runtimeInputs).toEqual([
       {
         ...workflowSend,
+        speed: "standard",
         repoPath: "/repo",
         model: storedModel,
       },
@@ -1049,6 +1843,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1066,7 +1861,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
 
@@ -1083,6 +1877,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1101,7 +1896,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1128,6 +1922,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1146,13 +1941,13 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: (input) =>
-          Effect.sync(() => {
-            calls.push("store");
-            storedModels.push(input);
-            return true;
-          }),
       },
+      persistTaskModel: (input) =>
+        Effect.sync(() => {
+          calls.push("store");
+          storedModels.push(input);
+          return { updated: true, publish: Effect.void };
+        }),
       taskLifecycle,
     });
 
@@ -1190,6 +1985,7 @@ describe("createAgentSessionCommandService", () => {
       {
         repoPath: "/repo",
         taskId: "task-1",
+        speed: "standard",
         identity: {
           externalSessionId: "session-1",
           runtimeKind: "opencode",
@@ -1216,10 +2012,10 @@ describe("createAgentSessionCommandService", () => {
         Effect.sync(() => {
           runtimeModels.push(input.model);
         }),
-      updateStoredModel: (input) =>
+      persistTaskModel: (input) =>
         Effect.sync(() => {
           storedModels.push(input.selectedModel);
-          return true;
+          return { updated: true, publish: Effect.void };
         }),
     });
 
@@ -1249,7 +2045,7 @@ describe("createAgentSessionCommandService", () => {
           calls.push("runtime");
           runtimeModels.push(input.model);
         }),
-      updateStoredModel: () => {
+      persistTaskModel: () => {
         calls.push("store");
         return Effect.fail(
           new HostOperationError({
@@ -1296,7 +2092,7 @@ describe("createAgentSessionCommandService", () => {
         Effect.sync(() => {
           runtimeModels.push(input.model);
         }),
-      updateStoredModel: () =>
+      persistTaskModel: () =>
         Effect.fail(
           new HostOperationError({
             operation: "task-session.update-model",
@@ -1319,7 +2115,7 @@ describe("createAgentSessionCommandService", () => {
         Effect.sync(() => {
           runtimeModels.push(input.model);
         }),
-      updateStoredModel: () => Effect.succeed(false),
+      persistTaskModel: () => Effect.succeed({ updated: false, publish: Effect.void }),
     });
 
     await expect(
@@ -1347,7 +2143,7 @@ describe("createAgentSessionCommandService", () => {
         runtimeCalls += 1;
         return runtimeCalls === 1 ? Effect.void : Effect.fail(restoreFailure);
       },
-      updateStoredModel: () => Effect.fail(storeFailure),
+      persistTaskModel: () => Effect.fail(storeFailure),
     });
 
     const result = await Effect.runPromise(
@@ -1371,6 +2167,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1387,7 +2184,6 @@ describe("createAgentSessionCommandService", () => {
       tasks: {
         agentSessionsList: () => Effect.succeed([]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1414,6 +2210,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1431,7 +2228,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1465,6 +2261,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () =>
           Effect.sync(() => {
@@ -1483,7 +2280,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1517,6 +2313,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1535,7 +2332,6 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1569,6 +2365,7 @@ describe("createAgentSessionCommandService", () => {
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1592,7 +2389,6 @@ describe("createAgentSessionCommandService", () => {
             ),
             Effect.as(true),
           ),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
       taskLifecycle,
     });
@@ -1619,6 +2415,7 @@ describe("createAgentSessionCommandService", () => {
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
       runtime: {
+        withSessionSettings: () => Effect.die(new Error("Unexpected settings change")),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1642,8 +2439,8 @@ describe("createAgentSessionCommandService", () => {
         agentSessionsList: () =>
           Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: () => Effect.succeed(true),
       },
+      persistTaskModel: () => Effect.succeed({ updated: true, publish: Effect.void }),
       taskLifecycle,
     });
 

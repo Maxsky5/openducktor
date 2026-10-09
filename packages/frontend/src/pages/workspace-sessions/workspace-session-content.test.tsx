@@ -60,6 +60,7 @@ const record = {
   manualTitle: "Chat",
   createdAt: 1,
   updatedAt: 1,
+  speed: "standard",
   archivedAt: null,
 };
 const worktreeRecord: WorkspaceSession = {

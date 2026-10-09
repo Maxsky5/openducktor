@@ -12,12 +12,15 @@ import {
 import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { HostOperationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import { createAgentSessionCommandService } from "./agent-session-command-service";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
 
 describe("message acceptance through the command and live adapter modules", () => {
-  test.each(["observe", "record", "reject", "invalid", "detach"] as const)(
+  test.each(["prepare", "observe", "record", "reject", "invalid", "detach"] as const)(
     "preserves the send result when %s fails",
     async (stage) => {
       const native = createRuntimeHarness();
@@ -93,8 +96,10 @@ describe("message acceptance through the command and live adapter modules", () =
           run: (_ref, _operation, effect) => effect,
           runSend: (_ref, effect) => effect,
           validateRef: () => Effect.void,
-          prepareSend: Effect.succeed,
+          prepareSend: (input) =>
+            stage === "prepare" ? Effect.fail(failure) : Effect.succeed(input),
           prepareResume: () => Effect.die(new Error("unexpected resume")),
+          prepareSpeedUpdate: () => Effect.die(new Error("Unexpected speed preparation")),
           prepareModelUpdate: () => Effect.die(new Error("unexpected model update")),
           recordAcceptedMessage: () => {
             records += 1;
@@ -106,7 +111,6 @@ describe("message acceptance through the command and live adapter modules", () =
         tasks: {
           agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
           agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
-          agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
           transitionTask: () => Effect.die(new Error("unexpected task transition")),
         },
         taskLifecycle: {
@@ -136,11 +140,16 @@ describe("message acceptance through the command and live adapter modules", () =
         }
       }
       const result = await sending;
-      expect(sends).toBe(1);
+      expect(sends).toBe(stage === "prepare" ? 0 : 1);
       expect(records).toBe(stage === "record" ? 1 : 0);
       expect(result._tag).toBe("Failure");
       if (result._tag !== "Failure") throw new Error("Expected send failure");
       const mapped = hostInvokeFailureFromError(result.failure);
+      if (stage === "prepare") {
+        expect(mapped).toBeUndefined();
+        expect(result.failure).toBeInstanceOf(AgentSessionMessageRejectedError);
+        return;
+      }
       if (stage === "reject" || stage === "invalid") {
         expect(mapped).toBeUndefined();
         expect(result.failure).not.toBeInstanceOf(AgentSessionMessageAcceptedError);

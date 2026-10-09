@@ -144,6 +144,9 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      catalog: {
+        loadRuntimeCatalog: () => Effect.die(new Error("Unexpected speed catalog read")),
+      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -485,6 +488,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       manualTitle: "Detached import",
       createdAt: 1,
       updatedAt: 1,
+      speed: "standard",
       archivedAt: null,
     };
     await Effect.runPromise(
@@ -600,6 +604,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(created.session).toMatchObject({
         manualTitle: "My session",
         generatedTitle: null,
+        speed: "standard",
         archivedAt: null,
         roleSnapshot: { name: "Reviewer", systemPrompt: "Original prompt." },
         selectedModel: input().selectedModel,

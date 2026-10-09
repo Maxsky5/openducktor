@@ -68,6 +68,8 @@ const queuedSessionEventKey = (event: QueuedSessionEvent, eventIndex: number): s
       return `assistant_message:${event.messageId}`;
     case "session_status":
       return `session_status:${eventIndex}`;
+    case "session_speed_changed":
+      return "session_speed_changed";
     case "session_todos_updated":
       return "session_todos_updated";
     default:
@@ -84,6 +86,7 @@ const queuedSessionEventMinEmitIntervalMs = (event: QueuedSessionEvent): number 
       return minAssistantPartEmitIntervalMs(event);
     case "session_started":
     case "session_status":
+    case "session_speed_changed":
     case "session_todos_updated":
       return null;
     default:

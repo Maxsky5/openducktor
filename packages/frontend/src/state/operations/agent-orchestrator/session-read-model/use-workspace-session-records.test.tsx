@@ -23,6 +23,7 @@ const record = (name: string): WorkspaceSession => ({
   manualTitle: name,
   createdAt: 1000,
   updatedAt: 1000,
+  speed: "standard",
   archivedAt: null,
 });
 

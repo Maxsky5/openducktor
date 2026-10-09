@@ -7,7 +7,8 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import { flushQueuedClaudeUserMessage } from "./claude-agent-sdk-session-dispatch";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 import {
   claudeHistoryMessageFixtures,

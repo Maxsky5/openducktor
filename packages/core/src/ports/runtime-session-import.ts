@@ -4,6 +4,7 @@ import type { SessionRef } from "../types/agent-orchestrator";
 export type RuntimeSessionImportSource = {
   metadata: WorkspaceSessionExternal;
   selectedModel: AgentSessionModelSelection | null;
+  speed: string | null;
   attach(): Promise<void>;
 };
 export type RuntimeSessionImportPort = {

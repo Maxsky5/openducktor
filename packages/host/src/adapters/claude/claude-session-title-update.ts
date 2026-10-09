@@ -2,7 +2,6 @@ import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts
 import {
   type AgentSessionScope,
   type AgentSessionSummary,
-  type ResumeAgentSessionInput,
   agentSessionTitle,
   withSummaryTitle,
   withoutSummaryTitle,
@@ -51,16 +50,14 @@ export const reconcileClaudeSessionTitle = async (input: {
 };
 
 /**
- * Prepares a retained Claude session for a resume. Validates the ref, requires the
- * OpenDucktor MCP scope, and reconciles the durable title with the runtime.
+ * Prepares a checked retained Claude session for resume. Requires the
+ * OpenDucktor MCP scope and updates the runtime with the saved title.
  */
 export const resumeRetainedClaudeSession = async (input: {
-  request: ResumeAgentSessionInput;
   runtimeId: string;
   scope: AgentSessionScope;
   session: ClaudeSession;
 }): Promise<AgentSessionSummary> => {
-  assertClaudeSessionRef(input.session, input.request, "resume");
   await requireClaudeOpenDucktorMcpForScope(input.scope, input.session.query, {
     externalSessionId: input.session.externalSessionId,
     runtimeId: input.runtimeId,

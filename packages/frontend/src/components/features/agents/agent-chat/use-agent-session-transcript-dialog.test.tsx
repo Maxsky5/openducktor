@@ -176,6 +176,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         sendAgentMessage: async () => null,
         stopAgentSession: async () => undefined,
         continueInterruptedTurn: async () => undefined,
+        updateAgentSessionSpeed: async () => {
+          throw new Error("Unexpected speed change.");
+        },
         updateAgentSessionModel: async () => undefined,
         replyAgentApproval: async () => undefined,
         answerAgentQuestion: async () => undefined,
@@ -336,6 +339,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
+      updateAgentSessionSpeed: async () => {
+        throw new Error("Unexpected speed change.");
+      },
       updateAgentSessionModel: async () => undefined,
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
@@ -438,6 +444,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
+      updateAgentSessionSpeed: async () => {
+        throw new Error("Unexpected speed change.");
+      },
       updateAgentSessionModel: async () => undefined,
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,

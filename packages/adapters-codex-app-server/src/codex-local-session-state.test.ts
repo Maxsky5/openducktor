@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { SessionTurnAdmission } from "@openducktor/core";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import type { CodexSessionState } from "./types";
 
 const session = (threadId: string, runtimeId = "runtime-1"): CodexSessionState => ({
+  turnAdmission: new SessionTurnAdmission(),
   summary: {
     externalSessionId: threadId,
     title: threadId,

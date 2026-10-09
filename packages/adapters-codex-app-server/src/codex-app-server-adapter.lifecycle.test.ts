@@ -22,6 +22,7 @@ import { CodexAppServerAdapter } from "./index";
 import type { CodexJsonRpcRequest } from "./types";
 
 const expectedThreadPolicy = {
+  serviceTier: null,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   sandbox: "workspace-write",
@@ -29,6 +30,7 @@ const expectedThreadPolicy = {
 const workflowThreadConfig = (role: AgentRole, repoPath = "/repo") =>
   expectedThreadConfig(repoPath, AGENT_ROLE_TOOL_POLICY[role]);
 const expectedTurnPolicy = (workingDirectory: string) => ({
+  serviceTier: null,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   sandboxPolicy: codexSandboxPolicy(defaultCodexEffectivePolicy(), workingDirectory),
@@ -419,6 +421,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     );
 
     expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
+      serviceTier: null,
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandbox: "workspace-write",
@@ -429,6 +432,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: "gpt-5",
     });
     expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
+      serviceTier: null,
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),

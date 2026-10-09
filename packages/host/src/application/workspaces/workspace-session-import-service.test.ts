@@ -70,6 +70,7 @@ const setup = async () => {
     createAgentSessionRuntimeAdapterTestDouble(
       { runtimeId, runtimeKind: "opencode" },
       {
+        readSnapshot: (ref) => Effect.succeed({ type: "missing" as const, ref }),
         sessionImport: {
           scanSessions: ({ repoPath, signal }) => {
             state.signal = signal;
@@ -96,6 +97,7 @@ const setup = async () => {
                   title: "Native title ".repeat(30),
                 },
                 selectedModel: null,
+                speed: null,
                 attach: Effect.suspend(() => {
                   calls.push("attach");
                   return state.failRegistration

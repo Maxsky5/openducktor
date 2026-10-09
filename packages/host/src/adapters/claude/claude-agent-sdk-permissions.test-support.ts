@@ -1,3 +1,4 @@
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import type { AgentRole, AgentSessionScope } from "@openducktor/core";
 import { createClaudeCanUseTool as createClaudeCanUseToolBase } from "./claude-agent-sdk-permissions";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -14,6 +15,7 @@ export const createClaudeCanUseTool = (
 const createClaudePermissionTestSessionForScope = (
   sessionScope: AgentSessionScope,
 ): ClaudeSessionContext => ({
+  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -36,6 +38,7 @@ const createClaudePermissionTestSessionForScope = (
   runtimeId: "runtime-1",
   startedAt: "2026-06-25T12:00:00.000Z",
   summary: {
+    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",

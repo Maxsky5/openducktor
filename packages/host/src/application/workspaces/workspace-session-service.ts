@@ -1,8 +1,9 @@
+import { createWorkspaceSessionSpeed } from "./workspace-session-speed";
+import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import { createWorkspaceSessionStart } from "./workspace-session-start";
 import {
   type WorkspaceSession,
   type WorkspaceSessionArchiveInput,
-  type AgentSessionModelSelection,
   type AgentSessionLiveRef,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
@@ -43,6 +44,7 @@ import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-se
 import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
 
 export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies & {
+  catalog: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   lifecycle: TaskSessionLifecycleCoordinator;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
@@ -63,7 +65,13 @@ export const createWorkspaceSessionService = (
 ) => {
   const { store, settings, live, git, operationGate, sessionTitleGate } = dependencies;
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
+  const { requireSpeed, setDraftModel, setDraftSpeed } = createWorkspaceSessionSpeed(
+    dependencies,
+    recordFor,
+  );
   return {
+    setDraftModel,
+    setDraftSpeed,
     listActive: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listActive)),
     listArchived: (workspaceId: string) =>
@@ -117,6 +125,14 @@ export const createWorkspaceSessionService = (
           },
           (executionTarget, retainTarget) =>
             Effect.gen(function* () {
+              if (input.speed !== undefined && input.speed !== "standard")
+                yield* requireSpeed(
+                  repoPath,
+                  executionTarget.workingDirectory,
+                  input.runtimeKind,
+                  input.selectedModel,
+                  input.speed,
+                );
               const now = yield* Clock.currentTimeMillis;
               const session: WorkspaceSession = {
                 id: sessionId,
@@ -125,6 +141,7 @@ export const createWorkspaceSessionService = (
                 executionTarget,
                 roleSnapshot,
                 selectedModel: input.selectedModel,
+                speed: input.speed ?? "standard",
                 generatedTitle: null,
                 manualTitle,
                 createdAt: now,
@@ -142,22 +159,6 @@ export const createWorkspaceSessionService = (
         );
       }),
     start: createWorkspaceSessionStart(dependencies),
-    setDraftModel: (
-      input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },
-    ) =>
-      operationGate.run(
-        input,
-        Effect.gen(function* () {
-          const { ref, session } = yield* recordFor(input);
-          if (session.externalSessionId !== null || session.archivedAt !== null) {
-            return yield* new HostValidationError({
-              field: "sessionId",
-              message: "Only an active draft can change its saved model.",
-            });
-          }
-          return yield* store.setSelectedModel({ ...ref, selectedModel: input.selectedModel });
-        }),
-      ),
     rename: (input: WorkspaceSessionRefInput & { manualTitle: string | null }) =>
       operationGate.run(
         input,

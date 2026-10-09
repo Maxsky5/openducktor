@@ -27,6 +27,7 @@ const makeSession = (id = "one", updatedAt = 1): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1,
   updatedAt,
+  speed: "standard",
   archivedAt: null,
 });
 
@@ -41,6 +42,46 @@ describe("SQLite Workspace Session store", () => {
   const scope = () => ({ repoPath: harness.repoPath, workspaceId: "fairnest" });
   const ref = (sessionId = "one") => ({ ...scope(), sessionId });
   const store = () => createSqliteWorkspaceSessionStore(harness.contextProvider);
+
+  test("persists on, off, and imported uncertainty without changing activity or titles", async () => {
+    const repository = store();
+    const session = {
+      ...makeSession(),
+      speed: null,
+      lastActivityAt: 123,
+      manualTitle: "Keep title",
+    };
+    await Effect.runPromise(repository.create({ ...scope(), session }));
+    expect(await Effect.runPromise(repository.get(ref()))).toMatchObject({
+      speed: null,
+      lastActivityAt: 123,
+      manualTitle: "Keep title",
+    });
+    await Effect.runPromise(repository.setSpeed({ ...ref(), speed: "fast" }));
+    expect(await Effect.runPromise(repository.get(ref()))).toMatchObject({
+      speed: "fast",
+      lastActivityAt: 123,
+      manualTitle: "Keep title",
+    });
+    await Effect.runPromise(
+      repository.setSelectedModel({
+        ...ref(),
+        selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "unsupported" },
+        speed: "standard",
+      }),
+    );
+    expect(await Effect.runPromise(repository.get(ref()))).toMatchObject({
+      speed: "standard",
+      selectedModel: { modelId: "unsupported" },
+      lastActivityAt: 123,
+    });
+    await Effect.runPromise(repository.archive({ ...ref(), archivedAt: 10 }));
+    await Effect.runPromise(repository.restore(ref()));
+    expect(await Effect.runPromise(repository.get(ref()))).toMatchObject({
+      speed: "standard",
+      lastActivityAt: 123,
+    });
+  });
 
   test("checks all archived chats and closed task ownership in the import transaction", async () => {
     const repository = store();

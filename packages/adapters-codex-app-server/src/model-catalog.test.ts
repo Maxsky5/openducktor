@@ -15,12 +15,30 @@ const createModelListResponse = (inputModalities: string[]): CodexModelListRespo
       inputModalities,
       supportsPersonality: true,
       isDefault: true,
+      serviceTiers: [],
     },
   ],
   nextCursor: null,
 });
 
 describe("Codex model catalog mapping", () => {
+  test("keeps every advertised speed level, including Ultrafast and future levels", () => {
+    const response = createModelListResponse(["text"]);
+    response.data[0]!.serviceTiers = [
+      { id: "priority", name: "Fast", description: "Fast processing" },
+      { id: "ultrafast", name: "Ultrafast", description: "Ultrafast processing" },
+      { id: "future-speed", name: "Future speed", description: "A new native level" },
+    ];
+    expect(toCatalog(response).models[0]).toMatchObject({
+      speedLevels: [
+        { id: "standard", label: "Standard" },
+        { id: "priority", label: "Fast", description: "Fast processing" },
+        { id: "ultrafast", label: "Ultrafast", description: "Ultrafast processing" },
+        { id: "future-speed", label: "Future speed", description: "A new native level" },
+      ],
+    });
+  });
+
   test("maps Codex image input modality to image attachment support", () => {
     const catalog = toCatalog(createModelListResponse(["text", "image"]));
 

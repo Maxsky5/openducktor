@@ -8,6 +8,7 @@ import {
   resolveModelSelectionForVariantChange,
 } from "@/features/model-selection/model-selection-state";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { reportModelUpdateError } from "./model-update-error";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
@@ -18,11 +19,7 @@ const findSelectedCatalogModel = (
   if (!catalog || !selection) {
     return null;
   }
-  return (
-    catalog.models.find(
-      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
-    ) ?? null
-  );
+  return findCatalogModel(catalog, selection);
 };
 
 export const useModelSelectionActions = ({

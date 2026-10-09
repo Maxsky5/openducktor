@@ -336,7 +336,7 @@ export const createSqliteTaskRepository = ({
         "sqliteTaskRepository.updateAgentSessionModel",
         ({ session }) =>
           session.transaction("sqliteTaskRepository.updateAgentSessionModel", (transaction) =>
-            updateAgentSessionModel(transaction, input, now()),
+            updateAgentSessionModel(transaction, input),
           ),
       );
     },

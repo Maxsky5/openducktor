@@ -537,6 +537,7 @@ describe("local host SSE subscriptions", () => {
         manualTitle: "Example",
         createdAt: 1000,
         updatedAt: 1000,
+        speed: "standard",
         archivedAt: null,
       },
     };

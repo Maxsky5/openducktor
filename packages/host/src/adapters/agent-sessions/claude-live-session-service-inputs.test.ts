@@ -45,6 +45,7 @@ describe("Claude live-session service inputs", () => {
     });
 
     expect(startInput).toEqual({
+      speed: "standard",
       repoPath: "/repo",
       runtimeKind: "claude",
       runtimePolicy: { kind: "claude" },

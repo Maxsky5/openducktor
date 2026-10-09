@@ -1,7 +1,6 @@
 import type { AgentSessionControlSummary, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError, type HostError } from "../../effect/host-errors";
-import { resumeAndSaveSession } from "./session-resume";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
@@ -23,6 +22,7 @@ export type RuntimeControl = Pick<
   | "forkSession"
   | "sendUserMessage"
   | "updateSessionModel"
+  | "withSessionSettings"
   | "stopSession"
   | "releaseSession"
 >;
@@ -53,10 +53,7 @@ export type TaskSessionWrites = {
 };
 export type TaskSessionOperationDependencies = {
   canonicalizeRepoPath: CanonicalizeRepoPath;
-  runtime: Pick<
-    RuntimeControl,
-    "startSession" | "forkSession" | "resumeSession" | "releaseSession"
-  >;
+  runtime: Pick<RuntimeControl, "startSession" | "forkSession">;
   taskReader: Pick<TaskStorePort, "getTask">;
   tasks: Pick<TaskService, "agentSessionsList">;
   taskLifecycle: TaskLifecycle;
@@ -69,43 +66,6 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
   const { canonicalizeRepoPath, runtime, taskReader, tasks, taskLifecycle, writes } = deps;
   return {
     start: createStartTaskWorkflowSession(deps),
-    resume: (
-      input: Parameters<RuntimeControl["resumeSession"]>[0],
-    ): Effect.Effect<PreparedTaskSession, HostError> =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          if (input.sessionScope.kind !== "workflow")
-            return yield* runtime
-              .resumeSession(input)
-              .pipe(Effect.map((session) => ({ session, publish: Effect.void })));
-          const scope = input.sessionScope;
-          const repoPath = yield* canonicalizeRepoPath(input.repoPath);
-          yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "resume session");
-          const stored = yield* readStoredWorkflowSession(
-            tasks,
-            { ...input, repoPath, sessionScope: scope },
-            "read-resume",
-          );
-          return yield* resumeAndSaveSession({
-            ref: { ...input, repoPath },
-            resume: runtime.resumeSession({
-              ...input,
-              repoPath,
-              runtimeKind: stored.runtimeKind,
-              workingDirectory: stored.workingDirectory,
-            }),
-            save: (session) =>
-              storeWorkflowSession(writes.saveSession, {
-                repoPath,
-                sessionScope: scope,
-                model: input.model,
-                selectedModel: stored.selectedModel,
-                summary: session,
-              }),
-            release: runtime.releaseSession,
-          }).pipe(Effect.map(({ session, saved }) => ({ session, publish: saved.publish })));
-        }),
-      ),
     fork: (
       input: Parameters<RuntimeControl["forkSession"]>[0],
       progress: TaskSessionProgress,

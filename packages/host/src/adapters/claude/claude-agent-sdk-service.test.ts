@@ -1,3 +1,4 @@
+import { initialSpeedState } from "@openducktor/core";
 import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
 import * as nativeSessions from "./claude-session-metadata";
@@ -5,7 +6,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
@@ -39,6 +40,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
     },
     runtimeId: "runtime-1",
     summary: {
+      speed: initialSpeedState("standard", "confirmed"),
       externalSessionId: "session-1",
       runtimeKind: "claude",
       workingDirectory: "/repo/worktree/",
@@ -104,7 +106,7 @@ const createService = (
 };
 
 describe("createClaudeAgentSdkService", () => {
-  test.each(["preparation", "queued"] as const)(
+  test.each(["preparation", "held admission", "speed restore", "queued"] as const)(
     "classifies a send failure at %s",
     async (stage) => {
       const base = createSession();
@@ -113,8 +115,13 @@ describe("createClaudeAgentSdkService", () => {
         query: createClaudeQueryFixture({
           mcpServerStatus: async () =>
             stage === "preparation" ? [] : [{ name: "openducktor", status: "connected" }],
+          applyFlagSettings: async () => {
+            if (stage === "speed restore") throw new Error("Speed restore failed");
+          },
         }),
       });
+      const release = stage === "held admission" ? await session.turnAdmission.hold() : undefined;
+      if (stage === "speed restore") session.summary.speed = initialSpeedState("fast", "unapplied");
       const service = createService(session, () => {
         throw new Error("Publication failed after queueing");
       });
@@ -137,7 +144,7 @@ describe("createClaudeAgentSdkService", () => {
         );
         expect(result._tag).toBe("Failure");
         if (result._tag !== "Failure") throw new Error("Expected send failure");
-        if (stage === "preparation") {
+        if (stage !== "queued") {
           expect(result.failure).toBeInstanceOf(AgentSessionMessageRejectedError);
           expect(session.acceptedUserMessages).toHaveLength(0);
         } else {
@@ -145,6 +152,7 @@ describe("createClaudeAgentSdkService", () => {
           expect(session.acceptedUserMessages).toHaveLength(1);
         }
       } finally {
+        release?.();
         service.dispose();
       }
     },
@@ -211,7 +219,7 @@ describe("createClaudeAgentSdkService", () => {
     });
   }
 
-  test("imports a saved conversation only when live registration runs", async () => {
+  test.each(["import", "cold control"])("%s retains the model for speed controls", async (path) => {
     const ref = {
       repoPath: "/repo/",
       runtimeKind: "claude" as const,
@@ -227,23 +235,28 @@ describe("createClaudeAgentSdkService", () => {
     const model = spyOn(nativeSessions, "readClaudeSessionModel").mockResolvedValue({
       runtimeKind: "claude",
       providerId: "claude",
-      modelId: "native-claude",
+      modelId: path === "import" ? "claude-opus-5-5" : "gpt-6-luna",
     });
     const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
-    const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
-      async (request) => {
-        expect(request.sessionInput).toEqual({
-          claudePolicy: null,
-          externalSessionId: "session-1",
-          options: { resume: "session-1" },
-          preserveNativeSettings: true,
-          startedMessage: "Imported session",
-        });
-        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
-        request.sessionStore.set(session);
-        return session.summary;
+    const streamFinished = Promise.withResolvers<void>();
+    const sdkQuery = createClaudeQueryFixture({
+      close: () => streamFinished.resolve(),
+      supportedModels: async () => [
+        {
+          value: "opus",
+          resolvedModel: "claude-opus-5-5",
+          displayName: "Opus 5.5",
+          description: "Opus",
+          supportsFastMode: true,
+        },
+      ],
+      mcpServerStatus: async () => [{ name: "openducktor", status: "connected" }],
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
       },
-    );
+    });
+    const query = spyOn(realClaudeSdk, "query").mockImplementation(() => sdkQuery);
     const service = createService(null, undefined, store, {
       resolveMcpBridgeConnection: () =>
         Effect.succeed({
@@ -253,19 +266,46 @@ describe("createClaudeAgentSdkService", () => {
         }),
     });
     try {
-      const source = await Effect.runPromise(service.inspectSessionForImport(ref, "runtime"));
-      expect(source.selectedModel?.modelId).toBe("native-claude");
-      expect(create).not.toHaveBeenCalled();
-      expect(store.get(ref.externalSessionId)).toBeUndefined();
-      await Effect.runPromise(source.attach);
-      expect(create).toHaveBeenCalledTimes(1);
+      let release;
+      if (path === "import") {
+        const source = await Effect.runPromise(service.inspectSessionForImport(ref, "runtime"));
+        expect(source.selectedModel?.modelId).toBe("claude-opus-5-5");
+        expect(query).not.toHaveBeenCalled();
+        expect(store.get(ref.externalSessionId)).toBeUndefined();
+        await Effect.runPromise(source.attach);
+      } else {
+        release = await Effect.runPromise(
+          service.holdSessionTurns(
+            {
+              ...ref,
+              sessionScope: { kind: "repository" },
+              model: { providerId: "claude", modelId: "claude-opus-5-5" },
+            },
+            "runtime",
+          ),
+        );
+      }
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(query.mock.calls[0]?.[0].options?.model).toBeUndefined();
       expect(store.get(ref.externalSessionId)).toBeDefined();
+      for (const speed of ["standard", "fast", "standard"]) {
+        const observation = await Effect.runPromise(
+          service.updateSessionSpeed({
+            ...ref,
+            sessionScope: { kind: "repository" },
+            speed,
+          }),
+        );
+        expect(observation).toMatchObject({ reportedChoice: speed });
+      }
+      if (release) await Effect.runPromise(release);
     } finally {
       metadata.mockRestore();
       model.mockRestore();
       loadTodos.mockRestore();
-      create.mockRestore();
       service.dispose();
+      streamFinished.resolve();
+      query.mockRestore();
     }
   });
 
@@ -299,6 +339,7 @@ describe("createClaudeAgentSdkService", () => {
         sessionScope: repositoryScope,
       },
       summary: {
+        speed: initialSpeedState("standard", "confirmed"),
         externalSessionId: "session-1",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
@@ -426,6 +467,7 @@ describe("createClaudeAgentSdkService", () => {
         sessionScope: { kind: "repository", title: "Fairnest" },
       },
       summary: {
+        speed: initialSpeedState("standard", "confirmed"),
         externalSessionId: "session-1",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
@@ -477,6 +519,7 @@ describe("createClaudeAgentSdkService", () => {
         sessionScope: { kind: "repository", title: "Fairnest" },
       },
       summary: {
+        speed: initialSpeedState("standard", "confirmed"),
         externalSessionId: "session-1",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
@@ -525,6 +568,7 @@ describe("createClaudeAgentSdkService", () => {
           sessionScope: { kind: "repository" },
         },
         summary: {
+          speed: initialSpeedState("standard", "confirmed"),
           externalSessionId: "session-1",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
@@ -937,26 +981,47 @@ describe("createClaudeAgentSdkService", () => {
   });
 
   test("validates existing live session refs before resuming", async () => {
-    const service = createService(createSession());
+    const applyFlagSettings = mock(async () => {});
+    const supportedModels = mock(async () => [
+      { value: "opus", displayName: "Opus", description: "Opus", supportsFastMode: true },
+    ]);
+    const session = createSession({
+      model: { providerId: "claude", modelId: "opus" },
+      query: createClaudeQueryFixture({ applyFlagSettings, supportedModels }),
+    });
+    const speed = session.summary.speed;
+    const service = createService(session);
 
-    await expect(
-      Effect.runPromise(
-        service.resumeSession(
-          {
-            repoPath: "/other-repo",
-            runtimeKind: "claude",
-            workingDirectory: "/repo/worktree",
-            externalSessionId: "session-1",
-            runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-            systemPrompt: "Build",
-          },
-          "runtime-claude",
-        ),
+    const result = await Effect.runPromiseExit(
+      service.resumeSession(
+        {
+          repoPath: "/other-repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build",
+          speed: "fast",
+        },
+        "runtime-claude",
       ),
-    ).rejects.toThrow(
-      "Cannot resume Claude session 'session-1' from repo '/other-repo' and working directory '/repo/worktree'",
     );
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.cause.reasons).toHaveLength(1);
+      const reason = result.cause.reasons[0];
+      expect(reason?._tag).toBe("Fail");
+      if (reason?._tag === "Fail") {
+        expect(reason.error).toBeInstanceOf(HostValidationError);
+        expect(reason.error.message).toContain(
+          "Cannot resume Claude session 'session-1' from repo '/other-repo' and working directory '/repo/worktree'",
+        );
+      }
+    }
+    expect(applyFlagSettings).not.toHaveBeenCalled();
+    expect(supportedModels).not.toHaveBeenCalled();
+    expect(session.summary.speed).toEqual(speed);
   });
 
   test("applies live Claude effort changes through the SDK session", async () => {
@@ -1018,6 +1083,7 @@ describe("createClaudeAgentSdkService", () => {
           sessionScope: { kind: "repository", title: "Fairnest" },
         },
         summary: {
+          speed: initialSpeedState("standard", "confirmed"),
           externalSessionId: "session-1",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
@@ -1045,6 +1111,7 @@ describe("createClaudeAgentSdkService", () => {
       expect(result).toMatchObject({
         status: "renamed",
         summary: {
+          speed: initialSpeedState("standard", "confirmed"),
           title: "Renamed",
           sessionAssociation: { kind: "repository", title: "Renamed" },
         },

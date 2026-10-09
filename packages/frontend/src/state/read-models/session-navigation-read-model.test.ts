@@ -48,6 +48,7 @@ const chat = (id: string, overrides: Partial<WorkspaceSession> = {}): WorkspaceS
   manualTitle: null,
   createdAt: Date.parse("2026-09-30T07:00:00.000Z"),
   updatedAt: Date.parse("2026-09-30T07:00:00.000Z"),
+  speed: "standard",
   archivedAt: null,
   ...overrides,
 });

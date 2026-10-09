@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createSessionSpeedWriter } from "../../application/agent-sessions/agent-session-speed-persistence";
 import { createAgentSessionActivityPersistence } from "../../application/agent-sessions/agent-session-activity-persistence";
 import type { AgentSessionRepository } from "../../ports/task-repository-ports";
 import type { AgentSessionLiveFaultLogger } from "../../application/agent-sessions/agent-session-live-state-service";
@@ -27,7 +28,10 @@ export const createNodeWorkspaceSessionPersistence = ({
 > & {
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
-  taskStore: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
+  taskStore: Pick<
+    AgentSessionRepository,
+    "recordAgentSessionActivity" | "listAgentSessionsForTasks" | "updateAgentSessionModel"
+  >;
 }) => {
   const operationGate = createWorkspaceSessionOperationGate();
   // Title transitions serialize on their own gate, because an observed message
@@ -83,6 +87,28 @@ export const createNodeWorkspaceSessionPersistence = ({
   });
   const persistence = {
     ...workspacePersistence,
+    recordSpeedChoice: createSessionSpeedWriter({
+      ...dependencies,
+      taskStore,
+      publishWorkspace: publishUpdated,
+      publishTask: (repoPath, taskId) =>
+        taskStore.listAgentSessionsForTasks({ repoPath, taskIds: [taskId] }).pipe(
+          Effect.mapError((cause) => toHostOperationError(cause, "agent-session.publish-speed")),
+          Effect.flatMap((records) =>
+            Effect.try({
+              try: () => {
+                for (const record of records)
+                  publishLiveEnvelope({
+                    type: "task_session_records_updated",
+                    repoPath,
+                    ...record,
+                  });
+              },
+              catch: (cause) => toHostOperationError(cause, "agent-session.publish-speed"),
+            }),
+          ),
+        ),
+    }),
     ...createAgentSessionActivityPersistence({
       tasks: taskStore,
       workspace: workspacePersistence,

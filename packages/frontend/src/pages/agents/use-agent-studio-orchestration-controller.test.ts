@@ -110,6 +110,7 @@ const createBaseArgs = (): BuildArgs => {
     }),
     sessionActions,
     modelSelection: {
+      speed: undefined,
       selectedModelSelection: null,
       selectedModelDescriptor: null,
       isSelectionCatalogLoading: false,

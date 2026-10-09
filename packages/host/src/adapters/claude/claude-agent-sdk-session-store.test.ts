@@ -1,3 +1,5 @@
+import { initialSpeedState } from "@openducktor/core";
+import { SessionTurnAdmission } from "@openducktor/core";
 import { describe, expect, mock, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
@@ -11,6 +13,7 @@ import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-sto
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
+  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -36,6 +39,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   runtimeId: "runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
   summary: {
+    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",

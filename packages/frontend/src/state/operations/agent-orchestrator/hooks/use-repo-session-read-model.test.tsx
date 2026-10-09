@@ -774,6 +774,7 @@ describe("useRepoSessionReadModel", () => {
       manualTitle: null,
       createdAt: 0,
       updatedAt: 0,
+      speed: "standard",
       archivedAt: null,
     }));
     const sessions = [
@@ -855,6 +856,7 @@ describe("useRepoSessionReadModel", () => {
       manualTitle: null,
       createdAt: 1000,
       updatedAt: 1000,
+      speed: "standard",
       archivedAt: null,
     };
     const native = snapshot({
@@ -912,6 +914,7 @@ describe("useRepoSessionReadModel", () => {
       manualTitle: null,
       createdAt: 1000,
       updatedAt: 1000,
+      speed: "standard",
       archivedAt: null,
     };
     const correct = snapshot({ repositoryScope: { kind: "repository" } });

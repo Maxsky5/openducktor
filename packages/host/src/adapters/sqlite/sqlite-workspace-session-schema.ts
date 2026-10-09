@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const workspaceSessions = sqliteTable(
   "workspace_sessions",
@@ -9,6 +10,7 @@ export const workspaceSessions = sqliteTable(
     executionTargetJson: text("execution_target_json").notNull(),
     roleSnapshotJson: text("role_snapshot_json"),
     selectedModelJson: text("selected_model_json"),
+    speed: text("speed").default("standard"),
     generatedTitle: text("generated_title"),
     manualTitle: text("manual_title"),
     createdAt: integer("created_at_ms").notNull(),
@@ -17,6 +19,10 @@ export const workspaceSessions = sqliteTable(
     archivedAt: integer("archived_at_ms"),
   },
   (table) => [
+    check(
+      "workspace_sessions_speed",
+      sql`${table.speed} IS NULL OR length(trim(${table.speed})) > 0`,
+    ),
     uniqueIndex("idx_workspace_sessions_runtime_identity").on(
       table.runtimeKind,
       table.externalSessionId,

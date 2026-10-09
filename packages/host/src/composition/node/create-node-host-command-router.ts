@@ -315,6 +315,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const mcpBridge = resolvedMcpHostBridge;
   const workspaceChats = createNodeWorkspaceSessionServices({
+    catalog: taskSessions.agentRuntimeQueries,
     terminalService,
     lifecycle: taskSessionLifecycleCoordinator,
     operationGate: workspaceSessions.operationGate,

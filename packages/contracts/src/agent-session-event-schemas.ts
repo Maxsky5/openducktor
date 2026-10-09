@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentSpeedRuntimeObservationSchema } from "./agent-speed-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import { agentImageGenerationPartSchema } from "./agent-image-generation-schemas";
 import {
@@ -314,6 +315,10 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
+  transcriptEventSchema({
+    type: z.literal("session_speed_changed"),
+    observation: agentSpeedRuntimeObservationSchema,
+  }),
   transcriptEventSchema({
     type: z.literal("session_policy_notice"),
     messageId: z.string(),

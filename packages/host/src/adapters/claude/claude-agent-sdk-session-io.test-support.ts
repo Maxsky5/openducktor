@@ -7,6 +7,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types";
@@ -38,6 +39,7 @@ export const createClaudeContextUsageResponse = (
 });
 
 export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
+  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -61,6 +63,7 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
   runtimeId: "claude-runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
   summary: {
+    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",

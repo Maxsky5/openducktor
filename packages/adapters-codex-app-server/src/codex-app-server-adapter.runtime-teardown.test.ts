@@ -136,7 +136,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("does not begin a turn after runtime release wins subscription readiness", async () => {
-    const { adapter } = createHarness();
+    const { adapter, transports } = createHarness();
 
     await adapter.startSession(codexStartSessionInput());
     const send = adapter.sendUserMessage(
@@ -146,9 +146,10 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     );
     adapter.releaseRuntime("runtime-live");
 
-    await expect(send).rejects.toThrow(
-      "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
-    );
+    await expect(send).rejects.toThrow();
+    expect(
+      transports.get("runtime-live")?.calls.filter((request) => request.method === "turn/start"),
+    ).toEqual([]);
   });
 
   test("does not send a turn after ownership is lost during model validation", async () => {

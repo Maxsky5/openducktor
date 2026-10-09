@@ -89,7 +89,7 @@ describe("agent session transcript event consumer", () => {
             kind: "session_notice",
             tone: "warning",
             reason: "runtime_policy",
-            title: "Claude permission mode mismatch",
+            title: "Runtime notice",
           },
         }),
       ]);

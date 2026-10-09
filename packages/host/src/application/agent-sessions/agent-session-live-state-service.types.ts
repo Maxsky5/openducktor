@@ -43,8 +43,10 @@ import type {
 import type { LiveStateCoordinator } from "./live-state-coordinator";
 import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
+import type { WithSessionSettings } from "./agent-session-settings-admission";
 
 export type AgentSessionLiveStateService = {
+  readonly withSessionSettings: WithSessionSettings;
   readonly publishTaskSessionRecords: (
     ref: AgentSessionLiveRef,
     records: TaskAgentSessions,
@@ -80,7 +82,7 @@ export type AgentSessionLiveStateService = {
     input: AgentSessionControlStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
-    input: AgentSessionControlResumeInput,
+    input: AgentSessionControlResumeInput & { speed?: string | null },
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly continueInterruptedTurn: (
     input: AgentSessionControlContinueInterruptedTurnInput,
@@ -89,7 +91,7 @@ export type AgentSessionLiveStateService = {
     input: AgentSessionControlForkInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
-    input: AgentSessionControlSendInput,
+    input: AgentSessionControlSendInput & { speed?: string | null },
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,

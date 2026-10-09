@@ -27,7 +27,7 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 
 `RuntimeRoute` can be `local_http`, `stdio`, or `host_service`. A `local_http` route must use the loopback host `localhost`, `127.0.0.1`, or `::1`. Never persist a route. `RuntimeTransport` carries request-scoped `local_http` and `stdio` connections. A host service can resolve inside its host adapter without a new public transport type.
 
-`AgentSessionRecord` stores the external session ID, role, start time, optional `lastActivityAt`, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
+`AgentSessionRecord` stores the external session ID, role, start time, optional `lastActivityAt`, runtime kind, working directory, selected model, and optional `speed` choice. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
 
 The live-session adapter owns the normalized snapshot, transcript, current context use, pending approvals and questions, child links, and native reply IDs. Keep this state out of SQLite and renderer caches.
 
@@ -112,6 +112,10 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 | `sessionLifecycle.supportsQueuedUserMessages` | Can keep a queued user message visible while busy |
 | `sessionLifecycle.supportsPendingInputSnapshots` | Can keep unresolved input in snapshots |
 | `sessionLifecycle.supportsInterruptedTurnResume` | Can continue an unfinished turn with no user message |
+
+### Session speed
+
+Declare `speed.support` as `none`, `runtime`, or `model`. Put supported levels in `speed.levels` for runtime support or `AgentModelDescriptor.speedLevels` for model support. Use stable IDs and labels. Map session controls and reports to the shared speed contract. Keep the saved choice separate from current processing. Test startup, restore, model changes, and failed updates.
 
 ### History
 

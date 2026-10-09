@@ -31,6 +31,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     | "loadAgentSessionHistory"
     | "updateAgentSessionModel"
     | "replyAgentApproval"
+    | "updateAgentSessionSpeed"
     | "answerAgentQuestion"
   >;
 };
@@ -106,6 +107,7 @@ export function useAgentsPageOrchestrationShellModel({
       stopAgentSession: agentOperations.stopAgentSession,
       loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
+      updateAgentSessionSpeed: agentOperations.updateAgentSessionSpeed,
       replyAgentApproval: agentOperations.replyAgentApproval,
       answerAgentQuestion: agentOperations.answerAgentQuestion,
       selectAgentStudioSelection,

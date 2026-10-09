@@ -113,6 +113,12 @@ export class HostWorkspaceSessionClient {
     return this.invoke("workspace_session_set_draft_model", input, workspaceSessionSchema);
   }
 
+  workspaceSessionSetDraftSpeed(
+    input: WorkspaceSessionRefInput & { speed: string },
+  ): Promise<WorkspaceSession> {
+    return this.invoke("workspace_session_set_draft_speed", input, workspaceSessionSchema);
+  }
+
   workspaceSessionRename(
     input: WorkspaceSessionRefInput & { manualTitle: string | null },
   ): Promise<WorkspaceSession> {

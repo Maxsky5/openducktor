@@ -33,6 +33,7 @@ test("preparation submits explicit identity to the host and sends no instruction
       taskId: "task",
       role: "build",
       startMode: "fresh",
+      speed: "priority",
       selectedModel: { runtimeKind: "codex", providerId: "provider", modelId: "model" },
       targetWorkingDirectory: "/repo/task",
     }),
@@ -42,6 +43,7 @@ test("preparation submits explicit identity to the host and sends no instruction
     repoPath: "/repo",
     taskId: "task",
     instruction: { kind: "none" },
+    policy: { decision: { startMode: "fresh", speed: "priority" } },
     targetWorkingDirectory: "/repo/task",
   });
 });

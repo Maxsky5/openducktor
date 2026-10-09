@@ -28,6 +28,7 @@ export const invokeStopAgentSession = (
 };
 
 export type AgentChatComposerConfig = {
+  speed?: import("../speed-select").SpeedControlModel | undefined;
   displayedSessionKey: string | null;
   selectedSession: AgentChatComposerSelectedSession | null;
   isSessionModelCatalogLoading: boolean;
@@ -126,6 +127,7 @@ export function useAgentChatComposerModel({
 
     const model: AgentChatComposerModel = {
       displayedSessionKey: composer.displayedSessionKey,
+      speed: composer.speed,
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,

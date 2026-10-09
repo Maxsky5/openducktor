@@ -164,6 +164,9 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      catalog: {
+        loadRuntimeCatalog: () => Effect.die(new Error("Unexpected speed catalog read")),
+      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -286,6 +289,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
             manualTitle: null,
             createdAt: 1,
             updatedAt: 2,
+            speed: "standard",
             archivedAt: 2,
           },
         }),
@@ -420,6 +424,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           manualTitle: null,
           createdAt: 1,
           updatedAt: 2,
+          speed: "standard",
           archivedAt: null,
         },
       }),
@@ -469,6 +474,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           manualTitle: null,
           createdAt: 1,
           updatedAt: 2,
+          speed: "standard",
           archivedAt: 2,
         },
       }),
@@ -593,6 +599,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           createAgentSessionRuntimeAdapterTestDouble(
             { runtimeId: "test-runtime", runtimeKind: "opencode" },
             {
+              readSnapshot: (ref) => Effect.succeed({ type: "missing" as const, ref }),
               sessionImport: {
                 scanSessions: () => {
                   let read = false;
@@ -610,6 +617,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
                   return Effect.succeed({
                     metadata,
                     selectedModel: null,
+                    speed: null,
                     attach: Effect.void,
                   });
                 },

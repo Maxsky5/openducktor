@@ -55,6 +55,9 @@ export const createCodexAppServerClient = (
     async threadStart(params: CodexThreadStartParams) {
       return requestCodex(transport, { method: "thread/start", params });
     },
+    async threadSettingsUpdate(params) {
+      return requestCodex(transport, { method: "thread/settings/update", params });
+    },
     async threadSetName(params: CodexThreadSetNameParams) {
       return requestCodex(transport, { method: "thread/name/set", params });
     },

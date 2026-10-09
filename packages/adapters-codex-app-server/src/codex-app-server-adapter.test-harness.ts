@@ -453,6 +453,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;
       }
+      case "thread/settings/update":
       case "thread/name/set":
       case "thread/compact/start":
       case "turn/interrupt":

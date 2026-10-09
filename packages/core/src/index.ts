@@ -4,6 +4,8 @@ export * from "./ports/agent-engine";
 export * from "./ports/agent-runtime-query-error";
 export * from "./ports/agent-session-resume-error";
 export * from "./services/agent-runtime-catalog";
+export * from "./services/agent-speed";
+export * from "./services/session-turn-admission";
 export * from "./services/agent-runtime-query-session";
 export * from "./services/agent-file-references";
 export * from "./services/agent-session-ref-key";

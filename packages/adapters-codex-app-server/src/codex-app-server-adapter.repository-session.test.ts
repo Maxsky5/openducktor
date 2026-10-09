@@ -680,6 +680,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     );
 
     expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toEqual({
+      serviceTier: null,
       config: repositoryThreadConfig,
       threadId: "thread-history",
       excludeTurns: true,
@@ -918,6 +919,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).resolves.toBeDefined();
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       {
+        serviceTier: null,
         config: repositoryThreadConfig,
         threadId: "thread-history",
         excludeTurns: true,

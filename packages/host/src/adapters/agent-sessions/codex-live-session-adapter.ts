@@ -1,4 +1,6 @@
 import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
+import { createCodexSessionSettingsControls } from "./codex-session-settings-controls";
+import { createNativeSpeedWriter } from "./native-speed-writer";
 import { createCodexSessionImportAdapter } from "./codex-session-import";
 import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
@@ -113,6 +115,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               );
               return undefined;
             },
+            recordSpeedChoice: createNativeSpeedWriter(projection.binding),
             onLiveSessionMutation: projection.enqueueMutation,
           }),
         catch: (cause) =>
@@ -458,20 +461,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
               publishAcceptedCodexMessage(value, toCodexLiveSessionRef(input), refreshProjection),
             ),
           ),
-        updateSessionModel: (input) =>
-          Effect.tryPromise({
-            try: async () => {
-              const policy = await Effect.runPromise(resolveRuntimePolicy({ kind: "repository" }));
-              return controller.updateSessionModel(input, {
-                repoPath: input.repoPath,
-                runtimeKind: "codex",
-                workingDirectory: input.workingDirectory,
-                externalSessionId: input.externalSessionId,
-                runtimePolicy: { kind: "codex", policy },
-              });
-            },
-            catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
-          }).pipe(Effect.tap(() => refreshProjection())),
+        ...createCodexSessionSettingsControls({
+          controller,
+          resolveRuntimePolicy,
+          sessionError,
+          refreshProjection,
+        }),
         updateSessionTitle: (input) =>
           runTitleUpdate(
             "codex-live-session.update-session-title",

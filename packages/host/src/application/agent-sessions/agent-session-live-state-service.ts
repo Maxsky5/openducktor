@@ -1,4 +1,5 @@
 import { createWorkflowLaunchHold, releaseHoldAfterSendFailure } from "./workflow-launch-hold";
+import { holdSessionSettings } from "./agent-session-settings-admission";
 import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveReadResult,
@@ -169,6 +170,7 @@ export const createAgentSessionLiveStateService = ({
     });
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
     adapterRegistry,
+    recordSpeedChoice: persistence?.recordSpeedChoice,
     coordinator,
     publishChanges,
     publishEnvelope,
@@ -239,6 +241,8 @@ export const createAgentSessionLiveStateService = ({
     runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
 
   const service: AgentSessionLiveStateService = {
+    withSessionSettings: (input, operation) =>
+      runAdmittedControl(input, (adapter) => holdSessionSettings(adapter, input, operation)),
     publishTaskSessionRecords: (ref, records) =>
       coordinator.run(
         Effect.gen(function* () {

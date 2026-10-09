@@ -181,6 +181,7 @@ const createWorkspaceSessionRecord = (): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1000,
   updatedAt: 1000,
+  speed: "standard",
   archivedAt: null,
 });
 
@@ -222,6 +223,9 @@ const createOperations = (
     throw new Error("Unexpected workflow start");
   },
   stopAgentSession: async () => {},
+  updateAgentSessionSpeed: async () => {
+    throw new Error("Unexpected speed change.");
+  },
   updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

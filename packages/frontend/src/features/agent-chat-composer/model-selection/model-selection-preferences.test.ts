@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { resolvePreferredModelSelection } from "@/features/model-selection/model-selection-state";
 import {
@@ -59,6 +59,23 @@ const LIVE_UPDATE_CATALOG: AgentModelCatalog = {
         }
       : model,
   ),
+};
+
+const CLAUDE_CATALOG: AgentModelCatalog = {
+  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "sonnet",
+      providerId: "claude",
+      providerName: "Claude",
+      modelId: "sonnet",
+      resolvedModelId: "claude-sonnet-5-5",
+      modelName: "Sonnet 5.5",
+      variants: ["low", "high"],
+      liveSessionUpdates: { variants: ["low", "high"] },
+    },
+  ],
+  defaultModelsByProvider: {},
 };
 
 describe("model-selection-preferences", () => {
@@ -360,38 +377,58 @@ describe("model-selection-preferences", () => {
     });
   });
 
-  test("preserves the current loaded-session variant even when it cannot be selected live", () => {
-    const selectedSessionModel = {
+  test.each([
+    {
+      name: "an exact ID and a variant that cannot be selected live",
       runtimeKind: "opencode" as const,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "max",
-    };
+      catalog: LIVE_UPDATE_CATALOG,
+    },
+    {
+      name: "a canonical Claude ID that matches an alias row",
+      runtimeKind: "claude" as const,
+      providerId: "claude",
+      modelId: "claude-sonnet-5-5",
+      variant: "high",
+      catalog: CLAUDE_CATALOG,
+    },
+  ])(
+    "preserves the loaded-session selection with $name",
+    ({ runtimeKind, providerId, modelId, variant, catalog }) => {
+      const selectedSessionModel = {
+        runtimeKind,
+        providerId,
+        modelId,
+        variant,
+      };
 
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "session",
-          sessionIdentity: {
-            externalSessionId: "session-1",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo",
+      expect(
+        resolveChatComposerModelSelections({
+          source: {
+            kind: "session",
+            sessionIdentity: {
+              externalSessionId: "session-1",
+              runtimeKind,
+              workingDirectory: "/repo",
+            },
+            sessionRuntimeKind: runtimeKind,
+            modelCatalog: catalog,
+            selectedSessionModel,
+            draftSelection: null,
           },
-          sessionRuntimeKind: "opencode",
-          modelCatalog: LIVE_UPDATE_CATALOG,
-          selectedSessionModel,
-          draftSelection: null,
-        },
-        defaultSelection: null,
-      }),
-    ).toEqual({
-      selectionCatalog: LIVE_UPDATE_CATALOG,
-      selectedModelSelection: selectedSessionModel,
-      selectionForNewSession: selectedSessionModel,
-      sessionModelRepairCommand: null,
-      isSelectedSessionModelSendable: true,
-    });
-  });
+          defaultSelection: null,
+        }),
+      ).toEqual({
+        selectionCatalog: catalog,
+        selectedModelSelection: selectedSessionModel,
+        selectionForNewSession: selectedSessionModel,
+        sessionModelRepairCommand: null,
+        isSelectedSessionModelSendable: true,
+      });
+    },
+  );
 
   test("does not invent a loaded-session model when the persisted session has none", () => {
     const defaultSelection = {

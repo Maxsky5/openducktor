@@ -9,6 +9,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
+  type AgentSpeedAvailability,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   skillCatalogSchema,
   slashCommandCatalogSchema,
@@ -27,6 +28,7 @@ import {
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
+import { readClaudeSpeedAvailability } from "./claude-speed-metadata";
 
 export { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 export { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
@@ -44,6 +46,7 @@ type ClaudeCatalogQuery = ReturnType<ClaudeCatalogQueryFactory>;
 type ClaudeCatalogSession = {
   queue: AsyncInputQueue<SDKUserMessage>;
   sdkQuery: ClaudeCatalogQuery;
+  speedAvailability: AgentSpeedAvailability | undefined;
 };
 
 export const loadClaudeModelCatalog = async (
@@ -64,7 +67,7 @@ export const loadClaudeModelCatalog = async (
       INIT_TIMEOUT_MS,
       "Claude did not return its model catalog. Check Claude authentication and retry.",
     );
-    return toClaudeModelCatalog(models);
+    return toClaudeModelCatalog(models, session.speedAvailability);
   } finally {
     closeClaudeCatalogSession(session);
   }
@@ -90,7 +93,7 @@ export const loadClaudeRuntimeCatalog = async (
     createQuery,
   );
   try {
-    return await readClaudeCatalogSurfaces(session.sdkQuery);
+    return await readClaudeCatalogSurfaces(session);
   } finally {
     closeClaudeCatalogSession(session);
   }
@@ -113,12 +116,16 @@ const openClaudeCatalogSession = async (
     options,
   });
   try {
-    await withTimeout(
+    const initialization = await withTimeout(
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
       "Claude Agent SDK catalog initialization timed out. Check Claude authentication and network connectivity.",
     );
-    return { queue, sdkQuery };
+    return {
+      queue,
+      sdkQuery,
+      speedAvailability: readClaudeSpeedAvailability(initialization),
+    };
   } catch (error) {
     queue.close();
     sdkQuery.close();
@@ -131,16 +138,19 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
   sdkQuery.close();
 };
 
-const readClaudeCatalogSurfaces = async (
-  sdkQuery: ClaudeCatalogQuery,
-): Promise<AgentRuntimeCatalogRead> => {
+const readClaudeCatalogSurfaces = async ({
+  sdkQuery,
+  speedAvailability,
+}: ClaudeCatalogSession): Promise<AgentRuntimeCatalogRead> => {
   let commands: Promise<SlashCommand[]> | undefined;
   const readCommands = (): Promise<SlashCommand[]> => {
     commands ??= sdkQuery.supportedCommands();
     return commands;
   };
   const [models, slashCommands, skills, subagents] = await Promise.all([
-    readCatalogSurface(async () => toClaudeModelCatalog(await sdkQuery.supportedModels())),
+    readCatalogSurface(async () =>
+      toClaudeModelCatalog(await sdkQuery.supportedModels(), speedAvailability),
+    ),
     readCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
     readCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
     readCatalogSurface(async () => toClaudeSubagentCatalog(await sdkQuery.supportedAgents())),
@@ -154,8 +164,12 @@ const readClaudeCatalogSurfaces = async (
   };
 };
 
-const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({
+const toClaudeModelCatalog = (
+  models: ModelInfo[],
+  speedAvailability: AgentSpeedAvailability | undefined,
+): AgentModelCatalog => ({
   runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  speedAvailability,
   models: models.map((model) => toClaudeModelDescriptor(model)),
   defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
   profiles: [],
@@ -166,8 +180,17 @@ export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor 
   providerId: "claude",
   providerName: "Claude",
   modelId: model.value,
+  resolvedModelId: model.resolvedModel,
   modelName: model.displayName,
   variants: [...(model.supportedEffortLevels ?? [])],
+  // Claude omits this flag for models that do not support fast mode.
+  speedLevels:
+    model.supportsFastMode === true
+      ? [
+          { id: "standard", label: "Standard" },
+          { id: "fast", label: "Fast" },
+        ]
+      : [{ id: "standard", label: "Standard" }],
   liveSessionUpdates: {
     profile: false,
     variants: (model.supportedEffortLevels ?? []).filter((variant) => variant !== "max"),

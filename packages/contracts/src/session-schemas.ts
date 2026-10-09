@@ -92,6 +92,7 @@ const agentSessionRecordFields = {
   lastActivityAt: z.number().int().nonnegative().optional(),
   runtimeKind: runtimeKindSchema,
   workingDirectory: nonEmptyStringSchema,
+  speed: z.string().min(1).nullable().optional(),
   selectedModel: z.preprocess(
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),

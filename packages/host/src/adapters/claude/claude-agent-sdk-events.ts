@@ -181,6 +181,16 @@ export const handleClaudeSdkMessage = ({
     handleSessionStateChanged({ emit, message, session, timestamp });
     return;
   }
+  if (message.type === "system" && message.subtype === "notification") {
+    emit({
+      type: "session_policy_notice",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      messageId: message.uuid,
+      message: message.text,
+    });
+    return;
+  }
   if (message.type === "system" && message.subtype === "local_command_output") {
     const content = message.content.trim();
     if (content.length > 0) {

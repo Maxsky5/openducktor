@@ -58,6 +58,7 @@ const sessionRecord = (id: string): WorkspaceSession => ({
   manualTitle: id,
   createdAt: 1000,
   updatedAt: 1000,
+  speed: "standard",
   archivedAt: null,
 });
 

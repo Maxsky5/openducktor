@@ -186,6 +186,9 @@ const operations = (
   sendAgentMessage: async () => null,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
+  updateAgentSessionSpeed: async () => {
+    throw new Error("Unexpected speed change.");
+  },
   updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

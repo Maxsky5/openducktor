@@ -53,8 +53,12 @@ export type WorkspaceSessionStorePort = {
     input: WorkspaceSessionStoreRef & { executionTarget?: WorkspaceSessionExecutionTarget },
   ): Result;
   setSelectedModel(
-    input: WorkspaceSessionStoreRef & { selectedModel: AgentSessionModelSelection },
+    input: WorkspaceSessionStoreRef & {
+      selectedModel: AgentSessionModelSelection;
+      speed?: string | null;
+    },
   ): Result;
+  setSpeed(input: WorkspaceSessionStoreRef & { speed: string | null }): Result;
   setGeneratedTitle(input: WorkspaceSessionStoreRef & { generatedTitle: string }): Result;
   recordAcceptedMessage(
     input: WorkspaceSessionStoreRef & {

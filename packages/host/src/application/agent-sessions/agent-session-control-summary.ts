@@ -18,6 +18,7 @@ export const toAgentSessionControlSummary = (
         workingDirectory: summary.workingDirectory,
         startedAt: summary.startedAt,
         status: summary.status,
+        speed: summary.speed,
       };
       if (summary.title !== undefined) {
         control.title = summary.title;

@@ -69,6 +69,7 @@ export const startSessionWorkflow = async ({
         ? { startMode: "fork", sourceSession: decision.sourceSession, selectedModel }
         : { startMode: "fresh", selectedModel };
   }
+  if (decision.speed !== undefined) hostDecision.speed = decision.speed;
   const launch: WorkflowLaunchRequest = {
     launchAttemptId,
     workspaceId,

@@ -1,3 +1,5 @@
+import { initialSpeedState } from "@openducktor/core";
+import { SessionTurnAdmission } from "@openducktor/core";
 import { describe, expect, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import * as fsPromises from "node:fs/promises";
@@ -26,6 +28,7 @@ import type {
 } from "./claude-agent-sdk-types";
 
 const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
+  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -48,6 +51,7 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   runtimeId: "claude-runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
   summary: {
+    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
@@ -78,6 +82,7 @@ const createRepositorySession = (): ClaudeSessionContext => {
     systemPrompt: "Help with this repository",
   };
   session.summary = {
+    ...session.summary,
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
@@ -433,7 +438,10 @@ describe("buildClaudeAgentSdkOptions", () => {
     try {
       const options = await buildOptions(session, undefined, policy);
       expect(options.permissionMode).toBe("auto");
-      expect<unknown>(options.settings).toEqual({ permissions: policy.permissions });
+      expect<unknown>(options.settings).toEqual({
+        permissions: policy.permissions,
+        fastMode: false,
+      });
       expect(options).not.toHaveProperty("allowedTools");
       expect(options.sandbox).toEqual({
         ...policy.sandbox,
@@ -476,13 +484,9 @@ describe("buildClaudeAgentSdkOptions", () => {
       const options = await buildOptions(session, undefined, null, {
         resume: "00000000-0000-4000-8000-000000000001",
       });
-      for (const field of [
-        "permissionMode",
-        "settings",
-        "sandbox",
-        "allowDangerouslySkipPermissions",
-      ])
+      for (const field of ["permissionMode", "sandbox", "allowDangerouslySkipPermissions"])
         expect(options).not.toHaveProperty(field);
+      expect(options.settings).toEqual({ fastMode: false });
       const args = captureSdkLaunchArgs(options);
       expect(args).toContain("--resume=00000000-0000-4000-8000-000000000001");
       expect(args).not.toContain("--permission-mode");

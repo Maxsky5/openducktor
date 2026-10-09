@@ -1,3 +1,5 @@
+import { initialSpeedState } from "@openducktor/core";
+import { unexpectedRuntimeQueries } from "../../../test-support/runtime-query-test-doubles";
 import { AgentSessionMessageRejectedError } from "../../../ports/agent-session-send-error";
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
 import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
@@ -57,7 +59,17 @@ export const createPersistenceHarness = async (
   draft = false,
   createControls?: (
     ref: AgentSessionLiveRef,
-  ) => Pick<AgentSessionRuntimeAdapterPort, "sendUserMessage" | "updateSessionTitle">,
+  ) => Partial<
+    Pick<
+      AgentSessionRuntimeAdapterPort,
+      | "sendUserMessage"
+      | "updateSessionTitle"
+      | "readSnapshot"
+      | "holdSessionTurns"
+      | "setSessionSpeedState"
+      | "updateSessionSpeed"
+    >
+  >,
 ) => {
   const ref: AgentSessionLiveRef = {
     repoPath: database.repoPath,
@@ -91,6 +103,7 @@ export const createPersistenceHarness = async (
       modelId: "stored-model",
       variant: "high",
     },
+    speed: "standard",
     generatedTitle: null,
     manualTitle: null,
     createdAt: 0,
@@ -102,7 +115,9 @@ export const createPersistenceHarness = async (
   const updates: Array<{ workspaceId: string; session: WorkspaceSession }> = [];
   const events: AgentSessionLiveEnvelope[] = [];
   const starts: import("@openducktor/contracts").AgentSessionControlStartInput[] = [];
-  const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
+  const inputs: Array<
+    (AgentSessionControlSendInput | AgentSessionControlResumeInput) & { speed?: string | null }
+  > = [];
   const releases: AgentSessionLiveRef[] = [];
   const stops: AgentSessionLiveRef[] = [];
   const activityTimes: number[] = [];
@@ -189,6 +204,14 @@ export const createPersistenceHarness = async (
             ),
           ),
         ),
+      setSpeed: (input) =>
+        state.beforeModelSave.pipe(
+          Effect.andThen(
+            Effect.suspend(() =>
+              state.failModelSave ? failure("model save failed") : store.setSpeed(input),
+            ),
+          ),
+        ),
       recordActivity: (input) => {
         activityTimes.push(input.activity.occurredAt);
         return state.failActivity ? failure("activity write failed") : store.recordActivity(input);
@@ -251,6 +274,36 @@ export const createPersistenceHarness = async (
   await Effect.runPromise(
     live.registerRuntimeAdapter(
       createAgentSessionRuntimeAdapterTestDouble(registration, {
+        queries: {
+          ...unexpectedRuntimeQueries,
+          loadRuntimeCatalog: () =>
+            Effect.succeed({
+              models: {
+                status: "available",
+                catalog: {
+                  models: [
+                    {
+                      id: "provider/stored-model",
+                      providerId: "provider",
+                      providerName: "Provider",
+                      modelId: "stored-model",
+                      modelName: "Stored model",
+                      variants: ["high"],
+                      supportsReasoning: true,
+                      speedLevels: [
+                        { id: "standard", label: "Standard" },
+                        { id: "fast", label: "Fast" },
+                      ],
+                    },
+                  ],
+                  defaultModelsByProvider: {},
+                },
+              },
+            }),
+        },
+        holdSessionTurns: () => Effect.succeed(Effect.void),
+        setSessionSpeedState: () => Effect.void,
+        updateSessionSpeed: (input) => Effect.succeed({ reportedChoice: input.speed }),
         listSnapshots: () => Effect.succeed([]),
         listRetainedSnapshots: () => Effect.succeed([]),
         readSnapshot: (ref) =>
@@ -275,6 +328,7 @@ export const createPersistenceHarness = async (
             starts.push(input);
             return {
               runtimeKind,
+              speed: initialSpeedState(input.speed ?? "standard", "confirmed"),
               externalSessionId: ref.externalSessionId,
               workingDirectory: ref.workingDirectory,
               startedAt: "2026-09-07T10:00:00Z",
@@ -361,7 +415,6 @@ export const createPersistenceHarness = async (
     tasks: {
       agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
       agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
-      agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
       transitionTask: () => Effect.die(new Error("unexpected task transition")),
     },
     taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
@@ -391,6 +444,7 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    catalog: { loadRuntimeCatalog: () => Effect.die(new Error("Unexpected speed catalog read")) },
     terminalService: {
       acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
     },

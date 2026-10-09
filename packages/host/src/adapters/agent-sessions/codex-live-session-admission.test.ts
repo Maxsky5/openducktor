@@ -257,7 +257,9 @@ const harness = async () => {
     }),
   );
   const input: AgentSessionControlSendInput = {
-    ...session,
+    externalSessionId: session.externalSessionId,
+    runtimeKind: session.runtimeKind,
+    workingDirectory: session.workingDirectory,
     repoPath: "/repo",
     sessionScope: { kind: "workflow", taskId: "task", role: "build" },
     parts: [{ kind: "text", text: "First instruction" }],

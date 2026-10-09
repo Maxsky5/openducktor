@@ -8,6 +8,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
+  agentModelCatalogSchema,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
 } from "@openducktor/contracts";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./claude-agent-sdk-catalog";
 import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { claudeSessionMessageFixtures } from "./claude-agent-sdk-test-messages";
+import { speedEligibility } from "@openducktor/core";
 
 describe("toClaudeModelDescriptor", () => {
   test("maps Claude SDK effort levels to OpenDucktor variants", () => {
@@ -352,6 +354,61 @@ describe("loadClaudeRuntimeCatalog", () => {
 
   const agentFixtures: AgentInfo[] = [{ name: "reviewer", description: "Reviews changes" }];
 
+  test.each(["runtime", "models"] as const)(
+    "carries initialization restrictions through the %s catalog without another probe",
+    async (surface) => {
+      for (const reason of [
+        "disabled_by_env",
+        "extra_usage_disabled",
+        "network_error",
+        "preference",
+        "sdk_opt_in_required",
+        undefined,
+      ] as const) {
+        const sdkQuery = createClaudeQueryFixture({
+          supportedCommands: async () => [],
+          supportedAgents: async () => [],
+        });
+        const initialization = await sdkQuery.initializationResult();
+        const initialize = mock(async () => {
+          const report = { ...initialization, fast_mode_state: "off" as const };
+          if (reason) report.fast_mode_disabled_reason = reason;
+          return report;
+        });
+        sdkQuery.initializationResult = initialize;
+        sdkQuery.supportedModels = async () => [{ ...modelFixture, supportsFastMode: true }];
+        const models =
+          surface === "models"
+            ? await loadClaudeModelCatalog("/repo", undefined, process.execPath, () => sdkQuery)
+            : (
+                await loadClaudeRuntimeCatalog(
+                  catalogInput,
+                  undefined,
+                  process.execPath,
+                  () => sdkQuery,
+                )
+              ).models;
+        const catalog =
+          models && "status" in models && models.status === "available" ? models.catalog : models;
+        if (!catalog || !("models" in catalog)) throw new Error("Expected a model catalog");
+        if (reason && reason !== "preference" && reason !== "sdk_opt_in_required") {
+          expect(catalog.speedAvailability).toMatchObject({
+            status: "blocked",
+            reason: { code: reason, message: expect.any(String) },
+          });
+        } else {
+          expect(catalog.speedAvailability).toEqual({ status: "available" });
+        }
+        expect(catalog.models[0]?.speedLevels?.map((level) => level.id)).toEqual([
+          "standard",
+          "fast",
+        ]);
+        expect(initialize).toHaveBeenCalledTimes(1);
+        expect(sdkQuery.reinitialize).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   test("reads every surface from one catalog session and shares the command read", async () => {
     let receivedOptions: Options | undefined;
     const supportedCommands = mock(async () => commandFixtures);
@@ -485,6 +542,42 @@ describe("loadClaudeModelCatalog", () => {
     displayName: "Claude Sonnet 4.6",
     description: "Claude Sonnet",
   };
+
+  test.each([true, false, undefined])(
+    "matches native resolved IDs to speed support %s through the public catalog",
+    async (supportsFastMode) => {
+      const nativeModel: ModelInfo = {
+        value: "opus",
+        resolvedModel: "claude-opus-5-5",
+        displayName: "Opus 5.5",
+        description: "Opus",
+      };
+      if (supportsFastMode !== undefined) nativeModel.supportsFastMode = supportsFastMode;
+      const sdkQuery = createClaudeQueryFixture({
+        supportedModels: async () => [nativeModel],
+      });
+      const catalog = agentModelCatalogSchema.parse(
+        await loadClaudeModelCatalog("/repo", undefined, process.execPath, () => sdkQuery),
+      );
+      expect(catalog.models[0]?.speedLevels?.map((level) => level.id)).toEqual(
+        supportsFastMode === true ? ["standard", "fast"] : ["standard"],
+      );
+      for (const modelId of ["opus", "claude-opus-5-5"]) {
+        expect(
+          speedEligibility(CLAUDE_RUNTIME_DESCRIPTOR, catalog, {
+            providerId: "claude",
+            modelId,
+          }),
+        ).toBe(supportsFastMode ? "supported" : "unsupported");
+      }
+      expect(
+        speedEligibility(CLAUDE_RUNTIME_DESCRIPTOR, catalog, {
+          providerId: "other",
+          modelId: "claude-opus-5-5",
+        }),
+      ).toBe("unknown");
+    },
+  );
 
   test("reads only models and closes its short-lived session", async () => {
     const close = mock(() => {});

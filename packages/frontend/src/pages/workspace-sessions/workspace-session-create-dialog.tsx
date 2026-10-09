@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSpeedDraftControl } from "@/features/agent-chat-composer/use-speed-draft";
 import { repoDefaultModelSelectionFor } from "@/features/session-start/session-start-selection";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,13 @@ export function WorkspaceSessionCreateDialog({
         void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
     },
   });
+  const { choice: speedChoice, control: speed } = useSpeedDraftControl({
+    key: `${workspace.workspaceId}|${open}`,
+    runtimeKind: model.selection?.runtimeKind ?? null,
+    catalog: model.catalog,
+    model: model.selection,
+    disabled: create.isPending,
+  });
   const worktreeError = workspaceSessionValidationError(create.error);
   const input = buildWorkspaceSessionCreateInput({
     workspaceId: workspace.workspaceId,
@@ -115,7 +123,7 @@ export function WorkspaceSessionCreateDialog({
     availableBranches: branches.isSuccess ? branches.data : null,
   });
   const submit = () => {
-    if (!create.isPending && input) create.mutate(input);
+    if (!create.isPending && input) create.mutate({ ...input, speed: speedChoice ?? "standard" });
   };
   return (
     <Dialog
@@ -151,7 +159,11 @@ export function WorkspaceSessionCreateDialog({
                   maxLength={WORKSPACE_SESSION_MANUAL_TITLE_LIMIT}
                 />
               </div>
-              <WorkspaceSessionModelFields model={model} disabled={create.isPending} />
+              <WorkspaceSessionModelFields
+                model={model}
+                disabled={create.isPending}
+                speed={speed}
+              />
               {repoConfig.isError && (
                 <div role="alert">
                   <p className="text-sm text-destructive">

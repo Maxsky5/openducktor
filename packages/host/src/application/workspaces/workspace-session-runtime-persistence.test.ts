@@ -541,6 +541,9 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      catalog: {
+        loadRuntimeCatalog: () => Effect.die(new Error("Unexpected speed catalog read")),
+      },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },

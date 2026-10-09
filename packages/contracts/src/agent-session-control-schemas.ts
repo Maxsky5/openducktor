@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentSessionSpeedStateSchema } from "./agent-speed-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
@@ -81,6 +82,7 @@ export const agentSessionControlStartInputSchema = z
     ...agentSessionControlWorkingDirectoryFields,
     sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
+    speed: z.string().min(1).optional(),
     model: agentModelSelectionSchema.optional(),
   })
   .strict();
@@ -99,6 +101,7 @@ export const agentWorkflowSessionStartInputSchema = z
     runtimeKind: runtimeKindSchema,
     sessionScope: agentSessionWorkflowScopeSchema,
     systemPrompt: z.string(),
+    speed: z.string().min(1).optional(),
     model: agentModelSelectionSchema,
     targetWorkingDirectory: nonEmptyStringSchema.optional(),
   })
@@ -132,6 +135,7 @@ export const agentSessionControlForkInputSchema = z
     ...agentSessionControlWorkingDirectoryFields,
     sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
+    speed: z.string().min(1).optional(),
     model: agentModelSelectionSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema,
     runtimeHistoryAnchor: nonEmptyStringSchema.optional(),
@@ -185,6 +189,13 @@ export type AgentSessionControlUpdateModelInput = z.infer<
   typeof agentSessionControlUpdateModelInputSchema
 >;
 
+export const agentSessionControlUpdateSpeedInputSchema = agentSessionLiveRefSchema
+  .extend({ sessionScope: agentSessionScopeSchema, speed: z.string().min(1) })
+  .strict();
+export type AgentSessionControlUpdateSpeedInput = z.infer<
+  typeof agentSessionControlUpdateSpeedInputSchema
+>;
+
 const agentSessionControlUpdateTitleInputSchema = agentSessionLiveRefSchema
   .extend({
     title: nonEmptyStringSchema.max(WORKSPACE_SESSION_MANUAL_TITLE_LIMIT),
@@ -209,6 +220,7 @@ export const agentSessionControlSummarySchema = z
     startedAt: isoTimestampSchema,
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
     firstTurnCompleted: z.boolean().optional(),
+    speed: agentSessionSpeedStateSchema.optional(),
   })
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;

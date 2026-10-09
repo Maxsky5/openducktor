@@ -6,9 +6,11 @@ import {
   projectWorkspaceSessionChatState,
 } from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
+import { useWorkspaceSessionSpeed } from "./use-workspace-session-speed";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { type ReactElement, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
+import type { AgentChatInterruptedTurnResumeModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
@@ -38,6 +40,7 @@ import {
 } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   useWorkspaceConflictChatActions,
   type WorkspaceConflictChatActions,
@@ -206,6 +209,19 @@ export function WorkspaceSessionChat({
     recordsError,
     targetFault: chatState.targetFault,
   });
+  const speed = useWorkspaceSessionSpeed({
+    workspaceId: workspace.workspaceId,
+    record,
+    catalog: catalogError ? null : modelCatalog,
+    selectedModel: chatState.selectedModel,
+    state: session?.speed,
+    livePresence: session?.livePresence ?? "unobserved",
+    identity,
+    canInteract,
+    isReadOnly: chatState.isReadOnly,
+    isStarting,
+    onLiveChange: operations.updateAgentSessionSpeed,
+  });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
     pendingApprovals: chatState.pendingApprovals,
@@ -268,19 +284,14 @@ export function WorkspaceSessionChat({
       isSubmittingByRequestId: questionActions.isSubmittingQuestionByRequestId,
       onSubmit: questionActions.onSubmitQuestionAnswers,
     },
-    interruptedTurnResume:
-      canResumeSession && canInteract
-        ? {
-            isPending: actions.isResumingSession,
-            isDisabled: isSavingModel,
-            error: actions.resumeSessionError,
-            usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
-            onResume: () => {
-              if (identity) actions.resumeInterruptedTurn(identity);
-            },
-          }
-        : undefined,
+    interruptedTurnResume: interruptedTurnResume(
+      canResumeSession && canInteract,
+      identity,
+      session,
+      actions,
+    ),
     composer: {
+      speed,
       displayedSessionKey: chatState.sessionKey,
       selectedSession: identity ? { ...identity, selectedModel: chatState.selectedModel } : null,
       isSessionModelCatalogLoading: isLoadingModelCatalog,
@@ -323,4 +334,22 @@ export function WorkspaceSessionChat({
     },
   });
   return <AgentChatSurface model={surface} visitKey={visitKey} />;
+}
+
+function interruptedTurnResume(
+  enabled: boolean,
+  identity: AgentSessionIdentity | null,
+  session: AgentSessionState | null,
+  actions: ReturnType<typeof useWorkspaceSessionChatActions>,
+): AgentChatInterruptedTurnResumeModel | undefined {
+  if (!enabled) return undefined;
+  return {
+    isPending: actions.isResumingSession,
+    isDisabled: actions.isSavingModel,
+    error: actions.resumeSessionError,
+    usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
+    onResume: () => {
+      if (identity) actions.resumeInterruptedTurn(identity);
+    },
+  };
 }

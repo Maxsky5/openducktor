@@ -38,6 +38,7 @@ const createOpencodeWorkflowToolAliasesByCanonical =
   };
 
 export const OPENCODE_RUNTIME_CAPABILITIES = {
+  speed: { support: "none" },
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,
@@ -116,6 +117,7 @@ const CODEX_READ_ONLY_ROLE_BLOCKED_TOOLS = [
 ] as const;
 
 export const CODEX_RUNTIME_CAPABILITIES = {
+  speed: { support: "model" },
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,
@@ -211,6 +213,7 @@ const createClaudeWorkflowToolAliasesByCanonical =
   };
 
 export const CLAUDE_RUNTIME_CAPABILITIES = {
+  speed: { support: "model" },
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,

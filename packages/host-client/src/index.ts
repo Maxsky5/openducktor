@@ -88,6 +88,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceSessionClient.workspaceSessionLaunchRecover.bind(workspaceSessionClient),
     workspaceSessionLaunchCancel:
       workspaceSessionClient.workspaceSessionLaunchCancel.bind(workspaceSessionClient),
+    workspaceSessionSetDraftSpeed:
+      workspaceSessionClient.workspaceSessionSetDraftSpeed.bind(workspaceSessionClient),
     workspaceSessionSetDraftModel:
       workspaceSessionClient.workspaceSessionSetDraftModel.bind(workspaceSessionClient),
     workspaceSessionRename:
@@ -268,6 +270,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionWorkflowStart.bind(agentSessionLiveClient),
     agentSessionControlStop:
       agentSessionLiveClient.agentSessionControlStop.bind(agentSessionLiveClient),
+    agentSessionControlUpdateSpeed:
+      agentSessionLiveClient.agentSessionControlUpdateSpeed.bind(agentSessionLiveClient),
     agentSessionControlUpdateModel:
       agentSessionLiveClient.agentSessionControlUpdateModel.bind(agentSessionLiveClient),
     agentSessionLiveList: agentSessionLiveClient.agentSessionLiveList.bind(agentSessionLiveClient),

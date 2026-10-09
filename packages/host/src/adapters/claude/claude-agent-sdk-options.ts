@@ -137,7 +137,8 @@ export const buildClaudeAgentSdkOptions = async ({
   ]);
   const overlay = claudePolicy;
   const permissionMode = overlay?.permissionMode;
-  const model = input.model;
+  // Cold attachment uses model metadata for controls and leaves native settings unchanged.
+  const model = preserveNativeSettings ? undefined : input.model;
   const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
   const systemPrompt = [
     "systemPrompt" in input && input.systemPrompt ? input.systemPrompt : null,
@@ -224,6 +225,7 @@ export const buildClaudeAgentSdkOptions = async ({
       message:
         "Managed Claude settings permit execution when isolation is unavailable. Ask your administrator to set sandbox.failIfUnavailable to true before launching an enabled sandbox.",
     });
+  const flagSettings: import("@anthropic-ai/claude-agent-sdk").Settings = {};
   if (overlay?.permissions) {
     const permissions: NonNullable<
       Exclude<Options["settings"], string | undefined>["permissions"]
@@ -232,7 +234,17 @@ export const buildClaudeAgentSdkOptions = async ({
       const rules = overlay.permissions[action];
       if (rules !== undefined) permissions[action] = rules;
     }
-    options.settings = { permissions };
+    flagSettings.permissions = permissions;
+    options.settings = flagSettings;
+  }
+  if (input.speed !== null && (!preserveNativeSettings || input.speed !== undefined)) {
+    if (input.speed !== undefined && input.speed !== "standard" && input.speed !== "fast")
+      throw new HostValidationError({
+        field: "speed",
+        message: "Claude does not support this speed level.",
+      });
+    flagSettings.fastMode = input.speed === "fast";
+    options.settings = flagSettings;
   }
   // Enforce failure on unsupported isolation, including an inherited enabled sandbox.
   if (!nativePreservation) {

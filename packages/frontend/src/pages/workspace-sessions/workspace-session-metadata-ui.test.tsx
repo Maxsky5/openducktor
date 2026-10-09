@@ -25,6 +25,7 @@ const record = (): WorkspaceSession => ({
   manualTitle: "My session",
   createdAt: 1000,
   updatedAt: 1000,
+  speed: "standard",
   archivedAt: null,
 });
 
@@ -287,6 +288,7 @@ describe("Workspace Session metadata UI", () => {
       manualTitle: "Build API",
       roleSnapshot: null,
       executionTarget: { kind: "local_repo_root", workingDirectory: "/other/project" },
+      speed: "standard",
       archivedAt: 3000,
     };
     configureShellBridge(

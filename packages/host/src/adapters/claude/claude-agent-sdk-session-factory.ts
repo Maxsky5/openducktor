@@ -1,3 +1,6 @@
+import { bindClaudeSpeedWriter, observeClaudeSpeed } from "./claude-session-speed-observation";
+import { observeClaudeSessionModel } from "./claude-session-speed-preparation";
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
 import { interruptedTurnResumeError } from "@openducktor/core";
@@ -16,6 +19,7 @@ import {
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
+  ClaudeAgentSdkService,
   ClaudeSession,
   ClaudeSessionContext,
   ClaudeSessionInput,
@@ -40,6 +44,7 @@ export type CreateClaudeAgentSdkSessionInput = {
   serviceInput: CreateClaudeAgentSdkServiceInput;
   sessionInput: ClaudeSessionLaunchInput;
   sessionStore: ClaudeSessionStore;
+  recordSpeedChoice?: Parameters<ClaudeAgentSdkService["setSpeedChoiceRecorder"]>[0];
 };
 
 /** Distinguishes a stream that ended before admission from an admission timeout. */
@@ -99,6 +104,7 @@ export const createClaudeAgentSdkSession = async ({
   serviceInput,
   sessionInput,
   sessionStore,
+  recordSpeedChoice,
 }: CreateClaudeAgentSdkSessionInput): Promise<AgentSessionSummary> => {
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
@@ -109,6 +115,7 @@ export const createClaudeAgentSdkSession = async ({
       ? { externalSessionId: sessionInput.externalSessionId }
       : sessionInput;
   const sessionContext: ClaudeSessionContext = {
+    turnAdmission: new SessionTurnAdmission(),
     acceptedUserMessages: [],
     activeSdkUserTurnCount: 0,
     abortController,
@@ -116,6 +123,7 @@ export const createClaudeAgentSdkSession = async ({
     externalSessionId: sessionInput.externalSessionId,
     input,
     model: input.model,
+    preserveNativeSettings: sessionInput.preserveNativeSettings === true,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
     queuedSdkMessages: [],
@@ -123,7 +131,16 @@ export const createClaudeAgentSdkSession = async ({
     queue,
     runtimeId,
     startedAt,
-    summary: createClaudeSessionSummary(input, summaryInput, startedAt),
+    summary: {
+      ...createClaudeSessionSummary(input, summaryInput, startedAt),
+      speed: initialSpeedState(
+        input.speed === undefined
+          ? sessionInput.preserveNativeSettings
+            ? null
+            : "standard"
+          : input.speed,
+      ),
+    },
     streamAssistantMessageOrdinal: 0,
     streamAssistantMessageIdsByBlockIndex: new Map(),
     subagentMessageIdsByTaskId: new Map(),
@@ -167,6 +184,7 @@ export const createClaudeAgentSdkSession = async ({
     throw error;
   }
   const session: ClaudeSession = Object.assign(sessionContext, { query: sdkQuery });
+  if (recordSpeedChoice) bindClaudeSpeedWriter(session, sessionStore, input, recordSpeedChoice);
   sessionStore.set(session);
   const isContinuation = sessionInput.resumeInterruptedTurn === true;
   const continuationAdmission = isContinuation ? Promise.withResolvers<void>() : null;
@@ -188,11 +206,28 @@ export const createClaudeAgentSdkSession = async ({
   }
   const consumption = consumeClaudeSession(consumptionInput);
   try {
-    await withTimeout(
+    const initialization = await withTimeout(
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
+    observeClaudeSpeed(session, initialization, true);
+    if (input.speed === "fast" && session.summary.speed.availability.status === "blocked")
+      throw new HostOperationError({
+        operation: "claudeRuntime.restoreSpeed",
+        message: session.summary.speed.availability.reason.message,
+      });
+    if (
+      input.speed !== null &&
+      input.speed !== undefined &&
+      initialization.fast_mode_state !== undefined &&
+      (initialization.fast_mode_state === "off" ? "standard" : "fast") !== input.speed
+    )
+      throw new HostOperationError({
+        operation: "claudeRuntime.restoreSpeed",
+        message:
+          "Claude did not accept the requested speed setting. Check the runtime notice and set fast mode explicitly.",
+      });
     await requireClaudeOpenDucktorMcpForScope(input.sessionScope, sdkQuery, {
       externalSessionId: session.externalSessionId,
       runtimeId,
@@ -239,6 +274,37 @@ export const createClaudeAgentSdkSession = async ({
     });
   }
   session.summary.status = isContinuation ? "running" : "idle";
+  if (input.speed === "fast" && session.summary.speed.availability.status === "blocked") {
+    sessionStore.close(session);
+    await sdkQuery.return();
+    await consumption;
+    throw new HostOperationError({
+      operation: "claudeRuntime.restoreSpeed",
+      message: session.summary.speed.availability.reason.message,
+    });
+  }
+  session.summary.speed = {
+    ...session.summary.speed,
+    synchronization: session.summary.speed.choice === null ? "unapplied" : "confirmed",
+  };
+  session.speedInitialized = true;
+  session.turnAdmission.setBlocked(session.summary.speed.choice === null);
+  if (session.preserveNativeSettings && session.nativeModel !== undefined) {
+    try {
+      await observeClaudeSessionModel(
+        session,
+        session.nativeModel,
+        emit,
+        now(),
+        serviceInput.onBackgroundFailure,
+      );
+    } catch (error) {
+      if (sessionStore.get(session.externalSessionId) === session) sessionStore.close(session);
+      await sdkQuery.return();
+      await consumption;
+      throw error;
+    }
+  }
   // Restoring an idle session must not move its activity time in the session list.
   if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
     return session.summary;

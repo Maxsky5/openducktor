@@ -1,3 +1,4 @@
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
@@ -16,9 +17,11 @@ const summary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
+  speed: initialSpeedState("standard", "confirmed"),
 } as const satisfies AgentSessionSummary;
 
 const session: ClaudeSessionContext = {
+  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -62,7 +65,7 @@ const ref = {
 
 describe("Claude host live-session state", () => {
   test("retains permission notices across control summaries until retraction or removal", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const notice = {
       type: "session_policy_notice" as const,
@@ -120,7 +123,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps a resumed wake-up turn running in the live snapshot until its result", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const wakeSession: ClaudeSession = {
       ...session,
@@ -201,7 +204,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("retains a subagent permission only on the child snapshot", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
@@ -234,7 +237,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("retains nested subagent ancestry from the emitting transcript", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
@@ -297,7 +300,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("drops late root and subagent events after release until an explicit resume", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
@@ -345,7 +348,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("does not overwrite newer streamed context with an explicit load", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const revision = state.contextRevision(ref);
     state.applyEvent(session, {
@@ -363,7 +366,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("advances context revisions only for streamed context events", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const revision = state.contextRevision(ref);
 
@@ -387,7 +390,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("scopes context refresh errors to the affected session", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
 
     expect(
       state.applyEvent(session, {
@@ -408,7 +411,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("ignores late context refresh errors after session removal", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     state.removeSession(ref);
 
@@ -423,7 +426,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps a no-message session idle when its start event arrives", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
 
     expect(
@@ -446,7 +449,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps current session state after a recoverable turn error", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", { ...summary, status: "running" });
 
     expect(
@@ -474,7 +477,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("removes subagent snapshots owned by a retracted assistant message", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const childRef = { ...ref, externalSessionId: childExternalSessionId };
@@ -552,7 +555,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("removes current session state after a terminal stream finish", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", { ...summary, status: "running" });
 
     expect(
@@ -573,7 +576,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps an independent fork when its source session finishes", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     const forkExternalSessionId = "session-fork";
     const forkRef = { ...ref, externalSessionId: forkExternalSessionId };
     const childExternalSessionId = "session-1::claude-subagent::child-1";
@@ -628,7 +631,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("replaces stale current context when no newer context update arrives", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
@@ -643,7 +646,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("keeps current context when a direct context read returns null", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
@@ -655,7 +658,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("preserves current activity when an already-live session is resumed", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", { ...summary, status: "running" });
     state.applyEvent(session, {
       type: "approval_required",
@@ -678,7 +681,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("publishes assistant duration through the normalized transcript", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     state.applyControlSummary("/repo", summary);
 
     expect(
@@ -701,7 +704,7 @@ describe("Claude host live-session state", () => {
   });
 
   test("publishes the authoritative slash-command replacement catalog", () => {
-    const state = createClaudeLiveSessionState();
+    const state = createClaudeLiveSessionState(() => undefined);
     const catalog = {
       commands: [
         {
@@ -760,7 +763,7 @@ describe("Claude host live-session state", () => {
     };
 
     const createTwoRepositoryState = () => {
-      const state = createClaudeLiveSessionState();
+      const state = createClaudeLiveSessionState(() => undefined);
       state.applyControlSummary("/repo", summary);
       state.applyControlSummary("/other-repo", otherSummary);
       return state;

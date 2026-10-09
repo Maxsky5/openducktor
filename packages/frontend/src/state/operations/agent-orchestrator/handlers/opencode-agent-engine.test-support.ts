@@ -177,6 +177,9 @@ export const createOpenCodeAgentEngineTestAdapter = (
   readGeneratedImage: async () => {
     throw new Error("OpenCode does not support generated image previews.");
   },
+  updateSessionSpeed: async () => {
+    throw new Error("OpenCode does not support fast mode.");
+  },
   listRuntimeDefinitions: () => adapter.listRuntimeDefinitions(),
   loadRuntimeCatalog: (input) => adapter.loadRuntimeCatalog(validateOpenCodeInput(input)),
   searchFiles: (input) => adapter.searchFiles(validateOpenCodeInput(input)),

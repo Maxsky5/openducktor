@@ -5,6 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import {
@@ -24,6 +25,7 @@ import { createAgentSessionCommandService } from "../agent-sessions/agent-sessio
 import { createAgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { createWorkspaceSessionRuntimePersistence } from "./workspace-session-runtime-persistence";
+import { createPersistenceHarness } from "./test-support/workspace-session-runtime-persistence-harness";
 
 describe("Workspace Session runtime rename through the real OpenCode live adapter", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -66,6 +68,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
           manualTitle: null,
           createdAt: 0,
           updatedAt: 0,
+          speed: "standard",
           archivedAt: null,
         },
       }),
@@ -142,7 +145,6 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       tasks: {
         agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
         agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
         transitionTask: () => Effect.die(new Error("unexpected task transition")),
       },
       taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
@@ -167,4 +169,86 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     });
     expect((await Effect.runPromise(store.get(storeRef))).generatedTitle).toBe(acceptedMessageText);
   });
+});
+
+describe("Workspace Session speed recovery", () => {
+  let database: SqliteTaskStoreTestHarness;
+  beforeEach(async () => {
+    database = await createSqliteTaskStoreHarness();
+  });
+  afterEach(async () => {
+    await database.cleanup();
+  });
+
+  test.each([true, false])(
+    "keeps the known model when speed recovery retries a failed save (live model: %s)",
+    async (hasLiveModel) => {
+      const nativeModel = { providerId: "openai", modelId: "gpt-5.6-sol", variant: "high" };
+      const admission = new SessionTurnAdmission();
+      admission.setBlocked(true);
+      let speed = initialSpeedState(null, "uncertain");
+      const harness = await createPersistenceHarness(database, "codex", false, () => ({
+        holdSessionTurns: () =>
+          Effect.promise(() => admission.hold()).pipe(
+            Effect.map((release) => Effect.sync(release)),
+          ),
+        readSnapshot: (ref) =>
+          Effect.sync(() => ({
+            type: "live" as const,
+            session: {
+              ref,
+              activity: "idle" as const,
+              title: "Imported session",
+              startedAt: "2026-09-07T10:00:00Z",
+              pendingApprovals: [],
+              pendingQuestions: [],
+              contextUsage: null,
+              model: hasLiveModel ? nativeModel : undefined,
+              speed,
+            },
+          })),
+        setSessionSpeedState: (_ref, next) =>
+          Effect.sync(() => {
+            speed = next;
+            admission.setBlocked(next.synchronization !== "confirmed" || next.choice === null);
+          }),
+        updateSessionSpeed: (input) => Effect.succeed({ reportedChoice: input.speed }),
+      }));
+      const previousModel = { ...harness.record.selectedModel!, profileId: "build" };
+      await Effect.runPromise(
+        harness.store.setSelectedModel({ ...harness.storeRef, selectedModel: previousModel }),
+      );
+      const input = {
+        ...harness.ref,
+        sessionScope: { kind: "repository" as const },
+        speed: "standard",
+      };
+      harness.state.failModelSave = true;
+      await expect(Effect.runPromise(harness.live.updateSessionSpeed(input))).rejects.toThrow(
+        "model save failed",
+      );
+      expect((await harness.get()).selectedModel).toEqual(previousModel);
+      expect(harness.updates).toEqual([]);
+      expect(speed.synchronization).toBe("uncertain");
+      await expect(admission.run(async () => "new turn")).rejects.toThrow();
+
+      harness.state.failModelSave = false;
+      await Effect.runPromise(harness.live.updateSessionSpeed(input));
+      const expectedModel = hasLiveModel
+        ? { ...nativeModel, runtimeKind: "codex" as const, profileId: "build" }
+        : previousModel;
+      expect((await harness.get()).selectedModel).toEqual(expectedModel);
+      expect(harness.updates).toEqual([
+        expect.objectContaining({
+          session: expect.objectContaining({ selectedModel: expectedModel }),
+        }),
+      ]);
+      expect(speed).toMatchObject({ choice: "standard", synchronization: "confirmed" });
+      expect(await admission.run(async () => "new turn")).toBe("new turn");
+      await harness.send("Continue after recovery");
+      expect(harness.inputs).toEqual([
+        expect.objectContaining({ model: expectedModel, speed: "standard" }),
+      ]);
+    },
+  );
 });

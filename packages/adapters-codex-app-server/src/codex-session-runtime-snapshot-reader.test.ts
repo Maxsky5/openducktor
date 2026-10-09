@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { SessionTurnAdmission } from "@openducktor/core";
 import { createCodexAppServerClient } from "./app-server-client";
 import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
@@ -162,6 +163,7 @@ describe("Codex session runtime snapshot reader", () => {
       loadedIds: new Set<string>(),
     };
     const localChild: CodexSessionState = {
+      turnAdmission: new SessionTurnAdmission(),
       summary: {
         externalSessionId: child.id,
         runtimeKind: "codex",

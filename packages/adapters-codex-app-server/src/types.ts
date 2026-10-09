@@ -165,6 +165,10 @@ export type CodexThreadHistoryReadResponse = CodexAppServerThreadReadResponse;
 export type CodexSessionState = {
   summary: AgentSessionSummary;
   nativeName?: string | null;
+  turnAdmission: import("@openducktor/core").SessionTurnAdmission;
+  serviceTier?: string | null;
+  settingsRevision?: number;
+  pendingSpeedReport?: { serviceTier: string | null; acknowledge: () => void };
   contextOwnerThreadId?: string;
   model?: AgentModelSelection;
   systemPrompt: string;
@@ -187,6 +191,10 @@ export type CodexAppServerClient = {
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
+  threadSettingsUpdate(params: {
+    threadId: string;
+    serviceTier: string | null;
+  }): Promise<CodexAppServerThreadSetNameResult>;
   threadSetName(params: CodexThreadSetNameParams): Promise<CodexAppServerThreadSetNameResult>;
   threadCompactStart(
     params: CodexThreadCompactStartParams,
@@ -214,6 +222,13 @@ type CodexAppServerAdapterBaseOptions = {
   resolveManagedMcpServer: ManagedMcpServerResolver;
   transportFactory: CodexJsonRpcTransportFactory;
   respondServerRequest?: CodexServerRequestResponder;
+  recordSpeedChoice?: (
+    ref: AgentSessionLiveRef,
+    choice: string | null,
+    isCurrent: () => boolean,
+    model?: import("@openducktor/contracts").AgentSessionModelSettings,
+    previousChoice?: string | null,
+  ) => Promise<() => Promise<void>>;
   onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void | Promise<void>;
   prepareImageGenerations?: CodexImageGenerationPreparer;

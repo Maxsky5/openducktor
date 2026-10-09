@@ -184,7 +184,13 @@ export function useWorkspaceSessionChatActions(
           sessionId: record.id,
           selectedModel: { ...selection, runtimeKind: record.runtimeKind },
         })
-        .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved))
+        .then((saved) => {
+          updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved);
+          if (record.speed !== null && record.speed !== "standard" && saved.speed === "standard")
+            toast.info(
+              "Speed was set to Standard because this model does not support the previous level.",
+            );
+        })
         .catch((cause: unknown) => {
           setError(errorMessage(cause));
         })
@@ -193,7 +199,7 @@ export function useWorkspaceSessionChatActions(
           setSavingModel(false);
         });
     },
-    [queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+    [queryClient, record.id, record.runtimeKind, record.speed, workspace.workspaceId],
   );
 
   const { updateAgentSessionModel } = operations;

@@ -124,6 +124,7 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     },
     loadSessionTodos: (input) => hostClient.agentRuntimeLoadSessionTodos(input),
     updateSessionModel: (input) => hostClient.agentSessionControlUpdateModel(input),
+    updateSessionSpeed: (input) => hostClient.agentSessionControlUpdateSpeed(input),
     sendUserMessage: (input) =>
       hostClient.agentSessionControlSend(input).then(toAcceptedAgentUserMessage),
     stopSession: (input) => hostClient.agentSessionControlStop(input),

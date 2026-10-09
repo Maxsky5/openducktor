@@ -63,6 +63,12 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
     providerName: "Codex",
     modelId: model.model,
     modelName: model.displayName,
+    speedLevels: [
+      { id: "standard", label: "Standard" },
+      ...model.serviceTiers
+        .filter((tier) => tier.id !== "default" && tier.id !== "standard")
+        .map((tier) => ({ id: tier.id, label: tier.name, description: tier.description })),
+    ],
     variants: model.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
     attachmentSupport: toAttachmentSupport(model.inputModalities),
   })),

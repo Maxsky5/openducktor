@@ -119,6 +119,7 @@ export const workspaceSessionEntry = (
           manualTitle: `Chat ${sessionId}`,
           createdAt: NOW - 3600000,
           updatedAt: NOW - 28 * 60000,
+          speed: "standard",
           archivedAt: null,
         },
       },

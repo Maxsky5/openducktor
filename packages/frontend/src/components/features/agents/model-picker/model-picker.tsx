@@ -791,16 +791,22 @@ export function ModelPicker({
     focusedModelKey.current = null;
     searchInputRef.current?.focus();
   }, [getModelDisabledReason, items, open]);
-  const { triggerRuntime, triggerModelLabel, triggerAriaLabel, visibleResources, emptyMessage } =
-    resolveModelPickerPresentation({
-      runtimes,
-      value,
-      placeholder,
-      activeView,
-      searchQuery,
-      favoriteState,
-      lockedRuntimeKind,
-    });
+  const {
+    selectedValue,
+    triggerRuntime,
+    triggerModelLabel,
+    triggerAriaLabel,
+    visibleResources,
+    emptyMessage,
+  } = resolveModelPickerPresentation({
+    runtimes,
+    value,
+    placeholder,
+    activeView,
+    searchQuery,
+    favoriteState,
+    lockedRuntimeKind,
+  });
   const readOnlyReason = selectionPolicy.kind === "read_only" ? selectionPolicy.reason : null;
 
   const registerButton = (index: number, element: HTMLButtonElement | null): void => {
@@ -996,7 +1002,7 @@ export function ModelPicker({
                 ))}
                 <ModelPickerList
                   items={items}
-                  value={value}
+                  value={selectedValue}
                   favoriteState={favoriteState}
                   getModelDisabledReason={getModelDisabledReason}
                   registerButton={registerButton}

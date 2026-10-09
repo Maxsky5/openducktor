@@ -166,6 +166,7 @@ export type AgentChatModelPicker = {
 };
 
 export type AgentChatComposerModel = {
+  speed?: import("../speed-select").SpeedControlModel | undefined;
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;

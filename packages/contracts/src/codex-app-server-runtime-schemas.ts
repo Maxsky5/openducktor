@@ -12,6 +12,7 @@ import {
   codexAppServerThreadStatusSchema,
   codexAppServerTurnSchema,
 } from "./codex-app-server-thread-schemas";
+import { codexAppServerReasoningEffortSchema } from "./codex-app-server-request-schemas";
 const codexAppServerJsonValueSchema = z.json();
 const codexAppServerJsonObjectSchema = z.record(z.string(), codexAppServerJsonValueSchema);
 const nonBlankStringSchema = z
@@ -110,7 +111,20 @@ const toolRequestUserInputParamsSchema = z.object({
   threadId: z.string(),
   turnId: z.string(),
 });
+export const codexAppServerThreadSettingsUpdatedNotificationParamsSchema = z.object({
+  threadId: z.string(),
+  threadSettings: z.object({
+    model: z.string(),
+    serviceTier: z.string().nullable(),
+    effort: codexAppServerReasoningEffortSchema.nullable(),
+  }),
+});
+
 export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUnion("method", [
+  notification(
+    "thread/settings/updated",
+    codexAppServerThreadSettingsUpdatedNotificationParamsSchema,
+  ),
   notification("skills/changed", z.object({}).strict()),
   notification(
     "serverRequest/resolved",
@@ -174,6 +188,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
 
 const consumedRuntimeNotificationMethods = new Set([
   "skills/changed",
+  "thread/settings/updated",
   "serverRequest/resolved",
   "thread/tokenUsage/updated",
   "turn/started",

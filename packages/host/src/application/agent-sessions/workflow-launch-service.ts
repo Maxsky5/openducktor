@@ -1,3 +1,4 @@
+import { TaskSessionOwnershipCommittedError } from "./task-session-ownership-error";
 import { createWorkflowLaunchSubmission } from "./workflow-launch-submission";
 import type {
   WorkflowLaunchContext,
@@ -5,7 +6,6 @@ import type {
   WorkflowLaunchService,
 } from "./workflow-launch-types";
 import type {
-  AgentSessionControlSendInput,
   AgentWorkflowSessionStartInput,
   AgentSessionControlResumeInput,
   WorkflowLaunchRead,
@@ -13,7 +13,7 @@ import type {
   WorkflowLaunchRequest,
   WorkflowLaunchSnapshot,
 } from "@openducktor/contracts";
-import type { SessionLaunchInitial } from "./session-launch-types";
+import type { SessionLaunchInitial, SessionLaunchSendInput } from "./session-launch-types";
 import { Effect } from "effect";
 import { createSessionLaunchService } from "./session-launch-service";
 import { findWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
@@ -41,6 +41,33 @@ export const createWorkflowLaunchService = (
       ),
     );
   const { send, validateRecovery } = createWorkflowLaunchSubmission(deps);
+  const publishRecords = (attempt: WorkflowLaunchContext) =>
+    Effect.gen(function* () {
+      const session = attempt.snapshot.session;
+      if (!session)
+        return yield* launchValidationError("The runtime returned no workflow session identity.");
+      const repoPath = attempt.snapshot.repoPath;
+      const taskId = attempt.request.taskId;
+      const agentSessions = yield* deps.tasks.agentSessionsList({ repoPath, taskId });
+      // Readers must bind the saved owner before the runtime publishes its first message.
+      yield* deps.runtime.publishTaskSessionRecords(toControlSessionRef(repoPath, session), {
+        taskId,
+        agentSessions,
+      });
+    });
+  const resumeSession = (
+    attempt: WorkflowLaunchContext,
+    input: Parameters<typeof deps.runtime.resumeSession>[0],
+  ) =>
+    deps.runtime
+      .resumeSession(input)
+      .pipe(
+        Effect.tapError((cause) =>
+          cause instanceof TaskSessionOwnershipCommittedError
+            ? Effect.sync(() => attempt.stage("publication"))
+            : Effect.void,
+        ),
+      );
   const run = (attempt: WorkflowLaunchContext) =>
     Effect.gen(function* () {
       yield* attempt.checkCanceled();
@@ -71,7 +98,8 @@ export const createWorkflowLaunchService = (
               return;
             }
             yield* attempt.checkCanceled();
-            const { decision, action, model, systemPrompt, parts } = prepared;
+            const { decision, action, speed, systemPrompt, parts } = prepared;
+            let { model } = prepared;
             if (model) attempt.updateOwner({ model });
             const sessionScope = {
               kind: "workflow" as const,
@@ -81,10 +109,11 @@ export const createWorkflowLaunchService = (
             const publications: Array<Effect.Effect<void, unknown>> = [];
             const retainInstruction = (result: Parameters<typeof toControlSessionRef>[1]) => {
               if (parts === undefined) return;
-              const input: AgentSessionControlSendInput = {
+              const input: SessionLaunchSendInput = {
                 ...toControlSessionRef(repoPath, result),
                 sessionScope,
                 systemPrompt,
+                speed,
                 parts,
               };
               if (model) input.model = model;
@@ -120,12 +149,13 @@ export const createWorkflowLaunchService = (
                 sessionScope,
                 systemPrompt,
                 model: decision.selectedModel,
+                speed: speed ?? "standard",
               };
               if (attempt.request.targetWorkingDirectory)
                 startInput.targetWorkingDirectory = attempt.request.targetWorkingDirectory;
               const result = yield* deps.sessions.start(startInput, progress);
               retainInstruction(result.session);
-              publications.push(result.publish);
+              publications.push(result.publish.pipe(Effect.andThen(publishRecords(attempt))));
             } else if (decision.startMode === "fork") {
               const result = yield* deps.sessions.fork(
                 {
@@ -134,12 +164,13 @@ export const createWorkflowLaunchService = (
                   parentExternalSessionId: decision.sourceSession.externalSessionId,
                   sessionScope,
                   model: decision.selectedModel,
+                  speed: speed ?? "standard",
                   systemPrompt,
                 },
                 progress,
               );
               retainInstruction(result.session);
-              publications.push(result.publish);
+              publications.push(result.publish.pipe(Effect.andThen(publishRecords(attempt))));
             } else {
               // Keep the source session available when resume fails.
               const records = yield* deps.tasks.agentSessionsList({
@@ -147,6 +178,8 @@ export const createWorkflowLaunchService = (
                 taskId: attempt.request.taskId,
               });
               const source = findWorkflowSession(records, action.role, decision.sourceSession)!;
+              model = source.selectedModel ?? undefined;
+              attempt.updateOwner({ model });
               const retained = yield* retainSession({
                 ...decision.sourceSession,
                 startedAt: source.startedAt,
@@ -164,9 +197,9 @@ export const createWorkflowLaunchService = (
                   systemPrompt,
                 };
                 if (model) resumeInput.model = model;
-                const resumed = yield* deps.sessions.resume(resumeInput);
-                attempt.retainSession(resumed.session);
-                publications.push(resumed.publish);
+                const resumed = yield* resumeSession(attempt, resumeInput);
+                attempt.retainSession(resumed);
+                publications.push(publishRecords(attempt));
               }
             }
             if (!attempt.snapshot.session)
@@ -175,15 +208,6 @@ export const createWorkflowLaunchService = (
               );
             attempt.stage("publication");
             for (const publication of publications) yield* publication;
-            if (publications.length > 0) {
-              const taskId = attempt.request.taskId;
-              const agentSessions = yield* deps.tasks.agentSessionsList({ repoPath, taskId });
-              // Readers must bind the saved owner before the runtime publishes its first message.
-              yield* deps.runtime.publishTaskSessionRecords(
-                toControlSessionRef(repoPath, attempt.snapshot.session),
-                { taskId, agentSessions },
-              );
-            }
             yield* attempt.checkCanceled();
             if (parts !== undefined) yield* send(attempt);
           }),
@@ -245,8 +269,15 @@ export const createWorkflowLaunchService = (
               const live = yield* deps.runtime.read(
                 toControlSessionRef(attempt.snapshot.repoPath, attempt.snapshot.session!),
               );
-              if (live.type === "missing")
-                yield* deps.runtime.resumeSession({ ...sendInput, resumeMode: "reattach" });
+              if (live.type === "missing") {
+                const resumed = yield* resumeSession(attempt, {
+                  ...sendInput,
+                  resumeMode: "reattach",
+                });
+                attempt.retainSession(resumed);
+                attempt.stage("publication");
+                yield* publishRecords(attempt);
+              }
               yield* send(attempt);
             }),
           ),

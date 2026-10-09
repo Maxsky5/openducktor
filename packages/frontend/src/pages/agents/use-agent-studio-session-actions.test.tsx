@@ -846,6 +846,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     expect(startAgentSession).toHaveBeenCalledWith({
+      speed: "standard",
       taskId: "task-1",
       role: "spec",
       selectedModel: {
@@ -2425,6 +2426,9 @@ describe("prepared composer catalog refresh", () => {
             reusablePrompts: props.reusablePrompts,
             repoSettings: props.repoSettings,
             favoriteState: props.favoriteState,
+            updateAgentSessionSpeed: async () => {
+              throw new Error("Unexpected speed change.");
+            },
             updateAgentSessionModel: async () => {},
             loadCatalog,
           });

@@ -6,6 +6,8 @@ import {
 import type { WorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
 import {
   type AgentRepositorySessionStartInput,
+  type AgentSessionControlUpdateSpeedInput,
+  type AgentSessionSpeedState,
   type AgentSessionControlSummary,
   type AgentWorkflowSessionStartInput,
   agentRepositorySessionStartInputSchema,
@@ -15,6 +17,7 @@ import {
   agentSessionControlSendInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
+  agentSessionControlUpdateSpeedInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
   agentSessionLiveLoadDiffInputSchema,
@@ -52,6 +55,9 @@ const parseCommandInput = <Output>(
 
 type LocalAttachmentResolver = Pick<LocalAttachmentService, "resolve">;
 type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSession"> & {
+  updateSessionSpeed(
+    input: AgentSessionControlUpdateSpeedInput,
+  ): Effect.Effect<AgentSessionSpeedState, HostError>;
   startSession: (
     input: AgentRepositorySessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
@@ -108,6 +114,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_stop",
       ).pipe(Effect.flatMap(service.stopSession)),
+    agent_session_control_update_speed: (args) =>
+      parseCommandInput(
+        agentSessionControlUpdateSpeedInputSchema,
+        args,
+        "agent_session_control_update_speed",
+      ).pipe(Effect.flatMap(service.updateSessionSpeed)),
     agent_session_control_update_model: (args) =>
       parseCommandInput(
         agentSessionControlUpdateModelInputSchema,

@@ -419,6 +419,7 @@ const applyDirectSnapshot = (
     ...current,
     sessionAssociation,
     title: snapshot.title,
+    speed: snapshot.speed ?? current.speed,
     selectedModel,
     ...activity,
     livePresence: "present",

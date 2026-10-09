@@ -62,6 +62,7 @@ export const workspaceSessionSchema = z
     executionTarget: workspaceSessionExecutionTargetSchema,
     roleSnapshot: workspaceSessionRoleSnapshotSchema.nullable(),
     selectedModel: agentSessionModelSelectionSchema.nullable(),
+    speed: z.string().min(1).nullable().default("standard"),
     generatedTitle: workspaceSessionGeneratedTitleSchema.nullable(),
     manualTitle: z.string().min(1).nullable(),
     createdAt: z.number().int(),

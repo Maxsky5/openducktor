@@ -25,6 +25,7 @@ export const buildReusableSessionOptions = ({
     const option: SessionStartExistingSessionOption = {
       value: agentSessionIdentityKey(session),
       sourceSession: toAgentSessionIdentity(session),
+      speed: session.speed ? session.speed.choice : "standard",
       runtimeKind: session.runtimeKind,
       label: formatAgentSessionOptionLabel({
         session,

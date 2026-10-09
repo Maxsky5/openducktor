@@ -154,6 +154,8 @@
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
   --odt-runtime-accent-codex: oklch(0.596 0.145 163.225); /* OpenAI green */
   --odt-runtime-accent-claude: #d97757; /* Claude Code orange */
+  --speed-fast: var(--color-amber-600);
+  --speed-ultrafast: var(--color-violet-600);
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
@@ -286,6 +288,8 @@
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
   --odt-runtime-accent-codex: oklch(0.723 0.219 149.579); /* ~green-500 */
   --odt-runtime-accent-claude: #c86649; /* Claude Code orange, dark-theme adjusted */
+  --speed-fast: var(--color-amber-400);
+  --speed-ultrafast: var(--color-violet-400);
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;

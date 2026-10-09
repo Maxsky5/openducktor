@@ -1,9 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createElement, createRef } from "react";
+import { describe, expect, mock, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { initialSpeedState } from "@openducktor/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createElement, createRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
+
+enableReactActEnvironment();
 
 const readComposerCard = (html: string): Element => {
   const card = new DOMParser().parseFromString(html, "text/html").body.querySelector("form > div");
@@ -123,6 +129,275 @@ const buildCodexModelSelectionWithoutProfile = () => {
 };
 
 describe("AgentChatComposer", () => {
+  test.each([
+    ["absent", "standard", "unapplied", false],
+    ["absent", "fast", "unapplied", false],
+    ["unobserved", "standard", "unapplied", false],
+    ["unobserved", "fast", "unapplied", false],
+    ["present", "standard", "unapplied", true],
+    ["present", "fast", "unapplied", true],
+    ["absent", null, "unapplied", true],
+    ["absent", "standard", "uncertain", true],
+    ["absent", "fast", "pending", true],
+  ] as const)(
+    "gates Send for %s presence with choice %s and settings %s",
+    async (livePresence, choice, synchronization, blocked) => {
+      const send = mock(async () => true);
+      const model = buildModel();
+      const speed = {
+        key: `${livePresence}-${choice}-${synchronization}`,
+        livePresence,
+        eligibility: "supported" as const,
+        levels: [
+          { id: "standard", label: "Standard" },
+          { id: "fast", label: "Fast" },
+        ],
+        state: initialSpeedState(choice, synchronization),
+        pending: false,
+        disabled: false,
+        error: null,
+        onChange: () => {},
+      };
+      const view = render(
+        createElement(AgentChatComposer, {
+          model: {
+            ...model,
+            speed,
+            onSend: send,
+            draftScope: { key: speed.key, persistence: null },
+          },
+        }),
+      );
+      try {
+        const editor = view.getByRole("combobox", { name: "Message composer" });
+        const text = editor.querySelector<HTMLElement>("[data-text-segment-id]");
+        if (!text) throw new Error("Expected an editable text segment.");
+        text.textContent = "Continue with the saved choice";
+        fireEvent.input(text);
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          blocked,
+        );
+        const form = editor.closest("form");
+        if (!form) throw new Error("Expected a composer form.");
+        fireEvent.submit(form);
+        if (blocked) expect(send).not.toHaveBeenCalled();
+        else await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
+  test.each(["standard", "fast"])(
+    "keeps the composer steady while changing speed from %s",
+    async (choice) => {
+      const change = Promise.withResolvers<void>();
+      const send = mock(async () => true);
+      const base = buildModel();
+      const catalog = {
+        ...base.modelPicker.runtimes[0]!.resource.catalog,
+        runtime: CODEX_RUNTIME_DESCRIPTOR,
+        models: base.modelPicker.runtimes[0]!.resource.catalog.models.map((model) => ({
+          ...model,
+          speedLevels: [
+            { id: "standard", label: "Standard" },
+            { id: "fast", label: "Fast" },
+          ],
+        })),
+      };
+      const model = {
+        ...base,
+        displayedSessionKey: null,
+        onSend: send,
+        selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+        draftScope: { key: `speed-${choice}`, persistence: null },
+        supportsProfiles: false,
+        modelPicker: {
+          ...base.modelPicker,
+          value: { ...base.modelPicker.value, runtimeKind: "codex" as const },
+          runtimes: [
+            {
+              ...base.modelPicker.runtimes[0]!,
+              descriptor: CODEX_RUNTIME_DESCRIPTOR,
+              resource: { status: "ready" as const, catalog },
+            },
+          ],
+        },
+      };
+      function Composer() {
+        const [enabled, setEnabled] = useState<string>(choice);
+        const speed = useSpeedControl({
+          key: model.draftScope.key,
+          livePresence: "present",
+          runtimeKind: "codex",
+          model: model.selectedModelSelection,
+          catalog,
+          choice: enabled,
+          state: initialSpeedState(enabled, "confirmed"),
+          onChange: async (next) => {
+            await change.promise;
+            setEnabled(next);
+          },
+        });
+        return createElement(AgentChatComposer, { model: { ...model, speed } });
+      }
+      const view = render(createElement(Composer));
+      try {
+        const editor = view.getByRole("combobox", { name: "Message composer" });
+        const picker = view.getByRole("button", { name: "Select model, Codex, GPT-5.3 Codex" });
+        const effort = view.getByRole("button", { name: "high" });
+        const speedButton = view.getByRole("button", {
+          name: choice === "standard" ? "Speed: Standard" : "Speed: Fast",
+        });
+        await act(async () => fireEvent.click(speedButton));
+        await act(async () =>
+          fireEvent.click(
+            screen.getByRole("option", { name: choice === "standard" ? "Fast" : "Standard" }),
+          ),
+        );
+        await waitFor(() =>
+          expect(speedButton.closest("[aria-busy]")?.getAttribute("aria-busy")).toBe("true"),
+        );
+        expect(editor.getAttribute("contenteditable")).toBe("true");
+        expect(view.getByRole("combobox", { name: "Message composer" })).toBe(editor);
+        expect(
+          view.getByRole("button", { name: "Select model, Codex, GPT-5.3 Codex", hidden: true }),
+        ).toBe(picker);
+        editor.focus();
+        const text = editor.querySelector<HTMLElement>("[data-text-segment-id]");
+        if (!text) throw new Error("Expected an editable text segment.");
+        text.textContent = "Keep this draft";
+        fireEvent.input(text);
+        expect(view.getByRole("button", { name: "Add attachment" }).hasAttribute("disabled")).toBe(
+          false,
+        );
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          true,
+        );
+        fireEvent.submit(editor.closest("form")!);
+        expect(send).not.toHaveBeenCalled();
+        await act(async () => {
+          change.resolve();
+          await change.promise;
+        });
+        await waitFor(() =>
+          expect(speedButton.closest("[aria-busy]")?.getAttribute("aria-busy")).toBe("false"),
+        );
+        expect(editor.getAttribute("contenteditable")).toBe("true");
+        expect(editor.textContent).toContain("Keep this draft");
+        expect(document.activeElement).toBe(editor);
+        expect(view.getByRole("button", { name: "high" })).toBe(effort);
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          false,
+        );
+        expect(
+          effort.compareDocumentPosition(speedButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      } finally {
+        change.resolve();
+        view.unmount();
+      }
+    },
+  );
+
+  test.each(["model", "effort"] as const)(
+    "blocks an already-open %s selector while a speed change is pending",
+    async (control) => {
+      const base = buildModel();
+      const selectModel = mock(() => {});
+      const selectVariant = mock(() => {});
+      const currentModel = base.modelPicker.runtimes[0]!.resource.catalog.models[0]!;
+      const catalog = {
+        ...base.modelPicker.runtimes[0]!.resource.catalog,
+        runtime: CODEX_RUNTIME_DESCRIPTOR,
+        models: [
+          {
+            ...currentModel,
+            variants: ["low", "high"],
+          },
+          {
+            ...currentModel,
+            id: "openai/gpt-5",
+            modelId: "gpt-5",
+            modelName: "GPT-5",
+          },
+        ],
+      };
+      const model = {
+        ...base,
+        displayedSessionKey: null,
+        selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+        draftScope: { key: `pending-speed-${control}`, persistence: null },
+        supportsProfiles: false,
+        variantOptions: [
+          { value: "low", label: "low" },
+          { value: "high", label: "high" },
+        ],
+        onSelectVariant: selectVariant,
+        modelPicker: {
+          ...base.modelPicker,
+          value: { ...base.modelPicker.value, runtimeKind: "codex" as const },
+          onValueChange: selectModel,
+          runtimes: [
+            {
+              ...base.modelPicker.runtimes[0]!,
+              descriptor: CODEX_RUNTIME_DESCRIPTOR,
+              resource: { status: "ready" as const, catalog },
+            },
+          ],
+        },
+      };
+      const speed = {
+        key: model.draftScope.key,
+        livePresence: "present" as const,
+        eligibility: "supported" as const,
+        levels: [
+          { id: "standard", label: "Standard" },
+          { id: "fast", label: "Fast" },
+        ],
+        state: initialSpeedState("standard", "confirmed"),
+        pending: false,
+        disabled: false,
+        error: null,
+        onChange: () => {},
+      };
+      const view = render(createElement(AgentChatComposer, { model: { ...model, speed } }));
+      try {
+        const trigger = view.getByRole("button", {
+          name: control === "model" ? "Select model, Codex, GPT-5.3 Codex" : "high",
+        });
+        const optionRole = control === "model" ? "button" : "option";
+        const optionName = control === "model" ? "Select GPT-5 model" : "low";
+        await act(async () => fireEvent.click(trigger));
+        const option = screen.getByRole(optionRole, { name: optionName });
+        view.rerender(
+          createElement(AgentChatComposer, {
+            model: { ...model, speed: { ...speed, pending: true } },
+          }),
+        );
+        expect(screen.getByRole(optionRole, { name: optionName })).toBe(option);
+        await act(async () => fireEvent.click(option));
+        expect(selectModel).not.toHaveBeenCalled();
+        expect(selectVariant).not.toHaveBeenCalled();
+        await waitFor(() =>
+          expect(screen.queryByRole(optionRole, { name: optionName })).toBeNull(),
+        );
+        view.rerender(createElement(AgentChatComposer, { model: { ...model, speed } }));
+        await act(async () => fireEvent.click(trigger));
+        await act(async () => fireEvent.click(screen.getByRole(optionRole, { name: optionName })));
+        const select = control === "model" ? selectModel : selectVariant;
+        const expected =
+          control === "model"
+            ? { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }
+            : "low";
+        expect(select).toHaveBeenCalledTimes(1);
+        expect(select).toHaveBeenCalledWith(expected);
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   test("renders the runtime-aware model picker and send controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

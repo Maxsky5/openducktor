@@ -1,3 +1,6 @@
+import { InterruptedTurnResumeError } from "@openducktor/core";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import type { AgentSessionResumeNextActionOverrides } from "../../ports/agent-session-resume-error";
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import { Effect } from "effect";
@@ -69,4 +72,37 @@ export const parseClaudeLiveSessionOutput = <Schema extends z.ZodType, Input>(
         cause,
         details: { operation },
       }),
+  });
+
+export const preAdmissionNextActionOverrides = (
+  cause: unknown,
+): AgentSessionResumeNextActionOverrides =>
+  cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
+    ? { continuation_failed: "Send a new message to continue." }
+    : {};
+
+export const requireClaudeSessionContext = (
+  sessionStore: import("./claude-live-session-adapter-contract").CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"],
+  runtimeId: string,
+  externalSessionId: string,
+) =>
+  Effect.try({
+    try: () => {
+      const session = sessionStore.get(externalSessionId);
+      if (!session) {
+        throw new HostValidationError({
+          field: "externalSessionId",
+          message: `Unknown Claude session '${externalSessionId}'.`,
+          details: { externalSessionId, runtimeId: runtimeId },
+        });
+      }
+      return session;
+    },
+    catch: (cause) =>
+      cause instanceof HostValidationError
+        ? cause
+        : toHostOperationError(cause, "claude-live-session.require-session", {
+            runtimeId: runtimeId,
+            externalSessionId,
+          }),
   });

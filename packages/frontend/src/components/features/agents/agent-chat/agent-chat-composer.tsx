@@ -19,6 +19,7 @@ import {
   useRef,
 } from "react";
 import { toast } from "sonner";
+import { SpeedSelect } from "../speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,7 @@ const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl(
 });
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
+  speed,
   onPickAttachments,
   attachmentIntakeDisabled,
   selectedModelSelection,
@@ -174,6 +176,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled,
   pendingSendItems,
 }: {
+  speed: AgentChatComposerModel["speed"];
   onPickAttachments: () => void;
   attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
@@ -196,6 +199,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
 }): ReactElement {
   const hasVariantOptions = variantOptions.length > 0;
+  const speedPending = speed?.pending === true || speed?.state.synchronization === "pending";
 
   return (
     <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
@@ -211,71 +215,88 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         >
           <Paperclip className="size-3.5" />
         </Button>
-        {supportsProfiles ? (
-          <div className="relative min-w-0">
-            <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Combobox
-              value={selectedModelSelection?.profileId ?? ""}
-              options={agentOptions}
-              className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-              placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-              searchPlaceholder="Search agent..."
-              triggerClassName={cn(
-                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                "max-w-[min(15rem,100%)] !pl-7 !pr-2",
-              )}
-              disabled={selectorDisabled}
-              onValueChange={onSelectAgent}
-              onOpenChange={(open) => {
-                if (open) {
-                  onAgentSelectorOpen();
-                }
-              }}
-            />
-          </div>
-        ) : null}
+        <div className="contents" inert={speedPending}>
+          {supportsProfiles ? (
+            <div className="relative min-w-0">
+              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Combobox
+                value={selectedModelSelection?.profileId ?? ""}
+                options={agentOptions}
+                className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
+                placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+                searchPlaceholder="Search agent..."
+                triggerClassName={cn(
+                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                  "max-w-[min(15rem,100%)] !pl-7 !pr-2",
+                )}
+                disabled={selectorDisabled}
+                onValueChange={(value) => {
+                  if (!speedPending) onSelectAgent(value);
+                }}
+                onOpenChange={(open) => {
+                  if (open) {
+                    onAgentSelectorOpen();
+                  }
+                }}
+              />
+            </div>
+          ) : null}
 
-        <ModelPicker
-          runtimes={modelPicker.runtimes}
-          value={modelPicker.value}
-          favoriteState={modelPicker.favoriteState}
-          selectionPolicy={
-            modelPickerDisabled
-              ? { kind: "read_only", reason: "Model selection is unavailable right now." }
-              : modelPicker.selectionPolicy
-          }
-          placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-          triggerClassName={cn(
-            COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-            "max-w-[min(19rem,100%)] !px-2",
-          )}
-          onValueChange={modelPicker.onValueChange}
-          onOpenChange={modelPicker.onOpenChange}
-        />
+          <ModelPicker
+            runtimes={modelPicker.runtimes}
+            value={modelPicker.value}
+            favoriteState={modelPicker.favoriteState}
+            selectionPolicy={
+              modelPickerDisabled
+                ? { kind: "read_only", reason: "Model selection is unavailable right now." }
+                : modelPicker.selectionPolicy
+            }
+            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+            triggerClassName={cn(
+              COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+              "max-w-[min(19rem,100%)] !px-2",
+            )}
+            onValueChange={(value) => {
+              // Popup portals sit outside the inert settings group.
+              if (!speedPending) modelPicker.onValueChange(value);
+            }}
+            onOpenChange={modelPicker.onOpenChange}
+          />
 
-        {hasVariantOptions ? (
-          <div className="relative min-w-0">
-            <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Combobox
-              value={selectedModelSelection?.variant ?? ""}
-              options={variantOptions}
-              className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-              placeholder="Effort"
-              searchPlaceholder="Search effort..."
-              triggerClassName={cn(
-                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                "max-w-[min(12rem,100%)] !pl-7 !pr-2",
-              )}
-              disabled={selectorDisabled}
-              onValueChange={onSelectVariant}
-              onOpenChange={(open) => {
-                if (open) {
-                  onVariantSelectorOpen();
-                }
-              }}
-            />
-          </div>
-        ) : null}
+          {hasVariantOptions ? (
+            <div className="relative min-w-0">
+              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Combobox
+                value={selectedModelSelection?.variant ?? ""}
+                options={variantOptions}
+                className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+                placeholder="Effort"
+                searchPlaceholder="Search effort..."
+                triggerClassName={cn(
+                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                  "max-w-[min(12rem,100%)] !pl-7 !pr-2",
+                )}
+                disabled={selectorDisabled}
+                onValueChange={(value) => {
+                  if (!speedPending) onSelectVariant(value);
+                }}
+                onOpenChange={(open) => {
+                  if (open) {
+                    onVariantSelectorOpen();
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+        {speed && (
+          <SpeedSelect
+            key={speed.key}
+            model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
+            compact
+            triggerClassName="hover:bg-muted hover:text-foreground"
+          />
+        )}
       </div>
 
       {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
@@ -515,6 +536,7 @@ function AgentChatComposerFormView({
           />
 
           <AgentChatComposerControls
+            speed={model.speed}
             onPickAttachments={onPickAttachments}
             attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
@@ -708,10 +730,6 @@ export function AgentChatComposer({
     pendingSendItems,
     draftScope,
     onSend,
-    isSending,
-    isStarting,
-    isSessionWorking,
-    isModelSelectionPending,
     selectedModelDescriptor,
     supportsAttachments,
     accentColor: composerAccentColor,
@@ -734,7 +752,7 @@ export function AgentChatComposer({
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
+  const isSubmitting = submitPending(model);
   const isComposerInputDisabled = composerInputDisabledFor(model);
   const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
@@ -810,6 +828,7 @@ export function AgentChatComposer({
   const sendDisabled =
     isSendOrModelPending ||
     isComposerInputDisabled ||
+    speedBlocksSend(model.speed) ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, pendingSendItems);
@@ -904,4 +923,21 @@ export function AgentChatComposer({
       submitAction={submitComposerAction}
     />
   );
+}
+
+function submitPending(model: AgentChatComposerModel): boolean {
+  return (
+    (model.isSending && !model.isSessionWorking) ||
+    model.isStarting ||
+    model.isModelSelectionPending
+  );
+}
+
+function speedBlocksSend(speed: AgentChatComposerModel["speed"]): boolean {
+  if (!speed) return false;
+  const { state, livePresence, pending } = speed;
+  if (pending || state.choice === null) return true;
+  // The host applies a known saved choice before a cold session starts its next turn.
+  if (state.synchronization === "unapplied" && livePresence !== "present") return false;
+  return state.synchronization !== "confirmed";
 }

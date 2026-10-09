@@ -13,6 +13,7 @@ import {
   agentSessionStatusFromActivity,
   describeAgentSessionScope,
   resolveAgentSessionAssociationTransition,
+  SessionTurnAdmission,
 } from "@openducktor/core";
 import {
   codexThreadStatusSnapshot,
@@ -48,6 +49,7 @@ const buildSessionState = (
 ): CodexSessionState => {
   const sessionState: CodexSessionState = {
     summary,
+    turnAdmission: new SessionTurnAdmission(),
     systemPrompt: input.systemPrompt ?? "",
     runtimeId,
     repoPath: input.repoPath,

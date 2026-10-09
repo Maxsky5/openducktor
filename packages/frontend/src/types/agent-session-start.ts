@@ -7,6 +7,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel?: never;
       startMode: "reuse";
+      speed?: string | null | undefined;
       sourceSession: AgentSessionIdentity;
     }
   | {
@@ -14,6 +15,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel: AgentModelSelection;
       startMode: "fresh";
+      speed?: string | null | undefined;
       queueIfBusy?: boolean;
       targetWorkingDirectory?: string | null;
     }
@@ -22,6 +24,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel: AgentModelSelection;
       startMode: "fork";
+      speed?: string | null | undefined;
       sourceSession: AgentSessionIdentity;
     };
 

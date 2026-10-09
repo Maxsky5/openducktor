@@ -81,6 +81,7 @@ export const createOpenCodeSessionImportPort = (input: {
       if (selectedModel && row.agent) selectedModel.profileId = row.agent;
       if (selectedModel && row.model?.variant) selectedModel.variant = row.model.variant;
       return {
+        speed: null,
         metadata: metadata(row),
         selectedModel,
         attach: () => input.admit(ref),

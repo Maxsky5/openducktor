@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { resolveModelSelectionOptions } from "./model-selection-options";
 
@@ -57,17 +57,19 @@ describe("model-selection-options", () => {
     ).toEqual({ "build-agent": "#f59e0b" });
   });
 
-  test("filters active-session variants to live-updatable options", () => {
+  test("filters a canonical Claude selection to live-updatable variants from its alias row", () => {
     const options = resolveModelSelectionOptions({
       liveSession: true,
       selectionCatalog: {
         ...makeCatalogWithProfile(),
+        runtime: CLAUDE_RUNTIME_DESCRIPTOR,
         models: [
           {
-            id: "anthropic/claude-sonnet",
-            providerId: "anthropic",
-            providerName: "Anthropic",
-            modelId: "claude-sonnet",
+            id: "sonnet",
+            providerId: "claude",
+            providerName: "Claude",
+            modelId: "sonnet",
+            resolvedModelId: "claude-sonnet-5-5",
             modelName: "Claude Sonnet",
             variants: ["low", "medium", "high", "xhigh", "max"],
             liveSessionUpdates: {
@@ -79,8 +81,8 @@ describe("model-selection-options", () => {
       },
       selectedModelSelection: {
         runtimeKind: "claude",
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
+        providerId: "claude",
+        modelId: "claude-sonnet-5-5",
         variant: "high",
       },
     });

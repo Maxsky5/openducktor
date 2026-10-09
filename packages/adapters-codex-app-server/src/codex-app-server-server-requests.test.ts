@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type AgentRole, CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
+import { SessionTurnAdmission } from "@openducktor/core";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
@@ -16,6 +17,7 @@ const createSession = (
   role: AgentRole | null,
   threadId = role ? `thread-${role}` : "thread-unknown-role",
 ): CodexSessionState => ({
+  turnAdmission: new SessionTurnAdmission(),
   summary: {
     externalSessionId: threadId,
     sessionAssociation: role ? { kind: "workflow", taskId: "task-1", role } : { kind: "unbound" },

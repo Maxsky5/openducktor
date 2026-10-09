@@ -25,12 +25,12 @@ import type { AgentSessionOperationPolicy } from "./agent-session-operation-poli
 
 export type TaskSessions = Pick<
   TaskService,
-  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel" | "transitionTask"
+  "agentSessionsList" | "agentSessionUpsert" | "transitionTask"
 >;
 type TaskReader = Pick<TaskStorePort, "getTask">;
 
 export type TaskSessionModelPersistence = (
-  input: Parameters<TaskSessions["agentSessionUpdateModel"]>[0],
+  input: Parameters<TaskService["agentSessionUpdateModel"]>[0],
 ) => Effect.Effect<{ updated: boolean; publish: Effect.Effect<void, HostError> }, HostError>;
 
 export const createTaskWorkflowSessionPolicy = ({
@@ -119,8 +119,10 @@ export const createTaskWorkflowSessionPolicy = ({
             return {
               input: {
                 ...input,
+                model: stored.selectedModel ?? input.model,
                 runtimeKind: stored.runtimeKind,
                 workingDirectory: stored.workingDirectory,
+                speed: stored.speed === undefined ? "standard" : stored.speed,
               },
               save: (summary: AgentSessionControlSummary) =>
                 storeWorkflowSession(tasks.agentSessionUpsert, {
@@ -139,8 +141,9 @@ export const createTaskWorkflowSessionPolicy = ({
               { ...input, sessionScope: scope },
               "send",
             );
-            const prepared: AgentSessionControlSendInput = {
+            const prepared: AgentSessionControlSendInput & { speed?: string | null } = {
               ...input,
+              speed: stored.speed === undefined ? "standard" : stored.speed,
               runtimeKind: stored.runtimeKind,
               workingDirectory: stored.workingDirectory,
             };
@@ -149,6 +152,50 @@ export const createTaskWorkflowSessionPolicy = ({
             return prepared;
           }),
         recordAcceptedMessage: () => Effect.void,
+        prepareSpeedUpdate: (input) =>
+          Effect.gen(function* () {
+            const stored = yield* readStoredWorkflowSession(
+              tasks,
+              { ...input, sessionScope: scope },
+              "update-model",
+            );
+            return {
+              model: toRuntimeModel(stored.selectedModel),
+              choice: stored.speed === undefined ? "standard" : stored.speed,
+              save: (speed, model) =>
+                Effect.gen(function* () {
+                  const current = yield* readStoredWorkflowSession(
+                    tasks,
+                    { ...input, sessionScope: scope },
+                    "update-model",
+                  );
+                  return yield* persistTaskModel({
+                    repoPath: input.repoPath,
+                    taskId: scope.taskId,
+                    identity: {
+                      externalSessionId: current.externalSessionId,
+                      runtimeKind: current.runtimeKind,
+                      workingDirectory: current.workingDirectory,
+                    },
+                    selectedModel: model
+                      ? toRecordModelSelection(model, current)
+                      : (current.selectedModel ?? null),
+                    speed,
+                  });
+                }).pipe(
+                  Effect.flatMap(({ updated, publish }) =>
+                    updated
+                      ? Effect.succeed(publish)
+                      : Effect.fail(
+                          new HostOperationError({
+                            operation: "task-workflow-session.update-speed",
+                            message: `Task '${scope.taskId}' no longer owns session '${stored.externalSessionId}'.`,
+                          }),
+                        ),
+                  ),
+                ),
+            };
+          }),
         prepareModelUpdate: (input) =>
           Effect.gen(function* () {
             const stored = yield* readStoredWorkflowSession(
@@ -165,34 +212,42 @@ export const createTaskWorkflowSessionPolicy = ({
             return {
               input: runtimeInput,
               previousModel: toRuntimeModel(stored.selectedModel),
-              save: Effect.suspend(() =>
-                persistTaskModel({
-                  repoPath: input.repoPath,
-                  taskId: scope.taskId,
-                  identity: {
-                    externalSessionId: stored.externalSessionId,
-                    runtimeKind: stored.runtimeKind,
-                    workingDirectory: stored.workingDirectory,
-                  },
-                  selectedModel,
-                }),
-              ).pipe(
-                Effect.flatMap(({ updated, publish }) =>
-                  updated
-                    ? Effect.succeed(publish)
-                    : Effect.fail(
-                        new HostOperationError({
-                          operation: "task-workflow-session.update-model",
-                          message: `Task '${scope.taskId}' did not update session '${stored.externalSessionId}'.`,
-                          details: {
-                            repoPath: input.repoPath,
-                            taskId: scope.taskId,
-                            externalSessionId: stored.externalSessionId,
-                          },
-                        }),
-                      ),
+              previousSpeed: stored.speed === undefined ? "standard" : stored.speed,
+              save: (speed) =>
+                Effect.suspend(() =>
+                  persistTaskModel({
+                    repoPath: input.repoPath,
+                    taskId: scope.taskId,
+                    identity: {
+                      externalSessionId: stored.externalSessionId,
+                      runtimeKind: stored.runtimeKind,
+                      workingDirectory: stored.workingDirectory,
+                    },
+                    selectedModel,
+                    speed:
+                      speed === undefined
+                        ? stored.speed === undefined
+                          ? "standard"
+                          : stored.speed
+                        : speed,
+                  }),
+                ).pipe(
+                  Effect.flatMap(({ updated, publish }) =>
+                    updated
+                      ? Effect.succeed(publish)
+                      : Effect.fail(
+                          new HostOperationError({
+                            operation: "task-workflow-session.update-model",
+                            message: `Task '${scope.taskId}' did not update session '${stored.externalSessionId}'.`,
+                            details: {
+                              repoPath: input.repoPath,
+                              taskId: scope.taskId,
+                              externalSessionId: stored.externalSessionId,
+                            },
+                          }),
+                        ),
+                  ),
                 ),
-              ),
             };
           }),
       };

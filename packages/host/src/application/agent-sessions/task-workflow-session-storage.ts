@@ -101,6 +101,7 @@ const workflowSessionRecord = (input: WorkflowSessionInput) => ({
   session: {
     externalSessionId: input.summary.externalSessionId,
     role: input.sessionScope.role,
+    speed: input.summary.speed ? input.summary.speed.choice : "standard",
     startedAt: input.summary.startedAt,
     runtimeKind: input.summary.runtimeKind,
     workingDirectory: input.summary.workingDirectory,

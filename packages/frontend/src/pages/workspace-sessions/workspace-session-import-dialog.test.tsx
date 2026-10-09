@@ -51,6 +51,7 @@ const saved: WorkspaceSession = {
   generatedTitle: null,
   createdAt: 1,
   updatedAt: 1,
+  speed: "standard",
   archivedAt: null,
 };
 const row = {

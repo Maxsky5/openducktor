@@ -1,9 +1,6 @@
-import type {
-  AgentSessionControlSendInput,
-  AgentSessionLiveRef,
-  SessionLaunchState,
-} from "@openducktor/contracts";
+import type { AgentSessionLiveRef, SessionLaunchState } from "@openducktor/contracts";
 import type { Deferred, Fiber } from "effect";
+import type { SessionLaunchSendInput } from "./session-launch-types";
 
 /** Private state shared by the worker and its settlement. */
 export type SessionLaunchAttempt<Request, State extends SessionLaunchState> = {
@@ -15,7 +12,7 @@ export type SessionLaunchAttempt<Request, State extends SessionLaunchState> = {
   worker?: Fiber.Fiber<void, never>;
   active: boolean;
   recovering: boolean;
-  sendInput?: AgentSessionControlSendInput;
+  sendInput?: SessionLaunchSendInput;
   canceled: boolean;
   runtimeStopAttempted: boolean;
   stopOwnedBySessionCommand: boolean;

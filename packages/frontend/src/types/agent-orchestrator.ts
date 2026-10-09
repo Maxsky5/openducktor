@@ -201,6 +201,7 @@ export type AgentSessionHistoryLoadState =
 export type AgentSessionRuntimeAvailability = "runtime" | "missing";
 
 export type AgentSessionState = {
+  speed?: import("@openducktor/contracts").AgentSessionSpeedState | undefined;
   externalSessionId: string;
   title?: string;
   sessionAssociation: AgentSessionAssociation;

@@ -96,6 +96,74 @@ describe("SQLite task agent session batches", () => {
 });
 
 describe("SQLite task session model updates", () => {
+  test("commits fast mode with the model without changing task state or session activity", async () => {
+    const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
+    try {
+      const task = await Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: { title: "Fast mode", issueType: "task", priority: 2, aiReviewEnabled: true },
+        }),
+      );
+      const session = createAgentSessionRecord({
+        runtimeKind: "claude",
+        speed: null,
+        lastActivityAt: Date.parse("2026-10-08T10:00:00Z"),
+      });
+      const model = {
+        runtimeKind: "claude" as const,
+        providerId: "anthropic",
+        modelId: "claude-opus-4-6",
+        profileId: "build",
+      };
+      await Effect.runPromise(store.upsertAgentSession({ repoPath, taskId: task.id, session }));
+      const before = await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }));
+
+      await Effect.runPromise(
+        store.updateAgentSessionModel({
+          repoPath,
+          taskId: task.id,
+          identity: session,
+          selectedModel: model,
+          speed: "fast",
+        }),
+      );
+      const after = await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }));
+      expect({ updatedAt: after.updatedAt, status: after.status }).toEqual({
+        updatedAt: before.updatedAt,
+        status: before.status,
+      });
+      expect(
+        (await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })))
+          .agentSessions,
+      ).toEqual([{ ...session, selectedModel: model, speed: "fast" }]);
+
+      const { speed: _choice, ...legacyRecord } = session;
+      await Effect.runPromise(
+        store.upsertAgentSession({ repoPath, taskId: task.id, session: legacyRecord }),
+      );
+      expect(
+        (await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })))
+          .agentSessions[0]?.speed,
+      ).toBe("fast");
+      await Effect.runPromise(
+        store.updateAgentSessionModel({
+          repoPath,
+          taskId: task.id,
+          identity: session,
+          selectedModel: model,
+          speed: "standard",
+        }),
+      );
+      expect(
+        (await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })))
+          .agentSessions[0]?.speed,
+      ).toBe("standard");
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("updates an existing record and never inserts a missing session", async () => {
     const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {

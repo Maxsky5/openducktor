@@ -32,7 +32,7 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
-type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt">;
+type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt" | "speed">;
 
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalOpenRequest,
@@ -476,6 +476,7 @@ const buildLaunchFields = (input: SessionStartDecisionInput): LaunchFields => {
   const fields: LaunchFields = {};
   if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
   if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
+  if (input.speed !== undefined) fields.speed = input.speed;
   return fields;
 };
 
