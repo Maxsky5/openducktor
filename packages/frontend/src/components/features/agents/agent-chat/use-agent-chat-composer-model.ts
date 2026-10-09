@@ -45,6 +45,7 @@ export type AgentChatComposerConfig = {
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
+  isSavingModel?: boolean;
   contextUsage: {
     totalTokens: number;
     contextWindow: number;
@@ -136,6 +137,7 @@ export function useAgentChatComposerModel({
       },
       isSending: composer.isSending,
       isStarting: composer.isStarting,
+      isSavingModel: composer.isSavingModel ?? false,
       isSessionWorking: composer.isSessionWorking,
       isWaitingInput: composer.isWaitingInput,
       waitingInputPlaceholder: composer.waitingInputPlaceholder,

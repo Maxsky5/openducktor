@@ -58,6 +58,34 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
     expect(events).toEqual([]);
   });
 
+  test("keeps an idle session idle when the SDK replays a user message", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: {
+        type: "user",
+        isReplay: true,
+        parent_tool_use_id: null,
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
+        session_id: "session-1",
+        message: { role: "user", content: "Previous prompt" },
+      },
+    });
+
+    expect(session.activity).toBe("idle");
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(events).toEqual([]);
+  });
+
   test("emits busy status for running SDK state during an active local turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");

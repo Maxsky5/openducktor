@@ -55,15 +55,12 @@ export const canInteractWithWorkspaceSession = ({
   observationReady,
   recordsError,
   targetFault,
-  isSavingModel,
 }: {
   runtimeInteractionEnabled: boolean;
   observationReady: boolean;
   recordsError: string | null;
   targetFault: AgentSessionTransientFault | null;
-  isSavingModel: boolean;
-}): boolean =>
-  runtimeInteractionEnabled && observationReady && !recordsError && !targetFault && !isSavingModel;
+}): boolean => runtimeInteractionEnabled && observationReady && !recordsError && !targetFault;
 
 export function projectWorkspaceSessionChatState({
   record,

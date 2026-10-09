@@ -81,7 +81,11 @@ export const handleClaudeSdkMessage = ({
     updateRateLimit({ info: message.rate_limit_info, session, emit, timestamp });
     return;
   }
-  if (message.type === "user" && isClaudeMetaStreamMessage(messageValue)) {
+  // Restores and SDK echoes can replay a prompt after its turn has settled.
+  if (
+    message.type === "user" &&
+    (("isReplay" in message && message.isReplay) || isClaudeMetaStreamMessage(messageValue))
+  ) {
     return;
   }
   if (message.type === "system" && (message.subtype === "init" || message.subtype === "status")) {

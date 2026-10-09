@@ -48,6 +48,7 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
 
 function QueryStatus() {
   const pending = useIsFetching();
@@ -394,6 +395,135 @@ const createPresentationScenario = (
     }),
   };
 };
+
+test.each(["model", "effort", "profile"] as const)(
+  "keeps the workspace draft editor active while saving %s",
+  async (control) => {
+    const { Harness, workspace, entry, session, operations, definitions } =
+      createPresentationScenario();
+    entry.selectedModel = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "low",
+      profileId: "build",
+    };
+    definitions.loadRepoRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: {
+          models: ["gpt-5", "gpt-6"].map((modelId) => ({
+            id: `openai/${modelId}`,
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId,
+            modelName: modelId,
+            variants: ["low", "high"],
+          })),
+          profiles: [
+            { name: "build", mode: "primary" },
+            { name: "review", mode: "primary" },
+          ],
+          defaultModelsByProvider: {},
+        },
+      },
+    });
+    const save = Promise.withResolvers<void>();
+    let updateRecord = (_record: WorkspaceSession): void => {};
+    const updateModel = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
+      async (_identity, selection) => {
+        await save.promise;
+        updateRecord({
+          ...entry,
+          selectedModel: selection ? { ...selection, runtimeKind: entry.runtimeKind } : null,
+        });
+      },
+    );
+    operations.updateAgentSessionModel = updateModel;
+    function Chat() {
+      const [record, setRecord] = useState(entry);
+      updateRecord = setRecord;
+      return (
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={record}
+          chatSettings={DEFAULT_CHAT_SETTINGS}
+          reusablePrompts={[]}
+          onToolRefresh={() => {}}
+          isMounted={() => true}
+        />
+      );
+    }
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+      }),
+    );
+    const view = render(
+      <Harness>
+        <Chat />
+      </Harness>,
+    );
+    try {
+      await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      const editor = view.getByRole("combobox", { name: "Message composer" });
+      typeIntoComposer(view.container, "Unsent draft");
+      const card = editor.closest(".rounded-xl");
+      expect(card).not.toBeNull();
+      const cardClass = card?.className;
+      const triggerName = {
+        model: "Select model, OpenCode, gpt-5",
+        effort: "low",
+        profile: "build",
+      }[control];
+      await act(async () => fireEvent.click(view.getByRole("button", { name: triggerName })));
+      const option =
+        control === "model"
+          ? view.getByRole("button", { name: "Select gpt-6 model" })
+          : view.getByRole("option", { name: control === "effort" ? "high" : "review" });
+      await act(async () => fireEvent.click(option));
+      expect(updateModel).toHaveBeenCalledTimes(1);
+      expect(updateModel.mock.calls[0]?.[0]).toMatchObject({
+        runtimeKind: session.runtimeKind,
+        externalSessionId: session.externalSessionId,
+        workingDirectory: session.workingDirectory,
+      });
+      expect(editor.getAttribute("contenteditable")).toBe("true");
+      expect(editor.getAttribute("aria-disabled")).toBe("false");
+      expect(card?.className).toBe(cardClass);
+      expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(
+        view
+          .getByRole("button", { name: "Select model, OpenCode, gpt-5" })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+      typeIntoComposer(view.container, "Unsent draft edited while saving");
+      await act(async () => save.resolve());
+      expect(editor.isConnected).toBe(true);
+      expect(editor.textContent).toContain("Unsent draft edited while saving");
+      expect(card?.className).toBe(cardClass);
+      expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+        false,
+      );
+      expect(
+        view.getByRole("button", {
+          name: {
+            model: "Select model, OpenCode, gpt-6",
+            effort: "high",
+            profile: "review",
+          }[control],
+        }),
+      ).toBeTruthy();
+    } finally {
+      save.resolve();
+      view.unmount();
+      createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, entry.id).clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+);
 
 test.each(["light", "dark"] as const)(
   "workspace child attention follows live input and full identity in the %s theme",

@@ -175,6 +175,7 @@ export type AgentChatComposerModel = {
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
+  isSavingModel?: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   waitingInputPlaceholder?: string | null;

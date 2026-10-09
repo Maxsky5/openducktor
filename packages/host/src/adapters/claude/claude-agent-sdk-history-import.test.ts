@@ -12,28 +12,54 @@ import {
 } from "./claude-agent-sdk-history-import";
 
 describe("Claude SDK history import", () => {
-  test("excludes meta peer queue entries using their paired SDK attachment", () => {
-    const peerPrompt =
-      '<agent-message from="Explore">Read-only exploration complete.</agent-message>';
-    const compactQueueEntry = {
-      type: "queue-operation",
-      operation: "enqueue",
-      timestamp: "2026-07-22T20:28:00.000Z",
-      sessionId: "session-1",
-      content: "/compact",
+  test.each([
+    {
+      kind: "non-meta queued",
+      attachment: {
+        type: "queued_command",
+        prompt: [{ type: "text", text: "Continue the session" }],
+        timestamp: 123,
+      },
+    },
+    {
+      kind: "unrelated",
+      attachment: { type: "file", isMeta: "native flag", timestamp: 123 },
+    },
+    { kind: "unclassified", attachment: { nativeVersion: 1 } },
+    { kind: "opaque", attachment: null },
+  ])("loads conversation entries while ignoring $kind attachment fields", ({ attachment }) => {
+    const userMessage = {
+      type: "user",
+      uuid: "user-1",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      message: { role: "user", content: "Continue the session" },
     } as const satisfies SessionStoreEntry;
-    const entries: SessionStoreEntry[] = [
-      {
+    const queuedAttachment: SessionStoreEntry = {
+      type: "attachment",
+      attachment,
+    };
+
+    expect(filterClaudeHistoryMessages([queuedAttachment, userMessage])).toEqual([userMessage]);
+  });
+
+  test.each(["entry", "attachment"] as const)(
+    "excludes meta peer queue entries using the %s timestamp",
+    (timestampSource) => {
+      const timestamp = "2026-07-22T20:27:59.026Z";
+      const peerPrompt =
+        '<agent-message from="Explore">Read-only exploration complete.</agent-message>';
+      const compactQueueEntry = {
         type: "queue-operation",
         operation: "enqueue",
-        timestamp: "2026-07-22T20:27:59.026Z",
+        timestamp: "2026-07-22T20:28:00.000Z",
         sessionId: "session-1",
-        content: peerPrompt,
-      },
-      {
+        content: "/compact",
+      } as const satisfies SessionStoreEntry;
+      const peerAttachment: SessionStoreEntry = {
         type: "attachment",
         uuid: "peer-attachment-1",
-        timestamp: "2026-07-22T20:27:59.026Z",
         sessionId: "session-1",
         attachment: {
           type: "queued_command",
@@ -46,15 +72,28 @@ describe("Claude SDK history import", () => {
             name: "Explore",
             body: "Read-only exploration complete.",
           },
-          timestamp: "2026-07-22T20:27:59.026Z",
+          timestamp: timestampSource === "entry" ? 123 : timestamp,
           isMeta: true,
         },
-      },
-      compactQueueEntry,
-    ];
+      };
+      if (timestampSource === "entry") {
+        peerAttachment.timestamp = timestamp;
+      }
+      const entries: SessionStoreEntry[] = [
+        {
+          type: "queue-operation",
+          operation: "enqueue",
+          timestamp,
+          sessionId: "session-1",
+          content: peerPrompt,
+        },
+        peerAttachment,
+        compactQueueEntry,
+      ];
 
-    expect(filterClaudeHistoryMessages(entries)).toEqual([compactQueueEntry]);
-  });
+      expect(filterClaudeHistoryMessages(entries)).toEqual([compactQueueEntry]);
+    },
+  );
 
   test("maps nested subagent transcripts to Agent tool calls in the selected transcript", () => {
     const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>([
