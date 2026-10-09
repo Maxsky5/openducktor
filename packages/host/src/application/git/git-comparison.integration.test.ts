@@ -92,7 +92,7 @@ test("keeps exact comparison refs and actual upstream counts independent", async
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
-}, 5000);
+}, 30_000);
 
 // Worktree setup and fetch start real Git processes, including a local bare remote.
 test("keeps an unpublished task worktree usable after fetch prunes its tracking ref", async () => {
@@ -152,7 +152,7 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 5000);
+}, 30_000);
 
 // Both Git backends start real processes and stop on a conflicting commit.
 test.each(["--merge", "--apply"] as const)(
@@ -204,5 +204,5 @@ test.each(["--merge", "--apply"] as const)(
       await rm(repo, { recursive: true, force: true });
     }
   },
-  5000,
+  30_000,
 );
