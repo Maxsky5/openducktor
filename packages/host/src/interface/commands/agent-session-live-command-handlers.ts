@@ -11,6 +11,7 @@ import {
   agentSessionControlSendInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
+  agentSessionLiveAttachInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
   agentSessionLiveLoadDiffInputSchema,
@@ -116,6 +117,10 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_workflow_start",
       ).pipe(Effect.flatMap(service.startWorkflowSession)),
+    agent_session_live_attach: (args) =>
+      parseCommandInput(agentSessionLiveAttachInputSchema, args, "agent_session_live_attach").pipe(
+        Effect.flatMap(service.attach),
+      ),
     agent_session_live_refresh: (args) =>
       parseCommandInput(
         agentSessionLiveRefreshInputSchema,

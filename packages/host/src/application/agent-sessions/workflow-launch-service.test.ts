@@ -75,6 +75,7 @@ test.each(["codex", "claude", "opencode"] as const)(
             activity: "running",
             ref: expect.objectContaining({ runtimeKind }),
           }),
+          sequence: expect.any(Number),
         });
         yield* send.open;
         expect((yield* Fiber.join(launch)).status).toBe("completed");

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveSnapshotEnvelope,
+  ExternalTaskSyncEvent,
+  TaskEventCursor,
+} from "@openducktor/contracts";
 import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
@@ -59,7 +63,13 @@ const createElectronApi = () => {
   return {
     electronApi: {
       platform: "darwin",
-      invoke: mock(async () => ({ ok: true as const, value: undefined })),
+      invoke: mock(async (command: string) => ({
+        ok: true as const,
+        value:
+          command === "agent_session_live_attach"
+            ? { type: "snapshot", repoPath: "/repo", sessions: [], sequence: 0 }
+            : undefined,
+      })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
@@ -218,7 +228,7 @@ describe("electron shell bridge", () => {
       expect.any(Function),
       "/repo",
     );
-    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_refresh", {
+    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_attach", {
       repoPath: "/repo",
     });
 
@@ -320,19 +330,32 @@ describe("electron shell bridge", () => {
     await controller.stop();
   });
 
-  test("delivers transcript events received during live-session attachment after its snapshot", async () => {
+  test("delivers changes received during live-session attachment after its snapshot", async () => {
     const { electronApi } = createElectronApi();
+    let resolveAttach: (snapshot: AgentSessionLiveSnapshotEnvelope) => void = () => {};
+    electronApi.invoke = mock(
+      () =>
+        new Promise((resolve) => {
+          resolveAttach = (value) => resolve({ ok: true as const, value });
+        }),
+    );
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
 
-    await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
+    const observing = bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     const subscription = electronApi.subscribe.mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
     )?.[1];
     if (!subscription) {
       throw new Error("Expected live-session subscription.");
     }
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "child-thread",
+    };
     const transcriptEvent = {
       type: "transcript_event",
       event: {
@@ -341,23 +364,29 @@ describe("electron shell bridge", () => {
         messageId: "assistant-1",
         message: "New child output",
         timestamp: "2026-07-17T08:00:00.000Z",
-        sessionRef: {
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "child-thread",
-        },
+        sessionRef,
       },
     };
-    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [] };
+    const coveredRemoval = { type: "session_removed", ref: sessionRef, sequence: 4 };
+    const newerRemoval = { ...coveredRemoval, sequence: 6 };
+    const snapshot: AgentSessionLiveSnapshotEnvelope = {
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+      sequence: 5,
+    };
 
+    subscription(coveredRemoval);
     subscription(transcriptEvent);
+    subscription(newerRemoval);
     expect(listener).not.toHaveBeenCalled();
-    subscription(snapshot);
+    resolveAttach(snapshot);
+    await observing;
 
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       { ...snapshot, isConnectionSnapshot: true },
       transcriptEvent,
+      newerRemoval,
     ]);
   });
 

@@ -35,10 +35,12 @@ import {
   type AgentSessionLiveLoadDiffInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
+  type AgentSessionLiveAttachInput,
   type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type AgentSessionLiveSnapshotEnvelope,
   type AgentWorkflowSessionStartInput,
   type FileDiff,
   acceptedAgentUserMessageSchema,
@@ -57,9 +59,11 @@ import {
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadInputSchema,
   agentSessionLiveReadResultSchema,
+  agentSessionLiveAttachInputSchema,
   agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
+  agentSessionLiveSnapshotEnvelopeSchema,
   agentSessionLiveSnapshotSchema,
   agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
@@ -171,6 +175,16 @@ export class HostAgentSessionLiveClient {
       "agent_session_control_release",
       agentSessionControlReleaseInputSchema.parse(input),
       voidResultSchema,
+    );
+  }
+
+  async agentSessionLiveAttach(
+    input: AgentSessionLiveAttachInput,
+  ): Promise<AgentSessionLiveSnapshotEnvelope> {
+    return this.invokeFn(
+      "agent_session_live_attach",
+      agentSessionLiveAttachInputSchema.parse(input),
+      agentSessionLiveSnapshotEnvelopeSchema,
     );
   }
 

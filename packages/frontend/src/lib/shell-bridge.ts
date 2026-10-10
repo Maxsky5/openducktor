@@ -1,6 +1,6 @@
 import type {
   AgentSessionLiveEnvelope,
-  AgentSessionLiveRefreshInput,
+  AgentSessionLiveAttachInput,
   AppUpdateCommandResult,
   AppUpdateState,
   HostEventPayload,
@@ -57,7 +57,7 @@ export type HostBridge = {
     listener: AzureDevOpsConnectionUpdateListener,
   ) => Promise<() => void>;
   observeAgentSessionLive: (
-    input: AgentSessionLiveRefreshInput,
+    input: AgentSessionLiveAttachInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
   subscribeNotificationStream: (

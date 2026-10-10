@@ -42,13 +42,16 @@ Owns durable record reads, root admission from durable records or explicit start
 
 Rules:
 
-- Attach the host listener before `agentSessionLiveRefresh`.
+- Attach the host listener before `agentSessionLiveAttach`. The host returns the repository snapshot to that caller only.
+- The first attachment of a repository reads its durable roots and runtime sessions once. Later attachments from any browser use the live projection.
 - A live snapshot cannot create a root. A root enters through an OpenDucktor start registration or a durable task or workspace session record.
 - A live event can add a descendant only when its parent already exists in the collection.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
 - The browser uses one tagged SSE channel for all host events. Electron uses its generic host-event IPC message.
-- Ignore replayed changes while a reconnect waits for its new snapshot.
+- Each snapshot carries the host `sequence` of the last state change that it covers. Drop older `snapshot`, `session_upsert`, and `session_removed` envelopes. Deliver an older `task_session_records_updated` without its `liveSession`. Deliver transcript and other changes in stream order.
+- A reconnect with complete replay keeps the collection and the loaded transcripts. A replay gap for the repository or a new host starts a new attachment.
+- A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
 - Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks chat actions, not healthy task sessions.
@@ -62,7 +65,7 @@ Files: `history/session-history-loader.ts`, `history/session-history-load-policy
 
 Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
-A stream gap, connection snapshot, observation failure, or repository switch marks retained history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+A connection snapshot, observation failure, or repository switch marks retained history stale. A connection snapshot comes only from the first attachment or from a replay gap. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
 
 TanStack Query owns native history reads and their cancellation. The session store owns the merge with live messages. A late read cannot replace newer live text or tool results, restore removed responses or answered questions, or drop known tool timing. An unchanged merge keeps the message objects and transcript revision. Failed reads keep an actionable error and wait for a retry.
 
@@ -458,10 +461,10 @@ Rules:
 
 1. Read task IDs from the task store.
 2. Read task and workspace session records through their shared Query keys.
-3. Attach to the generic host-event channel, then request a repository live snapshot. The host reads exact root references from both durable record kinds.
-4. Each runtime adapter reads only registered roots and verified descendants. Apply durable records before and after the live projection, then commit once.
+3. Attach to the generic host-event channel, then request a repository live snapshot. On the first attachment of the repository, the host reads exact root references from both durable record kinds.
+4. On that first attachment, each runtime adapter reads only registered roots and verified descendants. Apply durable records before and after the live projection, then commit once.
 5. Derive rows, activity, pending input, current context usage, and counters from that commit.
-6. Apply ordered changes on the same channel. After browser reconnect, wait for a fresh snapshot before replayed changes.
+6. Apply ordered changes on the same channel. After a browser reconnect, apply the replayed changes. Attach again only after a replay gap or a host change.
 7. Load history or missing context only for the selected session.
 
 Startup is complete when task records and the first host snapshot have produced one committed collection after the workspace record query settles. Workspace record failures remain visible through `workspaceSessionRecordsError`. They do not stop the shared observer or fail task-session startup. History does not block startup.

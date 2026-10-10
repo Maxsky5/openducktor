@@ -339,14 +339,7 @@ describe("applyWorkspaceActivityEnvelope", () => {
     });
     expect(faulted.unavailableReason).toBe("stream closed (during list)");
 
-    const gapped = apply(faulted, {
-      type: "transcript_gap",
-      repoPath,
-      message: "events were dropped",
-    });
-    expect(gapped.unavailableReason).toBe("events were dropped");
-
-    expect(apply(gapped, sessionSnapshot([])).unavailableReason).toBeNull();
+    expect(apply(faulted, sessionSnapshot([])).unavailableReason).toBeNull();
   });
 
   test("keeps a session-scoped fault on its session until the session updates", () => {

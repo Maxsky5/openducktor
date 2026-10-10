@@ -106,7 +106,7 @@ const harness = (
     baseline?: AgentSessionLiveSnapshot[];
     initialRead?: Promise<void>;
     failWorkspace?: string;
-    live?: Pick<AgentSessionLiveStateService, "list" | "refresh">;
+    live?: Pick<AgentSessionLiveStateService, "attach">;
   } = {},
 ) => {
   let saved = config();
@@ -136,13 +136,17 @@ const harness = (
   const listActive = mock(({ repoPath }: { repoPath: string }) =>
     Effect.succeed([association(repoPath)]),
   );
-  const listLive = mock(({ repoPath }: { repoPath: string }) =>
-    Effect.succeed((options.baseline ?? []).filter((entry) => entry.ref.repoPath === repoPath)),
+  const attachLive = mock(({ repoPath }: { repoPath: string }) =>
+    Effect.succeed({
+      type: "snapshot" as const,
+      repoPath,
+      sessions: (options.baseline ?? []).filter((entry) => entry.ref.repoPath === repoPath),
+    }),
   );
   const service = createNotificationService({
     settingsConfig: port,
     tasks: { listTasks, agentSessionsListForTasks: listAssociations },
-    live: options.live ?? { list: listLive, refresh: () => Effect.void },
+    live: options.live ?? { attach: attachLive },
     workspaceSessions: { listActive },
     boundIdentity: (id) => id,
   });
@@ -170,7 +174,7 @@ const harness = (
     listTasks,
     listAssociations,
     listActive,
-    listLive,
+    attachLive,
     config: saved,
   };
 };
@@ -184,7 +188,7 @@ test.each(["close", "shutdown"])(
     const wrapped = withNotificationConfigCommit(h.port, h.service.configCommitted);
     await Effect.runPromise(wrapped.writeConfig(h.config));
     await flush();
-    expect(h.listLive).toHaveBeenCalledTimes(2);
+    expect(h.attachLive).toHaveBeenCalledTimes(2);
 
     const stopped = await Promise.race([
       Effect.runPromise(stop === "close" ? wrapped.writeConfig(closed) : h.service.dispose()).then(
@@ -378,7 +382,7 @@ test("two browsers add no notification baseline reads and share ordered committe
     ]);
     expect(h.port.readConfig).toHaveBeenCalledTimes(1);
     expect(h.listTasks).toHaveBeenCalledTimes(2);
-    expect(h.listLive).toHaveBeenCalledTimes(2);
+    expect(h.attachLive).toHaveBeenCalledTimes(2);
     expect(h.listActive).toHaveBeenCalledTimes(2);
     expect(h.listAssociations).toHaveBeenCalledTimes(2);
   } finally {

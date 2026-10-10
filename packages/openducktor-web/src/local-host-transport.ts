@@ -3,8 +3,9 @@ import {
   notificationStreamFrameSchema,
   notificationStreamSubscribeSchema,
   type NotificationCursor,
+  type AgentSessionLiveAttachInput,
   type AgentSessionLiveEnvelope,
-  type AgentSessionLiveRefreshInput,
+  browserReplayCompleteSchema,
   type HostErrorResponse,
   type HostEventChannel,
   type HostEventEnvelope,
@@ -14,11 +15,11 @@ import {
 } from "@openducktor/contracts";
 import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import type { AzureDevOpsConnectionUpdateListener, RunEventListener } from "@openducktor/frontend";
+import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@openducktor/frontend/lib/browser-live/constants";
 import {
-  BROWSER_LIVE_RECONNECTED_EVENT_KIND,
-  BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-} from "@openducktor/frontend/lib/browser-live/constants";
-import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
+  browserLiveReconnectedEvent,
+  browserLiveStreamWarningEvent,
+} from "@openducktor/frontend/lib/browser-live-control-events";
 import type {
   RuntimeChangeListener,
   TaskStreamFrame,
@@ -50,7 +51,7 @@ import {
 import { hostEventStreamEventName, liveSessionStreamEventName } from "./host-event-stream-name";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
 
-type BrowserSseControlEvent = ReturnType<typeof browserLiveControlEvent>;
+type BrowserSseControlEvent = ReturnType<typeof browserLiveReconnectedEvent>;
 type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
 type BrowserSseListener = (event: BrowserSseEvent) => void;
 type BrowserSseListenerRegistration = {
@@ -58,7 +59,6 @@ type BrowserSseListenerRegistration = {
   eventName: string;
   listener: BrowserSseListener;
   receivesControlEvents: boolean;
-  onReplayGap?: (message: string) => void;
 };
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -73,20 +73,19 @@ const eventSourceDataSchema = z.object({ data: z.string() });
 type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListenerRegistration>;
+  /** Resolves when the first connection finishes its replay. */
   ready: Promise<void>;
-  readTransportEpoch: () => string | null;
   /** The warning of the current connection failure, or null while the stream is connected. */
   readConnectionWarning: () => string | null;
   handleMessage: EventListener;
-  handleOpen: EventListener;
+  handleReplayComplete: EventListener;
   handleError: EventListener;
-  handleStreamWarning: EventListener;
   handleNotification: EventListener;
   notifications: ReturnType<typeof createNotificationFrameRelay>;
 };
 
 type BrowserSseSubscription = {
-  ready: Promise<string>;
+  ready: Promise<void>;
   unsubscribe: () => void;
 };
 type LocalHostRequestErrorInput = {
@@ -101,7 +100,6 @@ const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseCo
 
 let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
-let nextSseTransportEpoch = 0;
 let sessionPromise: Promise<void> | null = null;
 
 const createLocalHostRequestError = (
@@ -288,9 +286,8 @@ const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
     return;
   }
   channel.eventSource.removeEventListener("message", channel.handleMessage);
-  channel.eventSource.removeEventListener("open", channel.handleOpen);
+  channel.eventSource.removeEventListener("replay-complete", channel.handleReplayComplete);
   channel.eventSource.removeEventListener("error", channel.handleError);
-  channel.eventSource.removeEventListener("stream-warning", channel.handleStreamWarning);
   channel.eventSource.removeEventListener("notification-frame", channel.handleNotification);
   channel.eventSource.close();
   if (sseChannel === channel) {
@@ -307,7 +304,6 @@ const getSseChannelEffect = (
 
     if (!channel) {
       const url = new URL(`${baseUrl}/${HOST_EVENT_STREAM_PATH}`);
-      url.searchParams.set("notifications", "1");
       if (notificationCursor)
         url.searchParams.set("notificationCursor", JSON.stringify(notificationCursor));
       const eventSource = yield* Effect.try({
@@ -340,7 +336,6 @@ const getSseChannelEffect = (
       let hasOpened = false;
       let hasReportedConnectionError = false;
       let connectionWarning: string | null = null;
-      let transportEpoch: string | null = null;
       let resolveReady: () => void = () => {};
       const ready = new Promise<void>((resolve) => {
         resolveReady = resolve;
@@ -365,21 +360,35 @@ const getSseChannelEffect = (
           hostEvent,
         );
       };
-      const handleOpen: EventListener = () => {
-        transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
-        nextSseTransportEpoch += 1;
-        // An open after a reported failure is a recovery, also when it is the first open.
+      // The host ends the replay of each connection with the event names it could not replay.
+      const handleReplayComplete: EventListener = (event) => {
+        const replay = browserReplayCompleteSchema.parse(
+          JSON.parse(readEventSourceData(event, "replay-complete")),
+        );
+        // A connection after a reported failure is a recovery, also when it is the first one.
         const recovers = connectionWarning !== null;
         connectionWarning = null;
         hasReportedConnectionError = false;
+        const resumed = hasOpened;
         if (!hasOpened) {
           hasOpened = true;
           resolveReady();
           if (!recovers) return;
         }
+        const gaps = new Set(replay.gaps);
         dispatchBrowserSseListeners(
-          snapshotControlListeners(),
-          browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
+          [...listeners.values()]
+            .filter((registration) => registration.receivesControlEvents)
+            .map(
+              (registration) => () =>
+                registration.listener(
+                  browserLiveReconnectedEvent(
+                    // A first connection has no cursor, so it cannot prove that nothing was missed.
+                    !resumed || replay.hostChanged || gaps.has(registration.eventName),
+                  ),
+                ),
+            ),
+          undefined,
         );
       };
       const handleError: EventListener = () => {
@@ -394,10 +403,7 @@ const getSseChannelEffect = (
         }
         if (hasOpened) {
           connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`;
-          const warningPayload = browserLiveControlEvent(
-            BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-            connectionWarning,
-          );
+          const warningPayload = browserLiveStreamWarningEvent(connectionWarning);
           try {
             dispatchBrowserSseListeners(snapshotControlListeners(), warningPayload);
           } finally {
@@ -408,42 +414,22 @@ const getSseChannelEffect = (
         connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`;
         dispatchBrowserSseListeners(
           snapshotControlListeners(),
-          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, connectionWarning),
+          browserLiveStreamWarningEvent(connectionWarning),
         );
         hasReportedConnectionError = true;
       };
-      const handleStreamWarning: EventListener = (event) => {
-        const warning = readEventSourceData(event, "stream-warning");
-        const warningPayload = browserLiveControlEvent(
-          BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-          warning,
-        );
-        const replayGapListeners = [...listeners.values()].flatMap((registration) =>
-          registration.onReplayGap ? [registration.onReplayGap] : [],
-        );
-        const controlListeners = [...listeners.values()]
-          .filter((registration) => registration.receivesControlEvents)
-          .map((registration) => (_message: string): void => {
-            registration.listener(warningPayload);
-          });
-        dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], warning);
-      };
-
       eventSource.addEventListener("notification-frame", handleNotification);
       eventSource.addEventListener("message", handleMessage);
-      eventSource.addEventListener("open", handleOpen);
+      eventSource.addEventListener("replay-complete", handleReplayComplete);
       eventSource.addEventListener("error", handleError);
-      eventSource.addEventListener("stream-warning", handleStreamWarning);
       channel = {
         eventSource,
         listeners,
         ready,
-        readTransportEpoch: () => transportEpoch,
         readConnectionWarning: () => connectionWarning,
         handleMessage,
-        handleOpen,
+        handleReplayComplete,
         handleError,
-        handleStreamWarning,
         handleNotification,
         notifications,
       };
@@ -457,7 +443,6 @@ const subscribeSseChannelEffect = (
   eventChannel: HostEventChannel,
   listener: BrowserSseListener,
   receivesControlEvents = false,
-  onReplayGap?: (message: string) => void,
   eventName = "message",
 ): Effect.Effect<BrowserSseSubscription, WebError> =>
   Effect.gen(function* () {
@@ -470,9 +455,6 @@ const subscribeSseChannelEffect = (
       listener,
       receivesControlEvents,
     };
-    if (onReplayGap) {
-      registration.onReplayGap = onReplayGap;
-    }
     if (
       eventName !== "message" &&
       ![...channel.listeners.values()].some((entry) => entry.eventName === eventName)
@@ -482,15 +464,6 @@ const subscribeSseChannelEffect = (
     channel.listeners.set(listenerId, registration);
     const activeChannel = channel;
     const subscriptionReady = activeChannel.ready.then(() => {
-      const transportEpoch = activeChannel.readTransportEpoch();
-      if (transportEpoch === null) {
-        throw new WebDependencyError({
-          dependency: "event-source",
-          operation: "read-transport-epoch",
-          message: `EventSource ${HOST_EVENT_STREAM_PATH} opened without a transport epoch.`,
-          details: { path: HOST_EVENT_STREAM_PATH },
-        });
-      }
       // The first open does not prove the stream is connected now. A control subscriber that
       // joins during a connection failure gets that failure before its subscription is ready.
       const connectionWarning = activeChannel.readConnectionWarning();
@@ -501,10 +474,9 @@ const subscribeSseChannelEffect = (
       ) {
         dispatchBrowserSseListeners(
           [registration.listener],
-          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, connectionWarning),
+          browserLiveStreamWarningEvent(connectionWarning),
         );
       }
-      return transportEpoch;
     });
     void subscriptionReady.catch(() => {});
 
@@ -576,18 +548,11 @@ export const subscribeLocalHostWorkspaceProviderSetupUpdates = async (
 const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,
   listener: BrowserSseListener,
-  onReplayGap?: (message: string) => void,
   eventName = "message",
 ): Effect.Effect<() => void, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
-    const subscription = yield* subscribeSseChannelEffect(
-      channel,
-      listener,
-      true,
-      onReplayGap,
-      eventName,
-    );
+    const subscription = yield* subscribeSseChannelEffect(channel, listener, true, eventName);
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
@@ -665,40 +630,45 @@ export const subscribeLocalHostRuntimeChanges = async (
 };
 
 export const observeLocalHostAgentSessions = async (
-  input: AgentSessionLiveRefreshInput,
+  input: AgentSessionLiveAttachInput,
   listener: (envelope: AgentSessionLiveEnvelope) => void,
 ): Promise<() => void> => {
   return runWebBoundary(
     Effect.gen(function* () {
       const client = createLocalHostClient();
       let closed = false;
-      let refreshTail = Promise.resolve();
+      // Each attach request takes a new generation. Only the latest one can install its snapshot.
+      let attachGeneration = 0;
+      const nextAttachGeneration = (): number => {
+        attachGeneration += 1;
+        return attachGeneration;
+      };
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
-      const refresh = (): void => {
+      const attach = async (generation: number): Promise<void> => {
+        const snapshot = await client.agentSessionLiveAttach(input);
+        if (!closed && generation === attachGeneration) attachment.install(snapshot);
+      };
+      // A complete replay keeps the current state. Missed events need a new host snapshot.
+      const reattach = (): void => {
+        const generation = nextAttachGeneration();
         attachment.restart();
-        refreshTail = refreshTail
-          .then(async () => {
-            if (!closed) {
-              await client.agentSessionLiveRefresh(input);
-            }
-          })
-          .catch((cause: unknown) => {
-            if (!closed) {
-              listener({
-                type: "fault",
-                repoPath: input.repoPath,
-                operation: "agent-session-live.refresh",
-                message: errorMessage(cause),
-              } satisfies AgentSessionLiveEnvelope);
-            }
-          });
+        attach(generation).catch((cause: unknown) => {
+          if (!closed && generation === attachGeneration) {
+            listener({
+              type: "fault",
+              repoPath: input.repoPath,
+              operation: "agent-session-live.attach",
+              message: errorMessage(cause),
+            } satisfies AgentSessionLiveEnvelope);
+          }
+        });
       };
       const unsubscribe = yield* subscribeReadyLocalHostEventsEffect(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
           if (isBrowserSseControlEvent(event)) {
-            if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-              refresh();
+            if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND && event.missedEvents) {
+              reattach();
             }
             return;
           }
@@ -706,28 +676,26 @@ export const observeLocalHostAgentSessions = async (
             attachment.accept(event.payload);
           }
         },
-        (message) => {
-          listener({ type: "transcript_gap", repoPath: input.repoPath, message });
-        },
         liveSessionStreamEventName(input.repoPath),
       );
-      const initialRefreshExit = yield* Effect.exit(
+      const initialAttachExit = yield* Effect.exit(
         Effect.tryPromise({
-          try: () => client.agentSessionLiveRefresh(input),
+          // A recovery before the first open can already have started a newer request.
+          try: () => attach(nextAttachGeneration()),
           catch: (cause) =>
             isWebError(cause)
               ? cause
               : new WebDependencyError({
                   dependency: "local-web-host",
-                  operation: "agent-session-live.refresh",
+                  operation: "agent-session-live.attach",
                   message: errorMessage(cause),
                   cause,
                 }),
         }),
       );
-      if (initialRefreshExit._tag === "Failure") {
+      if (initialAttachExit._tag === "Failure") {
         unsubscribe();
-        return yield* causeToWebBoundaryError(initialRefreshExit.cause);
+        return yield* causeToWebBoundaryError(initialAttachExit.cause);
       }
       return () => {
         closed = true;

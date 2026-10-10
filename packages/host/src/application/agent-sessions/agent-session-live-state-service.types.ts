@@ -10,6 +10,7 @@ import type {
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionControlUpdateTitleInput,
+  AgentSessionLiveAttachInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveListInput,
   AgentSessionLiveLoadContextInput,
@@ -22,6 +23,7 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
+  AgentSessionLiveSnapshotEnvelope,
   FileDiff,
   TaskAgentSessions,
 } from "@openducktor/contracts";
@@ -63,6 +65,14 @@ export type AgentSessionLiveStateService = {
     ref: AgentSessionLiveRef,
     held: boolean,
   ) => Effect.Effect<void, HostError>;
+  /**
+   * Returns the current repository snapshot to the caller only. The first call for a repository
+   * reads its durable roots and runtime sessions once. Later calls reuse the live projection.
+   */
+  readonly attach: (
+    input: AgentSessionLiveAttachInput,
+  ) => Effect.Effect<AgentSessionLiveSnapshotEnvelope, HostError>;
+  /** Rereads durable roots and runtime sessions, then publishes a snapshot to every observer. */
   readonly refresh: (input: AgentSessionLiveRefreshInput) => Effect.Effect<void, HostError>;
   readonly list: (
     input: AgentSessionLiveListInput,

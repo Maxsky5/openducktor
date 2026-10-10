@@ -56,9 +56,7 @@ import {
 
 import {
   allowedOriginsForFrontendOrigin,
-  type BufferedHostEvent,
   BufferedHostEventBus,
-  type BufferedHostEventStream,
   stopTypescriptHostBackendServices,
   validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
@@ -426,80 +424,6 @@ const validateAppCookieOrHeader = (
     "Invalid OpenDucktor web host app token.",
   );
 
-const writeSseEvent = (event: BufferedHostEvent): string =>
-  [
-    `id: ${event.id}`,
-    `event: ${event.eventName}`,
-    ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`),
-    "",
-    "",
-  ].join("\n");
-const writeSseNamedEvent = (eventName: string, data: string): string =>
-  [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
-const SSE_READY_COMMENT = ": openducktor-ready\n\n";
-
-const skippedReplayWarningMessage = (skippedEventCount: number): string => {
-  const eventLabel = skippedEventCount === 1 ? "event" : "events";
-  return `Host event stream skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
-};
-
-const createSseResponse = (
-  stream: BufferedHostEventStream,
-  lastEventId: number | null,
-  corsHeaders: HeadersInit,
-  reportDeliveryFailure: (cause: unknown) => void,
-): Response => {
-  const encoder = new TextEncoder();
-  let unsubscribe: (() => void) | null = null;
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const enqueue = (payload: string): boolean => {
-        try {
-          controller.enqueue(encoder.encode(payload));
-          return true;
-        } catch (cause) {
-          reportDeliveryFailure(cause);
-          return false;
-        }
-      };
-      if (!enqueue(SSE_READY_COMMENT)) return;
-      const replay = stream.replayAfterWithDiagnostics(lastEventId);
-      if (
-        replay.skippedEventCount > 0 &&
-        !enqueue(
-          writeSseNamedEvent(
-            "stream-warning",
-            skippedReplayWarningMessage(replay.skippedEventCount),
-          ),
-        )
-      ) {
-        return;
-      }
-      for (const event of replay.events) {
-        if (!enqueue(writeSseEvent(event))) return;
-      }
-      unsubscribe = stream.subscribe((event) => {
-        if (!enqueue(writeSseEvent(event))) {
-          unsubscribe?.();
-          unsubscribe = null;
-        }
-      });
-    },
-    cancel() {
-      unsubscribe?.();
-    },
-  });
-
-  return new Response(body, {
-    headers: {
-      ...corsHeaders,
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-      "content-type": "text/event-stream; charset=utf-8",
-    },
-  });
-};
-
 const isWithinDirectory = (directory: string, candidate: string): boolean => {
   const relative = path.relative(directory, candidate);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -548,19 +472,6 @@ const parseJsonObjectBody = (
       return yield* rejectWebHostRequest("Command request body must be a JSON object.", 400);
     }
     return body.data;
-  });
-
-const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>
-  Effect.gen(function* () {
-    const raw = request.headers.get(LAST_EVENT_ID_HEADER);
-    if (raw === null) {
-      return null;
-    }
-    const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed < 0) {
-      return yield* rejectWebHostRequest(`Invalid Last-Event-ID header: ${raw}`, 400);
-    }
-    return parsed;
   });
 
 const statLocalAttachmentPreview = (
@@ -748,31 +659,22 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
-      if (requestUrl.searchParams.get("notifications") === "1") {
-        if (!notificationStream)
-          return yield* rejectWebHostRequest(
-            "Notification stream is unavailable. Restart the host.",
-            503,
-          );
-        return yield* createCombinedHostSseResponse(
-          request,
-          eventBus.stream(),
-          notificationStream,
-          corsHeaders,
-          (cause) =>
-            scheduleNonFatalWebEventFailure(
-              logger,
-              "Failed to enqueue a combined host event.",
-              cause,
-            ),
+      if (!notificationStream)
+        return yield* rejectWebHostRequest(
+          "Notification stream is unavailable. Restart the host.",
+          503,
         );
-      }
-      return createSseResponse(
+      return yield* createCombinedHostSseResponse(
+        request,
         eventBus.stream(),
-        yield* parseLastEventId(request),
+        notificationStream,
         corsHeaders,
         (cause) =>
-          scheduleNonFatalWebEventFailure(logger, "Failed to enqueue an SSE host event.", cause),
+          scheduleNonFatalWebEventFailure(
+            logger,
+            "Failed to enqueue a combined host event.",
+            cause,
+          ),
       );
     }
 

@@ -25,10 +25,12 @@ export type BufferedHostEvent = {
   id: number;
   payload: string;
   eventName: string;
+  bytes: number;
 };
 export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
-  skippedEventCount: number;
+  /** SSE event names whose missed events are no longer retained. */
+  gaps: string[];
 };
 export type BufferedHostEventDeliveryReporter = {
   report(failure: { channel: HostEventChannel; cause: unknown }): void;
@@ -40,14 +42,33 @@ type StopTypescriptHostBackendServicesInput = {
   stopServer: () => void | Promise<void>;
 };
 
-const EVENT_BUFFER_CAPACITY = 256;
+type ReplayBuffer = {
+  events: BufferedHostEvent[];
+  bytes: number;
+  evictedThroughId: number;
+};
+export type ReplayLimits = { events: number; bytes: number; totalBytes: number };
 
+const DEFAULT_REPLAY_LIMITS: ReplayLimits = {
+  events: 4096,
+  bytes: 2 * 1024 * 1024,
+  totalBytes: 16 * 1024 * 1024,
+};
+
+/**
+ * Retains recent host events for SSE reconnects. Each SSE event name has its own buffer, so a busy
+ * repository or channel cannot evict the events of another one until all buffers reach
+ * `totalBytes`.
+ */
 export class BufferedHostEventStream {
+  /** Event IDs are valid only for this host process. */
+  readonly hostEpoch = crypto.randomUUID();
   private nextId = 0;
-  private readonly recent: BufferedHostEvent[] = [];
+  private totalBytes = 0;
+  private readonly buffers = new Map<string, ReplayBuffer>();
   private readonly listeners = new Set<(event: BufferedHostEvent) => void>();
 
-  constructor(private readonly capacity: number) {}
+  constructor(private readonly limits: ReplayLimits = DEFAULT_REPLAY_LIMITS) {}
 
   currentEventId(): number {
     return this.nextId;
@@ -55,15 +76,14 @@ export class BufferedHostEventStream {
 
   emit(envelope: HostEventEnvelope, reportDeliveryFailure: (cause: unknown) => void): void {
     this.nextId += 1;
+    const payload = JSON.stringify(envelope);
     const event = {
       id: this.nextId,
-      payload: JSON.stringify(envelope),
+      payload,
       eventName: hostEventStreamEventName(envelope),
+      bytes: Buffer.byteLength(payload),
     };
-    this.recent.push(event);
-    if (this.recent.length > this.capacity) {
-      this.recent.shift();
-    }
+    this.retain(event);
     // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...this.listeners]) {
       try {
@@ -74,28 +94,18 @@ export class BufferedHostEventStream {
     }
   }
 
-  replayAfter(lastSeenId: number | null): BufferedHostEvent[] {
-    if (lastSeenId === null) {
-      return [];
+  /** Returns the retained events after `lastSeenId` in publication order. */
+  replayAfter(lastSeenId: number): BufferedHostEventReplay {
+    const events: BufferedHostEvent[] = [];
+    const gaps: string[] = [];
+    for (const [eventName, buffer] of this.buffers) {
+      if (buffer.evictedThroughId > lastSeenId) gaps.push(eventName);
+      for (const event of buffer.events) {
+        if (event.id > lastSeenId) events.push(event);
+      }
     }
-    return this.recent.filter((event) => event.id > lastSeenId);
-  }
-
-  replayAfterWithDiagnostics(lastSeenId: number | null): BufferedHostEventReplay {
-    const events = this.replayAfter(lastSeenId);
-    if (lastSeenId === null) {
-      return { events, skippedEventCount: 0 };
-    }
-
-    const firstAvailableEventId = this.recent[0]?.id ?? null;
-    if (firstAvailableEventId === null || lastSeenId >= firstAvailableEventId - 1) {
-      return { events, skippedEventCount: 0 };
-    }
-
-    return {
-      events,
-      skippedEventCount: firstAvailableEventId - lastSeenId - 1,
-    };
+    events.sort((left, right) => left.id - right.id);
+    return { events, gaps };
   }
 
   subscribe(listener: (event: BufferedHostEvent) => void): HostEventUnsubscribe {
@@ -104,10 +114,44 @@ export class BufferedHostEventStream {
       this.listeners.delete(listener);
     };
   }
+
+  private retain(event: BufferedHostEvent): void {
+    let buffer = this.buffers.get(event.eventName);
+    if (!buffer) {
+      buffer = { events: [], bytes: 0, evictedThroughId: 0 };
+      this.buffers.set(event.eventName, buffer);
+    }
+    buffer.events.push(event);
+    buffer.bytes += event.bytes;
+    this.totalBytes += event.bytes;
+    while (buffer.events.length > this.limits.events || buffer.bytes > this.limits.bytes) {
+      this.evictFirst(buffer);
+    }
+    // The total limit evicts the oldest retained event of any event name.
+    while (this.totalBytes > this.limits.totalBytes) {
+      let oldest: ReplayBuffer | null = null;
+      for (const candidate of this.buffers.values()) {
+        const firstId = candidate.events[0]?.id;
+        if (firstId !== undefined && firstId < (oldest?.events[0]?.id ?? Infinity)) {
+          oldest = candidate;
+        }
+      }
+      if (!oldest) break;
+      this.evictFirst(oldest);
+    }
+  }
+
+  private evictFirst(buffer: ReplayBuffer): void {
+    const evicted = buffer.events.shift();
+    if (!evicted) return;
+    buffer.bytes -= evicted.bytes;
+    this.totalBytes -= evicted.bytes;
+    buffer.evictedThroughId = evicted.id;
+  }
 }
 
 export class BufferedHostEventBus implements HostEventBusPort {
-  private readonly eventStream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
+  private readonly eventStream = new BufferedHostEventStream();
   private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   constructor(private readonly deliveryReporter: BufferedHostEventDeliveryReporter) {}

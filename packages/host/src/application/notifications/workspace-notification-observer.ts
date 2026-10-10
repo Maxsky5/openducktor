@@ -48,7 +48,7 @@ export const createWorkspaceNotificationObserver = ({
 }: {
   record: WorkspaceRecord;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
-  live: Pick<AgentSessionLiveStateService, "list" | "refresh">;
+  live: Pick<AgentSessionLiveStateService, "attach">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
   select(occurrence: NotificationOccurrence): Effect.Effect<void, HostOperationError>;
   failure(scope: string, source: "initialization" | "task" | "session", cause: unknown): void;
@@ -199,11 +199,9 @@ export const createWorkspaceNotificationObserver = ({
         if (!state.active) return;
         for (const session of sessions) setWorkspaceSession(session);
         // Observe the workspace so the shared runtime restores its saved sessions when it starts.
-        yield* live.refresh({ repoPath: state.record.repoPath });
+        const snapshot = yield* live.attach({ repoPath: state.record.repoPath });
         if (!state.active) return;
-        const snapshots = yield* live.list({ repoPath: state.record.repoPath });
-        if (!state.active) return;
-        for (const session of snapshots) {
+        for (const session of snapshot.sessions) {
           // Captured live inputs, including removals, take precedence over read-derived state.
           if (!state.liveKeys.has(agentSessionRefKey(session.ref))) {
             yield* publish(state.projector.accept({ type: "session_upsert", session }, "baseline"));

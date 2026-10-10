@@ -153,32 +153,48 @@ export const agentSessionLiveScopeSchema = z
   .strict();
 export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
+/**
+ * The host numbers live state changes in publication order. A snapshot with sequence N covers
+ * every `snapshot`, `session_upsert`, and `session_removed` envelope and every
+ * `task_session_records_updated` `liveSession` up to N.
+ */
+const liveStateSequenceSchema = z.number().int().nonnegative();
+
+export const agentSessionLiveSnapshotEnvelopeSchema = z
+  .object({
+    type: z.literal("snapshot"),
+    repoPath: nonEmptyStringSchema,
+    sessions: z.array(agentSessionLiveSnapshotSchema),
+    isConnectionSnapshot: z.boolean().optional(),
+    sequence: liveStateSequenceSchema.optional(),
+  })
+  .strict();
+export type AgentSessionLiveSnapshotEnvelope = z.infer<
+  typeof agentSessionLiveSnapshotEnvelopeSchema
+>;
+
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
   taskAgentSessionsSchema
     .extend({
       type: z.literal("task_session_records_updated"),
       repoPath: nonEmptyStringSchema,
       liveSession: agentSessionLiveSnapshotSchema.optional(),
+      sequence: liveStateSequenceSchema.optional(),
     })
     .strict(),
-  z
-    .object({
-      type: z.literal("snapshot"),
-      repoPath: nonEmptyStringSchema,
-      sessions: z.array(agentSessionLiveSnapshotSchema),
-      isConnectionSnapshot: z.boolean().optional(),
-    })
-    .strict(),
+  agentSessionLiveSnapshotEnvelopeSchema,
   z
     .object({
       type: z.literal("session_upsert"),
       session: agentSessionLiveSnapshotSchema,
+      sequence: liveStateSequenceSchema.optional(),
     })
     .strict(),
   z
     .object({
       type: z.literal("session_removed"),
       ref: agentSessionLiveRefSchema,
+      sequence: liveStateSequenceSchema.optional(),
     })
     .strict(),
   z
@@ -204,13 +220,6 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
-      type: z.literal("transcript_gap"),
-      repoPath: nonEmptyStringSchema,
-      message: nonEmptyStringSchema,
-    })
-    .strict(),
-  z
-    .object({
       type: z.literal("fault"),
       repoPath: nonEmptyStringSchema,
       message: nonEmptyStringSchema,
@@ -226,6 +235,20 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
 ]);
 export type AgentSessionLiveEnvelope = z.infer<typeof agentSessionLiveEnvelopeSchema>;
 
+export type AgentSessionLiveStateEnvelope = Extract<
+  AgentSessionLiveEnvelope,
+  { type: "snapshot" | "session_upsert" | "session_removed" | "task_session_records_updated" }
+>;
+
+/** Reports whether the envelope carries live state that a later snapshot covers. */
+export const isAgentSessionLiveStateEnvelope = (
+  envelope: AgentSessionLiveEnvelope,
+): envelope is AgentSessionLiveStateEnvelope =>
+  envelope.type === "snapshot" ||
+  envelope.type === "session_upsert" ||
+  envelope.type === "session_removed" ||
+  envelope.type === "task_session_records_updated";
+
 export const agentSessionLiveListInputSchema = z
   .object({
     repoPath: nonEmptyStringSchema,
@@ -237,6 +260,11 @@ export const agentSessionLiveRefreshInputSchema = z
   .object({ repoPath: nonEmptyStringSchema })
   .strict();
 export type AgentSessionLiveRefreshInput = z.infer<typeof agentSessionLiveRefreshInputSchema>;
+
+export const agentSessionLiveAttachInputSchema = z
+  .object({ repoPath: nonEmptyStringSchema })
+  .strict();
+export type AgentSessionLiveAttachInput = z.infer<typeof agentSessionLiveAttachInputSchema>;
 
 export const agentSessionLiveReadInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInputSchema>;

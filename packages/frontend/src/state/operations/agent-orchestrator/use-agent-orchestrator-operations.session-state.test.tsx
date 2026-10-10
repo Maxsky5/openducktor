@@ -756,7 +756,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("a transcript gap leaves hidden sessions stale and discards an older read", async () => {
+  test("a reconnect snapshot leaves hidden sessions stale and discards an older read", async () => {
     const secondRecord = {
       ...persistedSessionFixture,
       externalSessionId: "external-2",
@@ -779,12 +779,13 @@ describe("use-agent-orchestrator-operations session state", () => {
       if (historyReads.length === 3) return oldRead.promise;
       return history(historyReads.length === 4 ? "Fresh answer" : "Baseline");
     };
-    const liveStream = createLiveSessionStreamFixture([
+    const liveSnapshots = [
       createAgentSessionLiveSnapshotFixture(),
       createAgentSessionLiveSnapshotFixture({
         ref: { externalSessionId: secondRecord.externalSessionId },
       }),
-    ]);
+    ];
+    const liveStream = createLiveSessionStreamFixture(liveSnapshots);
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
@@ -807,11 +808,13 @@ describe("use-agent-orchestrator-operations session state", () => {
           await harness.getLatest().operations.loadAgentSessionHistory(identity);
       });
       const baselines = listHarnessSessions(harness.getLatest()).map((session) => session.messages);
+      // The transport installs a new connection snapshot after missed events.
       const emitGap = () =>
         liveStream.emit({
-          type: "transcript_gap",
+          type: "snapshot",
           repoPath: "/tmp/repo",
-          message: "Missed transcript events",
+          sessions: liveSnapshots,
+          isConnectionSnapshot: true,
         });
       await harness.run(emitGap);
       expect(historyReads).toEqual(["external-1", "external-2"]);

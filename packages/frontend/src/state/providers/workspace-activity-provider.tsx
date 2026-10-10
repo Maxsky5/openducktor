@@ -3,7 +3,7 @@ import { type PropsWithChildren, type ReactElement, useEffect, useMemo } from "r
 import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
 import { hostBridge } from "@/lib/host-client";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
-import { updateAgentSessionListQuery } from "@/state/queries/agent-sessions";
+import { createAgentSessionListLiveSync } from "@/state/queries/agent-sessions";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import { createWorkspaceArchivedSessionsPort } from "../workspace-activity/archived-sessions-port";
@@ -26,13 +26,13 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
   const observer = useMemo(
     () =>
       createWorkspaceActivityObserver({
-        observe: (input, listener) =>
-          hostBridge.observeAgentSessionLive(input, (envelope) => {
-            if (envelope.type === "task_session_records_updated") {
-              updateAgentSessionListQuery(queryClient, envelope.repoPath, envelope);
-            }
+        observe: (input, listener) => {
+          const syncLists = createAgentSessionListLiveSync(queryClient);
+          return hostBridge.observeAgentSessionLive(input, (envelope) => {
+            syncLists(envelope);
             listener(envelope);
-          }),
+          });
+        },
         archivedSessions,
       }),
     [archivedSessions, queryClient],

@@ -253,7 +253,7 @@ Resume keeps the current running turn, approval, or question until a newer nativ
 
 The persistence observer does not call the runtime inside the publication or lock scopes. A runtime-visible follow-up, such as a session rename, runs after those scopes release.
 
-Renderer attachment is atomic. Its first envelope has the current snapshot. Later changes use the same ordered channel. Separate snapshot and subscribe calls have a race.
+Renderer attachment subscribes to the ordered channel first, then reads the repository snapshot with `agent_session_live_attach`. The snapshot carries the host sequence of the last state change that it covers. The attachment drops older state changes and delivers the other changes in stream order.
 
 Map native completion, stream end, runtime failure, stop, and release as different events. Final release removes the session tree and rejects unresolved requests.
 

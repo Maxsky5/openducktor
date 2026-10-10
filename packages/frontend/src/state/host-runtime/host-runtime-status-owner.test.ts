@@ -163,7 +163,7 @@ describe("createHostRuntimeStatusOwner", () => {
       hasBaseline: false,
     });
 
-    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "e:1" });
+    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
     expect(harness.owner.getConnection().streamError).toBeNull();
     await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
     harness.lastBaseline().resolve(snapshot("host-1", []));
@@ -191,7 +191,7 @@ describe("createHostRuntimeStatusOwner", () => {
       kind: "stream-warning",
       message: "Connection lost.",
     });
-    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "e:1" });
+    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
     await waitFor(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(3));
     await refresh;
 
@@ -248,7 +248,7 @@ describe("createHostRuntimeStatusOwner", () => {
       ports: {
         subscribeRuntimeChanges: async (listener) => {
           listener({ __openducktorBrowserLive: true, kind: "stream-warning", message: "Lost." });
-          listener({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "e:0" });
+          listener({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
           return () => {};
         },
         runtimeStatus: async () => snapshot("host-1", []),
@@ -561,7 +561,7 @@ describe("createHostRuntimeStatusOwner", () => {
       status: createHostRuntimeStatusFixture({ kind: "opencode", revision: 2 }),
     });
     harness.emit({ __openducktorBrowserLive: true, kind: "stream-warning", message: "Lost." });
-    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "e:1" });
+    harness.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
     unsubscribe();
     harness.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
 

@@ -36,7 +36,7 @@ export const createNotificationService = ({
 }: {
   settingsConfig: SettingsConfigPort;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
-  live: Pick<AgentSessionLiveStateService, "list" | "refresh">;
+  live: Pick<AgentSessionLiveStateService, "attach">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
   boundIdentity(identity: string): string;
 }) => {

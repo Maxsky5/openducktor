@@ -1,6 +1,6 @@
 import type {
   AgentSessionLiveEnvelope,
-  AgentSessionLiveRefreshInput,
+  AgentSessionLiveAttachInput,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -18,7 +18,7 @@ export type AgentOrchestratorLiveSessionHostPort = {
   agentSessionLiveReplyApproval: typeof host.agentSessionLiveReplyApproval;
   agentSessionLiveReplyQuestion: typeof host.agentSessionLiveReplyQuestion;
   observeAgentSessionLive: (
-    input: AgentSessionLiveRefreshInput,
+    input: AgentSessionLiveAttachInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
 };

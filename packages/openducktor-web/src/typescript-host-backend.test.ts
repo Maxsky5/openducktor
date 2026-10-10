@@ -18,6 +18,7 @@ import { Stream, Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { HostOperationError } from "../../host/src/effect/host-errors";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
+import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
@@ -99,6 +100,20 @@ const readImmediateStreamChunk = async (
   }
 
   return result;
+};
+
+// Reads SSE frames until one contains the expected text.
+const readStreamUntil = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  expected: string,
+): Promise<string> => {
+  let text = "";
+  while (!text.includes(expected)) {
+    const chunk = await reader.read();
+    if (chunk.done) throw new Error(`The SSE response ended before '${expected}'.`);
+    text += new TextDecoder().decode(chunk.value);
+  }
+  return text;
 };
 
 const createTestHostCommandRouter = (
@@ -241,6 +256,7 @@ const handleTestRequest = (
     controlToken: options.controlToken ?? CONTROL_TOKEN,
     eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
     hostCommandRouter,
+    notificationStream: createNotificationStream(),
     taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
     localAttachments: createLocalAttachmentAdapter(),
     logger: testLogger,
@@ -1174,11 +1190,16 @@ describe("TypeScript web host backend", () => {
       eventBus.publish(event);
     }
 
+    const cursor = {
+      hostEpoch: eventBus.stream().hostEpoch,
+      hostEventId: 0,
+      notificationCursor: null,
+    };
     const response = await handleTestRequest(
       new Request("http://127.0.0.1/events", {
         method: "GET",
         headers: {
-          "last-event-id": "0",
+          "last-event-id": JSON.stringify(cursor),
           "x-openducktor-app-token": APP_TOKEN,
         },
       }),
@@ -1194,14 +1215,11 @@ describe("TypeScript web host backend", () => {
       expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
         ": openducktor-ready\n\n",
       );
-      let replay = "";
-      for (const _event of events) {
-        replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
-      }
+      const replay = await readStreamUntil(reader, "event: replay-complete");
       for (const event of events) {
         expect(replay).toContain(JSON.stringify(event));
       }
-      expect(replay).toContain(`id: 2\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `);
+      expect(replay).toContain(`event: ${liveSessionStreamEventName("/repo")}\ndata: `);
       eventBus.publish({
         channel: "openducktor://agent-session-live-event",
         payload: {
@@ -1210,8 +1228,7 @@ describe("TypeScript web host backend", () => {
           sessions: [],
         },
       });
-      const next = new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
-      expect(next).toContain(`id: 3\nevent: ${liveSessionStreamEventName("/other")}\ndata: `);
+      await readStreamUntil(reader, `event: ${liveSessionStreamEventName("/other")}\ndata: `);
     } finally {
       await reader.cancel();
     }
@@ -1243,52 +1260,7 @@ describe("TypeScript web host backend", () => {
       payload: { type: "run" },
     });
     expect(reported).toEqual([failure]);
-    expect(eventBus.stream().replayAfter(0)).toHaveLength(1);
-  });
-
-  test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
-    const eventBus = new BufferedHostEventBus({ report: () => {} });
-    for (let index = 0; index < 258; index += 1) {
-      eventBus.publish({
-        channel: "openducktor://run-event",
-        payload: { type: "run", sequence: index },
-      });
-    }
-
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/events", {
-        method: "GET",
-        headers: {
-          "last-event-id": "1",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-      }),
-      { eventBus },
-    );
-
-    expect(response.status).toBe(200);
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Expected SSE response body.");
-    }
-    try {
-      const readyChunk = await readImmediateStreamChunk(reader);
-      expect(readyChunk.done).toBe(false);
-      expect(new TextDecoder().decode(readyChunk.value)).toBe(": openducktor-ready\n\n");
-
-      const warningChunk = await readImmediateStreamChunk(reader);
-      expect(warningChunk.done).toBe(false);
-      expect(new TextDecoder().decode(warningChunk.value)).toBe(
-        "event: stream-warning\n" +
-          "data: Host event stream skipped 1 event; reconnect will replay buffered events.\n\n",
-      );
-
-      const replayChunk = await readImmediateStreamChunk(reader);
-      expect(replayChunk.done).toBe(false);
-      expect(new TextDecoder().decode(replayChunk.value)).toContain('"sequence":2');
-    } finally {
-      await reader.cancel();
-    }
+    expect(eventBus.stream().replayAfter(0).events).toHaveLength(1);
   });
 
   test("rejects malformed invoke command URI components as typed host request errors", async () => {
@@ -1663,6 +1635,7 @@ describe("TypeScript web host backend", () => {
             controlToken: CONTROL_TOKEN,
             eventBus,
             hostCommandRouter: createTestHostCommandRouter(),
+            notificationStream: createNotificationStream(),
             taskAssetReadService: missingTaskAssetReadService,
             localAttachments: createLocalAttachmentAdapter(),
             logger: testLogger,
@@ -1688,7 +1661,7 @@ describe("TypeScript web host backend", () => {
       if (!reader) {
         throw new Error("Expected SSE response body.");
       }
-      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
+      expect(await readStreamUntil(reader, "event: replay-complete")).toStartWith(
         ": openducktor-ready\n\n",
       );
 
@@ -1698,7 +1671,7 @@ describe("TypeScript web host backend", () => {
         channel: "openducktor://run-event",
         payload: { type: "run" },
       });
-      expect(new TextDecoder().decode((await reader.read()).value)).toContain('"type":"run"');
+      await readStreamUntil(reader, '"type":"run"');
 
       disposeReleased.resolve();
       await shutdown;
