@@ -96,6 +96,32 @@ describe("buildSessionStartModalDecision", () => {
     });
   });
 
+  test.each([
+    {
+      startMode: "fresh",
+      speed: "fast",
+      expected: { selectedModel: { ...SELECTED_MODEL, speed: "fast" } },
+    },
+    { startMode: "fork", speed: undefined, expected: { selectedModel: SELECTED_MODEL } },
+    { startMode: "reuse", speed: "standard", expected: { speed: null } },
+    { startMode: "reuse", speed: undefined, expected: {} },
+  ] as const)("applies the $startMode start speed $speed", ({ startMode, speed, expected }) => {
+    const input: Parameters<typeof buildSessionStartModalDecision>[0]["input"] = {
+      startMode,
+      sourceSessionOptionValue: startMode === "fresh" ? null : "session-1",
+    };
+    if (speed) input.speed = speed;
+    const decision = buildSessionStartModalDecision({
+      input,
+      existingSessionOptions: [sourceOption("session-1")],
+      requestContext: REQUEST_CONTEXT,
+      selectedModel: { ...SELECTED_MODEL, speed: "fast" },
+    });
+
+    expect(decision).toMatchObject(expected);
+    if (startMode === "reuse" && !speed) expect(decision).not.toHaveProperty("speed");
+  });
+
   test("builds a reuse decision with the source session and optional target branch", () => {
     expect(
       buildSessionStartModalDecision({

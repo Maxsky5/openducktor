@@ -199,6 +199,35 @@ describe("model-selection-state", () => {
     });
   });
 
+  test("keeps a speed only on models that support it", () => {
+    const catalog: AgentModelCatalog = {
+      ...CATALOG,
+      models: [
+        { ...CATALOG.models[0]!, speedLevels: [{ id: "fast", label: "Fast" }] },
+        ...CATALOG.models.slice(1),
+      ],
+    };
+    const fast = { ...EXPLICIT_SELECTION, providerId: "openai", modelId: "gpt-5", speed: "fast" };
+
+    expect(
+      resolvePreferredModelSelection({
+        catalog,
+        preferredSelection: fast,
+        fallbackSelection: null,
+      })?.speed,
+    ).toBe("fast");
+    for (const modelKey of ["anthropic/claude-sonnet", "openai/gpt-5"]) {
+      expect(
+        resolveModelSelectionForModelChange({
+          catalog,
+          currentSelection: fast,
+          modelKey,
+          runtimeKind: "opencode",
+        })?.speed,
+      ).toBe(modelKey === "openai/gpt-5" ? "fast" : undefined);
+    }
+  });
+
   test("normalizes an invalid variant against the selected catalog model", () => {
     expect(
       resolveModelSelectionForVariantChange({

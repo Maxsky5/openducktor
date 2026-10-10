@@ -168,6 +168,18 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
+  const saveDraftModel = useCallback(
+    (selection: AgentModelSelection) =>
+      host
+        .workspaceSessionSetDraftModel({
+          workspaceId: workspace.workspaceId,
+          sessionId: record.id,
+          selectedModel: { ...selection, runtimeKind: record.runtimeKind },
+        })
+        .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved)),
+    [queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+  );
+
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
       if (savingModel.current || sending.current || resuming.current) return;
@@ -178,13 +190,7 @@ export function useWorkspaceSessionChatActions(
       savingModel.current = true;
       setSavingModel(true);
       setError(null);
-      void host
-        .workspaceSessionSetDraftModel({
-          workspaceId: workspace.workspaceId,
-          sessionId: record.id,
-          selectedModel: { ...selection, runtimeKind: record.runtimeKind },
-        })
-        .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved))
+      void saveDraftModel(selection)
         .catch((cause: unknown) => {
           setError(errorMessage(cause));
         })
@@ -193,10 +199,24 @@ export function useWorkspaceSessionChatActions(
           setSavingModel(false);
         });
     },
-    [queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+    [saveDraftModel],
   );
 
   const { updateAgentSessionModel } = operations;
+  // The speed control shows its own progress and failure, so it skips the model lock state.
+  const updateSpeed = useCallback(
+    async (identity: AgentSessionIdentity | null, selection: AgentModelSelection) => {
+      if (savingModel.current || sending.current || resuming.current)
+        throw new Error("Wait for the current send or session change before changing the speed.");
+      savingModel.current = true;
+      try {
+        await (identity ? updateAgentSessionModel(identity, selection) : saveDraftModel(selection));
+      } finally {
+        savingModel.current = false;
+      }
+    },
+    [saveDraftModel, updateAgentSessionModel],
+  );
   const updateSessionModel = useCallback(
     async (identity: AgentSessionIdentity, selection: AgentModelSelection | null) => {
       if (savingModel.current || sending.current || resuming.current)
@@ -354,6 +374,7 @@ export function useWorkspaceSessionChatActions(
     error,
     updateDraftModel,
     updateSessionModel,
+    updateSpeed,
     sendDraft,
     sendStandaloneMessage,
     isResumingSession,

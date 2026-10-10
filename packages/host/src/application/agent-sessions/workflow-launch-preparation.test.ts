@@ -188,7 +188,11 @@ test("invalid target rejects human feedback before the task mutation", async () 
   expect(h.starts).toHaveLength(0);
 });
 
-test.each([{ variant: "not-in-catalog" }, { profileId: "not-in-catalog" }])(
+test.each([
+  { variant: "not-in-catalog" },
+  { profileId: "not-in-catalog" },
+  { speed: "not-in-catalog" },
+])(
   "invalid configured model options reject before creating a native session: %j",
   async (patch) => {
     const h = await createLaunchHarness();

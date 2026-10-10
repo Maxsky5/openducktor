@@ -1,6 +1,6 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -164,6 +164,66 @@ describe("SessionStartModal", () => {
 
     expect(screen.getByRole("button", { name: /start session/i })).toBeTruthy();
 
+    unmount();
+  });
+
+  test("starts a reused session from its speed and submits the changed speed", async () => {
+    const onConfirm = mock(() => {});
+    const claudeModel = { runtimeKind: "claude" as const, providerId: "claude", modelId: "opus" };
+    const source = {
+      ...existingSessionOption("session-1"),
+      selectedModel: { ...claudeModel, speed: "fast" },
+    };
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          selectedModelSelection: claudeModel,
+          selectedRuntimeKind: "claude",
+          modelPickerRuntimes: [
+            {
+              descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+              isEnabledForFavorites: true,
+              resource: {
+                status: "ready",
+                catalog: {
+                  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+                  models: [
+                    {
+                      id: "opus",
+                      providerId: "claude",
+                      providerName: "Claude",
+                      modelId: "opus",
+                      modelName: "Opus",
+                      variants: [],
+                      speedLevels: [{ id: "fast", label: "Fast" }],
+                    },
+                  ],
+                  defaultModelsByProvider: {},
+                },
+              },
+            },
+          ],
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [source],
+          selectedSourceSessionValue: source.value,
+          onConfirm,
+        }),
+      }),
+    );
+
+    const speed = screen.getByRole("button", { name: "Speed" });
+    expect(speed.textContent).toContain("Fast");
+    await act(async () => fireEvent.click(speed));
+    await act(async () => fireEvent.click(screen.getByRole("option", { name: "Standard" })));
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "reuse",
+      sourceSessionOptionValue: source.value,
+      speed: "standard",
+    });
     unmount();
   });
 

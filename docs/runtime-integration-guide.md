@@ -113,6 +113,16 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 | `sessionLifecycle.supportsPendingInputSnapshots` | Can keep unresolved input in snapshots |
 | `sessionLifecycle.supportsInterruptedTurnResume` | Can continue an unfinished turn with no user message |
 
+### Session speed
+
+Set `speed.support` to `model` when the adapter can apply a speed level. Otherwise set it to `none`.
+
+List each level above standard speed in `AgentModelDescriptor.speedLevels`, with a stable ID and a label. A model without levels supports only standard speed.
+
+`AgentModelSelection.speed` holds the selected level. A selection without `speed` uses standard speed. The speed follows the model through start, fork, model update, each turn, and the saved session record.
+
+Send an explicit standard value to the runtime, so a native default cannot select another speed. Put a runtime-reported account restriction in `AgentModelCatalog.speedAvailability`.
+
 ### History
 
 | Field | Meaning |

@@ -154,6 +154,9 @@ const toAcceptedAgentUserMessage = (
     if (model.profileId !== undefined) {
       acceptedModel.profileId = model.profileId;
     }
+    if (model.speed !== undefined) {
+      acceptedModel.speed = model.speed;
+    }
     acceptedMessage.model = acceptedModel;
   }
   return acceptedMessage;

@@ -39,6 +39,8 @@ export type FreshSessionStartDecision = {
 export type ReuseSessionStartDecision = {
   startMode: "reuse";
   sourceSession: AgentSessionIdentity;
+  /** Omit to keep the source speed. Null sets standard speed. */
+  speed?: string | null;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
 };

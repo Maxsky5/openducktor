@@ -58,6 +58,7 @@ export type AgentStudioChatSessionActionsContext = {
 
 export type AgentStudioChatModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
+  speed?: AgentChatModel["composer"]["speed"];
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -348,6 +349,7 @@ export function useAgentStudioChatModel({
       isStarting: sessionActions.isStarting,
       contextUsage: chatContextUsage,
       selectedModelSelection: modelSelection.selectedModelSelection,
+      speed: modelSelection.speed,
       selectedModelDescriptor: modelSelection.selectedModelDescriptor,
       isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
       supportsProfiles: modelSelection.supportsProfiles ?? true,
@@ -405,6 +407,7 @@ export function useAgentStudioChatModel({
     modelSelection.searchFiles,
     modelSelection.selectedModelDescriptor,
     modelSelection.selectedModelSelection,
+    modelSelection.speed,
     modelSelection.slashCommandCatalog,
     modelSelection.slashCommands,
     modelSelection.slashCommandsError,

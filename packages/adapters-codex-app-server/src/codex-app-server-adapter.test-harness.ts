@@ -429,7 +429,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
               inputModalities: ["text"],
               modelSpecialty: null,
               multiAgentVersion: null,
-              serviceTiers: [],
+              serviceTiers: [{ id: "priority", name: "Fast", description: "Fast processing" }],
               supportsPersonality: true,
               isDefault: true,
               upgrade: null,

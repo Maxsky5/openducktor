@@ -547,6 +547,62 @@ test.each([
   },
 );
 
+test.each([false, true])("saves a speed change without the model lock, live=%p", async (live) => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const record = createWorkspaceSessionRecord();
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const pending = Promise.withResolvers<void>();
+  const saveDraft = mock(async () => {
+    await pending.promise;
+    return record;
+  });
+  const updateLive = mock(async () => {
+    await pending.promise;
+  });
+  configureShellBridge(
+    createShellBridgeFixture({ client: { workspaceSessionSetDraftModel: saveDraft } }),
+  );
+  const operations: AgentOperationsContextValue = {
+    ...createOperations({
+      sendAgentMessage: async () => null,
+      continueInterruptedTurn: async () => {},
+    }),
+    updateAgentSessionModel: updateLive,
+  };
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
+    wrapper,
+  });
+  const identity = live
+    ? workspaceSessionIdentity({ ...record, externalSessionId: "native" })
+    : null;
+  const selection = { providerId: "codex", modelId: "gpt-5", speed: "priority" };
+  try {
+    let update!: Promise<void>;
+    act(() => {
+      update = view.result.current.updateSpeed(identity, selection);
+    });
+    expect(view.result.current.isSavingModel).toBe(false);
+    await act(async () => {
+      pending.resolve();
+      await update;
+    });
+    expect((live ? updateLive : saveDraft).mock.calls).toHaveLength(1);
+    expect((live ? saveDraft : updateLive).mock.calls).toHaveLength(0);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test.each(["accepted", "rejected", "unknown", "unreadable", "pending"] as const)(
   "keeps the host first-send outcome: %s",
   async (acceptance) => {

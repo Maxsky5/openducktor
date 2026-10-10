@@ -52,6 +52,7 @@ export type AgentChatComposerConfig = {
     outputLimit?: number;
   } | null;
   selectedModelSelection: AgentModelSelection | null;
+  speed?: AgentChatComposerModel["speed"];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null | undefined;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -143,6 +144,7 @@ export function useAgentChatComposerModel({
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
+      speed: composer.speed,
       isSelectionCatalogLoading: composer.isSelectionCatalogLoading,
       supportsAttachments: composer.supportsAttachments,
       supportsSlashCommands: composer.supportsSlashCommands,

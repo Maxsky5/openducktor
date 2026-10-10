@@ -125,6 +125,7 @@ export function WorkspaceSessionChat({
     selection: chatState.selectedModel,
     readinessState: runtimeReadiness.state,
     updateDraft: actions.updateDraftModel,
+    updateSpeed: actions.updateSpeed,
     update: actions.updateSessionModel,
   });
   const {
@@ -301,6 +302,7 @@ export function WorkspaceSessionChat({
       isSavingModel,
       contextUsage,
       selectedModelSelection: chatState.selectedModel,
+      speed: picker.speed,
       selectedModelDescriptor: picker.selectedModelEntry,
       isSelectionCatalogLoading: picker.isLoading,
       supportsProfiles: picker.supportsProfiles,

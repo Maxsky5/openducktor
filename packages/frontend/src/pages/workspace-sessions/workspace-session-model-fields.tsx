@@ -1,3 +1,4 @@
+import { SpeedSelect } from "@/components/features/agents/speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
@@ -25,17 +26,20 @@ export function WorkspaceSessionModelFields({
             triggerClassName="w-full justify-between"
           />
         </div>
-        <div className="grid gap-1.5">
-          <Label id="workspace-session-effort">Effort</Label>
-          <Combobox
-            triggerAriaLabelledBy="workspace-session-effort"
-            value={model.selection?.variant ?? ""}
-            onValueChange={model.handleSelectVariant}
-            onOpenChange={model.onCatalogSelectorOpen}
-            options={model.variantOptions}
-            disabled={disabled || model.variantOptions.length === 0}
-            placeholder="Not supported"
-          />
+        <div className="flex items-end gap-2">
+          <div className="grid min-w-0 flex-1 gap-1.5">
+            <Label id="workspace-session-effort">Effort</Label>
+            <Combobox
+              triggerAriaLabelledBy="workspace-session-effort"
+              value={model.selection?.variant ?? ""}
+              onValueChange={model.handleSelectVariant}
+              onOpenChange={model.onCatalogSelectorOpen}
+              options={model.variantOptions}
+              disabled={disabled || model.variantOptions.length === 0}
+              placeholder="Not supported"
+            />
+          </div>
+          <SpeedSelect model={model.speed && { ...model.speed, disabled }} label="Speed" />
         </div>
       </div>
       {model.supportsProfiles && (

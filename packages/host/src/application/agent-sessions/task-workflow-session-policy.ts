@@ -206,9 +206,10 @@ const toRuntimeModel = (
   if (!selectedModel) {
     return null;
   }
-  const { providerId, modelId, variant, profileId } = selectedModel;
+  const { providerId, modelId, variant, profileId, speed } = selectedModel;
   const model: AgentSessionModelSettings = { providerId, modelId };
   if (variant !== undefined) model.variant = variant;
+  if (speed !== undefined) model.speed = speed;
   if (selectedModel.runtimeKind === "opencode" && profileId !== undefined)
     model.profileId = profileId;
   return model;
@@ -229,6 +230,9 @@ const toRecordModelSelection = (
   const profileId = model.profileId ?? stored.selectedModel?.profileId;
   if (profileId !== undefined) {
     selection.profileId = profileId;
+  }
+  if (model.speed !== undefined) {
+    selection.speed = model.speed;
   }
   return selection;
 };

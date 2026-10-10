@@ -140,6 +140,78 @@ describe("Claude session I/O model changes", () => {
     expect(pushed).toHaveLength(1);
   });
 
+  test.each([
+    { previous: undefined, next: "fast", settings: { fastMode: true } },
+    { previous: "fast", next: undefined, settings: { fastMode: false } },
+  ])("applies a speed change from $previous to $next as fast mode", async (change) => {
+    const applyFlagSettings = mock(async () => {});
+    const model = {
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      runtimeKind: "claude" as const,
+    };
+    const session = createClaudeSession({
+      activity: "idle",
+      model: change.previous ? { ...model, speed: change.previous } : model,
+      query: createClaudeQueryFixture({ applyFlagSettings }),
+    });
+    session.queue.push = () => {};
+
+    await sendClaudeUserMessage({
+      session,
+      now: () => "2026-06-25T20:00:00.000Z",
+      randomId: () => MESSAGE_ID,
+      emit: () => {},
+      messageInput: {
+        externalSessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        model: change.next ? { ...model, speed: change.next } : model,
+        parts: [{ kind: "text", text: "hello" }],
+      },
+    });
+
+    expect(applyFlagSettings).toHaveBeenCalledWith(change.settings);
+    expect(session.model?.speed).toBe(change.next);
+  });
+
+  test("rejects a speed that Claude does not support before delivery", async () => {
+    const applyFlagSettings = mock(async () => {});
+    const model = {
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      runtimeKind: "claude" as const,
+    };
+    const session = createClaudeSession({
+      activity: "idle",
+      model,
+      query: createClaudeQueryFixture({ applyFlagSettings }),
+    });
+
+    await expect(
+      sendClaudeUserMessage({
+        session,
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => MESSAGE_ID,
+        emit: () => {},
+        messageInput: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          model: { ...model, speed: "priority" },
+          parts: [{ kind: "text", text: "hello" }],
+        },
+      }),
+    ).rejects.toThrow("does not support speed 'priority'");
+    expect(applyFlagSettings).not.toHaveBeenCalled();
+  });
+
   test("rolls the Claude SDK model back when message delivery fails", async () => {
     const setModel = mock(async (_model?: string) => {});
     const queue = new AsyncInputQueue<SDKUserMessage>();

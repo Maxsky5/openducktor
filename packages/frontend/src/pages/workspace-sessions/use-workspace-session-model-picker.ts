@@ -8,6 +8,8 @@ import {
 import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
+import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
+import { withSpeed } from "@/lib/model-catalog-selection";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import { host } from "@/state/operations/host";
@@ -93,7 +95,24 @@ export function useWorkspaceSessionModelPicker(
     selectionCatalog: catalog,
     selectedRuntimeKind: runtimeKind,
   });
-  const { handleSelectModelPair } = actions;
+  const { handleSelectModelPair, handleSelectSpeed } = actions;
+  const updateSpeed = session?.updateSpeed;
+  const identity = session?.identity ?? null;
+  const selectSpeed = useCallback(
+    async (speed: string) => {
+      if (!updateSpeed || !selection) return handleSelectSpeed(speed);
+      await updateSpeed(identity, withSpeed(selection, speed));
+    },
+    [handleSelectSpeed, identity, selection, updateSpeed],
+  );
+  const speed = useSpeedControl({
+    key: identity?.externalSessionId ?? repoPath,
+    runtimeKind,
+    catalog,
+    selection,
+    disabled: false,
+    onSelect: selectSpeed,
+  });
   const onValueChange = useCallback(
     (value: ModelPickerValue) => {
       const runtime = runtimes.find((entry) => entry.descriptor.kind === value.runtimeKind);
@@ -164,6 +183,7 @@ export function useWorkspaceSessionModelPicker(
     ...actions,
     isLoading,
     modelPicker,
+    speed,
     onCatalogSelectorOpen,
   };
 }

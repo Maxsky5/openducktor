@@ -109,4 +109,26 @@ describe("codex session lifecycle", () => {
     expect(existingThreadSession.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
     expect(existingThreadSession.liveStatus).toBeUndefined();
   });
+
+  test.each([
+    { serviceTier: "priority", speed: "priority" },
+    { serviceTier: "default", speed: undefined },
+    { serviceTier: null, speed: undefined },
+  ])("restores native service tier $serviceTier as speed $speed", ({ serviceTier, speed }) => {
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "repository" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      externalSessionId: "thread-1",
+    } satisfies PolicyBoundSessionRef;
+
+    const session = sessionStateFromExistingThread(input, "runtime-1", undefined, {
+      ...threadResumeResponse,
+      serviceTier,
+    });
+
+    expect(session.model?.speed).toBe(speed);
+  });
 });

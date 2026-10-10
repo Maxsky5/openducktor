@@ -167,6 +167,7 @@ export const agentSessionModelSettingsSchema = z
     modelId: z.string(),
     variant: z.string().optional(),
     profileId: z.string().optional(),
+    speed: z.string().min(1).optional(),
   })
   .strict();
 export type AgentSessionModelSettings = z.infer<typeof agentSessionModelSettingsSchema>;

@@ -55,7 +55,8 @@ export const createWorkspaceSessionLaunchService = (
         session.selectedModel?.providerId !== model?.providerId ||
         session.selectedModel?.modelId !== model?.modelId ||
         session.selectedModel?.variant !== model?.variant ||
-        session.selectedModel?.profileId !== model?.profileId
+        session.selectedModel?.profileId !== model?.profileId ||
+        session.selectedModel?.speed !== model?.speed
       )
         return yield* invalid(
           "The saved session or model changed after launch. Inspect the chat before retrying.",

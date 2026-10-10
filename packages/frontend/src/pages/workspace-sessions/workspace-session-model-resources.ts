@@ -16,6 +16,11 @@ export type SessionModelTarget = {
   runtimeKind?: AgentSessionIdentity["runtimeKind"];
   runtimeRef?: RuntimeWorkingDirectoryRef;
   updateDraft?: (selection: AgentModelSelection | null) => void;
+  /** Saves a speed change without the model lock, so the other controls keep their state. */
+  updateSpeed?: (
+    identity: AgentSessionIdentity | null,
+    selection: AgentModelSelection,
+  ) => Promise<void>;
   selection: AgentModelSelection | null;
   catalog: AgentModelCatalog | null;
   isLoading: boolean;

@@ -56,6 +56,17 @@ describe("toClaudeModelDescriptor", () => {
     });
   });
 
+  test.each([
+    [true, [{ id: "fast", label: "Fast" }]],
+    [false, undefined],
+    [undefined, undefined],
+  ])("maps supportsFastMode %p to speed levels", (supportsFastMode, speedLevels) => {
+    const model: ModelInfo = { value: "opus", displayName: "Opus", description: "Opus" };
+    if (supportsFastMode !== undefined) model.supportsFastMode = supportsFastMode;
+
+    expect(toClaudeModelDescriptor(model).speedLevels).toEqual(speedLevels);
+  });
+
   test("leaves variants empty when the SDK does not expose effort levels", () => {
     const descriptor = toClaudeModelDescriptor({
       value: "claude-haiku-4-5-20251001",
@@ -409,6 +420,40 @@ describe("loadClaudeRuntimeCatalog", () => {
       catalog: { subagents: [{ id: "reviewer", name: "reviewer" }] },
     });
   });
+
+  test.each([
+    ["disabled_by_env", { status: "blocked", reason: { code: "disabled_by_env" } }],
+    ["sdk_opt_in_required", { status: "available" }],
+    ["preference", { status: "available" }],
+    [undefined, { status: "available" }],
+  ] as const)(
+    "reads speed availability %p from catalog initialization",
+    async (reason, availability) => {
+      const sdkQuery = createClaudeQueryFixture({
+        supportedAgents: async () => [],
+        supportedCommands: async () => [],
+        supportedModels: async () => [modelFixture],
+      });
+      const initialization = {
+        ...(await sdkQuery.initializationResult()),
+        fast_mode_state: "off" as const,
+      };
+      if (reason) initialization.fast_mode_disabled_reason = reason;
+      sdkQuery.initializationResult = async () => initialization;
+
+      const catalog = await loadClaudeRuntimeCatalog(
+        catalogInput,
+        undefined,
+        process.execPath,
+        () => sdkQuery,
+      );
+
+      expect(catalog.models).toMatchObject({
+        status: "available",
+        catalog: { speedAvailability: availability },
+      });
+    },
+  );
 
   test("keeps the other surfaces when one surface read fails", async () => {
     const failure = new Error("Claude agent list failed.");

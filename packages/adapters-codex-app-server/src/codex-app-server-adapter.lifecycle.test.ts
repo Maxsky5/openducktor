@@ -384,6 +384,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Hello Codex" }], []),
         model: "gpt-5",
+        serviceTier: null,
         effort: "medium",
       },
     });
@@ -435,6 +436,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       threadId: "thread/start-runtime-live",
       input: toCodexTurnInputList([{ kind: "text", text: "Build it" }], []),
       model: "gpt-5",
+      serviceTier: null,
       effort: "medium",
     });
   });
@@ -606,7 +608,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     );
   });
 
-  test("updates the session model used for subsequent turns", async () => {
+  test("updates the session model and speed used for subsequent turns", async () => {
     const { adapter, transports } = createHarness();
 
     await adapter.startSession({
@@ -624,7 +626,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+      model: { providerId: "openai", modelId: "gpt-5", variant: "high", speed: "priority" },
     });
 
     await adapter.sendUserMessage(
@@ -643,6 +645,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Use deeper reasoning" }], []),
         model: "gpt-5",
+        serviceTier: "priority",
         effort: "high",
       },
     });

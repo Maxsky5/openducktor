@@ -2,10 +2,13 @@ import {
   SessionStartKickoffField,
   useSessionStartKickoffDraft,
 } from "./session-start-kickoff-field";
+import { selectableModelPickerCatalog } from "./model-picker/model-picker-model";
+import { SpeedSelect, type SpeedControlModel } from "./speed-select";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
-import type { FormEvent, ReactElement } from "react";
+import { type FormEvent, type ReactElement, useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   ModelPicker,
   type ModelPickerFavoriteState,
@@ -25,7 +28,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
+import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
 import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
+import { findCatalogModel, STANDARD_SPEED, withSpeed } from "@/lib/model-catalog-selection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type SessionStartModalConfirmInput =
@@ -36,12 +41,14 @@ type SessionStartModalConfirmInput =
       sourceSessionOptionValue: string | null;
       targetBranch?: string;
       kickoffPrompt?: string | undefined;
+      speed?: string;
     };
 type SessionStartModalConfirmPayload = Exclude<SessionStartModalConfirmInput, boolean>;
 type SessionStartModalConfirmDraft = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
 type ExistingSessionOption = ComboboxOption & {
   sourceSession: AgentSessionIdentity;
+  selectedModel?: AgentModelSelection | null;
 };
 
 export type SessionStartModalModel = {
@@ -234,6 +241,7 @@ function RuntimeProfileField({
 }
 
 type ModelVariantFieldsProps = {
+  speed: SpeedControlModel | undefined;
   isSelectionCatalogLoading: boolean;
   selectedModelSelection: AgentModelSelection | null;
   selectedVariant: string;
@@ -268,6 +276,7 @@ const modelVariantPlaceholder = ({
 };
 
 function ModelVariantFields({
+  speed,
   isSelectionCatalogLoading,
   selectedModelSelection,
   selectedVariant,
@@ -277,26 +286,70 @@ function ModelVariantFields({
   onSelectVariant,
 }: ModelVariantFieldsProps): ReactElement {
   return (
-    <div className="grid gap-1.5" data-testid="session-start-variant-field">
-      <p className="text-sm font-medium text-foreground" id="session-start-variant-label">
-        Effort
-      </p>
-      <Combobox
-        triggerAriaLabelledBy="session-start-variant-label"
-        value={selectedVariant}
-        options={variantOptions}
-        placeholder={modelVariantPlaceholder({
-          isSelectionCatalogLoading,
-          selectedModelSelection,
-          supportsVariants,
-          variantOptions,
-        })}
-        disabled={variantDisabled}
-        className="w-full"
-        onValueChange={onSelectVariant}
-      />
+    <div className="flex items-end gap-2" data-testid="session-start-variant-field">
+      <div className="grid min-w-0 flex-1 gap-1.5">
+        <p className="text-sm font-medium text-foreground" id="session-start-variant-label">
+          Effort
+        </p>
+        <Combobox
+          triggerAriaLabelledBy="session-start-variant-label"
+          value={selectedVariant}
+          options={variantOptions}
+          placeholder={modelVariantPlaceholder({
+            isSelectionCatalogLoading,
+            selectedModelSelection,
+            supportsVariants,
+            variantOptions,
+          })}
+          disabled={variantDisabled}
+          className="w-full"
+          onValueChange={onSelectVariant}
+        />
+      </div>
+      <SpeedSelect key={speed?.key} model={speed} label="Speed" />
     </div>
   );
+}
+
+/**
+ * A reused session keeps its speed. A fresh or forked session starts at standard speed.
+ * The start sends a speed only when the user changes it.
+ */
+function useSessionStartSpeed(model: SessionStartModalModel) {
+  const { selectedStartMode, selectedSourceSessionValue, selectedModelSelection } = model;
+  const key = `${model.requestId ?? model.open}|${selectedStartMode}|${selectedSourceSessionValue}`;
+  const source =
+    selectedStartMode === "reuse"
+      ? model.existingSessionOptions.find((option) => option.value === selectedSourceSessionValue)
+      : undefined;
+  const initial = source?.selectedModel?.speed ?? STANDARD_SPEED;
+  const [draft, setDraft] = useState({ key, choice: initial });
+  const choice = draft.key === key ? draft.choice : initial;
+  const catalog = selectableModelPickerCatalog(
+    model.modelPickerRuntimes.find(
+      (runtime) => runtime.descriptor.kind === model.selectedRuntimeKind,
+    )?.resource,
+  );
+  const catalogModel =
+    catalog && selectedModelSelection ? findCatalogModel(catalog, selectedModelSelection) : null;
+  const unsupported =
+    choice !== STANDARD_SPEED &&
+    catalogModel !== null &&
+    !catalogModel.speedLevels?.some((level) => level.id === choice);
+  useEffect(() => {
+    if (!unsupported) return;
+    setDraft({ key, choice: STANDARD_SPEED });
+    toast.info("Speed was set to Standard because this model does not support the previous level.");
+  }, [key, unsupported]);
+  const control = useSpeedControl({
+    key,
+    runtimeKind: model.selectedRuntimeKind,
+    catalog,
+    selection: selectedModelSelection && withSpeed(selectedModelSelection, choice),
+    disabled: model.isStarting,
+    onSelect: (next) => setDraft({ key, choice: next }),
+  });
+  return { control, change: choice === initial ? undefined : choice };
 }
 
 type SessionStartModalFooterProps = {
@@ -576,6 +629,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     prompt: model.kickoffPrompt,
   });
 
+  const { control: speed, change: speedChange } = useSessionStartSpeed(model);
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = sessionStartAvailability(model);
@@ -591,6 +645,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
   };
+  if (speedChange !== undefined) confirmInput.speed = speedChange;
   if (kickoffDraft.value !== undefined) confirmInput.kickoffPrompt = kickoffDraft.value;
   if (showTargetBranchSelector) {
     confirmInput.targetBranch = selectedTargetBranch;
@@ -663,6 +718,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   <SessionStartModelPicker model={model} />
                 </div>
                 <ModelVariantFields
+                  speed={speed}
                   isSelectionCatalogLoading={isSelectionCatalogLoading}
                   selectedModelSelection={selectedModelSelection}
                   selectedVariant={selectedVariant}

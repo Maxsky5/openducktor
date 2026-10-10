@@ -1233,7 +1233,10 @@ describe("createClaudeAgentSdkService", () => {
         expect(operations).toEqual(["attach", "setModel"]);
         expect(inspect).toHaveBeenCalledWith(expect.objectContaining(ref));
         expect(setModel).toHaveBeenCalledWith(model?.modelId);
-        expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: model?.variant ?? null });
+        expect(applyFlagSettings).toHaveBeenCalledWith({
+          effortLevel: model?.variant ?? null,
+          fastMode: false,
+        });
         expect(store.get("session-1")?.model).toEqual(model ?? undefined);
         expect(store.get("session-1")?.summary.title).toBe("Native title");
         // The existing host save-failure compensation can restore the previous selection.

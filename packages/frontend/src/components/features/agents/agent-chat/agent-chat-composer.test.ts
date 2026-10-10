@@ -334,6 +334,35 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain('aria-label="Send message" disabled');
   });
 
+  test.each([false, true])(
+    "shows the speed control and blocks send while pending=%s",
+    (pending) => {
+      const html = renderToStaticMarkup(
+        createElement(AgentChatComposer, {
+          model: {
+            ...buildModel(),
+            pendingSendItems: { count: 1, accessibleLabel: "1 pending review comment" },
+            speed: {
+              key: "session",
+              choice: "fast",
+              levels: [{ id: "fast", label: "Fast" }],
+              blockedReason: undefined,
+              pending,
+              disabled: false,
+              error: null,
+              onChange: () => {},
+            },
+          },
+        }),
+      );
+
+      expect(html).toContain('aria-label="Speed: Fast"');
+      expect(html.includes('aria-label="Send message" disabled')).toBe(pending);
+      // A speed change must not lock the model and effort controls.
+      expect(html).not.toContain("Model selection is unavailable right now.");
+    },
+  );
+
   test("warns when pending comments are not saved for later", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

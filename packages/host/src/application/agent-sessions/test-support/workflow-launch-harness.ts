@@ -245,6 +245,15 @@ export const createLaunchHarness = async (
             }),
           ),
         ),
+      agentSessionUpdateModel: (input) =>
+        Effect.sync(() => {
+          const index = records.findIndex(
+            (record) => record.externalSessionId === input.identity.externalSessionId,
+          );
+          if (index < 0) return false;
+          records[index] = { ...records[index]!, selectedModel: input.selectedModel };
+          return true;
+        }),
       transitionTask: (input) =>
         Effect.sync(() => {
           task = { ...task, status: input.status };
@@ -369,6 +378,7 @@ export const createLaunchHarness = async (
                     modelId: "model",
                     modelName: "Model",
                     variants: ["medium"],
+                    speedLevels: [{ id: "fast", label: "Fast" }],
                     supportsReasoning: true,
                   },
                 ],

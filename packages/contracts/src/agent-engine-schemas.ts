@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
+import { agentSpeedAvailabilitySchema, agentSpeedLevelSchema } from "./agent-speed-schemas";
 import {
   agentSessionTodoItemSchema,
   agentSessionUsageLimitSchema,
@@ -38,6 +39,7 @@ export const agentModelDescriptorSchema = z
     modelId: nonEmptyStringSchema,
     modelName: nonEmptyStringSchema,
     variants: z.array(z.string()),
+    speedLevels: z.array(agentSpeedLevelSchema).optional(),
     contextWindow: z.number().int().positive().optional(),
     outputLimit: z.number().int().positive().optional(),
     attachmentSupport: agentModelAttachmentSupportSchema.optional(),
@@ -70,6 +72,7 @@ export const agentModelCatalogSchema = z
   .object({
     runtime: runtimeDescriptorSchema.optional(),
     models: z.array(agentModelDescriptorSchema),
+    speedAvailability: agentSpeedAvailabilitySchema.optional(),
     defaultModelsByProvider: z.record(z.string(), z.string()),
     profiles: z.array(agentDescriptorSchema).optional(),
   })

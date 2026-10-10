@@ -28,6 +28,8 @@ export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
     .object({
       startMode: z.literal("reuse"),
       sourceSession: agentSessionLiveRefSchema.omit({ repoPath: true }),
+      // Omit to keep the source speed. Null sets standard speed.
+      speed: z.string().min(1).nullable().optional(),
     })
     .strict(),
   z

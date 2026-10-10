@@ -50,6 +50,20 @@ export const normalizeCatalogVariant = (
   return model.variants[0] || undefined;
 };
 
+/** A selection without `speed` uses standard speed. */
+export const STANDARD_SPEED = "standard";
+
+export const normalizeCatalogSpeed = (
+  model: Pick<CatalogModel, "speedLevels">,
+  speed: string | undefined,
+): string | undefined =>
+  speed && model.speedLevels?.some((level) => level.id === speed) ? speed : undefined;
+
+export const withSpeed = (selection: AgentModelSelection, speed: string): AgentModelSelection => {
+  const { speed: _speed, ...rest } = selection;
+  return speed === STANDARD_SPEED ? rest : { ...rest, speed };
+};
+
 export const pickVisibleCatalogDefaultProfileId = (
   catalog: AgentModelCatalog,
 ): string | undefined => {

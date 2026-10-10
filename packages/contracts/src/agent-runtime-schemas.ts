@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeSpeedCapabilitySchema } from "./agent-speed-schemas";
 import {
   type AgentRole,
   type AgentToolName,
@@ -261,6 +262,7 @@ export type RuntimeOptionalSurfaceCapabilities = z.infer<
 
 export const runtimeCapabilitiesSchema = z
   .object({
+    speed: runtimeSpeedCapabilitySchema,
     provisioningMode: runtimeProvisioningModeSchema,
     workflow: runtimeWorkflowCapabilitiesSchema,
     sessionLifecycle: runtimeSessionLifecycleCapabilitiesSchema,
@@ -536,6 +538,7 @@ export const runtimeCapabilitiesSchema = z
 export type RuntimeCapabilities = z.infer<typeof runtimeCapabilitiesSchema>;
 
 export const runtimeCapabilityKeyValues = [
+  "speed.support",
   "workflow.supportsOdtWorkflowTools",
   "workflow.supportedScopes",
   "sessionLifecycle.supportedStartModes",
@@ -575,6 +578,7 @@ export const mandatoryRuntimeCapabilityKeys = [
 ] as const satisfies readonly RuntimeCapabilityKey[];
 
 export const optionalRuntimeCapabilityKeys = [
+  "speed.support",
   "sessionLifecycle.supportsQueuedUserMessages",
   "history.fidelity",
   "history.replay",
@@ -627,6 +631,7 @@ export type RuntimeCapabilityClass =
   | "optional_enhancement";
 
 export const runtimeCapabilityClasses = {
+  "speed.support": "optional_enhancement",
   "workflow.supportsOdtWorkflowTools": "workflow",
   "workflow.supportedScopes": "role_scoped",
   "sessionLifecycle.supportedStartModes": "baseline",

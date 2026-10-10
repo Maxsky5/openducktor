@@ -765,6 +765,43 @@ test.each(["opencode", "codex", "claude"] as const)(
   },
 );
 
+test.each([
+  { speed: "fast", saved: { ...modelFor("claude"), speed: "fast" } },
+  { speed: null, saved: modelFor("claude") },
+])("reuse saves speed $speed before its kickoff turn", async ({ speed, saved }) => {
+  const h = await createLaunchHarness("claude");
+  h.records.push({
+    externalSessionId: "source",
+    runtimeKind: "claude",
+    workingDirectory: "/worktrees/task",
+    role: "build",
+    startedAt: timestamp,
+    selectedModel: speed ? modelFor("claude") : { ...modelFor("claude"), speed: "fast" },
+  });
+  h.setTaskStatus("in_progress");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("claude"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_qa_rejected",
+        decision: {
+          startMode: "reuse",
+          sourceSession: {
+            externalSessionId: "source",
+            runtimeKind: "claude",
+            workingDirectory: "/worktrees/task",
+          },
+          speed,
+        },
+      },
+    }),
+  );
+  expect(result.acceptance).toBe("accepted");
+  expect(h.records[0]?.selectedModel).toEqual(saved);
+  expect(h.sends[0]?.model).toEqual(saved);
+});
+
 test.each(["rejected", "unknown", "accepted"] as const)(
   "retains session identity and exact send failure with %s acceptance",
   async (acceptance) => {

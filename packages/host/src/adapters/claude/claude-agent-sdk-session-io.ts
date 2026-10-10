@@ -18,7 +18,7 @@ import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timest
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   assertClaudeSessionModelUpdateSupported,
-  assertSupportedClaudeLiveEffort,
+  toClaudeFlagSettings,
 } from "./claude-agent-sdk-session-model";
 import {
   canFlushQueuedClaudeUserMessage,
@@ -74,18 +74,21 @@ export const applyClaudeSessionModel = async (
 
   const previousModel = session.model;
   const modelChanged = force || previousModel?.modelId !== nextModel?.modelId;
-  const effortChanged = force || previousModel?.variant !== nextModel?.variant;
+  const changed = {
+    effort: force || previousModel?.variant !== nextModel?.variant,
+    // An unknown native speed may come from user defaults, so set it explicitly.
+    speed: force || previousModel === undefined || previousModel.speed !== nextModel?.speed,
+  };
+  const settingsChanged = changed.effort || changed.speed;
   try {
     if (modelChanged) {
       await session.query.setModel(nextModel?.modelId);
       assertClaudeSessionAcceptingMessages(session);
     }
-    if (effortChanged) {
-      await session.query.applyFlagSettings({
-        effortLevel: nextModel
-          ? assertSupportedClaudeLiveEffort(nextModel, session.externalSessionId)
-          : null,
-      });
+    if (settingsChanged) {
+      await session.query.applyFlagSettings(
+        toClaudeFlagSettings(nextModel, session.externalSessionId, changed),
+      );
       assertClaudeSessionAcceptingMessages(session);
     }
   } catch (cause) {
@@ -93,15 +96,13 @@ export const applyClaudeSessionModel = async (
       throw cause;
     }
     const rollbackFailures: string[] = [];
-    if (effortChanged) {
+    if (settingsChanged) {
       try {
-        await session.query.applyFlagSettings({
-          effortLevel: previousModel
-            ? assertSupportedClaudeLiveEffort(previousModel, session.externalSessionId)
-            : null,
-        });
+        await session.query.applyFlagSettings(
+          toClaudeFlagSettings(previousModel, session.externalSessionId, changed),
+        );
       } catch (rollbackCause) {
-        rollbackFailures.push(`effort: ${errorMessage(rollbackCause)}`);
+        rollbackFailures.push(`settings: ${errorMessage(rollbackCause)}`);
       }
     }
     if (modelChanged) {

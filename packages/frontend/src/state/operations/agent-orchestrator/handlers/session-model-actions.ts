@@ -39,6 +39,7 @@ const toSessionModelSettings = (
     modelId: selection.modelId,
     variant: selection.variant,
   };
+  if (selection.speed !== undefined) model.speed = selection.speed;
   if (session.runtimeKind === "opencode" && selection.profileId !== undefined)
     model.profileId = selection.profileId;
   return model;

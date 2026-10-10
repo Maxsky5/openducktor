@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ClaudePolicyFields, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -913,6 +913,24 @@ describe("buildClaudeAgentSdkOptions", () => {
 
     expect(options.model).toBe("claude-sonnet-4-6-20260601");
     expect(options.effort).toBe("xhigh");
+  });
+
+  test.each([
+    [undefined, false],
+    ["fast", true],
+  ])("sets an explicit fast-mode flag for speed %p", async (speed, fastMode) => {
+    const session = createSession();
+    const model: AgentModelSelection = {
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+    };
+    if (speed) model.speed = speed;
+    session.input.model = model;
+
+    const options = await buildOptions(session);
+
+    expect<unknown>(options.settings).toEqual({ fastMode });
   });
 
   test("rejects a Claude effort variant that the SDK does not support", async () => {

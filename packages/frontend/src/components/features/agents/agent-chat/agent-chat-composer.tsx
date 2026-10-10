@@ -19,6 +19,7 @@ import {
   useRef,
 } from "react";
 import { toast } from "sonner";
+import { SpeedSelect } from "../speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,7 @@ const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl(
 });
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
+  speed,
   onPickAttachments,
   attachmentIntakeDisabled,
   selectedModelSelection,
@@ -174,6 +176,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled,
   pendingSendItems,
 }: {
+  speed: AgentChatComposerModel["speed"];
   onPickAttachments: () => void;
   attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
@@ -276,6 +279,14 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             />
           </div>
         ) : null}
+        {speed && (
+          <SpeedSelect
+            key={speed.key}
+            model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
+            compact
+            triggerClassName="hover:bg-muted hover:text-foreground"
+          />
+        )}
       </div>
 
       {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
@@ -515,6 +526,7 @@ function AgentChatComposerFormView({
           />
 
           <AgentChatComposerControls
+            speed={model.speed}
             onPickAttachments={onPickAttachments}
             attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
@@ -809,7 +821,7 @@ export function AgentChatComposer({
 
   const sendDisabled =
     isSendOrModelPending ||
-    isComposerInputDisabled ||
+    isSendInputBlocked(model, isComposerInputDisabled) ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, pendingSendItems);
@@ -905,3 +917,7 @@ export function AgentChatComposer({
     />
   );
 }
+
+// A speed change blocks only send, so the model and effort controls keep their state.
+const isSendInputBlocked = (model: AgentChatComposerModel, isInputDisabled: boolean): boolean =>
+  isInputDisabled || model.speed?.pending === true;

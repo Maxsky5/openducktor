@@ -24,6 +24,7 @@ import type {
   ModelPickerSelectionPolicy,
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
+import type { SpeedControlModel } from "@/components/features/agents/speed-select";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentApprovalRequest,
@@ -182,6 +183,7 @@ export type AgentChatComposerModel = {
   waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
+  speed?: SpeedControlModel | undefined;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;

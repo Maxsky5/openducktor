@@ -26,6 +26,7 @@ export const agentSessionModelSelectionSchema = z.object({
   modelId: z.string(),
   variant: optionalFromNullable(z.string()),
   profileId: optionalFromNullable(z.string()),
+  speed: optionalFromNullable(z.string().min(1)),
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 

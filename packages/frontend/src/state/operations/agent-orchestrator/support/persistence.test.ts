@@ -77,6 +77,23 @@ describe("agent-orchestrator/support/persistence", () => {
     expect("pendingQuestions" in persisted).toBe(false);
   });
 
+  test("keeps the selected speed through load and persistence", () => {
+    const record: AgentSessionRecord = {
+      ...recordFixture,
+      runtimeKind: "claude",
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "opus",
+        speed: "fast",
+      },
+    };
+
+    expect(toPersistedSessionRecord(loadRecordFixture(record)).selectedModel).toEqual(
+      record.selectedModel,
+    );
+  });
+
   test("persists compact session fields", () => {
     const session: AgentSessionState = {
       ...loadRecordFixture(),

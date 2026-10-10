@@ -36,6 +36,9 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     if (session.selectedModel.profileId) {
       selectedModel.profileId = session.selectedModel.profileId;
     }
+    if (session.selectedModel.speed) {
+      selectedModel.speed = session.selectedModel.speed;
+    }
   }
 
   return {

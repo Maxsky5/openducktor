@@ -153,6 +153,8 @@ export const runtimeSupportsCapability = (
   capability: RuntimeCapabilityKey,
 ): boolean => {
   switch (capability) {
+    case "speed.support":
+      return runtimeDescriptor.capabilities.speed.support !== "none";
     case "workflow.supportsOdtWorkflowTools":
       return runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools;
     case "workflow.supportedScopes":
@@ -228,7 +230,8 @@ const supportedScopesSatisfyRole = (
   supportedScopes: RuntimeDescriptor["capabilities"]["workflow"]["supportedScopes"],
   role: AgentRole,
 ): boolean => {
-  return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
+  const scopes = new Set(supportedScopes);
+  return runtimeRequiredScopesByRole[role].every((scope) => scopes.has(scope));
 };
 
 const roleScopeRequirementsDescription = (): string => {

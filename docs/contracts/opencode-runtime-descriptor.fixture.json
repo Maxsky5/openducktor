@@ -104,6 +104,9 @@
       "supportsImageGeneration": false,
       "supportsSubagents": true,
       "supportedSubagentExecutionModes": ["foreground", "background"]
+    },
+    "speed": {
+      "support": "none"
     }
   }
 }

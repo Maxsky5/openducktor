@@ -147,6 +147,14 @@ export const createWorkflowLaunchService = (
                 taskId: attempt.request.taskId,
               });
               const source = findWorkflowSession(records, action.role, decision.sourceSession)!;
+              // The kickoff turn applies a changed speed. Save it first, so the record matches.
+              if (model && model.speed !== source.selectedModel?.speed)
+                yield* deps.tasks.agentSessionUpdateModel({
+                  repoPath,
+                  taskId: attempt.request.taskId,
+                  identity: decision.sourceSession,
+                  selectedModel: model,
+                });
               const retained = yield* retainSession({
                 ...decision.sourceSession,
                 startedAt: source.startedAt,

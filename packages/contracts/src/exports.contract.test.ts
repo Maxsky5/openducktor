@@ -767,6 +767,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeSettingsApplicationSchema",
   "settingsSnapshotRuntimePreviewSchema",
   "settingsSnapshotSaveResultSchema",
+  "agentSpeedAvailabilitySchema",
+  "agentSpeedLevelSchema",
+  "runtimeSpeedCapabilitySchema",
 ] as const;
 
 describe("contracts exports contract", () => {

@@ -154,7 +154,7 @@ describe("SQLite task session model updates", () => {
     }
   });
 
-  test("stores a selection that omits an undefined profile", async () => {
+  test("stores a selection that omits an undefined profile and keeps its speed", async () => {
     const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {
       const task = await Effect.runPromise(
@@ -185,6 +185,7 @@ describe("SQLite task session model updates", () => {
               providerId: "openai",
               modelId: "gpt-5.6-sol",
               profileId: undefined,
+              speed: "priority",
             },
           }),
         ),
@@ -200,6 +201,7 @@ describe("SQLite task session model updates", () => {
         runtimeKind: "codex",
         providerId: "openai",
         modelId: "gpt-5.6-sol",
+        speed: "priority",
       });
     } finally {
       await cleanup();

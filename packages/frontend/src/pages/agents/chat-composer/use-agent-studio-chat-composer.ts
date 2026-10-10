@@ -35,6 +35,8 @@ import {
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
 import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
+import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
+import type { SpeedControlModel } from "@/components/features/agents/speed-select";
 import {
   type ChatComposerPromptInputRuntimeSource,
   resolveChatComposerPromptInputRuntime,
@@ -74,6 +76,7 @@ type UseAgentStudioChatComposerArgs = {
 };
 
 type AgentStudioChatComposerState = {
+  speed: SpeedControlModel | undefined;
   selectionForNewSession: AgentModelSelection | null;
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
@@ -117,6 +120,26 @@ type AgentStudioChatComposerState = {
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
+
+const useAgentStudioSpeed = ({
+  identity,
+  isLoaded,
+  draftKey,
+  isRuntimeReady,
+  ...input
+}: Omit<Parameters<typeof useSpeedControl>[0], "key" | "disabled"> & {
+  identity: AgentSessionIdentity | null;
+  isLoaded: boolean;
+  draftKey: string;
+  isRuntimeReady: boolean;
+}) =>
+  useSpeedControl({
+    ...input,
+    key: identity
+      ? `${identity.runtimeKind}|${identity.workingDirectory}|${identity.externalSessionId}`
+      : draftKey,
+    disabled: !isRuntimeReady || (identity !== null && !isLoaded),
+  });
 
 const canSelectProfile = (
   hasSessionTarget: boolean,
@@ -498,6 +521,7 @@ export function useAgentStudioChatComposer({
     handleSelectAgentProfile,
     handleSelectModelPair: applyModelPair,
     handleSelectVariant,
+    handleSelectSpeed,
   } = useModelSelectionActions({
     loadedSessionIdentity,
     updateAgentSessionModel,
@@ -548,7 +572,19 @@ export function useAgentStudioChatComposer({
     },
   };
 
+  const speed = useAgentStudioSpeed({
+    identity: selectedSessionIdentity,
+    isLoaded: loadedSession !== null,
+    draftKey: `${workspaceRepoPath}|${role}`,
+    isRuntimeReady,
+    runtimeKind: selectedTargetRuntimeKind,
+    catalog: selectionCatalog,
+    selection: selectedModelSelection,
+    onSelect: handleSelectSpeed,
+  });
+
   return {
+    speed,
     newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,

@@ -140,6 +140,9 @@ const withoutUndefinedSelectionFields = (
   if (selectedModel.profileId !== undefined) {
     selection.profileId = selectedModel.profileId;
   }
+  if (selectedModel.speed !== undefined) {
+    selection.speed = selectedModel.speed;
+  }
   return selection;
 };
 

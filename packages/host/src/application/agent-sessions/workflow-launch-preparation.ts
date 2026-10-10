@@ -153,9 +153,10 @@ export const prepareWorkflowLaunch = (
       const selectedModel = latest?.selectedModel;
       const defaultModel = config.agentDefaults[action.role] ?? config.defaultModel;
       const requireModel = (): AgentSessionModelSelection => {
+        // A fork starts at standard speed.
         const model =
           automatic.id === "startGeneratePullRequest" && selectedModel
-            ? selectedModel
+            ? withSpeed(selectedModel, null)
             : defaultModel;
         if (!model)
           throw launchValidationError(
@@ -251,10 +252,16 @@ export const prepareWorkflowLaunch = (
           source.workingDirectory,
           task.id,
         );
-      model =
-        decision.startMode === "reuse"
-          ? (stored.selectedModel ?? undefined)
-          : decision.selectedModel;
+      if (decision.startMode === "reuse") {
+        model = stored.selectedModel ?? undefined;
+        if (decision.speed !== undefined) {
+          if (!model)
+            return yield* launchValidationError(
+              "The source session has no model. Select a model before you change its speed.",
+            );
+          model = withSpeed(model, decision.speed);
+        }
+      } else model = decision.selectedModel;
       if (model && model.runtimeKind !== source.runtimeKind)
         return yield* launchValidationError(
           "Fork model must use the source runtime. Select a model from that runtime.",
@@ -394,6 +401,10 @@ export const validateWorkflowRuntimeSelection = (
         return yield* launchValidationError(
           `Model '${model.providerId}/${model.modelId}' or variant '${model.variant ?? ""}' is unavailable on '${runtimeKind}'. Correct the selected or configured model.`,
         );
+      if (model.speed !== undefined && !entry.speedLevels?.some(({ id }) => id === model.speed))
+        return yield* launchValidationError(
+          `Speed '${model.speed}' is unavailable for model '${model.providerId}/${model.modelId}'. Select a supported speed.`,
+        );
       if (
         model.profileId !== undefined &&
         !models.catalog.profiles?.some(
@@ -408,6 +419,14 @@ export const validateWorkflowRuntimeSelection = (
         );
     }
   });
+
+const withSpeed = (
+  model: AgentSessionModelSelection,
+  speed: string | null,
+): AgentSessionModelSelection => {
+  const { speed: _speed, ...selection } = model;
+  return speed === null ? selection : { ...selection, speed };
+};
 
 const toPromptTask = (task: TaskCard) => ({
   taskId: task.id,

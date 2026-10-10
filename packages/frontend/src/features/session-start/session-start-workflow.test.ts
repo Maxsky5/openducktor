@@ -141,7 +141,7 @@ test.each(["fresh", "reuse", "fork"] as const)(
     const beforeStartAction = { action: "human_request_changes" as const, note: "Fix the result" };
     const decision = (
       startMode === "reuse"
-        ? { startMode, sourceSession }
+        ? { startMode, sourceSession, speed: null }
         : startMode === "fork"
           ? { startMode, sourceSession, selectedModel }
           : { startMode, selectedModel }
