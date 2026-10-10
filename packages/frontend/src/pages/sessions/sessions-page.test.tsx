@@ -3,13 +3,18 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { AgentsPage } from "@/pages/agents/agents-page";
+import { QueryProvider } from "@/lib/query-provider";
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
+  TasksStateContext,
+  WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import {
   createTaskCardFixture,
+  createTasksStateFixture,
+  createWorkspacePresenceFixture,
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -30,25 +35,31 @@ function Harness({ initiallyClosed = false }: { initiallyClosed?: boolean }): Re
     workspaces: [workspace],
   });
   return (
-    <ActiveWorkspaceContext.Provider
-      value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
-    >
-      <WorkspaceStateContext.Provider value={workspaceState}>
-        <TaskSnapshotContext.Provider value={{ tasks, isLoadingTasks: false }}>
-          <button type="button" onClick={() => setClosed(true)}>
-            Close current task
-          </button>
-          <button type="button" onClick={() => navigate(-1)}>
-            Back
-          </button>
-          <Routes>
-            <Route path="/before-session" element={<p>Previous page</p>} />
-            <Route path="/kanban" element={<p>Kanban board</p>} />
-            <Route path="/sessions" element={<SessionsPage />} />
-          </Routes>
-        </TaskSnapshotContext.Provider>
-      </WorkspaceStateContext.Provider>
-    </ActiveWorkspaceContext.Provider>
+    <QueryProvider useIsolatedClient>
+      <ActiveWorkspaceContext.Provider
+        value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+      >
+        <WorkspacePresenceContext.Provider value={createWorkspacePresenceFixture()}>
+          <WorkspaceStateContext.Provider value={workspaceState}>
+            <TasksStateContext.Provider value={createTasksStateFixture({ tasks })}>
+              <TaskSnapshotContext.Provider value={{ tasks, isLoadingTasks: false }}>
+                <button type="button" onClick={() => setClosed(true)}>
+                  Close current task
+                </button>
+                <button type="button" onClick={() => navigate(-1)}>
+                  Back
+                </button>
+                <Routes>
+                  <Route path="/before-session" element={<p>Previous page</p>} />
+                  <Route path="/kanban" element={<p>Kanban board</p>} />
+                  <Route path="/sessions" element={<SessionsPage />} />
+                </Routes>
+              </TaskSnapshotContext.Provider>
+            </TasksStateContext.Provider>
+          </WorkspaceStateContext.Provider>
+        </WorkspacePresenceContext.Provider>
+      </ActiveWorkspaceContext.Provider>
+    </QueryProvider>
   );
 }
 

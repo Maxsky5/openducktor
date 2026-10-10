@@ -15,6 +15,7 @@ export const createTaskQueryUseCases = ({
   TaskService,
   | "listTasks"
   | "listKanbanTasks"
+  | "listTaskIds"
   | "getTaskMetadata"
   | "agentSessionsList"
   | "agentSessionDelete"
@@ -49,6 +50,12 @@ export const createTaskQueryUseCases = ({
 
       return enrichTasks(tasks);
     });
+  },
+
+  listTaskIds(input) {
+    return taskStore
+      .listTasks({ repoPath: input.repoPath })
+      .pipe(Effect.map((tasks) => tasks.map((task) => task.id)));
   },
 
   getTaskMetadata(input) {

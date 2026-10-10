@@ -1,6 +1,7 @@
 import type {
   AppPlatform,
   RepoAction,
+  TerminalActivity,
   TerminalCloseResponse,
   TerminalCreateResponse,
   TerminalLifecycle,
@@ -11,7 +12,7 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useSyncExternalStore } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
@@ -19,11 +20,10 @@ import {
   invalidateTerminalList,
   terminalListByFilterQueryOptions,
 } from "@/state/queries/terminals";
-import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
+import { terminalActivityOwnerKey } from "./terminal-activity-store";
 import {
   createTerminalPresentationState,
   emptyTerminalScopePresentation,
-  isUserStartedTab,
   type TerminalTab,
   terminalPresentationReducer,
 } from "./terminal-presentation-state";
@@ -47,36 +47,59 @@ export type TerminalScope = {
   workingDirectoryError: string;
 };
 
-export type TerminalPanelModel = {
+export type TerminalSessionsModel = {
   scopeKey: string | null;
   isAvailable: boolean;
   /** Why a new terminal or action run cannot start now, or null when it can. */
   startBlockedReason: string | null;
+  /** All terminal tabs of the scope, also the tabs that are closing. */
   tabs: TerminalTab[];
+  closingTabIds: ReadonlySet<string>;
+  /**
+   * The terminals of the scope that run a command, from the live activity stream. The host asks
+   * for a confirmation before it closes them.
+   */
+  runningCommandTerminalIds: ReadonlySet<string>;
+  /** True when `tabs` include each terminal of the latest host list for the scope. */
+  isSynced: boolean;
   mountedTabs: MountedTab[];
-  activeTabId: string | null;
-  isVisible: boolean;
   isLoading: boolean;
-  isCreating: boolean;
   discoveryError: string | null;
   transportError: string | null;
   platform: AppPlatform | undefined;
   platformError: string | null;
-  focusRequest: number;
   controller: TerminalTransportController | null;
-  onToggle: () => void;
-  onHide: () => void;
-  onSelectTab: (tabId: string) => void;
-  onCreate: () => void;
-  /** Opens the panel and runs the repository action in a new terminal tab. */
-  onRunAction: (action: RepoAction) => void;
+  /** Starts a terminal, or runs the action in one. Returns its tab ID, or null when start is blocked. */
+  createTerminal: (action?: RepoAction) => string | null;
   onRetryDiscovery: () => void;
   onRetryCreate: (scopeKey: string, tabId: string, actionId: string | null) => void;
-  onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
   onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
   onLifecycle: (scopeKey: string, terminalId: string, lifecycle: TerminalLifecycle) => void;
   onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
+};
+
+const NO_COMMANDS: readonly TerminalActivity[] = [];
+
+/** Watches the commands that the terminals of a scope run. */
+const useRunningCommandTerminalIds = (
+  controller: TerminalTransportController | null,
+  scope: TerminalScope | null,
+): ReadonlySet<string> => {
+  const activityKey = scope ? terminalActivityOwnerKey(scope.context) : null;
+  const subscribe = useCallback(
+    (listener: () => void): (() => void) => controller?.subscribeActivity(listener) ?? (() => {}),
+    [controller],
+  );
+  const readCommands = useCallback(
+    (): readonly TerminalActivity[] =>
+      controller && activityKey !== null
+        ? controller.readActivity(activityKey).commands
+        : NO_COMMANDS,
+    [activityKey, controller],
+  );
+  const commands = useSyncExternalStore(subscribe, readCommands, readCommands);
+  return useMemo(() => new Set(commands.map((command) => command.summary.terminalId)), [commands]);
 };
 
 export const useTerminals = (
@@ -90,7 +113,7 @@ export const useTerminals = (
     mountedScopeKeys: readonly string[];
   },
   dependencies = defaultDependencies(),
-): TerminalPanelModel => {
+): TerminalSessionsModel => {
   const scopeKey = scope?.key ?? null;
   const queryClient = useQueryClient();
   const [presentation, dispatch] = useReducer(
@@ -99,8 +122,8 @@ export const useTerminals = (
     createTerminalPresentationState,
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
-  const pendingOpen = useRef<string | null>(null);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
+  const runningCommandTerminalIds = useRunningCommandTerminalIds(controller, scope);
   const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: scope === null ? null : listFilter,
@@ -129,10 +152,10 @@ export const useTerminals = (
       return emptyTerminalScopePresentation();
     return presentation.scopes[scopeKey] ?? emptyTerminalScopePresentation();
   }, [presentation, scopeKey]);
-  const visibleTabs = useMemo(() => {
-    const closingTabIdSet = new Set(visibleState.closingTabIds);
-    return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
-  }, [visibleState.closingTabIds, visibleState.tabs]);
+  const closingTabIds = useMemo(
+    () => new Set(visibleState.closingTabIds),
+    [visibleState.closingTabIds],
+  );
   const mountedTabs = useMemo(
     () =>
       mountedScopeKeys.flatMap((ownerScopeKey) =>
@@ -143,21 +166,26 @@ export const useTerminals = (
       ),
     [mountedScopeKeys, presentation.scopes],
   );
-  const isVisible = visibleState.visibility.isExplicit
-    ? visibleState.visibility.value
-    : visibleTabs.some(isUserStartedTab);
-  const focusRequest = visibleState.focusRequest;
+  const isSynced = useMemo(() => {
+    const list = terminalQuery.data;
+    if (!list || visibleState.hostInstanceId !== list.hostInstanceId) return false;
+    const knownTerminalIds = new Set(
+      visibleState.tabs.map((tab) =>
+        tab.requestState === "lost" ? tab.sourceTerminalId : tab.terminalId,
+      ),
+    );
+    return list.terminals.every((summary) => knownTerminalIds.has(summary.terminalId));
+  }, [terminalQuery.data, visibleState.hostInstanceId, visibleState.tabs]);
 
-  const createTerminal = useCallback(
-    async ({ retryTabId, actionId = null, label }: TerminalCreation = {}): Promise<void> => {
+  const startTerminal = useCallback(
+    async ({ tabId, retry, actionId, label }: TerminalCreation): Promise<void> => {
       if (!scope || !scopeKey) return;
-      const tabId = retryTabId ?? `creating:${globalThis.crypto.randomUUID()}`;
       const workingDir = scope.workingDirectory;
       dispatch({
         type: "creationStarted",
         scopeKey,
         tabId,
-        retry: retryTabId !== undefined,
+        retry,
         label: label ?? workingDir ?? "Terminal",
         actionId,
       });
@@ -210,80 +238,6 @@ export const useTerminals = (
     [dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
 
-  useEffect(() => {
-    if (pendingOpen.current === null) return;
-    if (
-      pendingOpen.current !== scopeKey ||
-      !isVisible ||
-      terminalQuery.isError ||
-      visibleState.tabs.length > 0
-    ) {
-      pendingOpen.current = null;
-      return;
-    }
-    if (isScopeLoading || terminalQuery.isFetching || !terminalQuery.isSuccess) return;
-
-    // Consume the open request once so later refreshes cannot recreate closed terminals.
-    pendingOpen.current = null;
-    // Discovery can finish before the effect adds the host terminals to the tabs.
-    if (terminalQuery.data.terminals.length === 0) void createTerminal();
-  }, [
-    createTerminal,
-    isScopeLoading,
-    isVisible,
-    scopeKey,
-    terminalQuery.data,
-    terminalQuery.isError,
-    terminalQuery.isFetching,
-    terminalQuery.isSuccess,
-    visibleState.tabs.length,
-  ]);
-
-  const togglePanel = useCallback((): void => {
-    if (!scopeKey) return;
-    const transition = toggleTerminalPanel(isVisible);
-    pendingOpen.current =
-      transition.visible && visibleState.tabs.length === 0 && !terminalQuery.isError
-        ? scopeKey
-        : null;
-    dispatch({ type: "visibilitySet", scopeKey, value: transition.visible, isExplicit: true });
-    if (transition.requestFocus) {
-      dispatch({ type: "focusRequested", scopeKey });
-    }
-  }, [isVisible, scopeKey, terminalQuery.isError, visibleState.tabs.length]);
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent): void => {
-      if (isTerminalToggleShortcut(event)) {
-        event.preventDefault();
-        togglePanel();
-      }
-    };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [togglePanel]);
-
-  const hidePanel = useCallback((): void => {
-    pendingOpen.current = null;
-    if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
-  }, [scopeKey]);
-  const selectTab = useCallback(
-    (tabId: string): void => {
-      if (!scopeKey) return;
-      dispatch({ type: "tabSelected", scopeKey, tabId });
-      dispatch({ type: "focusRequested", scopeKey });
-    },
-    [scopeKey],
-  );
-  const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
-  const runAction = useCallback(
-    (action: RepoAction): void => {
-      if (!scopeKey) return;
-      dispatch({ type: "visibilitySet", scopeKey, value: true, isExplicit: true });
-      void createTerminal({ actionId: action.id, label: action.name });
-    },
-    [createTerminal, scopeKey],
-  );
   const { refetch } = terminalQuery;
   const retryDiscovery = useCallback((): void => {
     if (scopeKey) void refetch();
@@ -291,16 +245,9 @@ export const useTerminals = (
   const retryCreate = useCallback(
     (ownerScopeKey: string, tabId: string, actionId: string | null): void => {
       if (ownerScopeKey !== scopeKey) return;
-      void createTerminal({ retryTabId: tabId, actionId });
+      void startTerminal({ tabId, retry: true, actionId, label: null });
     },
-    [createTerminal, scopeKey],
-  );
-  const reorderTab = useCallback(
-    (draggedTabId: string, targetTabId: string, position: "before" | "after"): void => {
-      if (scopeKey)
-        dispatch({ type: "tabReordered", scopeKey, draggedTabId, targetTabId, position });
-    },
-    [scopeKey],
+    [scopeKey, startTerminal],
   );
   const changeTitle = useCallback(
     (ownerScopeKey: string, terminalId: string, title: string): void => {
@@ -360,41 +307,49 @@ export const useTerminals = (
     [],
   );
   const isLoading = terminalQuery.isFetching || isScopeLoading;
-  const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
+  const openTabs = visibleState.tabs.filter((tab) => !closingTabIds.has(tab.tabId));
   const discoveryError = terminalQuery.isError ? terminalQuery.error.message : null;
   const startBlockedReason = terminalStartBlockedReason({
     scope,
     isLoading,
     discoveryError,
-    isCreating,
-    tabCount: visibleTabs.length,
+    isCreating: openTabs.some((tab) => tab.requestState === "creating"),
+    tabCount: openTabs.length,
   });
+  const createTerminal = useCallback(
+    (action?: RepoAction): string | null => {
+      if (startBlockedReason !== null) return null;
+      const tabId = `creating:${globalThis.crypto.randomUUID()}`;
+      void startTerminal({
+        tabId,
+        retry: false,
+        actionId: action?.id ?? null,
+        label: action?.name ?? null,
+      });
+      return tabId;
+    },
+    [startBlockedReason, startTerminal],
+  );
 
   return useMemo(
     () => ({
       scopeKey,
       isAvailable: scope !== null,
       startBlockedReason,
-      tabs: visibleTabs,
+      tabs: visibleState.tabs,
+      closingTabIds,
+      runningCommandTerminalIds,
+      isSynced,
       mountedTabs,
-      activeTabId: visibleState.activeTabId,
-      isVisible,
       isLoading,
-      isCreating,
       discoveryError,
       transportError,
       platform: platformQuery.data,
       platformError: platformQuery.isError ? platformQuery.error.message : null,
-      focusRequest,
       controller,
-      onToggle: togglePanel,
-      onHide: hidePanel,
-      onSelectTab: selectTab,
-      onCreate: startCreate,
-      onRunAction: runAction,
+      createTerminal,
       onRetryDiscovery: retryDiscovery,
       onRetryCreate: retryCreate,
-      onReorderTab: reorderTab,
       onTitleChange: changeTitle,
       onClose: closeTerminal,
       onLifecycle: changeLifecycle,
@@ -404,31 +359,25 @@ export const useTerminals = (
       changeLifecycle,
       changeTitle,
       closeTerminal,
+      closingTabIds,
       controller,
+      createTerminal,
       discoveryError,
-      focusRequest,
       forgetTerminal,
-      hidePanel,
-      isCreating,
       isLoading,
-      isVisible,
+      isSynced,
       mountedTabs,
       platformQuery.data,
       platformQuery.error,
       platformQuery.isError,
-      reorderTab,
+      runningCommandTerminalIds,
       retryCreate,
       retryDiscovery,
-      runAction,
-      selectTab,
       scope,
       scopeKey,
       startBlockedReason,
-      startCreate,
       transportError,
-      togglePanel,
-      visibleState.activeTabId,
-      visibleTabs,
+      visibleState.tabs,
     ],
   );
 };
@@ -439,11 +388,12 @@ type MountedTab = {
 };
 
 type TerminalCreation = {
-  /** Restarts creation in this failed tab instead of a new tab. */
-  retryTabId?: string;
+  tabId: string;
+  /** Restarts creation in the failed tab `tabId` instead of a new tab. */
+  retry: boolean;
   /** The repository action that the new terminal runs. */
-  actionId?: string | null;
-  label?: string;
+  actionId: string | null;
+  label: string | null;
 };
 
 const startHostTerminal = (
@@ -473,7 +423,7 @@ const terminalStartBlockedReason = ({
   if (scope === null) return "Select a task or chat to use terminals.";
   if (scope.workingDirectory === null) return scope.workingDirectoryError;
   if (isLoading) return "Terminals are loading.";
-  if (discoveryError !== null) return "Terminal discovery failed. Retry it in the terminal panel.";
+  if (discoveryError !== null) return "Terminal discovery failed. Retry it in the bottom panel.";
   if (isCreating) return "A terminal is starting.";
   if (tabCount >= MAX_SCOPE_TERMINALS) {
     return `Close a terminal to start another. The limit is ${MAX_SCOPE_TERMINALS} terminals.`;

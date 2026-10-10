@@ -1,8 +1,9 @@
-import { Expand } from "lucide-react";
+import { ChevronDown, Expand } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useState } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { Button } from "@/components/ui/button";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { DocumentCopyButton } from "@/components/ui/document-copy-button";
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -10,7 +11,6 @@ import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 
 export type TaskExecutionDocument = {
   title: string;
-  description: string;
   emptyState: string;
   document: TaskDocumentState;
 };
@@ -33,8 +33,16 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   return DOCUMENT_UPDATED_AT_FORMATTER.format(value);
 };
 
+export type TaskDocumentKind = "spec" | "plan" | "qa";
+
+const TASK_DOCUMENT_KINDS = ["spec", "plan", "qa"] as const satisfies readonly TaskDocumentKind[];
+
+export type TaskExecutionDocuments = { [Kind in TaskDocumentKind]: TaskExecutionDocument };
+
 export type TaskExecutionDocumentPanelModel = {
-  activeDocument: TaskExecutionDocument | null;
+  documents: TaskExecutionDocuments;
+  selectedKind: TaskDocumentKind;
+  onSelectKind: (kind: TaskDocumentKind) => void;
 };
 
 type DocumentSectionProps = {
@@ -81,52 +89,54 @@ export function TaskExecutionDocumentPanel({
     title: string;
   } | null>(null);
 
+  const activeDocument = model.documents[model.selectedKind];
   const openModal = useCallback(() => {
-    if (!model.activeDocument) {
-      return;
-    }
     setModalSnapshot({
-      markdown: model.activeDocument.document.markdown,
-      title: model.activeDocument.title,
+      markdown: activeDocument.document.markdown,
+      title: activeDocument.title,
     });
-  }, [model.activeDocument]);
+  }, [activeDocument]);
 
   const closeModal = useCallback(() => {
     setModalSnapshot(null);
   }, []);
 
-  const snapshotModal = modalSnapshot ? (
-    <MarkdownPreviewModal
-      open
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          closeModal();
-        }
-      }}
-      markdown={modalSnapshot.markdown}
-      title={modalSnapshot.title}
-    />
-  ) : null;
-
-  if (!model.activeDocument) {
-    return (
-      <>
-        <div className="h-full min-h-0" />
-        {snapshotModal}
-      </>
-    );
-  }
-
-  const { activeDocument } = model;
   const canExpand = activeDocument.document.markdown.trim().length > 0;
+
+  const documentOptions = TASK_DOCUMENT_KINDS.map((kind): ComboboxOption => ({
+    value: kind,
+    label: model.documents[kind].title,
+    secondaryLabel: formatDocumentUpdatedAt(model.documents[kind].document.updatedAt) ?? "Not set",
+  }));
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="space-y-2 border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold leading-none tracking-tight">
-            {activeDocument.title}
-          </h2>
+      <div className="flex items-center justify-between gap-3 border-b border-border py-2 pr-3 pl-2">
+        <Combobox
+          value={model.selectedKind}
+          onValueChange={(value) => {
+            const kind = TASK_DOCUMENT_KINDS.find((candidate) => candidate === value);
+            if (kind) model.onSelectKind(kind);
+          }}
+          options={documentOptions}
+          searchable={false}
+          className="w-64"
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label={`${activeDocument.title}, change document`}
+              className="h-8 min-w-0 gap-1.5 px-2 text-base font-semibold tracking-tight"
+            >
+              <span className="truncate">{activeDocument.title}</span>
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </Button>
+          }
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            {formatDocumentUpdatedAt(activeDocument.document.updatedAt) ?? "Not set"}
+          </p>
           {canExpand ? (
             <Button
               variant="ghost"
@@ -140,12 +150,6 @@ export function TaskExecutionDocumentPanel({
             </Button>
           ) : null}
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">{activeDocument.description}</p>
-          <p className="shrink-0 text-right text-xs text-muted-foreground">
-            {formatDocumentUpdatedAt(activeDocument.document.updatedAt) ?? "Not set"}
-          </p>
-        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DocumentSection
@@ -153,7 +157,18 @@ export function TaskExecutionDocumentPanel({
           document={activeDocument.document}
         />
       </div>
-      {snapshotModal}
+      {modalSnapshot ? (
+        <MarkdownPreviewModal
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              closeModal();
+            }
+          }}
+          markdown={modalSnapshot.markdown}
+          title={modalSnapshot.title}
+        />
+      ) : null}
     </div>
   );
 }

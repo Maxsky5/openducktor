@@ -1,3 +1,4 @@
+import type { SessionPanelsModel } from "@/features/session-panels";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -140,23 +141,12 @@ type OrchestrationState = {
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
   agentStudioHeaderModel: AgentStudioHeaderModel;
   gitConflictQuickAction: AgentStudioQuickActionOption | null;
-  taskExecutionDocumentPanelModel: { activeDocument: null };
+  taskExecutionDocumentPanelModel: null;
   agentChatModel: AgentChatModel;
-  rightPanel: {
-    tabs: [
-      { id: "document"; label: "Document" },
-      { id: "git"; label: "Git" },
-      { id: "file_explorer"; label: "File explorer" },
-    ];
-    activeTabId: "document";
-    onActiveTabChange: (tabId: "document" | "git" | "file_explorer" | "ci_checks") => void;
-    isPanelOpen: boolean;
-    rightPanelToggleModel: {
-      kind: "task_execution";
-      isOpen: boolean;
-      onToggle: () => void;
-    };
-    pullRequestReviewUnavailableReason: string | null;
+  pullRequestReview: {
+    canShowPullRequestReview: boolean;
+    hasLinkedPullRequest: boolean;
+    unavailableReason: string | null;
   };
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: { rootPath: string; relativePath: string }) => void;
@@ -181,10 +171,9 @@ type AgentsPageShellModelState = {
   onRetryGitProviderContext: () => void;
   hasSelectedTask: boolean;
   chatHeaderModel: AgentStudioHeaderModel;
-  isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
-  terminalPanel: { scopeKey: string | null };
+  panels: SessionPanelsModel;
 };
 
 let workspaceState: Pick<
@@ -334,11 +323,6 @@ let selectionState: SelectionState = {
   taskId: "task-1",
   sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
 };
-const rightPanelToggleModel = {
-  kind: "task_execution" as const,
-  isOpen: true,
-  onToggle: () => {},
-};
 const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
   open: true,
   taskId: "task-1",
@@ -402,19 +386,12 @@ let orchestrationState: OrchestrationState = {
   startSessionRequest: async () => undefined,
   agentStudioHeaderModel,
   gitConflictQuickAction: null,
-  taskExecutionDocumentPanelModel: { activeDocument: null },
+  taskExecutionDocumentPanelModel: null,
   agentChatModel,
-  rightPanel: {
-    tabs: [
-      { id: "document", label: "Document" },
-      { id: "git", label: "Git" },
-      { id: "file_explorer", label: "File explorer" },
-    ],
-    activeTabId: "document",
-    onActiveTabChange: mock(() => {}),
-    isPanelOpen: true,
-    rightPanelToggleModel,
-    pullRequestReviewUnavailableReason: null,
+  pullRequestReview: {
+    canShowPullRequestReview: false,
+    hasLinkedPullRequest: false,
+    unavailableReason: null,
   },
   taskExecutionSelectedFilePreviewModel: {
     selectedFile: null,
@@ -824,19 +801,12 @@ beforeEach(async () => {
     startSessionRequest: async () => undefined,
     agentStudioHeaderModel,
     gitConflictQuickAction: null,
-    taskExecutionDocumentPanelModel: { activeDocument: null },
+    taskExecutionDocumentPanelModel: null,
     agentChatModel,
-    rightPanel: {
-      tabs: [
-        { id: "document", label: "Document" },
-        { id: "git", label: "Git" },
-        { id: "file_explorer", label: "File explorer" },
-      ],
-      activeTabId: "document",
-      onActiveTabChange: mock(() => {}),
-      isPanelOpen: true,
-      rightPanelToggleModel,
-      pullRequestReviewUnavailableReason: null,
+    pullRequestReview: {
+      canShowPullRequestReview: false,
+      hasLinkedPullRequest: false,
+      unavailableReason: null,
     },
     taskExecutionSelectedFilePreviewModel: {
       selectedFile: null,
@@ -922,7 +892,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.onRetryGitProviderContext).toBe(retryGitProviderContext);
       expect(state.hasSelectedTask).toBe(true);
-      expect(state.isRightPanelVisible).toBe(true);
+      expect(state.panels.right.isVisible).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe(
         selectionState.view.taskId,
       );
@@ -984,15 +954,15 @@ describe("useAgentsPageShellModel", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().terminalPanel.scopeKey).toBe(
-        JSON.stringify(["workspace-repo", "task-2"]),
+      expect(harness.getLatest().panels.bottom.terminals.scopeKey).toBe(
+        JSON.stringify(["workspace-repo", "task", "task-2"]),
       );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("reads the build tools state from the right panel selection", async () => {
+  test("reads the build tools state from the right panel selection, with Document selected first", async () => {
     const harness = createHookHarness();
 
     try {
@@ -1001,8 +971,8 @@ describe("useAgentsPageShellModel", () => {
       expect(buildToolsArgs.at(-1)).toMatchObject({
         activeWorkspace: workspaceState.activeWorkspace,
         activeBranch: workspaceState.activeBranch,
-        activeTabId: orchestrationState.rightPanel.activeTabId,
-        isPanelOpen: orchestrationState.rightPanel.isPanelOpen,
+        isDiffsActive: false,
+        isPanelOpen: true,
         repoSettings: orchestrationState.repoSettings,
         onResolveGitConflict: handleResolveRebaseConflict,
       });
@@ -1075,7 +1045,9 @@ describe("useAgentsPageShellModel", () => {
       const state = harness.getLatest();
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.hasSelectedTask).toBe(false);
-      expect(state.isRightPanelVisible).toBe(true);
+      // Without a selected task there is no panel owner, so the right panel does not show.
+      expect(state.panels.right.isVisible).toBe(false);
+      expect(state.panels.rightToggle).toBeNull();
       expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
     } finally {
       await harness.unmount();

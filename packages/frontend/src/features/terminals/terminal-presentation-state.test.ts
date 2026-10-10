@@ -49,12 +49,6 @@ describe("terminalPresentationReducer", () => {
       summaries: [summary("terminal-a"), summary("terminal-b")],
     });
     state = terminalPresentationReducer(state, {
-      type: "visibilitySet",
-      scopeKey,
-      value: true,
-      isExplicit: true,
-    });
-    state = terminalPresentationReducer(state, {
       type: "closeStarted",
       scopeKey,
       tabId: "tab:terminal-a",
@@ -76,8 +70,7 @@ describe("terminalPresentationReducer", () => {
     });
 
     expect(state.scopes[scopeKey]?.tabs.map((tab) => tab.tabId)).toEqual(["tab:terminal-a"]);
-    expect(state.scopes[scopeKey]?.activeTabId).toBe("tab:terminal-a");
-    expect(state.scopes[scopeKey]?.visibility.value).toBe(true);
+    expect(state.scopes[scopeKey]?.closingTabIds).toEqual([]);
   });
 
   test("does not turn an intentionally closing terminal into a lost tab", () => {
@@ -238,6 +231,6 @@ describe("terminalPresentationReducer", () => {
     });
 
     expect(state.scopes[scopeKey]?.tabs).toEqual([]);
-    expect(state.scopes[scopeKey]?.activeTabId).toBeNull();
+    expect(state.scopes[scopeKey]?.closingTabIds).toEqual([]);
   });
 });

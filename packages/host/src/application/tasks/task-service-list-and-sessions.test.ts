@@ -47,6 +47,27 @@ describe("createTaskService list and session reads", () => {
     ]);
   });
 
+  test("lists the IDs of all tasks, also closed tasks that the Kanban board hides", async () => {
+    const calls: Array<{ repoPath: string; doneVisibleDays?: number }> = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        calls.push(input);
+        return Effect.succeed([
+          task({ id: "task-open" }),
+          task({ id: "task-closed-long-ago", status: "closed" }),
+        ]);
+      },
+    };
+    const service = createTaskService({ taskStore });
+
+    await expect(Effect.runPromise(service.listTaskIds({ repoPath: "/repo" }))).resolves.toEqual([
+      "task-open",
+      "task-closed-long-ago",
+    ]);
+    // The ID list reads the store without the Kanban retention filter.
+    expect(calls).toEqual([{ repoPath: "/repo" }]);
+  });
+
   test("preserves typed task asset failures from task mutations", async () => {
     const failure = new TaskAssetError({
       operation: "create",

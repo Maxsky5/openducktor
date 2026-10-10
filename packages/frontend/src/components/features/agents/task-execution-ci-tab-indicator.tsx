@@ -45,7 +45,7 @@ export function TaskExecutionCiTabIconOverlay({
       {indicator.openThreadCount > 0 ? (
         <span
           aria-hidden="true"
-          className="absolute -left-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning-surface px-1 text-[9px] font-semibold leading-none text-warning-surface-foreground ring-1 ring-card"
+          className="absolute -top-2 -left-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning-surface px-1 text-[9px] font-semibold leading-none text-warning-surface-foreground ring-1 ring-card"
           data-testid="task-execution-tab-ci-open-threads"
         >
           {formatOpenThreadCount(indicator.openThreadCount)}
@@ -55,7 +55,7 @@ export function TaskExecutionCiTabIconOverlay({
         <span
           aria-hidden="true"
           className={cn(
-            "absolute right-0.5 top-0.5 size-1.5 rounded-full ring-1 ring-card",
+            "absolute -top-0.5 -right-0.5 size-1.5 rounded-full ring-1 ring-card",
             ciCheckStatusDotClassName[indicator.checkStatus],
           )}
           data-testid="task-execution-tab-ci-check-status"

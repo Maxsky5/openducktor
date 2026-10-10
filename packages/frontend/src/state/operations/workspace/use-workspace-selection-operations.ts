@@ -49,6 +49,8 @@ type UseWorkspaceSelectionOperationsResult = {
   closedWorkspaces: WorkspaceRecord[];
   incompleteRemovals: IncompleteWorkspaceRemoval[];
   hasLoadedWorkspaceList: boolean;
+  /** True when the open and closed workspace lists both loaded and neither list is fetching. */
+  workspaceRecordsAreCurrent: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
@@ -524,6 +526,11 @@ export function useWorkspaceSelectionOperations({
     incompleteRemovals,
     hasLoadedWorkspaceList:
       workspaceListQuery.data !== undefined && workspaceCatalogQuery.data !== undefined,
+    workspaceRecordsAreCurrent:
+      workspaceListQuery.isSuccess &&
+      workspaceCatalogQuery.isSuccess &&
+      !workspaceListQuery.isFetching &&
+      !workspaceCatalogQuery.isFetching,
     isLoadingWorkspaces: workspaceListQuery.isPending || workspaceCatalogQuery.isPending,
     workspaceLoadError,
     isSwitchingWorkspace,

@@ -15,6 +15,8 @@ export const taskQueryKeys = {
   repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
   repoData: (repoPath: string) => taskQueryKeys.repoDataPrefix(repoPath),
   kanbanData: (repoPath: string) => taskQueryKeys.repoData(repoPath),
+  /** Under the repository data prefix, so task events mark it stale with the task list. */
+  ids: (repoPath: string) => [...taskQueryKeys.repoDataPrefix(repoPath), "ids"] as const,
 };
 
 export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (repoPath: string) =>
@@ -31,6 +33,14 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
 );
 
 export const unfilteredRepoTaskDataQueryOptions = repoTaskDataQueryOptions;
+
+/** The IDs of all tasks of a repository, also closed tasks that the Kanban list hides. */
+export const repoTaskIdsQueryOptions = (repoPath: string) =>
+  queryOptions({
+    queryKey: taskQueryKeys.ids(repoPath),
+    queryFn: (): Promise<string[]> => host.taskIdsList(repoPath),
+    staleTime: TASK_DATA_STALE_TIME_MS,
+  });
 
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,

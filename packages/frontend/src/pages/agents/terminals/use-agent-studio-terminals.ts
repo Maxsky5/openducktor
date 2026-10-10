@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { TerminalDependencies, TerminalPanelModel, TerminalScope } from "@/features/terminals";
+import { sessionPanelOwnerKey } from "@/features/session-panels";
+import type {
+  TerminalDependencies,
+  TerminalScope,
+  TerminalSessionsModel,
+} from "@/features/terminals";
 import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
-
-export type AgentStudioTerminalPanelModel = TerminalPanelModel;
 
 type AgentStudioTerminalDependencies = {
   hostClient: TerminalDependencies["hostClient"] & Pick<typeof host, "taskWorktreeGet">;
@@ -18,8 +21,9 @@ const defaultDependencies = (): AgentStudioTerminalDependencies => ({
   terminalBridge: getShellBridge().terminals,
 });
 
+/** The panel layout owner key, so the panels can place the terminals of each task. */
 const terminalScopeKey = (workspaceId: string, taskId: string): string =>
-  JSON.stringify([workspaceId, taskId]);
+  sessionPanelOwnerKey({ kind: "task", workspaceId, taskId });
 
 export const useAgentStudioTerminals = (
   {
@@ -36,7 +40,7 @@ export const useAgentStudioTerminals = (
     mountedTaskIds: readonly string[];
   },
   dependencies = defaultDependencies(),
-): AgentStudioTerminalPanelModel => {
+): TerminalSessionsModel => {
   const enabled = workspaceId !== null && repoPath !== null && taskId !== null;
   const worktreeOptions = enabled
     ? taskWorktreeQueryOptions({

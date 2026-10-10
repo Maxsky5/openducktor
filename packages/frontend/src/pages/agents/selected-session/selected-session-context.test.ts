@@ -1,3 +1,4 @@
+import type { TaskDocumentKind } from "@/components/features/agents/task-execution-document-panel";
 import { describe, expect, mock, test } from "bun:test";
 import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
@@ -125,20 +126,21 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.documents.activeDocument).toBeNull();
+    expect(context.documents.taskDocuments).toBeNull();
     expect(context.selectedSession.runtimeData.contextError).toBeNull();
   });
 
-  test("maps active document from selected role semantics", () => {
+  test("gives every role all task documents and the role's first document", () => {
     const expectedByRole = {
-      spec: "Specification",
-      planner: "Implementation Plan",
-      qa: "QA Report",
-      build: null,
-    } satisfies Record<AgentRole, string | null>;
+      spec: "spec",
+      planner: "plan",
+      qa: "qa",
+      build: "plan",
+    } satisfies Record<AgentRole, TaskDocumentKind>;
+    const roleSessionKeys = new Set<string>();
 
     for (const role of agentRoleValues) {
-      const expectedTitle = expectedByRole[role];
+      const expectedKind = expectedByRole[role];
       const session = createSession({
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
       });
@@ -150,8 +152,13 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         }),
       );
 
-      expect(context.documents.activeDocument?.title ?? null).toBe(expectedTitle);
+      expect(context.documents.defaultDocumentKind).toBe(expectedKind);
+      expect(
+        Object.values(context.documents.taskDocuments ?? {}).map((document) => document.title),
+      ).toEqual(["Specification", "Implementation Plan", "QA Report"]);
+      roleSessionKeys.add(context.documents.roleSessionKey);
     }
+    expect(roleSessionKeys.size).toBe(agentRoleValues.length);
   });
 
   test("keeps selected-session identity authoritative when loaded session state is stale", () => {
@@ -179,7 +186,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.selectedSession.identity).toEqual(toAgentSessionIdentity(selectedSession));
     expect(context.workflow.sessionSelectorValue).toBe(agentSessionIdentityKey(selectedSession));
     expect(context.role).toBe("planner");
-    expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
+    expect(context.documents.defaultDocumentKind).toBe("plan");
   });
 
   test("marks unavailable selected role read-only and disables kickoff affordance", () => {

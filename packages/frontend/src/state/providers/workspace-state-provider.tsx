@@ -22,6 +22,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     closedWorkspaces,
     incompleteRemovals,
     hasLoadedWorkspaceList,
+    workspaceRecordsAreCurrent,
     isLoadingWorkspaces,
     workspaceLoadError,
     branches,
@@ -201,12 +202,14 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     () => ({
       hasWorkspaces: workspaces.length + closedWorkspaces.length + incompleteRemovals.length > 0,
       hasLoadedWorkspaceList,
+      workspaceRecordsAreCurrent,
       isLoadingWorkspaces,
       workspaceLoadError,
       retryWorkspaces: refreshWorkspaces,
     }),
     [
       hasLoadedWorkspaceList,
+      workspaceRecordsAreCurrent,
       isLoadingWorkspaces,
       closedWorkspaces.length,
       incompleteRemovals.length,

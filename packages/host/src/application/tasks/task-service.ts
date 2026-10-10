@@ -130,6 +130,8 @@ export type TaskServiceError =
 export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   listKanbanTasks(input: RepoPathInput): Effect.Effect<TaskCard[], TaskServiceError>;
+  /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
+  listTaskIds(input: RepoPathInput): Effect.Effect<string[], TaskServiceError>;
   getTaskStopImpact(input: TaskStopImpactRequest): Effect.Effect<TaskStopImpact, TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
@@ -429,6 +431,7 @@ const createTaskServiceImplementation = (
       mapTaskMutationProgressErrors(service.linkMergedPullRequest(input)),
     linkPullRequest: (input) => mapTaskServiceErrors(service.linkPullRequest(input)),
     listKanbanTasks: (input) => mapTaskServiceErrors(service.listKanbanTasks(input)),
+    listTaskIds: (input) => mapTaskServiceErrors(service.listTaskIds(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
     planGet: (input) => mapTaskServiceErrors(service.planGet(input)),

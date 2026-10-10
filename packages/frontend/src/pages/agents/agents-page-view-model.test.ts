@@ -1,18 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  buildAgentStudioHeaderModel,
-  buildRoleLabelByRole,
-  buildTaskExecutionDocumentPanelModel,
-} from "./agents-page-view-model";
+import { buildAgentStudioHeaderModel, buildRoleLabelByRole } from "./agents-page-view-model";
 
 const createTaskCard = (id: string): TaskCard => ({
   id,
@@ -59,14 +54,6 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     overrides,
   );
 };
-
-const createDocumentState = (markdown = ""): TaskDocumentState => ({
-  markdown,
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: true,
-});
 
 describe("agents-page-view-model", () => {
   test("buildRoleLabelByRole preserves defaults and applies provided labels", () => {
@@ -235,27 +222,5 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.onOpenTaskDetails).toBeNull();
-  });
-
-  test("buildTaskExecutionDocumentPanelModel forwards active document state", () => {
-    const onReplyApproval = mock(() => {});
-
-    const model = buildTaskExecutionDocumentPanelModel({
-      activeDocument: {
-        title: "Specification",
-        description: "Current specification document for this task.",
-        emptyState: "No spec document yet.",
-        document: createDocumentState("spec"),
-      },
-    });
-
-    expect(model.activeDocument).toEqual({
-      title: "Specification",
-      description: "Current specification document for this task.",
-      emptyState: "No spec document yet.",
-      document: createDocumentState("spec"),
-    });
-
-    expect(onReplyApproval).not.toHaveBeenCalled();
   });
 });

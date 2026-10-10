@@ -217,7 +217,7 @@ Rules:
 - Use `selectedSessionIdentity !== null` for existence. Do not add `hasSession`.
 - Keep `selectedSessionActivityState`, selected role, and `selectedSessionModel` as separate facts.
 - Runtime kind and working directory belong to `selectedSessionIdentity`.
-- `selected-session-context.ts` owns the active document, not right-panel state.
+- `selected-session-context.ts` owns the task documents and the first document of the selected role session, not right-panel state.
 - Read-only transcript history chooses a live session, runtime history, or an empty reason.
 - `agent-chat/agent-chat-thread-state.ts` owns the renderable session, active key, notice, and reset window.
 
@@ -259,9 +259,9 @@ The sidebar owns task and workspace session navigation. It shows each durable ro
 
 The app shell also owns `contexts/DiffWorkerProvider.tsx`. Page and workspace switches retain the syntax worker pool and its bounded highlight cache. Diff preloads handle their promises. A failed preload reports an error while its view is open. Closing that view stops error reporting for its pending work.
 
-`pages/agents/agent-studio-navigation-state.ts` resolves the committed task selection. Task and workspace views render one conversation without browser tabs. `components/features/agents/session-view-controls.tsx` supplies terminal and work-panel controls in the session header. The header stays visible during a file preview. Workspace session actions expose rename and archive. Archive uses the existing worktree confirmation and unsaved-edit guard.
+`pages/agents/agent-studio-navigation-state.ts` resolves the committed task selection. Task and workspace views render one conversation without browser tabs. `components/features/agents/session-view-controls.tsx` supplies the bottom panel and right panel toggles in the session header. The task header also shows the link of the pull request of the task. The header stays visible during a file preview. Workspace session actions expose rename and archive. Archive uses the existing worktree confirmation and unsaved-edit guard.
 
-`components/features/repository-actions/session-repo-actions.tsx` supplies the repository action button in both session headers. It reads actions from the repository config query, so a settings save updates it without a reload. It runs an action through the page terminal model, which opens a new terminal tab. The terminal scope gives the reason when the session has no usable working directory.
+`components/features/repository-actions/session-repo-actions.tsx` supplies the repository action button in both session headers. It reads actions from the repository config query, so a settings save updates it without a reload. It runs an action through the session panels controller, which opens a new terminal tab at the end of the bottom panel. The terminal scope gives the reason when the session has no usable working directory.
 
 `pages/agents/agents-page-session-tabs.ts` owns workflow roles and session history choices. It does not own a task tab list.
 
@@ -294,25 +294,44 @@ Key event tracking by selected session identity. A short gap in loaded session s
 
 Files: `pages/agents/shell/use-agents-page-build-tools.ts`, `pages/agents/right-panel/use-agents-page-right-panel-model.ts`, and `pages/agents/shell/use-agent-studio-git-conflict-header-model.ts`.
 
-The page shell owns the build-tools snapshot and the git actions. The right panel model reads them and owns the file explorer, CI checks, and panel models.
+The page shell owns the build-tools snapshot and the git actions. The right panel model reads them and owns the Document, Diffs, Files, and CI Checks tool models. The Diffs view reads Git data only while the Diffs tab is selected in the shown right panel.
 
 Rules:
 
 - The chat header reads the git conflict from the page shell. Do not send right panel state to the page shell from an effect.
 - The workflow model builds the git conflict quick action. The header model hook adds it while the git actions report a conflict.
 - Show the git conflict quick action only while the right panel is open. Git data does not refresh while the panel is closed.
-- Keep git state through a right panel toggle or a Git tab close, so a running git action keeps its result. Both session kinds use `pages/agents/use-agent-studio-git-actions.ts`. Task workflow policy stays in the task adapter.
+- Keep git state through a right panel toggle or a Diffs tab close, so a running git action keeps its result. Both session kinds use `pages/agents/use-agent-studio-git-actions.ts`. Task workflow policy stays in the task adapter.
 - Show action errors, a force push confirmation, or a local git conflict only in the repository and working directory where the action ran. Pull/rebase confirmations also belong to the original branch identity. Reset confirmations also belong to the original branch identity, comparison target, and displayed snapshot.
 
 `pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
 
 Deferred refreshes check the current view before each read. Branch and settings refreshes wait while tools are hidden. A repository, directory, or branch change discards work for the previous view.
 
-Dynamic tabs in `openduckto-k0u1t` must keep this hook in the session shell. Closing or hiding the Git tab must only unmount its view. Conflict assistance must use the same controller and keep task workflow policy in the task adapter.
+Keep this hook in the session shell. Closing or hiding the Diffs tab only unmounts its view. Conflict assistance uses the same controller and keeps task workflow policy in the task adapter.
 
 `features/git-conflict-resolution` shares conflict controls and core prompt instructions. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing saved-chat action owner through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved chat, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
 
 Git status supplies the effective conflict directory but uses the comparison branch as its target. The frontend marks that target unavailable. The retained conflict controller keeps operation and branch facts from the original command and updates its file paths from Git status.
+
+## Session panels
+
+Files: `features/session-panels/panel-tab-kinds.ts`, `session-panel-layout.ts`, `session-panel-layout-store.ts`, `use-session-panels.ts`, `use-session-panel-visibility.ts`, `session-panel.tsx`, `session-panel-split.tsx`, `session-panel-drop.ts`, and `session-panels-root.tsx`.
+
+Owns the tabs of the right panel and the bottom panel of task and Workspace Session pages. The task page shell and the Workspace Session view each call `useSessionPanels` with the owner, the selection key, the terminal model, and the kinds that the page cannot show now. The pages give the content of each tool tab.
+
+Rules:
+
+- `PANEL_TAB_KIND_RULES` is the only place that names a tab kind. It holds the label, launcher description, icon, number of tabs, allowed panels, allowed owners, and default state of each kind. A later kind adds a rule and a content renderer. A page names only the kinds that it cannot show now, such as CI Checks without a linked pull request.
+- One layout belongs to each task, for all its role sessions, and one to each Workspace Session. Each role and each chat remembers its selected right panel tab. A role without a selection starts on its default tab. When the remembered tab closes or moves away, the panel selects its first tab, also after a restart.
+- `reconcileSessionPanelLayout` applies the rules to a layout on each input change. It keeps the position of a kind that is not available, so CI Checks gets its position back. It drops a terminal tab only when the terminal list proves that its terminal ended.
+- `canPlacePanelTab` is the one placement check for the launcher and moves. `canMovePanelTab` is the one move check for drag and drop and the move action. The launcher shows no card for a unique kind that is already open.
+- The layout store keeps the layouts of all owners for the app run and saves tool tabs in `localStorage`, one record for each owner. It does not save terminal tabs or the New tab. The sessions page removes the records of tasks, chats, and workspaces that no longer exist. It removes the records of a workspace only when the open and the closed workspace lists are both current. It reads the IDs of all tasks from `task_ids_list`, because the Kanban task list hides old closed tasks.
+- The right panel open state is global. The bottom panel visibility belongs to the selected owner and resets when the owner changes. The bottom panel hides when it loses its last tab, by a close, a move, or a terminal list without its terminals. An empty bottom panel that the user opens stays open.
+- Each panel has one presence: `opening`, `open`, `closing`, or `closed`. A panel is visible in all states except `closed`, so its content does not change while it slides out. The Ctrl+` shortcut, an owner change, and the first render go to `open` or `closed` at once.
+- `SessionPanelSplit` places the main area and one panel. While the panel opens or closes, both change size together with the sheet motion tokens, and the panel content keeps its open size at the outer edge. The size transition is on only during that move, so a drag on the separator stays direct. The split calls `onSettled` when the move ends. It calls it at once when no transition runs, as with reduced motion or a panel that a drag made zero wide. When the user makes an open panel zero in size with its separator, the split calls `onCollapsed`, and the panel hides at once.
+- The terminal model owns terminal processes, discovery, close, and viewports. The panels own terminal placement, order, and selection.
+- A terminal that runs a command, as the live activity stream reports, opens the close confirmation at once and changes nothing behind it. Any other terminal tab hides at once while the host ends its terminal. If the host still asks for a confirmation, the tab comes back with the dialog.
 
 ## Composer
 

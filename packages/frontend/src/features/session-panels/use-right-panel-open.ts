@@ -16,7 +16,8 @@ export function useRightPanelOpen() {
     }
   }, [isOpen]);
   const toggle = useCallback(() => setIsOpen((open) => !open), []);
-  return { isOpen, toggle };
+  const close = useCallback(() => setIsOpen(false), []);
+  return { isOpen, toggle, close };
 }
 
 function readPanelOpen(): boolean {

@@ -17,17 +17,18 @@ import { SessionRepoActions } from "@/components/features/repository-actions/ses
 import { WorkflowRail } from "@/components/features/agents/agent-studio-header-workflow-rail";
 import { SessionOpenInAction } from "@/components/features/agents/session-open-in-action";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
-import type { TaskExecutionPanelToggleModel } from "@/components/features/agents/task-execution-panel";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import {
-  TerminalSplitLayout,
-  type TerminalSplitIds,
-  useTerminalSplit,
-} from "@/features/terminals/terminal-split-layout";
+  BottomPanelSplit,
+  type SessionPanelModel,
+  SessionPanelSplit,
+  type SessionPanelSplitIds,
+  type SessionPanelSplitSizes,
+  SessionPanelsRoot,
+  type SessionPanelsModel,
+} from "@/features/session-panels";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
 import {
   AgentsPageModalContent,
@@ -46,11 +47,22 @@ import type {
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
 } as const;
-const TERMINAL_SPLIT_IDS: TerminalSplitIds = {
+const BOTTOM_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
   group: "agent-studio-terminal-layout",
-  content: "agent-studio-workspace-panel",
-  terminal: "agent-studio-terminal-panel",
+  main: "agent-studio-workspace-panel",
+  panel: "agent-studio-terminal-panel",
   separator: "agent-studio-terminal-separator",
+};
+const RIGHT_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
+  group: "agent-studio-right-panel-layout",
+  main: "agent-studio-chat-panel",
+  panel: "agent-studio-right-panel",
+};
+const RIGHT_PANEL_SIZES: SessionPanelSplitSizes = {
+  main: 63,
+  mainMin: "35%",
+  panel: 37,
+  panelMin: "30%",
 };
 
 type AgentsPageWorkspaceProps = {
@@ -61,15 +73,14 @@ type AgentsPageWorkspaceProps = {
   chatContent: ReactElement;
   hasSelectedFilePreview: boolean;
   selectedFilePreviewContent: ReactNode;
-  isRightPanelVisible: boolean;
   rightPanelContent: ReactNode;
-  terminalPanel: AgentStudioTerminalPanelModel;
+  panels: SessionPanelsModel;
 };
 
 export type AgentsPageWorkspacePanesProps = Omit<
   AgentsPageWorkspaceProps,
-  "hasSelectedTask" | "unavailableTaskId" | "terminalPanel" | "headerContent"
->;
+  "hasSelectedTask" | "unavailableTaskId" | "panels" | "headerContent"
+> & { rightPanel: Pick<SessionPanelModel, "presence" | "onSettled" | "onCollapsed"> };
 
 type AgentChatPaneProps = {
   chatModel: ComponentProps<typeof AgentChatSurface>["model"];
@@ -80,13 +91,19 @@ export function AgentsPageWorkspacePanes({
   chatContent,
   hasSelectedFilePreview,
   selectedFilePreviewContent,
-  isRightPanelVisible,
   rightPanelContent,
+  rightPanel,
 }: AgentsPageWorkspacePanesProps): ReactElement {
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-      <ResizablePanel defaultSize="63%" minSize="35%">
-        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <SessionPanelSplit
+      ids={RIGHT_PANEL_SPLIT_IDS}
+      model={rightPanel}
+      direction="horizontal"
+      sizes={RIGHT_PANEL_SIZES}
+      className="h-full min-h-0 overflow-hidden"
+      mainClassName="flex h-full min-h-0 flex-col overflow-hidden"
+      main={
+        <>
           {workflowContent}
           <div
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -109,19 +126,10 @@ export function AgentsPageWorkspacePanes({
               {chatContent}
             </div>
           </div>
-        </div>
-      </ResizablePanel>
-      {isRightPanelVisible ? (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize="37%" minSize="30%">
-            <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
-              {rightPanelContent}
-            </div>
-          </ResizablePanel>
         </>
-      ) : null}
-    </ResizablePanelGroup>
+      }
+      panel={rightPanelContent}
+    />
   );
 }
 
@@ -133,11 +141,9 @@ export function AgentsPageWorkspace({
   chatContent,
   hasSelectedFilePreview,
   selectedFilePreviewContent,
-  isRightPanelVisible,
   rightPanelContent,
-  terminalPanel,
+  panels,
 }: AgentsPageWorkspaceProps): ReactElement {
-  const layout = useTerminalSplit(TERMINAL_SPLIT_IDS, terminalPanel.isVisible);
   if (unavailableTaskId) {
     return (
       <section
@@ -166,22 +172,23 @@ export function AgentsPageWorkspace({
       chatContent={chatContent}
       hasSelectedFilePreview={hasSelectedFilePreview}
       selectedFilePreviewContent={selectedFilePreviewContent}
-      isRightPanelVisible={isRightPanelVisible}
       rightPanelContent={rightPanelContent}
+      rightPanel={panels.right}
     />
   );
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {headerContent}
-      <TerminalSplitLayout
-        ids={TERMINAL_SPLIT_IDS}
-        model={terminalPanel}
-        layout={layout}
-        className="min-h-0 flex-1 overflow-hidden"
-        contentClassName="h-full min-h-0"
-      >
-        {workspacePanes}
-      </TerminalSplitLayout>
+      <SessionPanelsRoot panels={panels}>
+        <BottomPanelSplit
+          ids={BOTTOM_PANEL_SPLIT_IDS}
+          model={panels.bottom}
+          className="min-h-0 flex-1 overflow-hidden"
+          mainClassName="h-full min-h-0"
+        >
+          {workspacePanes}
+        </BottomPanelSplit>
+      </SessionPanelsRoot>
     </div>
   );
 }
@@ -203,7 +210,6 @@ export type AgentsPageLayoutModel = {
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
   onRetryGitProviderContext: () => void;
-  rightPanelToggleModel: TaskExecutionPanelToggleModel | null;
   hasSelectedTask: boolean;
   unavailableTaskId: string | null;
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
@@ -211,11 +217,10 @@ export type AgentsPageLayoutModel = {
   taskExecutionSelectedFilePreviewModel: ComponentProps<
     typeof TaskExecutionSelectedFilePreview
   >["model"];
-  isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
-  terminalPanel: AgentStudioTerminalPanelModel;
+  panels: SessionPanelsModel;
 };
 
 type AgentsPageLayoutProps = {
@@ -234,17 +239,15 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     onRetryNavigationPersistence,
     onRetryChatSettingsLoad,
     onRetryGitProviderContext,
-    rightPanelToggleModel,
     hasSelectedTask,
     unavailableTaskId,
     chatHeaderModel,
     chatModel,
     taskExecutionSelectedFilePreviewModel,
-    isRightPanelVisible,
     rightPanelBridge,
     selectedFileRefresh,
     modalContent,
-    terminalPanel,
+    panels,
   } = model;
   const linkRef = useRef<HTMLElement | null>(null);
   const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
@@ -284,7 +287,13 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         model={chatHeaderModel}
         repoActions={
           activeWorkspace ? (
-            <SessionRepoActions workspace={activeWorkspace} terminal={terminalPanel} />
+            <SessionRepoActions
+              workspace={activeWorkspace}
+              terminal={{
+                startBlockedReason: panels.startBlockedReason,
+                onRunAction: panels.runAction,
+              }}
+            />
           ) : null
         }
         openIn={
@@ -295,12 +304,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
           />
         }
         viewControls={
-          <SessionViewControls
-            terminal={terminalPanel}
-            tools={
-              rightPanelToggleModel ? { ...rightPanelToggleModel, label: "task execution" } : null
-            }
-          />
+          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
         }
       />
     ),
@@ -310,8 +314,10 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       openInContextMode,
       openInTargetPath,
       openInDisabledReason,
-      rightPanelToggleModel,
-      terminalPanel,
+      panels.bottomToggle,
+      panels.rightToggle,
+      panels.runAction,
+      panels.startBlockedReason,
     ],
   );
   const workflowContent = useMemo(
@@ -369,9 +375,8 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         chatContent={chatContent}
         hasSelectedFilePreview={hasSelectedFilePreview}
         selectedFilePreviewContent={selectedFilePreviewContent}
-        isRightPanelVisible={isRightPanelVisible}
         rightPanelContent={rightPanelContent}
-        terminalPanel={terminalPanel}
+        panels={panels}
       />
     ),
     [
@@ -381,10 +386,9 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       unavailableTaskId,
       headerContent,
       workflowContent,
-      isRightPanelVisible,
       rightPanelContent,
       selectedFilePreviewContent,
-      terminalPanel,
+      panels,
     ],
   );
   const modalContentElement = useMemo(
@@ -394,7 +398,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
 
   return (
     <>
-      {!isRightPanelVisible && rightPanelBridge ? (
+      {!panels.right.isVisible && rightPanelBridge ? (
         <AgentsPageRightPanelRuntime
           {...rightPanelBridge.rightPanel}
           refreshWorktreeRef={refreshWorktreeRef}

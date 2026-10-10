@@ -1,4 +1,3 @@
-import { arrayMove } from "@dnd-kit/sortable";
 import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
 
 type ReadyTerminalTab = {
@@ -38,7 +37,7 @@ const isPendingTab = (tab: TerminalTab): tab is PendingTerminalTab =>
 
 /**
  * Host-started terminals, such as worktree-creation actions, wait in the tab list. They do not open
- * the terminal panel.
+ * the bottom panel.
  */
 export const isUserStartedTab = (tab: TerminalTab): boolean =>
   tab.requestState !== "ready" || tab.summary.startedBy === "user";
@@ -113,9 +112,6 @@ export type TerminalScopePresentation = {
   hostInstanceId: string | null;
   tabs: TerminalTab[];
   closingTabIds: string[];
-  activeTabId: string | null;
-  visibility: { value: boolean; isExplicit: boolean };
-  focusRequest: number;
 };
 
 export type TerminalPresentationState = {
@@ -147,16 +143,6 @@ export type TerminalPresentationEvent =
       error: string;
     }
   | { type: "creationCompleted"; scopeKey: string; tabId: string; summary: TerminalSummary }
-  | { type: "visibilitySet"; scopeKey: string; value: boolean; isExplicit: boolean }
-  | { type: "focusRequested"; scopeKey: string }
-  | { type: "tabSelected"; scopeKey: string; tabId: string }
-  | {
-      type: "tabReordered";
-      scopeKey: string;
-      draggedTabId: string;
-      targetTabId: string;
-      position: "before" | "after";
-    }
   | { type: "closeStarted"; scopeKey: string; tabId: string }
   | { type: "closeRejected"; scopeKey: string; tabId: string }
   | { type: "closeCompleted"; scopeKey: string; tabId: string }
@@ -168,9 +154,6 @@ export const emptyTerminalScopePresentation = (): TerminalScopePresentation => (
   hostInstanceId: null,
   tabs: [],
   closingTabIds: [],
-  activeTabId: null,
-  visibility: { value: false, isExplicit: false },
-  focusRequest: 0,
 });
 
 export const createTerminalPresentationState = (
@@ -221,16 +204,6 @@ const toLostTab = (tab: ReadyTerminalTab, message: string): LostTerminalTab => (
   sourceTerminalId: tab.terminalId,
 });
 
-const resolveActiveTabId = (
-  tabs: TerminalTab[],
-  currentActiveTabId: string | null,
-  preferredActiveTabId: string | null = null,
-): string | null => {
-  if (tabs.some((tab) => tab.tabId === currentActiveTabId)) return currentActiveTabId;
-  if (tabs.some((tab) => tab.tabId === preferredActiveTabId)) return preferredActiveTabId;
-  return tabs[0]?.tabId ?? null;
-};
-
 const updateScope = (
   state: TerminalPresentationState,
   scopeKey: string,
@@ -271,15 +244,7 @@ const reconcileHostTabs = (
     const closingTabIds = scope.closingTabIds.filter((tabId) =>
       tabs.some((tab) => tab.tabId === tabId),
     );
-    const closingTabIdSet = new Set(closingTabIds);
-    const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
-    return {
-      ...scope,
-      hostInstanceId,
-      tabs,
-      closingTabIds,
-      activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
-    };
+    return { ...scope, hostInstanceId, tabs, closingTabIds };
   }
   const transient = scope.tabs.filter((tab) => tab.terminalId === null);
   const currentTabsByTerminalId = new Map(
@@ -308,24 +273,14 @@ const reconcileHostTabs = (
   const closingTabIds = scope.closingTabIds.filter((tabId) =>
     tabs.some((tab) => tab.tabId === tabId),
   );
-  const closingTabIdSet = new Set(closingTabIds);
-  const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
-  const activeTabId = resolveActiveTabId(selectableTabs, scope.activeTabId);
   if (
     scope.hostInstanceId === hostInstanceId &&
     arraysEqualByIdentity(scope.tabs, tabs) &&
-    arraysEqualByIdentity(scope.closingTabIds, closingTabIds) &&
-    scope.activeTabId === activeTabId
+    arraysEqualByIdentity(scope.closingTabIds, closingTabIds)
   ) {
     return scope;
   }
-  return {
-    ...scope,
-    hostInstanceId,
-    tabs,
-    closingTabIds,
-    activeTabId,
-  };
+  return { ...scope, hostInstanceId, tabs, closingTabIds };
 };
 
 export const terminalPresentationReducer = (
@@ -334,11 +289,7 @@ export const terminalPresentationReducer = (
 ): TerminalPresentationState => {
   if (event.type === "scopeActivated") {
     if (!event.scopeKey) return { ...state, activeScopeKey: null };
-    const activated = updateScope(state, event.scopeKey, (scope) => ({
-      ...scope,
-      visibility: { value: false, isExplicit: false },
-      focusRequest: 0,
-    }));
+    const activated = updateScope(state, event.scopeKey, (scope) => scope);
     return { ...activated, activeScopeKey: event.scopeKey };
   }
   return updateScope(state, event.scopeKey, (scope) => {
@@ -362,12 +313,7 @@ export const terminalPresentationReducer = (
               requestState: "creating" as const,
             },
           ];
-      return {
-        ...scope,
-        tabs,
-        activeTabId: event.tabId,
-        focusRequest: scope.focusRequest + 1,
-      };
+      return { ...scope, tabs };
     }
     if (event.type === "creationFailed") {
       return {
@@ -384,62 +330,23 @@ export const terminalPresentationReducer = (
         tabs: scope.tabs.map((tab) =>
           tab.tabId === event.tabId ? toHostTab(event.summary, tab) : tab,
         ),
-        activeTabId: event.tabId,
       };
-    }
-    if (event.type === "visibilitySet") {
-      return { ...scope, visibility: { value: event.value, isExplicit: event.isExplicit } };
-    }
-    if (event.type === "focusRequested") {
-      return { ...scope, focusRequest: scope.focusRequest + 1 };
-    }
-    if (event.type === "tabSelected") return { ...scope, activeTabId: event.tabId };
-    if (event.type === "tabReordered") {
-      const draggedIndex = scope.tabs.findIndex((tab) => tab.tabId === event.draggedTabId);
-      const targetIndex = scope.tabs.findIndex((tab) => tab.tabId === event.targetTabId);
-      if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) return scope;
-      const insertionIndex = event.position === "before" ? targetIndex : targetIndex + 1;
-      const adjustedIndex = draggedIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
-      return { ...scope, tabs: arrayMove(scope.tabs, draggedIndex, adjustedIndex) };
     }
     if (event.type === "closeStarted") {
-      const closingTabIds = scope.closingTabIds.includes(event.tabId)
-        ? scope.closingTabIds
-        : [...scope.closingTabIds, event.tabId];
-      const closingTabIdSet = new Set(closingTabIds);
-      const selectableTabs = scope.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
-      return {
-        ...scope,
-        closingTabIds,
-        activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
-        visibility:
-          selectableTabs.length === 0 ? { value: false, isExplicit: true } : scope.visibility,
-      };
+      if (scope.closingTabIds.includes(event.tabId)) return scope;
+      return { ...scope, closingTabIds: [...scope.closingTabIds, event.tabId] };
     }
     if (event.type === "closeRejected") {
-      const closingTabIds = scope.closingTabIds.filter((tabId) => tabId !== event.tabId);
-      const closingTabIdSet = new Set(closingTabIds);
-      const selectableTabs = scope.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
       return {
         ...scope,
-        closingTabIds,
-        activeTabId: resolveActiveTabId(selectableTabs, event.tabId),
-        visibility:
-          selectableTabs.length > 0 ? { value: true, isExplicit: true } : scope.visibility,
+        closingTabIds: scope.closingTabIds.filter((tabId) => tabId !== event.tabId),
       };
     }
     if (event.type === "closeCompleted") {
-      const tabs = scope.tabs.filter((tab) => tab.tabId !== event.tabId);
-      const closingTabIds = scope.closingTabIds.filter((tabId) => tabId !== event.tabId);
-      const closingTabIdSet = new Set(closingTabIds);
-      const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
       return {
         ...scope,
-        tabs,
-        closingTabIds,
-        activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
-        visibility:
-          selectableTabs.length === 0 ? { value: false, isExplicit: true } : scope.visibility,
+        tabs: scope.tabs.filter((tab) => tab.tabId !== event.tabId),
+        closingTabIds: scope.closingTabIds.filter((tabId) => tabId !== event.tabId),
       };
     }
     if (event.type === "titleChanged") {

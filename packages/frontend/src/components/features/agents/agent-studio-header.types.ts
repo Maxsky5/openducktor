@@ -1,3 +1,4 @@
+import type { PullRequest } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
@@ -51,6 +52,8 @@ export type AgentStudioQuickActionOption = {
 export type AgentStudioHeaderModel = {
   taskTitle: string | null;
   taskId: string | null;
+  /** The pull request linked to the task, shown in the top bar. */
+  pullRequest: PullRequest | null;
   onOpenTaskDetails: (() => void) | null;
   selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];

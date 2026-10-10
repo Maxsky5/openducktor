@@ -1,5 +1,6 @@
 import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { ArrowUpRightFromSquare } from "lucide-react";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -127,6 +128,9 @@ export function AgentStudioHeader({
       }
       actions={
         <>
+          {model.pullRequest ? (
+            <TaskPullRequestLink pullRequest={model.pullRequest} className="shrink-0" />
+          ) : null}
           {repoActions}
           <SessionHistoryMenu
             selector={model.sessionSelector}

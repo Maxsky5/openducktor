@@ -17,17 +17,30 @@ import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review"
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
 import { TaskExecutionSelectedFilePreview } from "./task-execution-file-preview";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
-import type {
-  TaskExecutionPanelModel,
-  TaskExecutionPanelToggleModel,
-} from "./task-execution-panel";
+import { SessionPanel, type ToolTabKind } from "@/features/session-panels";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
+import type { TaskExecutionToolsModel } from "./use-task-execution-tool-tabs";
 
-type TaskExecutionPanelComponent = (typeof import("./task-execution-panel"))["TaskExecutionPanel"];
-type TaskExecutionPanelToggleButtonComponent =
-  (typeof import("./task-execution-panel"))["TaskExecutionPanelToggleButton"];
+type TaskRightPanelModel = TaskExecutionToolsModel & {
+  tabs: ToolTabKind[];
+  activeTabId: ToolTabKind;
+};
 
-let TaskExecutionPanel: TaskExecutionPanelComponent;
-let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
+let useTaskExecutionToolTabs: (typeof import("./use-task-execution-tool-tabs"))["useTaskExecutionToolTabs"];
+
+/** The right panel as the task page renders it, with the task tool tabs. */
+function TaskRightPanel({ model }: { model: TaskRightPanelModel }) {
+  const toolTabs = useTaskExecutionToolTabs(model);
+  return (
+    <SessionPanel
+      model={createSessionPanelFixture({
+        tabs: model.tabs.map((kind) => ({ id: kind, kind })),
+        selectedTabId: model.activeTabId,
+      })}
+      toolTabs={toolTabs}
+    />
+  );
+}
 let lastFileTreeOptions: Parameters<typeof actualPierreTreesReact.useFileTree>[0] | null = null;
 let prepareFileTreeInputCalls: string[][] = [];
 let preparePresortedFileTreeInputCalls: string[][] = [];
@@ -97,7 +110,7 @@ beforeEach(async () => {
     }),
   ];
 
-  ({ TaskExecutionPanel, TaskExecutionPanelToggleButton } = await import("./task-execution-panel"));
+  ({ useTaskExecutionToolTabs } = await import("./use-task-execution-tool-tabs"));
 });
 
 afterEach(() => {
@@ -213,24 +226,28 @@ const createLoadedCiContext = ({
 });
 
 const basePanelModel = {
-  tabs: [
-    { id: "document", label: "Document" },
-    { id: "git", label: "Git" },
-    { id: "file_explorer", label: "File explorer" },
-    { id: "ci_checks", label: "CI Checks" },
-  ],
+  tabs: ["document", "diffs", "files", "ci_checks"],
   activeTabId: "document",
-  onActiveTabChange: () => {},
   documentModel: {
-    activeDocument: {
-      title: "Specification",
-      description: "Current specification document for this task.",
-      emptyState: "No spec document yet.",
-      document: {
-        ...emptyDoc,
-        markdown: "# Spec",
+    documents: {
+      spec: {
+        title: "Specification",
+        emptyState: "No spec document yet.",
+        document: { ...emptyDoc, markdown: "# Spec" },
+      },
+      plan: {
+        title: "Implementation Plan",
+        emptyState: "No implementation plan yet.",
+        document: { ...emptyDoc },
+      },
+      qa: {
+        title: "QA Report",
+        emptyState: "No QA report yet.",
+        document: { ...emptyDoc },
       },
     },
+    selectedKind: "spec",
+    onSelectKind: () => {},
   },
   gitModel: diffModel,
   fileExplorerModel: {
@@ -245,14 +262,14 @@ const basePanelModel = {
     isActive: false,
     queryInput: null,
   },
-} satisfies TaskExecutionPanelModel;
+} satisfies TaskRightPanelModel;
 
-const renderPanel = (model: TaskExecutionPanelModel): string =>
+const renderPanel = (model: TaskRightPanelModel): string =>
   renderToStaticMarkup(
     createElement(
       QueryProvider,
       { useIsolatedClient: true },
-      createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
+      createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
     ),
   );
 
@@ -269,7 +286,7 @@ function SeedQueryData({
 }
 
 const renderPanelWithFileTreeData = (
-  model: TaskExecutionPanelModel,
+  model: TaskRightPanelModel,
   fileTree: WorkspaceFileTree,
 ): string => {
   const queryClient = createQueryClient();
@@ -281,7 +298,7 @@ const renderPanelWithFileTreeData = (
     createElement(
       QueryClientProvider,
       { client: queryClient },
-      createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
+      createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
     ),
   );
 };
@@ -296,7 +313,7 @@ const renderPanelWithCiData = (context: PullRequestReviewContext): string => {
       createElement(
         ThemeProvider,
         null,
-        createElement(TaskExecutionPanel, {
+        createElement(TaskRightPanel, {
           model: {
             ...basePanelModel,
             ciChecksModel: {
@@ -310,61 +327,20 @@ const renderPanelWithCiData = (context: PullRequestReviewContext): string => {
   );
 };
 
-describe("TaskExecutionPanelToggleButton", () => {
-  test("renders hide label when task execution panel is open", () => {
-    const model: TaskExecutionPanelToggleModel = {
-      kind: "task_execution",
-      isOpen: true,
-      onToggle: () => {},
-    };
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionPanelToggleButton, {
-        model,
-      }),
-    );
-
-    expect(html).toContain("Hide task execution panel");
-  });
-
-  test("renders show label when task execution panel is closed", () => {
-    const model: TaskExecutionPanelToggleModel = {
-      kind: "task_execution",
-      isOpen: false,
-      onToggle: () => {},
-    };
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionPanelToggleButton, {
-        model,
-      }),
-    );
-
-    expect(html).toContain("Show task execution panel");
-  });
-});
-
-describe("TaskExecutionPanel", () => {
-  test("renders configured tabs and document content", () => {
+describe("useTaskExecutionToolTabs", () => {
+  test("renders the task tool tabs and document content", () => {
     const html = renderPanel(basePanelModel);
 
-    expect(html).toContain("task-execution-tab-document");
-    expect(html).toContain("task-execution-tab-git");
-    expect(html).toContain("task-execution-tab-file_explorer");
-    expect(html).toContain("task-execution-tab-ci_checks");
-    expect(html.match(/task-execution-tab-separator/g)?.length).toBe(3);
-    expect(html.match(/task-execution-tab-active-icon/g)?.length).toBe(1);
-    expect(html).toContain("cursor-pointer");
-    expect(html).toContain("bg-transparent");
-    expect(html).toContain("text-foreground");
-    expect(html).toContain("Document");
-    expect(html).toContain("Git");
-    expect(html).toContain("File explorer");
-    expect(html).toContain("CI Checks");
+    for (const label of ["Document", "Diffs", "Files", "CI Checks"]) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
+    expect(html.match(/data-selected="true"/g)?.length).toBe(1);
     expect(html).toContain("Specification");
-    expect(html).toContain("Current specification document for this task.");
+    expect(html).toContain("Specification, change document");
     expect(html).toContain("Spec");
   });
 
-  test("renders the pull request link once in the shared panel header", () => {
+  test("leaves the pull request link to the session top bar", () => {
     const html = renderPanel({
       ...basePanelModel,
       gitModel: {
@@ -373,7 +349,7 @@ describe("TaskExecutionPanel", () => {
       },
     });
 
-    expect(html.match(/PR #110/g)?.length).toBe(1);
+    expect(html).not.toContain("PR #110");
   });
 
   test("renders cached CI status dot colors in the tab header", () => {
@@ -496,14 +472,11 @@ describe("TaskExecutionPanel", () => {
     expect(htmlWithoutOpenThreads).toContain('aria-label="CI Checks, passing checks"');
   });
 
-  test("renders Git content as a tab", () => {
+  test("renders Git content in the Diffs tab", () => {
     const html = renderPanel({
       ...basePanelModel,
-      tabs: [
-        { id: "git", label: "Git" },
-        { id: "file_explorer", label: "File explorer" },
-      ],
-      activeTabId: "git",
+      tabs: ["diffs", "files"],
+      activeTabId: "diffs",
       documentModel: null,
       ciChecksModel: null,
     });
@@ -516,11 +489,8 @@ describe("TaskExecutionPanel", () => {
   test("renders a copyable file explorer working directory without a duplicate search input", () => {
     const html = renderPanel({
       ...basePanelModel,
-      tabs: [
-        { id: "git", label: "Git" },
-        { id: "file_explorer", label: "File explorer" },
-      ],
-      activeTabId: "file_explorer",
+      tabs: ["diffs", "files"],
+      activeTabId: "files",
       documentModel: null,
       fileExplorerModel: {
         rootPath: "/repo/.worktrees/task-12",
@@ -545,11 +515,8 @@ describe("TaskExecutionPanel", () => {
     renderPanelWithFileTreeData(
       {
         ...basePanelModel,
-        tabs: [
-          { id: "git", label: "Git" },
-          { id: "file_explorer", label: "File explorer" },
-        ],
-        activeTabId: "file_explorer",
+        tabs: ["diffs", "files"],
+        activeTabId: "files",
         documentModel: null,
         fileExplorerModel: {
           rootPath: "/repo/.worktrees/task-12",
@@ -617,14 +584,11 @@ describe("TaskExecutionPanel", () => {
         createElement(
           ThemeProvider,
           null,
-          createElement(TaskExecutionPanel, {
+          createElement(TaskRightPanel, {
             model: {
               ...basePanelModel,
-              tabs: [
-                { id: "git", label: "Git" },
-                { id: "file_explorer", label: "File explorer" },
-              ],
-              activeTabId: "file_explorer",
+              tabs: ["diffs", "files"],
+              activeTabId: "files",
               documentModel: null,
               fileExplorerModel: {
                 rootPath: fileTree.rootPath,
@@ -670,14 +634,11 @@ describe("TaskExecutionPanel", () => {
         createElement(
           ThemeProvider,
           null,
-          createElement(TaskExecutionPanel, {
+          createElement(TaskRightPanel, {
             model: {
               ...basePanelModel,
-              tabs: [
-                { id: "git", label: "Git" },
-                { id: "file_explorer", label: "File explorer" },
-              ],
-              activeTabId: "file_explorer",
+              tabs: ["diffs", "files"],
+              activeTabId: "files",
               documentModel: null,
               fileExplorerModel: {
                 rootPath: requestedRoot,
@@ -723,14 +684,11 @@ describe("TaskExecutionPanel", () => {
           createElement(
             ThemeProvider,
             null,
-            createElement(TaskExecutionPanel, {
+            createElement(TaskRightPanel, {
               model: {
                 ...basePanelModel,
-                tabs: [
-                  { id: "git", label: "Git" },
-                  { id: "file_explorer", label: "File explorer" },
-                ],
-                activeTabId: "file_explorer",
+                tabs: ["diffs", "files"],
+                activeTabId: "files",
                 documentModel: null,
                 fileExplorerModel: {
                   rootPath,
@@ -788,11 +746,11 @@ describe("TaskExecutionPanel", () => {
           >
             Leave task {owner}
           </button>
-          <TaskExecutionPanel
+          <TaskRightPanel
             model={{
               ...basePanelModel,
-              tabs: [{ id: "file_explorer", label: "File explorer" }],
-              activeTabId: "file_explorer",
+              tabs: ["files"],
+              activeTabId: "files",
               documentModel: null,
               fileExplorerModel: {
                 rootPath: requestedRoot,

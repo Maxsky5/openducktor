@@ -1,5 +1,6 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ComponentProps, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -40,9 +41,12 @@ const roleIcon = (index: number) => {
   return option.icon;
 };
 
+const noPullRequest: PullRequest | null = null;
+
 const buildModel = () => ({
   taskTitle: "Rework Agent Studio UI",
   taskId: "fairnest-97f",
+  pullRequest: noPullRequest,
   onOpenTaskDetails: () => {},
   selectedRole: "spec" as const,
   workflowSteps: [
@@ -203,6 +207,36 @@ describe("AgentStudioHeader", () => {
     expect(html).not.toContain("Questions:");
     expect(html).not.toContain("Chat-first workspace for this task session.");
     expect(html).not.toContain("AGENT STUDIO");
+  });
+
+  test("shows the linked pull request link in the top bar", () => {
+    const pullRequest: PullRequest = {
+      providerId: "github",
+      number: 110,
+      url: "https://github.com/openai/openducktor/pull/110",
+      state: "open",
+      createdAt: "2026-03-12T12:24:09Z",
+      updatedAt: "2026-03-12T12:24:09Z",
+    };
+    const withLink = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: { ...buildModel(), pullRequest },
+      }),
+    );
+    const withoutLink = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: buildModel(),
+      }),
+    );
+
+    expect(withLink.match(/PR #110/g)?.length).toBe(1);
+    expect(withoutLink).not.toContain("PR #");
   });
 
   test("falls back to generic header title when task title is missing", () => {

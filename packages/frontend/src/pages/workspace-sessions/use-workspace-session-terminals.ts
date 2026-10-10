@@ -1,10 +1,12 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMemo } from "react";
+import { sessionPanelOwnerKey } from "@/features/session-panels";
 import { useTerminals, type TerminalScope } from "@/features/terminals";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
+/** The panel layout owner key, so the panels can place the terminals of each chat. */
 const scopeKey = (workspaceId: string, sessionId: string): string =>
-  JSON.stringify(["workspace_session", workspaceId, sessionId]);
+  sessionPanelOwnerKey({ kind: "chat", workspaceId, sessionId });
 
 export const useWorkspaceSessionTerminals = ({
   workspace,

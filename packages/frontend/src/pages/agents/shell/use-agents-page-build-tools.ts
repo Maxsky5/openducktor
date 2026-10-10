@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import type { TaskExecutionPanelTabId } from "@/components/features/agents/task-execution-panel";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import {
   type AgentStudioBuildToolsWorktreeSnapshot,
@@ -24,7 +23,7 @@ export function useAgentsPageBuildTools({
   activeWorkspace,
   activeBranch,
   selectedView,
-  activeTabId,
+  isDiffsActive,
   isPanelOpen,
   repoSettings,
   repoSettingsError,
@@ -34,7 +33,8 @@ export function useAgentsPageBuildTools({
   activeWorkspace: ActiveWorkspace | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  activeTabId: TaskExecutionPanelTabId | null;
+  /** True while the Diffs tab is selected in the shown right panel. */
+  isDiffsActive: boolean;
   isPanelOpen: boolean;
   repoSettings: RepoSettingsInput | null;
   repoSettingsError: ReturnType<typeof useAgentStudioRepoSettings>["repoSettingsError"];
@@ -46,7 +46,7 @@ export function useAgentsPageBuildTools({
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    isGitTabActive: activeTabId === "git" && isPanelOpen,
+    isGitTabActive: isDiffsActive,
     isRightPanelOpen: isPanelOpen,
     repoSettings,
     repoSettingsError,

@@ -46,6 +46,7 @@ import {
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
+import { z } from "zod";
 import type { InvokeFn } from "./invoke-utils";
 import {
   arrayResultSchema,
@@ -154,6 +155,12 @@ export class HostTaskClient {
   async tasksList(repoPath: string): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
+  }
+
+  /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
+  async taskIdsList(repoPath: string): Promise<string[]> {
+    const args: TasksListArgs = { repoPath };
+    return this.invokeFn("task_ids_list", args, arrayResultSchema(z.string(), "task_ids_list"));
   }
 
   async issueItemsList(input: IssueItemsListInput): Promise<IssueItemsListResult> {

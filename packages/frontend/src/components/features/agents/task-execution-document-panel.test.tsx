@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { TaskExecutionDocumentPanel } from "./task-execution-document-panel";
+import {
+  type TaskDocumentKind,
+  type TaskExecutionDocument,
+  TaskExecutionDocumentPanel,
+  type TaskExecutionDocumentPanelModel,
+} from "./task-execution-document-panel";
 
 enableReactActEnvironment();
 
@@ -17,48 +22,52 @@ const emptyDoc = {
   loaded: true,
 };
 
+const documentFor = (
+  title: string,
+  emptyState: string,
+  document: Partial<TaskExecutionDocument["document"]> = {},
+): TaskExecutionDocument => ({
+  title,
+  emptyState,
+  document: { ...emptyDoc, ...document },
+});
+
+const documentModel = (
+  selectedKind: TaskDocumentKind,
+  documents: Partial<Record<TaskDocumentKind, TaskExecutionDocument>> = {},
+  onSelectKind: (kind: TaskDocumentKind) => void = () => {},
+): TaskExecutionDocumentPanelModel => ({
+  documents: {
+    spec: documents.spec ?? documentFor("Specification", "No spec document yet."),
+    plan: documents.plan ?? documentFor("Implementation Plan", "No implementation plan yet."),
+    qa: documents.qa ?? documentFor("QA Report", "No QA report yet."),
+  },
+  selectedKind,
+  onSelectKind,
+});
+
+const renderModel = (model: TaskExecutionDocumentPanelModel): string =>
+  renderToStaticMarkup(createElement(TaskExecutionDocumentPanel, { model }));
+
 describe("TaskExecutionDocumentPanel", () => {
-  test("renders active document content", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: {
-            title: "Specification",
-            description: "Current specification document for this task.",
-            emptyState: "No spec document yet.",
-            document: {
-              ...emptyDoc,
-              markdown: "# Spec",
-              updatedAt: "2026-02-21T10:00:00.000Z",
-            },
-          },
-        },
+  test("renders the selected document content", () => {
+    const html = renderModel(
+      documentModel("spec", {
+        spec: documentFor("Specification", "No spec document yet.", {
+          markdown: "# Spec",
+          updatedAt: "2026-02-21T10:00:00.000Z",
+        }),
       }),
     );
 
     expect(html).toContain("Specification");
-    expect(html).toContain("Current specification document for this task.");
-    expect(html).toContain("Spec");
     expect(html).toContain('data-testid="copy-agent-studio-document-content"');
     expect(html).toContain('data-testid="expand-agent-studio-document"');
     expect(html).toMatch(/Feb 21(?:, \d{1,2}:\d{2}\s?[AP]M| at)/u);
   });
 
-  test("renders active document placeholder when document is empty", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: {
-            title: "QA Report",
-            description: "Latest QA report for this task.",
-            emptyState: "No QA report yet.",
-            document: {
-              ...emptyDoc,
-            },
-          },
-        },
-      }),
-    );
+  test("renders the empty state of a document that does not exist yet", () => {
+    const html = renderModel(documentModel("qa"));
 
     expect(html).toContain("No QA report yet.");
     expect(html).toContain("Not set");
@@ -67,16 +76,12 @@ describe("TaskExecutionDocumentPanel", () => {
   });
 
   test("renders loading state before an empty document has loaded", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: {
-            title: "Specification",
-            description: "Current specification document.",
-            emptyState: "No spec document yet.",
-            document: { ...emptyDoc, loaded: false, isLoading: true },
-          },
-        },
+    const html = renderModel(
+      documentModel("spec", {
+        spec: documentFor("Specification", "No spec document yet.", {
+          loaded: false,
+          isLoading: true,
+        }),
       }),
     );
 
@@ -85,16 +90,11 @@ describe("TaskExecutionDocumentPanel", () => {
   });
 
   test("renders an actionable document load error", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: {
-            title: "Specification",
-            description: "Current specification document.",
-            emptyState: "No spec document yet.",
-            document: { ...emptyDoc, error: "Unable to load specification." },
-          },
-        },
+    const html = renderModel(
+      documentModel("spec", {
+        spec: documentFor("Specification", "No spec document yet.", {
+          error: "Unable to load specification.",
+        }),
       }),
     );
 
@@ -102,34 +102,38 @@ describe("TaskExecutionDocumentPanel", () => {
     expect(html).not.toContain("No spec document yet.");
   });
 
-  test("renders empty panel when no role document is available", () => {
-    const html = renderToStaticMarkup(
+  test("switches documents from the menu in the document title", () => {
+    const onSelectKind = mock((_kind: TaskDocumentKind) => {});
+    render(
       createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: null,
-        },
+        model: documentModel(
+          "plan",
+          {
+            spec: documentFor("Specification", "No spec document yet.", {
+              markdown: "# Spec",
+              updatedAt: "2026-02-21T10:00:00.000Z",
+            }),
+          },
+          onSelectKind,
+        ),
       }),
     );
+    expect(screen.getByText("No implementation plan yet.")).toBeDefined();
 
-    expect(html).not.toContain("Specification");
+    fireEvent.click(screen.getByRole("button", { name: "Implementation Plan, change document" }));
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      expect.stringMatching(/^SpecificationFeb 21/u),
+      "Implementation PlanNot set",
+      "QA ReportNot set",
+    ]);
+    fireEvent.click(screen.getByRole("option", { name: /QA Report/u }));
+
+    expect(onSelectKind).toHaveBeenCalledWith("qa");
   });
 
   test("expand button is hidden when document markdown is empty", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskExecutionDocumentPanel, {
-        model: {
-          activeDocument: {
-            title: "Specification",
-            description: "Current specification document.",
-            emptyState: "No spec document yet.",
-            document: {
-              ...emptyDoc,
-              markdown: "",
-            },
-          },
-        },
-      }),
-    );
+    const html = renderModel(documentModel("spec"));
 
     expect(html).not.toContain('data-testid="expand-agent-studio-document"');
   });
@@ -150,57 +154,41 @@ describe("TaskExecutionDocumentPanel snapshot persistence", () => {
     restoreClipboard = null;
   });
 
-  const activeDoc = {
-    title: "Specification",
-    description: "Current specification document.",
-    emptyState: "No spec document yet.",
-    document: {
+  const activeDocuments = {
+    spec: documentFor("Specification", "No spec document yet.", {
       markdown: "# Active spec content",
       updatedAt: "2026-02-21T10:00:00.000Z",
-      isLoading: false,
-      error: null,
-      loaded: true,
-    },
+    }),
   };
 
-  test("modal retains original content when activeDocument becomes null", () => {
+  test("modal retains original content when the shown document changes", () => {
     const { rerender } = render(
-      createElement(TaskExecutionDocumentPanel, {
-        model: { activeDocument: activeDoc },
-      }),
+      createElement(TaskExecutionDocumentPanel, { model: documentModel("spec", activeDocuments) }),
     );
 
     fireEvent.click(screen.getByTestId("expand-agent-studio-document"));
 
     expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
 
-    rerender(
-      createElement(TaskExecutionDocumentPanel, {
-        model: { activeDocument: null },
-      }),
-    );
+    rerender(createElement(TaskExecutionDocumentPanel, { model: documentModel("plan") }));
 
     expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
-    // After the panel becomes null, only the modal snapshot has the content.
+    // After the panel shows another document, only the modal snapshot has the content.
     const matching = screen.getAllByText((content) => content.includes("Active spec content"));
     expect(matching.length).toBe(1);
   });
 
-  test("copy button in modal copies snapshot markdown after activeDocument becomes null", async () => {
+  test("copy button in modal copies snapshot markdown after the shown document changes", async () => {
     await withMockedToast(async () => {
       const { rerender } = render(
         createElement(TaskExecutionDocumentPanel, {
-          model: { activeDocument: activeDoc },
+          model: documentModel("spec", activeDocuments),
         }),
       );
 
       fireEvent.click(screen.getByTestId("expand-agent-studio-document"));
 
-      rerender(
-        createElement(TaskExecutionDocumentPanel, {
-          model: { activeDocument: null },
-        }),
-      );
+      rerender(createElement(TaskExecutionDocumentPanel, { model: documentModel("plan") }));
 
       fireEvent.click(screen.getByTestId("markdown-preview-modal-copy"));
       expect(writeClipboardMock).toHaveBeenCalledWith("# Active spec content");

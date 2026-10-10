@@ -4,7 +4,11 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { TaskExecutionDocument } from "@/components/features/agents";
+import type {
+  TaskDocumentKind,
+  TaskExecutionDocuments,
+} from "@/components/features/agents/task-execution-document-panel";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   getAgentSessionWaitingInputPlaceholder,
   hasAgentSessionPendingApprovals,
@@ -14,8 +18,9 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
-  buildActiveDocumentForRole,
+  buildTaskExecutionDocuments,
   buildWorkflowModelContext,
+  DEFAULT_TASK_DOCUMENT_BY_ROLE,
   type WorkflowModelContext,
 } from "../use-agent-studio-page-model-builders";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
@@ -37,7 +42,12 @@ type SelectedSessionApprovalsContext = {
 };
 
 export type SelectedSessionDocumentsContext = {
-  activeDocument: TaskExecutionDocument | null;
+  /** The task documents, or null without a task. */
+  taskDocuments: TaskExecutionDocuments | null;
+  /** The document that the Document tab shows first for the selected role session. */
+  defaultDocumentKind: TaskDocumentKind;
+  /** Changes when the user selects another role session. */
+  roleSessionKey: string;
 };
 
 export type SelectedSessionPendingInputContext = {
@@ -102,9 +112,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     gitProviderContext,
     gitProviderReadError,
   });
-  const activeDocument = taskId
-    ? buildActiveDocumentForRole({
-        activeRole: role,
+  const taskDocuments = taskId
+    ? buildTaskExecutionDocuments({
         specDoc: documents.specDoc,
         planDoc: documents.planDoc,
         qaDoc: documents.qaDoc,
@@ -133,7 +142,13 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedSession,
     workflow,
     documents: {
-      activeDocument,
+      taskDocuments,
+      defaultDocumentKind: DEFAULT_TASK_DOCUMENT_BY_ROLE[role],
+      roleSessionKey: JSON.stringify([
+        taskId,
+        role,
+        selectedSessionIdentity ? agentSessionIdentityKey(selectedSessionIdentity) : null,
+      ]),
     },
     pendingInput: {
       waitingInputPlaceholder,

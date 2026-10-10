@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { WorkspaceFileTree, WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { FolderTree, GitBranch } from "lucide-react";
 import { useState } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
-import { SharedToolsPanel } from "./shared-tools-panel";
+import { SessionPanel } from "@/features/session-panels";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 
 enableReactActEnvironment();
 
@@ -54,7 +54,7 @@ const renderPanel = () => {
   const client = createQueryClient();
   client.setQueryData(workspaceFileTreeQueryOptions(ROOT_PATH, null).queryKey, TREE);
   function Tools({ rootPath }: { rootPath: string }) {
-    const [activeTabId, setActiveTabId] = useState("file_explorer");
+    const [activeTabId, setActiveTabId] = useState("files");
     const explorer = (
       <TaskExecutionFileExplorerPanel
         model={{
@@ -68,24 +68,12 @@ const renderPanel = () => {
       />
     );
     return (
-      <SharedToolsPanel
-        model={{
-          tabs: [
-            { id: "git", label: "Git", icon: GitBranch, content: <div>Git changes</div> },
-            {
-              id: "file_explorer",
-              label: "File explorer",
-              icon: FolderTree,
-              content: explorer,
-              keepMounted: true,
-            },
-          ],
-          activeTabId,
-          onActiveTabChange: setActiveTabId,
-          tabListLabel: "Task execution sections",
-          testIdPrefix: "task-execution",
-          headerActions: null,
-        }}
+      <SessionPanel
+        model={createSessionPanelFixture({
+          selectedTabId: activeTabId,
+          onSelect: setActiveTabId,
+        })}
+        toolTabs={{ diffs: { content: <div>Git changes</div> }, files: { content: explorer } }}
       />
     );
   }
@@ -130,10 +118,10 @@ describe("TaskExecutionFileExplorerPanel", () => {
     await flushTree();
     await clickRow("src/");
     await clickRow("src/lib/");
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Git" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Diffs" }), { button: 0 });
     await flushTree();
     expect(screen.queryByRole("textbox", { name: "Search files" })).toBeNull();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Files" }), { button: 0 });
     await flushTree();
     expect(treeRowPaths()).toContain("src/lib/util.ts");
   });

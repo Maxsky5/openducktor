@@ -1,3 +1,4 @@
+import type { AgentRole } from "@openducktor/core";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
@@ -1087,145 +1088,80 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("selects role-specific sidebar document", async () => {
-    const specSession = createSession("external-spec", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-    });
-    const harness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          role: "spec",
-          loadedSession: specSession,
-          sessionsForTask: summarizeSessions([specSession]),
-        },
-        documents: {
-          specDoc: createDocumentState("spec"),
-          planDoc: createDocumentState(""),
-          qaDoc: createDocumentState(""),
-        },
-      }),
-    );
-    await harness.mount();
-    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
-      "Specification",
-    );
-    await harness.unmount();
+  test("shows the first document of each role in the Document tab", async () => {
+    const expectedTitleByRole = {
+      spec: "Specification",
+      planner: "Implementation Plan",
+      build: "Implementation Plan",
+      qa: "QA Report",
+    } satisfies Record<AgentRole, string>;
+    for (const role of ["spec", "planner", "build", "qa"] as const) {
+      const session = createSession(`external-${role}`, {
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+      });
+      const harness = createHookHarness(
+        createHookArgs({
+          selectedSessionCore: {
+            role,
+            loadedSession: session,
+            sessionsForTask: summarizeSessions([session]),
+          },
+          documents: {
+            specDoc: createDocumentState("spec"),
+            planDoc: createDocumentState("plan"),
+            qaDoc: createDocumentState("qa"),
+          },
+        }),
+      );
+      await harness.mount();
+      const model = harness.getLatest().taskExecutionDocumentPanelModel;
+      expect(model ? model.documents[model.selectedKind].title : null).toBe(
+        expectedTitleByRole[role],
+      );
+      await harness.unmount();
+    }
+  });
 
+  test("keeps the document choice until the user selects another role session", async () => {
     const plannerSession = createSession("external-planner", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
     });
-    const plannerHarness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          role: "planner",
-          loadedSession: plannerSession,
-          sessionsForTask: summarizeSessions([plannerSession]),
-        },
-        documents: {
-          specDoc: createDocumentState(""),
-          planDoc: createDocumentState("plan"),
-          qaDoc: createDocumentState(""),
-        },
-      }),
-    );
-    await plannerHarness.mount();
-    expect(plannerHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
-      "Implementation Plan",
-    );
-    await plannerHarness.unmount();
-
     const qaSession = createSession("external-qa", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     });
-    const qaHarness = createHookHarness(
+    const plannerArgs = createHookArgs({
+      selectedSessionCore: {
+        role: "planner",
+        loadedSession: plannerSession,
+        sessionsForTask: summarizeSessions([plannerSession, qaSession]),
+      },
+    });
+    const harness = createHookHarness(plannerArgs);
+    await harness.mount();
+    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("plan");
+
+    await harness.run((state) => {
+      state.taskExecutionDocumentPanelModel?.onSelectKind("spec");
+    });
+    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("spec");
+
+    await harness.update(plannerArgs);
+    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("spec");
+
+    await harness.update(
       createHookArgs({
         selectedSessionCore: {
           role: "qa",
           loadedSession: qaSession,
-          sessionsForTask: summarizeSessions([qaSession]),
-        },
-        documents: {
-          specDoc: createDocumentState(""),
-          planDoc: createDocumentState(""),
-          qaDoc: createDocumentState("qa"),
+          sessionsForTask: summarizeSessions([plannerSession, qaSession]),
         },
       }),
     );
-    await qaHarness.mount();
-    expect(qaHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
-      "QA Report",
-    );
-    await qaHarness.unmount();
+    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("qa");
 
-    const buildSession = createSession("external-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    });
-    const buildHarness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          role: "build",
-          loadedSession: buildSession,
-          sessionsForTask: summarizeSessions([buildSession]),
-        },
-        documents: {
-          specDoc: createDocumentState(""),
-          planDoc: createDocumentState(""),
-          qaDoc: createDocumentState(""),
-        },
-      }),
-    );
-    await buildHarness.mount();
-    expect(buildHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument).toBeNull();
-    await buildHarness.unmount();
-  });
-
-  test("uses the resolved selected role to select the workspace document", async () => {
-    const plannerSession = createSession("external-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
-    });
-    const harness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          role: "planner",
-          loadedSession: plannerSession,
-          sessionsForTask: summarizeSessions([plannerSession]),
-        },
-        documents: {
-          specDoc: createDocumentState("spec"),
-          planDoc: createDocumentState("plan"),
-          qaDoc: createDocumentState(""),
-        },
-      }),
-    );
-
-    await harness.mount();
-    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
-      "Implementation Plan",
-    );
-    await harness.unmount();
-  });
-
-  test("keeps build workspace document selection aligned to the resolved selected role", async () => {
-    const buildSession = createSession("external-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    });
-    const harness = createHookHarness(
-      createHookArgs({
-        selectedSessionCore: {
-          role: "build",
-          loadedSession: buildSession,
-          sessionsForTask: summarizeSessions([buildSession]),
-        },
-        documents: {
-          specDoc: createDocumentState("spec"),
-          planDoc: createDocumentState("plan"),
-          qaDoc: createDocumentState("qa"),
-        },
-      }),
-    );
-
-    await harness.mount();
-    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument).toBeNull();
+    // A return to the first session starts again from its first document.
+    await harness.update(plannerArgs);
+    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("plan");
     await harness.unmount();
   });
 

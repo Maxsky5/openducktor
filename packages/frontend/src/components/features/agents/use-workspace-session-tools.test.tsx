@@ -22,7 +22,10 @@ import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { useWorkspaceSessionBranch } from "@/pages/workspace-sessions/use-workspace-session-branch";
-import { useWorkspaceSessionTools, type WorkspaceToolsTabId } from "./use-workspace-session-tools";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
+
+type HarnessTab = "diffs" | "files";
 
 type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
 const targetReference = "origin/main";
@@ -83,7 +86,7 @@ function PanelHarness({
   retryTarget = async () => {},
   readBranch = async () => branchKey,
   contextMode = "repository",
-  initialTabId = "git",
+  initialTabId = "diffs",
   onRefreshReady = () => {},
   isVisible = true,
   workingDirectory = "/repo",
@@ -98,11 +101,11 @@ function PanelHarness({
   retryTarget?: () => Promise<void>;
   readBranch?: () => Promise<string>;
   contextMode?: "repository" | "worktree";
-  initialTabId?: WorkspaceToolsTabId;
+  initialTabId?: HarnessTab;
   onRefreshReady?: (refresh: ReturnType<typeof useWorkspaceSessionTools>["refresh"]) => void;
 }) {
-  const [activeTabId, setActiveTabId] = useState<WorkspaceToolsTabId>(initialTabId);
-  const { toolsContent, refresh } = useWorkspaceSessionTools({
+  const [activeTabId, setActiveTabId] = useState<HarnessTab>(initialTabId);
+  const { diffsContent, filesContent, refresh } = useWorkspaceSessionTools({
     isVisible,
     applyTarget: async () => {},
     repoPath: "/repo",
@@ -117,15 +120,33 @@ function PanelHarness({
     targetError: targetError,
     retryTarget: retryTarget,
     readBranch: readBranch,
-    activeTabId: activeTabId,
-    onActiveTabChange: setActiveTabId,
+    isFilesActive: isVisible && activeTabId === "files",
     selectedFile: null,
     onSelectFile: () => {},
   });
   useEffect(() => {
     onRefreshReady(refresh);
   }, [onRefreshReady, refresh]);
-  return <SettingsModalProvider>{isVisible ? toolsContent : null}</SettingsModalProvider>;
+  // A small stand-in for the right panel tabs. The tools hook does not own tabs.
+  return (
+    <SettingsModalProvider>
+      {isVisible ? (
+        <Tabs
+          value={activeTabId}
+          onValueChange={(value) => setActiveTabId(value === "files" ? "files" : "diffs")}
+        >
+          <TabsList>
+            <TabsTrigger value="diffs">Diffs</TabsTrigger>
+            <TabsTrigger value="files">Files</TabsTrigger>
+          </TabsList>
+          <TabsContent value="diffs">{diffsContent}</TabsContent>
+          <TabsContent value="files" forceMount hidden={activeTabId !== "files"}>
+            {filesContent}
+          </TabsContent>
+        </Tabs>
+      ) : null}
+    </SettingsModalProvider>
+  );
 }
 
 test("reuses checked Git data when workspace sessions share a directory and comparison", async () => {
@@ -323,7 +344,7 @@ test.each(["available", "unavailable", "error"] as const)(
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <PanelHarness initialTabId="file_explorer" />
+          <PanelHarness initialTabId="files" />
         </ThemeProvider>
       </QueryClientProvider>,
     );
@@ -407,7 +428,7 @@ test("a save refresh reads Git without reading the file tree again", async () =>
         true,
       ),
     );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Files" }), { button: 0 });
     await waitFor(() => expect(filesystemRefreshTree).toHaveBeenCalledTimes(1));
     await act(async () => {
       await refresh?.("git");
@@ -1189,9 +1210,9 @@ test("refresh recovers local Git and file reads when the comparison target disap
   );
   try {
     await waitFor(() => expect(statusTargets).toContain(targetReference));
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Files" }), { button: 0 });
     await waitFor(() => expect(fileTreeTargets).toContain(targetReference));
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Git" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Diffs" }), { button: 0 });
 
     const comparisonReads = comparison.mock.calls.length;
     const staleStatusReads = statusTargets.filter((target) => target === targetReference).length;
@@ -1211,7 +1232,7 @@ test("refresh recovers local Git and file reads when the comparison target disap
         neutralStatusReads,
       ),
     );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "File explorer" }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Files" }), { button: 0 });
     await waitFor(() =>
       expect(
         queryClient.getQueryData<WorkspaceFileTree>(

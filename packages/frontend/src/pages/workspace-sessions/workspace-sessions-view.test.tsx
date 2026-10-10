@@ -7,7 +7,8 @@ import { act, type ReactNode, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { QueryProvider } from "@/lib/query-provider";
-import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/components/features/agents/use-right-panel-open";
+import { pruneSessionPanelLayouts } from "@/features/session-panels/session-panel-layout-store";
+import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/features/session-panels/use-right-panel-open";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -42,6 +43,7 @@ const testWorkspaceIds = new Set<string>();
 afterEach(() => {
   for (const workspaceId of testWorkspaceIds) {
     localStorage.removeItem(workspaceSessionSelectionStorageKey(workspaceId));
+    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
   }
   testWorkspaceIds.clear();
   localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
@@ -510,7 +512,7 @@ function DirtyPreview({ startOpen = true }: { startOpen?: boolean }) {
   );
 }
 
-test("chats share panel visibility and keep their own tools tab", async () => {
+test("chats share right panel visibility and keep their own selected tab", async () => {
   configureShellBridge(
     createShellBridgeFixture({
       client: {
@@ -521,34 +523,28 @@ test("chats share panel visibility and keep their own tools tab", async () => {
   );
   const view = renderSessions(undefined, "/chats?session=First");
   try {
-    await view.findByRole("button", { name: "Hide workspace tools panel" });
-    fireEvent.click(view.getByRole("button", { name: "Hide workspace tools panel" }));
-    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
+    await view.findByRole("button", { name: "Hide right panel" });
+    fireEvent.click(view.getByRole("button", { name: "Hide right panel" }));
+    expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
     fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
     await waitFor(() =>
       expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy(),
     );
-    expect(view.getByRole("button", { name: "Show workspace tools panel" })).toBeTruthy();
-    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
-    fireEvent.click(view.getByRole("button", { name: "Show workspace tools panel" }));
-    await view.findByRole("tablist", { name: "Workspace session tools" });
-    fireEvent.mouseDown(view.getByRole("tab", { name: "File explorer" }), {
-      button: 0,
-      ctrlKey: false,
-    });
+    expect(view.getByRole("button", { name: "Show right panel" })).toBeTruthy();
+    expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Show right panel" }));
+    await view.findByRole("tablist", { name: "Right panel tabs" });
+    fireEvent.mouseDown(view.getByRole("tab", { name: "Files" }), { button: 0 });
+    fireEvent.mouseUp(view.getByRole("tab", { name: "Files" }), { button: 0 });
     await waitFor(() =>
-      expect(view.getByRole("tab", { name: "File explorer" }).getAttribute("aria-selected")).toBe(
-        "true",
-      ),
+      expect(view.getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true"),
     );
     fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
-    await view.findByRole("tablist", { name: "Workspace session tools" });
-    expect(view.getByRole("tab", { name: "Git" }).getAttribute("aria-selected")).toBe("true");
+    await view.findByRole("tablist", { name: "Right panel tabs" });
+    expect(view.getByRole("tab", { name: "Diffs" }).getAttribute("aria-selected")).toBe("true");
     fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
     await waitFor(() =>
-      expect(view.getByRole("tab", { name: "File explorer" }).getAttribute("aria-selected")).toBe(
-        "true",
-      ),
+      expect(view.getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true"),
     );
     expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
@@ -557,7 +553,7 @@ test("chats share panel visibility and keep their own tools tab", async () => {
   }
 }, 5_000);
 
-test("workspace tools use the saved panel choice", async () => {
+test("the right panel uses the saved panel choice", async () => {
   localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
   configureShellBridge(
     createShellBridgeFixture({
@@ -569,10 +565,10 @@ test("workspace tools use the saved panel choice", async () => {
   );
   const view = renderSessions("First");
   try {
-    await view.findByRole("button", { name: "Show workspace tools panel" });
-    expect(view.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
-    fireEvent.click(view.getByRole("button", { name: "Show workspace tools panel" }));
-    await view.findByRole("tablist", { name: "Workspace session tools" });
+    await view.findByRole("button", { name: "Show right panel" });
+    expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Show right panel" }));
+    await view.findByRole("tablist", { name: "Right panel tabs" });
     expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();

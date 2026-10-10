@@ -199,6 +199,24 @@ describe("HostClient", () => {
     expect(calls).toEqual([{ command: "tasks_list", args: { repoPath: "/repo" } }]);
   });
 
+  test("lists the IDs of all tasks of a repository", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_ids_list") {
+        return ["task-1", "task-2"];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.taskIdsList("/repo")).resolves.toEqual(["task-1", "task-2"]);
+    expect(calls).toEqual([{ command: "task_ids_list", args: { repoPath: "/repo" } }]);
+  });
+
+  test("rejects a task ID list that is not a list of strings", async () => {
+    const { client } = createClient(() => [{ id: "task-1" }]);
+
+    await expect(client.taskIdsList("/repo")).rejects.toThrow();
+  });
+
   test("parses filesystem directory listings from the host", async () => {
     const { client, calls } = createClient((command, args) => {
       if (command === "filesystem_list_directory") {

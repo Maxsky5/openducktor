@@ -1,0 +1,51 @@
+/* A session panel and the main area resize together while the user shows or hides the panel. */
+/* The size transition is on only during that move, so a drag on the separator stays direct. */
+[data-panel-motion] > [data-panel] {
+  transition: flex-grow var(--sheet-open-dur) var(--sheet-ease);
+}
+
+[data-panel-motion="closing"] > [data-panel] {
+  transition-duration: var(--sheet-close-dur);
+}
+
+/* The separator shrinks with a closing panel, so the main area does not jump when the move ends. */
+[data-panel-motion] > [data-separator] {
+  transition:
+    width var(--sheet-open-dur) var(--sheet-ease),
+    height var(--sheet-open-dur) var(--sheet-ease);
+}
+
+[data-panel-motion="closing"] > [data-separator] {
+  transition-duration: var(--sheet-close-dur);
+}
+
+[data-panel-motion="closing"] > [data-separator][aria-orientation="vertical"] {
+  width: 0;
+}
+
+[data-panel-motion="closing"] > [data-separator][aria-orientation="horizontal"] {
+  height: 0;
+}
+
+/* The panel content keeps its open size at the outer edge, so it slides instead of reflowing. */
+[data-slot="session-panel-content"][data-moving][data-side="right"] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: var(--session-panel-size);
+}
+
+[data-slot="session-panel-content"][data-moving][data-side="bottom"] {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: var(--session-panel-size);
+}
+
+/* Reduced motion resizes at once. */
+@media (prefers-reduced-motion: reduce) {
+  [data-panel-motion] > [data-panel],
+  [data-panel-motion] > [data-separator] {
+    transition: none;
+  }
+}

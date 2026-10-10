@@ -8,162 +8,60 @@ import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { useTerminals, type TerminalDependencies, type TerminalScope } from "./use-terminals";
 
-describe("useTerminals", () => {
-  test.each([
-    { name: "empty initial discovery", refresh: false, hasTabs: false },
-    { name: "initial discovery with existing terminals", refresh: false, hasTabs: true },
-    { name: "an empty refresh", refresh: true, hasTabs: false },
-    { name: "a refresh with existing terminals", refresh: true, hasTabs: true },
-  ])("finishes opening the panel after $name", async ({ refresh, hasTabs }) => {
-    const terminal = existingTerminal();
-    let terminals: TerminalSummary[] = [];
-    const discovery = Promise.withResolvers<TerminalListResponse>();
-    const terminalList = mock(async () => ({
-      hostInstanceId: "host-1",
-      terminals: [...terminals],
-    }));
-    if (!refresh) terminalList.mockImplementationOnce(() => discovery.promise);
-    const view = renderModel(terminalList);
-    view.terminalCreate.mockImplementation(async () => {
-      terminals = [terminal];
-      return { ref: { terminalId: terminal.terminalId }, summary: terminal };
-    });
-    try {
-      if (refresh) {
-        await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-        terminalList.mockImplementationOnce(() => discovery.promise);
-        act(() => view.result.current.onRetryDiscovery());
-      }
-      await waitFor(() => expect(view.result.current.isLoading).toBe(true), { timeout: 500 });
-      act(() => view.result.current.onToggle());
-      expect(view.result.current.isVisible).toBe(true);
-      expect(view.terminalCreate).not.toHaveBeenCalled();
+/** The tab ID that a start returns inside an act callback. */
+type StartedTerminal = { tabId: string | null };
 
+describe("useTerminals", () => {
+  test("reports synced tabs only after they include the latest host list", async () => {
+    const discovery = Promise.withResolvers<TerminalListResponse>();
+    const view = renderModel(mock(() => discovery.promise));
+    try {
+      expect(view.result.current.isSynced).toBe(false);
       await act(async () => {
-        terminals = hasTabs ? [terminal] : [];
-        discovery.resolve({ hostInstanceId: "host-1", terminals: [...terminals] });
+        discovery.resolve({ hostInstanceId: "host-1", terminals: [existingTerminal()] });
         await discovery.promise;
       });
-      await waitFor(
-        () => expect(view.result.current.tabs[0]?.terminalId).toBe(terminal.terminalId),
-        { timeout: 500 },
-      );
-      expect(view.terminalCreate).toHaveBeenCalledTimes(hasTabs ? 0 : 1);
-      expect(view.result.current.tabs).toHaveLength(1);
-
-      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-      terminals = [];
-      act(() => view.result.current.onRetryDiscovery());
-      await waitFor(() => expect(view.result.current.tabs).toHaveLength(0), { timeout: 500 });
-      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-      expect(view.result.current.isVisible).toBe(true);
-      expect(view.terminalCreate).toHaveBeenCalledTimes(hasTabs ? 0 : 1);
+      await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+      expect(view.result.current.tabs[0]?.terminalId).toBe("existing-terminal");
     } finally {
       view.unmount();
     }
   });
 
-  test.each(["hide", "toggle closed", "switch scope", "discovery failure"] as const)(
-    "cancels pending terminal creation after %s",
-    async (cancel) => {
-      const empty: TerminalListResponse = { hostInstanceId: "host-1", terminals: [] };
-      const discovery = Promise.withResolvers<TerminalListResponse>();
-      const terminalList = mock(async () => empty).mockImplementationOnce(() => discovery.promise);
-      const view = renderModel(terminalList);
-      try {
-        act(() => view.result.current.onToggle());
-        expect(view.result.current.isVisible).toBe(true);
-        expect(view.result.current.isLoading).toBe(true);
-        expect(view.terminalCreate).not.toHaveBeenCalled();
-
-        switch (cancel) {
-          case "hide":
-            act(() => view.result.current.onHide());
-            break;
-          case "toggle closed":
-            act(() => view.result.current.onToggle());
-            break;
-          case "switch scope":
-            view.rerender({
-              scope: {
-                key: "/repo:task-2",
-                context: { repoPath: "/repo", taskId: "task-2" },
-                workingDirectory: "/repo",
-                workingDirectoryError: "The working directory is unavailable.",
-              },
-              isScopeLoading: false,
-            });
-            break;
-          case "discovery failure":
-            await act(async () => {
-              discovery.reject(new Error("Discovery failed."));
-              await discovery.promise.catch(() => undefined);
-            });
-            await waitFor(
-              () => expect(view.result.current.discoveryError).toBe("Discovery failed."),
-              {
-                timeout: 500,
-              },
-            );
-            act(() => view.result.current.onRetryDiscovery());
-            break;
-        }
-        if (cancel !== "discovery failure") {
-          await act(async () => {
-            discovery.resolve(empty);
-            await discovery.promise;
-          });
-        }
-        await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-        expect(view.result.current.tabs).toEqual([]);
-        expect(view.terminalCreate).not.toHaveBeenCalled();
-      } finally {
-        view.unmount();
-      }
-    },
-  );
-
-  test("keeps the panel closed for a host-started terminal until the user opens it", async () => {
-    const setup: TerminalSummary = {
-      ...existingTerminal(),
-      terminalId: "setup-terminal",
-      label: "Worktree setup",
-      lifecycle: "exited",
-      exit: {
-        exitCode: 0,
-        signal: null,
-        finalSequence: 10,
-        exitedAt: "2026-07-19T00:00:01.000Z",
-      },
-      startedBy: "host",
-    };
-    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals: [setup] })));
+  test("starts a terminal and returns its tab ID before the host answers", async () => {
+    const terminal = existingTerminal();
+    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals: [] })));
+    const create = Promise.withResolvers<{
+      ref: { terminalId: string };
+      summary: TerminalSummary;
+    }>();
+    view.terminalCreate.mockImplementation(() => create.promise);
     try {
-      await waitFor(() => expect(view.result.current.tabs[0]?.terminalId).toBe("setup-terminal"), {
-        timeout: 500,
+      await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
+      const started: StartedTerminal = { tabId: null };
+      act(() => {
+        started.tabId = view.result.current.createTerminal();
       });
-      expect(view.result.current.isVisible).toBe(false);
 
-      act(() => view.result.current.onToggle());
+      expect(started.tabId).not.toBeNull();
+      expect(view.result.current.tabs.map((tab) => tab.tabId)).toEqual([started.tabId ?? ""]);
+      expect(view.result.current.startBlockedReason).toBe("A terminal is starting.");
+      let blockedTabId: string | null = "not called";
+      act(() => {
+        blockedTabId = view.result.current.createTerminal();
+      });
+      expect(blockedTabId).toBeNull();
+      expect(view.terminalCreate).toHaveBeenCalledTimes(1);
 
-      expect(view.result.current.isVisible).toBe(true);
-      expect(view.result.current.activeTabId).toBe(view.result.current.tabs[0]?.tabId ?? null);
-      expect(view.terminalCreate).not.toHaveBeenCalled();
-    } finally {
-      view.unmount();
-    }
-  });
-
-  test("opens the panel for a terminal that the user started", async () => {
-    const view = renderModel(
-      mock(async () => ({ hostInstanceId: "host-1", terminals: [existingTerminal()] })),
-    );
-    try {
+      await act(async () => {
+        create.resolve({ ref: { terminalId: terminal.terminalId }, summary: terminal });
+        await create.promise;
+      });
       await waitFor(
         () => expect(view.result.current.tabs[0]?.terminalId).toBe("existing-terminal"),
         { timeout: 500 },
       );
-      expect(view.result.current.isVisible).toBe(true);
+      expect(view.result.current.tabs[0]?.tabId).toBe(started.tabId ?? "");
     } finally {
       view.unmount();
     }
@@ -179,19 +77,16 @@ describe("useTerminals", () => {
     const view = renderModel(terminalList);
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-      act(() => view.result.current.onToggle());
+      act(() => {
+        expect(view.result.current.createTerminal()).toBeNull();
+      });
       expect(view.terminalCreate).not.toHaveBeenCalled();
       expect(view.result.current.discoveryError).toBe("Terminal discovery unavailable.");
       expect(view.result.current.tabs).toEqual([]);
-      expect(view.result.current.isVisible).toBe(true);
       expect(terminalList).toHaveBeenCalledTimes(1);
 
       act(() => view.result.current.onRetryDiscovery());
       await waitFor(() => expect(view.result.current.isLoading).toBe(true), { timeout: 500 });
-      act(() => {
-        view.result.current.onHide();
-      });
-      act(() => view.result.current.onToggle());
       expect(view.terminalCreate).not.toHaveBeenCalled();
       await act(async () => {
         retry.resolve(result);
@@ -227,7 +122,6 @@ describe("useTerminals", () => {
       expect(view.result.current.tabs).toHaveLength(hasTabs ? 1 : 0);
       const tabs = view.result.current.tabs;
       const mountedTabs = view.result.current.mountedTabs;
-      const activeTabId = view.result.current.activeTabId;
       const controller = view.result.current.controller;
       terminalList.mockRejectedValueOnce(new Error("Terminal refresh unavailable."));
 
@@ -241,11 +135,7 @@ describe("useTerminals", () => {
       expect(view.result.current.isLoading).toBe(false);
       expect(view.result.current.tabs).toEqual(tabs);
       expect(view.result.current.mountedTabs).toEqual(mountedTabs);
-      expect(view.result.current.activeTabId).toBe(activeTabId);
       expect(view.result.current.controller).toBe(controller);
-      act(() => view.result.current.onHide());
-      act(() => view.result.current.onToggle());
-      expect(view.result.current.isVisible).toBe(true);
       expect(view.terminalCreate).not.toHaveBeenCalled();
       expect(terminalList).toHaveBeenCalledTimes(2);
     } finally {
@@ -343,7 +233,9 @@ describe("useTerminals", () => {
     );
     try {
       await waitFor(() => expect(getLatest().isLoading).toBe(false));
-      act(() => getLatest().onCreate());
+      act(() => {
+        getLatest().createTerminal();
+      });
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
       view.rerender(
         <QueryProvider useIsolatedClient>
@@ -352,7 +244,9 @@ describe("useTerminals", () => {
       );
       await waitFor(() => expect(getLatest().isLoading).toBe(false));
       expect(getLatest().tabs).toEqual([]);
-      act(() => getLatest().onCreate());
+      act(() => {
+        getLatest().createTerminal();
+      });
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-2"));
       view.rerender(
         <QueryProvider useIsolatedClient>
@@ -399,7 +293,7 @@ describe("useTerminals", () => {
       await waitFor(
         () =>
           expect(view.result.current.startBlockedReason).toBe(
-            "Terminal discovery failed. Retry it in the terminal panel.",
+            "Terminal discovery failed. Retry it in the bottom panel.",
           ),
         { timeout: 500 },
       );
@@ -426,7 +320,7 @@ describe("useTerminals", () => {
     }
   });
 
-  test("runs an action in a new visible tab and reads the host list again", async () => {
+  test("runs an action in a new tab and reads the host list again", async () => {
     const terminal = { ...existingTerminal(), terminalId: "action-terminal", label: "bun test" };
     let terminals: TerminalSummary[] = [];
     const terminalList = mock(async () => ({
@@ -438,18 +332,19 @@ describe("useTerminals", () => {
     view.terminalRunAction.mockImplementation(() => run.promise);
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-      expect(view.result.current.isVisible).toBe(false);
       expect(view.result.current.startBlockedReason).toBeNull();
       const listCalls = terminalList.mock.calls.length;
 
-      act(() => view.result.current.onRunAction(testAction()));
+      const started: StartedTerminal = { tabId: null };
+      act(() => {
+        started.tabId = view.result.current.createTerminal(testAction());
+      });
 
-      expect(view.result.current.isVisible).toBe(true);
       expect(view.result.current.tabs).toHaveLength(1);
       const [pendingTab] = view.result.current.tabs;
       expect(pendingTab?.requestState).toBe("creating");
       expect(pendingTab && "label" in pendingTab ? pendingTab.label : null).toBe("Run tests");
-      expect(view.result.current.activeTabId).toBe(pendingTab?.tabId ?? null);
+      expect(pendingTab?.tabId).toBe(started.tabId ?? "missing");
       // A second click on the action control cannot run the command again before this start ends.
       expect(view.result.current.startBlockedReason).toBe("A terminal is starting.");
       expect(view.terminalRunAction).toHaveBeenCalledWith({
@@ -490,9 +385,9 @@ describe("useTerminals", () => {
       }));
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
-      await act(async () =>
-        view.result.current.onRunAction(testAction({ id: "lint", name: "Lint" })),
-      );
+      act(() => {
+        view.result.current.createTerminal(testAction({ id: "lint", name: "Lint" }));
+      });
       await waitFor(
         () => expect(view.result.current.tabs[0]?.error).toBe("The action lint does not exist."),
         { timeout: 500 },
@@ -515,16 +410,17 @@ describe("useTerminals", () => {
     }
   });
 
-  test("shows the scope reason when an action has no working directory", async () => {
+  test("blocks an action with the scope reason when the scope has no working directory", async () => {
     const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }), null);
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
       expect(view.result.current.startBlockedReason).toBe("Task task-1 has no available worktree.");
 
-      act(() => view.result.current.onRunAction(testAction()));
+      act(() => {
+        expect(view.result.current.createTerminal(testAction())).toBeNull();
+      });
 
-      expect(view.result.current.isVisible).toBe(true);
-      expect(view.result.current.tabs[0]?.error).toBe("Task task-1 has no available worktree.");
+      expect(view.result.current.tabs).toEqual([]);
       expect(view.terminalRunAction).not.toHaveBeenCalled();
     } finally {
       view.unmount();

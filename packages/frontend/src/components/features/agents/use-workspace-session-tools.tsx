@@ -6,7 +6,6 @@ import {
 import { buildComparisonView } from "@/features/agent-studio-git/session-comparison-view";
 import type { GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { FolderTree } from "lucide-react";
 import {
   type ReactNode,
   type RefObject,
@@ -35,7 +34,6 @@ import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-ac
 import { WorkspaceSessionGitTools } from "./workspace-session-git-tools";
 import { useGitCommentDraftValidation } from "./agent-studio-git-panel/use-git-comment-draft-validation";
 
-export type WorkspaceToolsTabId = "git" | "file_explorer";
 type WorkspaceRefreshMode = "hard" | "soft" | "scheduled";
 
 const missingWorkingDirectoryReason = "The selected working directory is unavailable.";
@@ -59,8 +57,8 @@ type WorkspaceSessionToolsProps = {
   applyTarget: (target: GitTargetBranch) => Promise<void>;
   retryTarget: () => Promise<void>;
   readBranch: () => Promise<string>;
-  activeTabId: WorkspaceToolsTabId;
-  onActiveTabChange: (tab: WorkspaceToolsTabId) => void;
+  /** True while the Files tab is selected in the shown right panel. */
+  isFilesActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
   /** Replaces the read-only repository branch label for a repository-root session. */
@@ -96,8 +94,7 @@ export function useWorkspaceSessionTools({
   targetError,
   retryTarget,
   readBranch,
-  activeTabId,
-  onActiveTabChange,
+  isFilesActive,
   selectedFile,
   onSelectFile,
   repositoryBranchControl,
@@ -258,13 +255,13 @@ export function useWorkspaceSessionTools({
       workingDirectory,
       resolvedTarget: markerTarget,
       branchReady,
-      activeTabId,
+      isFilesActive,
       selectedFile,
       onSelectFile,
     }),
     branchKey,
   };
-  const toolsContent = (
+  const diffsContent = (
     <WorkspaceSessionGitTools
       key={JSON.stringify([repoPath, workingDirectory, branchKey])}
       commentOwner={commentOwner}
@@ -279,25 +276,10 @@ export function useWorkspaceSessionTools({
       workingDirectory={workingDirectory}
       isFetchingTarget={isFetchingTarget || isWaitingForBranch}
       refresh={manualRefresh}
-      tools={{
-        tabs: [
-          {
-            id: "file_explorer",
-            label: "File explorer",
-            icon: FolderTree,
-            content: <TaskExecutionFileExplorerPanel model={fileModel} />,
-            keepMounted: true,
-          },
-        ],
-        activeTabId: activeTabId,
-        onActiveTabChange: onActiveTabChange,
-        tabListLabel: "Workspace session tools",
-        testIdPrefix: "workspace-session-tools",
-        headerActions: null,
-      }}
     />
   );
-  return { toolsContent, refresh: isVisible ? refreshTools : null };
+  const filesContent = <TaskExecutionFileExplorerPanel model={fileModel} />;
+  return { diffsContent, filesContent, refresh: isVisible ? refreshTools : null };
 }
 
 const retryWorktreeResolution = (): void => undefined;
@@ -306,14 +288,14 @@ function workspaceFileModel({
   workingDirectory,
   resolvedTarget,
   branchReady,
-  activeTabId,
+  isFilesActive,
   selectedFile,
   onSelectFile,
 }: {
   workingDirectory: string | null;
   resolvedTarget: string | null;
   branchReady: boolean;
-  activeTabId: WorkspaceToolsTabId;
+  isFilesActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
 }): TaskExecutionFileExplorerPanelModel {
@@ -327,7 +309,7 @@ function workspaceFileModel({
     rootPath: workingDirectory,
     targetBranch: resolvedTarget,
     unavailableReason,
-    isActive: activeTabId === "file_explorer" && branchReady,
+    isActive: isFilesActive && branchReady,
     selectedFile,
     onSelectFile,
   };

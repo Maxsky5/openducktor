@@ -87,4 +87,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
         parseMarkdownDocumentInput(args, "spec_save_document input", "spec"),
       ),
     tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),
+    task_ids_list: (args) =>
+      taskService.listTaskIds(parseRepoPathInput(args, "task_ids_list input")),
   }) satisfies HostCommandHandlerDefinitions;

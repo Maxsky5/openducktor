@@ -11,9 +11,16 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
+/** Renders the tools as the right panel does: Diffs while selected, Files always mounted. */
 function ToolsOwner(props: Parameters<typeof useWorkspaceSessionTools>[0]) {
-  const { toolsContent } = useWorkspaceSessionTools(props);
-  return props.isVisible ? toolsContent : null;
+  const { diffsContent, filesContent } = useWorkspaceSessionTools(props);
+  if (!props.isVisible) return null;
+  return (
+    <>
+      {props.isFilesActive ? null : diffsContent}
+      {filesContent}
+    </>
+  );
 }
 
 test("returning to a session checks fresh comparison data while its previous read is pending", async () => {
@@ -68,8 +75,7 @@ test("returning to a session checks fresh comparison data while its previous rea
     applyTarget: async () => {},
     retryTarget: async () => {},
     readBranch: async () => currentBranch,
-    activeTabId: "git",
-    onActiveTabChange: () => {},
+    isFilesActive: false,
     selectedFile: null,
     onSelectFile: () => {},
   };
@@ -183,8 +189,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
             applyTarget={async () => {}}
             retryTarget={async () => {}}
             readBranch={async () => "feature"}
-            activeTabId="git"
-            onActiveTabChange={() => {}}
+            isFilesActive={false}
             selectedFile={null}
             onSelectFile={() => {}}
           />
@@ -282,7 +287,7 @@ test.each(["directory", "branch"] as const)(
       sessionId: string,
       workingDirectory: string,
       branchKey: string,
-      activeTabId: "git" | "file_explorer" = "git",
+      activeTab: "diffs" | "files" = "diffs",
       isVisible = true,
     ) => (
       <QueryClientProvider client={queryClient}>
@@ -303,8 +308,7 @@ test.each(["directory", "branch"] as const)(
               targetError={null}
               retryTarget={async () => {}}
               readBranch={async () => branchKey}
-              activeTabId={activeTabId}
-              onActiveTabChange={() => {}}
+              isFilesActive={activeTab === "files"}
               selectedFile={null}
               onSelectFile={() => {}}
             />
@@ -323,12 +327,12 @@ test.each(["directory", "branch"] as const)(
         fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
       });
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "file_explorer"));
+      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "files"));
       rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
       expect(Boolean(screen.queryByRole("dialog", { name: "Confirm pull with rebase" }))).toBe(
         true,
       );
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "git", false));
+      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "diffs", false));
       expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
       rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();

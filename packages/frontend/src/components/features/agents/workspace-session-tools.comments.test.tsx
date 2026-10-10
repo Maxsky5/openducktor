@@ -34,7 +34,7 @@ function ToolsOwner({
   contextMode: "repository" | "worktree";
   workingDirectory: string;
 }) {
-  const { toolsContent } = useWorkspaceSessionTools({
+  const { filesContent } = useWorkspaceSessionTools({
     isVisible,
     repoPath: "/repo",
     workspaceId: commentOwner.workspaceId,
@@ -49,12 +49,11 @@ function ToolsOwner({
     applyTarget: async () => {},
     retryTarget: async () => {},
     readBranch: async () => "feature",
-    activeTabId: "file_explorer",
-    onActiveTabChange: () => {},
+    isFilesActive: isVisible,
     selectedFile: null,
     onSelectFile: () => {},
   });
-  return isVisible ? toolsContent : null;
+  return isVisible ? filesContent : null;
 }
 
 afterEach(resetInlineCommentDraftStoreForTests);

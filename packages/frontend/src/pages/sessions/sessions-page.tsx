@@ -8,6 +8,7 @@ import {
   SESSIONS_QUERY_KEYS,
   TASK_SESSION_QUERY_KEYS,
 } from "@/features/session-navigation/session-navigation-target";
+import { useSessionPanelLayoutPruning } from "@/features/session-panels";
 import { AgentsPage } from "@/pages/agents/agents-page";
 import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
 import { useActiveWorkspace } from "@/state/app-state-provider";
@@ -22,6 +23,7 @@ import { useSessionsWorkspaceMatch } from "./use-sessions-workspace-match";
  * workspace contents never write the same address at the same time.
  */
 export function SessionsPage(): ReactElement {
+  useSessionPanelLayoutPruning();
   const activeWorkspace = useActiveWorkspace();
   const { tasks } = useTaskSnapshotContext();
   const [searchParams] = useSearchParams();

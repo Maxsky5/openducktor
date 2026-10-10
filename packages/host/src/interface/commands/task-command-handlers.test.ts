@@ -85,6 +85,27 @@ const runHandler = <T>(
 };
 
 describe("createTaskCommandHandlers", () => {
+  test("registers task_ids_list for the IDs of all tasks of a repository", async () => {
+    const inputs: unknown[] = [];
+    const handlers = createTaskCommandHandlers(
+      createTaskServiceTestDouble({
+        listTaskIds(input) {
+          return Effect.sync(() => {
+            inputs.push(input);
+            return ["task-1", "task-2"];
+          });
+        },
+      }),
+    );
+
+    await expect(runHandler(handlers.task_ids_list?.({ repoPath: "/repo" }))).resolves.toEqual([
+      "task-1",
+      "task-2",
+    ]);
+    expect(inputs).toEqual([{ repoPath: "/repo" }]);
+    expect(() => handlers.task_ids_list?.({})).toThrow("repoPath is required.");
+  });
+
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
     const service = createTaskServiceTestDouble({

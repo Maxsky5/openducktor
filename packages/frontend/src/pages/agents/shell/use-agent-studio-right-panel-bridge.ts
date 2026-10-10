@@ -4,20 +4,12 @@ import type { UseAgentsPageRightPanelModelArgs } from "../use-agents-page-right-
 
 type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelectionContext, "view">;
 
-type AgentStudioRightPanelPanelState = Pick<
-  UseAgentsPageRightPanelModelArgs,
-  | "tabs"
-  | "activeTabId"
-  | "isPanelOpen"
-  | "onActiveTabChange"
-  | "pullRequestReviewUnavailableReason"
->;
-
 type UseAgentStudioRightPanelBridgeArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selection: AgentStudioRightPanelBridgeSelection;
-  panel: AgentStudioRightPanelPanelState;
+  panel: UseAgentsPageRightPanelModelArgs["panel"];
+  pullRequestReviewUnavailableReason: string | null;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
@@ -32,11 +24,8 @@ export type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];
-  tabs: UseAgentsPageRightPanelModelArgs["tabs"];
-  activeTabId: UseAgentsPageRightPanelModelArgs["activeTabId"];
-  onActiveTabChange: UseAgentsPageRightPanelModelArgs["onActiveTabChange"];
+  panel: UseAgentsPageRightPanelModelArgs["panel"];
   pullRequestReviewUnavailableReason: UseAgentsPageRightPanelModelArgs["pullRequestReviewUnavailableReason"];
-  isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
@@ -47,10 +36,8 @@ export type AgentStudioRightPanelRuntimeModel = {
   gitProviderReadError: string | null;
 };
 
-export type AgentStudioBuildWorktreeRefreshModel = Pick<
-  AgentStudioRightPanelRuntimeModel,
-  "activeTabId" | "isPanelOpen"
-> & {
+export type AgentStudioBuildWorktreeRefreshModel = {
+  isPanelOpen: boolean;
   selectedView: {
     role: AgentStudioOrchestrationSelectionContext["view"]["role"];
     loadedSession: AgentStudioOrchestrationSelectionContext["view"]["selectedSession"]["loadedSession"];
@@ -68,76 +55,16 @@ export type AgentStudioRightPanelBridgeModel = {
 };
 
 export type AgentStudioRightPanelShellModel = {
-  isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
 };
-
-type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
-  UseAgentStudioRightPanelBridgeArgs,
-  "panel"
-> & {
-  activeTabId: NonNullable<AgentStudioRightPanelPanelState["activeTabId"]>;
-  tabs: AgentStudioRightPanelPanelState["tabs"];
-  isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
-  onActiveTabChange: AgentStudioRightPanelPanelState["onActiveTabChange"];
-  pullRequestReviewUnavailableReason: AgentStudioRightPanelPanelState["pullRequestReviewUnavailableReason"];
-  gitProviderReadError: string | null;
-};
-
-function buildAgentStudioRightPanelBridgeModel({
-  activeWorkspace,
-  buildTools,
-  selection,
-  activeTabId,
-  tabs,
-  isPanelOpen,
-  onActiveTabChange,
-  pullRequestReviewUnavailableReason,
-  documentsModel,
-  selectedFile,
-  onSelectFile,
-  setTaskTargetBranch,
-  detectingPullRequestTaskId,
-  onDetectPullRequest,
-  gitProviderContext,
-  gitProviderReadError,
-}: BuildAgentStudioRightPanelBridgeModelArgs): AgentStudioRightPanelBridgeModel {
-  return {
-    buildWorktreeRefresh: {
-      activeTabId,
-      isPanelOpen,
-      selectedView: {
-        role: selection.view.role,
-        loadedSession: selection.view.selectedSession.loadedSession,
-      },
-    },
-    rightPanel: {
-      activeWorkspace,
-      buildTools,
-      selectedView: selection.view,
-      tabs,
-      activeTabId,
-      onActiveTabChange,
-      pullRequestReviewUnavailableReason,
-      isPanelOpen,
-      documentsModel,
-      selectedFile,
-      onSelectFile,
-      setTaskTargetBranch,
-      detectingPullRequestTaskId,
-      onDetectPullRequest,
-      gitProviderContext,
-      gitProviderReadError,
-    },
-  };
-}
 
 export function useAgentStudioRightPanelBridge({
   activeWorkspace,
   buildTools,
   selection,
   panel,
+  pullRequestReviewUnavailableReason,
   documentsModel,
   selectedFile,
   onSelectFile,
@@ -147,53 +74,54 @@ export function useAgentStudioRightPanelBridge({
   gitProviderContext,
   gitProviderReadError = null,
 }: UseAgentStudioRightPanelBridgeArgs): AgentStudioRightPanelShellModel {
-  const activeTabId = panel.activeTabId;
-  const tabs = panel.tabs;
-  const isPanelOpen = panel.isPanelOpen;
-  const onActiveTabChange = panel.onActiveTabChange;
-  const pullRequestReviewUnavailableReason = panel.pullRequestReviewUnavailableReason;
-  const isRightPanelVisible = Boolean(activeTabId && isPanelOpen);
+  const hasTask = Boolean(selection.view.taskId);
+  const isPanelOpen = panel.isVisible;
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
-    if (!activeTabId) {
+    if (!hasTask) {
       return null;
     }
 
-    return buildAgentStudioRightPanelBridgeModel({
-      activeWorkspace,
-      buildTools,
-      selection,
-      activeTabId,
-      tabs,
-      isPanelOpen,
-      onActiveTabChange,
-      pullRequestReviewUnavailableReason,
-      documentsModel,
-      selectedFile,
-      onSelectFile,
-      setTaskTargetBranch,
-      detectingPullRequestTaskId,
-      onDetectPullRequest,
-      gitProviderContext,
-      gitProviderReadError,
-    });
+    return {
+      buildWorktreeRefresh: {
+        isPanelOpen,
+        selectedView: {
+          role: selection.view.role,
+          loadedSession: selection.view.selectedSession.loadedSession,
+        },
+      },
+      rightPanel: {
+        activeWorkspace,
+        buildTools,
+        selectedView: selection.view,
+        panel,
+        pullRequestReviewUnavailableReason,
+        documentsModel,
+        selectedFile,
+        onSelectFile,
+        setTaskTargetBranch,
+        detectingPullRequestTaskId,
+        onDetectPullRequest,
+        gitProviderContext,
+        gitProviderReadError,
+      },
+    };
   }, [
     activeWorkspace,
+    buildTools,
     detectingPullRequestTaskId,
     documentsModel,
-    activeTabId,
-    buildTools,
-    isPanelOpen,
-    onDetectPullRequest,
     gitProviderContext,
     gitProviderReadError,
+    hasTask,
+    isPanelOpen,
+    onDetectPullRequest,
     onSelectFile,
-    onActiveTabChange,
+    panel,
     pullRequestReviewUnavailableReason,
     selectedFile,
-    selection,
+    selection.view,
     setTaskTargetBranch,
-    tabs,
   ]);
 
   const selectedFileRefresh = useMemo<AgentStudioSelectedFileRefreshModel | null>(() => {
@@ -211,7 +139,6 @@ export function useAgentStudioRightPanelBridge({
   }, [isPanelOpen, selectedFile, selection.view]);
 
   return {
-    isRightPanelVisible,
     rightPanelBridge,
     selectedFileRefresh,
   };
