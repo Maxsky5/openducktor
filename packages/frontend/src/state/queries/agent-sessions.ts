@@ -1,8 +1,14 @@
-import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionRecord,
+  TaskAgentSessions,
+} from "@openducktor/contracts";
 import { isCancelledError, type QueryClient, queryOptions } from "@tanstack/react-query";
+import { z } from "zod";
 import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME = Number.POSITIVE_INFINITY;
+const queryKeyStringSchema = z.string();
 const invalidationVersionsByQueryClient = new WeakMap<QueryClient, Map<string, number>>();
 
 export type AgentSessionReadPort = Pick<
@@ -474,3 +480,37 @@ const sessionOwnershipKey = (records: AgentSessionRecord[]): string =>
       ])
       .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
   );
+
+export const cachedAgentSessionTaskIds = (queryClient: QueryClient, repoPath: string): string[] =>
+  queryClient
+    .getQueryCache()
+    .findAll({ queryKey: agentSessionQueryKeys.all, exact: false })
+    .flatMap((query) => {
+      const [, kind, cachedRepoPath, taskId] = query.queryKey;
+      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
+      return kind === "list" && cachedRepoPath === repoPath && taskIdResult.success
+        ? [taskIdResult.data]
+        : [];
+    });
+
+/**
+ * Keeps the list cache current from one live observation of a repository. Only the first
+ * connection snapshot comes from a normal attachment. A later one follows missed events, which
+ * can include record updates, so the cached lists of the repository read again.
+ */
+export const createAgentSessionListLiveSync = (queryClient: QueryClient) => {
+  let attached = false;
+  return (envelope: AgentSessionLiveEnvelope): void => {
+    if (envelope.type === "task_session_records_updated") {
+      updateAgentSessionListQuery(queryClient, envelope.repoPath, envelope);
+      return;
+    }
+    if (envelope.type !== "snapshot" || !envelope.isConnectionSnapshot) return;
+    if (attached) {
+      const taskIds = cachedAgentSessionTaskIds(queryClient, envelope.repoPath);
+      // A failed read stays on its list query, where the session read model reports it.
+      void refreshAgentSessionLists(queryClient, envelope.repoPath, taskIds).catch(() => false);
+    }
+    attached = true;
+  };
+};

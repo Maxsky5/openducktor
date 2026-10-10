@@ -1,11 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import { isCancelledError, QueryClient } from "@tanstack/react-query";
+import type { AgentSessionLiveSnapshotEnvelope, AgentSessionRecord } from "@openducktor/contracts";
+import { isCancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   type AgentSessionReadPort,
   agentSessionListHydrationQueryOptions,
   agentSessionListQueryOptions,
   agentSessionQueryKeys,
+  createAgentSessionListLiveSync,
   hydrateAgentSessionListQueries,
   invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
@@ -32,6 +33,14 @@ const createReadPort = (
   },
   agentSessionsListForTasks,
 });
+
+const waitForCondition = async (condition: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("Expected the condition to become true.");
+};
 
 describe("agent session query cache helpers", () => {
   test("a committed list completes a batch that joined its older read", async () => {
@@ -143,6 +152,43 @@ describe("agent session query cache helpers", () => {
       queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
     ).toEqual([updated]);
   });
+  test("a later live connection snapshot rereads the cached lists of its repository", async () => {
+    const queryClient = new QueryClient();
+    const refreshed = { ...sessionFixture, externalSessionId: "external-2" };
+    let reads = 0;
+    const agentSessionsList = mock(async () => (++reads === 1 ? [sessionFixture] : [refreshed]));
+    const observer = new QueryObserver(
+      queryClient,
+      agentSessionListQueryOptions("/repo", "task-1", { agentSessionsList }),
+    );
+    const stopObserving = observer.subscribe(() => {});
+    const syncLists = createAgentSessionListLiveSync(queryClient);
+    const connectionSnapshot: AgentSessionLiveSnapshotEnvelope = {
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+      sequence: 0,
+      isConnectionSnapshot: true,
+    };
+    try {
+      await observer.refetch();
+      syncLists(connectionSnapshot);
+      syncLists({ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 1 });
+      expect(agentSessionsList).toHaveBeenCalledTimes(1);
+
+      syncLists(connectionSnapshot);
+      await waitForCondition(() => agentSessionsList.mock.calls.length === 2);
+      await waitForCondition(
+        () =>
+          queryClient.getQueryData<AgentSessionRecord[]>(
+            agentSessionQueryKeys.list("/repo", "task-1"),
+          )?.[0]?.externalSessionId === "external-2",
+      );
+    } finally {
+      stopObserving();
+    }
+  });
+
   test("hydration query keys normalize task ordering, whitespace, duplicates, and empty IDs", () => {
     expect(agentSessionQueryKeys.hydration("/repo", [" task-2 ", "", "task-1", "task-2"])).toEqual([
       "agent-sessions",

@@ -51,6 +51,7 @@ Rules:
 - The browser uses one tagged SSE channel for all host events. Electron uses its generic host-event IPC message.
 - Each snapshot carries the host `sequence` of the last state change that it covers. Drop older `snapshot`, `session_upsert`, and `session_removed` envelopes. Deliver an older `task_session_records_updated` without its `liveSession`. Deliver transcript and other changes in stream order.
 - A reconnect with complete replay keeps the collection and the loaded transcripts. A replay gap for the repository or a new host starts a new attachment.
+- A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
 - Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks chat actions, not healthy task sessions.

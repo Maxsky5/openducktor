@@ -1,15 +1,13 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import { z } from "zod";
 import {
   agentSessionQueryKeys,
   type AgentSessionReadPort,
+  cachedAgentSessionTaskIds,
   loadAgentSessionListsFromQuery,
   removeAgentSessionListQueries,
   refreshAgentSessionLists,
 } from "./agent-sessions";
-
-const queryKeyStringSchema = z.string();
 
 export type AgentSessionViewSync = {
   reconcileExternalEvent: (event: ExternalTaskSyncEvent) => Promise<void>;
@@ -83,16 +81,3 @@ export const createAgentSessionViewSync = ({
     await refreshLiveSessions(activeRepoPath);
   },
 });
-
-function cachedAgentSessionTaskIds(queryClient: QueryClient, repoPath: string): string[] {
-  return queryClient
-    .getQueryCache()
-    .findAll({ queryKey: agentSessionQueryKeys.all, exact: false })
-    .flatMap((query) => {
-      const [, kind, cachedRepoPath, taskId] = query.queryKey;
-      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
-      return kind === "list" && cachedRepoPath === repoPath && taskIdResult.success
-        ? [taskIdResult.data]
-        : [];
-    });
-}
