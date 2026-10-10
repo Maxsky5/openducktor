@@ -177,6 +177,14 @@ describe("agent-session live contracts", () => {
 
   test("routes ordered envelope variants by repository without attachment identity", () => {
     const variants = [
+      {
+        type: "task_session_records_updated",
+        repoPath: ref.repoPath,
+        taskId: "task-1",
+        agentSessions: [],
+        liveSession: snapshot,
+        sequence: 3,
+      },
       { type: "snapshot", repoPath: ref.repoPath, sessions: [snapshot], sequence: 0 },
       { type: "session_upsert", session: snapshot, sequence: 1 },
       { type: "session_removed", ref, sequence: 2 },

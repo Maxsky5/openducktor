@@ -113,6 +113,34 @@ describe("agent session live attachment", () => {
     ]);
   });
 
+  test("keeps durable records of a covered record update without its live session", () => {
+    const { attachment, received } = createRecorder();
+    const records = (sequence: number): AgentSessionLiveEnvelope => ({
+      type: "task_session_records_updated",
+      repoPath: "/repo",
+      taskId: "task-1",
+      agentSessions: [],
+      liveSession: session,
+      sequence,
+    });
+
+    attachment.accept(records(4));
+    attachment.accept(records(6));
+    attachment.install({ ...snapshot, sequence: 5 });
+
+    expect(received).toEqual([
+      { ...snapshot, sequence: 5, isConnectionSnapshot: true },
+      {
+        type: "task_session_records_updated",
+        repoPath: "/repo",
+        taskId: "task-1",
+        agentSessions: [],
+        sequence: 4,
+      },
+      records(6),
+    ]);
+  });
+
   test("rejects a snapshot without a host sequence", () => {
     const { attachment } = createRecorder();
 

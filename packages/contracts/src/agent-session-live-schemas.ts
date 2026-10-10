@@ -155,7 +155,8 @@ export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
 /**
  * The host numbers live state changes in publication order. A snapshot with sequence N covers
- * every `snapshot`, `session_upsert`, and `session_removed` envelope up to N.
+ * every `snapshot`, `session_upsert`, and `session_removed` envelope and every
+ * `task_session_records_updated` `liveSession` up to N.
  */
 const liveStateSequenceSchema = z.number().int().nonnegative();
 
@@ -178,6 +179,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
       type: z.literal("task_session_records_updated"),
       repoPath: nonEmptyStringSchema,
       liveSession: agentSessionLiveSnapshotSchema.optional(),
+      sequence: liveStateSequenceSchema.optional(),
     })
     .strict(),
   agentSessionLiveSnapshotEnvelopeSchema,
@@ -235,7 +237,7 @@ export type AgentSessionLiveEnvelope = z.infer<typeof agentSessionLiveEnvelopeSc
 
 export type AgentSessionLiveStateEnvelope = Extract<
   AgentSessionLiveEnvelope,
-  { type: "snapshot" | "session_upsert" | "session_removed" }
+  { type: "snapshot" | "session_upsert" | "session_removed" | "task_session_records_updated" }
 >;
 
 /** Reports whether the envelope carries live state that a later snapshot covers. */
@@ -244,7 +246,8 @@ export const isAgentSessionLiveStateEnvelope = (
 ): envelope is AgentSessionLiveStateEnvelope =>
   envelope.type === "snapshot" ||
   envelope.type === "session_upsert" ||
-  envelope.type === "session_removed";
+  envelope.type === "session_removed" ||
+  envelope.type === "task_session_records_updated";
 
 export const agentSessionLiveListInputSchema = z
   .object({

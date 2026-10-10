@@ -47,18 +47,24 @@ type ReplayBuffer = {
   bytes: number;
   evictedThroughId: number;
 };
-export type ReplayLimits = { events: number; bytes: number };
+export type ReplayLimits = { events: number; bytes: number; totalBytes: number };
 
-const DEFAULT_REPLAY_LIMITS: ReplayLimits = { events: 4096, bytes: 2 * 1024 * 1024 };
+const DEFAULT_REPLAY_LIMITS: ReplayLimits = {
+  events: 4096,
+  bytes: 2 * 1024 * 1024,
+  totalBytes: 16 * 1024 * 1024,
+};
 
 /**
  * Retains recent host events for SSE reconnects. Each SSE event name has its own buffer, so a busy
- * repository or channel cannot evict the events of another one.
+ * repository or channel cannot evict the events of another one until all buffers reach
+ * `totalBytes`.
  */
 export class BufferedHostEventStream {
   /** Event IDs are valid only for this host process. */
   readonly hostEpoch = crypto.randomUUID();
   private nextId = 0;
+  private totalBytes = 0;
   private readonly buffers = new Map<string, ReplayBuffer>();
   private readonly listeners = new Set<(event: BufferedHostEvent) => void>();
 
@@ -117,12 +123,30 @@ export class BufferedHostEventStream {
     }
     buffer.events.push(event);
     buffer.bytes += event.bytes;
+    this.totalBytes += event.bytes;
     while (buffer.events.length > this.limits.events || buffer.bytes > this.limits.bytes) {
-      const evicted = buffer.events.shift();
-      if (!evicted) break;
-      buffer.bytes -= evicted.bytes;
-      buffer.evictedThroughId = evicted.id;
+      this.evictFirst(buffer);
     }
+    // The total limit evicts the oldest retained event of any event name.
+    while (this.totalBytes > this.limits.totalBytes) {
+      let oldest: ReplayBuffer | null = null;
+      for (const candidate of this.buffers.values()) {
+        const firstId = candidate.events[0]?.id;
+        if (firstId !== undefined && firstId < (oldest?.events[0]?.id ?? Infinity)) {
+          oldest = candidate;
+        }
+      }
+      if (!oldest) break;
+      this.evictFirst(oldest);
+    }
+  }
+
+  private evictFirst(buffer: ReplayBuffer): void {
+    const evicted = buffer.events.shift();
+    if (!evicted) return;
+    buffer.bytes -= evicted.bytes;
+    this.totalBytes -= evicted.bytes;
+    buffer.evictedThroughId = evicted.id;
   }
 }
 

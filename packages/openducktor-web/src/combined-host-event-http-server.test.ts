@@ -115,7 +115,11 @@ test("one response carries host and notification frames with independent resume 
 });
 
 test("a reconnect queues both full replay buffers and reports the evicted channel", async () => {
-  const host = new BufferedHostEventStream({ events: 256, bytes: 1024 * 1024 });
+  const host = new BufferedHostEventStream({
+    events: 256,
+    bytes: 1024 * 1024,
+    totalBytes: 1024 * 1024,
+  });
   const notifications = createNotificationStream();
   const failures = mock<(cause: unknown) => void>(() => {});
   const initial = await Effect.runPromise(
@@ -264,7 +268,11 @@ test("a stalled combined response fails once and releases both live subscription
 });
 
 test("a busy event name cannot evict the replay of another one", async () => {
-  const host = new BufferedHostEventStream({ events: 4, bytes: 1024 * 1024 });
+  const host = new BufferedHostEventStream({
+    events: 4,
+    bytes: 1024 * 1024,
+    totalBytes: 1024 * 1024,
+  });
   host.emit(liveEvent("/quiet", 0), () => {});
   for (let index = 1; index <= 6; index++) host.emit(liveEvent("/busy", index), () => {});
 
@@ -286,12 +294,33 @@ test("a busy event name cannot evict the replay of another one", async () => {
 });
 
 test("a byte limit evicts large events and reports their gap", () => {
-  const host = new BufferedHostEventStream({ events: 100, bytes: 300 });
+  const host = new BufferedHostEventStream({ events: 100, bytes: 300, totalBytes: 1024 * 1024 });
   for (let index = 0; index < 4; index++) host.emit(liveEvent("/repo", index), () => {});
 
   const replay = host.replayAfter(0);
   expect(replay.events.map((event) => event.id)).toEqual([3, 4]);
   expect(replay.gaps).toEqual([liveSessionStreamEventName("/repo")]);
+  expect(host.replayAfter(2).gaps).toEqual([]);
+});
+
+test("a total byte limit evicts the oldest events of any event name", () => {
+  const eventBytes = Buffer.byteLength(JSON.stringify(liveEvent("/a", 0)));
+  const host = new BufferedHostEventStream({
+    events: 100,
+    bytes: 1024 * 1024,
+    totalBytes: eventBytes * 3,
+  });
+  host.emit(liveEvent("/a", 0), () => {});
+  host.emit(liveEvent("/b", 1), () => {});
+  host.emit(liveEvent("/a", 2), () => {});
+  host.emit(liveEvent("/c", 3), () => {});
+  host.emit(liveEvent("/c", 4), () => {});
+
+  const replay = host.replayAfter(0);
+  expect(replay.events.map((event) => event.id)).toEqual([3, 4, 5]);
+  expect(replay.gaps.toSorted()).toEqual(
+    [liveSessionStreamEventName("/a"), liveSessionStreamEventName("/b")].toSorted(),
+  );
   expect(host.replayAfter(2).gaps).toEqual([]);
 });
 

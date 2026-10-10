@@ -32,8 +32,9 @@ export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => 
 
 /**
  * Subscribe first, then install the snapshot that `agent_session_live_attach` returns. The
- * snapshot covers every state change up to its sequence, so older state changes are dropped.
- * Transcript and other changes are delivered in stream order.
+ * snapshot covers every state change up to its sequence, so older state changes are dropped. An
+ * older record update keeps its durable records without its live session. Transcript and other
+ * changes are delivered in stream order.
  */
 export const createAgentSessionLiveAttachment = (
   repoPath: string,
@@ -49,6 +50,11 @@ export const createAgentSessionLiveAttachment = (
       envelope.sequence !== undefined &&
       envelope.sequence <= coveredSequence
     ) {
+      // Durable records still apply. Only their live session is older than the snapshot.
+      if (envelope.type === "task_session_records_updated") {
+        const { liveSession: _covered, ...records } = envelope;
+        listener(records);
+      }
       return;
     }
     listener(envelope);
