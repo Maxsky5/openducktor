@@ -885,6 +885,43 @@ describe("local host SSE subscriptions", () => {
     stopObserving();
   });
 
+  test("installs only the latest attachment after a recovery before the first open", async () => {
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    const attachResponses = [Promise.withResolvers<number>(), Promise.withResolvers<number>()];
+    let attachCount = 0;
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (!url.toString().endsWith("/invoke/agent_session_live_attach")) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        const sequence = await attachResponses[attachCount++]!.promise;
+        return new Response(liveAttachBody("/repo", sequence), { status: 200 });
+      }),
+    );
+    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
+
+    const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("error", "failed before opening");
+    // The recovery starts a request before the initial attachment starts its own.
+    eventSource.connect();
+    await waitForCondition(() => attachCount === 2);
+    attachResponses[1]!.resolve(9);
+    const stopObserving = await observation;
+    attachResponses[0]!.resolve(5);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+      sequence: 9,
+      isConnectionSnapshot: true,
+    });
+    stopObserving();
+  });
+
   test("reattaches every live-session observer after a host change when one listener fails", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(hostFetch());

@@ -637,8 +637,12 @@ export const observeLocalHostAgentSessions = async (
     Effect.gen(function* () {
       const client = createLocalHostClient();
       let closed = false;
-      // Only the latest attachment can install its snapshot.
+      // Each attach request takes a new generation. Only the latest one can install its snapshot.
       let attachGeneration = 0;
+      const nextAttachGeneration = (): number => {
+        attachGeneration += 1;
+        return attachGeneration;
+      };
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const attach = async (generation: number): Promise<void> => {
         const snapshot = await client.agentSessionLiveAttach(input);
@@ -646,8 +650,7 @@ export const observeLocalHostAgentSessions = async (
       };
       // A complete replay keeps the current state. Missed events need a new host snapshot.
       const reattach = (): void => {
-        attachGeneration += 1;
-        const generation = attachGeneration;
+        const generation = nextAttachGeneration();
         attachment.restart();
         attach(generation).catch((cause: unknown) => {
           if (!closed && generation === attachGeneration) {
@@ -677,7 +680,8 @@ export const observeLocalHostAgentSessions = async (
       );
       const initialAttachExit = yield* Effect.exit(
         Effect.tryPromise({
-          try: () => attach(attachGeneration),
+          // A recovery before the first open can already have started a newer request.
+          try: () => attach(nextAttachGeneration()),
           catch: (cause) =>
             isWebError(cause)
               ? cause
