@@ -1,6 +1,6 @@
 {
   "name": "@openducktor/electron",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "description": "OpenDucktor desktop application",
   "homepage": "https://github.com/Maxsky5/openducktor",
