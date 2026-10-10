@@ -61,6 +61,25 @@ describe("local-attachment-files", () => {
     expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
+  test("stageLocalAttachmentFile sends the exact file bytes as base64", async () => {
+    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/bytes.bin" }));
+    configureShellBridge(
+      createTestShellBridge({
+        client: createHostClientFixture({ workspaceStageLocalAttachment }),
+      }),
+    );
+    const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+
+    await expect(
+      stageLocalAttachmentFile(new File([bytes], "bytes.bin", { type: "application/pdf" })),
+    ).resolves.toBe("/tmp/staged/bytes.bin");
+    expect(workspaceStageLocalAttachment).toHaveBeenCalledWith({
+      name: "bytes.bin",
+      base64Data: Buffer.from(bytes).toString("base64"),
+      mime: "application/pdf",
+    });
+  });
+
   test("resolveLocalAttachmentPreviewSrc rejects blank paths before shell delegation", async () => {
     await expect(resolveLocalAttachmentPreviewSrc("   ")).rejects.toThrow(
       "Attachment preview is unavailable because the local file path is missing.",

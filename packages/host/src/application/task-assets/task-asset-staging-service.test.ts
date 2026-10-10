@@ -40,6 +40,7 @@ describe("task asset staging", () => {
       scope: "description",
       originalName: "diagram.png",
       verifiedMediaType: "image/png",
+      byteSize: Buffer.from(PNG_BASE64, "base64").byteLength,
     });
     expect(result).not.toHaveProperty("path");
     expect(result).not.toHaveProperty("url");
@@ -92,6 +93,28 @@ describe("task asset staging", () => {
         }),
       ),
     ).rejects.toThrow("10 MiB");
+  });
+
+  test("rejects malformed base64 and nonzero padding bits", async () => {
+    const { service } = await createHarness();
+    const common = {
+      workspaceId: "workspace-1",
+      scope: "description" as const,
+      originalName: "image.png",
+      declaredMediaType: "image/png" as const,
+    };
+
+    await expect(
+      Effect.runPromise(
+        service.stage({ ...common, bytesBase64: `${PNG_BASE64.slice(0, -4)}YI!=` }),
+      ),
+    ).rejects.toThrow("Invalid task asset upload");
+    // The changed bits are dropped on decode, so only the strict check rejects this PNG.
+    await expect(
+      Effect.runPromise(
+        service.stage({ ...common, bytesBase64: `${PNG_BASE64.slice(0, -4)}YIJ=` }),
+      ),
+    ).rejects.toThrow("Task description image data must be valid base64.");
   });
 
   test("keeps workspace ownership and discard exact", async () => {

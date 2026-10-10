@@ -1,11 +1,11 @@
 import {
-  LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
   LOCAL_ATTACHMENT_BYTE_LIMIT,
   LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
   LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
   type LocalAttachmentUnavailableDetails,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
+import { decodeStrictBase64 } from "../../domain/strict-base64";
 import {
   errorMessage,
   hasNestedNodeErrorCode,
@@ -95,21 +95,21 @@ const sanitizeAttachmentLookupToken = (pathOrName: string): string => {
   return trimmed;
 };
 const decodeBase64 = (value: string): Uint8Array => {
-  if (value.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT) {
+  const decoded = decodeStrictBase64(value, LOCAL_ATTACHMENT_BYTE_LIMIT);
+  if (decoded.ok) {
+    return decoded.bytes;
+  }
+  if (decoded.reason === "too_large") {
     throw new HostValidationError({
       field: "base64Data",
       message: "Attachment payload exceeds the 32 MiB staging limit.",
       details: { limitBytes: LOCAL_ATTACHMENT_BYTE_LIMIT },
     });
   }
-  const compact = value.trim();
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(compact) || compact.length % 4 !== 0) {
-    throw new HostValidationError({
-      field: "base64Data",
-      message: "Failed to decode attachment payload: invalid base64 data",
-    });
-  }
-  return Uint8Array.from(atob(compact), (character) => character.charCodeAt(0));
+  throw new HostValidationError({
+    field: "base64Data",
+    message: "Failed to decode attachment payload: invalid base64 data",
+  });
 };
 const requireAttachmentInput = (value: string, label: string): string => {
   const trimmed = value.trim();

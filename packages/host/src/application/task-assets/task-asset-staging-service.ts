@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
+import { decodeStrictBase64 } from "../../domain/strict-base64";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import { TaskAssetError, taskAssetValidationError } from "./task-asset-error";
 
@@ -66,9 +67,6 @@ const sanitizeOriginalName = (originalName: string): string => {
   return sanitized || "image";
 };
 
-const decodeBase64 = (value: string): Uint8Array =>
-  Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
-
 export const createTaskAssetStagingService = (
   filePort: TaskAssetFilePort,
 ): TaskAssetStagingService => {
@@ -101,12 +99,15 @@ export const createTaskAssetStagingService = (
             `Invalid task asset upload: ${parsed.error.message}`,
           );
         }
-        const bytes = decodeBase64(parsed.data.bytesBase64);
-        if (bytes.byteLength > TASK_ASSET_MAX_FILE_BYTES) {
+        const decoded = decodeStrictBase64(parsed.data.bytesBase64, TASK_ASSET_MAX_FILE_BYTES);
+        if (!decoded.ok) {
           return yield* taskAssetValidationError(
-            "Task description images must be 10 MiB or smaller.",
+            decoded.reason === "too_large"
+              ? "Task description images must be 10 MiB or smaller."
+              : "Task description image data must be valid base64.",
           );
         }
+        const { bytes } = decoded;
         const detected = yield* Effect.tryPromise({
           try: () => fileTypeFromBuffer(bytes),
           catch: (cause) =>
