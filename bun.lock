@@ -216,7 +216,7 @@
       "version": "1.0.0-beta.1",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.286",
-        "@azure/msal-node": "^6.0.1",
+        "@azure/msal-node": "^7.0.1",
         "@azure/msal-node-extensions": "^5.5.1",
         "@ff-labs/fff-node": "0.10.6",
         "@openducktor/adapters-codex-app-server": "workspace:*",
@@ -421,7 +421,7 @@
 
     "@azure/msal-common": ["@azure/msal-common@16.14.1", "", {}, "sha512-Or6xhPNyi4zHW25158yxBoyxuCqNSPa5YBVqfF1J5Ks4MJWBo/USXdp05DQIPu1Zli00YZu6t0+h6KvHJealxQ=="],
 
-    "@azure/msal-node": ["@azure/msal-node@6.0.1", "", { "dependencies": { "@azure/msal-common": "16.14.1", "jsonwebtoken": "^9.0.0" } }, "sha512-ixSO1Y/kCVRthRs+hSx/5qkwaunX1/RAePhlMN0wIpIQ4WEZ6AREGGnGd1AP0qspHVsAwzWQKGubpjh50JyJIQ=="],
+    "@azure/msal-node": ["@azure/msal-node@7.0.1", "", { "dependencies": { "@azure/msal-common": "16.14.2", "jsonwebtoken": "^9.0.0" } }, "sha512-mrHLCwXird58rdk7LjvlUn5YybvVb3qXwlw3tvSWqHllmatFeQYuFhX/cJ7CoGgpdAOmNzm6Un4KDu+v/O3Tcw=="],
 
     "@azure/msal-node-extensions": ["@azure/msal-node-extensions@5.5.1", "", { "dependencies": { "@azure/msal-common": "16.14.1", "@azure/msal-node-runtime": "^0.20.0", "keytar": "^7.8.0" } }, "sha512-o7L5OCEoHcqRELBeXRSHUibe5JYee7/dQ46Glaj7Ly7fVe76ac6oq2klr/bXDl1CHaiS0OuI6T3oWKD9FFL52g=="],
 
@@ -3048,6 +3048,8 @@
     "@astrojs/compiler-binding-wasm32-wasi/@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 
     "@astrojs/compiler-binding-wasm32-wasi/@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.2.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1 || ^2.0.0-alpha.4", "@emnapi/runtime": "^1.7.1 || ^2.0.0-alpha.4" } }, "sha512-AJxoUD2/15ESHbvpcyjU274nsAPLuOtPHCk0vKJM5pj//Fg/B1FXNWjPnXTT9PymCYYiHo4zPj0ZomXBKhoy7g=="],
+
+    "@azure/msal-node/@azure/msal-common": ["@azure/msal-common@16.14.2", "", {}, "sha512-HOBR0Gfo39TMrkxNG8k6cfjRkrRjXZc3JQs3ebMWQc9S4cihuknMYra3sgmzbZB752oQBqBN9+WF7c826p2vIQ=="],
 
     "@bruits/satteri-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 
