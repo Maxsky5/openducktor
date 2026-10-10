@@ -470,6 +470,7 @@ body {
 }
 
 .electron-shell .electron-sidebar-heading > button,
+.electron-shell .electron-sidebar-heading .electron-sidebar-search,
 .electron-shell .electron-sidebar-collapsed-title-row button {
   -webkit-app-region: no-drag;
 }

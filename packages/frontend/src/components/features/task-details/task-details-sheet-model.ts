@@ -1,75 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
-
-type TaskWorkflowCallbacks = {
-  onPlan: ((taskId: string, action: "set_spec" | "set_plan") => void) | undefined;
-  onQaStart: ((taskId: string) => void) | undefined;
-  onQaOpen: ((taskId: string) => void) | undefined;
-  onBuild: ((taskId: string) => void) | undefined;
-  onOpenSession?:
-    | ((taskId: string, role: AgentRole, options?: SessionTargetOptions) => void)
-    | undefined;
-  onDelegate: ((taskId: string) => void) | undefined;
-  onHumanApprove: ((taskId: string) => void) | undefined;
-  onHumanRequestChanges: ((taskId: string) => void) | undefined;
-  onResetImplementation:
-    | ((taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void)
-    | undefined;
-  onResetTask?: ((taskId: string) => void) | undefined;
-  onCloseTask?: ((taskId: string) => void) | undefined;
-};
-
-type TaskWorkflowActionContext = {
-  resolveSessionOptions?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
-};
-
-type OpenSessionWorkflowAction = Extract<
-  TaskWorkflowAction,
-  "open_spec" | "open_planner" | "open_qa" | "open_builder"
->;
-
-type RoleSessionActionConfig = {
-  role: AgentRole;
-  fallback?: (callbacks: TaskWorkflowCallbacks, taskId: string) => void;
-};
-
-const roleSessionActions = {
-  open_spec: { role: "spec" },
-  open_planner: { role: "planner" },
-  open_qa: {
-    role: "qa",
-    fallback: (callbacks, taskId) => callbacks.onQaOpen?.(taskId),
-  },
-  open_builder: {
-    role: "build",
-    fallback: (callbacks, taskId) => callbacks.onBuild?.(taskId),
-  },
-} satisfies Record<OpenSessionWorkflowAction, RoleSessionActionConfig>;
-
-const openRoleSession = (
-  action: OpenSessionWorkflowAction,
-  taskId: string,
-  callbacks: TaskWorkflowCallbacks,
-  context: TaskWorkflowActionContext | undefined,
-): void => {
-  const actionConfig = roleSessionActions[action];
-
-  if (callbacks.onOpenSession) {
-    callbacks.onOpenSession(
-      taskId,
-      actionConfig.role,
-      context?.resolveSessionOptions?.(actionConfig.role),
-    );
-    return;
-  }
-
-  if ("fallback" in actionConfig) {
-    actionConfig.fallback(callbacks, taskId);
-  }
-};
 
 export const toTaskLabels = toDisplayTaskLabels;
 
@@ -131,51 +61,17 @@ export const collectSingleTaskCleanupImpactTaskIds = (task: TaskCard | null): st
   return [task.id];
 };
 
-export const runTaskWorkflowAction = (
-  action: TaskWorkflowAction,
-  taskId: string | null,
-  callbacks: TaskWorkflowCallbacks,
-  context?: TaskWorkflowActionContext,
-): void => {
-  if (!taskId) {
-    return;
-  }
-
-  switch (action) {
-    case "set_spec":
-    case "set_plan":
-      callbacks.onPlan?.(taskId, action);
-      return;
-    case "qa_start":
-      callbacks.onQaStart?.(taskId);
-      return;
-    case "open_spec":
-    case "open_planner":
-    case "open_qa":
-    case "open_builder":
-      openRoleSession(action, taskId, callbacks, context);
-      return;
-    case "build_start":
-      callbacks.onDelegate?.(taskId);
-      return;
-    case "human_approve":
-      callbacks.onHumanApprove?.(taskId);
-      return;
-    case "human_request_changes":
-      callbacks.onHumanRequestChanges?.(taskId);
-      return;
-    case "reset_implementation":
-      callbacks.onResetImplementation?.(taskId, { closeDetailsAfterReset: true });
-      return;
-    case "reset_task":
-      callbacks.onResetTask?.(taskId);
-      return;
-    case "close_task":
-      callbacks.onCloseTask?.(taskId);
-      return;
-    default:
-      return;
-  }
+/** Which documents the task summary reports, and when each one changed. */
+export const toDocumentSummaryState = (task: TaskCard | null) => {
+  const summary = task?.documentSummary;
+  return {
+    specHasDocument: summary?.spec.has,
+    planHasDocument: summary?.plan.has,
+    qaHasDocument: summary?.qaReport.has,
+    specUpdatedAt: summary?.spec.updatedAt ?? null,
+    planUpdatedAt: summary?.plan.updatedAt ?? null,
+    qaUpdatedAt: summary?.qaReport.updatedAt ?? null,
+  };
 };
 
 export const shouldLoadDocumentSection = (hasDocument: boolean | undefined): boolean =>

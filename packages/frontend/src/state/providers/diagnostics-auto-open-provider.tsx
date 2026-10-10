@@ -6,7 +6,7 @@ import {
 
 const DiagnosticsAutoOpenContext = createContext<DiagnosticsAutoOpenOwner | null>(null);
 
-/** Shares one automatic-opening owner with every diagnostics trigger in the app session. */
+/** Keeps one automatic-opening owner for the app session, so a remounted panel does not open again. */
 export function DiagnosticsAutoOpenProvider({ children }: PropsWithChildren): ReactElement {
   const [owner] = useState(createDiagnosticsAutoOpenOwner);
   return (

@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { useCallback } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
+import type { DialogMotion } from "./dialog-presence";
 import { observeDialogResize } from "./dialog-resize";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
 
@@ -37,18 +38,26 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  overlayClassName,
+  positionerClassName,
+  motion = "animated",
   children,
   closeButton,
   ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  overlayClassName?: string;
+  /** Classes of the full-screen grid that places the dialog. */
+  positionerClassName?: string;
+  /** Use the same value in `useDialogPresence`. "instant" also resizes the dialog at once. */
+  motion?: DialogMotion;
   closeButton?: React.ReactNode;
 }) {
   const isOpen = useDialogOpen("DialogContent", "Dialog");
   const setContentRef = useCallback(
     (element: HTMLDivElement | null) => {
       if (!element) return;
-      const stopObserving = observeDialogResize(element);
+      const stopObserving = motion === "animated" ? observeDialogResize(element) : () => {};
       if (ref && "current" in ref) {
         ref.current = element;
         return () => {
@@ -66,7 +75,7 @@ function DialogContent({
       }
       return stopObserving;
     },
-    [ref],
+    [motion, ref],
   );
   const renderedCloseButton =
     closeButton === undefined ? (
@@ -80,17 +89,23 @@ function DialogContent({
 
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} data-motion={motion} />
       <div
         data-slot="dialog-positioner"
         data-state={isOpen ? "open" : "closed"}
-        className="fixed inset-0 z-[70] grid items-start justify-items-center overflow-y-auto p-4 sm:items-center"
+        data-motion={motion}
+        className={cn(
+          "fixed inset-0 z-[70] grid items-start justify-items-center overflow-y-auto p-4 sm:items-center",
+          positionerClassName,
+        )}
       >
         <DialogPrimitive.Content
           data-slot="dialog-content"
+          data-motion={motion}
           ref={setContentRef}
           className={cn(
-            "t-modal t-resize pointer-events-auto relative z-[70] flex w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
+            "t-modal pointer-events-auto relative z-[70] flex w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
+            motion === "animated" && "t-resize",
             className,
           )}
           {...props}

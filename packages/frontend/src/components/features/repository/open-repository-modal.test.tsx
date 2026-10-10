@@ -29,7 +29,7 @@ import type {
   WorkspaceSelectionOperationsInput,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { OpenRepositoryModal } from "./open-repository-modal";
+import { OpenRepositoryModal, type OpenRepositoryModalView } from "./open-repository-modal";
 
 const allowTransition = (apply: () => Promise<boolean>): void => {
   void apply();
@@ -126,12 +126,14 @@ const renderModal = ({
   requestTransition = allowTransition,
   canClose = true,
   open = true,
+  initialView,
 }: {
   state?: WorkspaceStateContextValue;
   onOpenChange?: (open: boolean) => void;
   requestTransition?: Parameters<typeof OpenRepositoryModal>[0]["requestTransition"];
   canClose?: boolean;
   open?: boolean;
+  initialView?: OpenRepositoryModalView;
 } = {}) => {
   const client = createQueryClient();
   client.setQueryData(filesystemQueryKeys.directory(), {
@@ -149,6 +151,7 @@ const renderModal = ({
           <OpenRepositoryModal
             open={isOpen}
             canClose={canClose}
+            initialView={initialView}
             onOpenChange={onOpenChange}
             requestTransition={requestTransition}
           />
@@ -432,6 +435,25 @@ describe("OpenRepositoryModal", () => {
     });
     await chooseRepository();
     expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo-3");
+  });
+
+  test("starts on the requested screen when closed workspaces exist", async () => {
+    const closed = {
+      ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/old" }),
+      isActive: false,
+    };
+    const view = renderModal({
+      state: workspaceState({ closedWorkspaces: [closed] }),
+      initialView: "add",
+    });
+
+    expect(await screen.findByRole("button", { name: "Choose This Folder" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Old.*\/old/ })).toBeNull();
+    view.unmount();
+
+    renderModal({ state: workspaceState({ closedWorkspaces: [closed] }), initialView: "reopen" });
+    expect(await screen.findByRole("button", { name: /Old.*\/old/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Choose This Folder" })).toBeNull();
   });
 
   test("reopens a closed workspace directly from the entry screen", async () => {

@@ -1,4 +1,5 @@
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
+import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { afterEach, expect, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
@@ -456,7 +457,9 @@ function renderSessions(
                   <WorkspacePreviewTransitionGuardProvider>
                     <VisibleSessionTargetProvider>
                       <SettingsModalProvider>
-                        <WorkspaceSessions workspace={workspace} />
+                        <CommandPaletteTestContext>
+                          <WorkspaceSessions workspace={workspace} />
+                        </CommandPaletteTestContext>
                         {previewControls}
                       </SettingsModalProvider>
                     </VisibleSessionTargetProvider>

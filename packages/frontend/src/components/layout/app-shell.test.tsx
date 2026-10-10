@@ -10,11 +10,14 @@ beforeAll(() => {
 afterAll(() => releaseProviderFixture?.());
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
+  type AgentSessionRecord,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
+  type TaskCard,
   type WorkspaceRecord,
+  type WorkspaceSession,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as pierre from "@pierre/diffs";
@@ -58,18 +61,27 @@ import {
 } from "@/state/queries/runtime";
 import { platformQueryOptions } from "@/state/queries/system";
 import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { useRecentItemsStore } from "@/features/command-palette/recent-items";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import { DiagnosticsPanelProvider } from "@/components/features/diagnostics";
+import {
+  type TaskWorkflowActions,
+  TaskWorkflowActionsContext,
+} from "@/features/task-workflow/task-workflow-actions-context";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import {
   createChecksStateFixture,
   createDeferred,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
+  createTaskCardFixture,
+  createTaskStoreCheckFixture,
   createTaskWorkflowActionsFixture,
   createWorkspaceActivityObserverStub,
 } from "@/test-utils/shared-test-fixtures";
@@ -282,6 +294,9 @@ type RenderAppShellForTestOptions = {
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
   prepareQueryClient?: (queryClient: QueryClient) => void;
   sessionContent?: ReactElement;
+  /** Tasks that the task state shows for the active workspace, by repository path. */
+  tasksByRepoPath?: Record<string, TaskCard[]>;
+  taskWorkflowActions?: Partial<TaskWorkflowActions>;
 };
 
 function CurrentRoute(): ReactElement {
@@ -297,7 +312,7 @@ function CurrentRoute(): ReactElement {
 
 const createChecksState = (): ChecksStateContextValue => createChecksStateFixture();
 
-const createTasksState = (): TasksStateContextValue => ({
+const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
   tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
@@ -306,7 +321,7 @@ const createTasksState = (): TasksStateContextValue => ({
   linkingMergedPullRequestTaskId: null,
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: null,
-  tasks: [],
+  tasks,
   refreshTasks: async () => undefined,
   syncPullRequests: async () => undefined,
   linkMergedPullRequest: async () => undefined,
@@ -443,7 +458,11 @@ function AppShellTestEnvironment({
                     >
                       <DiagnosticsAutoOpenProvider>
                         <ChecksStateContext.Provider value={createChecksState()}>
-                          <TasksStateContext.Provider value={createTasksState()}>
+                          <TasksStateContext.Provider
+                            value={createTasksState(
+                              options.tasksByRepoPath?.[currentWorkspace?.repoPath ?? ""],
+                            )}
+                          >
                             <TaskControlContext.Provider value={taskControlValue}>
                               <AgentSessionsContext.Provider
                                 value={createAgentSessionsStore("/repo")}
@@ -454,31 +473,38 @@ function AppShellTestEnvironment({
                                   >
                                     <WorkspacePreviewTransitionGuardProvider>
                                       <SettingsModalProvider>
-                                        <TaskWorkflowActionsContext.Provider
-                                          value={createTaskWorkflowActionsFixture()}
-                                        >
-                                          <Routes>
-                                            <Route element={<AppShell />}>
-                                              <Route path="/kanban" element={<main>Kanban</main>} />
-                                              <Route
-                                                path="/sessions"
-                                                element={
-                                                  options.sessionContent ? (
-                                                    <div key={currentWorkspace?.workspaceId}>
-                                                      {options.sessionContent}
-                                                    </div>
-                                                  ) : (
-                                                    <main>Sessions</main>
-                                                  )
-                                                }
-                                              />
-                                              <Route
-                                                path="/onboarding"
-                                                element={<Navigate to="/kanban" replace />}
-                                              />
-                                            </Route>
-                                          </Routes>
-                                        </TaskWorkflowActionsContext.Provider>
+                                        <DiagnosticsPanelProvider>
+                                          <TaskWorkflowActionsContext.Provider
+                                            value={createTaskWorkflowActionsFixture(
+                                              options.taskWorkflowActions,
+                                            )}
+                                          >
+                                            <Routes>
+                                              <Route element={<AppShell />}>
+                                                <Route
+                                                  path="/kanban"
+                                                  element={<main>Kanban</main>}
+                                                />
+                                                <Route
+                                                  path="/sessions"
+                                                  element={
+                                                    options.sessionContent ? (
+                                                      <div key={currentWorkspace?.workspaceId}>
+                                                        {options.sessionContent}
+                                                      </div>
+                                                    ) : (
+                                                      <main>Sessions</main>
+                                                    )
+                                                  }
+                                                />
+                                                <Route
+                                                  path="/onboarding"
+                                                  element={<Navigate to="/kanban" replace />}
+                                                />
+                                              </Route>
+                                            </Routes>
+                                          </TaskWorkflowActionsContext.Provider>
+                                        </DiagnosticsPanelProvider>
                                       </SettingsModalProvider>
                                     </WorkspacePreviewTransitionGuardProvider>
                                   </WorkspaceActivityContext.Provider>
@@ -1375,5 +1401,654 @@ describe("AppShell session navigation", () => {
         .getByRole("radio", { name: "Show sessions of OpenDucktor" })
         .getAttribute("aria-checked"),
     ).toBe("true");
+  });
+});
+
+describe("AppShell command palette", () => {
+  const fairnest = {
+    ...activeWorkspace,
+    workspaceId: "workspace-2",
+    workspaceName: "Fairnest",
+    repoPath: "/fairnest",
+    isActive: false,
+  } satisfies WorkspaceRecord;
+  const ownTask = createTaskCardFixture({
+    id: "odt-own",
+    title: "Polish the command palette",
+    status: "in_progress",
+    issueType: "feature",
+    labels: ["ux"],
+    availableActions: ["build_start", "open_builder", "reset_task", "close_task"],
+  });
+  const fairnestTask = createTaskCardFixture({
+    id: "fair-1",
+    title: "Fix checkout totals",
+    status: "ready_for_dev",
+    availableActions: ["build_start"],
+  });
+  const closedTask = createTaskCardFixture({
+    id: "odt-closed",
+    title: "Archive old builds",
+    status: "closed",
+    availableActions: [],
+  });
+  const builderSession = {
+    externalSessionId: "build-1",
+    role: "build",
+    startedAt: "2026-03-01T00:00:00.000Z",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/worktree",
+    selectedModel: null,
+  } satisfies AgentSessionRecord;
+
+  const renderPalette = (
+    options: RenderAppShellForTestOptions = {},
+    platform: "darwin" | "linux" = "darwin",
+  ) =>
+    renderAppShellForTest({
+      extraWorkspaces: [fairnest],
+      tasksByRepoPath: { "/repo": [ownTask, closedTask], "/fairnest": [fairnestTask] },
+      prepareQueryClient: (queryClient) => {
+        queryClient.setQueryData(platformQueryOptions().queryKey, platform);
+        queryClient.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+          tasks: [ownTask, closedTask],
+        });
+        queryClient.setQueryData(agentSessionQueryKeys.list("/repo", closedTask.id), [
+          { ...builderSession, externalSessionId: "build-closed" },
+        ]);
+        queryClient.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, {
+          tasks: [fairnestTask],
+        });
+        queryClient.setQueryData(agentSessionQueryKeys.list("/repo", ownTask.id), [builderSession]);
+        queryClient.setQueryData(agentSessionQueryKeys.list("/fairnest", fairnestTask.id), []);
+      },
+      ...options,
+    });
+
+  const pressShortcut = (modifier: "metaKey" | "ctrlKey" = "metaKey"): void => {
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "k", [modifier]: true });
+  };
+  const openPalette = async (modifier: "metaKey" | "ctrlKey" = "metaKey"): Promise<HTMLElement> => {
+    pressShortcut(modifier);
+    return screen.findByRole("dialog", { name: "Command palette" });
+  };
+  const search = (palette: HTMLElement, query: string): HTMLInputElement => {
+    const input = within(palette).getByRole<HTMLInputElement>("combobox");
+    fireEvent.change(input, { target: { value: query } });
+    return input;
+  };
+  const selectedOption = (palette: HTMLElement): HTMLElement | undefined =>
+    within(palette)
+      .getAllByRole("option")
+      .find((option) => option.getAttribute("aria-selected") === "true");
+  /** The input names the mounted option that is highlighted, so screen readers announce it. */
+  const expectActiveOptionLinked = async (palette: HTMLElement, text: string): Promise<void> => {
+    const input = within(palette).getByRole("combobox");
+    await waitFor(() => {
+      const selected = selectedOption(palette);
+      expect(selected?.textContent).toContain(text);
+      const linkedId = input.getAttribute("aria-activedescendant");
+      expect(linkedId).toBe(selected?.id ?? "");
+      expect(document.getElementById(linkedId ?? "")).toBe(selected ?? null);
+    });
+  };
+
+  /**
+   * Query results reach observers in a timer. waitFor cannot wait for a timer under Bun, so a
+   * test that waits for a query result flushes it here.
+   */
+  const flushQueryUpdates = (): Promise<void> =>
+    act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+
+  const actionOption = (palette: HTMLElement, label: string): HTMLElement => {
+    const option = within(palette)
+      .getAllByRole("option")
+      .find((entry) => entry.textContent?.startsWith(label));
+    if (!option) throw new Error(`The palette shows no ${label} action.`);
+    return option;
+  };
+
+  type PaletteHost = NonNullable<Parameters<typeof createShellBridgeFixture>[0]>["client"];
+  /** A host with a healthy task store and no Git provider setup, unless a test overrides it. */
+  const configurePaletteHost = (overrides: PaletteHost = {}): void => {
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          tasksList: async () => [],
+          agentSessionsListForTasks: async () => [],
+          taskStoreCheck: async () => createTaskStoreCheckFixture(),
+          workspaceGetGitProviderContext: async () => null,
+          workspaceSessionListActive: async () => [],
+          ...overrides,
+        },
+      }),
+    );
+  };
+
+  beforeEach(() => {
+    installLocalStorage(new MemoryStorage());
+    useRecentItemsStore.setState({ items: [], loadError: null });
+    configurePaletteHost();
+  });
+
+  afterEach(() => {
+    cleanup();
+    useRecentItemsStore.setState({ items: [], loadError: null });
+    configureShellBridge(createUnavailableShellBridge());
+  });
+
+  test("opens with the shortcut, starts with New task, and closes with the same keys", async () => {
+    renderPalette();
+    const palette = await openPalette();
+
+    const input = within(palette).getByRole<HTMLInputElement>("combobox");
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("");
+    expect(selectedOption(palette)?.textContent).toContain("New task");
+    expect(within(palette).getByRole("button", { name: "Workspace filter: All workspaces" }));
+
+    pressShortcut();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull(),
+    );
+  });
+
+  test("opens from the sidebar search button and returns focus to it on Escape", async () => {
+    renderPalette();
+    const trigger = screen.getByRole("button", { name: "Search and run commands" });
+    trigger.focus();
+
+    fireEvent.click(trigger);
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Escape" });
+    // Radix returns focus in a timer after the dialog content unmounts.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+  });
+
+  test("links the input to the highlighted option after open, keys, search, and view changes", async () => {
+    renderPalette();
+    const palette = await openPalette();
+    const input = within(palette).getByRole("combobox");
+
+    await expectActiveOptionLinked(palette, "New task");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    await expectActiveOptionLinked(palette, "New chat");
+    search(palette, "polish");
+    await expectActiveOptionLinked(palette, "Polish the command palette");
+    fireEvent.keyDown(input, { key: "Tab" });
+    await expectActiveOptionLinked(palette, "Open latest session");
+    fireEvent.keyDown(input, { key: "Escape" });
+    await expectActiveOptionLinked(palette, "Polish the command palette");
+  });
+
+  test("scrolls to the result that a search highlights and keeps the scroll on a data update", async () => {
+    let queryClient: QueryClient | null = null;
+    // More rows than the bounded list shows, so a move down leaves the first row out of view.
+    const tasks = Array.from({ length: 12 }, (_, index) =>
+      createTaskCardFixture({
+        id: `alpha-${index}`,
+        title: `Alpha task ${index}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 12 - index)).toISOString(),
+      }),
+    );
+    renderPalette({
+      tasksByRepoPath: { "/repo": tasks },
+      prepareQueryClient: (client) => {
+        queryClient = client;
+        client.setQueryData(platformQueryOptions().queryKey, "darwin");
+        client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, { tasks });
+        client.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, { tasks: [] });
+        for (const task of tasks) {
+          client.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
+        }
+      },
+    });
+    const palette = await openPalette();
+    const input = search(palette, "alpha");
+    await expectActiveOptionLinked(palette, "Alpha task 0");
+    for (let step = 0; step < 8; step += 1) fireEvent.keyDown(input, { key: "ArrowDown" });
+    await expectActiveOptionLinked(palette, "Alpha task 8");
+
+    const scrolled: Element[] = [];
+    const scrollIntoView = spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+      this: Element,
+    ) {
+      scrolled.push(this);
+    });
+    const scrolledIds = (): string[] => scrolled.map((element) => element.id);
+    try {
+      search(palette, "alph");
+      await expectActiveOptionLinked(palette, "Alpha task 0");
+      expect(scrolledIds()).toContain(selectedOption(palette)?.id ?? "");
+
+      // The user scrolls away with the wheel. The next search keeps the same best result.
+      scrolled.length = 0;
+      search(palette, "alpha");
+      await expectActiveOptionLinked(palette, "Alpha task 0");
+      expect(scrolledIds()).toContain(selectedOption(palette)?.id ?? "");
+
+      // A data update keeps the highlighted option, so it keeps the wheel scroll.
+      scrolled.length = 0;
+      await act(async () => {
+        queryClient?.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+          tasks: tasks.filter((task) => task.id !== "alpha-10"),
+        });
+      });
+      await flushQueryUpdates();
+      expect(within(palette).queryByText("Alpha task 10")).toBeNull();
+      await expectActiveOptionLinked(palette, "Alpha task 0");
+      expect(scrolled).toHaveLength(0);
+    } finally {
+      scrollIntoView.mockRestore();
+    }
+  });
+
+  test("disables task creation with the reason when the task store check fails", async () => {
+    configurePaletteHost({
+      taskStoreCheck: async () => {
+        throw new Error("task-store transport unavailable");
+      },
+    });
+    const onCreateTask = mock(() => {});
+    renderPalette({ taskWorkflowActions: { onCreateTask } });
+    const palette = await openPalette();
+
+    const reason = "Could not check the task store. task-store transport unavailable";
+    await flushQueryUpdates();
+    expect(actionOption(palette, "New task").getAttribute("aria-disabled")).toBe("true");
+    expect(actionOption(palette, "New task").textContent).toContain(reason);
+    expect(actionOption(palette, "Import tasks").getAttribute("aria-disabled")).toBe("true");
+    search(palette, "Write docs");
+    expect(actionOption(palette, "New task “Write docs”").getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+
+    fireEvent.click(actionOption(palette, "New task “Write docs”"));
+    await flushQueryUpdates();
+    expect(onCreateTask).not.toHaveBeenCalled();
+  });
+
+  test("disables import on a failed provider read and opens Settings only for missing setup", async () => {
+    configurePaletteHost({
+      workspaceGetGitProviderContext: async () => {
+        throw new Error("provider context unavailable");
+      },
+    });
+    const view = renderPalette();
+    const palette = await openPalette();
+
+    await flushQueryUpdates();
+    expect(actionOption(palette, "Import tasks").textContent).toContain(
+      "Could not read the Git provider. provider context unavailable",
+    );
+    expect(actionOption(palette, "Import tasks").getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(actionOption(palette, "Import tasks"));
+    await flushQueryUpdates();
+    expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
+    view.unmount();
+
+    configurePaletteHost();
+    renderPalette();
+    const setupPalette = await openPalette();
+    await flushQueryUpdates();
+    const importTasks = actionOption(setupPalette, "Import tasks");
+    expect(importTasks.getAttribute("aria-disabled")).toBe("false");
+    fireEvent.click(importTasks);
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
+  });
+
+  test("shows a failed session refresh of a workspace and keeps the other results", async () => {
+    let queryClient: QueryClient | null = null;
+    configurePaletteHost({
+      // A refresh reads the session lists of the workspace in one batch.
+      agentSessionsListForTasks: async () => {
+        throw new Error("session refresh unavailable");
+      },
+    });
+    renderPalette({
+      prepareQueryClient: (client) => {
+        queryClient = client;
+        client.setQueryData(platformQueryOptions().queryKey, "darwin");
+        client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+          tasks: [ownTask, closedTask],
+        });
+        client.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, {
+          tasks: [fairnestTask],
+        });
+        client.setQueryData(agentSessionQueryKeys.list("/repo", ownTask.id), [builderSession]);
+        client.setQueryData(agentSessionQueryKeys.list("/repo", closedTask.id), []);
+        client.setQueryData(agentSessionQueryKeys.list("/fairnest", fairnestTask.id), []);
+      },
+    });
+    const palette = await openPalette();
+
+    await act(async () => {
+      await queryClient?.refetchQueries({
+        queryKey: agentSessionQueryKeys.list("/repo", ownTask.id),
+        exact: true,
+      });
+    });
+    await flushQueryUpdates();
+
+    // The palette shows the problem with the same text as the sidebar.
+    expect(
+      await within(palette).findByText(
+        "OpenDucktor: Task sessions could not load. session refresh unavailable",
+      ),
+    ).toBeTruthy();
+    search(palette, "checkout");
+    expect(selectedOption(palette)?.textContent).toContain("Fix checkout totals");
+    // The row marks the part of its title that the query found.
+    expect(selectedOption(palette)?.querySelector("mark")?.textContent).toBe("checkout");
+  });
+
+  test.each([
+    ["darwin", "metaKey"],
+    ["linux", "ctrlKey"],
+  ] as const)(
+    "keeps the palette open when %s Mod+Enter has no next step for the task",
+    async (platform, modifier) => {
+      renderPalette({}, platform);
+      const palette = await openPalette(modifier);
+      const address = screen.getByTestId("current-address").textContent;
+
+      const input = search(palette, "archive old");
+      expect(selectedOption(palette)?.textContent).toContain("Archive old builds");
+      expect(within(palette).getByText("Open details")).toBeTruthy();
+      expect(within(palette).queryByText("↵", { selector: "kbd" })).toBeTruthy();
+      expect(
+        within(palette)
+          .getAllByRole("button")
+          .some((button) => button.textContent?.includes("Start")),
+      ).toBe(false);
+
+      fireEvent.keyDown(input, { key: "Enter", [modifier]: true });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
+      expect(screen.getByTestId("current-address").textContent).toBe(address);
+    },
+  );
+
+  test("leaves the shortcut alone while another dialog is open", async () => {
+    renderPalette();
+    fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics/ }));
+    await screen.findByRole("dialog", { name: "Diagnostics" });
+
+    pressShortcut();
+
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+  });
+
+  test("finds a task by its label and opens its latest session", async () => {
+    renderPalette();
+    const palette = await openPalette();
+
+    search(palette, "ux");
+
+    expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
+    expect(within(palette).getByText("Open Builder session")).toBeTruthy();
+    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-address").textContent).toContain("session=build-1"),
+    );
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+  });
+
+  test("makes the workspace of a task active before it opens the task details", async () => {
+    renderPalette();
+    const palette = await openPalette();
+
+    search(palette, "checkout");
+    expect(selectedOption(palette)?.textContent).toContain("in Fairnest");
+    expect(within(palette).getByText("Open details")).toBeTruthy();
+    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-address").textContent).toBe("/kanban?task=fair-1"),
+    );
+  });
+
+  test("copies the ID of a task in another workspace and keeps the active workspace", async () => {
+    const writeText = mock(async (_value: string) => {});
+    const restoreClipboard = replaceNavigatorClipboard(writeText);
+    try {
+      renderPalette();
+      const palette = await openPalette();
+      const input = search(palette, "checkout");
+      fireEvent.keyDown(input, { key: "Tab" });
+      search(palette, "copy");
+      expect(selectedOption(palette)?.textContent).toBe("Copy task ID");
+
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      // The copy runs inside the key event, so a browser sees the user gesture.
+      expect(writeText).toHaveBeenCalledWith(fairnestTask.id);
+      await flushQueryUpdates();
+      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+      const reopened = await openPalette();
+      expect(actionOption(reopened, "New task").textContent).toContain(
+        `in ${activeWorkspace.workspaceName}`,
+      );
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  test("switches the task card view and marks the current view", async () => {
+    const updateCardView = mock(async (taskCardView: "normal" | "compact") =>
+      createSettingsSnapshotFixture({ kanban: { taskCardView } }),
+    );
+    configurePaletteHost({ workspaceUpdateKanbanTaskCardView: updateCardView });
+    renderPalette();
+    const palette = await openPalette();
+
+    search(palette, "card view");
+    expect(actionOption(palette, "Task cards: Normal").textContent).toContain(", current");
+    expect(actionOption(palette, "Task cards: Compact").textContent).not.toContain(", current");
+
+    search(palette, "density");
+    expect(selectedOption(palette)?.textContent).toBe("Task cards: Compact");
+    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
+    await flushQueryUpdates();
+
+    expect(updateCardView).toHaveBeenCalledWith("compact");
+  });
+
+  const chatSession: WorkspaceSession = {
+    id: "chat-1",
+    runtimeKind: "codex",
+    externalSessionId: "native-chat-1",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: "Release notes",
+    manualTitle: null,
+    createdAt: 1,
+    lastActivityAt: 1,
+    updatedAt: 1,
+    archivedAt: null,
+  };
+  /** Opens the palette with one chat in the active workspace and searches for it. */
+  const searchChat = async (): Promise<{ palette: HTMLElement; input: HTMLInputElement }> => {
+    configurePaletteHost({
+      workspaceSessionListActive: async (workspaceId) =>
+        workspaceId === activeWorkspace.workspaceId ? [chatSession] : [],
+    });
+    renderPalette();
+    const palette = await openPalette();
+    await flushQueryUpdates();
+    const input = search(palette, "release notes");
+    expect(selectedOption(palette)?.textContent).toContain("Release notes");
+    return { palette, input };
+  };
+
+  test("opens the chat actions with Tab and copies the external session ID", async () => {
+    const writeText = mock(async (_value: string) => {});
+    const restoreClipboard = replaceNavigatorClipboard(writeText);
+    try {
+      const { palette, input } = await searchChat();
+      expect(within(palette).getByText("Rename")).toBeTruthy();
+
+      fireEvent.keyDown(input, { key: "Tab" });
+
+      expect(within(palette).getByPlaceholderText("Search chat actions…")).toBeTruthy();
+      expect(
+        within(palette)
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toEqual([
+        "Open chat",
+        "Mark as unread",
+        "Rename chat",
+        "Copy working directory",
+        "Copy external session ID",
+        "Archive chat",
+      ]);
+      search(palette, "external");
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(writeText).toHaveBeenCalledWith("native-chat-1");
+      await flushQueryUpdates();
+      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  test("renames a chat with Mod+E and archives it with the existing dialogs", async () => {
+    const { input } = await searchChat();
+
+    fireEvent.keyDown(input, { key: "e", metaKey: true });
+    await flushQueryUpdates();
+    const rename = await screen.findByRole("dialog", { name: "Rename chat" });
+    fireEvent.keyDown(rename, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename chat" })).toBeNull());
+
+    const palette = await openPalette();
+    const reopened = search(palette, "release notes");
+    fireEvent.keyDown(reopened, { key: "Tab" });
+    search(palette, "archive");
+    fireEvent.keyDown(reopened, { key: "Enter" });
+    await flushQueryUpdates();
+
+    expect(await screen.findByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+  });
+
+  test("shows the sidebar status dot at the start of a task row with sessions", async () => {
+    renderPalette();
+    const palette = await openPalette();
+
+    search(palette, "polish");
+    const row = selectedOption(palette);
+    if (!row) throw new Error("The palette highlights no task row.");
+
+    const dot = within(row).getByRole("img", {
+      name: /^(Session read|Unread session|Session running)$/,
+    });
+    expect(row.firstElementChild).toBe(dot);
+  });
+
+  test("opens the task actions with Tab and returns to the same results with Escape", async () => {
+    renderPalette();
+    const palette = await openPalette();
+    const input = search(palette, "polish");
+
+    fireEvent.keyDown(input, { key: "Tab" });
+
+    const actions = within(palette)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(actions).toEqual([
+      "Open latest sessionBuilder",
+      "Open Builder session",
+      "Start Builder",
+      "Edit task",
+      "Open task details",
+      "Copy task ID",
+      "Reset Task",
+      "Delete task",
+    ]);
+    expect(input.value).toBe("");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
+    expect(input.value).toBe("polish");
+    expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
+  });
+
+  test("edits the highlighted task and runs its next workflow step with the task keys", async () => {
+    const onEdit = mock(() => {});
+    const onOpenSession = mock(() => {});
+    renderPalette({ taskWorkflowActions: { onEdit, onOpenSession } });
+
+    search(await openPalette(), "polish");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "e", metaKey: true });
+    await waitFor(() => expect(onEdit).toHaveBeenCalledWith("odt-own"));
+
+    search(await openPalette(), "polish");
+    expect(screen.getByText("Open Builder")).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", metaKey: true });
+    await waitFor(() =>
+      expect(onOpenSession).toHaveBeenCalledWith("odt-own", "build", {
+        session: expect.objectContaining({ externalSessionId: "build-1" }),
+      }),
+    );
+  });
+
+  test("creates a task from the query text", async () => {
+    const onCreateTask = mock(() => {});
+    renderPalette({ taskWorkflowActions: { onCreateTask } });
+    const palette = await openPalette();
+
+    search(palette, "Write release notes");
+    const create = within(palette).getAllByRole("option").at(-1);
+    if (!create) throw new Error("The palette shows no option to create a task.");
+    expect(create.textContent).toContain("New task “Write release notes”");
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(onCreateTask).toHaveBeenCalledWith({ initialTitle: "Write release notes" }),
+    );
+  });
+
+  test("shows recent tasks after the actions and drops the ones that no longer exist", async () => {
+    useRecentItemsStore.setState({
+      items: [
+        { kind: "task", workspaceId: fairnest.workspaceId, taskId: fairnestTask.id, openedAt: 3 },
+        { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: "deleted", openedAt: 2 },
+        { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: ownTask.id, openedAt: 1 },
+      ],
+    });
+    renderPalette();
+    const palette = await openPalette();
+
+    const recent = await within(palette).findByRole("group", { name: "Recent" });
+    expect(
+      within(recent)
+        .getAllByRole("option")
+        .map((option) => option.textContent?.includes("Fix checkout totals")),
+    ).toEqual([true, false]);
+  });
+
+  test("filters by workspace from the keyboard and targets that workspace", async () => {
+    renderPalette();
+    const palette = await openPalette();
+    const input = within(palette).getByRole("combobox");
+
+    fireEvent.keyDown(input, { key: "ArrowDown", altKey: true });
+    fireEvent.click(await screen.findByRole("option", { name: "Fairnest" }));
+
+    expect(
+      await within(palette).findByRole("button", { name: "Workspace filter: Fairnest" }),
+    ).toBeTruthy();
+    expect(selectedOption(palette)?.textContent).toContain("New taskin Fairnest");
+    search(palette, "polish");
+    expect(within(palette).queryByText("Polish the command palette")).toBeNull();
   });
 });

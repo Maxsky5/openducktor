@@ -129,6 +129,7 @@ const renderController = (
   updateTask: TasksStateContextValue["updateTask"],
   createTask: TasksStateContextValue["createTask"] = async () => {},
   destination: TaskCreateDestination | null = null,
+  initialTitle = "",
 ) => {
   let latest: Controller | null = null;
 
@@ -139,6 +140,7 @@ const renderController = (
       tasks: task ? [task] : [],
       task,
       destination,
+      initialTitle,
     });
     return null;
   };
@@ -242,6 +244,16 @@ describe("useTaskCreateModalController", () => {
       });
 
       expect(createTask).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("starts a new task with the requested title", () => {
+    const harness = renderController(null, async () => {}, undefined, null, "Write docs");
+    try {
+      expect(harness.getController().state.title).toBe("Write docs");
+      expect(harness.getController().step).toBe("type");
     } finally {
       harness.unmount();
     }

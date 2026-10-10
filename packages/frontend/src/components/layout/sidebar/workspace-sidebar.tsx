@@ -10,11 +10,12 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { DiagnosticsPanel } from "@/components/features/diagnostics";
+import { DiagnosticsTrigger } from "@/components/features/diagnostics";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CommandPaletteTrigger } from "@/features/command-palette/command-palette-trigger";
 import {
   buildSessionNavigationHref,
   sessionNavigationTargetKey,
@@ -33,7 +34,6 @@ import { AppBrand } from "./app-brand";
 import { SessionCreateSplitAction } from "./session-create-split-action";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
-import { SessionMenuProvider } from "./session-menu-provider";
 import { SessionGroupingToggle } from "./session-grouping-toggle";
 import { type SessionNavigationScope, SessionScopeSwitch } from "./session-scope-switch";
 import { SidebarNavigation } from "./sidebar-navigation";
@@ -223,140 +223,134 @@ export function WorkspaceSidebar({
   );
 
   return (
-    <SessionMenuProvider>
-      <aside
-        aria-label="Sessions sidebar"
-        className={cn(
-          "workspace-sidebar flex h-full min-w-0 shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
-          isOpen ? "w-80" : "w-16",
-        )}
-      >
-        {isOpen ? (
-          <>
-            <div className="electron-sidebar-content-open flex flex-col gap-3 border-b border-sidebar-border p-4">
-              <div className="electron-sidebar-heading flex items-center justify-between gap-2">
-                <div className="electron-sidebar-brand">
-                  <AppBrand />
-                </div>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                  onClick={onHide}
-                  aria-label="Hide sidebar"
-                  title="Hide sidebar"
-                >
-                  <PanelLeftClose className="size-4" />
-                </Button>
+    <aside
+      aria-label="Sessions sidebar"
+      className={cn(
+        "workspace-sidebar flex h-full min-w-0 shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
+        isOpen ? "w-80" : "w-16",
+      )}
+    >
+      {isOpen ? (
+        <>
+          <div className="electron-sidebar-content-open flex flex-col gap-3 border-b border-sidebar-border p-4">
+            <div className="electron-sidebar-heading flex items-center justify-between gap-2">
+              <div className="electron-sidebar-brand flex min-w-0 flex-1 items-center justify-between gap-2">
+                <AppBrand />
+                <CommandPaletteTrigger className="electron-sidebar-search" />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <SidebarNavigation onBeforeNavigate={guardTransition} />
-                <SessionCreateSplitAction />
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
-              <div className="min-w-0 flex-1">
-                <SessionScopeSwitch
-                  scope={scope}
-                  onScopeChange={changeScope}
-                  workspace={activeWorkspace}
-                />
-              </div>
-              <SessionGroupingToggle
-                grouping={grouping}
-                onChange={changeGrouping}
-                disabled={groupingDisabled}
-              />
-            </div>
-            <div
-              ref={sessionsRegionRef}
-              className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
-              data-sidebar-scroll-region="sessions"
-            >
-              <SessionNavigationList
-                key={listScopeKey}
-                model={model}
-                selection={selection}
-                now={now}
-                onOpen={openEntry}
-                onRetry={retrySource}
-                footer={
-                  scope === "all" ? (
-                    <UnlistedWorkspacesNote onOpenRepositoryModal={onOpenRepositoryModal} />
-                  ) : null
-                }
-              />
-            </div>
-            <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
-              <SettingsModal
-                triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
-                triggerSize="default"
-              />
-              <DiagnosticsPanel
-                triggerVariant="icon"
-                triggerClassName="border-transparent bg-transparent shadow-none"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="electron-sidebar-content-collapsed flex h-full min-h-0 flex-col items-center gap-2 px-1 py-2">
-            <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                onClick={onShow}
-                aria-label="Show sidebar"
-                title="Show sidebar"
+                className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                onClick={onHide}
+                aria-label="Hide sidebar"
+                title="Hide sidebar"
               >
-                <PanelLeftOpen className="size-4" />
+                <PanelLeftClose className="size-4" />
               </Button>
             </div>
-            <div className="flex w-full flex-col items-center gap-1.5">
-              <SidebarNavigation compact onBeforeNavigate={guardTransition} />
-              <SessionCreateSplitAction compact />
+            <div className="flex flex-col gap-1.5">
+              <SidebarNavigation onBeforeNavigate={guardTransition} />
+              <SessionCreateSplitAction />
             </div>
-            <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
+          </div>
+          <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
+            <div className="min-w-0 flex-1">
               <SessionScopeSwitch
                 scope={scope}
                 onScopeChange={changeScope}
                 workspace={activeWorkspace}
-                compact
-              />
-              {scope === "all" ? (
-                <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
-              ) : null}
-            </div>
-            <div
-              ref={sessionsRegionRef}
-              className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
-            >
-              <SessionNavigationRail
-                key={listScopeKey}
-                model={model}
-                selection={selection}
-                now={now}
-                onOpen={openEntry}
-                onRetry={retrySource}
               />
             </div>
-            <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
-              <DiagnosticsPanel
-                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
-                triggerVariant="icon"
-              />
-              <SettingsModal
-                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
-                triggerSize="icon"
-                triggerIconOnly
-              />
-            </div>
+            <SessionGroupingToggle
+              grouping={grouping}
+              onChange={changeGrouping}
+              disabled={groupingDisabled}
+            />
           </div>
-        )}
-      </aside>
-    </SessionMenuProvider>
+          <div
+            ref={sessionsRegionRef}
+            className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+            data-sidebar-scroll-region="sessions"
+          >
+            <SessionNavigationList
+              key={listScopeKey}
+              model={model}
+              selection={selection}
+              now={now}
+              onOpen={openEntry}
+              onRetry={retrySource}
+              footer={
+                scope === "all" ? (
+                  <UnlistedWorkspacesNote onOpenRepositoryModal={onOpenRepositoryModal} />
+                ) : null
+              }
+            />
+          </div>
+          <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
+            <SettingsModal
+              triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
+              triggerSize="default"
+            />
+            <DiagnosticsTrigger className="border-transparent bg-transparent shadow-none" />
+          </div>
+        </>
+      ) : (
+        <div className="electron-sidebar-content-collapsed flex h-full min-h-0 flex-col items-center gap-2 px-1 py-2">
+          <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+              onClick={onShow}
+              aria-label="Show sidebar"
+              title="Show sidebar"
+            >
+              <PanelLeftOpen className="size-4" />
+            </Button>
+          </div>
+          <div className="flex w-full flex-col items-center gap-1.5">
+            <CommandPaletteTrigger compact />
+            <SidebarNavigation compact onBeforeNavigate={guardTransition} />
+            <SessionCreateSplitAction compact />
+          </div>
+          <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
+            <SessionScopeSwitch
+              scope={scope}
+              onScopeChange={changeScope}
+              workspace={activeWorkspace}
+              compact
+            />
+            {scope === "all" ? (
+              <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
+            ) : null}
+          </div>
+          <div
+            ref={sessionsRegionRef}
+            className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
+          >
+            <SessionNavigationRail
+              key={listScopeKey}
+              model={model}
+              selection={selection}
+              now={now}
+              onOpen={openEntry}
+              onRetry={retrySource}
+            />
+          </div>
+          <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
+            <DiagnosticsTrigger className="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground" />
+            <SettingsModal
+              triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
+              triggerSize="icon"
+              triggerIconOnly
+            />
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
 

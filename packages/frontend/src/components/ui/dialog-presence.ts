@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-export function useDialogPresence(open: boolean): boolean {
+/** "instant" shows and hides a dialog without motion, such as a dialog that opens from a key. */
+export type DialogMotion = "animated" | "instant";
+
+export function useDialogPresence(open: boolean, motion: DialogMotion = "animated"): boolean {
   const [mounted, setMounted] = useState(open);
   const currentOpen = useRef(open);
   useLayoutEffect(() => {
@@ -12,7 +15,7 @@ export function useDialogPresence(open: boolean): boolean {
       return;
     }
     if (!mounted) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (motion === "instant" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setMounted(false);
       return;
     }
@@ -24,6 +27,6 @@ export function useDialogPresence(open: boolean): boolean {
       if (!currentOpen.current) setMounted(false);
     }, milliseconds);
     return () => window.clearTimeout(timeout);
-  }, [open, mounted]);
+  }, [open, mounted, motion]);
   return mounted;
 }

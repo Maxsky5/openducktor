@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Dialog, DialogBody, DialogContent, DialogTitle } from "./dialog";
+import type { ReactElement } from "react";
+import { Dialog, DialogBody, DialogContent, DialogTitle, useDialogPresence } from "./dialog";
+import type { DialogMotion } from "./dialog-presence";
 
 const originalResizeObserver = globalThis.ResizeObserver;
 
@@ -64,6 +66,48 @@ describe("DialogContent", () => {
 
     surface.dataset.state = "closed";
     expect(getComputedStyle(surface).animation).toMatch(/\b(?:both|forwards)\b/);
+
+    surface.dataset.slot = "dialog-content";
+    surface.dataset.motion = "instant";
+    expect(getComputedStyle(surface).animation).toBe("none");
+    surface.dataset.state = "open";
+    expect(getComputedStyle(surface).animation).toBe("none");
+  });
+
+  test("shows an instant dialog without motion and removes it as soon as it closes", () => {
+    const notifyResize = installResizeObserver();
+    function PresenceProbe({ open, motion }: { open: boolean; motion: DialogMotion }) {
+      return useDialogPresence(open, motion) ? <span>Mounted</span> : null;
+    }
+    const renderProbe = (open: boolean, motion: DialogMotion): ReactElement => (
+      <PresenceProbe open={open} motion={motion} />
+    );
+
+    render(
+      <Dialog open>
+        <DialogContent motion="instant">
+          <DialogTitle>Instant test</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Instant test" });
+    const animate = spyOn(dialog, "animate");
+    notifyResize(400, 250);
+    notifyResize(500, 320);
+    expect(animate).not.toHaveBeenCalled();
+    expect(dialog.className).not.toContain("t-resize");
+    for (const slot of ["dialog-overlay", "dialog-positioner", "dialog-content"]) {
+      expect(document.querySelector(`[data-slot="${slot}"]`)?.getAttribute("data-motion")).toBe(
+        "instant",
+      );
+    }
+
+    const probe = render(renderProbe(true, "instant"));
+    probe.rerender(renderProbe(false, "instant"));
+    expect(screen.queryByText("Mounted")).toBeNull();
+    probe.rerender(renderProbe(true, "animated"));
+    probe.rerender(renderProbe(false, "animated"));
+    expect(screen.queryByText("Mounted")).not.toBeNull();
   });
 
   test("keeps the closing surface mounted and reuses it when reopened", () => {

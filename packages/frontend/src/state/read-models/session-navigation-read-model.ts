@@ -216,7 +216,7 @@ type SessionLiveFacts = {
 };
 
 /** A session fault stays on its entry also when the session has no live facts. */
-const sessionLiveFactsOf = (
+export const sessionLiveFactsOf = (
   live: WorkspaceSessionLiveState,
   identity: AgentSessionIdentity | null,
 ): SessionLiveFacts => {
@@ -249,7 +249,7 @@ const liveAttention = (
  * A ready stream without the session means that the session is not running. A failed status
  * read of the session makes its status unknown, also when an older snapshot stays.
  */
-const sessionStatus = (
+export const sessionStatus = (
   live: WorkspaceSessionLiveState,
   { facts, statusFailure }: SessionLiveFacts,
 ): SessionNavigationStatus => {

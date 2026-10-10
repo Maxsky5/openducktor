@@ -85,6 +85,8 @@ export function TaskDetailsSheetContent(
     onOpenChange,
     onEdit = workflowActions?.onEdit,
     onDelete = workflowActions?.onDelete,
+    requestedConfirm = null,
+    onRequestedConfirmHandled,
   } = props;
   const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
   const taskId = task.id;
@@ -109,6 +111,13 @@ export function TaskDetailsSheetContent(
       taskSessions: contextTaskSessions,
     }),
   );
+  const { openResetDialog, openDeleteDialog } = viewModel;
+  useEffect(() => {
+    if (!requestedConfirm) return;
+    if (requestedConfirm === "reset_task") openResetDialog();
+    else openDeleteDialog();
+    onRequestedConfirmHandled?.();
+  }, [onRequestedConfirmHandled, openDeleteDialog, openResetDialog, requestedConfirm]);
   const hasActiveSession = Boolean(activeSessionContext);
   const activeSessionRole = activeSessionContext?.role;
   const pullRequestHeaderProps = getPullRequestHeaderProps({

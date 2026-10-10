@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -10,12 +11,22 @@ import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-lay
 
 const render = (element: ReactElement) => {
   const result = testingLibraryRender(
-    createElement(QueryProvider, { useIsolatedClient: true }, element),
+    createElement(
+      QueryProvider,
+      { useIsolatedClient: true },
+      createElement(CommandPaletteTestContext, null, element),
+    ),
   );
   return {
     ...result,
     rerender: (next: ReactElement) =>
-      result.rerender(createElement(QueryProvider, { useIsolatedClient: true }, next)),
+      result.rerender(
+        createElement(
+          QueryProvider,
+          { useIsolatedClient: true },
+          createElement(CommandPaletteTestContext, null, next),
+        ),
+      ),
   };
 };
 

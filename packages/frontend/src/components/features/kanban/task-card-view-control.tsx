@@ -11,7 +11,7 @@ type TaskCardViewControlProps = {
   onValueChange: (value: KanbanTaskCardView) => void;
 };
 
-const TASK_CARD_VIEW_OPTIONS = [
+export const TASK_CARD_VIEW_OPTIONS = [
   { value: "normal", label: "Normal", icon: Rows2 },
   { value: "compact", label: "Compact", icon: Rows3 },
 ] as const;

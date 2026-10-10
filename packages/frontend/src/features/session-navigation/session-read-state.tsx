@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import { useRequiredContext } from "@/state/app-state-contexts";
 import type {
   SessionNavigationEntry,
@@ -52,25 +53,35 @@ export function SessionReadStateProvider({ children }: PropsWithChildren): React
   return <SessionReadStateContext value={store}>{children}</SessionReadStateContext>;
 }
 
-export const useSessionUnread = (entry: SessionNavigationEntry): boolean => {
-  const store = useRequiredContext(SessionReadStateContext, "useSessionUnread");
-  const key = sessionEntryReadKey(entry);
-  return useSyncExternalStore(
-    store.subscribe,
-    () => store.isUnread(key),
-    () => store.isUnread(key),
-  );
-};
+export const useSessionUnread = (entry: SessionNavigationEntry): boolean =>
+  useSessionUnreadKey(sessionEntryReadKey(entry));
 
 export const useSetSessionUnread = (): ((
   entry: SessionNavigationEntry,
   unread: boolean,
 ) => void) => {
-  const store = useRequiredContext(SessionReadStateContext, "useSetSessionUnread");
-  return useCallback(
-    (entry, unread) => store.setUnread(sessionEntryReadKey(entry), unread),
-    [store],
-  );
+  const setUnread = useSetSessionUnreadKey();
+  return useCallback((entry, unread) => setUnread(sessionEntryReadKey(entry), unread), [setUnread]);
+};
+
+/** Whether the session with this read key shows as unread. A null key is never unread. */
+export const useSessionUnreadKey = (key: string | null): boolean => {
+  const store = useRequiredContext(SessionReadStateContext, "useSessionUnreadKey");
+  const isUnread = (): boolean => key !== null && store.isUnread(key);
+  return useSyncExternalStore(store.subscribe, isUnread, isUnread);
+};
+
+export const useSetSessionUnreadKey = (): ((key: string, unread: boolean) => void) => {
+  const store = useRequiredContext(SessionReadStateContext, "useSetSessionUnreadKey");
+  return useCallback((key, unread) => store.setUnread(key, unread), [store]);
+};
+
+/** The read key of a chat. Its sidebar row uses the same key. */
+export const workspaceSessionReadKey = (workspaceId: string, session: WorkspaceSession): string => {
+  const identity = workspaceSessionIdentity(session);
+  return identity
+    ? sessionReadStateKey(workspaceId, identity)
+    : sessionNavigationTargetKey({ kind: "workspace_session", workspaceId, sessionId: session.id });
 };
 
 /** Watch task metadata even when the sidebar has no row for the task. */
@@ -90,13 +101,10 @@ export const useWatchSessionBlockers = (model: SessionNavigationModel): void => 
   }, [model, store]);
 };
 
-const sessionEntryReadKey = (entry: SessionNavigationEntry): string => {
-  if (entry.context.kind === "workspace") {
-    const identity = workspaceSessionIdentity(entry.context.session);
-    if (identity) return sessionReadStateKey(entry.workspace.workspaceId, identity);
-  }
-  return targetReadKey(entry.target);
-};
+const sessionEntryReadKey = (entry: SessionNavigationEntry): string =>
+  entry.context.kind === "workspace"
+    ? workspaceSessionReadKey(entry.workspace.workspaceId, entry.context.session)
+    : targetReadKey(entry.target);
 
 const targetReadKey = (target: SessionNavigationTarget): string =>
   target.kind === "task_session"

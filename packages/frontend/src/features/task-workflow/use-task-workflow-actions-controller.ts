@@ -41,6 +41,7 @@ export type TaskWorkflowTaskComposerModel = {
   task: TaskCard | null;
   tasks: TaskCard[];
   destination: TaskCreateDestination | null;
+  initialTitle: string;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -48,9 +49,15 @@ type TaskComposerState = {
   open: boolean;
   taskId: string | null;
   destination: TaskCreateDestination | null;
+  initialTitle: string;
 };
 
-const CLOSED_TASK_COMPOSER: TaskComposerState = { open: false, taskId: null, destination: null };
+const CLOSED_TASK_COMPOSER: TaskComposerState = {
+  open: false,
+  taskId: null,
+  destination: null,
+  initialTitle: "",
+};
 
 export type TaskWorkflowActionsController = {
   actions: TaskWorkflowActions;
@@ -249,18 +256,22 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   const destinationWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const destinationWorkspaceName = activeWorkspace?.workspaceName ?? null;
   // New task keeps the workspace that was active when it opened.
-  const onCreateTask = useCallback((): void => {
-    setComposerState({
-      open: true,
-      taskId: null,
-      destination:
-        destinationWorkspaceId && destinationWorkspaceName
-          ? { workspaceId: destinationWorkspaceId, workspaceName: destinationWorkspaceName }
-          : null,
-    });
-  }, [destinationWorkspaceId, destinationWorkspaceName]);
+  const onCreateTask = useCallback(
+    (options?: { initialTitle?: string }): void => {
+      setComposerState({
+        open: true,
+        taskId: null,
+        destination:
+          destinationWorkspaceId && destinationWorkspaceName
+            ? { workspaceId: destinationWorkspaceId, workspaceName: destinationWorkspaceName }
+            : null,
+        initialTitle: options?.initialTitle ?? "",
+      });
+    },
+    [destinationWorkspaceId, destinationWorkspaceName],
+  );
   const onEdit = useCallback((taskId: string): void => {
-    setComposerState({ open: true, taskId, destination: null });
+    setComposerState({ open: true, taskId, destination: null, initialTitle: "" });
   }, []);
   const onComposerOpenChange = useCallback((open: boolean): void => {
     setComposerState((current) => (open ? { ...current, open: true } : CLOSED_TASK_COMPOSER));
@@ -271,9 +282,17 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       task: composerTask,
       tasks,
       destination: composerState.destination,
+      initialTitle: composerState.initialTitle,
       onOpenChange: onComposerOpenChange,
     }),
-    [composerOpen, composerState.destination, composerTask, onComposerOpenChange, tasks],
+    [
+      composerOpen,
+      composerState.destination,
+      composerState.initialTitle,
+      composerTask,
+      onComposerOpenChange,
+      tasks,
+    ],
   );
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);

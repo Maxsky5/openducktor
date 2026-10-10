@@ -10,14 +10,14 @@ type ThemePickerProps = {
   triggerClassName?: string;
 };
 
-const themePreferenceLabels = {
+export const THEME_PREFERENCE_LABELS = {
   system: "System default",
   light: "Light",
   dark: "Dark",
 } satisfies Record<ThemePreference, string>;
 
 const themePreferenceOptions: { value: ThemePreference; label: string }[] =
-  THEME_PREFERENCE_VALUES.map((value) => ({ value, label: themePreferenceLabels[value] }));
+  THEME_PREFERENCE_VALUES.map((value) => ({ value, label: THEME_PREFERENCE_LABELS[value] }));
 
 const isThemePreference = (value: string): value is ThemePreference =>
   THEME_PREFERENCE_VALUES.some((candidate) => candidate === value);

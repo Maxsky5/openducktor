@@ -50,6 +50,8 @@ type UseTaskCreateModalControllerOptions = {
   tasks: TaskCard[];
   task: TaskCard | null;
   destination?: TaskCreateDestination | null;
+  /** The title of a new task when the modal opens. Edit mode ignores it. */
+  initialTitle?: string;
 };
 
 type TaskCreateModalState = {
@@ -67,7 +69,7 @@ type TaskCreateModalState = {
 };
 
 type TaskCreateModalAction =
-  | { type: "resetForOpenTask"; task: TaskCard | null }
+  | { type: "resetForOpenTask"; task: TaskCard | null; initialTitle: string }
   | { type: "externalTaskApplied"; composer: ComposerState }
   | { type: "externalTaskConflictDetected" }
   | { type: "composerPatched"; patch: Partial<ComposerState> }
@@ -85,10 +87,13 @@ type TaskCreateModalAction =
   | { type: "documentSaveFinished" }
   | { type: "discardIntentCleared" };
 
-const initialTaskCreateModalState = (task: TaskCard | null): TaskCreateModalState => ({
+const initialTaskCreateModalState = (
+  task: TaskCard | null,
+  initialTitle = "",
+): TaskCreateModalState => ({
   step: task ? "details" : "type",
   editSection: "details",
-  composer: toComposerState(task),
+  composer: task ? toComposerState(task) : { ...toComposerState(null), title: initialTitle },
   selectedCreateIssueType: task?.issueType ?? null,
   error: null,
   documentError: null,
@@ -117,7 +122,7 @@ const taskCreateModalReducer = (
 ): TaskCreateModalState => {
   switch (action.type) {
     case "resetForOpenTask":
-      return initialTaskCreateModalState(action.task);
+      return initialTaskCreateModalState(action.task, action.initialTitle);
     case "externalTaskApplied":
       return {
         ...state,
@@ -188,12 +193,14 @@ function useExternalTaskSync({
   open,
   task,
   taskId,
+  initialTitle,
   composer,
   dispatch,
 }: {
   open: boolean;
   task: TaskCard | null;
   taskId: string | null;
+  initialTitle: string;
   composer: ComposerState;
   dispatch: Dispatch<TaskCreateModalAction>;
 }): void {
@@ -208,7 +215,7 @@ function useExternalTaskSync({
     if (contextChanged) {
       previousModalContext.current = { open, taskId };
       serverComposer.current = nextServerComposer;
-      if (open) dispatch({ type: "resetForOpenTask", task });
+      if (open) dispatch({ type: "resetForOpenTask", task, initialTitle });
       return;
     }
     if (!open) return;
@@ -228,7 +235,7 @@ function useExternalTaskSync({
         ? { type: "externalTaskApplied", composer: nextServerComposer }
         : { type: "externalTaskConflictDetected" },
     );
-  }, [composer, dispatch, open, task, taskId]);
+  }, [composer, dispatch, initialTitle, open, task, taskId]);
 }
 
 function createTaskSubmit({
@@ -442,6 +449,7 @@ export function useTaskCreateModalController({
   tasks,
   task,
   destination = null,
+  initialTitle = "",
 }: UseTaskCreateModalControllerOptions) {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -494,7 +502,7 @@ export function useTaskCreateModalController({
     loadPlanDocument,
   });
 
-  useExternalTaskSync({ open, task, taskId, composer, dispatch });
+  useExternalTaskSync({ open, task, taskId, initialTitle, composer, dispatch });
 
   const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
     toast.error("Temporary image cleanup failed", {

@@ -38,7 +38,7 @@ const SESSION_VIEW_ACTION_BY_ROLE = {
   qa: "open_qa",
 } satisfies Record<AgentRole, SessionRoleViewAction>;
 
-const SESSION_VIEW_ACTIONS: ReadonlySet<TaskWorkflowAction> = new Set(
+export const SESSION_VIEW_ACTIONS: ReadonlySet<TaskWorkflowAction> = new Set(
   Object.values(SESSION_VIEW_ACTION_BY_ROLE),
 );
 const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task"]);
@@ -303,9 +303,11 @@ export const resolveTaskCardActions = (
 ): TaskCardActionState => {
   const enabled = filterEnabledActions(task, options);
   const priority = resolvePriorityForTask(task, options);
+  const enabledSet = new Set(enabled);
+  const prioritySet = new Set(priority);
   const orderedEnabled = [
-    ...priority.filter((action) => enabled.includes(action)),
-    ...enabled.filter((action) => !priority.includes(action)),
+    ...priority.filter((action) => enabledSet.has(action)),
+    ...enabled.filter((action) => !prioritySet.has(action)),
   ];
   const primaryAction = orderedEnabled[0] ?? null;
 

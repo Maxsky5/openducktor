@@ -26,6 +26,11 @@
   animation: dialog-scale-out var(--modal-close-dur) var(--modal-ease) both;
 }
 
+/* A dialog that the user opens from a key many times a day shows and hides at once. */
+[data-slot^="dialog-"][data-motion="instant"] {
+  animation: none !important;
+}
+
 /* Radix tracks each portal child. Keep the positioner until its content closes. */
 [data-slot="dialog-positioner"][data-state="closed"] {
   animation: dialog-positioner-exit var(--modal-close-dur) linear both;

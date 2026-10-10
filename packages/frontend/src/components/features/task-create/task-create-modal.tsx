@@ -33,6 +33,7 @@ type TaskCreateModalProps = {
   tasks: TaskCard[];
   task?: TaskCard | null;
   destination?: TaskCreateDestination | null;
+  initialTitle?: string;
 };
 
 type TaskCreateModalController = ReturnType<typeof useTaskCreateModalController>;
@@ -296,6 +297,7 @@ export function TaskCreateModal({
   tasks,
   task = null,
   destination = null,
+  initialTitle = "",
 }: TaskCreateModalProps): ReactElement {
   const openerRef = useRef<HTMLElement | null>(null);
   const controller = useTaskCreateModalController({
@@ -304,6 +306,7 @@ export function TaskCreateModal({
     tasks,
     task,
     destination,
+    initialTitle,
   });
   return (
     <>

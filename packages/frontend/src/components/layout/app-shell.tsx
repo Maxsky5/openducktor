@@ -1,15 +1,23 @@
-import { DiagnosticsPanel } from "@/components/features/diagnostics";
+import { DiagnosticsTrigger } from "@/components/features/diagnostics";
 import { LoaderCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
+import {
+  OpenRepositoryModal,
+  type OpenRepositoryModalView,
+} from "@/components/features/repository/open-repository-modal";
 import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { WorkspaceSidebar } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";
+import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { Button } from "@/components/ui/button";
+import { CommandPaletteProvider } from "@/features/command-palette/command-palette-provider";
+import type { CommandPaletteShell } from "@/features/command-palette/command-palette-types";
+import { RecentItemsRecorder } from "@/features/command-palette/recent-items-recorder";
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
@@ -25,6 +33,8 @@ type AppShellSidebarPreference = "opened" | "collapsed";
 const APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE: AppShellSidebarPreference = "opened";
 const NO_ACTIVE_WORKSPACE_ID = "__no_active_workspace__";
+
+type RepositoryModalRequest = { open: boolean; view: OpenRepositoryModalView | undefined };
 
 const isAppShellSidebarPreference = (value: string | null): value is AppShellSidebarPreference =>
   value === "opened" || value === "collapsed";
@@ -71,70 +81,86 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   });
-  const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
+  const [repositoryModal, setRepositoryModal] = useState<RepositoryModalRequest>({
+    open: false,
+    view: undefined,
+  });
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
   );
   useEffect(() => {
-    if (workspaces.length === 0) setRepositoryModalOpen(true);
+    if (workspaces.length === 0) setRepositoryModal({ open: true, view: undefined });
   }, [workspaces.length]);
 
   const handleRepositoryModalOpenChange = useCallback((open: boolean) => {
-    setRepositoryModalOpen(open);
+    setRepositoryModal((current) => ({ ...current, open }));
   }, []);
 
-  const openRepositoryModal = useCallback(() => {
-    setRepositoryModalOpen(true);
+  const openRepositoryModal = useCallback((view?: OpenRepositoryModalView) => {
+    setRepositoryModal({ open: true, view });
   }, []);
+  const openDefaultRepositoryModal = useCallback(
+    () => openRepositoryModal(),
+    [openRepositoryModal],
+  );
 
-  const handleHideSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    persistLeftSidebarPreference("collapsed");
+  const changeSidebarOpen = useCallback((open: boolean) => {
+    setSidebarOpen(open);
+    persistLeftSidebarPreference(open ? "opened" : "collapsed");
   }, []);
-
-  const handleShowSidebar = useCallback(() => {
-    setSidebarOpen(true);
-    persistLeftSidebarPreference("opened");
-  }, []);
+  const handleHideSidebar = useCallback(() => changeSidebarOpen(false), [changeSidebarOpen]);
+  const handleShowSidebar = useCallback(() => changeSidebarOpen(true), [changeSidebarOpen]);
+  const paletteShell = useMemo<CommandPaletteShell>(
+    () => ({ isSidebarOpen, setSidebarOpen: changeSidebarOpen, openRepositoryModal }),
+    [changeSidebarOpen, isSidebarOpen, openRepositoryModal],
+  );
 
   return (
     <VisibleSessionTargetProvider>
       <SessionReadStateProvider>
-        <div
-          className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
-          data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
-        >
-          <div
-            className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
-            aria-hidden="true"
-          />
-          <div className="flex h-full min-h-0 w-full">
-            <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
-
-            <WorkspaceSidebar
-              isOpen={isSidebarOpen}
-              onHide={handleHideSidebar}
-              onShow={handleShowSidebar}
-              onOpenRepositoryModal={openRepositoryModal}
-            />
-
-            <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-              <main
-                data-main-scroll-container="true"
-                className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+        <WorkspaceDialogsProvider>
+          <SessionMenuProvider>
+            <CommandPaletteProvider shell={paletteShell}>
+              <RecentItemsRecorder />
+              <div
+                className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
+                data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
               >
-                <DiffWorkerProvider>
-                  <AgentChatTranscriptCacheProvider>
-                    <Outlet />
-                  </AgentChatTranscriptCacheProvider>
-                </DiffWorkerProvider>
-              </main>
-            </section>
-          </div>
-        </div>
+                <div
+                  className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
+                  aria-hidden="true"
+                />
+                <div className="flex h-full min-h-0 w-full">
+                  <WorkspaceRail onOpenRepositoryModal={openDefaultRepositoryModal} />
+
+                  <WorkspaceSidebar
+                    isOpen={isSidebarOpen}
+                    onHide={handleHideSidebar}
+                    onShow={handleShowSidebar}
+                    onOpenRepositoryModal={openDefaultRepositoryModal}
+                  />
+
+                  <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+                    <main
+                      data-main-scroll-container="true"
+                      className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+                    >
+                      <DiffWorkerProvider>
+                        <AgentChatTranscriptCacheProvider>
+                          <Outlet />
+                        </AgentChatTranscriptCacheProvider>
+                      </DiffWorkerProvider>
+                    </main>
+                  </section>
+                </div>
+              </div>
+            </CommandPaletteProvider>
+          </SessionMenuProvider>
+        </WorkspaceDialogsProvider>
         <OpenRepositoryModal
-          open={isRepositoryModalOpen}
+          open={repositoryModal.open}
           canClose
+          initialView={repositoryModal.view}
           onOpenChange={handleRepositoryModalOpenChange}
           requestTransition={guardWorkspaceChange}
         />
@@ -207,10 +233,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
       return <Navigate to="/kanban" replace />;
     }
     return (
-      <OnboardingPage
-        onComplete={completeOnboarding}
-        headerActions={<DiagnosticsPanel triggerVariant="icon" />}
-      />
+      <OnboardingPage onComplete={completeOnboarding} headerActions={<DiagnosticsTrigger />} />
     );
   }
 
