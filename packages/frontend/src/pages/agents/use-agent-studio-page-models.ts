@@ -1,9 +1,12 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type {
+  TaskDocumentKind,
+  TaskExecutionDocumentPanelModel,
+} from "@/components/features/agents/task-execution-document-panel";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import { buildTaskExecutionDocumentPanelModel } from "./agents-page-view-model";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
   type AgentStudioChatComposerContext,
@@ -74,12 +77,34 @@ export function useAgentStudioPageModels({
     },
   });
 
-  const taskExecutionDocumentPanelModel = useMemo(
+  // The document choice lasts until the user selects another role session. A return to an earlier
+  // session starts again from its first document.
+  const { taskDocuments, defaultDocumentKind, roleSessionKey } = selectedSession.documents;
+  const [documentChoice, setDocumentChoice] = useState<{
+    roleSessionKey: string;
+    kind: TaskDocumentKind | null;
+  }>({ roleSessionKey, kind: null });
+  if (documentChoice.roleSessionKey !== roleSessionKey) {
+    setDocumentChoice({ roleSessionKey, kind: null });
+  }
+  const selectedDocumentKind =
+    documentChoice.roleSessionKey === roleSessionKey && documentChoice.kind !== null
+      ? documentChoice.kind
+      : defaultDocumentKind;
+  const selectDocumentKind = useCallback(
+    (kind: TaskDocumentKind) => setDocumentChoice({ roleSessionKey, kind }),
+    [roleSessionKey],
+  );
+  const taskExecutionDocumentPanelModel = useMemo<TaskExecutionDocumentPanelModel | null>(
     () =>
-      buildTaskExecutionDocumentPanelModel({
-        activeDocument: selectedSession.documents.activeDocument,
-      }),
-    [selectedSession.documents.activeDocument],
+      taskDocuments
+        ? {
+            documents: taskDocuments,
+            selectedKind: selectedDocumentKind,
+            onSelectKind: selectDocumentKind,
+          }
+        : null,
+    [selectDocumentKind, selectedDocumentKind, taskDocuments],
   );
 
   const agentChatModel = useAgentStudioChatModel({
@@ -97,7 +122,7 @@ export function useAgentStudioPageModels({
     agentChatModel,
   } satisfies {
     agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
-    taskExecutionDocumentPanelModel: ReturnType<typeof buildTaskExecutionDocumentPanelModel>;
+    taskExecutionDocumentPanelModel: TaskExecutionDocumentPanelModel | null;
     agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
   };
 }

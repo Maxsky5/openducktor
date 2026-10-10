@@ -26,7 +26,6 @@ import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
-import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 import type { UseTaskExecutionFilePreviewControllerResult } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
@@ -108,7 +107,7 @@ type UseAgentStudioOrchestrationControllerResult = {
     typeof useAgentStudioPageModels
   >["taskExecutionDocumentPanelModel"];
   agentChatModel: ReturnType<typeof useAgentStudioPageModels>["agentChatModel"];
-  rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
+  pullRequestReview: ReturnType<typeof resolvePullRequestReviewAvailability>;
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: TaskExecutionSelectedFile) => void;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
@@ -461,22 +460,10 @@ export function useAgentStudioOrchestrationController({
   const { agentStudioHeaderModel, taskExecutionDocumentPanelModel, agentChatModel } =
     useAgentStudioPageModels(pageModelsArgs);
 
-  const {
-    canShowPullRequestReview,
-    hasLinkedPullRequest,
-    unavailableReason: pullRequestReviewUnavailableReason,
-  } = resolvePullRequestReviewAvailability({
+  const pullRequestReview = resolvePullRequestReviewAvailability({
     gitProviderContext,
     gitProviderReadError,
     linkedPullRequest: view.selectedTask?.pullRequest,
-  });
-  const rightPanel = useAgentStudioRightPanel({
-    role: selectedSessionContext.role,
-    hasTaskContext: Boolean(selectedSessionContext.taskId),
-    hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
-    canShowPullRequestReview,
-    hasLinkedPullRequest,
-    pullRequestReviewUnavailableReason,
   });
   const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
     taskExecutionFilePreview;
@@ -491,7 +478,7 @@ export function useAgentStudioOrchestrationController({
     gitConflictQuickAction: selectedSessionContext.workflow.gitConflictQuickAction,
     taskExecutionDocumentPanelModel,
     agentChatModel,
-    rightPanel,
+    pullRequestReview,
     taskExecutionSelectedFilePreviewModel,
     onSelectTaskExecutionFile,
     startSessionRequest,

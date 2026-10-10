@@ -2,6 +2,12 @@ import type { SessionNavigationRecovery } from "@/features/session-navigation/us
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
 import { useMemo } from "react";
+import {
+  type SessionPanelOwner,
+  type SessionPanelsModel,
+  type ToolTabKind,
+  useSessionPanels,
+} from "@/features/session-panels";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { gitProviderReadError } from "@/lib/git-provider-health";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -37,9 +43,6 @@ type AgentsPageShellModel = {
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
   onRetryGitProviderContext: () => void;
-  rightPanelToggleModel: ReturnType<
-    typeof useAgentStudioOrchestrationController
-  >["rightPanel"]["rightPanelToggleModel"];
   hasSelectedTask: boolean;
   unavailableTaskId: string | null;
   chatHeaderModel: AgentStudioHeaderModel;
@@ -47,11 +50,10 @@ type AgentsPageShellModel = {
   taskExecutionSelectedFilePreviewModel: ReturnType<
     typeof useAgentStudioOrchestrationController
   >["taskExecutionSelectedFilePreviewModel"];
-  isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
-  terminalPanel: ReturnType<typeof useAgentStudioTerminals>;
+  panels: SessionPanelsModel;
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -137,12 +139,39 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         answerAgentQuestion,
       },
     });
+  const mountedTaskIds = useMemo(
+    () => (selection.view.taskId ? [selection.view.taskId] : []),
+    [selection.view.taskId],
+  );
+  const terminals = useAgentStudioTerminals({
+    workspaceId: activeWorkspaceId,
+    repoPath: workspaceRepoPath,
+    taskId: selection.view.taskId || null,
+    taskVersion: selection.view.selectedTask?.updatedAt ?? null,
+    mountedTaskIds,
+  });
+  const panelOwner = useMemo<SessionPanelOwner | null>(
+    () =>
+      activeWorkspaceId && selection.view.taskId
+        ? { kind: "task", workspaceId: activeWorkspaceId, taskId: selection.view.taskId }
+        : null,
+    [activeWorkspaceId, selection.view.taskId],
+  );
+  const { canShowPullRequestReview, hasLinkedPullRequest } = orchestration.pullRequestReview;
+  const panels = useSessionPanels({
+    owner: panelOwner,
+    selectionKey: orchestrationSelection.view.role,
+    // CI Checks needs a linked pull request that the provider can review.
+    unavailableKinds:
+      canShowPullRequestReview && hasLinkedPullRequest ? NO_KINDS : WITHOUT_CI_CHECKS,
+    terminals,
+  });
   const buildTools = useAgentsPageBuildTools({
     activeWorkspace,
     activeBranch,
     selectedView: orchestrationSelection.view,
-    activeTabId: orchestration.rightPanel.activeTabId,
-    isPanelOpen: orchestration.rightPanel.isPanelOpen,
+    isDiffsActive: panels.right.activeKind === "diffs",
+    isPanelOpen: panels.right.isVisible,
     repoSettings: orchestration.repoSettings,
     repoSettingsError,
     loadRepoSettings,
@@ -153,35 +182,24 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     gitConflictQuickAction: orchestration.gitConflictQuickAction,
     gitConflict: buildTools.gitActions.gitConflict,
     resolveGitConflict: buildTools.gitActions.askBuilderToResolveGitConflict,
-    isPanelOpen: orchestration.rightPanel.isPanelOpen,
-  });
-  const mountedTaskIds = useMemo(
-    () => (selection.view.taskId ? [selection.view.taskId] : []),
-    [selection.view.taskId],
-  );
-  const terminalPanel = useAgentStudioTerminals({
-    workspaceId: activeWorkspaceId,
-    repoPath: workspaceRepoPath,
-    taskId: selection.view.taskId || null,
-    taskVersion: selection.view.selectedTask?.updatedAt ?? null,
-    mountedTaskIds,
+    isPanelOpen: panels.right.isVisible,
   });
 
-  const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =
-    useAgentStudioRightPanelBridge({
-      activeWorkspace,
-      buildTools,
-      selection: orchestrationSelection,
-      panel: orchestration.rightPanel,
-      documentsModel: orchestration.taskExecutionDocumentPanelModel,
-      selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
-      onSelectFile: orchestration.onSelectTaskExecutionFile,
-      setTaskTargetBranch,
-      detectingPullRequestTaskId,
-      onDetectPullRequest: taskActions.onDetectPullRequest,
-      gitProviderContext: gitProvider.context,
-      gitProviderReadError: providerReadError,
-    });
+  const { rightPanelBridge, selectedFileRefresh } = useAgentStudioRightPanelBridge({
+    activeWorkspace,
+    buildTools,
+    selection: orchestrationSelection,
+    panel: panels.right,
+    pullRequestReviewUnavailableReason: orchestration.pullRequestReview.unavailableReason,
+    documentsModel: orchestration.taskExecutionDocumentPanelModel,
+    selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
+    onSelectFile: orchestration.onSelectTaskExecutionFile,
+    setTaskTargetBranch,
+    detectingPullRequestTaskId,
+    onDetectPullRequest: taskActions.onDetectPullRequest,
+    gitProviderContext: gitProvider.context,
+    gitProviderReadError: providerReadError,
+  });
 
   const modalContent = useMemo<AgentsPageModalContentModel>(
     () => ({
@@ -226,7 +244,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onRetryNavigationPersistence: retryNavigationPersistence,
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
     onRetryGitProviderContext: gitProvider.retry,
-    rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
     hasSelectedTask: Boolean(selection.view.taskId),
     unavailableTaskId:
       tasksAreCurrent && !isForegroundLoadingTasks && !selection.view.selectedTask
@@ -236,10 +253,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatModel: orchestration.agentChatModel,
     chatFileLinkOwner,
     taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
-    isRightPanelVisible,
     rightPanelBridge,
     selectedFileRefresh,
     modalContent,
-    terminalPanel,
+    panels,
   };
 }
+
+const NO_KINDS: ReadonlySet<ToolTabKind> = new Set();
+const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);

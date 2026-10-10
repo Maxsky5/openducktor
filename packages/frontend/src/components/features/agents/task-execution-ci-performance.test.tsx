@@ -8,11 +8,38 @@ import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
+import { SessionPanel, type ToolTabKind } from "@/features/session-panels";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
+import { SessionViewControls } from "./session-view-controls";
 import {
-  TaskExecutionPanel,
-  type TaskExecutionPanelModel,
-  TaskExecutionPanelToggleButton,
-} from "./task-execution-panel";
+  type TaskExecutionToolsModel,
+  useTaskExecutionToolTabs,
+} from "./use-task-execution-tool-tabs";
+
+type TaskExecutionPanelModel = TaskExecutionToolsModel & {
+  tabs: ToolTabKind[];
+  activeTabId: ToolTabKind;
+};
+
+function TaskExecutionPanel({
+  model,
+  onSelect,
+}: {
+  model: TaskExecutionPanelModel;
+  onSelect: (kind: ToolTabKind) => void;
+}): ReactElement {
+  const toolTabs = useTaskExecutionToolTabs(model);
+  return (
+    <SessionPanel
+      model={createSessionPanelFixture({
+        tabs: model.tabs.map((kind) => ({ id: kind, kind })),
+        selectedTabId: model.activeTabId,
+        onSelect: (entryId) => onSelect(entryId === "ci_checks" ? "ci_checks" : "diffs"),
+      })}
+      toolTabs={toolTabs}
+    />
+  );
+}
 
 const ciQueryInput = {
   repoPath: "/repo",
@@ -129,12 +156,8 @@ const gitModel: AgentStudioGitPanelModel = {
 };
 
 const basePanelModel = {
-  tabs: [
-    { id: "git", label: "Git" },
-    { id: "ci_checks", label: "CI Checks" },
-  ],
-  activeTabId: "git",
-  onActiveTabChange: () => {},
+  tabs: ["diffs", "ci_checks"],
+  activeTabId: "diffs",
   documentModel: null,
   gitModel,
   fileExplorerModel: {
@@ -163,21 +186,16 @@ function CiPerformanceHarness({
 
   return (
     <>
-      <TaskExecutionPanelToggleButton
-        model={{
-          kind: "task_execution",
-          isOpen,
-          onToggle: () => {
-            setIsOpen((current) => !current);
-          },
-        }}
+      <SessionViewControls
+        bottom={{ isAvailable: false, isOpen: false, onToggle: () => {} }}
+        right={{ isOpen, onToggle: () => setIsOpen((current) => !current) }}
       />
       {isOpen ? (
         <TaskExecutionPanel
+          onSelect={setActiveTabId}
           model={{
             ...basePanelModel,
             activeTabId,
-            onActiveTabChange: setActiveTabId,
             ciChecksModel: {
               isActive: activeTabId === "ci_checks",
               queryInput: ciQueryInput,
@@ -228,7 +246,7 @@ describe("TaskExecutionPanel CI performance", () => {
       const view = renderCiPerformanceHarness({
         comments,
         initiallyOpen: true,
-        initialTabId: "git",
+        initialTabId: "diffs",
       });
       const scoped = within(view.container);
       const ciTab = scoped.getByRole("tab", { name: /CI Checks/ });
@@ -255,15 +273,15 @@ describe("TaskExecutionPanel CI performance", () => {
         initiallyOpen: true,
         initialTabId: "ci_checks",
       });
-      const gitTab = screen.getByRole("tab", { name: "Git" });
+      const diffsTab = screen.getByRole("tab", { name: "Diffs" });
 
       expect(screen.getByText("Comments")).toBeTruthy();
       expect(screen.queryByText("Performance marker 0")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
-      fireEvent.mouseDown(gitTab, { button: 0, ctrlKey: false });
+      fireEvent.mouseDown(diffsTab, { button: 0, ctrlKey: false });
 
-      expect(gitTab.getAttribute("aria-selected")).toBe("true");
+      expect(diffsTab.getAttribute("aria-selected")).toBe("true");
       expect(screen.queryByText("Comments")).toBeNull();
 
       const reopenedCiTab = screen.getByRole("tab", { name: /CI Checks/ });
@@ -289,7 +307,7 @@ describe("TaskExecutionPanel CI performance", () => {
       });
       const scoped = within(view.container);
 
-      fireEvent.click(scoped.getByRole("button", { name: "Show task execution panel" }));
+      fireEvent.click(scoped.getByRole("button", { name: "Show right panel" }));
 
       expect(scoped.getByRole("tab", { name: /CI Checks/ }).getAttribute("aria-selected")).toBe(
         "true",

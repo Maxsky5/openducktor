@@ -374,6 +374,7 @@ function AppShellTestEnvironment({
             <WorkspacePresenceContext.Provider
               value={{
                 hasLoadedWorkspaceList: true,
+                workspaceRecordsAreCurrent: true,
                 isLoadingWorkspaces: false,
                 workspaceLoadError: null,
                 retryWorkspaces: async () => {},

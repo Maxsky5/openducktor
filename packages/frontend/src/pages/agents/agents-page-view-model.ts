@@ -1,11 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type {
-  AgentRoleOption,
-  AgentStudioHeaderModel,
-  TaskExecutionDocument,
-  TaskExecutionDocumentPanelModel,
-} from "@/components/features/agents";
+import type { AgentRoleOption, AgentStudioHeaderModel } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -52,6 +47,7 @@ export const buildAgentStudioHeaderModel = (args: {
 }): AgentStudioWorkflowHeaderModel => ({
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
+  pullRequest: args.selectedTask?.pullRequest ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
   selectedRole: args.selectedRole,
   workflowSteps: args.roleOptions.map((entry) => {
@@ -80,10 +76,4 @@ export const buildAgentStudioHeaderModel = (args: {
   onQuickAction: args.onQuickAction,
   isCreatingSession: args.isStarting,
   agentStudioReady: args.agentStudioReady,
-});
-
-export const buildTaskExecutionDocumentPanelModel = (args: {
-  activeDocument: TaskExecutionDocument | null;
-}): TaskExecutionDocumentPanelModel => ({
-  activeDocument: args.activeDocument,
 });

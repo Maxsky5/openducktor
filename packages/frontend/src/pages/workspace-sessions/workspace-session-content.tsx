@@ -1,22 +1,19 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import {
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
-import {
-  useWorkspaceSessionTools,
-  type WorkspaceToolsTabId,
-} from "@/components/features/agents/use-workspace-session-tools";
+import { useWorkspaceSessionTools } from "@/components/features/agents/use-workspace-session-tools";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { Button } from "@/components/ui/button";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
+import {
+  SessionPanel,
+  type SessionPanelModel,
+  SessionPanelSplit,
+  type SessionPanelSplitIds,
+  type SessionPanelSplitSizes,
+  type ToolTabViews,
+  useNarrowWindow,
+} from "@/features/session-panels";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
@@ -31,21 +28,31 @@ import {
   type WorkspaceSessionFilePreviewHandle,
 } from "./workspace-session-file-preview";
 
-export type WorkspaceSessionPanelState = {
-  isOpen: boolean;
-  activeTabId: WorkspaceToolsTabId;
-  selectedFile: TaskExecutionSelectedFile | null;
+const TOOLS_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
+  group: "workspace-session-tools-layout",
+  main: "workspace-session-main-panel",
+  panel: "workspace-session-tools-panel",
+};
+const TOOLS_PANEL_SIZES: SessionPanelSplitSizes = {
+  main: 63,
+  mainMin: "35%",
+  panel: 37,
+  panelMin: "30%",
+};
+const NARROW_TOOLS_PANEL_SIZES: SessionPanelSplitSizes = {
+  main: 55,
+  mainMin: "30%",
+  panel: 45,
+  panelMin: "25%",
 };
 
 type WorkspaceSessionContentProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   sessionIds: readonly string[];
-  panelState: WorkspaceSessionPanelState;
-  onPanelStateChange: (
-    sessionId: string,
-    update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
-  ) => void;
+  rightPanel: SessionPanelModel;
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
   onSafeToLeave?: () => void;
 };
 
@@ -53,10 +60,12 @@ export function WorkspaceSessionContent({
   workspace,
   record,
   sessionIds,
-  panelState,
-  onPanelStateChange: changePanel,
+  rightPanel,
+  selectedFile,
+  onSelectedFileChange,
   onSafeToLeave,
 }: WorkspaceSessionContentProps): ReactElement {
+  const isPanelOpen = rightPanel.isVisible;
   const [chatActions, setChatActions] = useState<WorkspaceConflictChatActions | null>(null);
   const selectedKey = workspaceConflictChatKey(workspace.workspaceId, record.id);
   const onActionsReady = useCallback(
@@ -87,11 +96,6 @@ export function WorkspaceSessionContent({
       conflict,
       assertCurrent,
     });
-  const onPanelStateChange = useCallback(
-    (update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>) =>
-      changePanel(record.id, update),
-    [changePanel, record.id],
-  );
   const {
     branch,
     workingDirectory,
@@ -104,17 +108,10 @@ export function WorkspaceSessionContent({
     retryTarget,
     refreshAfterChange,
     refreshRef,
-  } = useWorkspaceSessionGit({ workspace, record, isPanelOpen: panelState.isOpen });
+  } = useWorkspaceSessionGit({ workspace, record, isPanelOpen });
   const { branchKey, branchReady, readBranch } = branch;
   const previewRef = useRef<WorkspaceSessionFilePreviewHandle | null>(null);
-  const [isNarrow, setIsNarrow] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const updateLayout = () => setIsNarrow(media.matches);
-    updateLayout();
-    media.addEventListener("change", updateLayout);
-    return () => media.removeEventListener("change", updateLayout);
-  }, []);
+  const isNarrow = useNarrowWindow();
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
     const actions = previewRef.current;
     if (!actions) throw new Error("The file preview is not ready. Open the chat again.");
@@ -123,18 +120,14 @@ export function WorkspaceSessionContent({
   const onFileSaved = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
   const onToolRefresh = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
   const onSelectionChange = useCallback(
-    (selectedFile: TaskExecutionSelectedFile | null) => onPanelStateChange({ selectedFile }),
-    [onPanelStateChange],
-  );
-  const onActiveTabChange = useCallback(
-    (activeTabId: WorkspaceToolsTabId) => onPanelStateChange({ activeTabId }),
-    [onPanelStateChange],
+    (file: TaskExecutionSelectedFile | null) => onSelectedFileChange(record.id, file),
+    [onSelectedFileChange, record.id],
   );
   const previewContent = (
     <WorkspaceSessionFilePreview
       key={record.id}
       ref={previewRef}
-      initialFile={panelState.selectedFile}
+      initialFile={selectedFile}
       onSelectionChange={onSelectionChange}
       onSafeToLeave={onSafeToLeave}
       isWorktree={isWorktree}
@@ -149,8 +142,8 @@ export function WorkspaceSessionContent({
         {previewContent}
         <div
           className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
-          style={{ visibility: panelState.selectedFile ? "hidden" : undefined }}
-          inert={panelState.selectedFile !== null}
+          style={{ visibility: selectedFile ? "hidden" : undefined }}
+          inert={selectedFile !== null}
         >
           <WorkspaceSessionChatPanes
             workspace={workspace}
@@ -166,8 +159,12 @@ export function WorkspaceSessionContent({
       </div>
     </div>
   );
-  const { toolsContent, refresh: refreshTools } = useWorkspaceSessionTools({
-    isVisible: panelState.isOpen,
+  const {
+    diffsContent,
+    filesContent,
+    refresh: refreshTools,
+  } = useWorkspaceSessionTools({
+    isVisible: isPanelOpen,
     onResolveGitConflict,
     conflictAssistanceBlockedReason:
       assistance?.blockedReason ??
@@ -188,11 +185,14 @@ export function WorkspaceSessionContent({
     targetError,
     readBranch,
     retryTarget,
-    activeTabId: panelState.activeTabId,
-    onActiveTabChange,
-    selectedFile: panelState.selectedFile,
+    isFilesActive: rightPanel.activeKind === "files",
+    selectedFile,
     onSelectFile,
   });
+  const toolTabs: ToolTabViews = {
+    diffs: { content: diffsContent },
+    files: { content: filesContent },
+  };
   useLayoutEffect(() => {
     refreshRef.current = refreshTools;
     return () => {
@@ -201,11 +201,16 @@ export function WorkspaceSessionContent({
   }, [refreshRef, refreshTools]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
-      <WorkspaceSessionPaneLayout
-        isOpen={panelState.isOpen}
-        isNarrow={isNarrow}
-        mainContent={mainContent}
-        toolsContent={toolsContent}
+      <SessionPanelSplit
+        ids={TOOLS_PANEL_SPLIT_IDS}
+        model={rightPanel}
+        direction={isNarrow ? "vertical" : "horizontal"}
+        sizes={isNarrow ? NARROW_TOOLS_PANEL_SIZES : TOOLS_PANEL_SIZES}
+        className="h-full min-h-0 overflow-hidden"
+        mainClassName="h-full min-h-0"
+        panelClassName="border-l border-border bg-card"
+        main={mainContent}
+        panel={<SessionPanel model={rightPanel} toolTabs={toolTabs} />}
       />
     </div>
   );
@@ -226,40 +231,5 @@ export function WorkspaceSessionReadModelNotice(): ReactElement | null {
         Retry
       </Button>
     </div>
-  );
-}
-
-type WorkspaceSessionPaneLayoutProps = {
-  isOpen: boolean;
-  isNarrow: boolean;
-  mainContent: ReactNode;
-  toolsContent: ReactNode;
-};
-
-function WorkspaceSessionPaneLayout({
-  isOpen,
-  isNarrow,
-  mainContent,
-  toolsContent,
-}: WorkspaceSessionPaneLayoutProps): ReactElement {
-  return (
-    <ResizablePanelGroup
-      direction={isNarrow ? "vertical" : "horizontal"}
-      className="h-full min-h-0 overflow-hidden"
-    >
-      <ResizablePanel defaultSize={isNarrow ? "55%" : "63%"} minSize={isNarrow ? "30%" : "35%"}>
-        {mainContent}
-      </ResizablePanel>
-      {isOpen ? (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={isNarrow ? "45%" : "37%"} minSize={isNarrow ? "25%" : "30%"}>
-            <div className="h-full min-h-0 overflow-hidden border-l border-border bg-card">
-              {toolsContent}
-            </div>
-          </ResizablePanel>
-        </>
-      ) : null}
-    </ResizablePanelGroup>
   );
 }

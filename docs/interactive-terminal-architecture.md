@@ -4,7 +4,7 @@ The shared host terminal engine owns each byte stream, headless screen, replay w
 
 The PTY handle implements `TerminalProducerHandle` for output pause, resume, and termination, and `TerminalPtyHandle` for input, native resize, and child-process inspection. All terminals are interactive.
 
-The terminal panel loads the shared viewport through `React.lazy`. The transport remains outside the loading boundary. The viewport attaches to the host when it mounts.
+The terminal layer of each session panel loads the shared viewport through `React.lazy`. The transport remains outside the loading boundary. The viewport attaches to the host when it mounts.
 
 The app does not store terminal sessions, tabs, or transcripts in settings or SQLite. After a renderer reload, the UI finds terminals that still belong to the same host and attaches again. Host shutdown stops and forgets them.
 
@@ -14,19 +14,30 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
 - The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
-- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. A transport lease shares one controller and one connection per terminal bridge across terminal panels. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
+- `packages/frontend/src/features/terminals` owns the collection hook, terminal tabs, terminal layer, close dialog, transport controller, xterm renderer, and input rules. A transport lease shares one controller and one connection per terminal bridge across terminal views. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
+- `packages/frontend/src/features/session-panels` owns the panel, position, order, and selection of each terminal tab, and the visibility of the bottom panel. See [Terminal tabs in session panels](#terminal-tabs-in-session-panels).
 
 Create, run action, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
 
 ## Discover terminals
 
-The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty panel creates a terminal only after discovery succeeds with an empty list. New terminals and action runs use one start rule. They stay disabled while discovery runs or fails, while another terminal starts, and when the owner has 8 terminals. The control shows the reason.
+The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty bottom panel starts a terminal only after discovery succeeds and the bottom panel is still empty. New terminals and action runs use one start rule. They stay disabled while discovery runs or fails, while another terminal starts, and when the owner has 8 terminals. The control shows the reason.
 
-An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, existing terminals, closing the panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
+An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, a terminal in the bottom panel, closing the bottom panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
 
-Each terminal summary has `startedBy`. The value is `user` for a shell or an action that the user starts, and `host` for a terminal that OpenDucktor starts without a user request, such as a worktree-creation action. Until the user opens or closes the panel for an owner, the panel opens when the owner has a terminal that the user started. A `host` terminal stays in the tab list and does not open the panel. When the user opens the panel, the tab shows the retained output.
+Each terminal summary has `startedBy`. The value is `user` for a shell or an action that the user starts, and `host` for a terminal that OpenDucktor starts without a user request, such as a worktree-creation action. Until the user opens or closes the bottom panel for an owner, the bottom panel opens when it holds a terminal that the user started. A `host` terminal stays in the tab list and does not open the bottom panel. When the user opens the bottom panel, the tab shows the retained output.
 
-Discovery failure appears in the panel with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport remains separate from the list query.
+Discovery failure appears in the bottom panel, and in any panel that shows a terminal tab, with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport remains separate from the list query.
+
+## Terminal tabs in session panels
+
+A terminal tab can be in the right panel or the bottom panel of a task or Workspace Session. The panel layout gives each terminal tab its panel and position. A terminal that has no position, such as a terminal found again after a renderer reload, opens at the end of the bottom panel.
+
+`useTerminals` starts a terminal and returns its tab ID at once, so the panel controller can place the tab in the same update. A repository action opens a new tab at the end of the bottom panel and shows the bottom panel.
+
+A move from one panel to the other mounts the viewport again in the target panel. The transport detaches and attaches again, and the host screen restore brings back the output. No DOM node moves between panels. The limits of [Attach and replay](#attach-and-replay) apply to each move.
+
+Each panel keeps the viewports of all mounted owners that it holds, so an owner switch does not mount a viewport again. Only the terminals of the selected owner show. The right panel unmounts its viewports while it is hidden. Terminal tabs in both panels count toward the limit of 8 terminals for an owner.
 
 ## Start a terminal
 
@@ -83,7 +94,7 @@ The service returns typed errors. The `terminal_run_action` handler in `repo-act
 
 ### Worktree-creation actions
 
-The host worktree action runner starts the worktree-creation actions with `startCommandInPreparedTarget`. It runs them in list order after the copied files. Each terminal continues as a normal shell after its command, so the user can work in it. All worktree-creation actions use `startedBy: "host"`, so the panel stays closed until the user opens it.
+The host worktree action runner starts the worktree-creation actions with `startCommandInPreparedTarget`. It runs them in list order after the copied files. Each terminal continues as a normal shell after its command, so the user can work in it. All worktree-creation actions use `startedBy: "host"`, so the bottom panel stays closed until the user opens it.
 
 The runner waits up to 5 minutes for each waiting action. Each failure has its own tagged error with the reason and the last output lines:
 

@@ -1,10 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import { useOptionalAgentSessionTranscriptDialog } from "@/components/features/agents/agent-chat/agent-session-transcript-dialog-context";
-import { MemoizedTaskExecutionPanel } from "@/components/features/agents/task-execution-panel";
+import { useTaskExecutionToolTabs } from "@/components/features/agents/use-task-execution-tool-tabs";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { SessionPanel } from "@/features/session-panels";
 import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   type UseAgentsPageRightPanelModelArgs,
@@ -27,25 +28,25 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
   refreshWorktreeRef: WorktreeRefreshRef;
   renderPanel?: boolean;
 }): ReactElement | null {
-  const { rightPanelModel: panelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
+  const { toolsModel: baseToolsModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
   // The Git panel shows the branch switcher only for the repository root.
-  const rightPanelModel = useMemo(
-    () =>
-      panelModel && {
-        ...panelModel,
-        gitModel: {
-          ...panelModel.gitModel,
-          repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
-        },
+  const toolsModel = useMemo(
+    () => ({
+      ...baseToolsModel,
+      gitModel: {
+        ...baseToolsModel.gitModel,
+        repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
       },
-    [panelModel],
+    }),
+    [baseToolsModel],
   );
+  const toolTabs = useTaskExecutionToolTabs(toolsModel);
 
   const registerFileSaveHandler =
     useOptionalAgentSessionTranscriptDialog()?.registerFileSaveHandler;
   const repoPath = args.activeWorkspace?.repoPath ?? null;
   const taskId = args.selectedView.taskId;
-  const contextMode = rightPanelModel?.gitModel.contextMode;
+  const contextMode = toolsModel.gitModel.contextMode;
   useLayoutEffect(
     () =>
       registerFileSaveHandler?.((savedRepoPath, savedTaskId) => {
@@ -65,9 +66,7 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
     };
   }, [refreshWorktree, refreshWorktreeRef]);
 
-  return renderPanel && rightPanelModel ? (
-    <MemoizedTaskExecutionPanel model={rightPanelModel} />
-  ) : null;
+  return renderPanel ? <SessionPanel model={args.panel} toolTabs={toolTabs} /> : null;
 });
 
 export function AgentsPageBuildWorktreeRefreshRuntime({
@@ -75,7 +74,6 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   selectedView,
   refreshWorktreeRef,
 }: {
-  activeTabId: AgentStudioBuildWorktreeRefreshModel["activeTabId"];
   isPanelOpen: boolean;
   selectedView: AgentStudioBuildWorktreeRefreshModel["selectedView"];
   refreshWorktreeRef: WorktreeRefreshRef;

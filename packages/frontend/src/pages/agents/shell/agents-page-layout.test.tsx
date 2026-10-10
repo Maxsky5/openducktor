@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
+import {
+  createSessionPanelFixture,
+  createSessionPanelsFixture,
+} from "@/test-utils/session-panel-fixtures";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
 
 const render = (element: ReactElement) => {
@@ -27,8 +30,8 @@ const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
         { "data-testid": "mock-file-preview" },
         "Preview",
       ),
-      isRightPanelVisible: false,
       rightPanelContent: null,
+      rightPanel: createSessionPanelFixture({ isVisible: false }),
     }),
   );
 
@@ -64,7 +67,7 @@ describe("AgentsPageWorkspacePanes", () => {
   });
 });
 
-describe("AgentsPageWorkspace terminal visibility", () => {
+describe("AgentsPageWorkspace bottom panel visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
     const listeners = new Set<EventListener>();
@@ -85,35 +88,16 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       dispatchEvent: () => true,
     } satisfies MediaQueryList;
     window.matchMedia = () => mediaQueryList;
-    const terminalPanel: AgentStudioTerminalPanelModel = {
-      scopeKey: "repo:task-1",
-      isAvailable: true,
-      startBlockedReason: null,
-      tabs: [],
-      mountedTabs: [],
-      activeTabId: null,
-      isVisible: false,
-      isLoading: false,
-      isCreating: false,
-      discoveryError: null,
-      transportError: null,
-      platform: "darwin",
-      platformError: null,
-      focusRequest: 1,
-      controller: null,
-      onToggle: () => undefined,
-      onHide: () => undefined,
-      onSelectTab: () => undefined,
-      onCreate: () => undefined,
-      onRunAction: () => undefined,
-      onRetryDiscovery: () => undefined,
-      onRetryCreate: () => undefined,
-      onReorderTab: () => undefined,
-      onTitleChange: () => undefined,
-      onClose: async () => ({ closed: true }),
-      onLifecycle: () => undefined,
-      onForgotten: () => undefined,
-    };
+    const panelsFor = (isVisible: boolean) =>
+      createSessionPanelsFixture({
+        bottom: createSessionPanelFixture({
+          panel: "bottom",
+          tabs: [],
+          selectedTabId: null,
+          isVisible,
+          onHide: () => undefined,
+        }),
+      });
     const view = render(
       createElement(AgentsPageWorkspace, {
         unavailableTaskId: null,
@@ -123,9 +107,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: true,
         selectedFilePreviewContent: createElement(DraftPreviewHarness),
-        isRightPanelVisible: false,
         rightPanelContent: null,
-        terminalPanel,
+        panels: panelsFor(false),
       }),
     );
     const draft = view.getByRole("textbox", { name: "Draft preview" });
@@ -146,7 +129,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     expect(draft.value).toBe("unsaved draft");
   });
 
-  test("keeps the terminal panel mounted while hiding and reopening it", () => {
+  test("keeps the bottom panel mounted while hiding and reopening it", () => {
     window.matchMedia = (query: string) => ({
       matches: false,
       media: query,
@@ -157,35 +140,16 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
     });
-    const terminalPanel: AgentStudioTerminalPanelModel = {
-      scopeKey: "repo:task-1",
-      isAvailable: true,
-      startBlockedReason: null,
-      tabs: [],
-      mountedTabs: [],
-      activeTabId: null,
-      isVisible: true,
-      isLoading: false,
-      isCreating: false,
-      discoveryError: null,
-      transportError: null,
-      platform: "darwin",
-      platformError: null,
-      focusRequest: 1,
-      controller: null,
-      onToggle: () => undefined,
-      onHide: () => undefined,
-      onSelectTab: () => undefined,
-      onCreate: () => undefined,
-      onRunAction: () => undefined,
-      onRetryDiscovery: () => undefined,
-      onRetryCreate: () => undefined,
-      onReorderTab: () => undefined,
-      onTitleChange: () => undefined,
-      onClose: async () => ({ closed: true }),
-      onLifecycle: () => undefined,
-      onForgotten: () => undefined,
-    };
+    const panelsFor = (isVisible: boolean) =>
+      createSessionPanelsFixture({
+        bottom: createSessionPanelFixture({
+          panel: "bottom",
+          tabs: [],
+          selectedTabId: null,
+          isVisible,
+          onHide: () => undefined,
+        }),
+      });
     const renderWorkspace = (isVisible: boolean) =>
       createElement(AgentsPageWorkspace, {
         unavailableTaskId: null,
@@ -195,12 +159,11 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         chatContent: createElement("div", null, "Chat"),
         hasSelectedFilePreview: false,
         selectedFilePreviewContent: null,
-        isRightPanelVisible: false,
         rightPanelContent: null,
-        terminalPanel: { ...terminalPanel, isVisible },
+        panels: panelsFor(isVisible),
       });
     const view = render(renderWorkspace(false));
-    const panel = view.getByText("No terminals.");
+    const panel = view.getByLabelText("Open a tab");
     const workspacePanel = view.container.querySelector<HTMLElement>(
       "#agent-studio-workspace-panel",
     );
@@ -209,10 +172,10 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     );
     expect(workspacePanel?.style.flexGrow).toBe("100");
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
-    expect(view.queryByRole("separator", { name: "Resize terminal panel" })).toBeNull();
+    expect(view.queryByRole("separator", { name: "Resize bottom panel" })).toBeNull();
 
     view.rerender(renderWorkspace(true));
-    const separator = view.getByRole("separator", { name: "Resize terminal panel" });
+    const separator = view.getByRole("separator", { name: "Resize bottom panel" });
     expect(workspacePanel?.style.flexGrow).toBe("72");
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("28");
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
@@ -225,12 +188,12 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     view.rerender(renderWorkspace(false));
     expect(workspacePanel?.style.flexGrow).toBe("100");
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
-    expect(view.getByText("No terminals.")).toBe(panel);
+    expect(view.getByLabelText("Open a tab")).toBe(panel);
     view.rerender(renderWorkspace(true));
-    expect(view.getByText("No terminals.")).toBe(panel);
+    expect(view.getByLabelText("Open a tab")).toBe(panel);
   });
 
-  test("uses terminal mode at 767px and keeps a path back to the workspace", () => {
+  test("fills the page with the bottom panel at 767px and keeps a path back", () => {
     window.matchMedia = (query: string) => ({
       matches: query === "(max-width: 767px)",
       media: query,
@@ -245,35 +208,16 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     const onHide = () => {
       hideCount += 1;
     };
-    const terminalPanel: AgentStudioTerminalPanelModel = {
-      scopeKey: "repo:task-1",
-      isAvailable: true,
-      startBlockedReason: null,
-      tabs: [],
-      mountedTabs: [],
-      activeTabId: null,
-      isVisible: true,
-      isLoading: false,
-      isCreating: false,
-      discoveryError: null,
-      transportError: null,
-      platform: "darwin",
-      platformError: null,
-      focusRequest: 1,
-      controller: null,
-      onToggle: () => undefined,
-      onHide,
-      onSelectTab: () => undefined,
-      onCreate: () => undefined,
-      onRunAction: () => undefined,
-      onRetryDiscovery: () => undefined,
-      onRetryCreate: () => undefined,
-      onReorderTab: () => undefined,
-      onTitleChange: () => undefined,
-      onClose: async () => ({ closed: true }),
-      onLifecycle: () => undefined,
-      onForgotten: () => undefined,
-    };
+    const panelsFor = (isVisible: boolean) =>
+      createSessionPanelsFixture({
+        bottom: createSessionPanelFixture({
+          panel: "bottom",
+          tabs: [],
+          selectedTabId: null,
+          isVisible,
+          onHide: onHide,
+        }),
+      });
     const view = render(
       createElement(AgentsPageWorkspace, {
         unavailableTaskId: null,
@@ -283,9 +227,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         chatContent: createElement("div", { "data-testid": "narrow-chat" }, "Chat"),
         hasSelectedFilePreview: false,
         selectedFilePreviewContent: null,
-        isRightPanelVisible: false,
         rightPanelContent: null,
-        terminalPanel,
+        panels: panelsFor(true),
       }),
     );
     expect(view.getByRole("button", { name: "Back to workspace" })).toBeTruthy();
@@ -293,7 +236,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     expect(view.getByText("Session toolbar").closest("[data-panel]")).toBeNull();
     expect(view.getByText("Task workflow").closest("[hidden]")).toBeTruthy();
     expect(view.getByTestId("narrow-chat").closest("[hidden]")).toBeTruthy();
-    expect(view.getByText("No terminals.").closest("[hidden]")).toBeNull();
+    expect(view.getByLabelText("Open a tab").closest("[hidden]")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));
     expect(hideCount).toBe(1);
   });

@@ -60,7 +60,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       sessionAuxiliaryError: null,
     },
   },
-  activeTabId: "git",
+  isDiffsActive: true,
   isPanelOpen: true,
   repoSettings: null,
   repoSettingsError: null,
@@ -91,7 +91,7 @@ afterEach(() => {
 });
 
 describe("useAgentsPageBuildTools", () => {
-  test("loads git data only while the git tab of an open panel is active", async () => {
+  test("loads git data only while the Diffs tab of an open panel is active", async () => {
     const harness = createHookHarness(useAgentsPageBuildTools, createArgs());
     await harness.mount();
     expect(snapshotMock.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -99,13 +99,13 @@ describe("useAgentsPageBuildTools", () => {
       isRightPanelOpen: true,
     });
 
-    await harness.update(createArgs({ activeTabId: "document" }));
+    await harness.update(createArgs({ isDiffsActive: false }));
     expect(snapshotMock.mock.calls.at(-1)?.[0]).toMatchObject({
       isGitTabActive: false,
       isRightPanelOpen: true,
     });
 
-    await harness.update(createArgs({ isPanelOpen: false }));
+    await harness.update(createArgs({ isDiffsActive: false, isPanelOpen: false }));
     expect(snapshotMock.mock.calls.at(-1)?.[0]).toMatchObject({
       isGitTabActive: false,
       isRightPanelOpen: false,

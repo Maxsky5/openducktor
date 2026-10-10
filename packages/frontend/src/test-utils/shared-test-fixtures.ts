@@ -46,6 +46,8 @@ import type { HostRuntimeStatusMap, ObservedCheck } from "@/types/diagnostics";
 import type {
   ChecksStateContextValue,
   HostRuntimeStatusContextValue,
+  TasksStateContextValue,
+  WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 
@@ -597,6 +599,50 @@ export const createWorkspaceRecordFixture = (
   configuredWorktreeBasePath: null,
   defaultWorktreeBasePath: null,
   effectiveWorktreeBasePath: null,
+  ...overrides,
+});
+
+/** Current task state with no tasks. Operations do nothing unless a test overrides them. */
+export const createTasksStateFixture = (
+  overrides: Partial<TasksStateContextValue> = {},
+): TasksStateContextValue => ({
+  tasksAreCurrent: true,
+  isForegroundLoadingTasks: false,
+  isRefreshingTasksInBackground: false,
+  isLoadingTasks: false,
+  detectingPullRequestTaskId: null,
+  linkingMergedPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  pendingMergedPullRequest: null,
+  tasks: [],
+  refreshTasks: async () => undefined,
+  syncPullRequests: async () => undefined,
+  linkMergedPullRequest: async () => undefined,
+  cancelLinkMergedPullRequest: () => undefined,
+  unlinkPullRequest: async () => undefined,
+  createTask: async () => undefined,
+  updateTask: async () => undefined,
+  setTaskTargetBranch: async () => undefined,
+  deleteTask: async () => undefined,
+  closeTask: async () => undefined,
+  resetTaskImplementation: async () => undefined,
+  resetTask: async () => undefined,
+  transitionTask: async () => undefined,
+  humanApproveTask: async () => undefined,
+  humanRequestChangesTask: async () => undefined,
+  ...overrides,
+});
+
+/** Loaded and current workspace lists. */
+export const createWorkspacePresenceFixture = (
+  overrides: Partial<WorkspacePresenceContextValue> = {},
+): WorkspacePresenceContextValue => ({
+  hasWorkspaces: true,
+  hasLoadedWorkspaceList: true,
+  workspaceRecordsAreCurrent: true,
+  isLoadingWorkspaces: false,
+  workspaceLoadError: null,
+  retryWorkspaces: async () => {},
   ...overrides,
 });
 

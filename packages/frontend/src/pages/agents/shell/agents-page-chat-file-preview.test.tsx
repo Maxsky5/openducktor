@@ -10,6 +10,7 @@ import {
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionPanelsFixture } from "@/test-utils/session-panel-fixtures";
 import { AgentsPageLayout, type AgentsPageLayoutModel } from "./agents-page-layout";
 import * as modals from "./agents-page-modal-content";
 import {
@@ -42,7 +43,6 @@ function MainChatPreview() {
     onRetryNavigationPersistence: () => {},
     onRetryChatSettingsLoad: () => {},
     onRetryGitProviderContext: () => {},
-    rightPanelToggleModel: null,
     hasSelectedTask: true,
     unavailableTaskId: null,
     chatHeaderModel: createAgentStudioHeaderModelFixture(),
@@ -54,7 +54,6 @@ function MainChatPreview() {
       onSelectFile: preview.onSelectFile,
     },
     taskExecutionSelectedFilePreviewModel: preview.model,
-    isRightPanelVisible: false,
     rightPanelBridge: null,
     selectedFileRefresh: null,
     modalContent: {
@@ -70,35 +69,7 @@ function MainChatPreview() {
         },
       },
     },
-    terminalPanel: {
-      scopeKey: taskId,
-      isAvailable: false,
-      startBlockedReason: null,
-      tabs: [],
-      mountedTabs: [],
-      activeTabId: null,
-      isVisible: false,
-      isLoading: false,
-      isCreating: false,
-      discoveryError: null,
-      transportError: null,
-      platform: "darwin",
-      platformError: null,
-      focusRequest: 0,
-      controller: null,
-      onToggle: () => {},
-      onHide: () => {},
-      onSelectTab: () => {},
-      onCreate: () => {},
-      onRunAction: () => {},
-      onRetryDiscovery: () => {},
-      onRetryCreate: () => {},
-      onReorderTab: () => {},
-      onTitleChange: () => {},
-      onClose: async () => ({ closed: true }),
-      onLifecycle: () => {},
-      onForgotten: () => {},
-    },
+    panels: createSessionPanelsFixture(),
   };
   return (
     <>

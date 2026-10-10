@@ -3,14 +3,17 @@ import type { RepositoryGitProviderContext, SystemOpenInToolId } from "@openduck
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import type {
+  TaskExecutionDocumentPanelModel,
   TaskExecutionFileSelectionResult,
   TaskExecutionSelectedFile,
+  TaskExecutionToolsModel,
 } from "@/components/features/agents";
 import { useGitCommentDraftValidation } from "@/components/features/agents/agent-studio-git-panel/use-git-comment-draft-validation";
 import { useSessionComparisonControl } from "@/features/agent-studio-git/use-session-comparison";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { SessionPanelModel } from "@/features/session-panels";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
@@ -23,7 +26,6 @@ import {
 } from "@/state/queries/pull-request-review";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { buildTaskExecutionPanelModel } from "./use-agent-studio-right-panel";
 import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools";
 
 export type UseAgentsPageRightPanelModelArgs = {
@@ -31,12 +33,9 @@ export type UseAgentsPageRightPanelModelArgs = {
   /** The page shell owns the git state, so the chat header can read the same git conflict. */
   buildTools: AgentsPageBuildTools;
   selectedView: BuildToolsSelectedView;
-  tabs: Parameters<typeof buildTaskExecutionPanelModel>[0]["tabs"];
-  activeTabId: Parameters<typeof buildTaskExecutionPanelModel>[0]["activeTabId"];
-  onActiveTabChange: Parameters<typeof buildTaskExecutionPanelModel>[0]["onActiveTabChange"];
-  isPanelOpen: boolean;
+  panel: SessionPanelModel;
   pullRequestReviewUnavailableReason: string | null;
-  documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
+  documentsModel: TaskExecutionDocumentPanelModel | null;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
@@ -214,10 +213,7 @@ export function useAgentsPageRightPanelModel({
   activeWorkspace,
   buildTools,
   selectedView,
-  tabs,
-  activeTabId,
-  onActiveTabChange,
-  isPanelOpen,
+  panel,
   pullRequestReviewUnavailableReason,
   documentsModel,
   selectedFile,
@@ -229,6 +225,8 @@ export function useAgentsPageRightPanelModel({
   gitProviderReadError = null,
 }: UseAgentsPageRightPanelModelArgs) {
   const queryClient = useQueryClient();
+  // A tool view is active while its tab is selected in the shown right panel.
+  const { activeKind } = panel;
   const taskTargetControl = useSessionComparisonControl({
     repoPath: activeWorkspace?.repoPath ?? "__no_repo__",
     target: buildTools.buildToolsSnapshot.comparison?.target ?? null,
@@ -296,21 +294,20 @@ export function useAgentsPageRightPanelModel({
       ...fileExplorerRoot,
       targetBranch: fileExplorerTargetBranch,
       branchKey: fileExplorerBranchKey,
-      isActive: activeTabId === "file_explorer" && isPanelOpen,
+      isActive: activeKind === "files",
       selectedFile,
       onSelectFile,
     }),
     [
-      activeTabId,
+      activeKind,
       fileExplorerRoot,
       fileExplorerTargetBranch,
       fileExplorerBranchKey,
-      isPanelOpen,
       onSelectFile,
       selectedFile,
     ],
   );
-  const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");
+  const hasCiChecksTab = panel.tabs.some((tab) => tab.kind === "ci_checks");
   const linkedPullRequestProviderId = selectedView.selectedTask?.pullRequest?.providerId ?? null;
   const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
   const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
@@ -351,18 +348,12 @@ export function useAgentsPageRightPanelModel({
     () =>
       hasCiChecksTab
         ? {
-            isActive: activeTabId === "ci_checks" && isPanelOpen,
+            isActive: activeKind === "ci_checks",
             queryInput: ciReviewQueryInput,
             unavailableReason: pullRequestReviewUnavailableReason,
           }
         : null,
-    [
-      activeTabId,
-      ciReviewQueryInput,
-      hasCiChecksTab,
-      isPanelOpen,
-      pullRequestReviewUnavailableReason,
-    ],
+    [activeKind, ciReviewQueryInput, hasCiChecksTab, pullRequestReviewUnavailableReason],
   );
   const refreshWorktree = useCallback<GitDiffRefresh>(
     async (mode): Promise<void> => {
@@ -450,31 +441,15 @@ export function useAgentsPageRightPanelModel({
   ]);
   useGitCommentDraftValidation(diffModel);
 
-  const rightPanelModel = useMemo(
-    () =>
-      buildTaskExecutionPanelModel({
-        tabs,
-        activeTabId,
-        documentModel: documentsModel,
-        diffModel,
-        fileExplorerModel,
-        ciChecksModel,
-        onActiveTabChange,
-      }),
-    [
-      activeTabId,
-      ciChecksModel,
-      diffModel,
-      documentsModel,
+  const toolsModel = useMemo<TaskExecutionToolsModel>(
+    () => ({
+      documentModel: documentsModel,
+      gitModel: diffModel,
       fileExplorerModel,
-      onActiveTabChange,
-      tabs,
-    ],
+      ciChecksModel,
+    }),
+    [ciChecksModel, diffModel, documentsModel, fileExplorerModel],
   );
 
-  return {
-    isRightPanelVisible: Boolean(activeTabId && isPanelOpen),
-    rightPanelModel,
-    refreshWorktree,
-  };
+  return { toolsModel, refreshWorktree };
 }

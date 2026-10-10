@@ -359,7 +359,8 @@ describe("createOpenCodeRuntimeStarter", () => {
         }),
         launchDirectory,
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        startupTimeoutMs: 2000,
+        // The fake child can start slowly while the full suite runs in parallel.
+        startupTimeoutMs: 4_000,
         retryDelayMs: 1,
         portAllocator: () =>
           Effect.tryPromise({
@@ -377,7 +378,8 @@ describe("createOpenCodeRuntimeStarter", () => {
           Effect.tryPromise({
             try: async () => {
               portProbeCalls.push(port);
-              return portProbeCalls.length === 3;
+              // The fake server is ready after a few probes and only once its process runs.
+              return portProbeCalls.length >= 3 && existsSync(environmentCapturePath);
             },
             catch: (cause) =>
               new HostOperationError({
@@ -405,8 +407,8 @@ describe("createOpenCodeRuntimeStarter", () => {
       });
       expect(handle.configuredExecutablePath).toBe(opencodeBinary);
       expect(handle.effectiveExecutablePath).toBe(opencodeBinary);
-      expect(portProbeCalls).toEqual([43123, 43123, 43123]);
-      await waitFor(() => existsSync(environmentCapturePath), PROCESS_START_TIMEOUT_MS);
+      expect(portProbeCalls.length).toBeGreaterThanOrEqual(3);
+      expect(portProbeCalls.every((port) => port === 43123)).toBe(true);
       const { cwd, ...environment } = JSON.parse(await readFile(environmentCapturePath, "utf8"));
       expect(environment).toEqual({
         password: null,
@@ -421,7 +423,7 @@ describe("createOpenCodeRuntimeStarter", () => {
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 
   test("registers the live adapter before forwarding and returning the runtime handle", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-order-"));

@@ -3,6 +3,8 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { AgentsPageRightPanelRuntime } from "../shell/agents-page-right-panel-runtime";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { ToolTabKind } from "@/features/session-panels";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import {
   createDialogPreviewHarness,
   dialogTextFile,
@@ -169,6 +171,16 @@ afterEach(() => {
   testSpies = [];
 });
 
+const DEFAULT_TABS: ToolTabKind[] = ["document", "diffs", "files"];
+const CI_TABS: ToolTabKind[] = ["diffs", "files", "ci_checks"];
+
+const rightPanel = (selected: ToolTabKind, isVisible: boolean, kinds = DEFAULT_TABS) =>
+  createSessionPanelFixture({
+    tabs: kinds.map((kind) => ({ id: kind, kind })),
+    selectedTabId: selected,
+    isVisible,
+  });
+
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
     workspaceId: "workspace-repo",
@@ -180,16 +192,9 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     gitActions: createGitActionsFixture(null),
   }),
   selectedView: createSelectedView(),
-  tabs: [
-    { id: "document", label: "Document" },
-    { id: "git", label: "Git" },
-    { id: "file_explorer", label: "File explorer" },
-  ],
-  activeTabId: "document",
-  onActiveTabChange: () => {},
-  isPanelOpen: false,
+  panel: rightPanel("document", false),
   pullRequestReviewUnavailableReason: null,
-  documentsModel: { activeDocument: null },
+  documentsModel: null,
   selectedFile: null,
   onSelectFile: () => {},
   detectingPullRequestTaskId: null,
@@ -231,7 +236,7 @@ describe("useAgentsPageRightPanelModel", () => {
     });
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
-      createHookArgs({ activeTabId: "file_explorer" }),
+      createHookArgs({ panel: rightPanel("files", false) }),
     );
     try {
       await harness.mount();
@@ -249,7 +254,7 @@ describe("useAgentsPageRightPanelModel", () => {
     const queryClient = createQueryClient();
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
-      createHookArgs({ activeTabId: "file_explorer", isPanelOpen: true }),
+      createHookArgs({ panel: rightPanel("files", true) }),
       { queryClient },
     );
     let head = "head-before";
@@ -280,7 +285,7 @@ describe("useAgentsPageRightPanelModel", () => {
 
     try {
       await harness.mount();
-      const model = harness.getLatest().rightPanelModel?.fileExplorerModel;
+      const model = harness.getLatest().toolsModel.fileExplorerModel;
       if (!model?.rootPath) throw new Error("Expected a file explorer root.");
       const options = workspaceFileTreeQueryOptions(
         model.rootPath,
@@ -304,7 +309,7 @@ describe("useAgentsPageRightPanelModel", () => {
 
   test("gives the git panel a new subject key only for another workspace, task, or session", async () => {
     const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
-    const subjectKey = () => harness.getLatest().rightPanelModel?.gitModel.subjectKey;
+    const subjectKey = () => harness.getLatest().toolsModel.gitModel.subjectKey;
     await harness.mount();
     const firstKey = subjectKey();
     expect(firstKey).toBeString();
@@ -344,13 +349,7 @@ describe("useAgentsPageRightPanelModel", () => {
             pullRequest: linkedPullRequest,
           }),
         }),
-        tabs: [
-          { id: "git", label: "Git" },
-          { id: "file_explorer", label: "File explorer" },
-          { id: "ci_checks", label: "CI Checks" },
-        ],
-        activeTabId: "git",
-        isPanelOpen: false,
+        panel: rightPanel("diffs", false, CI_TABS),
       }),
       { queryClient },
     );
@@ -389,8 +388,7 @@ describe("useAgentsPageRightPanelModel", () => {
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({
-        activeTabId: "file_explorer",
-        isPanelOpen: true,
+        panel: rightPanel("files", true),
         selectedFile,
       }),
       { queryClient },
@@ -424,14 +422,14 @@ describe("useAgentsPageRightPanelModel", () => {
     queryClient.setQueryData(textKey, { kind: "text" });
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
-      createHookArgs({ activeTabId: "git", isPanelOpen: true, selectedFile }),
+      createHookArgs({ panel: rightPanel("diffs", true), selectedFile }),
       { queryClient },
     );
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.rightPanelModel?.gitModel.refresh();
+        await state.toolsModel.gitModel.refresh();
       });
 
       expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
@@ -447,12 +445,7 @@ describe("useAgentsPageRightPanelModel", () => {
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({
-        tabs: [
-          { id: "git", label: "Git" },
-          { id: "file_explorer", label: "File explorer" },
-          { id: "ci_checks", label: "CI Checks" },
-        ],
-        activeTabId: "git",
+        panel: rightPanel("diffs", false, CI_TABS),
       }),
     );
 
@@ -474,13 +467,7 @@ describe("useAgentsPageRightPanelModel", () => {
             pullRequest: linkedPullRequest,
           }),
         }),
-        tabs: [
-          { id: "git", label: "Git" },
-          { id: "file_explorer", label: "File explorer" },
-          { id: "ci_checks", label: "CI Checks" },
-        ],
-        activeTabId: "ci_checks",
-        isPanelOpen: true,
+        panel: rightPanel("ci_checks", true, CI_TABS),
         pullRequestReviewUnavailableReason: readError,
       }),
     );
@@ -488,7 +475,7 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.mount();
 
     expect(prefetchPullRequestReviewContextMock).not.toHaveBeenCalled();
-    expect(harness.getLatest().rightPanelModel?.ciChecksModel).toMatchObject({
+    expect(harness.getLatest().toolsModel.ciChecksModel).toMatchObject({
       queryInput: null,
       unavailableReason: readError,
     });

@@ -1,10 +1,10 @@
+import type { RepoAction } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Play } from "lucide-react";
 import type { ReactElement } from "react";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { TerminalPanelModel } from "@/features/terminals/use-terminals";
 import { errorMessage } from "@/lib/errors";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -12,7 +12,7 @@ import { RepoActionsSplitButton } from "./repo-actions-split-button";
 
 type Props = {
   workspace: Pick<ActiveWorkspace, "workspaceId" | "repoPath">;
-  terminal: Pick<TerminalPanelModel, "startBlockedReason" | "onRunAction">;
+  terminal: { startBlockedReason: string | null; onRunAction: (action: RepoAction) => void };
 };
 
 /** The session top bar control that runs repository actions in new terminals. */

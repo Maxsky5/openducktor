@@ -5,6 +5,7 @@
 @import "./components/ui/tooltip.css";
 @import "./components/ui/icon-swap.css";
 @import "./components/layout/sidebar/session-navigation.css";
+@import "./features/session-panels/session-panel-split.css";
 @source "./";
 @custom-variant dark (&:where(.dark, .dark *));
 @plugin "@tailwindcss/typography";

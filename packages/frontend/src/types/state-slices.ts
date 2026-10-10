@@ -151,6 +151,8 @@ export type WorkspaceBranchStateContextValue = Pick<
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
   hasLoadedWorkspaceList: boolean;
+  /** True when the open and closed workspace lists both loaded and neither list is fetching. */
+  workspaceRecordsAreCurrent: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
   retryWorkspaces: () => Promise<void>;

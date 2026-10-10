@@ -120,6 +120,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
 export const createAgentStudioHeaderModelFixture = (): AgentStudioHeaderModel => ({
   taskTitle: "Task 1",
   taskId: "task-1",
+  pullRequest: null,
   onOpenTaskDetails: () => {},
   selectedRole: "planner",
   workflowSteps: [],

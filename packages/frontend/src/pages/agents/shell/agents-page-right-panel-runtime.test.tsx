@@ -59,7 +59,6 @@ afterEach(() => {
 
 test("observes builder mutations while the file explorer tab is active", () => {
   const props = {
-    activeTabId: "file_explorer",
     isPanelOpen: true,
     selectedView: { role: "build", loadedSession: null },
     refreshWorktreeRef: { current: async () => {} },

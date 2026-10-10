@@ -6,8 +6,9 @@ import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtur
 import { AGENT_ROLE_LABELS } from "@/types";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
-  buildActiveDocumentForRole,
+  buildTaskExecutionDocuments,
   buildWorkflowModelContext,
+  DEFAULT_TASK_DOCUMENT_BY_ROLE,
 } from "./use-agent-studio-page-model-builders";
 
 const createDoc = (markdown: string): TaskDocumentState => ({
@@ -32,43 +33,31 @@ const selectedIdentityFromSession = (session: AgentSessionSummary | null = null)
   session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
-  test("buildActiveDocumentForRole maps documents by role", () => {
-    const specDoc = createDoc("spec");
-    const planDoc = createDoc("plan");
-    const qaDoc = createDoc("qa");
+  test("buildTaskExecutionDocuments keeps each task document in its own slot", () => {
+    const documents = buildTaskExecutionDocuments({
+      specDoc: createDoc("spec"),
+      planDoc: createDoc("plan"),
+      qaDoc: createDoc("qa"),
+    });
 
-    expect(
-      buildActiveDocumentForRole({
-        activeRole: "spec",
-        specDoc,
-        planDoc,
-        qaDoc,
-      })?.title,
-    ).toBe("Specification");
-    expect(
-      buildActiveDocumentForRole({
-        activeRole: "planner",
-        specDoc,
-        planDoc,
-        qaDoc,
-      })?.title,
-    ).toBe("Implementation Plan");
-    expect(
-      buildActiveDocumentForRole({
-        activeRole: "qa",
-        specDoc,
-        planDoc,
-        qaDoc,
-      })?.title,
-    ).toBe("QA Report");
-    expect(
-      buildActiveDocumentForRole({
-        activeRole: "build",
-        specDoc,
-        planDoc,
-        qaDoc,
-      }),
-    ).toBeNull();
+    expect(documents.spec).toMatchObject({
+      title: "Specification",
+      document: { markdown: "spec" },
+    });
+    expect(documents.plan).toMatchObject({
+      title: "Implementation Plan",
+      document: { markdown: "plan" },
+    });
+    expect(documents.qa).toMatchObject({ title: "QA Report", document: { markdown: "qa" } });
+  });
+
+  test("shows the plan first for Planner and Builder sessions", () => {
+    expect(DEFAULT_TASK_DOCUMENT_BY_ROLE).toEqual({
+      spec: "spec",
+      planner: "plan",
+      build: "plan",
+      qa: "qa",
+    });
   });
 
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {

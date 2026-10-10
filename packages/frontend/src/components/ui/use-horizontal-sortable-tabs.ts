@@ -32,6 +32,14 @@ export const horizontalTabSortTransition = {
 const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };
 const horizontalTabModifiers: [typeof restrictToHorizontalAxis] = [restrictToHorizontalAxis];
 
+const TAB_DRAG_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
+
+/** The drag sensors of tab strips. A drag starts after 6 px, so a click still selects the tab. */
+export const useTabDragSensors = () => {
+  const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
+  return useSensors(useSensor(PrimarySensor, TAB_DRAG_SENSOR_OPTIONS));
+};
+
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   if (frameRef.current === null) return;
   globalThis.cancelAnimationFrame(frameRef.current);
@@ -45,12 +53,7 @@ export const useHorizontalSortableTabs = ({
   itemIds: string[];
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 }) => {
-  const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
-  const sensors = useSensors(
-    useSensor(PrimarySensor, {
-      activationConstraint: { distance: 6 },
-    }),
-  );
+  const sensors = useTabDragSensors();
   const [activeId, setActiveId] = useState<string | null>(null);
   const suppressedSelectionIdRef = useRef<string | null>(null);
   const selectionSuppressionFrameRef = useRef<number | null>(null);

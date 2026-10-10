@@ -1,6 +1,9 @@
 import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { TaskExecutionDocument } from "@/components/features/agents";
+import type {
+  TaskDocumentKind,
+  TaskExecutionDocuments,
+} from "@/components/features/agents/task-execution-document-panel";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -143,45 +146,38 @@ export const buildWorkflowModelContext = ({
   };
 };
 
-type BuildActiveDocumentForRoleArgs = {
-  activeRole: AgentRole;
+type BuildTaskExecutionDocumentsArgs = {
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
   qaDoc: TaskDocumentState;
 };
 
-export const buildActiveDocumentForRole = ({
-  activeRole,
+/** The document that the Document tab shows first for each role session. */
+export const DEFAULT_TASK_DOCUMENT_BY_ROLE = {
+  spec: "spec",
+  planner: "plan",
+  build: "plan",
+  qa: "qa",
+} satisfies Record<AgentRole, TaskDocumentKind>;
+
+export const buildTaskExecutionDocuments = ({
   specDoc,
   planDoc,
   qaDoc,
-}: BuildActiveDocumentForRoleArgs): TaskExecutionDocument | null => {
-  if (activeRole === "spec") {
-    return {
-      title: "Specification",
-      description: "Current spec document for this task.",
-      emptyState: "No spec document yet.",
-      document: specDoc,
-    };
-  }
-
-  if (activeRole === "planner") {
-    return {
-      title: "Implementation Plan",
-      description: "Current implementation plan for this task.",
-      emptyState: "No implementation plan yet.",
-      document: planDoc,
-    };
-  }
-
-  if (activeRole === "qa") {
-    return {
-      title: "QA Report",
-      description: "Latest QA report for this task.",
-      emptyState: "No QA report yet.",
-      document: qaDoc,
-    };
-  }
-
-  return null;
-};
+}: BuildTaskExecutionDocumentsArgs): TaskExecutionDocuments => ({
+  spec: {
+    title: "Specification",
+    emptyState: "No spec document yet.",
+    document: specDoc,
+  },
+  plan: {
+    title: "Implementation Plan",
+    emptyState: "No implementation plan yet.",
+    document: planDoc,
+  },
+  qa: {
+    title: "QA Report",
+    emptyState: "No QA report yet.",
+    document: qaDoc,
+  },
+});

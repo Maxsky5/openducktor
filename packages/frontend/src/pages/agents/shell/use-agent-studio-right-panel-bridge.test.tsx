@@ -7,6 +7,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import { createBuildToolsFixture } from "./agents-page-build-tools.test-support";
 import { useAgentStudioRightPanelBridge } from "./use-agent-studio-right-panel-bridge";
 
@@ -14,18 +15,16 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRightPanelBridge>[0];
 
-const createPanelState = (panel: Partial<HookArgs["panel"]> = {}): HookArgs["panel"] => ({
-  tabs: [
-    { id: "document", label: "Document" },
-    { id: "git", label: "Git" },
-    { id: "file_explorer", label: "File explorer" },
-  ],
-  activeTabId: "git",
-  isPanelOpen: true,
-  onActiveTabChange: mock(() => {}),
-  pullRequestReviewUnavailableReason: null,
-  ...panel,
-});
+const createPanelState = (panel: Partial<HookArgs["panel"]> = {}): HookArgs["panel"] =>
+  createSessionPanelFixture({
+    tabs: [
+      { id: "document", kind: "document" },
+      { id: "diffs", kind: "diffs" },
+      { id: "files", kind: "files" },
+    ],
+    selectedTabId: "diffs",
+    ...panel,
+  });
 
 const createSelectionView = (
   overrides: Partial<HookArgs["selection"]["view"]> = {},
@@ -82,9 +81,8 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     view: createSelectionView(),
   },
   panel: createPanelState(),
-  documentsModel: {
-    activeDocument: null,
-  },
+  pullRequestReviewUnavailableReason: null,
+  documentsModel: null,
   selectedFile: null,
   onSelectFile: mock(() => {}),
   setTaskTargetBranch: mock(async () => undefined),
@@ -105,7 +103,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.isRightPanelVisible).toBe(true);
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.isPanelOpen).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(args.activeWorkspace);
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe("task-1");
       expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
@@ -119,24 +117,32 @@ describe("useAgentStudioRightPanelBridge", () => {
     }
   });
 
-  test("omits bridge props when no tab is selected", async () => {
+  test("omits bridge props without a selected task", async () => {
     const harness = createHookHarness(
-      createArgs({
-        panel: createPanelState({
-          tabs: [],
-          activeTabId: null,
-          isPanelOpen: true,
-          onActiveTabChange: mock(() => {}),
-        }),
-      }),
+      createArgs({ selection: { view: createSelectionView({ taskId: "", selectedTask: null }) } }),
     );
 
     try {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.isRightPanelVisible).toBe(false);
       expect(state.rightPanelBridge).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the bridge for an empty right panel, which shows the New tab launcher", async () => {
+    const harness = createHookHarness(
+      createArgs({ panel: createPanelState({ tabs: [], selectedTabId: null }) }),
+    );
+
+    try {
+      await harness.mount();
+
+      const state = harness.getLatest();
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.isPanelOpen).toBe(true);
+      expect(state.rightPanelBridge?.rightPanel.panel.tabs).toEqual([]);
     } finally {
       await harness.unmount();
     }
@@ -145,16 +151,7 @@ describe("useAgentStudioRightPanelBridge", () => {
   test("keeps refresh bridge props when the selected panel is closed", async () => {
     const harness = createHookHarness(
       createArgs({
-        panel: createPanelState({
-          tabs: [
-            { id: "document", label: "Document" },
-            { id: "git", label: "Git" },
-            { id: "file_explorer", label: "File explorer" },
-          ],
-          activeTabId: "git",
-          isPanelOpen: false,
-          onActiveTabChange: mock(() => {}),
-        }),
+        panel: createPanelState({ isVisible: false }),
       }),
     );
 
@@ -162,8 +159,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.isRightPanelVisible).toBe(false);
-      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.isPanelOpen).toBe(false);
       expect(state.selectedFileRefresh).toBeNull();
     } finally {
       await harness.unmount();
@@ -179,10 +175,9 @@ describe("useAgentStudioRightPanelBridge", () => {
       createArgs({
         selectedFile,
         panel: createPanelState({
-          tabs: [{ id: "file_explorer", label: "File explorer" }],
-          activeTabId: "file_explorer",
-          isPanelOpen: false,
-          onActiveTabChange: mock(() => {}),
+          tabs: [{ id: "files", kind: "files" }],
+          selectedTabId: "files",
+          isVisible: false,
         }),
       }),
     );
@@ -191,8 +186,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.isRightPanelVisible).toBe(false);
-      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.isPanelOpen).toBe(false);
       expect(state.selectedFileRefresh).toEqual({
         selectedFile,
         selectedView: {

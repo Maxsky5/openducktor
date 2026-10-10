@@ -1,12 +1,9 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import { GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import type { DiffDataState } from "@/features/agent-studio-git";
 import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
-import { SharedToolsPanel, type SharedToolsPanelModel } from "./shared-tools-panel";
-import type { WorkspaceToolsTabId } from "./use-workspace-session-tools";
 
 export function WorkspaceSessionGitTools({
   actions,
@@ -21,7 +18,6 @@ export function WorkspaceSessionGitTools({
   workingDirectory,
   isFetchingTarget,
   refresh,
-  tools,
 }: WorkspaceSessionGitToolsProps): ReactElement {
   const model: AgentStudioGitPanelModel = {
     ...diffData,
@@ -61,23 +57,12 @@ export function WorkspaceSessionGitTools({
       ? null
       : "The selected working directory is unavailable.",
   };
-  return (
-    <SharedToolsPanel
-      model={{
-        ...tools,
-        tabs: [
-          { id: "git", label: "Git", icon: GitBranch, content: <GitPanel {...model} /> },
-          ...tools.tabs,
-        ],
-      }}
-    />
-  );
+  return <GitPanel {...model} />;
 }
 
 type WorkspaceSessionGitToolsProps = {
   actions: ReturnType<typeof useAgentStudioGitActions>;
   commentOwner: Extract<InlineCommentOwner, { kind: "workspace_session" }>;
-  tools: SharedToolsPanelModel<WorkspaceToolsTabId>;
   control: ReturnType<
     typeof import("@/features/agent-studio-git/use-session-comparison").useSessionComparisonControl
   >;
@@ -92,7 +77,7 @@ type WorkspaceSessionGitToolsProps = {
   refresh: () => Promise<void>;
 };
 
-// Keep tab and file explorer updates from redrawing unchanged Git data.
+// Keep file explorer updates from redrawing unchanged Git data.
 const GitPanel = memo(function GitPanel(model: AgentStudioGitPanelModel): ReactElement {
   return <AgentStudioGitPanel model={model} />;
 });

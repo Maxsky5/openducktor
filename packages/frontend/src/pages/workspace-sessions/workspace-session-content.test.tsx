@@ -36,14 +36,16 @@ import { buildQuestionRequest } from "@/components/features/agents/agent-chat/ag
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
-  type WorkspaceSessionPanelState,
 } from "./workspace-session-content";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 
 function mockTools(
   renderTools: (props: Parameters<typeof toolsModule.useWorkspaceSessionTools>[0]) => ReactElement,
 ) {
   return spyOn(toolsModule, "useWorkspaceSessionTools").mockImplementation((props) => ({
-    toolsContent: renderTools(props),
+    diffsContent: <></>,
+    filesContent: renderTools(props),
     refresh: null,
   }));
 }
@@ -86,7 +88,7 @@ function renderClosedSession(
   branch: string | null | undefined,
   revision?: string,
   sessionRecord: WorkspaceSession = record,
-  selectedFile: WorkspaceSessionPanelState["selectedFile"] = {
+  selectedFile: TaskExecutionSelectedFile | null = {
     rootPath: sessionRecord.executionTarget.workingDirectory,
     relativePath: "file.ts",
   },
@@ -127,12 +129,12 @@ function renderClosedSession(
               workspace={currentWorkspace}
               record={currentRecord}
               sessionIds={sessionIds}
-              panelState={{
-                isOpen: panelOpen,
-                activeTabId: "file_explorer",
-                selectedFile: currentFile,
-              }}
-              onPanelStateChange={() => {}}
+              rightPanel={createSessionPanelFixture({
+                isVisible: panelOpen,
+                selectedTabId: "files",
+              })}
+              selectedFile={currentFile}
+              onSelectedFileChange={() => {}}
               {...(onSafeToLeave ? { onSafeToLeave } : {})}
             />
           </Tabs>
@@ -143,7 +145,7 @@ function renderClosedSession(
   const view = render(content(branch, revision));
   return {
     ...view,
-    setSession: (next: WorkspaceSession, file: WorkspaceSessionPanelState["selectedFile"]) => {
+    setSession: (next: WorkspaceSession, file: TaskExecutionSelectedFile | null) => {
       currentRecord = next;
       currentFile = file;
       if (!sessionIds.includes(next.id)) sessionIds = [...sessionIds, next.id];
@@ -754,8 +756,9 @@ test("the tools panel stays beside the chat", () => {
               workspace={workspace}
               record={record}
               sessionIds={[record.id]}
-              panelState={{ isOpen: true, activeTabId: "git", selectedFile: null }}
-              onPanelStateChange={() => {}}
+              rightPanel={createSessionPanelFixture()}
+              selectedFile={null}
+              onSelectedFileChange={() => {}}
             />
           </Tabs>
         </WorkspacePreviewTransitionGuardProvider>
@@ -766,7 +769,8 @@ test("the tools panel stays beside the chat", () => {
     const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
     expect(panels.length).toBe(2);
     expect(screen.getByText("Chat").closest('[data-slot="resizable-panel"]')).toBe(panels.item(0));
-    expect(panels[1]?.textContent).toBe("Tools");
+    expect(panels[0]?.textContent).not.toContain("Tools");
+    expect(panels[1]?.textContent).toContain("Tools");
   } finally {
     view.unmount();
     queryClient.clear();

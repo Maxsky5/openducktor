@@ -182,6 +182,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     systemListOpenInTools: systemClient.systemListOpenInTools.bind(systemClient),
     systemOpenDirectoryInTool: systemClient.systemOpenDirectoryInTool.bind(systemClient),
     tasksList: taskClient.tasksList.bind(taskClient),
+    taskIdsList: taskClient.taskIdsList.bind(taskClient),
     issueItemsList: taskClient.issueItemsList.bind(taskClient),
     issueItemGet: taskClient.issueItemGet.bind(taskClient),
     issueImageGet: taskClient.issueImageGet.bind(taskClient),

@@ -1,67 +1,23 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { TerminalSummary } from "@openducktor/contracts";
+import { describe, expect, test } from "bun:test";
+import {
+  encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalActivityMessage,
+  type TerminalSummary,
+} from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
-import { useQueryClient } from "@tanstack/react-query";
-import { act, render, waitFor } from "@testing-library/react";
-import type { TerminalTab } from "@/features/terminals";
-import { terminalTabLabel } from "@/features/terminals/terminal-presentation-state";
-import { QueryProvider } from "@/lib/query-provider";
-import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
-
-if (globalThis.document === undefined) {
-  GlobalRegistrator.register();
-}
-
-const summaryForTask = (taskId: string): TerminalSummary => ({
-  terminalId: `terminal-${taskId}`,
-  label: "Shell 1",
-  context: { repoPath: "/repo", taskId },
-  initialWorkingDir: `/repo/worktrees/${taskId}`,
-  createdAt: "2026-07-13T00:00:00.000Z",
-  lifecycle: "running",
-  exit: null,
-  startedBy: "user",
-});
-
-const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
-  if (!tab) throw new Error("Expected a terminal tab.");
-  return tab;
-};
-
-type TerminalTestDependencies = NonNullable<Parameters<typeof useAgentStudioTerminals>[1]>;
-
-const createTerminalTestDependencies = (): TerminalTestDependencies => {
-  const unavailable = createUnavailableShellBridge();
-  return {
-    hostClient: {
-      ...unavailable.client,
-      systemGetPlatform: async () => "darwin",
-      terminalList: async ({ filter }) => {
-        const taskId = filter.kind === "task" ? filter.taskId : "unassociated";
-        return { hostInstanceId: "host-1", terminals: [summaryForTask(taskId)] };
-      },
-      taskWorktreeGet: async (_repoPath, taskId) => ({
-        workingDirectory: `/repo/worktrees/${taskId}`,
-      }),
-    },
-    terminalBridge: {
-      connect: async (_onFrame, onStateChange) => {
-        onStateChange("connected");
-        return { send: async () => undefined, close: () => undefined };
-      },
-    },
-  };
-};
-
-beforeEach(() => {
-  localStorage.clear();
-});
-
-afterEach(() => {
-  localStorage.clear();
-});
+import { act, waitFor } from "@testing-library/react";
+import { terminalTabLabel } from "@/features/terminals";
+import {
+  bottomEntryId,
+  bottomTerminalIds,
+  createTerminalTestDependencies,
+  renderTaskTerminalPanels,
+  requireTab,
+  selectedBottomTerminal,
+  summaryForTask,
+  type TerminalTestDependencies,
+} from "./agent-studio-terminals-test-harness";
 
 describe("useAgentStudioTerminals", () => {
   test("reloads the task worktree when the task version changes", async () => {
@@ -77,112 +33,51 @@ describe("useAgentStudioTerminals", () => {
         },
       },
     };
-    const Harness = ({ taskVersion }: { taskVersion: string }) => {
-      useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness taskVersion="version-1" />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies, { taskVersion: "version-1" });
     try {
       await waitFor(() => expect(worktreeReads).toBe(1));
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness taskVersion="version-2" />
-        </QueryProvider>,
-      );
+      view.update({ taskVersion: "version-2" });
       await waitFor(() => expect(worktreeReads).toBe(2));
     } finally {
       view.unmount();
     }
   });
 
-  test("uses workspace identity for terminal presentation scopes", async () => {
-    const dependencies = createTerminalTestDependencies();
-    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
-    const Harness = ({ workspaceId }: { workspaceId: string }) => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId,
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness workspaceId="workspace-a" />
-      </QueryProvider>,
-    );
-
+  test("uses the panel layout owner of the task as the terminal scope", async () => {
+    const view = renderTaskTerminalPanels(createTerminalTestDependencies(), {
+      workspaceId: "workspace-a",
+    });
     try {
-      await waitFor(() => expect(latest?.scopeKey).toBe(JSON.stringify(["workspace-a", "task-a"])));
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness workspaceId="workspace-b" />
-        </QueryProvider>,
+      await waitFor(() =>
+        expect(view.terminals().scopeKey).toBe(JSON.stringify(["workspace-a", "task", "task-a"])),
       );
-      await waitFor(() => expect(latest?.scopeKey).toBe(JSON.stringify(["workspace-b", "task-a"])));
+      view.update({ workspaceId: "workspace-b" });
+      await waitFor(() =>
+        expect(view.terminals().scopeKey).toBe(JSON.stringify(["workspace-b", "task", "task-a"])),
+      );
     } finally {
       view.unmount();
     }
   });
 
-  test("reopens the panel when the host lists existing task terminals", async () => {
-    const dependencies = createTerminalTestDependencies();
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+  test("opens the bottom panel when the host lists existing task terminals", async () => {
+    const view = renderTaskTerminalPanels(createTerminalTestDependencies());
     try {
-      await waitFor(() => expect(getLatest().isLoading).toBe(false));
-
-      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-a"]);
-      expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
-      expect(getLatest().isVisible).toBe(true);
+      await waitFor(() => expect(view.terminals().isLoading).toBe(false));
+      await waitFor(() => expect(bottomTerminalIds(view.panels())).toEqual(["terminal-task-a"]));
+      expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-task-a");
+      expect(view.panels().bottom.isVisible).toBe(true);
+      expect(view.panels().right.tabs.map((tab) => tab.kind)).toEqual([
+        "document",
+        "diffs",
+        "files",
+      ]);
     } finally {
       view.unmount();
     }
   });
 
-  test("opening an empty terminal panel creates and selects a terminal", async () => {
+  test("opening an empty bottom panel creates and selects a terminal", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals: TerminalSummary[] = [];
     let createCalls = 0;
@@ -202,45 +97,20 @@ describe("useAgentStudioTerminals", () => {
         },
       },
     };
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
       await waitFor(() => {
-        expect(getLatest().isLoading).toBe(false);
-        expect(getLatest().tabs).toEqual([]);
+        expect(view.terminals().isLoading).toBe(false);
+        expect(view.terminals().tabs).toEqual([]);
       });
 
-      act(() => getLatest().onToggle());
+      act(() => view.panels().bottomToggle.onToggle());
 
       await waitFor(
         () => {
           expect(createCalls).toBe(1);
-          expect(getLatest().isVisible).toBe(true);
-          expect(getLatest().tabs[0]?.terminalId).toBe("terminal-created");
-          expect(getLatest().activeTabId).toBe(getLatest().tabs[0]?.tabId ?? null);
+          expect(view.panels().bottom.isVisible).toBe(true);
+          expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-created");
         },
         { timeout: 2_000 },
       );
@@ -251,59 +121,30 @@ describe("useAgentStudioTerminals", () => {
 
   test("uses the worktree path while a new terminal is being created", async () => {
     const baseDependencies = createTerminalTestDependencies();
-    let resolveCreate = (_value: { ref: { terminalId: string }; summary: TerminalSummary }): void =>
-      undefined;
-    const createPending = new Promise<{
+    const create = Promise.withResolvers<{
       ref: { terminalId: string };
       summary: TerminalSummary;
-    }>((resolve) => {
-      resolveCreate = resolve;
-    });
+    }>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
         terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
-        terminalCreate: async () => createPending,
+        terminalCreate: async () => create.promise,
       },
     };
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().isLoading).toBe(false));
-      act(() => getLatest().onCreate());
-      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("creating"));
-      expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("/repo/worktrees/task-a");
+      await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
+      act(() => {
+        view.terminals().createTerminal();
+      });
+      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("creating"));
+      expect(terminalTabLabel(requireTab(view.terminals().tabs[0]))).toBe("/repo/worktrees/task-a");
     } finally {
-      resolveCreate({
+      create.resolve({
         ref: { terminalId: "terminal-created" },
-        summary: {
-          ...summaryForTask("task-a"),
-          terminalId: "terminal-created",
-        },
+        summary: { ...summaryForTask("task-a"), terminalId: "terminal-created" },
       });
       view.unmount();
     }
@@ -313,21 +154,17 @@ describe("useAgentStudioTerminals", () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals: TerminalSummary[] = [];
     const closeCalls: Array<{ terminalId: string; confirmTerminate: boolean }> = [];
-    let resolveCreate = (_value: { ref: { terminalId: string }; summary: TerminalSummary }): void =>
-      undefined;
-    const createPending = new Promise<{
+    const create = Promise.withResolvers<{
       ref: { terminalId: string };
       summary: TerminalSummary;
-    }>((resolve) => {
-      resolveCreate = resolve;
-    });
+    }>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
         terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
         terminalCreate: async () => {
-          const created = await createPending;
+          const created = await create.promise;
           terminals.push(created.summary);
           return created;
         },
@@ -342,43 +179,19 @@ describe("useAgentStudioTerminals", () => {
         },
       },
     };
-    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
-    const getLatest = (): ReturnType<typeof useAgentStudioTerminals> => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().isLoading).toBe(false));
-      act(() => getLatest().onCreate());
-      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("creating"));
-      const pendingTab = getLatest().tabs[0];
-      if (!pendingTab) throw new Error("Expected the pending terminal tab.");
+      await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
+      act(() => view.panels().bottomToggle.onToggle());
+      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("creating"));
+      const pendingEntryId = view.panels().bottom.selectedTabId;
+      if (!pendingEntryId) throw new Error("Expected the pending terminal tab.");
 
-      await act(async () => {
-        expect(await getLatest().onClose(pendingTab, false)).toEqual({ closed: true });
-      });
-      expect(getLatest().tabs).toEqual([]);
+      act(() => view.panels().bottom.onClose(pendingEntryId));
+      await waitFor(() => expect(view.panels().bottom.tabs).toEqual([]));
+      expect(view.panels().bottom.isVisible).toBe(false);
 
-      resolveCreate({
+      create.resolve({
         ref: { terminalId: "terminal-abandoned" },
         summary: { ...summaryForTask("task-a"), terminalId: "terminal-abandoned" },
       });
@@ -386,7 +199,7 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() =>
         expect(closeCalls).toEqual([{ terminalId: "terminal-abandoned", confirmTerminate: true }]),
       );
-      await waitFor(() => expect(getLatest().mountedTabs).toEqual([]));
+      await waitFor(() => expect(view.terminals().mountedTabs).toEqual([]));
       expect(terminals).toEqual([]);
     } finally {
       view.unmount();
@@ -411,41 +224,24 @@ describe("useAgentStudioTerminals", () => {
         },
       },
     };
-    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
-    const getLatest = (): ReturnType<typeof useAgentStudioTerminals> => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().isLoading).toBe(false));
-      act(() => getLatest().onCreate());
-      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("unsupported_runtime"));
-      expect(getLatest().tabs[0]?.error).toBe("The runtime cannot launch an interactive terminal.");
+      await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
+      act(() => {
+        view.terminals().createTerminal();
+      });
+      await waitFor(() =>
+        expect(view.terminals().tabs[0]?.requestState).toBe("unsupported_runtime"),
+      );
+      expect(view.terminals().tabs[0]?.error).toBe(
+        "The runtime cannot launch an interactive terminal.",
+      );
     } finally {
       view.unmount();
     }
   });
 
-  test("keeps live terminal titles and drag order across host list refreshes", async () => {
+  test("keeps live terminal titles and tab order across host list refreshes", async () => {
     const first = summaryForTask("task-a");
     const second: TerminalSummary = {
       ...first,
@@ -454,323 +250,272 @@ describe("useAgentStudioTerminals", () => {
       createdAt: "2026-07-13T00:01:00.000Z",
     };
     const baseDependencies = createTerminalTestDependencies();
+    let listCalls = 0;
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [first, second] }),
+        terminalList: async () => {
+          listCalls += 1;
+          return { hostInstanceId: "host-1", terminals: [first, second] };
+        },
       },
     };
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    let refresh = async (): Promise<void> => undefined;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      const queryClient = useQueryClient();
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      refresh = async () => {
-        await queryClient.invalidateQueries();
-      };
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().tabs).toHaveLength(2));
+      await waitFor(() =>
+        expect(bottomTerminalIds(view.panels())).toEqual(["terminal-task-a", "terminal-task-a-2"]),
+      );
       act(() => {
-        getLatest().onTitleChange('["workspace-1","task-a"]', first.terminalId, "pnpm run dev");
-        getLatest().onReorderTab("tab:terminal-task-a-2", "tab:terminal-task-a", "before");
+        view.terminals().onTitleChange(view.scopeKey(), first.terminalId, "pnpm run dev");
+        const panels = view.panels();
+        panels.onDrop(bottomEntryId(panels, "terminal-task-a-2"), "bottom", {
+          id: bottomEntryId(panels, "terminal-task-a"),
+          position: "before",
+        });
       });
-      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
-        "terminal-task-a-2",
-        "terminal-task-a",
-      ]);
-      expect(terminalTabLabel(requireTab(getLatest().tabs[1]))).toBe("pnpm run dev");
+      expect(bottomTerminalIds(view.panels())).toEqual(["terminal-task-a-2", "terminal-task-a"]);
 
-      await act(refresh);
+      const calls = listCalls;
+      act(() => view.terminals().onRetryDiscovery());
+      await waitFor(() => expect(listCalls).toBe(calls + 1));
+      await waitFor(() => expect(view.terminals().isLoading).toBe(false));
 
-      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
-        "terminal-task-a-2",
-        "terminal-task-a",
-      ]);
-      expect(terminalTabLabel(requireTab(getLatest().tabs[1]))).toBe("pnpm run dev");
+      expect(bottomTerminalIds(view.panels())).toEqual(["terminal-task-a-2", "terminal-task-a"]);
+      expect(terminalTabLabel(requireTab(view.terminals().tabs[0]))).toBe("pnpm run dev");
     } finally {
       view.unmount();
     }
   });
 
   test("keeps terminal actions stable across presentation-only updates", async () => {
-    const dependencies = createTerminalTestDependencies();
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
-    try {
-      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
-      const actions = {
-        onToggle: getLatest().onToggle,
-        onHide: getLatest().onHide,
-        onSelectTab: getLatest().onSelectTab,
-        onCreate: getLatest().onCreate,
-        onRunAction: getLatest().onRunAction,
-        onRetryCreate: getLatest().onRetryCreate,
-        onReorderTab: getLatest().onReorderTab,
-        onTitleChange: getLatest().onTitleChange,
-        onClose: getLatest().onClose,
-        onLifecycle: getLatest().onLifecycle,
-        onForgotten: getLatest().onForgotten,
+    const view = renderTaskTerminalPanels(createTerminalTestDependencies());
+    const actionsOf = () => {
+      const terminals = view.terminals();
+      return {
+        createTerminal: terminals.createTerminal,
+        onRetryDiscovery: terminals.onRetryDiscovery,
+        onRetryCreate: terminals.onRetryCreate,
+        onTitleChange: terminals.onTitleChange,
+        onClose: terminals.onClose,
+        onLifecycle: terminals.onLifecycle,
+        onForgotten: terminals.onForgotten,
       };
+    };
+    try {
+      await waitFor(() => expect(view.terminals().tabs).toHaveLength(1));
+      await waitFor(() => expect(view.terminals().isLoading).toBe(false));
+      const actions = actionsOf();
 
-      act(() =>
-        getLatest().onTitleChange('["workspace-1","task-a"]', "terminal-task-a", "pnpm run dev"),
-      );
+      act(() => view.terminals().onTitleChange(view.scopeKey(), "terminal-task-a", "pnpm run dev"));
       await waitFor(() =>
-        expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("pnpm run dev"),
+        expect(terminalTabLabel(requireTab(view.terminals().tabs[0]))).toBe("pnpm run dev"),
       );
 
-      expect({
-        onToggle: getLatest().onToggle,
-        onHide: getLatest().onHide,
-        onSelectTab: getLatest().onSelectTab,
-        onCreate: getLatest().onCreate,
-        onRunAction: getLatest().onRunAction,
-        onRetryCreate: getLatest().onRetryCreate,
-        onReorderTab: getLatest().onReorderTab,
-        onTitleChange: getLatest().onTitleChange,
-        onClose: getLatest().onClose,
-        onLifecycle: getLatest().onLifecycle,
-        onForgotten: getLatest().onForgotten,
-      }).toEqual(actions);
+      expect(actionsOf()).toEqual(actions);
     } finally {
       view.unmount();
     }
   });
 
-  test("hides the final tab immediately while its terminal shuts down", async () => {
+  test("hides the bottom panel at once when its last terminal starts to close", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
-    let resolveClose = (_result: { closed: true }): void => undefined;
-    const closePending = new Promise<{ closed: true }>((resolve) => {
-      resolveClose = resolve;
-    });
+    const close = Promise.withResolvers<{ closed: true }>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
         terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
         terminalClose: async () => {
-          const result = await closePending;
+          const result = await close.promise;
           terminals.splice(0, terminals.length);
           return result;
         },
       },
     };
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
-      expect(getLatest().isVisible).toBe(true);
+      await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
+      await waitFor(() => expect(view.terminals().controller).not.toBeNull());
+      expect(view.panels().bottom.isVisible).toBe(true);
 
-      let closePromise: Promise<{ closed: boolean }> | null = null;
-      act(() => {
-        const tab = getLatest().tabs[0];
-        if (!tab) throw new Error("Expected the live terminal tab.");
-        closePromise = getLatest().onClose(tab, false);
+      act(() => view.panels().bottom.onClose(bottomEntryId(view.panels(), "terminal-task-a")));
+
+      await waitFor(() => expect(view.panels().bottom.tabs).toEqual([]));
+      expect(view.panels().bottom.isVisible).toBe(false);
+      expect(view.terminals().mountedTabs[0]?.tab.terminalId).toBe("terminal-task-a");
+
+      await act(async () => {
+        close.resolve({ closed: true });
+        await close.promise;
       });
-
-      try {
-        await waitFor(() => expect(getLatest().tabs).toEqual([]));
-        expect(getLatest().mountedTabs).toHaveLength(1);
-        expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe("terminal-task-a");
-        expect(getLatest().isVisible).toBe(false);
-      } finally {
-        resolveClose({ closed: true });
-        await act(async () => {
-          await closePromise;
-        });
-      }
-      expect(getLatest().tabs).toEqual([]);
-      expect(getLatest().mountedTabs).toEqual([]);
-      expect(getLatest().isVisible).toBe(false);
+      await waitFor(() => expect(view.terminals().mountedTabs).toEqual([]));
+      expect(view.panels().bottom.isVisible).toBe(false);
     } finally {
       view.unmount();
     }
   });
 
-  test("keeps the same terminal mounted when confirmation is required", async () => {
+  test("asks at once for a terminal that runs a command and changes nothing behind the dialog", async () => {
     const baseDependencies = createTerminalTestDependencies();
-    let resolveClose = (_result: { closed: false; confirmationRequired: true }): void => undefined;
-    const closePending = new Promise<{ closed: false; confirmationRequired: true }>((resolve) => {
-      resolveClose = resolve;
-    });
+    const closeCalls: boolean[] = [];
+    let receiveFrame: ((frame: Uint8Array) => void) | null = null;
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalClose: async () => closePending,
+        terminalClose: async ({ confirmTerminate }) => {
+          closeCalls.push(confirmTerminate);
+          return { closed: true };
+        },
+      },
+      terminalBridge: {
+        connect: async (onFrame, onStateChange) => {
+          receiveFrame = onFrame;
+          onStateChange("connected");
+          return { send: async () => undefined, close: () => undefined };
+        },
       },
     };
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const receive = (message: TerminalActivityMessage): void =>
+      receiveFrame?.(encodeTerminalProtocolFrame({ message, payload: new Uint8Array() }));
+    // Each render of the bottom panel while the close asks for a confirmation.
+    const shown: string[] = [];
+    let isRecording = false;
+    const view = renderTaskTerminalPanels(dependencies, {
+      children: ({ panels }) => {
+        if (isRecording) {
+          const { bottom } = panels;
+          shown.push(`${bottom.presence}:${bottom.selectedTabId}:${bottom.tabs.length}`);
+        }
+        return null;
+      },
+    });
     try {
-      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
-      const originalTab = getLatest().tabs[0];
-      let closePromise: ReturnType<HookResult["onClose"]> | null = null;
+      await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
+      await waitFor(() => expect(receiveFrame).not.toBeNull());
       act(() => {
-        const tab = getLatest().tabs[0];
-        if (!tab) throw new Error("Expected the live terminal tab.");
-        closePromise = getLatest().onClose(tab, false);
+        receive({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" });
+        receive({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "activity_updated",
+          activity: { summary: summaryForTask("task-a"), command: "sleep 300" },
+        });
+        receive({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" });
       });
+      await waitFor(() =>
+        expect(view.terminals().runningCommandTerminalIds.has("terminal-task-a")).toBe(true),
+      );
+      const entryId = bottomEntryId(view.panels(), "terminal-task-a");
 
-      await waitFor(() => expect(getLatest().tabs).toEqual([]));
-      expect(getLatest().mountedTabs[0]?.tab.tabId).toBe(originalTab?.tabId);
-      expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe(originalTab?.terminalId);
-      expect(getLatest().isVisible).toBe(false);
+      isRecording = true;
+      act(() => view.panels().bottom.onClose(entryId));
+      isRecording = false;
 
-      resolveClose({ closed: false, confirmationRequired: true });
-      await act(async () => {
-        expect(await closePromise).toEqual({ closed: false, confirmationRequired: true });
-      });
+      expect(view.panels().terminalClose.candidate?.terminalId).toBe("terminal-task-a");
+      expect(closeCalls).toEqual([]);
+      expect(new Set(shown)).toEqual(new Set([`open:${entryId}:1`]));
 
-      expect(getLatest().tabs).toHaveLength(1);
-      expect(getLatest().mountedTabs).toHaveLength(1);
-      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
-      expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
-      expect(getLatest().isVisible).toBe(true);
+      act(() => view.panels().terminalClose.onConfirm());
+
+      await waitFor(() => expect(view.panels().terminalClose.candidate).toBeNull());
+      expect(closeCalls).toEqual([true]);
+      await waitFor(() => expect(view.panels().bottom.isVisible).toBe(false));
     } finally {
       view.unmount();
     }
   });
 
-  test("hides the panel after dismissing its final lost terminal", async () => {
-    const dependencies = createTerminalTestDependencies();
-    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (!latest) throw new Error("Terminal hook result is not ready.");
-      return latest;
-    };
-    const Harness = () => {
-      latest = useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
+  test("asks before it ends a running process and gives the tab back meanwhile", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const closeCalls: boolean[] = [];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalClose: async ({ confirmTerminate }) => {
+          closeCalls.push(confirmTerminate);
+          return confirmTerminate
+            ? { closed: true }
+            : { closed: false, confirmationRequired: true };
         },
-        dependencies,
-      );
-      return null;
+      },
     };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
+    const view = renderTaskTerminalPanels(dependencies);
     try {
-      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
+      await waitFor(() => expect(view.terminals().controller).not.toBeNull());
+      const entryId = bottomEntryId(view.panels(), "terminal-task-a");
+
+      act(() => view.panels().bottom.onClose(entryId));
+
+      await waitFor(() =>
+        expect(view.panels().terminalClose.candidate?.terminalId).toBe("terminal-task-a"),
+      );
+      expect(view.panels().bottom.tabs.map((tab) => tab.id)).toEqual([entryId]);
+      expect(view.panels().bottom.selectedTabId).toBe(entryId);
+      expect(view.panels().bottom.isVisible).toBe(true);
+      expect(closeCalls).toEqual([false]);
+
+      act(() => view.panels().terminalClose.onConfirm());
+
+      await waitFor(() => expect(view.panels().terminalClose.candidate).toBeNull());
+      expect(closeCalls).toEqual([false, true]);
+      expect(view.panels().bottom.isVisible).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("hides the bottom panel when a refreshed host list no longer has its terminal", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    let terminals = [summaryForTask("task-a")];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+      },
+    };
+    const view = renderTaskTerminalPanels(dependencies);
+    try {
+      await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
+      await waitFor(() => expect(view.terminals().isLoading).toBe(false));
+      act(() => view.panels().bottomToggle.onToggle());
+      act(() => view.panels().bottomToggle.onToggle());
+      expect(view.panels().bottom.isVisible).toBe(true);
+
+      terminals = [];
+      act(() => view.terminals().onRetryDiscovery());
+
+      await waitFor(() => expect(view.panels().bottom.tabs).toEqual([]));
+      expect(view.terminals().isSynced).toBe(true);
+      expect(view.panels().bottom.isVisible).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("hides the bottom panel after dismissing its final lost terminal", async () => {
+    const view = renderTaskTerminalPanels(createTerminalTestDependencies());
+    try {
+      await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
       act(() => {
-        getLatest().onForgotten(
-          '["workspace-1","task-a"]',
-          "terminal-task-a",
-          "Terminal host restarted.",
-        );
+        view
+          .terminals()
+          .onForgotten(view.scopeKey(), "terminal-task-a", "Terminal host restarted.");
       });
-      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
+      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("lost"));
+      const entryId = view.panels().bottom.tabs[0]?.id;
+      if (!entryId) throw new Error("Expected the lost terminal tab.");
 
       await act(async () => {
-        const tab = getLatest().tabs[0];
-        if (!tab) throw new Error("Expected the lost terminal tab.");
-        await getLatest().onClose(tab, false);
+        view.panels().bottom.onClose(entryId);
       });
 
-      expect(getLatest().tabs).toEqual([]);
-      expect(getLatest().isVisible).toBe(false);
+      await waitFor(() => expect(view.terminals().tabs).toEqual([]));
+      expect(view.panels().bottom.isVisible).toBe(false);
     } finally {
       view.unmount();
     }

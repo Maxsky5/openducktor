@@ -196,7 +196,8 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
-    expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
+    expect(mapped.selectedSession.documents.taskDocuments?.plan.document.markdown).toBe("# doc");
+    expect(mapped.selectedSession.documents.defaultDocumentKind).toBe("plan");
     expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);

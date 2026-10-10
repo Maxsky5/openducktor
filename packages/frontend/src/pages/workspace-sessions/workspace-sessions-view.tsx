@@ -13,8 +13,15 @@ import {
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useDialogPresence } from "@/components/ui/dialog";
-import type { TerminalPanelModel } from "@/features/terminals";
-import { useRightPanelOpen } from "@/components/features/agents/use-right-panel-open";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
+import {
+  BottomPanelSplit,
+  type SessionPanelOwner,
+  type SessionPanelSplitIds,
+  SessionPanelsRoot,
+  type SessionPanelsModel,
+  useSessionPanels,
+} from "@/features/session-panels";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
@@ -27,14 +34,12 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
-  type WorkspaceSessionPanelState,
 } from "./workspace-session-content";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
-import { WorkspaceSessionTerminalLayout } from "./workspace-session-terminal-layout";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "./use-mounted-ref";
@@ -97,12 +102,24 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     requestedSelected,
   );
   const selectedId = selected?.id ?? null;
-  const terminalModel = useWorkspaceSessionTerminals({
+  const terminals = useWorkspaceSessionTerminals({
     workspace,
     selected,
     sessions,
   });
-  const { panelState, onPanelStateChange, togglePanel } = useSessionPanelState(
+  const panelOwner = useMemo<SessionPanelOwner | null>(
+    () =>
+      selectedId === null
+        ? null
+        : { kind: "chat", workspaceId: workspace.workspaceId, sessionId: selectedId },
+    [selectedId, workspace.workspaceId],
+  );
+  const panels = useSessionPanels({
+    owner: panelOwner,
+    selectionKey: "chat",
+    terminals,
+  });
+  const { selectedFile, onSelectedFileChange } = useSelectedFiles(
     workspace.workspaceId,
     selectedId,
   );
@@ -187,17 +204,14 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         sessionIds={sessions.map((record) => record.id)}
         missingSessionId={missingSessionId}
         onDismissMissing={() => updateNavigation({ sessionId: null })}
-        terminalModel={terminalModel}
-        panelState={panelState}
-        onPanelStateChange={onPanelStateChange}
+        panels={panels}
+        selectedFile={selectedFile}
+        onSelectedFileChange={onSelectedFileChange}
         onSafeToLeave={leaveRemovedChat}
         hasSessions={records.data.length > 0}
         onCreate={() => setCreating(true)}
         viewControls={
-          <SessionViewControls
-            terminal={terminalModel}
-            tools={{ label: "workspace tools", isOpen: panelState.isOpen, onToggle: togglePanel }}
-          />
+          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
         }
         onArchive={(onCloseAutoFocus) => {
           if (!selected) return;
@@ -260,9 +274,9 @@ function WorkspaceSessionActiveContent({
   sessionIds,
   missingSessionId,
   onDismissMissing,
-  terminalModel,
-  panelState,
-  onPanelStateChange,
+  panels,
+  selectedFile,
+  onSelectedFileChange,
   onSafeToLeave,
   hasSessions,
   onCreate,
@@ -275,12 +289,9 @@ function WorkspaceSessionActiveContent({
   sessionIds: readonly string[];
   missingSessionId: string | null;
   onDismissMissing: () => void;
-  terminalModel: TerminalPanelModel;
-  panelState: WorkspaceSessionPanelState;
-  onPanelStateChange: (
-    sessionId: string,
-    update: Partial<Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">>,
-  ) => void;
+  panels: SessionPanelsModel;
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
   onSafeToLeave: () => void;
   hasSessions: boolean;
   onCreate: () => void;
@@ -313,24 +324,46 @@ function WorkspaceSessionActiveContent({
         key={selected.id}
         workspace={workspace}
         record={selected}
-        repoActions={<SessionRepoActions workspace={workspace} terminal={terminalModel} />}
+        repoActions={
+          <SessionRepoActions
+            workspace={workspace}
+            terminal={{
+              startBlockedReason: panels.startBlockedReason,
+              onRunAction: panels.runAction,
+            }}
+          />
+        }
         viewControls={viewControls}
         onArchive={onArchive}
         isArchiving={isArchiving}
       />
-      <WorkspaceSessionTerminalLayout model={terminalModel}>
-        <WorkspaceSessionContent
-          workspace={workspace}
-          record={selected}
-          sessionIds={sessionIds}
-          panelState={panelState}
-          onPanelStateChange={onPanelStateChange}
-          onSafeToLeave={onSafeToLeave}
-        />
-      </WorkspaceSessionTerminalLayout>
+      <SessionPanelsRoot panels={panels}>
+        <BottomPanelSplit
+          ids={TERMINAL_PANEL_SPLIT_IDS}
+          model={panels.bottom}
+          className="min-h-0 min-w-0 flex-1 overflow-hidden"
+          mainClassName="flex h-full min-h-0 flex-col"
+        >
+          <WorkspaceSessionContent
+            workspace={workspace}
+            record={selected}
+            sessionIds={sessionIds}
+            rightPanel={panels.right}
+            selectedFile={selectedFile}
+            onSelectedFileChange={onSelectedFileChange}
+            onSafeToLeave={onSafeToLeave}
+          />
+        </BottomPanelSplit>
+      </SessionPanelsRoot>
     </>
   );
 }
+
+const TERMINAL_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
+  group: "workspace-session-terminal-layout",
+  main: "workspace-session-content-panel",
+  panel: "workspace-session-terminal-panel",
+};
 
 function useVisibleSessionRecord(
   workspaceId: string,
@@ -351,39 +384,28 @@ function useVisibleSessionRecord(
   );
 }
 
-function useSessionPanelState(workspaceId: string, selectedId: string | null) {
-  const { isOpen, toggle: togglePanel } = useRightPanelOpen();
-  type TabState = Pick<WorkspaceSessionPanelState, "activeTabId" | "selectedFile">;
-  const [scope, setScope] = useState<{ workspaceId: string; panels: Record<string, TabState> }>({
-    workspaceId,
-    panels: {},
-  });
-  if (scope.workspaceId !== workspaceId) setScope({ workspaceId, panels: {} });
-  const panelStates = scope.workspaceId === workspaceId ? scope.panels : {};
-  const panelState: WorkspaceSessionPanelState = selectedId
-    ? { isOpen, ...(panelStates[selectedId] ?? { activeTabId: "git", selectedFile: null }) }
-    : { isOpen: false, activeTabId: "git", selectedFile: null };
-  const onPanelStateChange = useCallback(
-    (sessionId: string, update: Partial<TabState>) => {
+/** Keeps the previewed file of each chat in the workspace while the page shows. */
+function useSelectedFiles(workspaceId: string, selectedId: string | null) {
+  const [scope, setScope] = useState<{
+    workspaceId: string;
+    files: Record<string, TaskExecutionSelectedFile | null>;
+  }>({ workspaceId, files: {} });
+  if (scope.workspaceId !== workspaceId) setScope({ workspaceId, files: {} });
+  const files = scope.workspaceId === workspaceId ? scope.files : {};
+  const selectedFile = selectedId ? (files[selectedId] ?? null) : null;
+  const onSelectedFileChange = useCallback(
+    (sessionId: string, file: TaskExecutionSelectedFile | null) => {
       setScope((current) => {
         if (current.workspaceId !== workspaceId) return current;
-        const previous = current.panels[sessionId] ?? {
-          activeTabId: "git",
-          selectedFile: null,
-        };
-        const next = { ...previous, ...update };
-        if (
-          previous.activeTabId === next.activeTabId &&
-          previous.selectedFile?.rootPath === next.selectedFile?.rootPath &&
-          previous.selectedFile?.relativePath === next.selectedFile?.relativePath
-        )
+        const previous = current.files[sessionId] ?? null;
+        if (previous?.rootPath === file?.rootPath && previous?.relativePath === file?.relativePath)
           return current;
-        return { ...current, panels: { ...current.panels, [sessionId]: next } };
+        return { ...current, files: { ...current.files, [sessionId]: file } };
       });
     },
     [workspaceId],
   );
-  return { panelState, onPanelStateChange, togglePanel };
+  return { selectedFile, onSelectedFileChange };
 }
 
 function WorkspaceSessionArchiveError({ error }: { error: Error | null }): ReactElement | null {

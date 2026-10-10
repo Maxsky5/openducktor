@@ -22,6 +22,7 @@ export {
 export type { SessionStartModalModel } from "./session-start-modal";
 export { SessionStartModal } from "./session-start-modal";
 export type {
+  TaskDocumentKind,
   TaskExecutionDocument,
   TaskExecutionDocumentPanelModel,
 } from "./task-execution-document-panel";
@@ -34,9 +35,4 @@ export type {
   TaskExecutionFilePreviewLeavePolicy,
   TaskExecutionSelectedFilePreviewModel,
 } from "./task-execution-file-preview";
-export type {
-  TaskExecutionPanelModel,
-  TaskExecutionPanelTab,
-  TaskExecutionPanelTabId,
-  TaskExecutionPanelToggleModel,
-} from "./task-execution-panel";
+export type { TaskExecutionToolsModel } from "./use-task-execution-tool-tabs";
