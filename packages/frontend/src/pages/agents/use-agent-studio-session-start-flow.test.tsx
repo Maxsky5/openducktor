@@ -7,11 +7,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRuntimeCatalog,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { type SessionStartWorkflowResult } from "@/features/session-start";
@@ -703,25 +699,24 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test.each([
     {
-      name: "role default in another runtime",
+      name: "role defaults across runtimes",
       currentSelection: MODEL_SELECTION,
       selectedSessionIdentity: sessionIdentity("session-spec"),
-      plannerDefault: {
+      plannerSelection: {
         runtimeKind: "claude" as const,
         providerId: "claude",
         modelId: "default",
         variant: "high",
-        profileId: "",
       },
     },
     {
-      name: "role default when only the current session runtime is known",
+      name: "role defaults when only the current session runtime is known",
       currentSelection: null,
       selectedSessionIdentity: {
         ...sessionIdentity("session-spec"),
         runtimeKind: "claude" as const,
       },
-      plannerDefault: {
+      plannerSelection: {
         runtimeKind: "opencode" as const,
         providerId: "openai",
         modelId: "gpt-5",
@@ -730,10 +725,10 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
     },
     {
-      name: "model, effort, and profile in the same runtime",
+      name: "model, effort, and profile defaults within one runtime",
       currentSelection: MODEL_SELECTION,
       selectedSessionIdentity: sessionIdentity("session-spec"),
-      plannerDefault: {
+      plannerSelection: {
         runtimeKind: "opencode" as const,
         providerId: "anthropic",
         modelId: "claude-sonnet-4",
@@ -742,15 +737,18 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
     },
   ])(
-    "handleQuickAction uses the next role's $name",
-    async ({ currentSelection, selectedSessionIdentity, plannerDefault }) => {
+    "handleQuickAction selects $name",
+    async ({ currentSelection, selectedSessionIdentity, plannerSelection }) => {
       const harness = createInternalModalHookHarness({
         ...createBaseArgs(),
         selectionForNewSession: currentSelection,
         selectedSessionIdentity,
         repoSettings: {
           ...REPO_SETTINGS,
-          agentDefaults: { ...REPO_SETTINGS.agentDefaults, planner: plannerDefault },
+          agentDefaults: {
+            ...REPO_SETTINGS.agentDefaults,
+            planner: { profileId: "", ...plannerSelection },
+          },
         },
       });
 
@@ -769,13 +767,8 @@ describe("useAgentStudioSessionStartFlow", () => {
         });
 
         const modal = await waitForSessionStartModal(harness);
-        const { profileId, ...modelSelection } = plannerDefault;
-        const expectedSelection: AgentModelSelection = modelSelection;
-        if (profileId) {
-          expectedSelection.profileId = profileId;
-        }
-        expect(modal.selectedRuntimeKind).toBe(plannerDefault.runtimeKind);
-        expect(modal.selectedModelSelection).toEqual(expectedSelection);
+        expect(modal.selectedRuntimeKind).toBe(plannerSelection.runtimeKind);
+        expect(modal.selectedModelSelection).toEqual(plannerSelection);
       } finally {
         await harness.unmount();
       }
