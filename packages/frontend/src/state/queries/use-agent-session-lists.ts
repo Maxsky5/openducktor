@@ -4,7 +4,6 @@ import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
   type AgentSessionReadPort,
-  agentSessionListHydrationQueryOptions,
   agentSessionListQueryOptions,
   agentSessionQueryKeys,
   normalizeAgentSessionTaskIds,
@@ -23,10 +22,9 @@ export type AgentSessionListTarget = { repoPath: string; taskId: string };
 /**
  * Read the saved session lists of tasks in one or more repositories.
  *
- * Each list keeps its own shared query. One batch read per repository fills the lists that
- * have no cached result, and a list waits for that read instead of reading alone. `combine`
- * receives one read per target in normalized target order: repositories in first-seen order,
- * task IDs sorted within each repository.
+ * Each list keeps its own shared query. Lists of one repository that read together share one
+ * host request. `combine` receives one read per target in normalized target order:
+ * repositories in first-seen order, task IDs sorted within each repository.
  */
 export function useAgentSessionListQueries<Result>({
   targets,
@@ -43,51 +41,10 @@ export function useAgentSessionListQueries<Result>({
 }): Result {
   const targetsKey = toTargetsKey(targets);
   const normalizedTargets = useMemo(() => toTargets(targetsKey), [targetsKey]);
-  const missingTaskIdsByRepo = new Map<string, string[]>();
-  if (enabled) {
-    for (const { repoPath, taskId } of normalizedTargets) {
-      const state = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));
-      if (state?.status === "error" || state?.data !== undefined) continue;
-      missingTaskIdsByRepo.set(repoPath, [...(missingTaskIdsByRepo.get(repoPath) ?? []), taskId]);
-    }
-  }
-  const batchRepos = [...missingTaskIdsByRepo.keys()];
-  const batchResults = useQueries(
-    {
-      queries: batchRepos.map((repoPath) =>
-        agentSessionListHydrationQueryOptions(
-          queryClient,
-          repoPath,
-          missingTaskIdsByRepo.get(repoPath) ?? [],
-          readPort,
-        ),
-      ),
-      combine: combineBatchReads,
-    },
-    queryClient,
-  );
-  const batchReposKey = batchRepos.join(TARGETS_SEPARATOR);
-  const batchesByRepo = useMemo(
-    () =>
-      new Map(
-        (batchReposKey ? batchReposKey.split(TARGETS_SEPARATOR) : []).map((repoPath, index) => [
-          repoPath,
-          batchResults[index] ?? PENDING_BATCH_READ,
-        ]),
-      ),
-    [batchReposKey, batchResults],
-  );
   const combineLists = useCallback(
-    (lists: AgentSessionListQueryResult[]): Result => {
-      const readTargets = enabled ? normalizedTargets : [];
-      return combine(
-        readTargets.map((target, index) =>
-          toListRead(lists[index], batchesByRepo.get(target.repoPath)),
-        ),
-        readTargets,
-      );
-    },
-    [batchesByRepo, combine, enabled, normalizedTargets],
+    (lists: AgentSessionListQueryResult[]): Result =>
+      combine(lists, enabled ? normalizedTargets : []),
+    [combine, enabled, normalizedTargets],
   );
 
   return useQueries(
@@ -95,13 +52,11 @@ export function useAgentSessionListQueries<Result>({
       queries: enabled
         ? normalizedTargets.map(({ repoPath, taskId }) => {
             const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-            const batch = batchesByRepo.get(repoPath);
-            const batchReady = batch === undefined || batch.status === "success";
             // A failed exact refresh waits for its owner to retry instead of refetching on mount.
             const listFailed = queryClient.getQueryState(queryKey)?.status === "error";
             return {
               ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-              enabled: batchReady && !listFailed,
+              enabled: !listFailed,
             };
           })
         : [],
@@ -154,13 +109,8 @@ export const useAgentSessionLists = ({
   });
 };
 
-/**
- * One task's saved session list. A list without data waits for its repository's batch read,
- * so it reports the state of that read until the read succeeds.
- */
+/** One task's saved session list. */
 export type AgentSessionListRead = Pick<AgentSessionListQueryResult, "data" | "error" | "status">;
-
-type BatchRead = Pick<UseQueryResult<true, Error>, "error" | "status">;
 
 type UseAgentSessionListsArgs = {
   repoPath: string | null;
@@ -197,19 +147,3 @@ const toTargets = (targetsKey: string): AgentSessionListTarget[] =>
         return { repoPath, taskId };
       })
     : [];
-
-const PENDING_BATCH_READ: BatchRead = { error: null, status: "pending" };
-
-const combineBatchReads = (results: BatchRead[]): BatchRead[] =>
-  results.map(({ error, status }) => ({ error, status }));
-
-const toListRead = (
-  list: AgentSessionListQueryResult | undefined,
-  batch: BatchRead | undefined,
-): AgentSessionListRead => {
-  if (list?.data === undefined && batch && batch.status !== "success") {
-    return { data: undefined, error: batch.error, status: batch.status };
-  }
-  if (!list) return { data: undefined, error: null, status: "pending" };
-  return { data: list.data, error: list.error, status: list.status };
-};

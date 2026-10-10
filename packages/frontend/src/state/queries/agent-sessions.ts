@@ -6,40 +6,12 @@ import type {
 import { isCancelledError, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { host } from "../operations/host";
+import { getAgentSessionListBatch } from "./agent-session-list-batch";
 
 const AGENT_SESSION_LIST_STALE_TIME = Number.POSITIVE_INFINITY;
 const queryKeyStringSchema = z.string();
-const invalidationVersionsByQueryClient = new WeakMap<QueryClient, Map<string, number>>();
 
-export type AgentSessionReadPort = Pick<
-  typeof host,
-  "agentSessionsList" | "agentSessionsListForTasks"
->;
-
-const agentSessionInvalidationVersionKey = (repoPath: string, taskId: string): string =>
-  JSON.stringify([repoPath, taskId]);
-
-const getAgentSessionInvalidationVersion = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): number =>
-  invalidationVersionsByQueryClient
-    .get(queryClient)
-    ?.get(agentSessionInvalidationVersionKey(repoPath, taskId)) ?? 0;
-
-const incrementAgentSessionInvalidationVersion = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): number => {
-  const versions = invalidationVersionsByQueryClient.get(queryClient) ?? new Map<string, number>();
-  const versionKey = agentSessionInvalidationVersionKey(repoPath, taskId);
-  const version = (versions.get(versionKey) ?? 0) + 1;
-  versions.set(versionKey, version);
-  invalidationVersionsByQueryClient.set(queryClient, versions);
-  return version;
-};
+export type AgentSessionReadPort = Pick<typeof host, "agentSessionsListForTasks">;
 
 export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
   Array.from(
@@ -55,170 +27,34 @@ export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
   list: (repoPath: string, taskId: string) =>
     [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,
-  hydration: (repoPath: string, taskIds: string[]) =>
-    [
-      ...agentSessionQueryKeys.all,
-      "hydrate-missing-lists",
-      repoPath,
-      normalizeAgentSessionTaskIds(taskIds),
-    ] as const,
 };
 
-/** A committed host update replaces the full task list and supersedes older reads. */
+/** A committed host update replaces the full task list and completes the reads in progress. */
 export const updateAgentSessionListQuery = (
   queryClient: QueryClient,
   repoPath: string,
   records: TaskAgentSessions,
 ): void => {
-  incrementAgentSessionInvalidationVersion(queryClient, repoPath, records.taskId);
-  const queryKey = agentSessionQueryKeys.list(repoPath, records.taskId);
-  // Without revert, the canceled fetch can mark the new data as failed after this commit.
-  void queryClient.cancelQueries({ queryKey, exact: true });
-  queryClient.setQueryData(queryKey, records.agentSessions);
+  getAgentSessionListBatch(queryClient).settle(repoPath, records);
+  queryClient.setQueryData(
+    agentSessionQueryKeys.list(repoPath, records.taskId),
+    records.agentSessions,
+  );
 };
 
+/** Each task has its own list query. Reads of one workspace share one host request. */
 export const agentSessionListQueryOptions = (
   repoPath: string,
   taskId: string,
-  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
+  readPort: AgentSessionReadPort = host,
 ) =>
   queryOptions({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-    queryFn: (): Promise<AgentSessionRecord[]> => readPort.agentSessionsList(repoPath, taskId),
+    queryFn: ({ client }): Promise<AgentSessionRecord[]> =>
+      getAgentSessionListBatch(client).load(repoPath, taskId, readPort),
     retryOnMount: false,
     staleTime: AGENT_SESSION_LIST_STALE_TIME,
   });
-
-const joinInFlightAgentSessionListQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-  readPort: Pick<AgentSessionReadPort, "agentSessionsList">,
-): Promise<AgentSessionRecord[]> => {
-  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  const query = queryClient.getQueryCache().find({ queryKey, exact: true });
-  const updates = query?.state.dataUpdateCount ?? 0;
-  const version = getAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
-  return queryClient
-    .fetchQuery({
-      ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-      staleTime: 0,
-    })
-    .catch((error) => {
-      const current = queryClient
-        .getQueryCache()
-        .find<AgentSessionRecord[]>({ queryKey, exact: true });
-      // Joined callers still receive the old retryer's cancellation after a host commit.
-      if (
-        isCancelledError(error) &&
-        current !== undefined &&
-        current === query &&
-        current.state.dataUpdateCount > updates &&
-        getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== version &&
-        current.state.status === "success" &&
-        current.state.data !== undefined &&
-        !current.state.isInvalidated
-      )
-        return current.state.data;
-      throw error;
-    });
-};
-
-export const hydrateAgentSessionListQueries = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-  readPort: AgentSessionReadPort = host,
-): Promise<void> => {
-  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
-  if (normalizedTaskIds.length === 0) {
-    return;
-  }
-
-  const initialQueryStates = new Map(
-    normalizedTaskIds.map((taskId) => [
-      taskId,
-      queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId)),
-    ]),
-  );
-  const taskIdsWithInFlightQueries = normalizedTaskIds.filter(
-    (taskId) => initialQueryStates.get(taskId)?.fetchStatus === "fetching",
-  );
-  const taskIdsToHydrate = normalizedTaskIds.filter(
-    (taskId) => initialQueryStates.get(taskId)?.fetchStatus !== "fetching",
-  );
-  const inFlightQueries = taskIdsWithInFlightQueries.map((taskId) =>
-    joinInFlightAgentSessionListQuery(queryClient, repoPath, taskId, readPort),
-  );
-  if (taskIdsToHydrate.length === 0) {
-    await Promise.all(inFlightQueries);
-    return;
-  }
-  const initialInvalidationVersions = new Map(
-    taskIdsToHydrate.map((taskId) => [
-      taskId,
-      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId),
-    ]),
-  );
-  const [taskSessions] = await Promise.all([
-    readPort.agentSessionsListForTasks(repoPath, taskIdsToHydrate),
-    Promise.all(inFlightQueries),
-  ]);
-  const requestedTaskIds = new Set(taskIdsToHydrate);
-  const sessionsByTaskId = new Map<string, AgentSessionRecord[]>();
-  for (const taskSession of taskSessions) {
-    if (!requestedTaskIds.has(taskSession.taskId)) {
-      throw new Error(`Batch session response included unexpected task "${taskSession.taskId}".`);
-    }
-    if (sessionsByTaskId.has(taskSession.taskId)) {
-      throw new Error(
-        `Batch session response included task "${taskSession.taskId}" more than once.`,
-      );
-    }
-    sessionsByTaskId.set(taskSession.taskId, taskSession.agentSessions);
-  }
-
-  const missingTaskId = taskIdsToHydrate.find((taskId) => !sessionsByTaskId.has(taskId));
-  if (missingTaskId) {
-    throw new Error(`Batch session response omitted task "${missingTaskId}".`);
-  }
-  for (const taskId of taskIdsToHydrate) {
-    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-    const initialState = initialQueryStates.get(taskId);
-    const currentState = queryClient.getQueryState(queryKey);
-    const generationChanged =
-      (currentState?.dataUpdateCount ?? 0) !== (initialState?.dataUpdateCount ?? 0) ||
-      (currentState?.errorUpdateCount ?? 0) !== (initialState?.errorUpdateCount ?? 0);
-    const invalidatedAfterBatchStarted =
-      initialState?.isInvalidated !== true && currentState?.isInvalidated === true;
-    const invalidationVersionChanged =
-      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !==
-      initialInvalidationVersions.get(taskId);
-    if (generationChanged || invalidatedAfterBatchStarted || invalidationVersionChanged) {
-      continue;
-    }
-    queryClient.setQueryData(queryKey, sessionsByTaskId.get(taskId));
-  }
-};
-
-export const agentSessionListHydrationQueryOptions = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-  readPort: AgentSessionReadPort = host,
-) => {
-  const queryKey = agentSessionQueryKeys.hydration(repoPath, taskIds);
-  const normalizedTaskIds = queryKey[3];
-  return queryOptions({
-    queryKey,
-    queryFn: async (): Promise<true> => {
-      await hydrateAgentSessionListQueries(queryClient, repoPath, normalizedTaskIds, readPort);
-      return true;
-    },
-    staleTime: AGENT_SESSION_LIST_STALE_TIME,
-    gcTime: 0,
-  });
-};
 
 export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
@@ -242,68 +78,15 @@ export const loadAgentSessionListsFromQuery = async (
     readPort?: AgentSessionReadPort;
   },
 ): Promise<Record<string, AgentSessionRecord[]>> => {
-  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
-  if (normalizedTaskIds.length === 0) {
-    return {};
-  }
-
-  const taskIdsToHydrate: string[] = [];
-  let refreshesInvalidatedData = false;
-  for (const taskId of normalizedTaskIds) {
-    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-    const queryState = queryClient.getQueryState(queryKey);
-    const shouldHydrate =
-      options?.forceFresh === true ||
-      queryClient.getQueryData(queryKey) === undefined ||
-      queryState?.isInvalidated === true;
-    if (!shouldHydrate) {
-      continue;
-    }
-    taskIdsToHydrate.push(taskId);
-    refreshesInvalidatedData ||= queryState?.isInvalidated === true;
-  }
-  if (taskIdsToHydrate.length > 0) {
-    const query = agentSessionListHydrationQueryOptions(
-      queryClient,
-      repoPath,
-      taskIdsToHydrate,
-      options?.readPort,
-    );
-    const forceFresh = options?.forceFresh || refreshesInvalidatedData;
-    await queryClient.fetchQuery(forceFresh ? { ...query, staleTime: 0 } : query);
-    await Promise.all(
-      taskIdsToHydrate.flatMap((taskId) => {
-        const queryState = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));
-        return queryState?.fetchStatus === "fetching"
-          ? [
-              joinInFlightAgentSessionListQuery(
-                queryClient,
-                repoPath,
-                taskId,
-                options?.readPort ?? host,
-              ),
-            ]
-          : [];
-      }),
-    );
-  }
-
-  const entries = normalizedTaskIds.map((taskId) => {
-    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-    const queryState = queryClient.getQueryState(queryKey);
-    if (queryState?.status === "error") {
-      throw queryState.error;
-    }
-    const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
-    if (!records) {
-      throw new Error(`Batch session hydration did not populate task "${taskId}".`);
-    }
-    if (queryState?.isInvalidated === true) {
-      throw new Error(`Batch session hydration for task "${taskId}" was superseded.`);
-    }
-    return [taskId, records] as const;
-  });
-
+  const entries = await Promise.all(
+    normalizeAgentSessionTaskIds(taskIds).map(
+      async (taskId) =>
+        [
+          taskId,
+          await loadAgentSessionListFromQuery(queryClient, repoPath, taskId, options),
+        ] as const,
+    ),
+  );
   return Object.fromEntries(entries);
 };
 
@@ -322,10 +105,21 @@ export const retryAgentSessionListQueries = async (
       queryClient.getQueryData(queryKey) === undefined
     );
   });
-  for (const taskId of taskIdsToRetry) {
-    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
-  }
-  await hydrateAgentSessionListQueries(queryClient, repoPath, taskIdsToRetry, readPort);
+  await loadAgentSessionListsFromQuery(queryClient, repoPath, taskIdsToRetry, {
+    forceFresh: true,
+    readPort,
+  });
+};
+
+/** Cancel every session-list read before a stream snapshot replaces the lists. */
+export const cancelAgentSessionListReads = (queryClient: QueryClient): Promise<void> => {
+  const cancelled = queryClient.cancelQueries({
+    queryKey: agentSessionQueryKeys.all,
+    exact: false,
+  });
+  // Cancelled reads must not reach the host. A deleted task fails the whole batch request.
+  getAgentSessionListBatch(queryClient).dropAll();
+  return cancelled;
 };
 
 export const removeAgentSessionListQueries = async (
@@ -333,13 +127,13 @@ export const removeAgentSessionListQueries = async (
   repoPath: string,
   taskIds: string[],
 ): Promise<void> => {
-  const queryKeys = normalizeAgentSessionTaskIds(taskIds).map((taskId) => {
-    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
-    return agentSessionQueryKeys.list(repoPath, taskId);
-  });
-  await Promise.all(
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+  const queryKeys = normalizedTaskIds.map((taskId) => agentSessionQueryKeys.list(repoPath, taskId));
+  const cancelled = Promise.all(
     queryKeys.map((queryKey) => queryClient.cancelQueries({ queryKey, exact: true })),
   );
+  getAgentSessionListBatch(queryClient).drop(repoPath, normalizedTaskIds);
+  await cancelled;
   for (const queryKey of queryKeys) {
     const query = queryClient.getQueryCache().find({ queryKey, exact: true });
     if (query && query.getObserversCount() > 0) {
@@ -350,123 +144,57 @@ export const removeAgentSessionListQueries = async (
   }
 };
 
-const beginAgentSessionListInvalidation = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): Promise<number> => {
-  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  const invalidationVersion = incrementAgentSessionInvalidationVersion(
-    queryClient,
-    repoPath,
-    taskId,
-  );
-  await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-  return invalidationVersion;
-};
-
-type AuthoritativeAgentSessionListInvalidation = {
-  queryKey: ReturnType<typeof agentSessionQueryKeys.list>;
-  invalidationVersion: number;
-};
-
-const runAuthoritativeAgentSessionListInvalidation = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-  complete: (invalidation: AuthoritativeAgentSessionListInvalidation) => Promise<void>,
-): Promise<void> => {
-  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  const invalidationVersion = await beginAgentSessionListInvalidation(
-    queryClient,
-    repoPath,
-    taskId,
-  );
-  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
-    return;
-  }
-  await queryClient.cancelQueries({ queryKey, exact: true });
-  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
-    return;
-  }
-  await complete({ queryKey, invalidationVersion });
-};
-
-export const invalidateAgentSessionListQuery = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): Promise<void> => {
-  await runAuthoritativeAgentSessionListInvalidation(
-    queryClient,
-    repoPath,
-    taskId,
-    async ({ queryKey }) => {
-      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-    },
-  );
-};
-
+/** Read current records for one task, also when no view observes its list. */
 export const refreshAgentSessionListQuery = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
+  readPort: AgentSessionReadPort = host,
 ): Promise<void> => {
-  await runAuthoritativeAgentSessionListInvalidation(
-    queryClient,
-    repoPath,
-    taskId,
-    async ({ invalidationVersion }) => {
-      try {
-        await queryClient.fetchQuery({
-          ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-          staleTime: 0,
-        });
-      } catch (error) {
-        const superseded =
-          getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
-        if (superseded && isCancelledError(error)) {
-          return;
-        }
-        throw error;
-      }
-    },
-  );
+  getAgentSessionListBatch(queryClient).markStale(repoPath, [taskId]);
+  try {
+    await loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {
+      forceFresh: true,
+      readPort,
+    });
+  } catch (error) {
+    // A task deletion or a stream snapshot cancels the read and owns the list.
+    if (!isCancelledError(error)) {
+      throw error;
+    }
+  }
 };
 
+/**
+ * Read again the changed lists that a view observes. The other changed lists stay stale until
+ * a view needs them. Returns true when the session membership or ownership changed.
+ */
 export const refreshAgentSessionLists = async (
   queryClient: QueryClient,
   repoPath: string,
   taskIds: string[],
 ): Promise<boolean> => {
-  const ownershipChanged = await Promise.all(
-    normalizeAgentSessionTaskIds(taskIds).map(async (taskId) => {
-      const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-      const before = sessionOwnershipKey(
-        queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? [],
-      );
-      let changed = false;
-      await runAuthoritativeAgentSessionListInvalidation(
-        queryClient,
-        repoPath,
-        taskId,
-        async ({ queryKey: currentQueryKey }) => {
-          await queryClient.refetchQueries(
-            { queryKey, exact: true, type: "active" },
-            { throwOnError: true },
-          );
-          changed =
-            before !==
-            sessionOwnershipKey(
-              queryClient.getQueryData<AgentSessionRecord[]>(currentQueryKey) ?? [],
-            );
-        },
-      );
-      return changed;
-    }),
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+  const queryKeys = normalizedTaskIds.map((taskId) => agentSessionQueryKeys.list(repoPath, taskId));
+  const readOwnership = (): string =>
+    queryKeys
+      .map((queryKey) =>
+        sessionOwnershipKey(queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? []),
+      )
+      .join("\n");
+  const before = readOwnership();
+  // A read that started before this change reads again, so it cannot complete the change.
+  getAgentSessionListBatch(queryClient).markStale(repoPath, normalizedTaskIds);
+  // Joining a read in progress keeps imperative callers of that read free of cancellation.
+  await Promise.all(
+    queryKeys.map((queryKey) =>
+      queryClient.invalidateQueries(
+        { queryKey, exact: true },
+        { throwOnError: true, cancelRefetch: false },
+      ),
+    ),
   );
-  return ownershipChanged.some(Boolean);
+  return readOwnership() !== before;
 };
 
 const sessionOwnershipKey = (records: AgentSessionRecord[]): string =>

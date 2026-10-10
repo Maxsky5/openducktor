@@ -1,16 +1,22 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import type { host } from "../operations/host";
 import {
   agentSessionQueryKeys,
   type AgentSessionReadPort,
   cachedAgentSessionTaskIds,
+  cancelAgentSessionListReads,
   loadAgentSessionListsFromQuery,
   removeAgentSessionListQueries,
   refreshAgentSessionLists,
 } from "./agent-sessions";
+import { repoTaskIdsQueryOptions } from "./tasks";
+
+export type AgentSessionViewReadPort = AgentSessionReadPort & Pick<typeof host, "taskIdsList">;
 
 export type AgentSessionViewSync = {
-  reconcileExternalEvent: (event: ExternalTaskSyncEvent) => Promise<void>;
+  /** Reconcile consecutive task events together, so their session reads share requests. */
+  reconcileExternalEvents: (events: ExternalTaskSyncEvent[]) => Promise<void>;
   reconcileStreamSnapshot: (activeRepoPath: string | null, taskIds: string[]) => Promise<void>;
 };
 
@@ -21,34 +27,36 @@ export const createAgentSessionViewSync = ({
   refreshLiveSessions,
 }: {
   queryClient: QueryClient;
-  readPort: AgentSessionReadPort;
+  readPort: AgentSessionViewReadPort;
   removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
   refreshLiveSessions: (repoPath: string) => Promise<void>;
 }): AgentSessionViewSync => ({
-  reconcileExternalEvent: async (event) => {
-    const taskIds = event.kind === "external_task_created" ? [event.taskId] : event.taskIds;
-    const removedTaskIds = event.kind === "external_task_created" ? [] : event.removedTaskIds;
-    const removedTaskIdSet = new Set(removedTaskIds);
-    const retainedTaskIds = taskIds.filter((taskId) => !removedTaskIdSet.has(taskId));
-    await removeAgentSessionListQueries(queryClient, event.repoPath, removedTaskIds);
-    removeTaskSessions(event.repoPath, removedTaskIds);
-    const ownershipChanged = await refreshAgentSessionLists(
-      queryClient,
-      event.repoPath,
-      retainedTaskIds,
+  reconcileExternalEvents: async (events) => {
+    await Promise.all(
+      [...collectTaskChanges(events)].map(async ([repoPath, changes]) => {
+        const removedTaskIds = [...changes].flatMap(([taskId, change]) =>
+          change === "remove" ? [taskId] : [],
+        );
+        const refreshedTaskIds = [...changes].flatMap(([taskId, change]) =>
+          change === "refresh" ? [taskId] : [],
+        );
+        await removeAgentSessionListQueries(queryClient, repoPath, removedTaskIds);
+        removeTaskSessions(repoPath, removedTaskIds);
+        if (await refreshAgentSessionLists(queryClient, repoPath, refreshedTaskIds)) {
+          await refreshLiveSessions(repoPath);
+        }
+      }),
     );
-    if (ownershipChanged) {
-      await refreshLiveSessions(event.repoPath);
-    }
   },
   reconcileStreamSnapshot: async (activeRepoPath, taskIds) => {
     const taskIdSet = new Set(taskIds);
-    const removedTaskIds = activeRepoPath
+    // The Kanban list hides older done tasks, so a task that it omits can still exist.
+    const unlistedTaskIds = activeRepoPath
       ? cachedAgentSessionTaskIds(queryClient, activeRepoPath).filter(
           (taskId) => !taskIdSet.has(taskId),
         )
       : [];
-    await queryClient.cancelQueries({ queryKey: agentSessionQueryKeys.all, exact: false });
+    await cancelAgentSessionListReads(queryClient);
     // A view can observe the lists of an inactive workspace, such as the session sidebar in
     // all-workspaces scope. Those lists refetch; every other list reloads when it is next read.
     const observedInactiveLists = queryClient
@@ -70,14 +78,44 @@ export const createAgentSessionViewSync = ({
       await inactiveRefetches;
       return;
     }
-    removeTaskSessions(activeRepoPath, removedTaskIds);
-    await Promise.all([
+    const [existingTaskIds] = await Promise.all([
+      unlistedTaskIds.length > 0
+        ? queryClient.fetchQuery({
+            ...repoTaskIdsQueryOptions(activeRepoPath, readPort),
+            staleTime: 0,
+          })
+        : [],
       inactiveRefetches,
       loadAgentSessionListsFromQuery(queryClient, activeRepoPath, taskIds, {
         forceFresh: true,
         readPort,
       }),
     ]);
+    const existingTaskIdSet = new Set(existingTaskIds);
+    removeTaskSessions(
+      activeRepoPath,
+      unlistedTaskIds.filter((taskId) => !existingTaskIdSet.has(taskId)),
+    );
     await refreshLiveSessions(activeRepoPath);
   },
 });
+
+type TaskSessionChange = "refresh" | "remove";
+
+/** The last event that names a task decides whether its sessions refresh or go away. */
+const collectTaskChanges = (
+  events: ExternalTaskSyncEvent[],
+): Map<string, Map<string, TaskSessionChange>> => {
+  const changesByRepo = new Map<string, Map<string, TaskSessionChange>>();
+  for (const event of events) {
+    const changes = changesByRepo.get(event.repoPath) ?? new Map<string, TaskSessionChange>();
+    changesByRepo.set(event.repoPath, changes);
+    if (event.kind === "external_task_created") {
+      changes.set(event.taskId, "refresh");
+      continue;
+    }
+    for (const taskId of event.taskIds) changes.set(taskId, "refresh");
+    for (const taskId of event.removedTaskIds) changes.set(taskId, "remove");
+  }
+  return changesByRepo;
+};

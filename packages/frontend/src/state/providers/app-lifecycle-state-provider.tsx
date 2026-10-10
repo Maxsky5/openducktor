@@ -48,21 +48,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const { loadWorkspaceTasks } = useTaskControlContext();
   const sessionStore = useAgentSessionsContext();
   const taskStreamControllerFactory = useMemo(
-    () =>
-      createProductionTaskStreamController((repoPath, taskIds) => {
-        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
-          return;
-        }
-        const taskIdSet = new Set(taskIds);
-        for (const session of sessionStore.listSessionSnapshots()) {
-          if (
-            session.sessionAssociation.kind === "workflow" &&
-            taskIdSet.has(session.sessionAssociation.taskId)
-          ) {
-            sessionStore.removeSession(session);
-          }
-        }
-      }),
+    () => createProductionTaskStreamController(sessionStore.removeTaskSessions),
     [sessionStore],
   );
 

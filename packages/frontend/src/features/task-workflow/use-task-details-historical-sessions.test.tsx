@@ -20,9 +20,6 @@ const sessionFixture: AgentSessionRecord = {
 type HarnessProps = Parameters<typeof useTaskDetailsHistoricalSessions>[0];
 
 const createFailingReadPort = (): AgentSessionReadPort => ({
-  agentSessionsList: async () => {
-    throw new Error("agent session list unavailable");
-  },
   agentSessionsListForTasks: async () => {
     throw new Error("agent session list unavailable");
   },

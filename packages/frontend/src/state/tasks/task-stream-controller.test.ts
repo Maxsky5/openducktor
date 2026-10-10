@@ -76,7 +76,7 @@ const createHarness = ({
     ...taskViewSyncOverrides,
   };
   const agentSessionViewSync: AgentSessionViewSync = agentSessionViewSyncOverride ?? {
-    reconcileExternalEvent: mock(async () => {}),
+    reconcileExternalEvents: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => {}),
   };
   const transport = {
@@ -166,8 +166,8 @@ describe("task stream controller recovery", () => {
     const agentSessionViewSync = createAgentSessionViewSync({
       queryClient,
       readPort: {
-        agentSessionsList: async () => [],
         agentSessionsListForTasks: loadSessionBatch,
+        taskIdsList: async () => ["task-1"],
       },
       removeTaskSessions: () => {},
       refreshLiveSessions: async () => {},
@@ -185,7 +185,7 @@ describe("task stream controller recovery", () => {
   test("applies task and session views before acknowledging a change", async () => {
     const sessionRefresh = deferred<void>();
     const harness = createHarness();
-    harness.agentSessionViewSync.reconcileExternalEvent = mock(async () => sessionRefresh.promise);
+    harness.agentSessionViewSync.reconcileExternalEvents = mock(async () => sessionRefresh.promise);
 
     await harness.controller.start();
     harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-1") });
@@ -198,6 +198,85 @@ describe("task stream controller recovery", () => {
     await flush();
 
     expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(0));
+  });
+
+  test("changes received during a reconciliation share one session reconciliation", async () => {
+    const firstRefresh = deferred<void>();
+    const harness = createHarness();
+    const reconcileSessions = mock(async (events: ExternalTaskSyncEvent[]) => {
+      if (reconcileSessions.mock.calls.length === 1) await firstRefresh.promise;
+      void events;
+    });
+    harness.agentSessionViewSync.reconcileExternalEvents = reconcileSessions;
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("zero") });
+    await flush();
+    for (const [sequence, taskId] of [
+      [1, "one"],
+      [2, "two"],
+      [3, "three"],
+    ] as const) {
+      harness.emit(0, { type: "change", cursor: cursor(sequence), event: event(taskId) });
+    }
+    await flush();
+    expect(harness.records[0]?.acknowledge).not.toHaveBeenCalled();
+
+    firstRefresh.resolve();
+    await flush();
+
+    expect(reconcileSessions.mock.calls).toEqual([
+      [[event("zero")]],
+      [[event("one"), event("two"), event("three")]],
+    ]);
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(4);
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([
+      [cursor(0)],
+      [cursor(1)],
+      [cursor(2)],
+      [cursor(3)],
+    ]);
+  });
+
+  test("an acknowledgement failure inside a run recovers without reapplying the run", async () => {
+    const firstRefresh = deferred<void>();
+    const harness = createHarness({
+      onSubscribe: async (record, index) => {
+        if (index === 0) {
+          record.acknowledge.mockImplementation(async (nextCursor) => {
+            if (nextCursor.sequence === 1) throw new Error("ack unavailable");
+          });
+        }
+        return {
+          subscriptionId: `subscription-${index}`,
+          acknowledge: record.acknowledge,
+          unsubscribe: record.unsubscribe,
+        };
+      },
+    });
+    const reconcileSessions = mock(async (_events: ExternalTaskSyncEvent[]) => {
+      if (reconcileSessions.mock.calls.length === 1) await firstRefresh.promise;
+    });
+    harness.agentSessionViewSync.reconcileExternalEvents = reconcileSessions;
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("zero") });
+    await flush();
+    harness.emit(0, { type: "change", cursor: cursor(1), event: event("one") });
+    harness.emit(0, { type: "change", cursor: cursor(2), event: event("two") });
+    firstRefresh.resolve();
+    await flush();
+
+    expect(harness.records).toHaveLength(2);
+    expect(harness.records[1]?.input).toEqual({ cursor: cursor(0) });
+
+    harness.emit(1, { type: "change", cursor: cursor(1), event: event("one") });
+    harness.emit(1, { type: "change", cursor: cursor(2), event: event("two") });
+    await flush();
+
+    expect(reconcileSessions).toHaveBeenCalledTimes(2);
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(3);
+    expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(1)], [cursor(2)]]);
   });
 
   test("application failure closes the subscription, recovers from a snapshot, and resumes", async () => {
@@ -471,7 +550,7 @@ describe("task stream controller recovery", () => {
         reconcileStreamSnapshot: async () => [],
       },
       agentSessionViewSync: {
-        reconcileExternalEvent: async () => {},
+        reconcileExternalEvents: async () => {},
         reconcileStreamSnapshot: async () => {},
       },
       getActiveRepoPath: () => "/repo",

@@ -298,7 +298,7 @@ describe("useAppLifecycle task stream", () => {
         },
         taskViewSync: { ...taskViewSync, reconcileStreamSnapshot },
         agentSessionViewSync: {
-          reconcileExternalEvent: async () => {},
+          reconcileExternalEvents: async () => {},
           reconcileStreamSnapshot: async () => {},
         },
         getActiveRepoPath,
@@ -450,7 +450,7 @@ describe("useAppLifecycle task stream", () => {
         },
         taskViewSync,
         agentSessionViewSync: {
-          reconcileExternalEvent: async () => {},
+          reconcileExternalEvents: async () => {},
           reconcileStreamSnapshot: async () => {},
         },
         getActiveRepoPath,

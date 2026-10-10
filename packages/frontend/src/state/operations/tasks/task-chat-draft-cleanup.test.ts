@@ -22,7 +22,6 @@ const createSessionReadPort = (
     taskIds,
   ) => taskIds.map((taskId) => ({ taskId, agentSessions: [session] })),
 ): AgentSessionReadPort => ({
-  agentSessionsList: async () => [],
   agentSessionsListForTasks,
 });
 

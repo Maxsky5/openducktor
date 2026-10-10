@@ -16,7 +16,7 @@ import type { UseTaskOperationsResult } from "./task-operations-types";
 
 type UseTaskResetOperationsArgs = {
   activeRepoPath: string | null;
-  agentSessionReadPort: Pick<AgentSessionReadPort, "agentSessionsList">;
+  agentSessionReadPort: AgentSessionReadPort;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   hostPort?: Pick<typeof host, "taskReset" | "taskResetImplementation">;
   notificationPort?: Pick<typeof toast, "error" | "success">;
@@ -124,7 +124,7 @@ const refreshTaskAfterReset = async (
   repoPath: string,
   taskId: string,
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"],
-  agentSessionReadPort: Pick<AgentSessionReadPort, "agentSessionsList">,
+  agentSessionReadPort: AgentSessionReadPort,
 ): Promise<void> => {
   const results = await Promise.allSettled([
     invalidateTaskWorkflowQueries(queryClient, repoPath, taskId, agentSessionReadPort),
@@ -147,7 +147,7 @@ const invalidateTaskWorkflowQueries = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  agentSessionReadPort: Pick<AgentSessionReadPort, "agentSessionsList">,
+  agentSessionReadPort: AgentSessionReadPort,
 ): Promise<void> => {
   await Promise.all([
     queryClient.invalidateQueries({

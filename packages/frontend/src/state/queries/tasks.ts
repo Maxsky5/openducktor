@@ -35,10 +35,13 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
 export const unfilteredRepoTaskDataQueryOptions = repoTaskDataQueryOptions;
 
 /** The IDs of all tasks of a repository, also closed tasks that the Kanban list hides. */
-export const repoTaskIdsQueryOptions = (repoPath: string) =>
+export const repoTaskIdsQueryOptions = (
+  repoPath: string,
+  readPort: Pick<typeof host, "taskIdsList"> = host,
+) =>
   queryOptions({
     queryKey: taskQueryKeys.ids(repoPath),
-    queryFn: (): Promise<string[]> => host.taskIdsList(repoPath),
+    queryFn: (): Promise<string[]> => readPort.taskIdsList(repoPath),
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 

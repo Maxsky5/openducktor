@@ -43,6 +43,16 @@ const createHarness = (initialProps: HarnessProps) => {
   };
 };
 
+type BatchResult = { taskId: string; agentSessions: AgentSessionRecord[] }[];
+
+const deferred = <Value,>() => {
+  let resolve!: (value: Value) => void;
+  const promise = new Promise<Value>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
 describe("useAgentSessionLists", () => {
   test("does not read a deleted task while its session list observer is still mounted", async () => {
     let deleted = false;
@@ -50,18 +60,11 @@ describe("useAgentSessionLists", () => {
       if (deleted) throw new Error("Task not found: task-1");
       return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
     });
-    const singleList = mock(async () => {
-      if (deleted) throw new Error("Task not found: task-1");
-      return [sessionFixture];
-    });
     const props: HarnessProps = {
       repoPath: "/repo",
       taskIds: ["task-1"],
       enabled: true,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     };
     const harness = createHarness(props);
 
@@ -77,7 +80,6 @@ describe("useAgentSessionLists", () => {
       await harness.update(props);
 
       expect(batchList).toHaveBeenCalledTimes(1);
-      expect(singleList).not.toHaveBeenCalled();
       expect(harness.getLatest().error).toBeNull();
     } finally {
       await harness.unmount();
@@ -86,15 +88,11 @@ describe("useAgentSessionLists", () => {
 
   test("stays pending without reading when disabled", async () => {
     const batchList = mock(async () => []);
-    const singleList = mock(async () => []);
     const harness = createHarness({
       repoPath: "/repo",
       taskIds: ["task-1"],
       enabled: false,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     });
 
     try {
@@ -105,7 +103,6 @@ describe("useAgentSessionLists", () => {
         isPending: true,
       });
       expect(batchList).not.toHaveBeenCalled();
-      expect(singleList).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -113,15 +110,11 @@ describe("useAgentSessionLists", () => {
 
   test("stays pending without reading when no repository is selected", async () => {
     const batchList = mock(async () => []);
-    const singleList = mock(async () => []);
     const harness = createHarness({
       repoPath: null,
       taskIds: ["task-1"],
       enabled: true,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     });
 
     try {
@@ -132,27 +125,26 @@ describe("useAgentSessionLists", () => {
         isPending: true,
       });
       expect(batchList).not.toHaveBeenCalled();
-      expect(singleList).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("batches initial missing tasks once and leaves exact invalidation to the per-task query", async () => {
+  test("reads the initial lists in one request and an exact refresh reads only its task", async () => {
     const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
-    const batchList = mock(async () => [
-      { taskId: "task-1", agentSessions: [sessionFixture] },
-      { taskId: "task-2", agentSessions: [] },
-    ]);
-    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
+    const batchList = mock(async (_repoPath: string, taskIds: string[]): Promise<BatchResult> =>
+      batchList.mock.calls.length === 1
+        ? [
+            { taskId: "task-1", agentSessions: [sessionFixture] },
+            { taskId: "task-2", agentSessions: [] },
+          ]
+        : taskIds.map((taskId) => ({ taskId, agentSessions: [refreshedSession] })),
+    );
     const props: HarnessProps = {
       repoPath: "/repo",
       taskIds: ["task-1", "task-2"],
       enabled: true,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     };
     const harness = createHarness(props);
 
@@ -160,60 +152,42 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       await harness.waitFor((state) => !state.isPending);
-      expect(batchList).toHaveBeenCalledTimes(1);
-      expect(singleList).not.toHaveBeenCalled();
+      expect(batchList.mock.calls).toEqual([["/repo", ["task-1", "task-2"]]]);
 
       await harness.update({ ...props, taskIds: [] });
-      for (const taskId of ["task-1", "task-2"]) {
-        const queryKey = agentSessionQueryKeys.list("/repo", taskId);
-        queryClient.setQueryData(queryKey, queryClient.getQueryData(queryKey), { updatedAt: 1 });
-      }
-
       await harness.update(props);
       await harness.waitFor((state) => !state.isPending);
       expect(batchList).toHaveBeenCalledTimes(1);
-      expect(singleList).not.toHaveBeenCalled();
 
       await harness.run(async () => {
         await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
-          agentSessionsList: singleList,
+          agentSessionsListForTasks: batchList,
         });
       });
-      expect(singleList).toHaveBeenCalledTimes(1);
-      expect(singleList).toHaveBeenCalledWith("/repo", "task-1");
+      expect(batchList.mock.calls[1]).toEqual(["/repo", ["task-1"]]);
       expect(
         queryClient.getQueryData<AgentSessionRecord[]>(
           agentSessionQueryKeys.list("/repo", "task-1"),
         ),
       ).toEqual([refreshedSession]);
-      expect(batchList).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("refetches only a task invalidated during initial batch hydration", async () => {
+  test("reads a task again when it is refreshed during the initial read", async () => {
     const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
-    let resolveInitialBatch: (
-      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
-    ) => void = () => {
-      throw new Error("Initial batch resolver was not initialized.");
-    };
-    const batchList = mock(
-      async (_repoPath: string, _taskIds: string[]) =>
-        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
-          resolveInitialBatch = resolve;
-        }),
+    const initialRead = deferred<BatchResult>();
+    const batchList = mock(async (_repoPath: string, taskIds: string[]): Promise<BatchResult> =>
+      batchList.mock.calls.length === 1
+        ? initialRead.promise
+        : taskIds.map((taskId) => ({ taskId, agentSessions: [refreshedSession] })),
     );
-    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
     const harness = createHarness({
       repoPath: "/repo",
       taskIds: ["task-1", "task-2"],
       enabled: true,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     });
 
     try {
@@ -221,25 +195,22 @@ describe("useAgentSessionLists", () => {
       const queryClient = harness.getQueryClient();
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
-        await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
-          agentSessionsList: singleList,
+        const refresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          agentSessionsListForTasks: batchList,
         });
-        resolveInitialBatch([
+        initialRead.resolve([
           { taskId: "task-1", agentSessions: [sessionFixture] },
           { taskId: "task-2", agentSessions: [] },
         ]);
+        await refresh;
       });
-      await harness.waitFor(
-        (current) =>
-          !current.isPending && current.data["task-1"]?.[0]?.externalSessionId === "external-2",
-      );
-      const state = harness.getLatest();
+      await harness.waitFor((current) => !current.isPending);
 
-      expect(batchList).toHaveBeenCalledTimes(1);
-      expect(singleList).toHaveBeenCalledTimes(1);
-      expect(singleList).toHaveBeenCalledWith("/repo", "task-1");
-      expect(batchList.mock.calls[0]).toEqual(["/repo", ["task-1", "task-2"]]);
-      expect(state.data).toEqual({
+      expect(batchList.mock.calls).toEqual([
+        ["/repo", ["task-1", "task-2"]],
+        ["/repo", ["task-1"]],
+      ]);
+      expect(harness.getLatest().data).toEqual({
         "task-1": [refreshedSession],
         "task-2": [],
       });
@@ -248,29 +219,17 @@ describe("useAgentSessionLists", () => {
     }
   });
 
-  test("does not retry a failed exact refetch when startup hydration enables the task query", async () => {
-    let resolveInitialBatch: (
-      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
-    ) => void = () => {
-      throw new Error("Initial batch resolver was not initialized.");
-    };
-    const batchList = mock(
-      async (_repoPath: string, _taskIds: string[]) =>
-        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
-          resolveInitialBatch = resolve;
-        }),
-    );
-    const singleList = mock(async (_repoPath: string, _taskId: string) => {
+  test("does not retry a failed exact refresh after the initial read completes", async () => {
+    const initialRead = deferred<BatchResult>();
+    const batchList = mock(async (): Promise<BatchResult> => {
+      if (batchList.mock.calls.length === 1) return initialRead.promise;
       throw new Error("exact refresh failed");
     });
     const harness = createHarness({
       repoPath: "/repo",
       taskIds: ["task-1"],
       enabled: true,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     });
 
     try {
@@ -278,39 +237,33 @@ describe("useAgentSessionLists", () => {
       const queryClient = harness.getQueryClient();
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
-        await expect(
-          refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
-            agentSessionsList: singleList,
-          }),
-        ).rejects.toThrow("exact refresh failed");
-        resolveInitialBatch([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+        const refresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          agentSessionsListForTasks: batchList,
+        });
+        initialRead.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+        await expect(refresh).rejects.toThrow("exact refresh failed");
       });
       await harness.waitFor(
         (current) =>
           current.error instanceof Error && current.error.message === "exact refresh failed",
       );
 
-      expect(batchList).toHaveBeenCalledTimes(1);
-      expect(singleList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().isPending).toBe(false);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("surfaces an exact refresh error without batch-hydrating the failed query", async () => {
-    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [sessionFixture] }]);
-    const singleList = mock(async () => {
+  test("surfaces an exact refresh error without reading the failed list on mount", async () => {
+    const batchList = mock(async () => {
       throw new Error("exact refresh failed before mount");
     });
     const props: HarnessProps = {
       repoPath: "/repo",
       taskIds: ["task-1"],
       enabled: false,
-      readPort: {
-        agentSessionsList: singleList,
-        agentSessionsListForTasks: batchList,
-      },
+      readPort: { agentSessionsListForTasks: batchList },
     };
     const harness = createHarness(props);
 
@@ -320,7 +273,7 @@ describe("useAgentSessionLists", () => {
       await harness.run(async () => {
         await expect(
           refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
-            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
           }),
         ).rejects.toThrow("exact refresh failed before mount");
       });
@@ -331,8 +284,7 @@ describe("useAgentSessionLists", () => {
           current.error.message === "exact refresh failed before mount",
       );
 
-      expect(batchList).not.toHaveBeenCalled();
-      expect(singleList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().isPending).toBe(false);
     } finally {
       await harness.unmount();

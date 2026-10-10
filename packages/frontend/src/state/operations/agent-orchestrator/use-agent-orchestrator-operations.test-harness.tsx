@@ -115,7 +115,6 @@ export const createTestDependencies = (
       },
     }),
     hostPort: {
-      agentSessionsList: async () => [],
       agentSessionsListForTasks: async (_repoPath, taskIds) =>
         taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
       taskMetadataGet: (...args) => host.taskMetadataGet(...args),
@@ -212,7 +211,6 @@ export const createHookHarness = (args: {
   const dependencies =
     args.dependencies ??
     createTestDependencies({
-      agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
       agentSessionsListForTasks: (repoPath, taskIds) =>
         host.agentSessionsListForTasks(repoPath, taskIds),
       taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
