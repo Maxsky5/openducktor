@@ -272,6 +272,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     agentSessionLiveLoadDiff:
       agentSessionLiveClient.agentSessionLiveLoadDiff.bind(agentSessionLiveClient),
     agentSessionLiveRead: agentSessionLiveClient.agentSessionLiveRead.bind(agentSessionLiveClient),
+    agentSessionLiveAttach:
+      agentSessionLiveClient.agentSessionLiveAttach.bind(agentSessionLiveClient),
     agentSessionLiveRefresh:
       agentSessionLiveClient.agentSessionLiveRefresh.bind(agentSessionLiveClient),
     agentSessionLiveReplyApproval:

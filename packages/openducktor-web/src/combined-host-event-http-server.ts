@@ -2,6 +2,7 @@ import {
   browserEventCursorSchema,
   notificationCursorSchema,
   type BrowserEventCursor,
+  type BrowserReplayComplete,
 } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
@@ -19,16 +20,23 @@ export const createCombinedHostSseResponse = (
     try: () => {
       const raw = request.headers.get("last-event-id");
       const requested = new URL(request.url).searchParams.get("notificationCursor");
-      let cursor: BrowserEventCursor;
-      if (raw === null) {
-        cursor = {
-          hostEventId: host.currentEventId(),
-          notificationCursor:
-            requested === null ? null : notificationCursorSchema.parse(JSON.parse(requested)),
-        };
-      } else {
-        cursor = browserEventCursorSchema.parse(JSON.parse(raw));
-      }
+      const previous = raw === null ? null : browserEventCursorSchema.parse(JSON.parse(raw));
+      // A cursor from another host process cannot be replayed. Its observers attach again.
+      const hostChanged = previous !== null && previous.hostEpoch !== host.hostEpoch;
+      const replay =
+        previous && !hostChanged
+          ? host.replayAfter(previous.hostEventId)
+          : { events: [], gaps: [] };
+      const replayComplete: BrowserReplayComplete = { hostChanged, gaps: replay.gaps };
+      const cursor: BrowserEventCursor = {
+        hostEpoch: host.hostEpoch,
+        hostEventId: previous && !hostChanged ? previous.hostEventId : host.currentEventId(),
+        notificationCursor: previous
+          ? previous.notificationCursor
+          : requested === null
+            ? null
+            : notificationCursorSchema.parse(JSON.parse(requested)),
+      };
       let closed = false;
       let stopHost: (() => void) | null = null;
       let stopNotifications: (() => void) | null = null;
@@ -68,16 +76,13 @@ export const createCombinedHostSseResponse = (
               }
             };
             controller.enqueue(encoder.encode(": openducktor-ready\n\n"));
-            const replay = host.replayAfterWithDiagnostics(cursor.hostEventId);
-            if (replay.skippedEventCount > 0)
-              write(
-                "stream-warning",
-                `Host event stream skipped ${replay.skippedEventCount} events; reconnect will replay buffered events.`,
-              );
             for (const event of replay.events) {
               cursor.hostEventId = event.id;
               write(event.eventName, event.payload);
             }
+            // The replay covers every retained event, and `gaps` reports the evicted ones.
+            cursor.hostEventId = host.currentEventId();
+            write("replay-complete", JSON.stringify(replayComplete));
             if (closed) return;
             stopHost = host.subscribe((event) => {
               cursor.hostEventId = event.id;
@@ -100,8 +105,9 @@ export const createCombinedHostSseResponse = (
           },
           cancel: stop,
         },
-        { highWaterMark: 515 },
-      ); // Two 256-frame replays, readiness, a gap warning, and notification attachment.
+        // Host replay, a 256-frame notification replay, readiness, replay end, and attachment.
+        { highWaterMark: replay.events.length + 259 },
+      );
       return new Response(body, {
         headers: {
           ...corsHeaders,

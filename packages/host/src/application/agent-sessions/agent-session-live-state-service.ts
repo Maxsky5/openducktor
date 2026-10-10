@@ -7,11 +7,13 @@ import {
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveSnapshotSchema,
+  isAgentSessionLiveStateEnvelope,
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Clock, Effect } from "effect";
 import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
+import { createKeyedSharedFlight } from "../../effect/shared-flight";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterPort,
@@ -71,6 +73,9 @@ export const createAgentSessionLiveStateService = ({
         : admitted;
     };
   const observedRepoPaths = new Set<string>();
+  // Native events keep a restored repository current, so attachments do not read it again.
+  const restoredRepoPaths = new Set<string>();
+  const restoration = createKeyedSharedFlight<string, void, HostError>();
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   // Transient admission guard that spans the probe and the native continuation for one session.
@@ -84,8 +89,15 @@ export const createAgentSessionLiveStateService = ({
   };
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const engagement = createRuntimeSessionEngagement();
+  // Numbers state changes in publication order, so an attachment can drop the ones its snapshot covers.
+  let liveStateSequence = 0;
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
-    publish,
+    (envelope) =>
+      publish(
+        isAgentSessionLiveStateEnvelope(envelope)
+          ? { ...envelope, sequence: ++liveStateSequence }
+          : envelope,
+      ),
     faultLog,
     persistence,
   );
@@ -169,6 +181,14 @@ export const createAgentSessionLiveStateService = ({
           ) ?? Effect.void,
       );
     });
+  // Run inside `refreshGate`. Observe the repository before listing adapters, so a runtime that
+  // registers during the read restores this repository itself.
+  const restoreRepository = (repoPath: string): Effect.Effect<void, HostError> =>
+    Effect.gen(function* () {
+      observedRepoPaths.add(repoPath);
+      yield* refreshAdapters(repoPath, adapterRegistry.list());
+      restoredRepoPaths.add(repoPath);
+    });
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
     adapterRegistry,
     coordinator,
@@ -182,14 +202,16 @@ export const createAgentSessionLiveStateService = ({
         ? refreshGate.run(
             Effect.forEach([...observedRepoPaths], (repoPath) =>
               refreshAdapters(repoPath, [adapter]).pipe(
-                Effect.catch((cause) =>
-                  publishEnvelope({
+                Effect.catch((cause) => {
+                  // The next attachment restores the repository again.
+                  restoredRepoPaths.delete(repoPath);
+                  return publishEnvelope({
                     type: "fault",
                     repoPath,
                     operation: "agent-session-live.restore-runtime-sessions",
                     message: `Cannot restore the ${adapter.binding.runtimeKind} sessions of this repository: ${cause.message}`,
-                  }),
-                ),
+                  });
+                }),
               ),
             ),
           )
@@ -292,11 +314,29 @@ export const createAgentSessionLiveStateService = ({
           }
         }),
       ),
+    attach: (input) =>
+      Effect.gen(function* () {
+        if (!restoredRepoPaths.has(input.repoPath)) {
+          yield* restoration.run(
+            input.repoPath,
+            refreshGate.run(restoreRepository(input.repoPath)),
+          );
+        }
+        return yield* coordinator.run(
+          listSnapshots(input.repoPath).pipe(
+            Effect.map((snapshots) => ({
+              type: "snapshot" as const,
+              repoPath: input.repoPath,
+              sessions: [...snapshots],
+              sequence: liveStateSequence,
+            })),
+          ),
+        );
+      }),
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
-          observedRepoPaths.add(input.repoPath);
-          yield* refreshAdapters(input.repoPath, adapterRegistry.list());
+          yield* restoreRepository(input.repoPath);
           yield* coordinator.run(
             Effect.gen(function* () {
               const snapshots = yield* listSnapshots(input.repoPath);

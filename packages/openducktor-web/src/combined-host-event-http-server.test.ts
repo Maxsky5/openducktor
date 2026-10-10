@@ -4,6 +4,7 @@ import { browserEventCursorSchema } from "@openducktor/contracts";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { BufferedHostEventStream } from "./typescript-host-backend-support";
 import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
+import { liveSessionStreamEventName } from "./host-event-stream-name";
 
 const decode = (value: Uint8Array | undefined) => new TextDecoder().decode(value);
 const readCursor = (text: string) => {
@@ -11,9 +12,31 @@ const readCursor = (text: string) => {
   if (!id) throw new Error("Expected an SSE cursor");
   return browserEventCursorSchema.parse(JSON.parse(id.slice(4)));
 };
+const replayComplete = (hostChanged: boolean, gaps: string[]) =>
+  `event: replay-complete\ndata: ${JSON.stringify({ hostChanged, gaps })}\n\n`;
+const liveEvent = (repoPath: string, index: number) =>
+  ({
+    channel: "openducktor://agent-session-live-event",
+    payload: { type: "fault", repoPath, message: `fault ${index}` },
+  }) as const;
+const resume = (
+  host: BufferedHostEventStream,
+  cursor: { hostEpoch: string; hostEventId: number },
+) =>
+  Effect.runPromise(
+    createCombinedHostSseResponse(
+      new Request("http://localhost/events", {
+        headers: { "last-event-id": JSON.stringify({ notificationCursor: null, ...cursor }) },
+      }),
+      host,
+      createNotificationStream(),
+      {},
+      () => {},
+    ),
+  );
 
 test("one response carries host and notification frames with independent resume cursors", async () => {
-  const host = new BufferedHostEventStream(256);
+  const host = new BufferedHostEventStream();
   const notifications = createNotificationStream();
   const failures = mock(() => {});
   const hostStop = mock(() => {});
@@ -36,6 +59,7 @@ test("one response carries host and notification frames with independent resume 
   );
   const reader = response.body!.getReader();
   expect(decode((await reader.read()).value)).toContain(": openducktor-ready");
+  expect(decode((await reader.read()).value)).toContain(replayComplete(false, []));
   const initial = readCursor(decode((await reader.read()).value));
   expect(initial.hostEventId).toBe(0);
   expect(initial.notificationCursor?.sequence).toBe(0);
@@ -48,6 +72,7 @@ test("one response carries host and notification frames with independent resume 
   const notificationFrame = decode((await reader.read()).value);
   expect(notificationFrame).toContain("event: notification-frame");
   expect(readCursor(notificationFrame)).toEqual({
+    hostEpoch: host.hostEpoch,
     hostEventId: 1,
     notificationCursor: { ...initial.notificationCursor, sequence: 1 },
   });
@@ -66,6 +91,7 @@ test("one response carries host and notification frames with independent resume 
   const replay = resumed.body!.getReader();
   await replay.read();
   expect(decode((await replay.read()).value)).toContain('"type":"run"');
+  expect(decode((await replay.read()).value)).toContain(replayComplete(false, []));
   expect(decode((await replay.read()).value)).toContain('"reason":"replay"');
   expect(decode((await replay.read()).value)).toContain('"sequence":1');
   const query = new URL("http://localhost/events?notifications=1");
@@ -75,6 +101,7 @@ test("one response carries host and notification frames with independent resume 
   );
   const queryReplay = fromQuery.body!.getReader();
   await queryReplay.read();
+  expect(decode((await queryReplay.read()).value)).toContain(replayComplete(false, []));
   expect(decode((await queryReplay.read()).value)).toContain('"reason":"replay"');
   expect(decode((await queryReplay.read()).value)).toContain('"sequence":1');
   await reader.cancel();
@@ -87,8 +114,8 @@ test("one response carries host and notification frames with independent resume 
   expect(failures).not.toHaveBeenCalled();
 });
 
-test("a reconnect queues both full replay buffers with a host gap warning", async () => {
-  const host = new BufferedHostEventStream(256);
+test("a reconnect queues both full replay buffers and reports the evicted channel", async () => {
+  const host = new BufferedHostEventStream({ events: 256, bytes: 1024 * 1024 });
   const notifications = createNotificationStream();
   const failures = mock<(cause: unknown) => void>(() => {});
   const initial = await Effect.runPromise(
@@ -110,6 +137,7 @@ test("a reconnect queues both full replay buffers with a host gap warning", asyn
       new Request("http://localhost/events", {
         headers: {
           "last-event-id": JSON.stringify({
+            hostEpoch: host.hostEpoch,
             hostEventId: 0,
             notificationCursor: initial.value.cursor,
           }),
@@ -129,9 +157,6 @@ test("a reconnect queues both full replay buffers with a host gap warning", asyn
     await Effect.runPromise(
       Effect.tryPromise(async () => {
         expect(decode((await reader.read()).value)).toContain(": openducktor-ready");
-        expect(decode((await reader.read()).value)).toContain(
-          "event: stream-warning\ndata: Host event stream skipped 1 events;",
-        );
         const hostIds: number[] = [];
         for (let index = 0; index < 256; index++) {
           const frame = decode((await reader.read()).value);
@@ -139,6 +164,9 @@ test("a reconnect queues both full replay buffers with a host gap warning", asyn
           hostIds.push(readCursor(frame).hostEventId);
         }
         expect(hostIds).toEqual(Array.from({ length: 256 }, (_, index) => index + 2));
+        const completed = decode((await reader.read()).value);
+        expect(completed).toContain(replayComplete(false, ["message"]));
+        expect(readCursor(completed).hostEventId).toBe(257);
         const attached = decode((await reader.read()).value);
         expect(attached).toContain('"reason":"replay"');
         const sequences: number[] = [];
@@ -160,10 +188,11 @@ test("a reconnect queues both full replay buffers with a host gap warning", asyn
 test.each([
   "garbage",
   "42",
-  '{"hostEventId":-1,"notificationCursor":null}',
-  '{"hostEventId":0,"notificationCursor":{"epoch":"invalid","sequence":0}}',
+  '{"hostEventId":0,"notificationCursor":null}',
+  '{"hostEpoch":"host","hostEventId":-1,"notificationCursor":null}',
+  '{"hostEpoch":"host","hostEventId":0,"notificationCursor":{"epoch":"invalid","sequence":0}}',
 ])("invalid combined cursor %s rejects attachment visibly", async (raw) => {
-  const host = new BufferedHostEventStream(256);
+  const host = new BufferedHostEventStream();
   const notifications = createNotificationStream();
   await expect(
     Effect.runPromise(
@@ -179,7 +208,7 @@ test.each([
 });
 
 test("a stalled combined response fails once and releases both live subscriptions", async () => {
-  const host = new BufferedHostEventStream(256);
+  const host = new BufferedHostEventStream();
   const notifications = createNotificationStream();
   const failures = mock(() => {});
   const hostStop = mock(() => {});
@@ -231,5 +260,54 @@ test("a stalled combined response fails once and releases both live subscription
     await Effect.runPromise(notifications.dispose());
     hostSpy.mockRestore();
     notificationSpy.mockRestore();
+  }
+});
+
+test("a busy event name cannot evict the replay of another one", async () => {
+  const host = new BufferedHostEventStream({ events: 4, bytes: 1024 * 1024 });
+  host.emit(liveEvent("/quiet", 0), () => {});
+  for (let index = 1; index <= 6; index++) host.emit(liveEvent("/busy", index), () => {});
+
+  const reader = (
+    await resume(host, { hostEpoch: host.hostEpoch, hostEventId: 0 })
+  ).body!.getReader();
+  try {
+    await reader.read();
+    const replayed: string[] = [];
+    for (let index = 0; index < 5; index++) replayed.push(decode((await reader.read()).value));
+    expect(replayed[0]).toContain(`event: ${liveSessionStreamEventName("/quiet")}`);
+    expect(replayed.slice(1).map((frame) => readCursor(frame).hostEventId)).toEqual([4, 5, 6, 7]);
+    expect(decode((await reader.read()).value)).toContain(
+      replayComplete(false, [liveSessionStreamEventName("/busy")]),
+    );
+  } finally {
+    await reader.cancel();
+  }
+});
+
+test("a byte limit evicts large events and reports their gap", () => {
+  const host = new BufferedHostEventStream({ events: 100, bytes: 300 });
+  for (let index = 0; index < 4; index++) host.emit(liveEvent("/repo", index), () => {});
+
+  const replay = host.replayAfter(0);
+  expect(replay.events.map((event) => event.id)).toEqual([3, 4]);
+  expect(replay.gaps).toEqual([liveSessionStreamEventName("/repo")]);
+  expect(host.replayAfter(2).gaps).toEqual([]);
+});
+
+test("a cursor from another host reports a host change without replay", async () => {
+  const host = new BufferedHostEventStream();
+  host.emit(liveEvent("/repo", 0), () => {});
+
+  const reader = (
+    await resume(host, { hostEpoch: "previous-host", hostEventId: 0 })
+  ).body!.getReader();
+  try {
+    await reader.read();
+    const completed = decode((await reader.read()).value);
+    expect(completed).toContain(replayComplete(true, []));
+    expect(readCursor(completed)).toMatchObject({ hostEpoch: host.hostEpoch, hostEventId: 1 });
+  } finally {
+    await reader.cancel();
   }
 });

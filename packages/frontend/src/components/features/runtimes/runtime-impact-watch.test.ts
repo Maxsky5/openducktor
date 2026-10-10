@@ -46,7 +46,7 @@ const streamWarning = {
 const reconnected = {
   __openducktorBrowserLive: true,
   kind: "reconnected",
-  transportEpoch: "e:1",
+  missedEvents: true,
 } as const;
 
 describe("watchRuntimeImpact", () => {

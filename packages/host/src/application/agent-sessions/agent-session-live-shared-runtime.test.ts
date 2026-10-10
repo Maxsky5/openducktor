@@ -264,8 +264,8 @@ describe("shared live runtime across repositories", () => {
     ]);
 
     expect(events).toEqual([
-      { type: "session_removed", ref: first.ref },
-      { type: "session_removed", ref: second.ref },
+      { type: "session_removed", ref: first.ref, sequence: 5 },
+      { type: "session_removed", ref: second.ref, sequence: 6 },
     ]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo-a" }))).resolves.toEqual([]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo-b" }))).resolves.toEqual([]);
@@ -299,14 +299,14 @@ describe("shared live runtime across repositories", () => {
     );
 
     expect(events.filter((event) => event.type === "session_removed")).toEqual([
-      { type: "session_removed", ref: first.ref },
-      { type: "session_removed", ref: second.ref },
+      { type: "session_removed", ref: first.ref, sequence: 5 },
+      { type: "session_removed", ref: second.ref, sequence: 6 },
     ]);
     // Observed repositories and the repositories of released refs all get a fresh snapshot.
     expect(events.filter((event) => event.type === "snapshot")).toEqual([
-      { type: "snapshot", repoPath: "/repo-a", sessions: [] },
-      { type: "snapshot", repoPath: "/repo-c", sessions: [] },
-      { type: "snapshot", repoPath: "/repo-b", sessions: [] },
+      { type: "snapshot", repoPath: "/repo-a", sessions: [], sequence: 7 },
+      { type: "snapshot", repoPath: "/repo-c", sessions: [], sequence: 8 },
+      { type: "snapshot", repoPath: "/repo-b", sessions: [], sequence: 9 },
     ]);
   });
 
@@ -380,7 +380,7 @@ describe("shared live runtime across repositories", () => {
     const failure = await expectHostFailure(service.releaseRuntime("codex-runtime"));
     expect(failure.message).toContain("adapter cleanup");
     expect(failure.message).toContain("child alive");
-    expect(events).toEqual([{ type: "session_removed", ref: detached.ref }]);
+    expect(events).toEqual([{ type: "session_removed", ref: detached.ref, sequence: 2 }]);
 
     await expect(Effect.runPromise(service.releaseRuntime("codex-runtime"))).resolves.toEqual([
       detached.ref,
@@ -388,8 +388,8 @@ describe("shared live runtime across repositories", () => {
     ]);
     expect(nativeReleases).toBe(2);
     expect(events).toEqual([
-      { type: "session_removed", ref: detached.ref },
-      { type: "session_removed", ref: lateRef },
+      { type: "session_removed", ref: detached.ref, sequence: 2 },
+      { type: "session_removed", ref: lateRef, sequence: 3 },
     ]);
     await expect(Effect.runPromise(service.releaseRuntime("codex-runtime"))).resolves.toEqual([]);
     expect(nativeReleases).toBe(2);

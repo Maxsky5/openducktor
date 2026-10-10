@@ -174,7 +174,7 @@ describe("RuntimeRestartControl", () => {
     await view.findByText(/Lost\./);
     expect((await getConfirmButton(view)).hasAttribute("disabled")).toBe(true);
     act(() =>
-      events.emit({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "e:1" }),
+      events.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true }),
     );
     await waitFor(async () =>
       expect((await getConfirmButton(view)).hasAttribute("disabled")).toBe(false),

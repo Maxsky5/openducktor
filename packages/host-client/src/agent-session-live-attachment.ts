@@ -1,7 +1,14 @@
-import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import {
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLiveSnapshotEnvelope,
+  isAgentSessionLiveStateEnvelope,
+} from "@openducktor/contracts";
 
 type AgentSessionLiveAttachment = {
   accept: (envelope: AgentSessionLiveEnvelope) => void;
+  /** Installs a host snapshot, then delivers the changes it does not cover. */
+  install: (snapshot: AgentSessionLiveSnapshotEnvelope) => void;
+  /** Drops held changes and holds new ones until the next `install`. */
   restart: () => void;
 };
 
@@ -9,7 +16,6 @@ export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => 
   switch (envelope.type) {
     case "task_session_records_updated":
     case "snapshot":
-    case "transcript_gap":
     case "fault":
       return envelope.repoPath;
     case "session_upsert":
@@ -24,53 +30,59 @@ export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => 
   }
 };
 
+/**
+ * Subscribe first, then install the snapshot that `agent_session_live_attach` returns. The
+ * snapshot covers every state change up to its sequence, so older state changes are dropped.
+ * Transcript and other changes are delivered in stream order.
+ */
 export const createAgentSessionLiveAttachment = (
   repoPath: string,
   listener: (envelope: AgentSessionLiveEnvelope) => void,
 ): AgentSessionLiveAttachment => {
   let awaitingSnapshot = true;
   let pending: AgentSessionLiveEnvelope[] = [];
+  let coveredSequence = -1;
+
+  const deliver = (envelope: AgentSessionLiveEnvelope): void => {
+    if (
+      isAgentSessionLiveStateEnvelope(envelope) &&
+      envelope.sequence !== undefined &&
+      envelope.sequence <= coveredSequence
+    ) {
+      return;
+    }
+    listener(envelope);
+  };
 
   return {
     accept: (envelope) => {
       if (envelopeRepoPath(envelope) !== repoPath) {
         return;
       }
-      if (envelope.type === "fault") {
-        listener(envelope);
-        return;
-      }
-      if (envelope.type === "snapshot") {
-        if (!awaitingSnapshot) {
-          listener(envelope);
-          return;
-        }
-        awaitingSnapshot = false;
-        const buffered = pending;
-        pending = [];
-        listener({ ...envelope, isConnectionSnapshot: true });
-        for (const bufferedEnvelope of buffered) {
-          if (
-            bufferedEnvelope.type === "session_upsert" ||
-            bufferedEnvelope.type === "session_removed"
-          ) {
-            continue;
-          }
-          listener(bufferedEnvelope);
-        }
-        return;
-      }
-      if (awaitingSnapshot) {
+      if (awaitingSnapshot && envelope.type !== "fault") {
         pending.push(envelope);
         return;
       }
-      listener(envelope);
+      deliver(envelope);
+    },
+    install: (snapshot) => {
+      if (snapshot.sequence === undefined) {
+        throw new Error(
+          `The live-session snapshot of '${repoPath}' has no host sequence. Restart the host.`,
+        );
+      }
+      awaitingSnapshot = false;
+      // A new host starts a new sequence, so the latest snapshot sets the bound.
+      coveredSequence = snapshot.sequence;
+      const buffered = pending;
+      pending = [];
+      listener({ ...snapshot, isConnectionSnapshot: true });
+      for (const envelope of buffered) deliver(envelope);
     },
     restart: () => {
-      if (!awaitingSnapshot) {
-        pending = [];
-      }
+      // The next snapshot and history reload replace everything received before the restart.
       awaitingSnapshot = true;
+      pending = [];
     },
   };
 };

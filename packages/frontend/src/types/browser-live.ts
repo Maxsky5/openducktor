@@ -11,7 +11,8 @@ export type BrowserLiveControlEvent =
   | {
       __openducktorBrowserLive: true;
       kind: typeof BROWSER_LIVE_RECONNECTED_EVENT_KIND;
-      transportEpoch: string;
+      /** False when the replay delivered every event since the connection failed. */
+      missedEvents: boolean;
     }
   | {
       __openducktorBrowserLive: true;

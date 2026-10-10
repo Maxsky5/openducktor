@@ -354,7 +354,11 @@ describe("HostClient", () => {
       pendingQuestions: [],
       contextUsage: null,
     };
+    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [session], sequence: 4 };
     const { client, calls } = createClient((command) => {
+      if (command === "agent_session_live_attach") {
+        return snapshot;
+      }
       if (command === "agent_session_live_refresh") {
         return undefined;
       }
@@ -378,6 +382,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
+    await expect(client.agentSessionLiveAttach({ repoPath: "/repo" })).resolves.toEqual(snapshot);
     await client.agentSessionLiveRefresh({ repoPath: "/repo" });
     await expect(client.agentSessionLiveList({ repoPath: "/repo" })).resolves.toEqual([session]);
     await expect(client.agentSessionLiveRead(session.ref)).resolves.toEqual({
@@ -388,6 +393,7 @@ describe("HostClient", () => {
       client.agentSessionLiveLoadDiff({ ...session.ref, runtimeHistoryAnchor: "turn-1" }),
     ).resolves.toEqual([expect.objectContaining({ file: "src/app.ts" })]);
     expect(calls).toEqual([
+      { command: "agent_session_live_attach", args: { repoPath: "/repo" } },
       {
         command: "agent_session_live_refresh",
         args: { repoPath: "/repo" },

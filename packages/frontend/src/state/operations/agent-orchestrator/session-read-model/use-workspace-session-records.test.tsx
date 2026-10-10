@@ -143,7 +143,7 @@ describe("Workspace Session metadata subscription", () => {
     expect(stopped).toEqual([0, 1]);
   });
 
-  test("keeps durable records after a stream warning and refetches on reconnect", async () => {
+  test("keeps durable records after a stream warning and refetches only missed updates", async () => {
     const client = new QueryClient();
     let emit!: WorkspaceSessionUpdateListener;
     let reads = 0;
@@ -171,8 +171,14 @@ describe("Workspace Session metadata subscription", () => {
       );
       expect(harness.getLatest().subscriptionError).toBe("Connection lost");
       expect(harness.getLatest().records.data?.[0]?.manualTitle).toBe("read-1");
+      // A complete replay already delivered every update.
       await harness.run(() =>
-        emit({ __openducktorBrowserLive: true, kind: "reconnected", transportEpoch: "next" }),
+        emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: false }),
+      );
+      expect(harness.getLatest().subscriptionError).toBeNull();
+      expect(reads).toBe(1);
+      await harness.run(() =>
+        emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true }),
       );
       await harness.waitFor((state) => state.records.data?.[0]?.manualTitle === "read-2");
       expect(harness.getLatest().subscriptionError).toBeNull();

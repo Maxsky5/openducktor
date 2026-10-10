@@ -634,6 +634,103 @@ describe("createAgentSessionLiveStateService", () => {
     },
   );
 
+  describe("attach", () => {
+    const createAttachHarness = () => {
+      const events: AgentSessionLiveEnvelope[] = [];
+      const counts = { rootReads: 0, refreshes: 0 };
+      const control = { failRoots: false, failRefresh: false };
+      const failure = new HostOperationError({ operation: "test.roots", message: "Roots failed" });
+      const service = createAgentSessionLiveStateService({
+        runtimeAdmission: passThroughAdmission,
+        adapterRegistry: createLiveSessionAdapterRegistry(),
+        readSessionRootRefs: () =>
+          Effect.sleep("1 millis").pipe(
+            Effect.andThen(
+              Effect.suspend(() => {
+                counts.rootReads += 1;
+                return control.failRoots ? Effect.fail(failure) : Effect.succeed([]);
+              }),
+            ),
+          ),
+        faultLog: () => Effect.void,
+        publish: (event) => events.push(event),
+      });
+      const adapter = (runtimeId: string) =>
+        fakeAdapter({
+          runtimeId,
+          snapshots: () => [liveSnapshot("session-1")],
+          refreshEffect: () =>
+            Effect.suspend(() => {
+              counts.refreshes += 1;
+              return control.failRefresh ? Effect.fail(failure) : Effect.void;
+            }),
+        });
+      return { adapter, control, counts, events, service };
+    };
+
+    test("restores a repository once and answers later attachments from the live projection", async () => {
+      const { adapter, counts, events, service } = createAttachHarness();
+      await Effect.runPromise(service.registerRuntimeAdapter(adapter("runtime-1")));
+      expect(events).toMatchObject([{ type: "session_upsert", sequence: 1 }]);
+      events.length = 0;
+
+      const first = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      const second = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+
+      expect(first).toEqual({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [{ ...liveSnapshot("session-1"), executionEpisodeId: expect.any(String) }],
+        sequence: 1,
+      });
+      expect(second).toEqual(first);
+      expect(counts).toEqual({ rootReads: 1, refreshes: 1 });
+      // The caller receives its snapshot. Other observers receive nothing.
+      expect(events).toEqual([]);
+    });
+
+    test("concurrent first attachments share one restoration and its failure", async () => {
+      const { adapter, control, counts, service } = createAttachHarness();
+      await Effect.runPromise(service.registerRuntimeAdapter(adapter("runtime-1")));
+      control.failRoots = true;
+
+      const results = await Effect.runPromise(
+        Effect.all(
+          [service.attach({ repoPath: "/repo" }), service.attach({ repoPath: "/repo" })].map(
+            Effect.result,
+          ),
+          { concurrency: "unbounded" },
+        ),
+      );
+
+      expect(results.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
+      expect(counts.rootReads).toBe(1);
+      control.failRoots = false;
+      await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      expect(counts).toEqual({ rootReads: 2, refreshes: 1 });
+    });
+
+    test("a failed runtime restoration makes the next attachment restore the repository again", async () => {
+      const { adapter, control, counts, events, service } = createAttachHarness();
+      await Effect.runPromise(service.registerRuntimeAdapter(adapter("runtime-1")));
+      await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      await Effect.runPromise(service.releaseRuntime("runtime-1"));
+      control.failRefresh = true;
+      events.length = 0;
+
+      await Effect.runPromise(service.registerRuntimeAdapter(adapter("runtime-2")));
+      expect(events).toMatchObject([
+        { type: "fault", operation: "agent-session-live.restore-runtime-sessions" },
+        { type: "session_upsert" },
+      ]);
+      control.failRefresh = false;
+      await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+
+      expect(counts).toEqual({ rootReads: 3, refreshes: 3 });
+    });
+  });
+
   test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
     const withProcessStartAdmission: WithProcessStartAdmission = (repoPath) =>
       Effect.fail(
@@ -735,7 +832,7 @@ describe("createAgentSessionLiveStateService", () => {
     events.length = 0;
     broken = true;
     expect(await Effect.runPromise(service.releaseRuntime("released"))).toEqual([owned.ref]);
-    expect(events).toEqual([{ type: "session_removed", ref: owned.ref }]);
+    expect(events).toEqual([{ type: "session_removed", ref: owned.ref, sequence: 2 }]);
   });
   test("publishes the same execution episode to list, read, and refresh consumers", async () => {
     const { events, service } = createHarness();
@@ -762,6 +859,7 @@ describe("createAgentSessionLiveStateService", () => {
         type: "snapshot",
         repoPath: "/repo",
         sessions: [{ ...snapshot, executionEpisodeId: episodeId }],
+        sequence: 2,
       },
     ]);
   });
@@ -1357,7 +1455,11 @@ describe("createAgentSessionLiveStateService", () => {
         repoPath: "/repo",
         message: "Codex event processing failed.",
       },
-      { type: "session_upsert", session: { ...snapshot, executionEpisodeId: expect.any(String) } },
+      {
+        type: "session_upsert",
+        session: { ...snapshot, executionEpisodeId: expect.any(String) },
+        sequence: 1,
+      },
     ]);
   });
 
@@ -1512,7 +1614,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 1 }]);
     expect(faultLogs).toEqual([]);
   });
 
@@ -1763,7 +1865,7 @@ describe("createAgentSessionLiveStateService", () => {
       "live snapshot read failed",
     );
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 3 }]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 

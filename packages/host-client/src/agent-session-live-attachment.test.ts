@@ -25,107 +25,98 @@ const transcriptEvent = (messageId: string): AgentSessionLiveEnvelope => ({
   },
 });
 
+const session = {
+  ref: {
+    repoPath: "/repo",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/worktree",
+    externalSessionId: "thread",
+  },
+  sessionAssociation: { kind: "unbound" },
+  activity: "waiting_for_permission",
+  title: "Session",
+  startedAt: "2026-07-17T08:00:00.000Z",
+  pendingApprovals: [],
+  pendingQuestions: [],
+  contextUsage: null,
+} as const;
+const upsert = (sequence: number): AgentSessionLiveEnvelope => ({
+  type: "session_upsert",
+  session,
+  sequence,
+});
+
+const createRecorder = () => {
+  const received: AgentSessionLiveEnvelope[] = [];
+  const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
+    received.push(envelope);
+  });
+  return { attachment, received };
+};
+
 describe("agent session live attachment", () => {
-  test("delivers the snapshot first and replays pre-snapshot envelopes in order", () => {
-    const received: AgentSessionLiveEnvelope[] = [];
-    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
-      received.push(envelope);
-    });
-    const first = transcriptEvent("first");
-    const second = transcriptEvent("second");
+  test("installs the snapshot first and delivers held changes it does not cover", () => {
+    const { attachment, received } = createRecorder();
+    const fault = { type: "fault", repoPath: "/repo", message: "Status read failed" } as const;
 
-    attachment.accept(first);
-    attachment.accept(second);
-    expect(received).toEqual([]);
-    attachment.accept(snapshot);
-
-    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, first, second]);
-  });
-
-  test("delivers later ordered snapshots without dropping deltas", () => {
-    const received: AgentSessionLiveEnvelope[] = [];
-    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
-      received.push(envelope);
-    });
-    const delta = transcriptEvent("after-snapshot");
-    const refreshedSnapshot = { ...snapshot };
-
-    attachment.accept({ ...snapshot, repoPath: "/other" });
-    attachment.accept(snapshot);
-    attachment.accept(refreshedSnapshot);
-    attachment.accept(delta);
+    attachment.accept(upsert(3));
+    attachment.accept(transcriptEvent("first"));
+    attachment.accept(fault);
+    attachment.accept(upsert(6));
+    attachment.accept(transcriptEvent("second"));
+    expect(received).toEqual([fault]);
+    attachment.install({ ...snapshot, sequence: 5 });
 
     expect(received).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      refreshedSnapshot,
-      delta,
+      fault,
+      { ...snapshot, sequence: 5, isConnectionSnapshot: true },
+      transcriptEvent("first"),
+      upsert(6),
+      transcriptEvent("second"),
     ]);
   });
 
-  test("lets a repair snapshot supersede buffered session state without dropping transcripts", () => {
-    const received: AgentSessionLiveEnvelope[] = [];
-    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
-      received.push(envelope);
-    });
-    const staleSession = {
-      ref: {
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "stale-thread",
-      },
-      sessionAssociation: { kind: "unbound" },
-      activity: "waiting_for_permission",
-      title: "Stale session",
-      startedAt: "2026-07-17T08:00:00.000Z",
-      pendingApprovals: [
-        {
-          requestId: "stale-approval",
-          requestType: "command_execution",
-          title: "Stale approval",
-        },
-      ],
-      pendingQuestions: [],
-      contextUsage: null,
-    } as const;
-    const duringReconnect = transcriptEvent("during-repair");
-    const repairSnapshot = { ...snapshot };
+  test("drops later state changes that the installed snapshot covers", () => {
+    const { attachment, received } = createRecorder();
 
-    attachment.accept(snapshot);
-    attachment.restart();
-    attachment.accept({ type: "session_upsert", session: staleSession });
-    attachment.accept({ type: "session_removed", ref: staleSession.ref });
-    attachment.accept(duringReconnect);
-    attachment.accept(repairSnapshot);
+    attachment.install({ ...snapshot, sequence: 5 });
+    attachment.accept({ ...snapshot, repoPath: "/other", sequence: 9 });
+    attachment.accept({ ...snapshot, sequence: 4 });
+    attachment.accept(upsert(5));
+    attachment.accept({ ...snapshot, sequence: 7 });
+    attachment.accept(transcriptEvent("after-snapshot"));
 
     expect(received).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      { ...repairSnapshot, isConnectionSnapshot: true },
-      duringReconnect,
+      { ...snapshot, sequence: 5, isConnectionSnapshot: true },
+      { ...snapshot, sequence: 7 },
+      transcriptEvent("after-snapshot"),
     ]);
   });
 
-  test("preserves buffered transcript events across repeated reconnect signals", () => {
-    const received: AgentSessionLiveEnvelope[] = [];
-    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
-      received.push(envelope);
-    });
-    const first = transcriptEvent("first-reconnect");
-    const second = transcriptEvent("second-reconnect");
+  test("a restart drops held changes and the next snapshot sets a new sequence bound", () => {
+    const { attachment, received } = createRecorder();
 
-    attachment.accept(snapshot);
+    attachment.install({ ...snapshot, sequence: 50 });
     attachment.restart();
-    attachment.accept(first);
+    attachment.accept(transcriptEvent("before-gap"));
     attachment.restart();
-    attachment.accept(second);
-    attachment.accept(snapshot);
+    attachment.accept(transcriptEvent("after-gap"));
+    attachment.accept(upsert(3));
+    // A replacement host starts a new sequence.
+    attachment.install({ ...snapshot, sequence: 2 });
 
     expect(received).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      { ...snapshot, isConnectionSnapshot: true },
-      first,
-      second,
+      { ...snapshot, sequence: 50, isConnectionSnapshot: true },
+      { ...snapshot, sequence: 2, isConnectionSnapshot: true },
+      transcriptEvent("after-gap"),
+      upsert(3),
     ]);
+  });
+
+  test("rejects a snapshot without a host sequence", () => {
+    const { attachment } = createRecorder();
+
+    expect(() => attachment.install(snapshot)).toThrow("has no host sequence");
   });
 
   test("forwards complete repository session events unchanged", () => {
@@ -151,9 +142,12 @@ describe("agent session live attachment", () => {
     const event = { type: "session_upsert", session } as const;
     const expectedEvent = structuredClone(event);
 
-    attachment.accept(snapshot);
+    attachment.install({ ...snapshot, sequence: 0 });
     attachment.accept(event);
 
-    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, expectedEvent]);
+    expect(received).toEqual([
+      { ...snapshot, sequence: 0, isConnectionSnapshot: true },
+      expectedEvent,
+    ]);
   });
 });

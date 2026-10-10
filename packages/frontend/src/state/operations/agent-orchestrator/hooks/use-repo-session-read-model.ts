@@ -1,7 +1,7 @@
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
-  AgentSessionLiveRefreshInput,
+  AgentSessionLiveAttachInput,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
@@ -64,7 +64,7 @@ import {
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
   observeAgentSessionLive: (
-    input: AgentSessionLiveRefreshInput,
+    input: AgentSessionLiveAttachInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
 };
@@ -80,7 +80,6 @@ type UseRepoSessionReadModelArgs = {
   applyLiveNotices: AgentSessionsStore["applyLiveNotices"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
-  recoverTranscriptGap: (message: string) => Promise<void>;
   queryClient: QueryClient;
   sessionReadPort: AgentSessionReadPort;
 };
@@ -136,7 +135,6 @@ export const useRepoSessionReadModel = ({
   applyLiveNotices,
   liveSessionPort,
   transcriptEvents,
-  recoverTranscriptGap,
   queryClient,
   sessionReadPort,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
@@ -216,9 +214,6 @@ export const useRepoSessionReadModel = ({
   const retainLiveNotices = useEffectEvent(applyLiveNotices);
   const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
     transcriptEvents.flushSession(ref),
-  );
-  const recoverTranscriptHistory = useEffectEvent((message: string) =>
-    recoverTranscriptGap(message),
   );
   const clearSessionFaults = useCallback(() => {
     setSessionFaults((current) => (current.size === 0 ? current : new Map()));
@@ -849,14 +844,6 @@ export const useRepoSessionReadModel = ({
         clearSessionFault(envelope.event.sessionRef);
         commitTranscriptActivity(envelope);
         handleTranscriptEvent(envelope.event);
-        return;
-      }
-      if (envelope.type === "transcript_gap") {
-        void recoverTranscriptHistory(envelope.message).catch((cause: unknown) => {
-          failObservation(
-            `Failed to recover transcript history after a live-stream gap: ${errorMessage(cause)}`,
-          );
-        });
         return;
       }
       if (envelope.type === "catalog_invalidated") {

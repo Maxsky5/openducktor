@@ -177,9 +177,9 @@ describe("agent-session live contracts", () => {
 
   test("routes ordered envelope variants by repository without attachment identity", () => {
     const variants = [
-      { type: "snapshot", repoPath: ref.repoPath, sessions: [snapshot] },
-      { type: "session_upsert", session: snapshot },
-      { type: "session_removed", ref },
+      { type: "snapshot", repoPath: ref.repoPath, sessions: [snapshot], sequence: 0 },
+      { type: "session_upsert", session: snapshot, sequence: 1 },
+      { type: "session_removed", ref, sequence: 2 },
       {
         type: "transcript_event",
         event: {
@@ -217,11 +217,6 @@ describe("agent-session live contracts", () => {
             },
           ],
         },
-      },
-      {
-        type: "transcript_gap",
-        repoPath: ref.repoPath,
-        message: "Host event replay skipped transcript events.",
       },
       {
         type: "fault",

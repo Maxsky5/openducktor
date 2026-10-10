@@ -104,10 +104,6 @@ export const applyWorkspaceActivityEnvelope = (
     return withUnavailableReason(current, faultReason(envelope));
   }
 
-  if (envelope.type === "transcript_gap") {
-    return withUnavailableReason(current, envelope.message);
-  }
-
   return current;
 };
 

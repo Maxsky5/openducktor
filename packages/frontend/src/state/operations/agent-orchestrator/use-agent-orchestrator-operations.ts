@@ -3,10 +3,7 @@ import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
-import {
-  agentSessionHistoryQueryKeys,
-  sessionHistoryQueryOptions,
-} from "@/state/queries/agent-session-history";
+import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -21,7 +18,6 @@ import { createAgentSessionTranscriptEventConsumer } from "./events/session-tran
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createLoadAgentSessionHistory } from "./history/session-history-loader";
-import { markSessionHistoriesStale } from "./history/session-history-freshness";
 import { createSessionHistoryReadGeneration } from "./history/session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
@@ -162,17 +158,6 @@ export function useAgentOrchestratorOperations({
     workspaceId,
     workspaceRepoPath,
   ]);
-  const recoverTranscriptGap = useCallback(async (): Promise<void> => {
-    if (!workspaceRepoPath) return;
-    const filters = { queryKey: agentSessionHistoryQueryKeys.workspace(workspaceRepoPath) };
-    const cancelledReads = queryClient.cancelQueries(filters);
-    sessionStore.setSessionCollection(markSessionHistoriesStale);
-    await cancelledReads;
-    await queryClient.invalidateQueries({
-      ...filters,
-      refetchType: "active",
-    });
-  }, [queryClient, sessionStore, workspaceRepoPath]);
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     workspaceId,
@@ -184,7 +169,6 @@ export function useAgentOrchestratorOperations({
     applyLiveNotices: sessionStore.applyLiveNotices,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
-    recoverTranscriptGap,
     queryClient,
     sessionReadPort: hostPort,
   });

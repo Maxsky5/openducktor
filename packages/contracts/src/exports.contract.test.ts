@@ -3,6 +3,7 @@ import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
   "browserEventCursorSchema",
+  "browserReplayCompleteSchema",
   "notificationCursorSchema",
   "notificationStreamSubscribeSchema",
   "notificationStreamFrameSchema",
@@ -181,6 +182,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionHistoryMessageSchema",
   "agentSessionHistorySchema",
   "agentSessionLiveEnvelopeSchema",
+  "agentSessionLiveSnapshotEnvelopeSchema",
+  "isAgentSessionLiveStateEnvelope",
+  "agentSessionLiveAttachInputSchema",
   "agentSessionLiveListInputSchema",
   "agentSessionLiveLoadContextInputSchema",
   "agentSessionLiveLoadContextResultSchema",

@@ -50,10 +50,12 @@ export const observeWorkspaceSessionRecords = (
           report(event.message ?? "Workspace Session updates are unavailable.");
         } else {
           report(null);
-          void queryClient.invalidateQueries({
-            queryKey: workspaceSessionQueryKeys.all,
-            refetchType: "all",
-          });
+          if (event.missedEvents) {
+            void queryClient.invalidateQueries({
+              queryKey: workspaceSessionQueryKeys.all,
+              refetchType: "all",
+            });
+          }
         }
         return;
       }

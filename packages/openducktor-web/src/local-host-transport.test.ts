@@ -65,6 +65,12 @@ class FakeEventSource {
     }
   }
 
+  /** Opens the connection and ends its replay, as the host does for each connection. */
+  connect(replay: { hostChanged: boolean; gaps: string[] } = { hostChanged: false, gaps: [] }) {
+    this.emit("open", "");
+    this.emit("replay-complete", JSON.stringify(replay));
+  }
+
   hasListener(type: string): boolean {
     return (this.listeners.get(type)?.size ?? 0) > 0;
   }
@@ -73,6 +79,18 @@ class FakeEventSource {
     FakeEventSource.instances = [];
   }
 }
+
+const liveAttachBody = (repoPath: string, sequence = 0): string =>
+  JSON.stringify({ type: "snapshot", repoPath, sessions: [], sequence });
+// Answers live attachments with an empty snapshot of the requested repository.
+const hostFetch = (sequence = 0) =>
+  mock(async (url: string | URL | Request, init?: RequestInit) =>
+    url.toString().endsWith("/invoke/agent_session_live_attach")
+      ? new Response(liveAttachBody(JSON.parse(String(init?.body)).repoPath, sequence), {
+          status: 200,
+        })
+      : new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  );
 
 const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
@@ -107,6 +125,17 @@ const waitForEventSourceListener = async (
   }
 
   throw new Error(`Expected EventSource listener for ${type}.`);
+};
+
+const waitForCondition = async (condition: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (condition()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Expected the condition to become true.");
 };
 
 beforeEach(async () => {
@@ -433,14 +462,14 @@ describe("local host SSE subscriptions", () => {
       },
     );
     const eventSource = await waitForEventSourceInstance();
-    await waitForEventSourceListener(eventSource, "open");
+    await waitForEventSourceListener(eventSource, "replay-complete");
 
     eventSource.emit("error", "initial failure");
     await Promise.resolve();
     expect(ready).toBe(false);
     expect(listener).not.toHaveBeenCalled();
 
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribe = await subscription;
     expect(ready).toBe(true);
     unsubscribe();
@@ -456,9 +485,12 @@ describe("local host SSE subscriptions", () => {
     } = await loadLocalHostTransport();
     const fetchMock = mock(
       async (url: string | URL | Request) =>
-        new Response(url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }), {
-          status: 200,
-        }),
+        new Response(
+          url.toString().includes("/invoke/")
+            ? liveAttachBody("/repo")
+            : JSON.stringify({ ok: true }),
+          { status: 200 },
+        ),
     );
     globalThis.fetch = createFetchFixture(fetchMock);
     const runListener = mock(() => {});
@@ -476,10 +508,10 @@ describe("local host SSE subscriptions", () => {
     );
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events?notifications=1");
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events");
     expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.connect();
     const unsubscribeWorkspaceSession = await workspaceSessionSubscription;
     const unsubscribeSetup = await setupSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
@@ -525,14 +557,23 @@ describe("local host SSE subscriptions", () => {
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
+      sequence: 1,
     });
 
     expect(runListener).toHaveBeenCalledWith({ type: "run" });
-    expect(liveSessionListener).toHaveBeenCalledWith({
-      isConnectionSnapshot: true,
+    expect(liveSessionListener).toHaveBeenCalledTimes(2);
+    expect(liveSessionListener).toHaveBeenNthCalledWith(1, {
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
+      sequence: 0,
+      isConnectionSnapshot: true,
+    });
+    expect(liveSessionListener).toHaveBeenNthCalledWith(2, {
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+      sequence: 1,
     });
     expect(() =>
       emitHostEvent("openducktor://workspace-session-updated", { workspaceId: "workspace-A" }),
@@ -563,7 +604,7 @@ describe("local host SSE subscriptions", () => {
     const unsubscribeFirst = await subscribeLocalHostRunEvents(first);
     unsubscribeLater = await subscribeLocalHostRunEvents(later);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const data = JSON.stringify({ channel: "openducktor://run-event", payload: { type: "run" } });
 
     let thrown: unknown;
@@ -584,13 +625,13 @@ describe("local host SSE subscriptions", () => {
 
   test("routes named live events only to observed repositories and removes unused listeners", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    globalThis.fetch = createFetchFixture(mock(async () => new Response("null", { status: 200 })));
+    globalThis.fetch = createFetchFixture(hostFetch());
     const first = mock((_event: AgentSessionLiveEnvelope) => {});
     const duplicate = mock((_event: AgentSessionLiveEnvelope) => {});
     const second = mock((_event: AgentSessionLiveEnvelope) => {});
     const firstSetup = observeLocalHostAgentSessions({ repoPath: "/first" }, first);
     const source = await waitForEventSourceInstance();
-    source.emit("open", "");
+    source.connect();
     const stopFirst = await firstSetup;
     const stopDuplicate = await observeLocalHostAgentSessions({ repoPath: "/first" }, duplicate);
     const stopSecond = await observeLocalHostAgentSessions({ repoPath: "/second" }, second);
@@ -604,9 +645,10 @@ describe("local host SSE subscriptions", () => {
         payload: snapshot,
       }),
     );
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(duplicate).toHaveBeenCalledTimes(1);
-    expect(second).not.toHaveBeenCalled();
+    // Each observer received its own attachment snapshot first.
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(duplicate).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(1);
     expect(() =>
       source.emit(
         liveSessionStreamEventName("/first"),
@@ -652,16 +694,22 @@ describe("local host SSE subscriptions", () => {
     await Promise.resolve();
     expect(didResolve).toBe(false);
 
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribe = await subscription;
     expect(listener).not.toHaveBeenCalled();
 
-    eventSource.emit("open", "");
-    expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
-      kind: "reconnected",
-      transportEpoch: "events:1",
-    });
+    eventSource.connect();
+    eventSource.connect({ hostChanged: false, gaps: [liveSessionStreamEventName("/repo")] });
+    eventSource.connect({ hostChanged: false, gaps: ["message"] });
+    eventSource.connect({ hostChanged: true, gaps: [] });
+    expect(listener).toHaveBeenCalledTimes(4);
+    for (const [index, missedEvents] of [false, false, true, true].entries()) {
+      expect(listener).toHaveBeenNthCalledWith(index + 1, {
+        __openducktorBrowserLive: true,
+        kind: "reconnected",
+        missedEvents,
+      });
+    }
 
     unsubscribe();
   });
@@ -674,7 +722,7 @@ describe("local host SSE subscriptions", () => {
     const listener = mock(() => {});
     const subscription = subscribeLocalHostRuntimeChanges(listener);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribe = await subscription;
     const payload = {
       type: "runtime_changed",
@@ -699,13 +747,13 @@ describe("local host SSE subscriptions", () => {
       "message",
       JSON.stringify({ channel: "openducktor://runtime-changed", payload }),
     );
-    eventSource.emit("open", "");
+    eventSource.connect();
 
     expect(listener).toHaveBeenNthCalledWith(1, payload);
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      missedEvents: false,
     });
     unsubscribe();
   });
@@ -724,13 +772,13 @@ describe("local host SSE subscriptions", () => {
     const later = mock(() => {});
     const firstSubscription = subscribeLocalHostWorkspaceSessionUpdates(first);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribeFirst = await firstSubscription;
     unsubscribeLater = await subscribeLocalHostWorkspaceSessionUpdates(later);
 
     let thrown: unknown;
     try {
-      eventSource.emit("open", "");
+      eventSource.connect();
     } catch (cause) {
       thrown = cause;
     }
@@ -740,161 +788,109 @@ describe("local host SSE subscriptions", () => {
     expect(later).toHaveBeenCalledWith({
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      missedEvents: false,
     });
 
-    expect(() => eventSource.emit("open", "")).toThrow("reconnect listener failed");
+    expect(() => eventSource.connect()).toThrow("reconnect listener failed");
     expect(later).toHaveBeenCalledTimes(1);
     unsubscribeFirst();
   });
 
-  test("refreshes live-session state on the shared connection without losing ordered deltas", async () => {
+  test("keeps live-session state across a complete replay and reattaches after missed events", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    let refreshCallCount = 0;
-    let resolveSecondRefresh: () => void = () => {};
-    const secondRefresh = new Promise<void>((resolve) => {
-      resolveSecondRefresh = resolve;
-    });
+    const attachResponses = [Promise.withResolvers<number>(), Promise.withResolvers<number>()];
+    let attachCount = 0;
     const fetchMock = mock(async (url: string | URL | Request) => {
-      if (url.toString().endsWith("/invoke/agent_session_live_refresh")) {
-        refreshCallCount += 1;
-        if (refreshCallCount === 2) {
-          resolveSecondRefresh();
-        }
+      if (!url.toString().endsWith("/invoke/agent_session_live_attach")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
-      return new Response("null", { status: 200 });
+      const sequence = await attachResponses[attachCount++]!.promise;
+      return new Response(liveAttachBody("/repo", sequence), { status: 200 });
     });
     globalThis.fetch = createFetchFixture(fetchMock);
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "child-thread",
+    } as const;
+    const transcriptEvent = (messageId: string) =>
+      ({
+        type: "transcript_event",
+        event: {
+          type: "assistant_message",
+          externalSessionId: "child-thread",
+          messageId,
+          message: messageId,
+          timestamp: "2026-07-17T08:00:00.000Z",
+          sessionRef,
+        },
+      }) satisfies AgentSessionLiveEnvelope;
+    const removal = (sequence: number) =>
+      ({ type: "session_removed", ref: sessionRef, sequence }) satisfies AgentSessionLiveEnvelope;
 
     const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
     const eventSource = await waitForEventSourceInstance();
-    expect(new URL(eventSource.url).pathname).toBe("/events");
-
-    eventSource.emit("open", "");
-    const stopObserving = await observation;
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:14327/invoke/agent_session_live_refresh",
-      expect.objectContaining({ body: JSON.stringify({ repoPath: "/repo" }) }),
-    );
-
-    const transcriptEvent = {
-      type: "transcript_event",
-      event: {
-        type: "assistant_message",
-        externalSessionId: "child-thread",
-        messageId: "assistant-1",
-        message: "New child output",
-        timestamp: "2026-07-17T08:00:00.000Z",
-        sessionRef: {
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "child-thread",
-        },
-      },
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: transcriptEvent,
-      }),
-    );
+    eventSource.connect();
+    await waitForCondition(() => attachCount === 1);
+    const emitLive = (payload: AgentSessionLiveEnvelope) =>
+      eventSource.emit(
+        liveSessionStreamEventName("/repo"),
+        JSON.stringify({ channel: "openducktor://agent-session-live-event", payload }),
+      );
+    // Changes that arrive during the attachment wait for its snapshot.
+    emitLive(removal(4));
+    emitLive(transcriptEvent("during-attach"));
+    emitLive(removal(6));
     expect(listener).not.toHaveBeenCalled();
-
-    const snapshot = {
-      type: "snapshot",
-      repoPath: "/repo",
-      sessions: [],
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: snapshot,
-      }),
-    );
+    attachResponses[0]!.resolve(5);
+    const stopObserving = await observation;
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      transcriptEvent,
+      {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [],
+        sequence: 5,
+        isConnectionSnapshot: true,
+      },
+      transcriptEvent("during-attach"),
+      removal(6),
     ]);
 
-    eventSource.emit("open", "");
-    await secondRefresh;
-    expect(
-      fetchMock.mock.calls.filter(([url]) =>
-        url.toString().endsWith("/invoke/agent_session_live_refresh"),
-      ),
-    ).toHaveLength(2);
+    listener.mockClear();
+    eventSource.connect();
+    eventSource.connect({ hostChanged: false, gaps: [liveSessionStreamEventName("/other")] });
+    expect(attachCount).toBe(1);
+    expect(listener).not.toHaveBeenCalled();
 
-    const transcriptGap = {
-      type: "transcript_gap",
-      repoPath: "/repo",
-      message: "Host event stream skipped 2 events; reconnect will replay buffered events.",
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit("stream-warning", transcriptGap.message);
-    expect(listener).toHaveBeenNthCalledWith(3, transcriptGap);
-
-    const reconnectTranscriptEvent = {
-      ...transcriptEvent,
-      event: {
-        ...transcriptEvent.event,
-        messageId: "assistant-2",
-        message: "Output during reconnect",
-      },
-    } satisfies AgentSessionLiveEnvelope;
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: reconnectTranscriptEvent,
-      }),
-    );
-    expect(listener).toHaveBeenCalledTimes(3);
-    const replayedSnapshot = { ...snapshot };
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: replayedSnapshot,
-      }),
-    );
-    const refreshedSnapshot = { ...snapshot };
-    eventSource.emit(
-      liveSessionStreamEventName("/repo"),
-      JSON.stringify({
-        channel: "openducktor://agent-session-live-event",
-        payload: refreshedSnapshot,
-      }),
-    );
+    eventSource.connect({ hostChanged: false, gaps: [liveSessionStreamEventName("/repo")] });
+    await waitForCondition(() => attachCount === 2);
+    emitLive(removal(8));
+    emitLive(transcriptEvent("during-reattach"));
+    expect(listener).not.toHaveBeenCalled();
+    attachResponses[1]!.resolve(9);
+    await waitForCondition(() => listener.mock.calls.length === 2);
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
-      transcriptEvent,
-      transcriptGap,
-      { ...replayedSnapshot, isConnectionSnapshot: true },
-      reconnectTranscriptEvent,
-      refreshedSnapshot,
+      {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [],
+        sequence: 9,
+        isConnectionSnapshot: true,
+      },
+      transcriptEvent("during-reattach"),
     ]);
 
     stopObserving();
   });
 
-  test("delivers replay gaps to every live-session observer when one listener fails", async () => {
+  test("reattaches every live-session observer after a host change when one listener fails", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    globalThis.fetch = createFetchFixture(
-      mock(
-        async (url: string | URL | Request) =>
-          new Response(
-            url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }),
-            {
-              status: 200,
-            },
-          ),
-      ),
-    );
+    globalThis.fetch = createFetchFixture(hostFetch());
+    let snapshots = 0;
     const throwingListener = mock((envelope: AgentSessionLiveEnvelope) => {
-      if (envelope.type === "transcript_gap") {
+      if (envelope.type === "snapshot" && ++snapshots === 2) {
         throw new Error("listener failed");
       }
     });
@@ -903,17 +899,22 @@ describe("local host SSE subscriptions", () => {
     const firstObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, throwingListener);
     const eventSource = await waitForEventSourceInstance();
     const secondObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
-    eventSource.emit("open", "");
+    eventSource.connect();
     const stopFirstObservation = await firstObservation;
     const stopSecondObservation = await secondObservation;
 
-    expect(() =>
-      eventSource.emit("stream-warning", "Host event replay skipped transcript events."),
-    ).toThrow("listener failed");
-    expect(listener).toHaveBeenCalledWith({
-      type: "transcript_gap",
+    eventSource.connect({ hostChanged: true, gaps: [] });
+    await waitForCondition(() => listener.mock.calls.length === 2);
+    await waitForCondition(() => throwingListener.mock.calls.length === 3);
+    expect(listener.mock.calls[1]?.[0]).toMatchObject({
+      type: "snapshot",
+      isConnectionSnapshot: true,
+    });
+    expect(throwingListener.mock.calls[2]?.[0]).toEqual({
+      type: "fault",
       repoPath: "/repo",
-      message: "Host event replay skipped transcript events.",
+      operation: "agent-session-live.attach",
+      message: "listener failed",
     });
 
     stopFirstObservation();
@@ -941,13 +942,13 @@ describe("local host SSE subscriptions", () => {
     });
     expect(eventSource.closed).toBe(false);
 
-    eventSource.emit("open", "");
-    // The first open recovers the reported failure, so consumers can read a current baseline.
+    eventSource.connect();
+    // The first connection has no cursor, so consumers read a current baseline.
     expect(listener).toHaveBeenCalledTimes(2);
     expect(listener).toHaveBeenLastCalledWith({
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:0",
+      missedEvents: true,
     });
     const unsubscribe = await subscription;
 
@@ -969,7 +970,7 @@ describe("local host SSE subscriptions", () => {
 
     const subscription = subscribeLocalHostWorkspaceSessionUpdates(listener);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribe = await subscription;
 
     eventSource.emit("error", "lost connection");
@@ -983,11 +984,11 @@ describe("local host SSE subscriptions", () => {
     eventSource.emit("error", "still disconnected");
     expect(listener).toHaveBeenCalledTimes(1);
 
-    eventSource.emit("open", "");
+    eventSource.connect();
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      missedEvents: false,
     });
 
     eventSource.emit("error", "lost again");
@@ -1008,7 +1009,7 @@ describe("local host SSE subscriptions", () => {
     const existing = mock<RuntimeChangeListener>(() => {});
     const subscription = subscribeLocalHostRuntimeChanges(existing);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const stopExisting = await subscription;
     eventSource.emit("error", "lost connection");
 
@@ -1025,11 +1026,11 @@ describe("local host SSE subscriptions", () => {
     expect(late).toHaveBeenCalledTimes(1);
     expect(late).toHaveBeenCalledWith(warning);
 
-    eventSource.emit("open", "");
+    eventSource.connect();
     const reconnected = {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "events:1",
+      missedEvents: false,
     };
     expect(late).toHaveBeenLastCalledWith(reconnected);
 
@@ -1055,7 +1056,7 @@ describe("local host SSE subscriptions", () => {
 
     const throwingSubscription = subscribeLocalHostWorkspaceSessionUpdates(throwingListener);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribeThrowing = await throwingSubscription;
     const unsubscribe = await subscribeLocalHostWorkspaceSessionUpdates(listener);
 
@@ -1073,7 +1074,7 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
-  test("isolates named stream-warning listener failures", async () => {
+  test("isolates missed-event reconnect listener failures", async () => {
     const { subscribeLocalHostWorkspaceSessionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
       mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
@@ -1085,20 +1086,17 @@ describe("local host SSE subscriptions", () => {
 
     const throwingSubscription = subscribeLocalHostWorkspaceSessionUpdates(throwingListener);
     const eventSource = await waitForEventSourceInstance();
-    eventSource.emit("open", "");
+    eventSource.connect();
     const unsubscribeThrowing = await throwingSubscription;
     const unsubscribe = await subscribeLocalHostWorkspaceSessionUpdates(listener);
 
-    expect(() =>
-      eventSource.emit(
-        "stream-warning",
-        "Host event stream skipped 2 events; reconnect will replay buffered events.",
-      ),
-    ).toThrow("listener failed");
+    expect(() => eventSource.connect({ hostChanged: false, gaps: ["message"] })).toThrow(
+      "listener failed",
+    );
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
-      kind: "stream-warning",
-      message: "Host event stream skipped 2 events; reconnect will replay buffered events.",
+      kind: "reconnected",
+      missedEvents: true,
     });
 
     unsubscribeThrowing();
@@ -1132,7 +1130,7 @@ describe("local host SSE subscriptions", () => {
     expect(didResolve).toBe(false);
     expect(FakeEventSource.instances).toHaveLength(1);
 
-    eventSource.emit("open", "");
+    eventSource.connect();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(didResolve).toBe(false);
 
@@ -1268,7 +1266,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     for (let attempt = 0; scheduledTimers.length === 0 && attempt < 10; attempt += 1) {
       await Promise.resolve();
     }
@@ -1303,7 +1301,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.readyState = FakeEventSource.CLOSED;
     eventSource.emit("error", "terminal failure");
 
@@ -1341,7 +1339,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.emit("task-frame", "not-json");
 
     await expect(setup).rejects.toThrow("invalid JSON");
@@ -1378,7 +1376,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.emit("task-frame", JSON.stringify({ type: "invalid" }));
 
     await expect(setup).rejects.toThrow("invalid frame");
@@ -1415,7 +1413,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     const subscription = await setup;
     eventSource.readyState = FakeEventSource.CONNECTING;
     eventSource.emit("error", "native reconnecting");
@@ -1447,7 +1445,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.emit(
       "task-frame",
       JSON.stringify({
@@ -1497,7 +1495,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.emit(
       "task-frame",
       JSON.stringify({
@@ -1546,7 +1544,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
+    eventSource.connect();
     eventSource.emit(
       "task-frame",
       JSON.stringify({
@@ -1685,7 +1683,6 @@ test("a notification reconnect cursor is sent when it opens the shared connectio
   );
   const url = new URL(FakeEventSource.instances[0]!.url);
   expect(url.pathname).toBe("/events");
-  expect(url.searchParams.get("notifications")).toBe("1");
   expect(JSON.parse(url.searchParams.get("notificationCursor")!)).toEqual(cursor);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   stop();
