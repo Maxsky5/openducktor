@@ -145,6 +145,7 @@ export function useAgentStudioSessionStartFlow({
       request: SessionStartFlowRequest,
       executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
     ): Promise<T | undefined> => {
+      const isSameTaskAndRole = request.taskId === taskId && request.role === role;
       return runInternalSessionStartRequest(
         buildSessionStartModalRequest({
           source: "agent_studio",
@@ -155,16 +156,10 @@ export function useAgentStudioSessionStartFlow({
             request,
           }),
           request,
-          requestedRuntimeKind:
-            request.taskId === taskId
-              ? (selectionForNewSession?.runtimeKind ??
-                selectedSessionIdentity?.runtimeKind ??
-                null)
-              : null,
-          selectedModel:
-            request.role === role && request.taskId === taskId
-              ? (selectionForNewSession ?? null)
-              : null,
+          requestedRuntimeKind: isSameTaskAndRole
+            ? (selectionForNewSession?.runtimeKind ?? selectedSessionIdentity?.runtimeKind ?? null)
+            : null,
+          selectedModel: isSameTaskAndRole ? (selectionForNewSession ?? null) : null,
           taskSessions: sessionsForTask,
           preferredSourceSession: isWorkflowAgentSession(loadedSession)
             ? {
