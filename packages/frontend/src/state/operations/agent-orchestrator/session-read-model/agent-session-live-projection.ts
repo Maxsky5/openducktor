@@ -283,6 +283,12 @@ const toApprovalRequest = (
   if (request.supportedReplyOutcomes !== undefined) {
     approval.supportedReplyOutcomes = request.supportedReplyOutcomes;
   }
+  if (request.persistentGrant !== undefined) {
+    approval.persistentGrant = request.persistentGrant;
+  }
+  if (request.rejectsAllPendingApprovals !== undefined) {
+    approval.rejectsAllPendingApprovals = request.rejectsAllPendingApprovals;
+  }
   if (routing) {
     approval.source = routing.source;
     approval.responseSession = routing.responseSession;
@@ -306,6 +312,9 @@ const toQuestionRequest = (
     if (question.custom !== undefined) {
       projectedQuestion.custom = question.custom;
     }
+    if (question.required !== undefined) {
+      projectedQuestion.required = question.required;
+    }
     return projectedQuestion;
   });
   const questionRequest: AgentQuestionRequest = { requestId: request.requestId, questions };
@@ -314,6 +323,12 @@ const toQuestionRequest = (
   }
   if (request.blocking !== undefined) {
     questionRequest.blocking = request.blocking;
+  }
+  if (request.canCancel !== undefined) {
+    questionRequest.canCancel = request.canCancel;
+  }
+  if (request.unsupportedReason !== undefined) {
+    questionRequest.unsupportedReason = request.unsupportedReason;
   }
   if (routing) {
     questionRequest.source = routing.source;
@@ -591,6 +606,7 @@ export const applyAgentSessionLiveDelta = ({
   envelope: LiveProjectionEnvelope;
 }): AgentSessionCollection => {
   if (envelope.type === "transcript_event") {
+    if (envelope.provenance === "baseline") return current;
     const identity = toSessionIdentity(envelope.event.sessionRef);
     const session = getAgentSession(current, identity);
     if (!session) return current;

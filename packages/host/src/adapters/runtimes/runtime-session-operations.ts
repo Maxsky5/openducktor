@@ -9,7 +9,6 @@ import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { RuntimeRegistryError, RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 import { stopCodexSession } from "../codex/codex-session-stop";
-import { probeOpenCodeSessionStatus, stopOpenCodeSession } from "./runtime-registry-probes";
 
 export type ClaudeRuntimeSessionOperationsPort = {
   stopSession(input: RuntimeSessionTarget): Effect.Effect<void, unknown>;
@@ -32,6 +31,7 @@ export type RuntimeSessionOperations = {
 export type RuntimeSessionOperationsByKind = Record<RuntimeKind, RuntimeSessionOperations>;
 
 export type CreateRuntimeSessionOperationsInput = {
+  opencode: RuntimeSessionOperations;
   codexAppServer: Pick<CodexAppServerPort, "request">;
   claudeAgentSdk: ClaudeRuntimeSessionOperationsPort;
 };
@@ -47,15 +47,6 @@ const toClaudeSessionOperationError = (
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
   });
-
-const createOpenCodeSessionOperations = (): RuntimeSessionOperations => ({
-  stopSession(input, runtime) {
-    return stopOpenCodeSession(toSessionRouteTarget(input, runtime));
-  },
-  probeSessionStatus(input, runtime) {
-    return probeOpenCodeSessionStatus(toSessionRouteTarget(input, runtime));
-  },
-});
 
 const createCodexSessionOperations = (
   codexAppServer: Pick<CodexAppServerPort, "request">,
@@ -118,9 +109,10 @@ const createClaudeSessionOperations = (
 export const createRuntimeSessionOperations = ({
   codexAppServer,
   claudeAgentSdk,
+  opencode,
 }: CreateRuntimeSessionOperationsInput) =>
   ({
-    opencode: createOpenCodeSessionOperations(),
+    opencode,
     codex: createCodexSessionOperations(codexAppServer),
     claude: createClaudeSessionOperations(claudeAgentSdk),
   }) satisfies RuntimeSessionOperationsByKind;
@@ -138,10 +130,3 @@ const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
       }),
     );
   });
-
-const toSessionRouteTarget = (input: RuntimeSessionTarget, runtime: RuntimeInstanceSummary) => ({
-  runtimeKind: input.runtimeKind,
-  runtimeRoute: runtime.runtimeRoute,
-  externalSessionId: input.externalSessionId,
-  workingDirectory: input.workingDirectory,
-});

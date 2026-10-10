@@ -1,5 +1,6 @@
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
+import type { ChatSettings, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import type {
@@ -91,7 +92,6 @@ export type AgentStudioChatModelSelectionContext = {
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
   onSelectVariant: (variant: string) => void;
-  agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
 };
 
@@ -125,6 +125,13 @@ const toChatContextUsage = (
   }
   return contextUsage;
 };
+
+const subagentCapabilityLimit = (runtimeKind: RuntimeKind | undefined) =>
+  runtimeKind
+    ? RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].capabilityLimits.find(
+        (limit) => limit.surface === "subagents",
+      )
+    : undefined;
 
 export function useAgentStudioChatModel({
   selectedSession,
@@ -168,9 +175,7 @@ export function useAgentStudioChatModel({
     pendingApprovals: pendingApprovalRequests,
     pendingQuestions: pendingQuestionRequests,
     skills: modelSelection.skills,
-    profileId: selectedSessionModel?.profileId,
     runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
-    sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     runtimeReadiness: selectedSessionState.runtimeReadiness,
   });
   const chatContextUsage = useMemo(
@@ -324,6 +329,9 @@ export function useAgentStudioChatModel({
   );
   const pendingSendItems = reviewCommentComposer.pendingSendItems;
 
+  const composerRuntimeKind =
+    selectedSessionIdentity?.runtimeKind ?? modelSelection.selectedModelSelection?.runtimeKind;
+  const subagentLimit = subagentCapabilityLimit(composerRuntimeKind);
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {
       displayedSessionKey: selectedSessionKey,
@@ -357,7 +365,7 @@ export function useAgentStudioChatModel({
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
       supportsSkillReferences: modelSelection.supportsSkillReferences,
-      supportsSubagentReferences: modelSelection.supportsSubagentReferences,
+      supportsSubagentReferences: modelSelection.supportsSubagentReferences && !subagentLimit,
       slashCommandCatalog: modelSelection.slashCommandCatalog,
       slashCommands: modelSelection.slashCommands,
       slashCommandsError: modelSelection.slashCommandsError,
@@ -367,8 +375,8 @@ export function useAgentStudioChatModel({
       skillsError: modelSelection.skillsError,
       isSkillsLoading: modelSelection.isSkillsLoading,
       subagentCatalog: modelSelection.subagentCatalog,
-      subagents: modelSelection.subagents,
-      subagentsError: modelSelection.subagentsError,
+      subagents: subagentLimit ? [] : modelSelection.subagents,
+      subagentsError: subagentLimit?.reason ?? modelSelection.subagentsError,
       isSubagentsLoading: modelSelection.isSubagentsLoading,
       retrySlashCommands: modelSelection.retrySlashCommands,
       retrySkills: modelSelection.retrySkills,
@@ -388,6 +396,7 @@ export function useAgentStudioChatModel({
     }
     return config;
   }, [
+    subagentLimit,
     chatContextUsage,
     composerDraftScope,
     modelSelection.agentOptions,
@@ -466,7 +475,6 @@ export function useAgentStudioChatModel({
     approvals,
     interruptedTurnResume,
     composer: composerConfig,
-    sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
   });

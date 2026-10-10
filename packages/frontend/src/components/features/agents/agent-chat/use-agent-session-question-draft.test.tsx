@@ -112,7 +112,7 @@ describe("useQuestionDraft", () => {
     });
 
     const latest = harness.getLatest();
-    expect(latest.normalizedDraft[0]?.selectedOptionLabels).toEqual([]);
+    expect(latest.normalizedDraft[0]?.selectedOptionValues).toEqual([]);
     expect(latest.normalizedDraft[0]?.useFreeText).toBe(true);
     expect(latest.buildAnswers()).toEqual([["Design system updates"]]);
 
@@ -143,7 +143,7 @@ describe("useQuestionDraft", () => {
 
     const latest = harness.getLatest();
     expect(latest.normalizedDraft[0]?.freeText).toBe("Keep this note");
-    expect(latest.normalizedDraft[0]?.selectedOptionLabels).toEqual(["A"]);
+    expect(latest.normalizedDraft[0]?.selectedOptionValues).toEqual(["A"]);
     expect(latest.buildAnswers()).toEqual([["A", "Keep this note"]]);
 
     await harness.unmount();
@@ -170,7 +170,7 @@ describe("useQuestionDraft", () => {
       state.selectOption(0, "B");
     });
 
-    expect(harness.getLatest().normalizedDraft[0]?.selectedOptionLabels).toEqual(["A", "B"]);
+    expect(harness.getLatest().normalizedDraft[0]?.selectedOptionValues).toEqual(["A", "B"]);
 
     await harness.unmount();
   });

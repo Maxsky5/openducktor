@@ -12,7 +12,7 @@ type QuestionTabProps = {
   questionIndex: number;
   entry: AgentQuestionDraftEntry | undefined;
   disabled: boolean;
-  onSelectOption: (optionLabel: string) => void;
+  onSelectOption: (optionValue: string) => void;
   onToggleFreeText: () => void;
   onChangeFreeText: (value: string) => void;
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
@@ -38,7 +38,7 @@ export const QuestionTab = ({
 }: QuestionTabProps): ReactElement => {
   const answerId = useId();
   const { className: panelClassName, ...rootProps } = panelProps ?? {};
-  const selectedOptionLabels = new Set(entry?.selectedOptionLabels ?? []);
+  const selectedOptionValues = new Set(entry?.selectedOptionValues ?? []);
 
   return (
     <div {...rootProps} className={cn("space-y-2", panelClassName)}>
@@ -49,6 +49,9 @@ export const QuestionTab = ({
           </p>
           <p className="text-[13px] font-medium text-foreground">{question.question}</p>
         </div>
+        {question.required === false ? (
+          <p className="text-xs text-muted-foreground">Optional question</p>
+        ) : null}
         {question.multiple ? (
           <p className="inline-flex items-center gap-1 rounded-full border border-input bg-secondary px-1.5 py-0 text-[10px] font-semibold text-foreground">
             <CheckSquare className="size-3" />
@@ -60,10 +63,10 @@ export const QuestionTab = ({
       {question.options.length > 0 ? (
         <div className="space-y-1">
           {question.options.map((option) => {
-            const isSelected = selectedOptionLabels.has(option.label);
+            const isSelected = selectedOptionValues.has(option.value ?? option.label);
             return (
               <button
-                key={`option:${questionIndex}:${option.label}`}
+                key={`option:${questionIndex}:${option.value ?? option.label}`}
                 type="button"
                 disabled={disabled}
                 className={cn(
@@ -73,7 +76,7 @@ export const QuestionTab = ({
                     : "border-border bg-card text-foreground hover:border-input hover:bg-accent",
                   disabled && "cursor-not-allowed opacity-70",
                 )}
-                onClick={() => onSelectOption(option.label)}
+                onClick={() => onSelectOption(option.value ?? option.label)}
               >
                 <div className="flex flex-1 items-start gap-1.5">
                   <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
@@ -92,7 +95,7 @@ export const QuestionTab = ({
         </div>
       ) : null}
 
-      {question.options.length > 0 ? (
+      {question.options.length > 0 && question.custom !== false ? (
         <SegmentedControlRoot
           size="sm"
           className="h-auto bg-transparent p-0"

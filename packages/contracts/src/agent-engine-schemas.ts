@@ -82,6 +82,13 @@ export type AgentModelCatalog = z.infer<typeof agentModelCatalogSchema>;
 const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
   z
     .object({
+      tone: z.literal("cancelled"),
+      reason: z.literal("session_interrupted"),
+      title: nonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
       tone: z.literal("info"),
       reason: z.literal("session_compacted"),
       title: nonEmptyStringSchema,
@@ -128,6 +135,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .object({
       ...sessionHistoryMessageFields,
       role: z.literal("assistant"),
+      error: z.string().optional(),
       durationMs: z.number().optional(),
       totalTokens: z.number().optional(),
       contextWindow: z.number().optional(),

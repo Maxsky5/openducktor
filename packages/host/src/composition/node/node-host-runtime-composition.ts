@@ -126,18 +126,19 @@ export const createNodeHostRuntimeComposition = ({
     readEnv,
   };
   if (clientVersion) codexStarterInput.clientVersion = clientVersion;
+  const opencodeRuntime = createOpenCodeRuntimeComposition({
+    launchDirectory,
+    liveSessionLifecycle: liveState,
+    readEnv,
+    resolveMcpServerConfig: mcpServerConfigFor("OpenCode"),
+    settingsConfig,
+    taskSessionLifecycleCoordinator,
+    toolDiscovery,
+  });
   const runtimeStarters = {
     claude: claudeRuntime.runtimeStarter,
     codex: createCodexRuntimeStarter(codexStarterInput),
-    opencode: createOpenCodeRuntimeComposition({
-      launchDirectory,
-      liveSessionLifecycle: liveState,
-      readEnv,
-      resolveMcpServerConfig: mcpServerConfigFor("OpenCode"),
-      settingsConfig,
-      taskSessionLifecycleCoordinator,
-      toolDiscovery,
-    }),
+    opencode: opencodeRuntime.runtimeStarter,
   } satisfies Record<RuntimeKind, RuntimeStarterPort>;
   const descriptorFor = (kind: RuntimeKind) => {
     const descriptor = runtimeDefinitionsService
@@ -181,6 +182,7 @@ export const createNodeHostRuntimeComposition = ({
       descriptorFor,
       starters: { opencode: startGuard, codex: startGuard, claude: startGuard },
       sessionOperations: createRuntimeSessionOperations({
+        opencode: opencodeRuntime.sessionOperations,
         codexAppServer,
         claudeAgentSdk: claudeRuntime.sessionOperations,
       }),

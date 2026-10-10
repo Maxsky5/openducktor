@@ -12,6 +12,7 @@ import {
 import {
   agentPendingRequestIdSchema,
   agentSessionPendingQuestionRequestSchema,
+  projectApprovalGrantSchema,
 } from "./agent-session-pending-schemas";
 import {
   agentModelSelectionSchema,
@@ -21,6 +22,7 @@ import {
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { fileDiffSchema } from "./git-schemas";
+import { runtimeOperationFailureSchema } from "./runtime-operation-failure-schemas";
 import { taskAgentSessionsSchema } from "./session-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -80,6 +82,8 @@ export const agentSessionLivePendingApprovalRequestSchema = z
       .optional(),
     mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
     supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
+    persistentGrant: projectApprovalGrantSchema.optional(),
+    rejectsAllPendingApprovals: z.boolean().optional(),
   })
   .strict();
 export type AgentSessionLivePendingApprovalRequest = z.infer<
@@ -174,6 +178,11 @@ export type AgentSessionLiveSnapshotEnvelope = z.infer<
 >;
 
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("runtime_notice"),
+    scope: agentSessionLiveScopeSchema,
+    message: nonEmptyStringSchema,
+  }),
   taskAgentSessionsSchema
     .extend({
       type: z.literal("task_session_records_updated"),
@@ -201,6 +210,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("transcript_event"),
       event: agentSessionTranscriptEventSchema,
+      provenance: z.enum(["baseline", "live"]).optional(),
     })
     .strict(),
   z
@@ -230,6 +240,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
        * session stays, but its status can be out of date until a newer update.
        */
       statusUnavailable: z.literal(true).optional(),
+      runtimeOperationFailure: runtimeOperationFailureSchema.optional(),
     })
     .strict(),
 ]);

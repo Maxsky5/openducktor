@@ -47,7 +47,6 @@ type UseAgentChatThreadModelArgs = {
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
   interruptedTurnResume?: AgentChatInterruptedTurnResumeModel | undefined;
-  sessionAgentColors: Record<string, string>;
   subagentPendingApprovalCountBySessionKey: Record<string, number> | undefined;
   subagentPendingQuestionCountBySessionKey: Record<string, number> | undefined;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -70,7 +69,6 @@ export function useAgentChatThreadModel({
   pendingQuestions,
   approvals,
   interruptedTurnResume,
-  sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
@@ -107,7 +105,6 @@ export function useAgentChatThreadModel({
       emptyState,
       isStarting: composerActivity?.isStarting ?? false,
       isSending: composerActivity?.isSending ?? false,
-      sessionAgentColors,
       pendingApprovalRequests,
       pendingQuestionRequests,
       subagentPendingApprovalCountBySessionKey:
@@ -149,7 +146,6 @@ export function useAgentChatThreadModel({
       runtimePresentation,
       scrollToBottomOnSendRef,
       sessionAccentColor,
-      sessionAgentColors,
       todos,
       sessionAuxiliaryError,
       subagentPendingApprovalCountBySessionKey,

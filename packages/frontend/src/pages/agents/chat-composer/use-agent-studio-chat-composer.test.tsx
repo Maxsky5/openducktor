@@ -544,22 +544,6 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("publishes agent colors from composer catalog before a session is started", async () => {
-    const harness = createHookHarness(createBaseProps());
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.agentProfileOptions.length > 0);
-
-      const state = harness.getLatest();
-      expect(state.agentAccentColorsByProfileId).toMatchObject({
-        "spec-agent": "#f59e0b",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("loads other runtime catalogs when the new-session picker opens and selects an exact pair", async () => {
     const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) =>
       runtimeCatalog({ models: runtimeKind === "codex" ? CODEX_CATALOG : CATALOG }),
@@ -642,7 +626,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("does not offer runtime profiles for an existing session", async () => {
+  test("offers supported runtime profiles for an existing session", async () => {
     const loadedSession = createLoadedSession();
     const harness = createHookHarness(
       createBaseProps({
@@ -654,7 +638,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().supportsProfiles).toBe(false);
+      expect(harness.getLatest().supportsProfiles).toBe(true);
     } finally {
       await harness.unmount();
     }

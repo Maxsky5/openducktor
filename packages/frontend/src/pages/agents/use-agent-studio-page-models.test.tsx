@@ -301,7 +301,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     variantOptions: [],
     onSelectAgent: () => {},
     onSelectVariant: () => {},
-    agentAccentColorsByProfileId: {},
     selectedSessionContextUsage: overrides.selectedSessionContextUsage ?? {
       totalTokens: 12,
       contextWindow: 100,
@@ -520,6 +519,61 @@ describe("useAgentStudioPageModels", () => {
       await harness.unmount();
     }
   });
+  test.each(["spec", "planner", "build", "qa"] as const)(
+    "shows custom slash commands in the %s task composer",
+    async (role) => {
+      const command = { id: "review", trigger: "review", title: "Review", hints: [] };
+      const selected = createSession("external-command", {
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+      });
+      const harness = createHookHarness(
+        createHookArgs({
+          selectedSessionCore: { role, loadedSession: selected },
+          modelSelection: {
+            slashCommands: [command],
+            slashCommandCatalog: { commands: [command] },
+          },
+        }),
+      );
+      try {
+        await harness.mount();
+        const composer = harness.getLatest().agentChatModel.composer;
+        expect(composer.slashCommands).toEqual([command]);
+        expect(composer.slashCommandsError).toBeNull();
+        expect(composer.isReadOnly).toBe(false);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("shows the OpenCode workflow subagent limit before a session exists", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          selectedSessionIdentity: null,
+          loadedSession: null,
+          sessionsForTask: [],
+        },
+        modelSelection: {
+          selectedModelSelection: { runtimeKind: "opencode", providerId: "test", modelId: "model" },
+          supportsSubagentReferences: true,
+          subagents: [{ id: "research", name: "research" }],
+        },
+      }),
+    );
+    try {
+      await harness.mount();
+      const composer = harness.getLatest().agentChatModel.composer;
+      expect(composer.supportsSubagentReferences).toBe(false);
+      expect(composer.subagents).toEqual([]);
+      expect(composer.subagentsError).toContain(
+        "workflow sessions do not allow subagent references",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
 
   test("keeps a read-only composer model available before a task is selected", async () => {
     const harness = createHookHarness(
@@ -628,12 +682,7 @@ describe("useAgentStudioPageModels", () => {
           loadedSession: staleLoadedSession,
           sessionsForTask: summarizeSessions([selectedSession]),
         },
-        modelSelection: {
-          agentAccentColorsByProfileId: {
-            "selected-builder": "#0ea5e9",
-            "stale-builder": "#ef4444",
-          },
-        },
+        modelSelection: {},
       }),
     );
 
@@ -642,8 +691,8 @@ describe("useAgentStudioPageModels", () => {
     const chatModel = harness.getLatest().agentChatModel;
     expect(chatModel.thread.transcript.session).toBeNull();
     expect(chatModel.thread.isSessionWorking).toBe(false);
-    expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
-    expect(chatModel.composer.accentColor).toBe("#0ea5e9");
+    expect(chatModel.thread.sessionAccentColor).toBe("var(--odt-runtime-accent-codex)");
+    expect(chatModel.composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
     await harness.unmount();
   });
@@ -674,9 +723,6 @@ describe("useAgentStudioPageModels", () => {
             providerId: "openai",
             modelId: "gpt-5.3-codex",
             profileId: "Ares (Legacy Agent)",
-          },
-          agentAccentColorsByProfileId: {
-            "Ares (Legacy Agent)": "#f97316",
           },
           supportsProfiles: false,
         },

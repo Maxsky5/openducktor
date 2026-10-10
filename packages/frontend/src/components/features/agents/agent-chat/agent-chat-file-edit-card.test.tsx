@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { FileEditData } from "./agent-chat-message-card-model";
+import { extractAllFileEditData } from "./file-edit-tool";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
 let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").AgentChatSettingsProvider;
@@ -50,8 +51,17 @@ const viewerMock = mock(DiffViewerMock);
 const preloadedViewerMock = mock(DiffViewerMock);
 
 const fileViewerMock = mock(
-  ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
-    <div data-testid="pierre-file-viewer" data-content={content} data-file-path={filePath}>
+  ({
+    content,
+    filePath,
+    heightMode,
+  }: ComponentProps<typeof pierreDiffViewerModule.PierreFileViewer>): ReactElement => (
+    <div
+      data-testid="pierre-file-viewer"
+      data-content={content}
+      data-file-path={filePath}
+      data-height-mode={heightMode ?? ""}
+    >
       {content}
     </div>
   ),
@@ -169,14 +179,6 @@ afterAll(() => {
 });
 
 describe("AgentChatFileEditCard", () => {
-  test("uses the cache-aware viewer for a newly displayed transcript diff", () => {
-    renderFileEditCard(buildFileEditData(), true);
-
-    expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
-    expect(viewerMock).not.toHaveBeenCalled();
-    expect(fileViewerMock).not.toHaveBeenCalled();
-  });
-
   test("does not mount the hidden diff preloader while collapsed", () => {
     renderFileEditCard(buildFileEditData(), false);
 
@@ -202,6 +204,7 @@ describe("AgentChatFileEditCard", () => {
     expect(preloaderMock).not.toHaveBeenCalled();
     expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
     expect(viewerMock).not.toHaveBeenCalled();
+    expect(fileViewerMock).not.toHaveBeenCalled();
   });
 
   test("renders the visible diff viewer after expansion with default chat diff settings", () => {
@@ -240,13 +243,11 @@ describe("AgentChatFileEditCard", () => {
   });
 
   test("renders full file content without invoking the diff viewer", () => {
-    renderFileEditCard(
-      buildContentFileEditData({
-        filePath: "src/AuthContext.test.tsx",
-        content: "export const value = 1;\n",
-      }),
-      true,
-    );
+    const data = buildContentFileEditData({
+      filePath: "src/AuthContext.test.tsx",
+      content: "export const value = 1;\n",
+    });
+    const { rerender } = renderFileEditCard(data, true);
 
     expect(screen.getByText("export const value = 1;")).toBeDefined();
     expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-file-path")).toBe(
@@ -256,6 +257,16 @@ describe("AgentChatFileEditCard", () => {
     expect(preloadedViewerMock).not.toHaveBeenCalled();
     expect(viewerMock).not.toHaveBeenCalled();
     expect(fileViewerMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-height-mode")).toBe("full");
+
+    rerender(fileEditCardElement(data, true, { diffHeight: "scroll" }));
+
+    expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-height-mode")).toBe(
+      "scroll",
+    );
+    expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-content")).toBe(
+      data.content,
+    );
   });
 
   test("treats empty file content as expandable content", () => {
@@ -282,6 +293,38 @@ describe("AgentChatFileEditCard", () => {
 
     expect(screen.getByText("D")).toBeDefined();
   });
+
+  test.each([
+    { type: "modified", additions: 8, deletions: 0, badge: "M" },
+    { type: "modified", additions: 0, deletions: 8, badge: "M" },
+    { type: "added", additions: 0, deletions: 0, badge: "A" },
+    { type: "deleted", additions: 0, deletions: 0, badge: "D" },
+  ])(
+    "keeps native $type status with +$additions/-$deletions",
+    ({ type, additions, deletions, badge }) => {
+      const data = extractAllFileEditData({
+        kind: "tool",
+        partId: "part-file",
+        callId: "call-file",
+        tool: "edit",
+        toolType: "file_edit",
+        status: "completed",
+        fileDiffs: [
+          {
+            file: "src/example.ts",
+            type,
+            additions,
+            deletions,
+            diff: type === "modified" ? "@@ -1 +1 @@\n-old\n+new\n" : "",
+          },
+        ],
+      })[0]!;
+
+      renderFileEditCard(data, false);
+
+      expect(screen.getByText(badge)).toBeDefined();
+    },
+  );
 
   test("collapses an expanded diff card without changing metadata", () => {
     renderFileEditCard(buildFileEditData(), true);

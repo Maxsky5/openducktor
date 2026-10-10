@@ -176,19 +176,32 @@ export const buildToolSummary = (
   const toolType = meta.toolType;
   const isTodoTool = toolType === "todo";
   const lifecyclePhase = getToolLifecyclePhase(meta);
+  if (lifecyclePhase === "preparing") return "Preparing arguments";
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
+  const isTaskDocumentRead =
+    lowerTool === "read_task_documents" ||
+    lowerTool === "odt_read_task_documents" ||
+    lowerTool.endsWith("_odt_read_task_documents");
 
   if (
     lowerTool === "read_task" ||
     lowerTool === "odt_read_task" ||
-    lowerTool.endsWith("_odt_read_task")
+    lowerTool.endsWith("_odt_read_task") ||
+    isTaskDocumentRead
   ) {
     if (meta.status === "error" && hasNonEmptyText(meta.error)) {
       return compactText(meta.error, 220);
     }
     const taskId = extractTaskId(meta.input);
     if (taskId) {
+      if (isTaskDocumentRead) {
+        const documents = [];
+        if (meta.input?.includeSpec === true) documents.push("Spec");
+        if (meta.input?.includePlan === true) documents.push("Plan");
+        if (meta.input?.includeQaReport === true) documents.push("QA report");
+        return documents.length > 0 ? `${taskId} · ${documents.join(", ")}` : taskId;
+      }
       return taskId;
     }
   }
@@ -211,6 +224,10 @@ export const buildToolSummary = (
 
   if (meta.status === "error" && hasNonEmptyText(meta.error)) {
     return compactText(meta.error, 220);
+  }
+
+  if (lowerTool === "execute") {
+    return compactText(readInputString(meta.input, ["code"]) ?? "", 160);
   }
 
   const command = meta.input?.command;

@@ -538,11 +538,14 @@ export function AgentChatComposerEditor({
 
   useLayoutEffect(() => {
     const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
-    if (!editor || syncComposerDomInPlace(editor, draftSegments)) {
+    if (!editor) {
       return;
     }
-    editor.innerHTML = buildComposerContentMarkup(draftSegments);
-  }, [draftSegments, editorRef]);
+    if (!syncComposerDomInPlace(editor, draftSegments)) {
+      editor.innerHTML = buildComposerContentMarkup(draftSegments);
+    }
+    onEditorInput();
+  }, [draftSegments, editorRef, onEditorInput]);
 
   useLayoutEffect(() => {
     if (!composerFileReferenceTooltip) {

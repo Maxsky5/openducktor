@@ -26,6 +26,7 @@ const archivedRecord = (index: number): WorkspaceSession => ({
 });
 
 describe("Workspace Session archive refresh", () => {
+  // This full render flow loads 100 archive rows and waits for two restores and list refreshes.
   test("refills the bounded archive after each restore without invalidating other lists", async () => {
     const client = createQueryClient();
     let records = Array.from({ length: WORKSPACE_SESSION_ARCHIVE_LIMIT + 1 }, (_, index) =>
@@ -92,7 +93,7 @@ describe("Workspace Session archive refresh", () => {
       client.clear();
       configureShellBridge(createUnavailableShellBridge());
     }
-  });
+  }, 5_000);
 
   test.each([0, 1])(
     "waits for refresh and exposes refresh failure without a false empty state, remaining=%s",

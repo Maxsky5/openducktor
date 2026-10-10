@@ -1,1183 +1,674 @@
+import { detectAgentFileReferenceKind } from "./file-reference-utils";
+import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
+import { basename, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { z } from "zod";
+import type { OpenCodeClient, SessionInfo, ModelRef } from "@opencode/client";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
+  isManualSessionCompactionSlashCommand,
+  type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
-  type RuntimeDescriptor,
-  type RuntimeKind,
 } from "@openducktor/contracts";
-import type { Session } from "@opencode-ai/sdk/v2/client";
-import type {
-  AcceptedAgentUserMessage,
-  BoundRuntimeRoute,
-  AgentCatalogPort,
-  AgentSessionRef,
-  AgentEvent,
-  AgentFileSearchResult,
-  AgentRuntimeCatalogRead,
-  AgentSessionHistoryMessage,
-  AgentSessionPort,
-  AgentSessionRuntimePolicy,
-  AgentSessionSummary,
-  AgentSessionTitleUpdateResult,
-  AgentSessionTodoItem,
-  AgentWorkspaceInspectionPort,
-  EventUnsubscribe,
-  ContinueInterruptedAgentTurnInput,
-  ForkAgentSessionInput,
-  LoadAgentRuntimeCatalogInput,
-  LoadAgentFileStatusInput,
-  LoadAgentSessionDiffInput,
-  LoadAgentSessionHistoryInput,
-  LoadAgentSessionTodosInput,
-  PolicyBoundSessionRef,
-  ReplyApprovalInput,
-  ReplyQuestionInput,
-  ResumeAgentSessionInput,
-  SearchAgentFilesInput,
-  SendAgentUserMessageInput,
-  SessionRef,
-  StartAgentSessionInput,
-  UpdateAgentSessionModelInput,
-} from "@openducktor/core";
 import {
-  AgentRuntimeQueryError,
-  assertAgentRuntimeQuerySession,
   agentSessionRefsEqual,
+  agentSessionScopesEqual,
   assertAgentRuntimePolicyBinding,
-  withSummaryTitle,
-  classifySystemSlashCommandInvocation,
-  interruptedTurnResumeError,
-  withAgentSessionRef,
+  type StartAgentSessionInput,
+  type ResumeAgentSessionInput,
+  type ForkAgentSessionInput,
+  type SendAgentUserMessageInput,
+  type AcceptedAgentInput,
+  type UpdateAgentSessionModelInput,
+  type SessionRef,
+  type AgentSessionSummary,
+  type LoadAgentSessionHistoryInput,
+  type LoadAgentSessionTodosInput,
+  type LoadAgentRuntimeCatalogInput,
+  type SearchAgentFilesInput,
+  type LoadAgentSessionDiffInput,
+  type LoadAgentFileStatusInput,
+  type AgentSessionTitleUpdateResult,
+  type ContinueInterruptedAgentTurnInput,
+  type AgentModelSelection,
 } from "@openducktor/core";
-import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
-import { buildCreationPermissions } from "./opencode-creation-permissions";
-import { PERMISSION_METADATA_KEY, unownedPermissionRules } from "./opencode-permission-ownership";
-import { buildDefaultFactory, nowIso } from "./client-factory";
-import { unwrapData } from "./data-utils";
 import {
-  loadFileStatus as loadFileStatusOp,
-  loadSessionDiff as loadSessionDiffOp,
-} from "./diff-ops";
+  createOpenCodeClient,
+  nativeRequest,
+  operationError,
+  readMigration,
+  verifySession,
+  type OpenCodeRequestDraft,
+} from "./opencode-client";
 import {
-  clearSessionListeners,
-  emitSessionEvent,
-  type SessionEventListeners,
-  subscribeSessionEvents,
-} from "./event-emitter";
-import {
-  sendUserMessage,
-  usesPromptAsyncTransport,
-  type UserSendOptions,
-} from "./message-execution";
-import {
-  continueOpencodeInterruptedTurn,
-  probeOpencodeInterruptedTurn,
-  toOpencodeInterruptedTurnResumeError,
-  toOpencodeSessionNotFoundResumeError,
-} from "./opencode-interrupted-turn";
-import { loadSessionHistory, loadSessionTodos } from "./message-ops";
-import { normalizeModelInput } from "./payload-mappers";
-import { createOpenCodeMessageId } from "./opencode-message-id";
-import {
-  applySessionContext,
-  assertSessionRef,
-  assertSessionScope,
-  setSessionTitle,
-  getBoundSession,
-  restoreSessionPolicy,
-} from "./opencode-session-binding";
-import {
-  createSessionPermissionRestorer,
-  type SessionPermissionRestorer,
-  resolvePermissionOwnership,
-  readPermissionSession,
-  appendSessionPermissions,
-  checkSessionPermissions,
-  assertTurnPermissionsReady,
-} from "./opencode-session-permissions";
+  compilePermissionRule,
+  compileCreationSettings,
+  forkNativePermissions,
+  installOpenCodePolicy,
+} from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
-import {
-  beginOpencodeUserMessageSend,
-  completeOpencodeUserMessageSend,
-  failOpencodeUserMessageSend,
-  projectAdmittedOpencodeUserMessage,
-} from "./opencode-agent-session-projection";
-import { opencodeSessionDetailPayloadSchema, type ParsedOpencodeSession } from "./opencode-ingress";
-import { replyApproval, replyQuestion } from "./pending-input-ops";
-import { toOpenCodeRequestError } from "./request-errors";
-import {
-  type OpencodeRuntimeResolutionInput,
-  type ResolvedOpencodeRuntimeClientInput,
-  resolveOpencodeRuntimeClientInput,
-} from "./runtime-connection";
-import { opencodeSessionRef } from "./session-ref";
-import {
-  registerSession,
-  releaseSessionRuntime,
-  requireSession,
-  stopSessionRuntime,
-  subscribeSessionToRuntimeEvents,
-} from "./session-registry";
-import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
+import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
+import { iso, projectInboxUser, projectMessages } from "./opencode-message-projection";
+import { readOpenCodeTranscript } from "./opencode-session-transcript";
+import { readCatalog } from "./opencode-catalog";
 import type {
-  ClientFactory,
-  OpencodeEventLogger,
+  OpenCodeRuntimeConnection,
   OpencodeSdkAdapterOptions,
-  RuntimeEventTransportRecord,
-  SessionInput,
-  SessionRecord,
+  ReadOpencodeDirectory,
 } from "./types";
-import { waitForUserMessageAdmission } from "./user-message-admission";
-import type {
-  OpencodeMcpDirectoryBindings,
-  OpencodeMcpReconnectEvent,
-} from "./opencode-mcp-bindings";
 
-const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
-  return toSessionInput(input);
+export type OpenCodeSessionBinding = {
+  ref: SessionRef;
+  scope: AgentSessionScope;
+  detail: SessionInfo;
+};
+export type OpenCodeControlHooks = {
+  readDirectory: ReadOpencodeDirectory;
+  ensureMcp: (ref: { repoPath: string; workingDirectory: string }) => Promise<void>;
+  admitted: (binding: OpenCodeSessionBinding) => void;
 };
 
-const assertOpenCodeRuntimePolicyBinding = (
-  input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
-  action: string,
-): void => {
-  assertAgentRuntimePolicyBinding(input, action);
-  if (input.runtimeKind !== "opencode") {
-    throw new Error(`Cannot ${action} for non-OpenCode runtime '${input.runtimeKind}'.`);
-  }
+const nativeModelSelection = (model: AgentModelSelection): ModelRef => {
+  if (model.speed !== undefined)
+    throw new Error(`OpenCode does not support speed '${model.speed}'. Select standard speed.`);
+  const native: ModelRef = { providerID: model.providerId, id: model.modelId };
+  if (model.variant) native.variant = model.variant;
+  return native;
 };
 
-type SendActivityListener = (
-  externalSessionId: string,
-  event: Extract<AgentEvent, { type: "session_status" | "session_idle" }>,
-) => Promise<void>;
+const newSessionIdSchema = z.object({ id: z.string().startsWith("ses") });
 
-export class OpencodeSdkAdapter
-  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
-{
-  private readonly resolveCreationSettings: OpencodeSdkAdapterOptions["resolveCreationSettings"];
-  private readonly restorePermissions: SessionPermissionRestorer;
-  private readonly sessions: Map<string, SessionRecord>;
-  private readonly runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
-  private readonly listeners: SessionEventListeners = new Map();
-  private readonly now: () => string;
-  private readonly createClient: ClientFactory;
-  private readonly runtime: BoundRuntimeRoute;
-  private readonly mcpBindings: OpencodeMcpDirectoryBindings | undefined;
-  private readonly logEvent: OpencodeEventLogger | undefined;
-  private readonly onSendActivity: SendActivityListener | undefined;
-
+/** One controller for an owned authenticated V2 runtime. */
+export class OpencodeSdkAdapter {
+  readonly client: OpenCodeClient;
+  private readonly generations = new Map<string, number>();
+  private closed = false;
+  private readonly abort = new AbortController();
+  readonly bindings = new Map<string, OpenCodeSessionBinding>();
   constructor(
-    options: OpencodeSdkAdapterOptions,
-    runtimeState?: {
-      sessions: Map<string, SessionRecord>;
-      runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
-      restorePermissions?: SessionPermissionRestorer;
-      onSendActivity?: SendActivityListener;
-    },
+    readonly connection: OpenCodeRuntimeConnection,
+    readonly options: OpencodeSdkAdapterOptions,
+    readonly hooks: OpenCodeControlHooks,
   ) {
-    this.resolveCreationSettings = options.resolveCreationSettings;
-    this.restorePermissions = runtimeState?.restorePermissions ?? createSessionPermissionRestorer();
-    this.sessions = runtimeState?.sessions ?? new Map();
-    this.runtimeEventTransports = runtimeState?.runtimeEventTransports ?? new Map();
-    this.now = options.now ?? nowIso;
-    this.createClient = options.createClient ?? buildDefaultFactory();
-    this.runtime = options.runtime;
-    this.mcpBindings = options.mcpBindings;
-    this.logEvent = options.logEvent;
-    this.onSendActivity = runtimeState?.onSendActivity;
+    this.client = (options.createClient ?? createOpenCodeClient)(connection, this.abort.signal);
   }
 
-  private resolveRuntimeClientInput(input: OpencodeRuntimeResolutionInput, action: string) {
-    return resolveOpencodeRuntimeClientInput({
-      runtime: this.runtime,
-      input,
-      action,
-    });
+  generation(sessionID: string) {
+    return this.generations.get(sessionID) ?? 0;
+  }
+  private assertCurrent(ref: SessionRef, generation: number) {
+    if (this.closed || this.generation(ref.externalSessionId) !== generation)
+      throw operationError(
+        ref,
+        "submit prepared input",
+        "runtime_unavailable",
+        "The conversation stopped or was released while input was prepared. The prepared input was not submitted.",
+        "Review the retained draft, reopen the intended conversation, and send it explicitly.",
+      );
+  }
+  close() {
+    this.closed = true;
+    this.abort.abort();
+    this.bindings.clear();
   }
 
-  /**
-   * Resolves a session client without registering the session, so the continuation probe
-   * can refuse an ineligible turn before the adapter attaches to the runtime session.
-   */
-  private async resolveContinuationProbeClient(input: ContinueInterruptedAgentTurnInput) {
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "continue OpenCode turn");
-    const client = this.createClient(runtimeClientInput);
-    await this.ensureMcpBinding(client, input);
-    return client;
-  }
-
-  getRuntimeDefinition(): RuntimeDescriptor {
+  getRuntimeDefinition() {
     return OPENCODE_RUNTIME_DESCRIPTOR;
   }
 
-  listRuntimeDefinitions(): RuntimeDescriptor[] {
-    return [this.getRuntimeDefinition()];
+  /** Query and import inspection callers hold the host guard. Control and live reads use readSession. */
+  async readNativeSession(input: SessionRef, operation: string): Promise<SessionInfo> {
+    if (input.runtimeKind !== "opencode")
+      throw operationError(
+        input,
+        operation,
+        "identity_mismatch",
+        "The selected conversation uses a different runtime.",
+      );
+    return nativeRequest(input, operation, async () => {
+      await readMigration(this.client, input, operation);
+      return verifySession(
+        await this.client.session.get({ sessionID: input.externalSessionId }),
+        input,
+      );
+    });
+  }
+
+  async readSession(input: SessionRef, operation: string): Promise<SessionInfo> {
+    return nativeRequest(input, operation, async () => {
+      const detail = await this.hooks.readDirectory(input.workingDirectory, async () =>
+        this.readNativeSession(input, operation),
+      );
+      if (!detail)
+        throw operationError(
+          input,
+          operation,
+          "runtime_unavailable",
+          "The linked working directory is unavailable.",
+          "Restore the linked worktree or directory, then retry. The saved link is unchanged.",
+        );
+      return detail;
+    });
+  }
+
+  summary(binding: OpenCodeSessionBinding, running = false): AgentSessionSummary {
+    const summary: AgentSessionSummary = {
+      externalSessionId: binding.detail.id,
+      runtimeKind: "opencode",
+      workingDirectory: binding.detail.location.directory,
+      sessionAssociation: binding.scope,
+      startedAt: iso(binding.detail.time.created),
+      status: running ? "running" : "idle",
+    };
+    if (binding.detail.title) summary.title = binding.detail.title;
+    return summary;
+  }
+
+  admit(ref: SessionRef, scope: AgentSessionScope, detail: SessionInfo): OpenCodeSessionBinding {
+    const previous = this.bindings.get(detail.id);
+    if (
+      previous &&
+      (previous.ref.repoPath !== ref.repoPath ||
+        previous.ref.workingDirectory !== ref.workingDirectory ||
+        !agentSessionScopesEqual(previous.scope, scope))
+    )
+      throw operationError(
+        ref,
+        "attach the conversation",
+        "identity_mismatch",
+        "The conversation already has a different OpenDucktor association.",
+      );
+    const binding = { ref, scope, detail };
+    this.bindings.set(detail.id, binding);
+    this.hooks.admitted(binding);
+    return binding;
+  }
+
+  private async readBinding(
+    input: ResumeAgentSessionInput | SendAgentUserMessageInput,
+    generation: number,
+  ): Promise<SessionInfo> {
+    assertAgentRuntimePolicyBinding(input, "bind the OpenCode conversation");
+    const previous = this.bindings.get(input.externalSessionId);
+    if (
+      previous &&
+      (previous.ref.repoPath !== input.repoPath ||
+        previous.ref.workingDirectory !== input.workingDirectory ||
+        !agentSessionScopesEqual(previous.scope, input.sessionScope))
+    )
+      throw operationError(
+        input,
+        "attach the conversation",
+        "identity_mismatch",
+        "The conversation already has a different OpenDucktor association.",
+      );
+    const detail = await this.readSession(input, "attach the conversation");
+    this.assertCurrent(input, generation);
+    return detail;
+  }
+
+  async bind(
+    input: ResumeAgentSessionInput | SendAgentUserMessageInput,
+    generation = this.generation(input.externalSessionId),
+  ): Promise<OpenCodeSessionBinding> {
+    const detail = await this.readBinding(input, generation);
+    await nativeRequest(input, "install session controls", async () => {
+      await this.hooks.ensureMcp(input);
+      this.assertCurrent(input, generation);
+      await installOpenCodePolicy({
+        connection: this.connection,
+        client: this.client,
+        detail,
+        identity: input,
+        scope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+      });
+    });
+    this.assertCurrent(input, generation);
+    return this.admit(input, input.sessionScope, detail);
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
-    assertOpenCodeRuntimePolicyBinding(input, "start OpenCode session");
-    const runtimeDefinition = this.getRuntimeDefinition();
-    const policy = resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      runtimeDefinition,
-      "start OpenCode session",
-    );
-    const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "start session");
-    const client = this.createClient(runtimeClientInput);
-    await this.ensureMcpBinding(client, input);
-    const creation = await buildCreationPermissions({
-      settings,
-      policy,
-      native: [],
-      client,
-      workingDirectory: input.workingDirectory,
+    assertAgentRuntimePolicyBinding(input, "start the OpenCode conversation");
+    return nativeRequest(input, "start the conversation", async () => {
+      await readMigration(this.client, input, "start the conversation");
+      const settings = await compileCreationSettings(
+        this.client,
+        input,
+        await this.options.resolveCreationSettings(input.sessionScope),
+      );
+      await this.hooks.ensureMcp(input);
+      const policy = resolveOpencodeSessionPolicy(
+        input.sessionScope,
+        OPENCODE_RUNTIME_DESCRIPTOR,
+        "start the conversation",
+      );
+      const request: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["create"]>[0]> = {
+        location: { directory: input.workingDirectory },
+        permissions: policy.permission.map(compilePermissionRule),
+      };
+      if (policy.title) request.title = policy.title;
+      if (input.model) {
+        request.model = nativeModelSelection(input.model);
+        if (input.model.profileId) request.agent = input.model.profileId;
+      }
+      const detail = await this.client.session.create(request);
+      const sessionID = newSessionIdSchema.parse(detail).id;
+      const ref: SessionRef = {
+        repoPath: input.repoPath,
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: sessionID,
+      };
+      try {
+        verifySession(detail, input);
+        await installOpenCodePolicy({
+          connection: this.connection,
+          client: this.client,
+          detail,
+          identity: ref,
+          scope: input.sessionScope,
+          systemPrompt: input.systemPrompt,
+          creationSettings: settings,
+          native: [],
+        });
+        return this.summary(
+          this.admit(
+            ref,
+            input.sessionScope,
+            await this.readSession(ref, "confirm the new conversation"),
+          ),
+        );
+      } catch (cause) {
+        return this.cleanupNewSession(sessionID, cause);
+      }
     });
-    const createRequest: Parameters<typeof client.session.create>[0] = {
-      directory: input.workingDirectory,
-      permission: creation.permission,
-      metadata: { [PERMISSION_METADATA_KEY]: creation.ownership },
-    };
-    if (policy.title !== undefined) {
-      createRequest.title = policy.title;
-    }
-    const createAction = `create permissions for OpenCode session in '${input.workingDirectory}'. Reconnect the selected OpenCode runtime and retry; update OpenCode if its permission API is unsupported`;
-    let created: Session;
-    try {
-      created = unwrapData(await client.session.create(createRequest), createAction);
-    } catch (error) {
-      throw toOpenCodeRequestError(createAction, error);
-    }
-    const id = opencodeSessionDetailPayloadSchema.shape.id
-      .refine((value) => value.trim().length > 0)
-      .safeParse(created.id);
-    if (!id.success) {
-      throw toOpenCodeRequestError(
-        createAction,
-        new Error("The native create response has no usable session ID."),
-      );
-    }
-    const externalSessionId = id.data;
-    try {
-      checkSessionPermissions(
-        created,
-        input.workingDirectory,
-        externalSessionId,
-        creation.permission,
-        creation.ownership,
-      );
-    } catch (error) {
-      return this.deleteUnregisteredSession(
-        { client, externalSessionId, workingDirectory: input.workingDirectory },
-        toOpenCodeRequestError(createAction, error),
-      );
-    }
-    const sessionInput = toSessionInput(input);
+  }
 
-    const registrationInput: Parameters<typeof registerSession>[0] = {
-      sessions: this.sessions,
-      runtimeEventTransports: this.runtimeEventTransports,
-      createClient: this.createClient,
-      runtimeId: runtimeClientInput.runtimeId,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      externalSessionId,
-      sessionInput,
-      client,
-      startedAt: this.now(),
-      now: this.now,
-      emit: this.emit.bind(this),
-    };
-    if (this.logEvent) {
-      registrationInput.logEvent = this.logEvent;
+  async cleanupNewSession(sessionID: string, cause: unknown): Promise<never> {
+    try {
+      await this.client.session.remove({ sessionID });
+    } catch (cleanup) {
+      throw new AggregateError(
+        [cause, cleanup],
+        `OpenCode conversation '${sessionID}' failed setup and cleanup. Remove the unused conversation in OpenCode before retrying. ${String(cause)}; ${String(cleanup)}`,
+      );
     }
-    return registerSession(registrationInput);
+    throw cause;
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
-    assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
-    const runtimeDefinition = this.getRuntimeDefinition();
-    const policy = resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      runtimeDefinition,
-      "resume OpenCode session",
+    const binding = await this.bind(input);
+    const active = await nativeRequest(input, "read session activity", () =>
+      this.client.session.active(),
     );
-    const existing = this.sessions.get(input.externalSessionId);
-    if (existing) {
-      const registeredSessionRef = opencodeSessionRef(existing);
-      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-        throw new Error(
-          `Cannot resume OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-        );
-      }
-      await restoreSessionPolicy({
-        action: "resume session",
-        policy,
-        request: input,
-        session: existing,
-        restorePermissions: this.restorePermissions,
-        ensureMcpBinding: () => this.ensureMcpBinding(existing.client, input),
-      });
-      return existing.summary;
-    }
-
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "resume session");
-    const client = this.createClient(runtimeClientInput);
-    await this.ensureMcpBinding(client, input);
-    const detailRecord = await this.restorePermissions({
-      client,
-      externalSessionId: input.externalSessionId,
-      policy,
-      workingDirectory: input.workingDirectory,
-    });
-    const title = await setSessionTitle({
-      client,
-      externalSessionId: input.externalSessionId,
-      title: policy.title,
-      workingDirectory: input.workingDirectory,
-    });
-    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
-    const sessionInput = toSessionInput(input);
-    const registrationInput: Parameters<typeof registerSession>[0] = {
-      sessions: this.sessions,
-      runtimeEventTransports: this.runtimeEventTransports,
-      createClient: this.createClient,
-      runtimeId: runtimeClientInput.runtimeId,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      externalSessionId: input.externalSessionId,
-      sessionInput,
-      client,
-      startedAt,
-      now: this.now,
-      emit: this.emit.bind(this),
-    };
-    if (this.logEvent) {
-      registrationInput.logEvent = this.logEvent;
-    }
-    const summary = registerSession(registrationInput);
-    summary.title = title ?? detailRecord.title;
-    return summary;
+    return this.summary(binding, Boolean(active[binding.detail.id]));
   }
 
   async continueInterruptedTurn(
     input: ContinueInterruptedAgentTurnInput,
   ): Promise<AgentSessionSummary> {
-    assertOpenCodeRuntimePolicyBinding(input, "continue OpenCode turn");
-    resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      this.getRuntimeDefinition(),
-      "continue OpenCode turn",
+    throw operationError(
+      input,
+      "continue an interrupted turn",
+      "unsupported_operation",
+      "OpenCode V2 has no equivalent continuation operation.",
+      "Send an explicit new message in the existing conversation.",
     );
-    const registered = this.sessions.get(input.externalSessionId);
-    if (registered) {
-      const registeredRef = opencodeSessionRef(registered);
-      if (!agentSessionRefsEqual(registeredRef, input)) {
-        throw interruptedTurnResumeError({
-          reason: "identity_mismatch",
-          message: `OpenCode session '${input.externalSessionId}' is registered to repo '${registeredRef.repoPath}' and working directory '${registeredRef.workingDirectory}'.`,
-        });
-      }
-      assertSessionScope(registered, input, "continue OpenCode turn", (message) =>
-        interruptedTurnResumeError({ reason: "identity_mismatch", message }),
-      );
-    }
-    // Probe with an unregistered session client so an ineligible turn never registers,
-    // subscribes, or emits a started event for the session.
-    const probeClient = registered
-      ? registered.client
-      : await this.resolveContinuationProbeClient(input);
-
-    let probe: Awaited<ReturnType<typeof probeOpencodeInterruptedTurn>>;
-    try {
-      probe = await probeOpencodeInterruptedTurn({
-        client: probeClient,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-      });
-    } catch (error) {
-      throw (
-        toOpencodeSessionNotFoundResumeError(
-          error instanceof Error ? error : null,
-          input.externalSessionId,
-        ) ??
-        interruptedTurnResumeError({
-          reason: "probe_failed",
-          message: `Cannot read the OpenCode turn state for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
-          cause: error,
-        })
-      );
-    }
-    if (probe.kind !== "unfinished_turn") {
-      throw toOpencodeInterruptedTurnResumeError(probe, input.externalSessionId);
-    }
-
-    try {
-      await this.resumeSession(input);
-    } catch (error) {
-      const notFound = toOpencodeSessionNotFoundResumeError(
-        error instanceof Error ? error : null,
-        input.externalSessionId,
-      );
-      if (notFound) {
-        throw notFound;
-      }
-      throw error;
-    }
-    const session = requireSession(this.sessions, input.externalSessionId);
-
-    const begunSend = beginOpencodeUserMessageSend({
-      session,
-      expectsPromptTurnStart: true,
-      isManualSessionCompaction: false,
-      timestamp: this.now(),
-    });
-    this.emit(input.externalSessionId, begunSend.runningEvent);
-    try {
-      await this.ensureSessionMcpBinding(session);
-      assertTurnPermissionsReady(session);
-      const modelInput = normalizeModelInput(input.model ?? session.input.model);
-      const continuationInput = {
-        client: session.client,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-        modelInput,
-      };
-      await continueOpencodeInterruptedTurn(
-        session.input.systemPrompt.trim().length > 0
-          ? { ...continuationInput, systemPrompt: session.input.systemPrompt }
-          : continuationInput,
-      );
-    } catch (error) {
-      const idleEvent = failOpencodeUserMessageSend(session, false, this.now());
-      if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
-        this.emit(input.externalSessionId, idleEvent);
-      }
-      throw (
-        toOpencodeSessionNotFoundResumeError(
-          error instanceof Error ? error : null,
-          input.externalSessionId,
-        ) ??
-        interruptedTurnResumeError({
-          reason: "continuation_failed",
-          message: `OpenCode could not continue the interrupted turn for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
-          cause: error,
-        })
-      );
-    } finally {
-      completeOpencodeUserMessageSend(session);
-    }
-
-    return session.summary;
-  }
-
-  async observeRegisteredSession(input: {
-    repoPath: string;
-    workingDirectory: string;
-    externalSessionId: string;
-    detail: ParsedOpencodeSession;
-  }): Promise<AgentSessionSummary> {
-    const sessionRef: PolicyBoundSessionRef = {
-      repoPath: input.repoPath,
-      workingDirectory: input.workingDirectory,
-      externalSessionId: input.externalSessionId,
-      runtimeKind: "opencode",
-      runtimePolicy: { kind: "opencode" },
-    };
-    return this.ensureSessionState(sessionRef, input.detail);
-  }
-
-  private async ensureSessionState(
-    input: PolicyBoundSessionRef,
-    knownDetail?: ParsedOpencodeSession,
-  ): Promise<AgentSessionSummary> {
-    assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
-    const existing = this.sessions.get(input.externalSessionId);
-    if (existing) {
-      const registeredSessionRef = opencodeSessionRef(existing);
-      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-        throw new Error(
-          `Cannot ensure OpenCode session state for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-        );
-      }
-      if (input.sessionScope) {
-        await restoreSessionPolicy({
-          action: "ensure session state",
-          policy: resolveOpencodeSessionPolicy(
-            input.sessionScope,
-            this.getRuntimeDefinition(),
-            "ensure OpenCode session state",
-          ),
-          request: input,
-          session: existing,
-          restorePermissions: this.restorePermissions,
-          ensureMcpBinding: () => this.ensureMcpBinding(existing.client, input),
-        });
-      } else {
-        applySessionContext(existing, input, "ensure session state");
-      }
-      return existing.summary;
-    }
-
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "ensure session state");
-    const client = this.createClient(runtimeClientInput);
-    const policy = input.sessionScope
-      ? resolveOpencodeSessionPolicy(
-          input.sessionScope,
-          this.getRuntimeDefinition(),
-          "ensure OpenCode session state",
-        )
-      : null;
-    if (policy) {
-      await this.ensureMcpBinding(client, input);
-    }
-    if (knownDetail) {
-      if (
-        knownDetail.id !== input.externalSessionId ||
-        knownDetail.directory !== input.workingDirectory
-      ) {
-        throw new Error(
-          `Cannot observe OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' from detail '${knownDetail.id}' in '${knownDetail.directory}'.`,
-        );
-      }
-    }
-    let detailRecord: ParsedOpencodeSession;
-    if (policy) {
-      detailRecord = await this.restorePermissions({
-        client,
-        externalSessionId: input.externalSessionId,
-        policy,
-        workingDirectory: input.workingDirectory,
-      });
-    } else if (knownDetail) {
-      detailRecord = knownDetail;
-    } else {
-      detailRecord = await readPermissionSession({
-        client,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-      });
-    }
-    const title = policy
-      ? await setSessionTitle({
-          client,
-          externalSessionId: input.externalSessionId,
-          title: policy.title,
-          workingDirectory: input.workingDirectory,
-        })
-      : null;
-    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
-    const sessionInput = toExistingSessionInput(input);
-
-    const registrationInput: Parameters<typeof registerSession>[0] = {
-      sessions: this.sessions,
-      runtimeEventTransports: this.runtimeEventTransports,
-      createClient: this.createClient,
-      runtimeId: runtimeClientInput.runtimeId,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      externalSessionId: input.externalSessionId,
-      sessionInput,
-      client,
-      startedAt,
-      subscribeToEvents: false,
-      now: this.now,
-      emit: this.emit.bind(this),
-    };
-    if (this.logEvent) {
-      registrationInput.logEvent = this.logEvent;
-    }
-    const summary = registerSession(registrationInput);
-    summary.title = title ?? detailRecord.title;
-
-    try {
-      const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
-        sessions: this.sessions,
-        runtimeEventTransports: this.runtimeEventTransports,
-        createClient: this.createClient,
-        runtimeId: runtimeClientInput.runtimeId,
-        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-        externalSessionId: input.externalSessionId,
-        sessionInput,
-        now: this.now,
-        emit: this.emit.bind(this),
-      };
-      if (this.logEvent) {
-        subscriptionInput.logEvent = this.logEvent;
-      }
-      subscribeSessionToRuntimeEvents(subscriptionInput);
-    } catch (error) {
-      const session = this.sessions.get(input.externalSessionId);
-      if (session) {
-        await releaseSessionRuntime(session, this.sessions, this.runtimeEventTransports);
-      }
-      throw error;
-    }
-
-    return summary;
-  }
-
-  private policyBoundSessionState(
-    input: PolicyBoundSessionRef,
-    action: string,
-  ): SessionRecord | Promise<SessionRecord> {
-    return getBoundSession({
-      request: input,
-      action,
-      session: this.sessions.get(input.externalSessionId),
-      bindSession: async () => {
-        await this.ensureSessionState(input);
-        return requireSession(this.sessions, input.externalSessionId);
-      },
-    });
-  }
-
-  async releaseSession(input: SessionRef): Promise<void> {
-    const session = this.sessions.get(input.externalSessionId);
-    if (!session) {
-      clearSessionListeners(this.listeners, input);
-      return;
-    }
-    const sessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(sessionRef, input)) {
-      throw new Error(
-        `Cannot release OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
-      );
-    }
-
-    await releaseSessionRuntime(session, this.sessions, this.runtimeEventTransports);
-    clearSessionListeners(this.listeners, sessionRef);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
-    assertOpenCodeRuntimePolicyBinding(input, "fork OpenCode session");
-    const policy = resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      this.getRuntimeDefinition(),
-      "fork OpenCode session",
-    );
-    const settings = structuredClone(await this.resolveCreationSettings(input.sessionScope!));
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "fork session");
-    const client = this.createClient(runtimeClientInput);
-    await this.ensureMcpBinding(client, input);
-    // The fork uses this source snapshot. Later native permission changes do not alter the captured rules.
-    const source = await readPermissionSession({
-      client,
-      externalSessionId: input.parentExternalSessionId,
-      workingDirectory: input.workingDirectory,
-    });
-    const ownership = await resolvePermissionOwnership(client, source);
-    const native = unownedPermissionRules(source.permission ?? [], ownership);
-    const creation = await buildCreationPermissions({
-      settings,
-      policy,
-      native,
-      client,
-      workingDirectory: input.workingDirectory,
-    });
-    const forkRequest: Parameters<typeof client.session.fork>[0] = {
-      directory: input.workingDirectory,
-      sessionID: input.parentExternalSessionId,
-    };
-    if (input.runtimeHistoryAnchor) {
-      forkRequest.messageID = input.runtimeHistoryAnchor;
-    }
-    const forked = await client.session.fork(forkRequest);
-    const forkedData = unwrapData(forked, "fork session");
-    const externalSessionId = forkedData.id;
-    if (!externalSessionId)
-      throw toOpenCodeRequestError(
-        `fork OpenCode session '${input.parentExternalSessionId}' in '${input.workingDirectory}'. Reconnect the selected OpenCode runtime and retry`,
-        new Error("The native fork response has no session ID."),
+    assertAgentRuntimePolicyBinding(input, "fork the OpenCode conversation");
+    const sourceRef: SessionRef = { ...input, externalSessionId: input.parentExternalSessionId };
+    return nativeRequest(sourceRef, "fork the conversation", async () => {
+      const source = await this.readSession(sourceRef, "verify the fork source");
+      const native = forkNativePermissions(source, sourceRef);
+      const settings = await compileCreationSettings(
+        this.client,
+        input,
+        await this.options.resolveCreationSettings(input.sessionScope),
       );
-    try {
-      const detail = checkSessionPermissions(forkedData, input.workingDirectory, externalSessionId);
-      if ((detail.permission?.length ?? 0) !== 0)
-        throw new Error(
-          "The native fork unexpectedly contains permissions. Update the selected OpenCode runtime.",
+      await this.hooks.ensureMcp(input);
+      const request: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["fork"]>[0]> = {
+        sessionID: source.id,
+      };
+      if (input.runtimeHistoryAnchor) request.before = input.runtimeHistoryAnchor;
+      const detail = await this.client.session.fork(request);
+      const sessionID = newSessionIdSchema.parse(detail).id;
+      if (sessionID === source.id)
+        throw operationError(
+          sourceRef,
+          "fork the conversation",
+          "identity_mismatch",
+          "The native fork did not return a distinct conversation with the requested source.",
         );
-      await appendSessionPermissions({
-        client,
-        detail,
-        permission: creation.permission,
-        ownership: creation.ownership,
-      });
-      await setSessionTitle({
-        client,
-        externalSessionId,
-        workingDirectory: input.workingDirectory,
-        title: policy.title,
-      });
-    } catch (policyError) {
-      return this.deleteUnregisteredSession(
-        { client, externalSessionId, workingDirectory: input.workingDirectory },
-        toOpenCodeRequestError(
-          `apply ${policy.scope.kind} policy to forked OpenCode session '${externalSessionId}' in '${input.workingDirectory}'`,
-          policyError,
-        ),
-      );
-    }
-    const sessionInput = toSessionInput(input);
-
-    const registrationInput: Parameters<typeof registerSession>[0] = {
-      sessions: this.sessions,
-      runtimeEventTransports: this.runtimeEventTransports,
-      createClient: this.createClient,
-      runtimeId: runtimeClientInput.runtimeId,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      externalSessionId,
-      sessionInput,
-      client,
-      startedAt: this.now(),
-      now: this.now,
-      emit: this.emit.bind(this),
-    };
-    if (this.logEvent) {
-      registrationInput.logEvent = this.logEvent;
-    }
-    return registerSession(registrationInput);
-  }
-
-  async loadSessionHistory(
-    input: LoadAgentSessionHistoryInput,
-  ): Promise<AgentSessionHistoryMessage[]> {
-    assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "load session history");
-    const session = await this.querySession(input, runtimeClientInput);
-    const preservedDisplayPartsByMessageId = new Map(
-      [...(session?.messageMetadataById ?? [])].flatMap(([messageId, metadata]) =>
-        metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
-      ),
-    );
-
-    const historyInput: Parameters<typeof loadSessionHistory>[2] = {
-      ...runtimeClientInput,
-      externalSessionId: input.externalSessionId,
-    };
-    if (input.limit !== undefined) {
-      historyInput.limit = input.limit;
-    }
-    if (preservedDisplayPartsByMessageId.size > 0) {
-      historyInput.preservedDisplayPartsByMessageId = preservedDisplayPartsByMessageId;
-    }
-
-    return loadSessionHistory(this.createClient, this.now, historyInput);
-  }
-
-  async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
-    assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
-    const runtime = this.resolveRuntimeClientInput(input, "load session todos");
-    await this.querySession(input, runtime);
-    return loadSessionTodos(this.createClient, {
-      ...runtime,
-      externalSessionId: input.externalSessionId,
+      const ref: SessionRef = { ...sourceRef, externalSessionId: sessionID };
+      try {
+        verifySession(detail, input);
+        if (detail.fork?.sessionID !== source.id)
+          throw operationError(
+            sourceRef,
+            "fork the conversation",
+            "identity_mismatch",
+            "The native fork did not return the requested source conversation.",
+          );
+        await installOpenCodePolicy({
+          connection: this.connection,
+          client: this.client,
+          detail,
+          identity: ref,
+          scope: input.sessionScope,
+          systemPrompt: input.systemPrompt,
+          creationSettings: settings,
+          native,
+        });
+        const title = resolveOpencodeSessionPolicy(
+          input.sessionScope,
+          OPENCODE_RUNTIME_DESCRIPTOR,
+          "fork the conversation",
+        ).title;
+        if (title) await this.client.session.update({ sessionID: detail.id, title });
+        if (input.model) await this.updateNativeModel(ref, input.model);
+        return this.summary(
+          this.admit(ref, input.sessionScope, await this.readSession(ref, "confirm the fork")),
+        );
+      } catch (cause) {
+        return this.cleanupNewSession(sessionID, cause);
+      }
     });
   }
 
-  async resolveSessionParent(input: SessionRef): Promise<string | null> {
-    const runtime = this.resolveRuntimeClientInput(input, "read session parent");
-    const target = await this.readSession(input, runtime, "read session parent");
-    return target.parentID || null;
-  }
-
-  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
-    const runtimeClientInput = this.resolveRuntimeClientInput(input, "load runtime catalog");
-    return loadRuntimeCatalog(this.createClient, {
-      ...runtimeClientInput,
-      repoPath: input.repoPath,
-    });
-  }
-
-  async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {
-    return searchFiles(this.createClient, {
-      ...this.resolveRuntimeClientInput(input, "search files"),
-      query: input.query,
-    });
-  }
-
-  shouldRestartRuntimeForMcpStatusError(message: string): boolean {
-    return /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
-  }
-
-  /** signal cancels preparation. onSent lets reads resume at the native call. */
   async sendUserMessage(
     input: SendAgentUserMessageInput,
-    options?: UserSendOptions,
-  ): Promise<AcceptedAgentUserMessage> {
-    options?.signal?.throwIfAborted();
-    assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
-    resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      this.getRuntimeDefinition(),
-      "send OpenCode user message",
-    );
-    let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
-    try {
-      systemInvocation = classifySystemSlashCommandInvocation(input.parts);
-    } catch (error) {
-      throw toOpenCodeRequestError("compact session", error);
-    }
-    const existing = this.sessions.get(input.externalSessionId);
-    if (existing?.permissionSetupError || existing?.permissionSetupInFlight) {
-      assertSessionRef(existing, input, "send");
-      assertSessionScope(existing, input, "send");
-      assertTurnPermissionsReady(existing);
-    }
-    const session = this.policyBoundSessionState(input, "send");
-    return session instanceof Promise
-      ? session.then((boundSession) =>
-          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation, options),
+    options?: { signal?: AbortSignal; onSent?: () => void; assertCommandIdle?: () => void },
+  ): Promise<AcceptedAgentInput> {
+    let submitted = false;
+    const onSent = () => {
+      submitted = true;
+      options?.onSent?.();
+    };
+    const generation = this.generation(input.externalSessionId);
+    return nativeRequest<AcceptedAgentInput>(input, "send input", async () => {
+      options?.signal?.throwIfAborted();
+      const commands = input.parts.filter((part) => part.kind === "slash_command");
+      if (commands.length > 1) throw new Error("Use one slash command per submission.");
+      if (commands[0] && isManualSessionCompactionSlashCommand(commands[0].command)) {
+        if (
+          input.parts.some(
+            (part) => part.kind !== "slash_command" && (part.kind !== "text" || part.text.trim()),
+          )
         )
-      : this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
+          throw new Error("Submit /compact without other input.");
+        const detail = await this.readBinding(input, generation);
+        this.admit(input, input.sessionScope, detail);
+        if (input.model) await this.updateNativeModel(input, input.model);
+        this.assertCurrent(input, generation);
+        options?.signal?.throwIfAborted();
+        const sending = this.client.session.compact({ sessionID: input.externalSessionId });
+        onSent();
+        const item = z
+          .object({
+            id: z.string().min(1),
+            sessionID: z.string().min(1),
+            type: z.literal("compaction"),
+          })
+          .parse(await sending);
+        if (item.sessionID !== input.externalSessionId)
+          throw operationError(
+            input,
+            "accept compaction",
+            "identity_mismatch",
+            "OpenCode accepted compaction for a different conversation.",
+          );
+        return { type: "command_accepted", commandName: "compact", inputId: item.id };
+      }
+      const subagents = input.parts.filter((part) => part.kind === "subagent_reference");
+      if (input.sessionScope.kind === "workflow" && subagents.length)
+        throw operationError(
+          input,
+          "send input",
+          "unsupported_operation",
+          "OpenDucktor workflow sessions do not allow subagent references.",
+          "Open a repository conversation for subagents.",
+        );
+      await this.bind(input, generation);
+      if (input.model) await this.updateNativeModel(input, input.model);
+      const encoded = buildOpenCodePromptText(
+        input.parts.filter((part) => part.kind !== "slash_command"),
+      );
+      const files = [
+        ...encoded.fileReferences.map((reference) => ({
+          uri: pathToFileURL(resolve(input.workingDirectory, reference.file.path)).href,
+          name: reference.file.name,
+          mention: {
+            start: reference.sourceText.start,
+            end: reference.sourceText.end,
+            text: reference.sourceText.value,
+          },
+        })),
+        ...input.parts.flatMap((part) =>
+          part.kind === "attachment"
+            ? [
+                {
+                  uri: pathToFileURL(resolve(input.workingDirectory, part.attachment.path)).href,
+                  name: part.attachment.name,
+                },
+              ]
+            : [],
+        ),
+      ];
+      const payload: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["prompt"]>[0]> = {
+        sessionID: input.externalSessionId,
+        text: encoded.text,
+      };
+      if (files.length) payload.files = files;
+      if (encoded.subagentReferences.length)
+        payload.agents = encoded.subagentReferences.map((reference) => ({
+          name: reference.subagent.name,
+          mention: {
+            start: reference.sourceText.start,
+            end: reference.sourceText.end,
+            text: reference.sourceText.value,
+          },
+        }));
+      if (encoded.skillReferences.length)
+        payload.skills = encoded.skillReferences.map((reference) => ({
+          id: reference.skill.id,
+          mention: {
+            start: reference.sourceText.start,
+            end: reference.sourceText.end,
+            text: reference.sourceText.value,
+          },
+        }));
+      if (commands[0]) {
+        this.assertCurrent(input, generation);
+        options?.signal?.throwIfAborted();
+        options?.assertCommandIdle?.();
+        const sending = this.client.session.command({
+          ...payload,
+          name: commands[0].command.trigger,
+        });
+        onSent();
+        await sending;
+        return { type: "command_accepted", commandName: commands[0].command.trigger };
+      }
+      if (!payload.text.trim() && !files.length)
+        throw new Error("Enter a message or attach a file.");
+      this.assertCurrent(input, generation);
+      options?.signal?.throwIfAborted();
+      const sending = this.client.session.prompt(payload);
+      onSent();
+      const item = await sending;
+      if (item.sessionID !== input.externalSessionId)
+        throw operationError(
+          input,
+          "accept input",
+          "identity_mismatch",
+          "OpenCode accepted the input for a different conversation.",
+        );
+      return projectInboxUser(item);
+    }).catch((cause: Error) => {
+      if (!submitted) throw new OpenCodeMessageRejectedError(cause);
+      throw cause;
+    });
   }
 
-  private async sendUserMessageFromBoundSession(
-    input: SendAgentUserMessageInput,
-    session: SessionRecord,
-    systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
-    options?: UserSendOptions,
-  ): Promise<AcceptedAgentUserMessage> {
-    options?.signal?.throwIfAborted();
-    const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
-    const waitsForRuntimeAdmission =
-      systemInvocation.kind === "not_system" && !expectsPromptTurnStart;
-    const messageId = waitsForRuntimeAdmission ? createOpenCodeMessageId() : undefined;
-    const admission = messageId ? waitForUserMessageAdmission(session, messageId) : undefined;
-    const begunSend = beginOpencodeUserMessageSend({
-      session,
-      expectsPromptTurnStart,
-      isManualSessionCompaction: systemInvocation.kind === "manual_session_compaction",
-      timestamp: this.now(),
-    });
-    this.emit(input.externalSessionId, begunSend.runningEvent);
-    try {
-      await this.onSendActivity?.(input.externalSessionId, begunSend.runningEvent);
-      if (systemInvocation.kind !== "manual_session_compaction") {
-        await this.ensureSessionMcpBinding(session);
-      }
-      const sendInput: Parameters<typeof sendUserMessage>[0] = {
-        session,
-        request: input,
-      };
-      if (messageId) {
-        sendInput.messageId = messageId;
-      }
-      if (admission) {
-        sendInput.admission = admission.promise;
-      }
-      if (options?.onSent) {
-        sendInput.onSent = options.onSent;
-      }
-      if (options?.signal) {
-        sendInput.signal = options.signal;
-      }
-      const admittedUserMessage = await sendUserMessage(sendInput);
-      const timestamp = this.now();
-      const event: AcceptedAgentUserMessage = {
-        type: "user_message",
-        externalSessionId: input.externalSessionId,
-        timestamp,
-        ...admittedUserMessage,
-      };
-      if (systemInvocation.kind !== "manual_session_compaction") {
-        projectAdmittedOpencodeUserMessage({
-          externalSessionId: session.externalSessionId,
-          input: session.input,
-          session,
-          now: this.now,
-          emit: this.emit.bind(this),
-          message: {
-            ...admittedUserMessage,
-            timestamp,
-          },
-        });
-      }
-      return event;
-    } catch (error) {
-      const idleEvent = failOpencodeUserMessageSend(
-        session,
-        begunSend.preserveActiveTurnOnFailure,
-        this.now(),
-      );
-      if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
-        this.emit(input.externalSessionId, idleEvent);
-        try {
-          await this.onSendActivity?.(input.externalSessionId, idleEvent);
-        } catch (activityError) {
-          throw new AggregateError(
-            [error, activityError],
-            `OpenCode session '${input.externalSessionId}' failed to send and report its idle state. Reconnect the runtime before retrying.`,
-          );
-        }
-      }
-      options?.signal?.throwIfAborted();
-      throw error;
-    } finally {
-      admission?.dispose();
-      completeOpencodeUserMessageSend(session);
-    }
+  async updateNativeModel(
+    ref: SessionRef,
+    model: NonNullable<UpdateAgentSessionModelInput["model"]>,
+  ): Promise<void> {
+    const request: Parameters<OpenCodeClient["session"]["switchModel"]>[0] = {
+      sessionID: ref.externalSessionId,
+      model: nativeModelSelection(model),
+    };
+    await this.client.session.switchModel(request);
+    if (model.profileId)
+      await this.client.session.switchAgent({
+        sessionID: ref.externalSessionId,
+        agent: model.profileId,
+      });
   }
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
-    const session = requireSession(this.sessions, input.externalSessionId);
-    const nextInput: SessionInput = { ...session.input };
-    if (input.model) {
-      const profileId = input.model.profileId ?? session.input.model?.profileId;
-      nextInput.model = profileId ? { ...input.model, profileId } : input.model;
-    } else {
-      delete nextInput.model;
-    }
-    session.input = nextInput;
+    await this.readSession(input, "change the selected model");
+    if (!input.model)
+      throw operationError(
+        input,
+        "clear the selected model",
+        "unsupported_operation",
+        "OpenCode V2 requires an explicit model.",
+        "Select a model from the runtime catalog.",
+      );
+    await nativeRequest(input, "change the selected model", () =>
+      this.updateNativeModel(input, input.model!),
+    );
   }
 
   async updateSessionTitle(
     input: AgentSessionControlUpdateTitleInput,
   ): Promise<AgentSessionTitleUpdateResult> {
-    const session = this.sessions.get(input.externalSessionId);
-    if (!session) {
-      return { status: "not_attached" };
-    }
-    assertSessionRef(session, input, "rename");
-    const action = `rename OpenCode session '${input.externalSessionId}'`;
-    try {
-      const updated = await session.client.session.update({
-        directory: input.workingDirectory,
-        sessionID: input.externalSessionId,
-        title: input.title,
-      });
-      unwrapData(updated, action);
-    } catch (error) {
-      throw toOpenCodeRequestError(action, error);
-    }
-    session.summary = withSummaryTitle(session.summary, input.title);
-    return { status: "renamed", summary: session.summary };
-  }
-
-  async replyApproval(input: ReplyApprovalInput): Promise<void> {
-    assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode approval");
-    const reply = async (session: SessionRecord) => {
-      await replyApproval(session, input);
-      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
-    };
-    const session = this.policyBoundSessionState(input, "reply to approval for");
-    return session instanceof Promise ? session.then(reply) : reply(session);
-  }
-
-  async replyQuestion(input: ReplyQuestionInput): Promise<void> {
-    assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode question");
-    const reply = async (session: SessionRecord) => {
-      await replyQuestion(session, input);
-      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
-    };
-    const session = this.policyBoundSessionState(input, "reply to question for");
-    return session instanceof Promise ? session.then(reply) : reply(session);
-  }
-
-  async subscribeEvents(
-    input: PolicyBoundSessionRef,
-    listener: (event: AgentEvent) => void,
-  ): Promise<EventUnsubscribe> {
-    assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
-    const subscribe = (session: SessionRecord) =>
-      subscribeSessionEvents(this.listeners, opencodeSessionRef(session), listener);
-    const session = this.policyBoundSessionState(input, "subscribe to events for");
-    return session instanceof Promise ? session.then(subscribe) : subscribe(session);
+    const binding = this.bindings.get(input.externalSessionId);
+    if (!binding) return { status: "not_attached" };
+    await this.readSession(input, "rename the conversation");
+    await nativeRequest(input, "rename the conversation", () =>
+      this.client.session.update({ sessionID: input.externalSessionId, title: input.title }),
+    );
+    binding.detail = { ...binding.detail, title: input.title };
+    return { status: "renamed", summary: this.summary(binding) };
   }
 
   async stopSession(input: SessionRef): Promise<void> {
-    const session = requireSession(this.sessions, input.externalSessionId);
-    const sessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(sessionRef, input)) {
-      throw new Error(
-        `Cannot stop OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
-      );
-    }
-
-    await stopSessionRuntime(session, this.sessions, this.runtimeEventTransports);
-
-    emitSessionEvent(
-      this.listeners,
-      sessionRef,
-      withAgentSessionRef(sessionRef, {
-        type: "session_finished",
-        externalSessionId: input.externalSessionId,
-        timestamp: this.now(),
-        message: "Session stopped",
-      }),
-    );
-    clearSessionListeners(this.listeners, sessionRef);
-  }
-
-  async loadSessionDiff(
-    input: LoadAgentSessionDiffInput,
-  ): Promise<import("@openducktor/contracts").FileDiff[]> {
-    const runtime = this.resolveRuntimeClientInput(input, "load session diff");
-    await this.querySession(input, runtime);
-    return loadSessionDiffOp(
-      runtime.runtimeEndpoint,
-      input.externalSessionId,
-      input.workingDirectory,
-      input.runtimeHistoryAnchor,
-    );
-  }
-
-  async loadFileStatus(
-    input: LoadAgentFileStatusInput,
-  ): Promise<import("@openducktor/contracts").FileStatus[]> {
-    return loadFileStatusOp(
-      this.resolveRuntimeClientInput(input, "load file status").runtimeEndpoint,
-      input.workingDirectory,
-    );
-  }
-
-  /** Delete a new session before returning its setup failure. Keep both errors if cleanup fails. */
-  private async deleteUnregisteredSession(
-    input: {
-      client: SessionRecord["client"];
-      externalSessionId: string;
-      workingDirectory: string;
-    },
-    setupError: Error,
-  ): Promise<never> {
-    try {
-      const deleted = await input.client.session.delete({
-        directory: input.workingDirectory,
-        sessionID: input.externalSessionId,
-      });
-      if (deleted.error || deleted.data !== true) {
-        throw toOpenCodeRequestError(
-          `delete unregistered OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}'`,
-          deleted.error,
-          deleted.response,
-        );
-      }
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [setupError, cleanupError],
-        `OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' failed setup and could not be deleted: ${String(setupError)}; ${String(cleanupError)}. Delete the unused session in OpenCode before retrying.`,
-      );
-    }
-    throw setupError;
-  }
-
-  private emit(externalSessionId: string, event: AgentEvent): void {
-    const session = this.sessions.get(externalSessionId);
-    if (!session) {
-      if (event.sessionRef) {
-        emitSessionEvent(this.listeners, event.sessionRef, event);
-        return;
-      }
-      throw new Error(
-        `Cannot emit OpenCode session event for missing session '${externalSessionId}'.`,
-      );
-    }
-    const sessionRef = opencodeSessionRef(session);
-    emitSessionEvent(this.listeners, sessionRef, withAgentSessionRef(sessionRef, event));
-  }
-
-  private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {
-    for (const session of this.sessions.values()) {
-      const pending = session.pendingSubagentInputEventsByExternalSessionId.get(externalSessionId);
-      if (!pending) {
-        continue;
-      }
-
-      const nextPending = pending.filter((event) => event.requestId !== requestId);
-      if (nextPending.length === pending.length) {
-        continue;
-      }
-      if (nextPending.length === 0) {
-        session.pendingSubagentInputEventsByExternalSessionId.delete(externalSessionId);
-        continue;
-      }
-      session.pendingSubagentInputEventsByExternalSessionId.set(externalSessionId, nextPending);
-    }
-  }
-
-  /**
-   * Binds the OpenDucktor MCP server of the owning workspace to the directory. Fails when this
-   * adapter has no MCP bindings, because workflow tools need them.
-   */
-  private async ensureMcpBinding(
-    client: SessionRecord["client"],
-    input: { repoPath: string; workingDirectory: string },
-    onReconnectStart?: (event: OpencodeMcpReconnectEvent) => void,
-  ): Promise<void> {
-    if (!this.mcpBindings) {
-      throw new Error(
-        `ODT workflow tools unavailable for "${input.workingDirectory}": the OpenCode adapter has no OpenDucktor MCP binding. Restart the OpenCode runtime from Diagnostics and retry.`,
-      );
-    }
-    await this.mcpBindings.ensure({
-      client,
-      repoPath: input.repoPath,
-      workingDirectory: input.workingDirectory,
-      onReconnectStart,
+    this.generations.set(input.externalSessionId, this.generation(input.externalSessionId) + 1);
+    await this.readSession(input, "interrupt the conversation");
+    await nativeRequest(input, "interrupt the conversation", async () => {
+      await this.client.session.interrupt({ sessionID: input.externalSessionId });
     });
   }
-
-  /** Binds the session directory and emits `mcp_reconnect_started` when it must reconnect. */
-  private async ensureSessionMcpBinding(session: SessionRecord): Promise<void> {
-    await this.ensureMcpBinding(session.client, session.input, (event) => {
-      const reconnectEvent: AgentEvent = {
-        type: "mcp_reconnect_started",
-        externalSessionId: session.summary.externalSessionId,
-        timestamp: this.now(),
-        serverName: event.serverName,
-        workingDirectory: event.workingDirectory,
-        status: event.status,
-      };
-      if (event.errorDetails) {
-        reconnectEvent.errorDetails = event.errorDetails;
-      }
-      this.emit(session.summary.externalSessionId, reconnectEvent);
+  async releaseSession(input: SessionRef): Promise<SessionRef[]> {
+    const binding = this.bindings.get(input.externalSessionId);
+    if (binding && !agentSessionRefsEqual(binding.ref, input))
+      throw operationError(
+        input,
+        "release the conversation",
+        "identity_mismatch",
+        "The attached conversation has another directory.",
+      );
+    const refs = [input];
+    const seen = new Set([input.externalSessionId]);
+    for (const parent of refs)
+      for (const child of this.bindings.values())
+        if (
+          child.detail.parentID === parent.externalSessionId &&
+          child.ref.repoPath === input.repoPath &&
+          child.ref.workingDirectory === input.workingDirectory &&
+          child.ref.runtimeKind === input.runtimeKind &&
+          !seen.has(child.detail.id)
+        ) {
+          seen.add(child.detail.id);
+          refs.push(child.ref);
+        }
+    for (const ref of refs) {
+      this.generations.set(ref.externalSessionId, this.generation(ref.externalSessionId) + 1);
+      this.bindings.delete(ref.externalSessionId);
+    }
+    return refs;
+  }
+  async loadSessionHistory(input: LoadAgentSessionHistoryInput) {
+    const detail = await this.readNativeSession(input, "read history");
+    return nativeRequest(input, "read history", async () => {
+      const history = projectMessages(await readOpenCodeTranscript(this.client, detail));
+      if (detail.fork)
+        history.unshift({
+          role: "system",
+          messageId: `${detail.id}:fork`,
+          timestamp: iso(detail.time.created),
+          text: `Forked from conversation '${detail.fork.sessionID}'.`,
+          notice: {
+            tone: "info",
+            reason: "session_forked",
+            title: "Conversation forked",
+            parentExternalSessionId: detail.fork.sessionID,
+          },
+          parts: [],
+        });
+      return history;
     });
   }
-
-  private async querySession(
-    input: AgentSessionRef,
-    runtime: ResolvedOpencodeRuntimeClientInput,
-  ): Promise<SessionRecord | undefined> {
-    const session = this.sessions.get(input.externalSessionId);
-    if (session) {
-      this.assertRetainedQuerySession(input, runtime, session);
-      return session;
-    }
-    await this.readSession(input, runtime, "read session identity");
-    return undefined;
-  }
-
-  private assertRetainedQuerySession(
-    input: AgentSessionRef,
-    runtime: ResolvedOpencodeRuntimeClientInput,
-    session: SessionRecord,
-  ): void {
-    assertAgentRuntimeQuerySession(
-      { ...input, workingDirectory: runtime.workingDirectory },
-      opencodeSessionRef(session),
-      session.summary.sessionAssociation,
+  async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<never> {
+    throw operationError(
+      input,
+      "read native todos",
+      "unsupported_operation",
+      "OpenCode V2 has no native session todo API.",
+      "Use the retained conversation and OpenDucktor task data.",
     );
-    if (session.runtimeId !== runtime.runtimeId) {
-      throw new AgentRuntimeQueryError(
-        "runtime_unavailable",
-        "The session belongs to a replaced runtime. Reload the runtime data.",
-      );
-    }
   }
-
-  private async readSession(
-    input: SessionRef,
-    runtime: ResolvedOpencodeRuntimeClientInput,
-    operation: string,
-  ): Promise<ParsedOpencodeSession> {
-    const response = await this.createClient(runtime).session.get({
+  async resolveSessionParent(input: SessionRef): Promise<string | null> {
+    return (await this.readNativeSession(input, "read the parent conversation")).parentID ?? null;
+  }
+  async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput) {
+    return readCatalog(this.client, input.workingDirectory);
+  }
+  async searchFiles(input: SearchAgentFilesInput) {
+    return nativeRequest(input, "search files", async () =>
+      (
+        await this.client.file.find({
+          location: { directory: input.workingDirectory },
+          query: input.query,
+          limit: 100,
+        })
+      ).data.map((file) => ({
+        id: file.path,
+        name: basename(file.path),
+        path: file.path,
+        kind:
+          file.type === "directory"
+            ? ("directory" as const)
+            : detectAgentFileReferenceKind({ filePath: file.path }),
+      })),
+    );
+  }
+  async loadSessionDiff(input: LoadAgentSessionDiffInput) {
+    await this.readNativeSession(input, "read session diff");
+    const request: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["diff"]>[0]> = {
       sessionID: input.externalSessionId,
-      directory: runtime.workingDirectory,
-    });
-    const target = opencodeSessionDetailPayloadSchema.parse(unwrapData(response, operation));
-    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
-      throw new AgentRuntimeQueryError(
-        "scope_mismatch",
-        "The native session does not match the selected session and working directory. Select the matching session.",
-      );
-    }
-    return target;
+    };
+    if (input.runtimeHistoryAnchor) request.to = input.runtimeHistoryAnchor;
+    return nativeRequest(input, "read session diff", async () =>
+      (await this.client.session.diff(request)).map((diff) => ({
+        file: diff.file,
+        type: diff.status,
+        additions: diff.additions,
+        deletions: diff.deletions,
+        diff: diff.patch,
+      })),
+    );
+  }
+  async loadFileStatus(input: LoadAgentFileStatusInput) {
+    return nativeRequest(input, "read file status", async () =>
+      (await this.client.vcs.status({ location: { directory: input.workingDirectory } })).data.map(
+        (file) => ({ path: file.file, status: file.status, staged: false }),
+      ),
+    );
   }
 }

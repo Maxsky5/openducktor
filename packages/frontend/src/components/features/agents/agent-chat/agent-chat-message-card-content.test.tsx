@@ -55,7 +55,7 @@ const createReasoningMessageBody = (content: string) =>
     toolCallPresentation: null,
   });
 
-describe("MessageBody streamed markdown", () => {
+describe("MessageBody", () => {
   test("renders the computer use card without a generic tool presentation", () => {
     const message: AgentChatMessage = {
       id: "cua-tool",

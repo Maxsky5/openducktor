@@ -25,6 +25,7 @@ export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => 
     case "transcript_event":
       return envelope.event.sessionRef.repoPath;
     case "catalog_invalidated":
+    case "runtime_notice":
     case "slash_command_catalog_updated":
       return envelope.scope.repoPath;
   }
@@ -65,7 +66,7 @@ export const createAgentSessionLiveAttachment = (
       if (envelopeRepoPath(envelope) !== repoPath) {
         return;
       }
-      if (awaitingSnapshot && envelope.type !== "fault") {
+      if (awaitingSnapshot && envelope.type !== "fault" && envelope.type !== "runtime_notice") {
         pending.push(envelope);
         return;
       }

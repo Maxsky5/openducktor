@@ -393,7 +393,7 @@ test.each(["before its first native send", "after native acceptance"] as const)(
           sessionScope: builderScope,
           parts: [{ kind: "text", text: "Message for another Builder session" }],
         });
-        expect(accepted.externalSessionId).toBe("other");
+        expect(accepted).toMatchObject({ type: "user_message", externalSessionId: "other" });
         yield* wait.open;
         expect((yield* Fiber.join(launch)).status).toBe("completed");
       }).pipe(Effect.ensuring(wait.open)),
@@ -601,7 +601,11 @@ test.each(["before", "during"] as const)(
         if (point === "before") {
           expect(result.failure?.message).toBe("Session launch was canceled.");
           expect(result.acceptedMessage).toBeUndefined();
-        } else expect(result.acceptedMessage?.externalSessionId).toBe("session-1");
+        } else
+          expect(result.acceptedMessage).toMatchObject({
+            type: "user_message",
+            externalSessionId: "session-1",
+          });
         expect(result.unsentInstruction).toBeUndefined();
       }).pipe(Effect.ensuring(wait.open)),
     );

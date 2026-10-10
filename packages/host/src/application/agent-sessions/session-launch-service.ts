@@ -10,6 +10,7 @@ import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import { createSerialGate } from "../../effect/serial-gate";
 import {
   AgentSessionMessageAcceptedError,
+  AgentSessionCommandAcceptedError,
   AgentSessionMessageRejectedError,
 } from "../../ports/agent-session-send-error";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
@@ -123,6 +124,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         }
         if (reply.failure instanceof AgentSessionMessageAcceptedError)
           attempt.result.acceptedMessage = reply.failure.failure.acceptedMessage;
+        else if (reply.failure instanceof AgentSessionCommandAcceptedError)
+          attempt.result.acceptedMessage = reply.failure.failure.acceptedCommand;
         else
           attempt.sendFailure =
             !sent || reply.failure instanceof AgentSessionMessageRejectedError

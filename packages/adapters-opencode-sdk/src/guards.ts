@@ -6,69 +6,11 @@ export type OpenCodeProtocolObject = Record<string, OpenCodeProtocolValue>;
 export const opencodeProtocolValueSchema = z.json();
 export const opencodeProtocolObjectSchema = z.record(z.string(), opencodeProtocolValueSchema);
 
-const stringSchema = z.string();
-const finiteNumberSchema = z.number().finite();
-const booleanSchema = z.boolean();
-
 export const asJsonObject = (
   value: OpenCodeProtocolValue | undefined,
 ): OpenCodeProtocolObject | undefined => {
   const parsed = opencodeProtocolObjectSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
-};
-
-export const readStringProp = (
-  source: OpenCodeProtocolValue | undefined,
-  keys: readonly string[],
-): string | undefined => {
-  const record = asJsonObject(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = stringSchema.safeParse(record[key]);
-    if (value.success && value.data.length > 0) {
-      return value.data;
-    }
-  }
-  return undefined;
-};
-
-export const readNumberProp = (
-  source: OpenCodeProtocolValue | undefined,
-  keys: string[],
-): number | undefined => {
-  const record = asJsonObject(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = finiteNumberSchema.safeParse(record[key]);
-    if (value.success) {
-      return value.data;
-    }
-  }
-  return undefined;
-};
-
-export const readBooleanProp = (
-  source: OpenCodeProtocolValue | undefined,
-  keys: string[],
-): boolean | undefined => {
-  const record = asJsonObject(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = booleanSchema.safeParse(record[key]);
-    if (value.success) {
-      return value.data;
-    }
-  }
-  return undefined;
 };
 
 export const readStringArrayProp = (

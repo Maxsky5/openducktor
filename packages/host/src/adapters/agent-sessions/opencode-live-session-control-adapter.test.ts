@@ -3,7 +3,7 @@ import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
+import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter.test-support";
 import {
   controlMetadata,
   controlSummary,
@@ -285,9 +285,8 @@ describe("OpenCode live session controls", () => {
       }),
     );
     await Effect.runPromise(adapter.stopSession(controlRef));
-    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toEqual({
-      type: "missing",
-      ref: controlRef,
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toMatchObject({
+      type: "live",
     });
     await Effect.runPromise(
       adapter.resumeSession({

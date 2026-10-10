@@ -23,7 +23,6 @@ const SESSION_NOTICE_TONE_CLASS_NAMES = {
 
 type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
-  sessionAgentColors: Record<string, string> | undefined;
   sessionRuntimeKind: RuntimeKind | null;
   toolCallPresentation: AgentChatToolCallPresentation | null;
 };
@@ -45,18 +44,6 @@ type AgentChatMessageCardViewModel = {
   isSystemPromptMessage: boolean;
   isRichCardMessage: boolean;
   articleClassName: string;
-};
-
-const resolveMessageAgentColor = (
-  profileId: string | null | undefined,
-  sessionAgentColors: Record<string, string> | undefined,
-  sessionRuntimeKind: RuntimeKind | null,
-): string | undefined => {
-  return resolveAgentSessionAccentColor({
-    agentName: profileId,
-    agentColors: sessionAgentColors,
-    runtimeKind: sessionRuntimeKind,
-  });
 };
 
 const toArticleClassName = (
@@ -97,14 +84,14 @@ const toArticleClassName = (
             ? "rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 my-2 text-destructive-surface-foreground"
             : workflowToolPhase === "cancelled"
               ? "rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 my-2 text-cancelled-surface-foreground"
-              : workflowToolPhase === "executing"
+              : workflowToolPhase === "executing" || workflowToolPhase === "preparing"
                 ? "rounded-md border border-info-border bg-info-surface px-3 py-2 my-2 text-info-surface-foreground"
                 : "rounded-md border border-pending-border bg-pending-surface px-3 py-2 my-2 text-pending-surface-foreground"
         : "border-none bg-transparent px-0 py-0 text-foreground"
       : isSubagentMessage
         ? "rounded-md border border-border bg-card px-3 py-2 text-foreground shadow-sm my-2"
         : isSystemPromptMessage
-          ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
+          ? "rounded-md text-foreground"
           : message.role === "assistant"
             ? "px-1 pt-1 pb-3 text-foreground"
             : "border-none bg-transparent px-0 py-2 text-foreground",
@@ -113,7 +100,6 @@ const toArticleClassName = (
 
 export const buildAgentChatMessageCardViewModel = ({
   message,
-  sessionAgentColors,
   sessionRuntimeKind,
   toolCallPresentation,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
@@ -137,9 +123,8 @@ export const buildAgentChatMessageCardViewModel = ({
     isSystemPromptMessage ||
     isImageGenerationMessage;
   const assistantRole = assistantRoleFromMessage(message);
-  const assistantMeta = meta?.kind === "assistant" ? meta : null;
   const assistantAccentColor = isAssistantMessage
-    ? resolveMessageAgentColor(assistantMeta?.profileId, sessionAgentColors, sessionRuntimeKind)
+    ? resolveAgentSessionAccentColor({ runtimeKind: sessionRuntimeKind })
     : undefined;
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()

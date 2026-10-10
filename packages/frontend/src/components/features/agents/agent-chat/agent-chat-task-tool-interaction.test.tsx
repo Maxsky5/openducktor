@@ -121,7 +121,6 @@ test("the task card opens and closes the real detail sheet without leaving chat"
                   }),
                 },
               },
-              sessionAgentColors: {},
             })}
           </TaskSnapshotContext>
         </ActiveWorkspaceContext>

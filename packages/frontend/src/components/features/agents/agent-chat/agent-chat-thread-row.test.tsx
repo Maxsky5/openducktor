@@ -7,7 +7,6 @@ import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 
 const createBaseProps = () => ({
   isStreamingAssistantMessage: false,
-  sessionAgentColors: {},
   sessionIdentity: {
     runtimeKind: "opencode" as const,
     workingDirectory: "/repo",

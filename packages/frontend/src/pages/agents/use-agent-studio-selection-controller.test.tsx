@@ -1277,14 +1277,8 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("loads runtime data once when selected and view sessions are the same", async () => {
-    const readSessionTodos = mock(async () => [
-      {
-        id: "todo-1",
-        content: "Check startup",
-        status: "pending" as const,
-        priority: "medium" as const,
-      },
-    ]);
+    const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => []);
     const buildSession = createSession("task-1", "session-build", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimeKind: "opencode",
@@ -1301,22 +1295,23 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
-      { readSessionTodos },
+      { readSessionTodos, runtimeDefinitionsContext: { loadRepoRuntimeCatalog } },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.view.selectedSession.runtimeData.todos.length === 1);
-
-      expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos).toHaveBeenCalledWith(
-        expect.objectContaining({
-          externalSessionId: "session-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        }),
+      await harness.waitFor(
+        (latest) => latest.view.selectedSession.runtimeData.modelCatalog !== null,
       );
-      expect(harness.getLatest().view.selectedSession.runtimeData.todos[0]?.id).toBe("todo-1");
+
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      });
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest().view.selectedSession.runtimeData.todos).toEqual([]);
     } finally {
       await harness.unmount();
     }
@@ -1324,14 +1319,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("keeps selected-session runtime data while the full session hydrates", async () => {
     const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => [
-      {
-        id: "todo-1",
-        content: "Check startup",
-        status: "pending" as const,
-        priority: "medium" as const,
-      },
-    ]);
+    const readSessionTodos = mock(async () => []);
     const buildSession = toAgentSessionSummary(
       createAgentSessionFixture({
         externalSessionId: "session-build",
@@ -1360,9 +1348,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
       await harness.waitFor(
-        (latest) =>
-          latest.view.selectedSession.runtimeData.modelCatalog !== null &&
-          latest.view.selectedSession.runtimeData.todos.length === 1,
+        (latest) => latest.view.selectedSession.runtimeData.modelCatalog !== null,
       );
 
       const selectedSession = harness.getLatest().view.selectedSession;
@@ -1372,29 +1358,26 @@ describe("useAgentStudioSelectionController", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
       });
-      expect(readSessionTodos).toHaveBeenCalledWith(
-        expect.objectContaining({
-          externalSessionId: "session-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      );
-      expect(selectedSession.runtimeData.todos[0]?.id).toBe("todo-1");
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(selectedSession.runtimeData.todos).toEqual([]);
     } finally {
       await harness.unmount();
     }
   });
 
   test("loads runtime data only for the committed conversation after navigation", async () => {
-    const readSessionTodos = mock(async ({ externalSessionId }: { externalSessionId: string }) => [
-      {
-        id: `todo-${externalSessionId}`,
-        content: `Todo for ${externalSessionId}`,
-        status: "pending" as const,
-        priority: "medium" as const,
-      },
-    ]);
+    const loadRepoRuntimeCatalog = mock(
+      async ({ workingDirectory }: { workingDirectory: string }) => ({
+        models: {
+          ...emptyCatalog.models,
+          catalog: {
+            ...emptyCatalog.models.catalog,
+            defaultModelsByProvider: { selected: workingDirectory },
+          },
+        },
+      }),
+    );
+    const readSessionTodos = mock(async () => []);
     const activeSession = createSession("task-1", "session-build", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimeKind: "opencode",
@@ -1417,24 +1400,24 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
-      { readSessionTodos },
+      { readSessionTodos, runtimeDefinitionsContext: { loadRepoRuntimeCatalog } },
     );
 
     try {
       await harness.mount();
       await harness.waitFor(
-        (latest) => latest.view.selectedSession.runtimeData.todos[0]?.id === "todo-session-build",
+        (latest) =>
+          latest.view.selectedSession.runtimeData.modelCatalog?.defaultModelsByProvider.selected ===
+          "/repo/task-1",
       );
-      expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos).toHaveBeenCalledWith({
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: workspaceRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-1",
-        externalSessionId: "session-build",
-        runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       });
-      readSessionTodos.mockClear();
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      loadRepoRuntimeCatalog.mockClear();
 
       await harness.update(
         createBaseArgs({
@@ -1447,21 +1430,21 @@ describe("useAgentStudioSelectionController", () => {
           roleFromQuery: "build",
           selectionState: toAgentStudioTaskSelection("task-2"),
         }),
-        { readSessionTodos },
+        { readSessionTodos, runtimeDefinitionsContext: { loadRepoRuntimeCatalog } },
       );
       await harness.waitFor(
-        (latest) => latest.view.selectedSession.runtimeData.todos[0]?.id === "todo-session-qa",
+        (latest) =>
+          latest.view.selectedSession.runtimeData.modelCatalog?.defaultModelsByProvider.selected ===
+          "/repo/task-2",
       );
 
-      expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos).toHaveBeenCalledWith({
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: workspaceRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-2",
-        externalSessionId: "session-qa",
-        runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-2", role: "qa" },
       });
+      expect(readSessionTodos).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

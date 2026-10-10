@@ -88,7 +88,7 @@ export const assertApprovalAllowed = ({
       allowedOdt = true;
     }
     if (
-      name === "subtask" ||
+      name === "subagent" ||
       (isReadOnlyAgentRole(scope.role) &&
         (name === "edit" || descriptor.readOnlyRoleBlockedTools.some((tool) => tool === name)))
     )

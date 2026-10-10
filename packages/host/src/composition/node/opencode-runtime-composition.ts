@@ -2,6 +2,9 @@ import type { ManagedMcpServerResolver } from "@openducktor/core";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import {
   createPrepareOpencodeSessionRuntime,
+  createOpenCodeRuntimeProbes,
+  OpenCodeOperationError,
+  type OpenCodeRuntimeConnection,
   type ReadOpencodeDirectory,
 } from "@openducktor/adapters-opencode-sdk";
 import { Effect, Exit } from "effect";
@@ -9,8 +12,13 @@ import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-s
 import type { OpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
 import { createOpenCodeRuntimeStarter } from "../../adapters/opencode/opencode-runtime-starter";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
-import { causeToHostBoundaryError, toHostOperationError } from "../../effect/host-errors";
+import {
+  causeToHostBoundaryError,
+  HostResourceError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
+import type { RuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -26,6 +34,11 @@ export type CreateOpenCodeRuntimeCompositionInput = {
   toolDiscovery: ToolDiscoveryPort;
 };
 
+type OpenCodeRuntimeComposition = {
+  runtimeStarter: RuntimeStarterPort;
+  sessionOperations: RuntimeSessionOperations;
+};
+
 export const createOpenCodeRuntimeComposition = ({
   launchDirectory,
   liveSessionLifecycle,
@@ -34,7 +47,21 @@ export const createOpenCodeRuntimeComposition = ({
   settingsConfig,
   taskSessionLifecycleCoordinator,
   toolDiscovery,
-}: CreateOpenCodeRuntimeCompositionInput): RuntimeStarterPort => {
+}: CreateOpenCodeRuntimeCompositionInput): OpenCodeRuntimeComposition => {
+  const connections = new Map<string, OpenCodeRuntimeConnection>();
+  const requireConnection = (runtimeId: string) =>
+    Effect.suspend(() => {
+      const connection = connections.get(runtimeId);
+      return connection
+        ? Effect.succeed(createOpenCodeRuntimeProbes(connection))
+        : Effect.fail(
+            new HostResourceError({
+              resource: "OpenCode connection",
+              message:
+                "The owned OpenCode V2 connection closed. Restart OpenCode from Diagnostics.",
+            }),
+          );
+    });
   const creationSettings = createOpenCodeCreationSettings(settingsConfig);
   const readDirectory: ReadOpencodeDirectory = (directory, read) =>
     Effect.runPromise(
@@ -47,7 +74,11 @@ export const createOpenCodeRuntimeComposition = ({
           return yield* Effect.tryPromise({
             try: read,
             catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.read-directory", { directory }),
+              cause instanceof OpenCodeOperationError
+                ? cause
+                : toHostOperationError(cause, "opencode-live-session.read-directory", {
+                    directory,
+                  }),
           });
         }),
       ),
@@ -58,7 +89,13 @@ export const createOpenCodeRuntimeComposition = ({
     throw causeToHostBoundaryError(exit.cause);
   };
 
-  return createOpenCodeRuntimeStarter({
+  const runtimeStarter = createOpenCodeRuntimeStarter({
+    onConnectionReady: (connection) => {
+      connections.set(connection.runtimeId, connection);
+    },
+    onConnectionClosed: (runtimeId) => {
+      connections.delete(runtimeId);
+    },
     toolDiscovery,
     readEnv,
     launchDirectory,
@@ -72,4 +109,37 @@ export const createOpenCodeRuntimeComposition = ({
       }),
     }),
   });
+  return {
+    runtimeStarter,
+    sessionOperations: {
+      stopSession: (input, runtime) =>
+        requireConnection(runtime.runtimeId).pipe(
+          Effect.flatMap((probes) =>
+            Effect.tryPromise({
+              try: () =>
+                probes.stopSession({
+                  ...input,
+                  repoPath: input.workingDirectory,
+                  runtimeKind: "opencode",
+                }),
+              catch: (cause) => toHostOperationError(cause, "opencode.stopSession"),
+            }),
+          ),
+        ),
+      probeSessionStatus: (input, runtime) =>
+        requireConnection(runtime.runtimeId).pipe(
+          Effect.flatMap((probes) =>
+            Effect.tryPromise({
+              try: () =>
+                probes.probeSessionStatus({
+                  ...input,
+                  repoPath: input.workingDirectory,
+                  runtimeKind: "opencode",
+                }),
+              catch: (cause) => toHostOperationError(cause, "opencode.probeSessionStatus"),
+            }),
+          ),
+        ),
+    },
+  };
 };

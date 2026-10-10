@@ -95,7 +95,6 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     emptyState: null,
     isStarting: false,
     isSending: false,
-    sessionAgentColors: {},
     pendingApprovalRequests: [],
     pendingQuestionRequests: [],
     todos: [],
@@ -636,7 +635,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
             startedAtMs: 1_000,
           },
         })}
-        sessionAgentColors={{}}
         sessionIdentity={{
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",

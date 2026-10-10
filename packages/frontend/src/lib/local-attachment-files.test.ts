@@ -67,6 +67,19 @@ describe("local-attachment-files", () => {
     );
   });
 
+  test("resolveLocalAttachmentPreviewSrc keeps native inline image bytes without reading a local file", async () => {
+    const uri = "data:image/png;base64,aW1hZ2U=";
+    const resolveForShell = mock(async () => {
+      throw new Error("Inline runtime attachments have no local file.");
+    });
+    configureShellBridge(
+      createTestShellBridge({ resolveLocalAttachmentPreviewSrc: resolveForShell }),
+    );
+
+    expect(await resolveLocalAttachmentPreviewSrc(uri)).toBe(uri);
+    expect(resolveForShell).not.toHaveBeenCalled();
+  });
+
   test("resolveLocalAttachmentPreviewSrc trims and delegates preview URL resolution to the shell bridge", async () => {
     const resolveLocalAttachmentPreviewSrcForShell = mock(
       async () => "asset://localhost/preview.png",

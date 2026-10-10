@@ -90,7 +90,6 @@ export type AgentChatComposerConfig = {
 type UseAgentChatComposerModelArgs = {
   composer: AgentChatComposerConfig | undefined;
   interactionEnabled: boolean;
-  sessionAgentColors: Record<string, string>;
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerEditorRef: RefObject<HTMLDivElement | null>;
   resizeComposerEditor: () => void;
@@ -100,7 +99,6 @@ type UseAgentChatComposerModelArgs = {
 export function useAgentChatComposerModel({
   composer,
   interactionEnabled,
-  sessionAgentColors,
   composerFormRef,
   composerEditorRef,
   resizeComposerEditor,
@@ -114,10 +112,9 @@ export function useAgentChatComposerModel({
             selectedModelSelection: composer.selectedModelSelection,
             isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
             isInteractionEnabled: interactionEnabled,
-            sessionAgentColors,
           })
         : null,
-    [composer, interactionEnabled, sessionAgentColors],
+    [composer, interactionEnabled],
   );
 
   return useMemo(() => {

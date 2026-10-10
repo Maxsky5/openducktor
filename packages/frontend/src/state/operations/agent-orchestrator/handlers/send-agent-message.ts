@@ -203,6 +203,7 @@ export const upsertAcceptedUserMessage = (
   resolvedQuestionRequestIds: readonly string[] | undefined,
   updateSession: UpdateSession,
 ): void => {
+  if (acceptedUserMessage.type === "command_accepted") return;
   const handledRequestIds =
     acceptedUserMessage.resolvedQuestionRequestIds ?? resolvedQuestionRequestIds ?? [];
   updateSession(session, (current) => ({

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { getSessionMessages } from "@/state/operations/agent-orchestrator/support/messages";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatTranscriptModel,
@@ -7,6 +8,50 @@ import {
 } from "./agent-chat-transcript-model";
 
 describe("agent chat transcript model", () => {
+  test("keeps one initial system prompt above the first user message during live updates and hydration", () => {
+    const user = buildMessage("user", "Question", { id: "user-1" });
+    const prompt = buildMessage("system", "System prompt:\n\nInitial instructions", {
+      id: "prompt-1",
+    });
+    const answer = buildMessage("assistant", "Answer", { id: "assistant-1" });
+    const update = buildMessage("system", "Instructions update:\n\nTool catalog update", {
+      id: "prompt-2",
+    });
+    const followup = buildMessage("user", "Follow-up", { id: "user-2" });
+    const session = buildSession({ messages: [user] });
+    const initial = buildAgentChatTranscriptModel(session, { showThinkingMessages: true });
+    const firstTurn = buildSession({ ...session, messages: [user, prompt, answer] });
+    const live = updateAgentChatTranscriptModelFromPrefix({
+      session: firstTurn,
+      showThinkingMessages: true,
+      previousTranscriptModel: initial,
+      startMessageIndex: 1,
+      mode: "append",
+    })!;
+    expect(live.rows.flatMap((row) => (row.kind === "message" ? [row.message.id] : []))).toEqual([
+      "prompt-1",
+      "user-1",
+      "assistant-1",
+    ]);
+    const completed = buildSession({
+      ...session,
+      messages: [user, prompt, answer, update, followup],
+    });
+    const appended = updateAgentChatTranscriptModelFromPrefix({
+      session: completed,
+      showThinkingMessages: true,
+      previousTranscriptModel: live,
+      startMessageIndex: 3,
+      mode: "append",
+    })!;
+    expect(
+      appended.rows.flatMap((row) => (row.kind === "message" ? [row.message.id] : [])),
+    ).toEqual(["prompt-1", "user-1", "assistant-1", "prompt-2", "user-2"]);
+    expect(appended).toEqual(
+      buildAgentChatTranscriptModel(completed, { showThinkingMessages: true }),
+    );
+    expect(getSessionMessages(completed)).toHaveLength(5);
+  });
   test("keeps row keys when history adds older messages before visible messages", () => {
     const messages = [
       buildMessage("user", "Question", { id: "user-1" }),

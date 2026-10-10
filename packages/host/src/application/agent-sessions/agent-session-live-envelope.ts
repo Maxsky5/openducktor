@@ -107,7 +107,9 @@ export const toAgentSessionLiveEnvelope = (
     case "session_removed":
       return { type: "session_removed", ref: change.ref };
     case "transcript_event":
-      return { type: "transcript_event", event: change.event };
+      return change.provenance === "baseline"
+        ? { type: "transcript_event", event: change.event, provenance: "baseline" }
+        : { type: "transcript_event", event: change.event };
     case "catalog_invalidated":
       if (!change.workingDirectory) {
         return {
@@ -133,12 +135,20 @@ export const toAgentSessionLiveEnvelope = (
         },
         catalog: change.catalog,
       };
+    case "runtime_notice":
+      return {
+        type: "runtime_notice",
+        scope: { repoPath: change.repoPath, runtimeKind: change.runtimeKind },
+        message: change.message,
+      };
     case "fault":
       const envelope: AgentSessionLiveFaultEnvelope = {
         type: "fault",
         repoPath: change.repoPath,
         message: change.message,
       };
+      if (change.runtimeOperationFailure)
+        envelope.runtimeOperationFailure = change.runtimeOperationFailure;
       if (change.operation) {
         envelope.operation = change.operation;
       }

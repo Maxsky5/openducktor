@@ -19,6 +19,7 @@ import type {
   EnsureSession,
   ReadSession,
   SessionTranscriptEventContext,
+  SessionTranscriptEventProvenance,
   UpdateSession,
   UpdateSessionTodos,
 } from "./session-event-types";
@@ -96,6 +97,7 @@ const dispatchTranscriptEvent = (
   dependencies: TranscriptEventDependencies,
   event: AgentSessionTranscriptEvent,
   firstTimestamp = event.timestamp,
+  provenance?: SessionTranscriptEventProvenance,
 ): void => {
   if (!dependencies.readSession(toAgentSessionIdentity(event.sessionRef))) {
     return;
@@ -156,7 +158,7 @@ const dispatchTranscriptEvent = (
       handleSessionError(context, event);
       return;
     case "session_idle":
-      handleSessionIdle(context, event);
+      handleSessionIdle(context, event, provenance);
       return;
     case "session_finished":
       handleSessionFinished(context, event);
@@ -165,7 +167,10 @@ const dispatchTranscriptEvent = (
 };
 
 export type AgentSessionTranscriptEventConsumer = {
-  handle: (event: AgentSessionTranscriptEvent) => void;
+  handle: (
+    event: AgentSessionTranscriptEvent,
+    provenance?: SessionTranscriptEventProvenance,
+  ) => void;
   /**
    * Applies the session's queued events without waiting for the batch window. A session
    * snapshot that reports the session as settled must not overtake the transcript events
@@ -232,11 +237,11 @@ export const createAgentSessionTranscriptEventConsumer = (
   };
 
   return {
-    handle: (event) => {
+    handle: (event, provenance) => {
       const sessionKey = agentSessionIdentityKey(toAgentSessionIdentity(event.sessionRef));
       if (isImmediateSessionEvent(event)) {
         forceFlushSession(sessionKey);
-        dispatchTranscriptEvent(dependencies, event);
+        dispatchTranscriptEvent(dependencies, event, event.timestamp, provenance);
         return;
       }
       const queued = queuedEventsBySession.get(sessionKey) ?? [];

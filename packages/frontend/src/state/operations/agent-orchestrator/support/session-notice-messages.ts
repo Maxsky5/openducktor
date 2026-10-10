@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 import type { AgentSessionUsageLimit } from "@openducktor/contracts";
 
@@ -32,6 +33,23 @@ export const buildUserStoppedNoticeMessage = (timestamp: string): AgentChatMessa
       tone: "cancelled",
       reason: "user_stopped",
       title: "Stopped",
+    },
+  });
+
+export const buildSessionInterruptedNoticeMessage = (
+  timestamp: string,
+  message: string,
+  id: string,
+): AgentChatMessage =>
+  buildSessionNoticeMessage({
+    id,
+    timestamp,
+    content: message,
+    meta: {
+      kind: "session_notice",
+      tone: "cancelled",
+      reason: "session_interrupted",
+      title: "Interrupted",
     },
   });
 
@@ -121,15 +139,21 @@ export const buildSessionPolicyNoticeMessage = (
   timestamp: string,
   message: string,
   id: string,
-): AgentChatMessage =>
-  buildSessionNoticeMessage({
-    timestamp,
-    content: message,
+  runtimeKind: RuntimeKind,
+): AgentChatMessage => {
+  const notice: AgentChatMessage = {
     id,
-    meta: {
+    role: "system",
+    content: message,
+    timestamp,
+  };
+  if (runtimeKind === "claude") {
+    notice.meta = {
       kind: "session_notice",
       tone: "warning",
       reason: "runtime_policy",
       title: "Claude permission mode mismatch",
-    },
-  });
+    };
+  }
+  return notice;
+};

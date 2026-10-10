@@ -18,10 +18,9 @@ describe("agent-chat-composer-model-state", () => {
         },
         isSessionModelCatalogLoading: true,
         isInteractionEnabled: false,
-        sessionAgentColors: {},
       }),
     ).toEqual({
-      accentColor: undefined,
+      accentColor: "var(--odt-runtime-accent-opencode)",
       isInteractionEnabled: false,
       isModelSelectionPending: true,
     });
@@ -39,12 +38,9 @@ describe("agent-chat-composer-model-state", () => {
         },
         isSessionModelCatalogLoading: false,
         isInteractionEnabled: true,
-        sessionAgentColors: {
-          builder: "#22c55e",
-        },
       }),
     ).toEqual({
-      accentColor: "#22c55e",
+      accentColor: "var(--odt-runtime-accent-opencode)",
       isInteractionEnabled: true,
       isModelSelectionPending: false,
     });
@@ -61,7 +57,6 @@ describe("agent-chat-composer-model-state", () => {
         },
         isSessionModelCatalogLoading: false,
         isInteractionEnabled: true,
-        sessionAgentColors: {},
       }).accentColor,
     ).toBe(CODEX_SESSION_ACCENT_COLOR);
   });
@@ -77,7 +72,6 @@ describe("agent-chat-composer-model-state", () => {
         },
         isSessionModelCatalogLoading: false,
         isInteractionEnabled: true,
-        sessionAgentColors: {},
       }).accentColor,
     ).toBe(CLAUDE_SESSION_ACCENT_COLOR);
   });

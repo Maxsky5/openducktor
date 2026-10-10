@@ -19,6 +19,7 @@ import type { RuntimeStartInput } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
+import type { OpenCodeRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
@@ -28,12 +29,22 @@ import { createOpenCodeRuntimeStarter as createEffectOpenCodeRuntimeStarter } fr
 type OpenCodeRuntimeStarterInput = Parameters<typeof createEffectOpenCodeRuntimeStarter>[0];
 type OpenCodeRuntimeStarterTestInput = Omit<
   OpenCodeRuntimeStarterInput,
-  "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "launchDirectory" | "toolDiscovery"
+  | "liveSessionLifecycle"
+  | "prepareLiveSessionAdapter"
+  | "launchDirectory"
+  | "toolDiscovery"
+  | "onConnectionReady"
+  | "onConnectionClosed"
 > &
   Partial<
     Pick<
       OpenCodeRuntimeStarterInput,
-      "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "launchDirectory" | "toolDiscovery"
+      | "liveSessionLifecycle"
+      | "prepareLiveSessionAdapter"
+      | "launchDirectory"
+      | "toolDiscovery"
+      | "onConnectionReady"
+      | "onConnectionClosed"
     >
   > & {
     systemCommands?: SystemCommandPort;
@@ -54,10 +65,9 @@ const startInput = (
   onRuntimeExit,
   onRuntimeCleanupFailed,
 });
-/** Runs the one cleanup that startup handed to the host, as the registry does after a failure. */
+/** Runs the latest resource cleanup, as the registry does after a failure. */
 const runOwnedCleanup = (ownedCleanups: OwnedCleanup[]) => {
-  expect(ownedCleanups).toHaveLength(1);
-  const [cleanup] = ownedCleanups;
+  const cleanup = ownedCleanups.at(-1);
   if (!cleanup) throw new Error("Startup must hand its cleanup to the host.");
   return cleanup;
 };
@@ -87,6 +97,8 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
   }
   const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
   const runtimeStarterInput: Parameters<typeof createEffectOpenCodeRuntimeStarter>[0] = {
+    onConnectionReady: () => {},
+    onConnectionClosed: () => {},
     launchDirectory: launchDirectory ?? tmpdir(),
     toolDiscovery: effectiveToolDiscovery,
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLifecycle,
@@ -251,6 +263,7 @@ const createFakeOpenCode = async (
     configCapturePath?: string;
     environmentCapturePath?: string;
     exitAfterMs?: number;
+    silent?: boolean;
   } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
@@ -258,6 +271,7 @@ const createFakeOpenCode = async (
     scriptPath,
     `import { spawn } from "node:child_process";
 import { renameSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 
 const args = process.argv.slice(2);
 if (args[0] !== "serve") {
@@ -265,7 +279,7 @@ if (args[0] !== "serve") {
   process.exit(2);
 }
 const portFlagIndex = args.indexOf("--port");
-if (Number(args[portFlagIndex + 1]) !== 43123) {
+if (Number(args[portFlagIndex + 1]) !== 0 || !args.includes("--stdio")) {
   console.error("unexpected port");
   process.exit(2);
 }
@@ -293,6 +307,29 @@ if (childPidPath) {
   });
   writeFileSync(childPidPath, String(child.pid));
 }
+const silent = ${JSON.stringify(options.silent ?? false)};
+const server = createServer(async (req, res) => {
+  if (req.headers.authorization !== "Basic " + Buffer.from("opencode:" + process.env.OPENCODE_PASSWORD).toString("base64")) { res.writeHead(401); res.end(); return; }
+  res.setHeader("content-type", "application/json");
+  if (req.url === "/test/exit") {
+    res.end("{}");
+    setImmediate(stop);
+    return;
+  }
+  if (req.url === "/api/rpc/openducktor-workflow-instructions/bind") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const connection = JSON.parse(body).input;
+    if (configCapturePath) writeFileSync(configCapturePath + ".bound", JSON.stringify({
+      runtimeId: connection.runtimeId, endpoint: connection.endpoint,
+      authenticated: connection.authentication.password === process.env.OPENCODE_PASSWORD,
+    }));
+    res.end(JSON.stringify({ output: { ready: true } }));
+    return;
+  }
+  res.end(JSON.stringify({ version: "2.0.24", pid: process.pid, urls: [], paths: { tmp: process.cwd() } }));
+});
+server.listen(0, "127.0.0.1", () => { if (!silent) process.stdout.write(JSON.stringify({ url: "http://127.0.0.1:" + server.address().port }) + "\\n"); });
 const keepAlive = setInterval(() => {}, 1000);
 const stop = () => {
   clearInterval(keepAlive);
@@ -306,6 +343,15 @@ if (exitAfterMs !== null) {
 `,
   );
   return writeFakeRuntimeCommand(root, "opencode", "opencode.mjs");
+};
+
+const crashFakeRuntime = async (connection: OpenCodeRuntimeConnection) => {
+  const result = await fetch(new URL("/test/exit", connection.endpoint), {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`opencode:${connection.authentication.password}`).toString("base64")}`,
+    },
+  });
+  expect(result.ok).toBe(true);
 };
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
@@ -343,14 +389,14 @@ describe("createOpenCodeRuntimeStarter", () => {
         configCapturePath,
         environmentCapturePath,
       });
-      const portProbeCalls: number[] = [];
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         readEnv: () => ({
           ...process.env,
           OPENCODE_SERVER_PASSWORD: "inherited-password",
           OPENCODE_SERVER_USERNAME: "inherited-username",
-          OPENCODE_CONFIG_CONTENT: '{"logLevel":"WARN"}',
+          OPENCODE_CONFIG_CONTENT:
+            '{ // Native JSONC.\n "logLevel":"WARN", "plugins":["native-plugin", "-removed-native-plugin"],\n}',
           ODT_WORKSPACE_ID: "inherited-workspace",
           ODT_HOST_URL: "http://127.0.0.1:14327",
           ODT_HOST_TOKEN: "inherited-token",
@@ -361,33 +407,6 @@ describe("createOpenCodeRuntimeStarter", () => {
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         // The fake child can start slowly while the full suite runs in parallel.
         startupTimeoutMs: 4_000,
-        retryDelayMs: 1,
-        portAllocator: () =>
-          Effect.tryPromise({
-            try: async () => {
-              return 43123;
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          }),
-        readinessProbe: (port) =>
-          Effect.tryPromise({
-            try: async () => {
-              portProbeCalls.push(port);
-              // The fake server is ready after a few probes and only once its process runs.
-              return portProbeCalls.length >= 3 && existsSync(environmentCapturePath);
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          }),
         now: () => new Date("2026-05-10T10:00:00.000Z"),
         runtimeId: () => "runtime-1",
       });
@@ -400,22 +419,36 @@ describe("createOpenCodeRuntimeStarter", () => {
         runtimeId: "runtime-1",
         runtimeRoute: {
           type: "local_http",
-          endpoint: "http://127.0.0.1:43123",
+          endpoint: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
         },
         startedAt: "2026-05-10T10:00:00.000Z",
         descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
       });
       expect(handle.configuredExecutablePath).toBe(opencodeBinary);
       expect(handle.effectiveExecutablePath).toBe(opencodeBinary);
-      expect(portProbeCalls.length).toBeGreaterThanOrEqual(3);
-      expect(portProbeCalls.every((port) => port === 43123)).toBe(true);
       const { cwd, ...environment } = JSON.parse(await readFile(environmentCapturePath, "utf8"));
+      await Effect.runPromise(handle.stop());
       expect(environment).toEqual({
         password: null,
         username: null,
-        configContent: '{"logLevel":"WARN"}',
+        configContent: expect.any(String),
         odtNames: [],
       });
+      const config = JSON.parse(environment.configContent);
+      expect(config.logLevel).toBe("WARN");
+      expect(config.plugins).toEqual([
+        "native-plugin",
+        "-removed-native-plugin",
+        { package: expect.any(String) },
+      ]);
+      const connection = JSON.parse(await readFile(configCapturePath + ".bound", "utf8"));
+      expect(connection.runtimeId).toBe("runtime-1");
+      expect(handle.runtime.runtimeRoute).toEqual({
+        type: "local_http",
+        endpoint: connection.endpoint,
+      });
+      expect(connection.authenticated).toBe(true);
+      expect(environment.configContent).not.toContain("authentication");
       // Compare resolved paths: Windows can report the short 8.3 name, macOS the /private path.
       expect(await realpath(cwd)).toBe(await realpath(launchDirectory));
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
@@ -467,10 +500,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           }),
         // The fake child can start slowly while the full suite runs in parallel.
         startupTimeoutMs: 4_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
         // The fake child must start before the test stops its process tree on Windows.
-        readinessProbe: () => Effect.sync(() => existsSync(configCapturePath)),
         runtimeId: () => "runtime-live-order",
       });
 
@@ -492,6 +522,7 @@ describe("createOpenCodeRuntimeStarter", () => {
 
   test("applies the startup deadline to live-session initialization after readiness", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-timeout-"));
+    const preparing = Promise.withResolvers<void>();
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
@@ -499,24 +530,28 @@ describe("createOpenCodeRuntimeStarter", () => {
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        prepareLiveSessionAdapter: (runtime) =>
-          Effect.sleep("100 millis").pipe(
-            Effect.as({
-              adapter: createLiveAdapter(runtime),
-              startForwarding: () => Effect.void,
-              discard: () => Effect.void,
-            }),
-          ),
-        startupTimeoutMs: 20,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
+        prepareLiveSessionAdapter: () =>
+          Effect.sync(() => preparing.resolve()).pipe(Effect.andThen(Effect.never)),
+        startupTimeoutMs: 1000,
         runtimeId: () => "runtime-live-timeout",
       });
 
+      const ownedCleanups: OwnedCleanup[] = [];
       const result = await Effect.runPromise(
-        Effect.result(starter.startRuntime(startInput(opencodeBinary))),
+        Effect.gen(function* () {
+          const startup = yield* Effect.forkChild(
+            Effect.result(
+              starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
+            ),
+          );
+          return yield* Effect.gen(function* () {
+            yield* Effect.promise(() => preparing.promise);
+            yield* TestClock.adjust("1 second");
+            return yield* Fiber.join(startup);
+          }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
+        }).pipe(Effect.provide(TestClock.layer())),
       );
+      if (result._tag === "Failure") await Effect.runPromise(runOwnedCleanup(ownedCleanups));
       if (result._tag === "Success") {
         await Effect.runPromise(result.success.stop());
       }
@@ -524,37 +559,67 @@ describe("createOpenCodeRuntimeStarter", () => {
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure") {
         expect(result.failure.message).toBe(
-          "Timed out starting OpenCode runtime on 127.0.0.1:43123 after 20ms.",
+          "OpenCode V2 live-session startup timed out. Check the selected executable and restart OpenCode from Diagnostics.",
         );
       }
     } finally {
       await removeTestDirectory(root);
     }
-  });
+  }, 10_000);
 
-  test("bounds readiness probing by the startup deadline", async () => {
+  test("bounds native readiness by the startup deadline", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-readiness-timeout-"));
+    const acquired = Promise.withResolvers<void>();
+    const ownedCleanups: OwnedCleanup[] = [];
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const opencodeBinary = await createFakeOpenCode(root, { silent: true });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 40,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.sleep("50 millis").pipe(Effect.as(false)),
       });
 
-      const startedAt = Date.now();
-      await expect(
-        Effect.runPromise(starter.startRuntime(startInput(opencodeBinary))),
-      ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
-
-      expect(Date.now() - startedAt).toBeLessThan(500);
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          let completed = false;
+          const startup = yield* Effect.forkChild(
+            Effect.result(
+              starter.startRuntime({
+                ...startInput(opencodeBinary),
+                ownCleanup: (cleanup) => {
+                  ownedCleanups.push(cleanup);
+                  acquired.resolve();
+                },
+              }),
+            ).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  completed = true;
+                }),
+              ),
+            ),
+          );
+          return yield* Effect.gen(function* () {
+            yield* Effect.promise(() => acquired.promise);
+            yield* TestClock.adjust("39 millis");
+            expect(completed).toBe(false);
+            yield* TestClock.adjust("1 milli");
+            expect(completed).toBe(true);
+            return yield* Fiber.join(startup);
+          }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
+        }).pipe(Effect.provide(TestClock.layer())),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure")
+        expect(result.failure.message).toContain("authenticated V2 readiness URL within 40ms");
     } finally {
-      await removeTestDirectory(root);
+      try {
+        if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
+      } finally {
+        await removeTestDirectory(root);
+      }
     }
   });
 
@@ -563,7 +628,8 @@ describe("createOpenCodeRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { exitAfterMs: 50 });
+      const opencodeBinary = await createFakeOpenCode(root);
+      const connected = Promise.withResolvers<OpenCodeRuntimeConnection>();
       const releasedRuntimeIds: string[] = [];
       const lifecycle: RuntimeLiveSessionLifecyclePort = {
         registerRuntimeAdapter: () => Effect.void,
@@ -581,6 +647,7 @@ describe("createOpenCodeRuntimeStarter", () => {
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         liveSessionLifecycle: lifecycle,
+        onConnectionReady: connected.resolve,
         prepareLiveSessionAdapter: (runtime) =>
           Effect.succeed({
             adapter: createLiveAdapter(runtime),
@@ -588,9 +655,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             discard: () => Effect.void,
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-unexpected-close",
       });
 
@@ -598,10 +662,11 @@ describe("createOpenCodeRuntimeStarter", () => {
       const handle = await Effect.runPromise(
         starter.startRuntime(startInput(opencodeBinary, (message) => exits.push(message))),
       );
+      await crashFakeRuntime(await connected.promise);
       await waitFor(() => releasedRuntimeIds.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       await waitFor(() => exits.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
-      expect(exits).toEqual(["process exited with code 0."]);
+      expect(exits).toEqual(["process exited with code 0"]);
       await Effect.runPromise(handle.stop());
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
       expect(exits).toHaveLength(1);
@@ -615,7 +680,8 @@ describe("createOpenCodeRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { exitAfterMs: 50 });
+      const opencodeBinary = await createFakeOpenCode(root);
+      const connected = Promise.withResolvers<OpenCodeRuntimeConnection>();
       let releaseAttempts = 0;
       const lifecycle: RuntimeLiveSessionLifecyclePort = {
         registerRuntimeAdapter: () => Effect.void,
@@ -637,6 +703,7 @@ describe("createOpenCodeRuntimeStarter", () => {
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         liveSessionLifecycle: lifecycle,
+        onConnectionReady: connected.resolve,
         prepareLiveSessionAdapter: (runtime) =>
           Effect.succeed({
             adapter: createLiveAdapter(runtime),
@@ -644,9 +711,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             discard: () => Effect.void,
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-crash-cleanup",
       });
 
@@ -661,6 +725,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           ),
         ),
       );
+      await crashFakeRuntime(await connected.promise);
       await waitFor(() => cleanupFailures.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       expect(exits).toHaveLength(1);
       expect(cleanupFailures[0]).toContain("adapter busy");
@@ -704,9 +769,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             };
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-observation-lost",
       });
       const exits: string[] = [];
@@ -747,9 +809,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             };
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-observation-stop",
       });
       const exits: string[] = [];
@@ -803,9 +862,6 @@ describe("createOpenCodeRuntimeStarter", () => {
               }),
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-register-failure",
       });
 
@@ -865,9 +921,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             discard: () => Effect.void,
           }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 1,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-forward-failure",
       });
 
@@ -898,9 +951,6 @@ describe("createOpenCodeRuntimeStarter", () => {
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 20,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-tree",
       });
 
@@ -932,14 +982,11 @@ describe("createOpenCodeRuntimeStarter", () => {
       const childPidPath = join(root, "child.pid");
       const startupTimeoutMs = 2_000;
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
+      const opencodeBinary = await createFakeOpenCode(root, { childPidPath, silent: true });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs,
-        retryDelayMs: 2_000,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(false),
       });
 
       const ownedCleanups: OwnedCleanup[] = [];
@@ -962,9 +1009,7 @@ describe("createOpenCodeRuntimeStarter", () => {
             const result = yield* Fiber.join(startup);
             expect(result._tag).toBe("Failure");
             if (result._tag === "Failure") {
-              expect(result.failure.message).toBe(
-                "Timed out waiting for OpenCode runtime on 127.0.0.1:43123.",
-              );
+              expect(result.failure.message).toContain("authenticated V2 readiness URL");
             }
           }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
         }).pipe(Effect.provide(TestClock.layer())),
@@ -994,10 +1039,7 @@ describe("createOpenCodeRuntimeStarter", () => {
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 20,
-        portAllocator: () => Effect.succeed(43123),
         // The child must own its working directory before cleanup tests stop it on Windows.
-        readinessProbe: () => Effect.sync(() => existsSync(configCapturePath)),
         runtimeId: () => "runtime-failure",
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
@@ -1033,9 +1075,6 @@ describe("createOpenCodeRuntimeStarter", () => {
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 20,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.sync(() => existsSync(configCapturePath)),
         runtimeId: () => "runtime-retry",
         liveSessionLifecycle: {
           registerRuntimeAdapter: () => Effect.void,
@@ -1087,14 +1126,11 @@ describe("createOpenCodeRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const opencodeBinary = await createFakeOpenCode(root, { silent: true });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 20,
-        retryDelayMs: 5,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.succeed(false),
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
           return Effect.fail(
@@ -1112,7 +1148,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
         ),
       );
-      expect(failure.message).toBe("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
+      expect(failure.message).toContain("authenticated V2 readiness URL");
       await expect(Effect.runPromise(runOwnedCleanup(ownedCleanups))).rejects.toThrow(
         "process tree cleanup failed",
       );
@@ -1125,19 +1161,11 @@ describe("createOpenCodeRuntimeStarter", () => {
   });
 
   test("rejects an empty saved executable path before it starts a process", async () => {
-    let portAllocations = 0;
-    const starter = createOpenCodeRuntimeStarter({
-      portAllocator: () =>
-        Effect.sync(() => {
-          portAllocations += 1;
-          return 43123;
-        }),
-    });
+    const starter = createOpenCodeRuntimeStarter({});
 
     await expect(Effect.runPromise(starter.startRuntime(startInput("")))).rejects.toThrow(
       "Saved OpenCode path is empty",
     );
-    expect(portAllocations).toBe(0);
   });
 
   // Windows starts a cmd shim and stops the resulting process tree.
@@ -1160,9 +1188,6 @@ describe("createOpenCodeRuntimeStarter", () => {
         }),
         readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
         startupTimeoutMs: 2_000,
-        retryDelayMs: 20,
-        portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () => Effect.sync(() => existsSync(startupPath)),
         runtimeId: () => "runtime-path",
       });
 

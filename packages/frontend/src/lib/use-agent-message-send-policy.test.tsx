@@ -12,7 +12,7 @@ import {
   createSessionsRef,
   getSession,
 } from "@/state/operations/agent-orchestrator/handlers/session-actions.test-helpers";
-import { createTestOpencodeSdkAdapter } from "@/state/operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
+import { AgentRuntimeTestAdapter } from "../test-support/agent-runtime-test-adapter";
 import { acceptedUserMessage } from "@/state/operations/agent-orchestrator/handlers/session-actions-send.test-support";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
@@ -21,7 +21,7 @@ import type { AgentSessionTransientFault } from "@/types/agent-session-transient
 
 test("blocks a send while the session is still starting", async () => {
   let submissions = 0;
-  const adapter = createTestOpencodeSdkAdapter();
+  const adapter = new AgentRuntimeTestAdapter();
   adapter.sendUserMessage = async (input) => {
     submissions += 1;
     return acceptedUserMessage(input);
@@ -51,7 +51,7 @@ test.each([
   "%s fault follows the session's write access",
   async (_name, fault, canSend) => {
     let submissions = 0;
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     adapter.sendUserMessage = async (input) => {
       submissions += 1;
       return acceptedUserMessage(input);

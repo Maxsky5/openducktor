@@ -60,7 +60,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               agentRole: "planner",
             },
           },
-          sessionAgentColors: {},
         }),
       );
 
@@ -96,7 +95,6 @@ describe("AgentChatMessageCard assistant copy", () => {
             },
           },
           isStreamingAssistantMessage: false,
-          sessionAgentColors: {},
         }),
       );
 
@@ -130,7 +128,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               isFinal: true,
             },
           },
-          sessionAgentColors: {},
         }),
       );
 
@@ -169,7 +166,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               isFinal: true,
             },
           },
-          sessionAgentColors: {},
         }),
       );
 

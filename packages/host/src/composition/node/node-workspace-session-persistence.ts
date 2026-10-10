@@ -16,6 +16,7 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createWorkspaceSessionOperationGate } from "../../application/workspaces/workspace-session-operation-gate";
 import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
 
+// Resolve live state in the title callback at call time. Composition creates persistence first.
 export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
   faultLog,

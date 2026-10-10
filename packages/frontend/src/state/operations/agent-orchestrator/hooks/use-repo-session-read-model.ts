@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
@@ -208,8 +209,8 @@ export const useRepoSessionReadModel = ({
       liveSessionPort.agentSessionLiveReplyApproval(input),
   );
   const handleTranscriptEvent = useEffectEvent(
-    (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
-      transcriptEvents.handle(event),
+    (...args: Parameters<AgentSessionTranscriptEventConsumer["handle"]>) =>
+      transcriptEvents.handle(...args),
   );
   const retainLiveNotices = useEffectEvent(applyLiveNotices);
   const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
@@ -786,6 +787,10 @@ export const useRepoSessionReadModel = ({
         commitInitialSnapshot(envelope);
         return;
       }
+      if (envelope.type === "runtime_notice") {
+        toast.warning(envelope.message);
+        return;
+      }
       if (envelope.type === "fault") {
         const message = faultMessage(envelope);
         if (envelope.ref) {
@@ -843,7 +848,7 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "transcript_event") {
         clearSessionFault(envelope.event.sessionRef);
         commitTranscriptActivity(envelope);
-        handleTranscriptEvent(envelope.event);
+        handleTranscriptEvent(envelope.event, envelope.provenance);
         return;
       }
       if (envelope.type === "catalog_invalidated") {

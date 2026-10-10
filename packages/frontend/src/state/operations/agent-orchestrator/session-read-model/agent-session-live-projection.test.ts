@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveSnapshot,
+  AgentSessionLivePendingApprovalRequest,
+  AgentSessionLivePendingQuestionRequest,
+} from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -253,6 +258,61 @@ describe("agent session live projection", () => {
     expect(getAgentSession(changed, identity("root"))?.pendingQuestions).toBe(
       parent?.pendingQuestions,
     );
+  });
+
+  test("keeps native approval and form details on owners and parents", () => {
+    const request: AgentSessionLivePendingApprovalRequest = {
+      requestId: "approval",
+      requestType: "permission_grant" as const,
+      title: "Approve shell",
+      supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
+      persistentGrant: {
+        scope: "project" as const,
+        projectDirectory: "/repo",
+        rules: [{ action: "shell", resource: "bun test*" }],
+      },
+      rejectsAllPendingApprovals: true,
+    };
+    const form: AgentSessionLivePendingQuestionRequest = {
+      requestId: "form-native",
+      questions: [
+        { header: "Optional", question: "Note", options: [], custom: true, required: false },
+        { header: "Required", question: "Explain", options: [], custom: true, required: true },
+      ],
+      canCancel: true,
+      unsupportedReason: "This native form has unsupported constraints.",
+    };
+    const child = snapshot("child", {
+      parentExternalSessionId: "root",
+      pendingApprovals: [request],
+      pendingQuestions: [form],
+    });
+    const current = build({ snapshots: [snapshot("root"), child] });
+    for (const id of ["root", "child"]) {
+      expect(getAgentSession(current, identity(id))?.pendingApprovals[0]).toMatchObject(request);
+      expect(getAgentSession(current, identity(id))?.pendingQuestions[0]).toMatchObject(form);
+    }
+    const updated = delta(current, {
+      type: "session_upsert",
+      session: {
+        ...child,
+        pendingApprovals: [{ ...child.pendingApprovals[0]!, rejectsAllPendingApprovals: false }],
+        pendingQuestions: [
+          { ...form, canCancel: false, unsupportedReason: "The native form constraints changed." },
+        ],
+      },
+    });
+    for (const id of ["root", "child"]) {
+      expect(getAgentSession(updated, identity(id))?.pendingApprovals[0]).toMatchObject({
+        ...request,
+        rejectsAllPendingApprovals: false,
+      });
+      expect(getAgentSession(updated, identity(id))?.pendingQuestions[0]).toMatchObject({
+        ...form,
+        canCancel: false,
+        unsupportedReason: "The native form constraints changed.",
+      });
+    }
   });
 
   test.each(["approval", "question"] as const)(

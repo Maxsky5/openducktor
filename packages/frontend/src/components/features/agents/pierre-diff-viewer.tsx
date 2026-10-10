@@ -82,6 +82,7 @@ type PierreDiffPreloaderProps = {
 type PierreFileViewerProps = {
   filePath: string;
   content: string;
+  heightMode?: PierreDiffHeightMode;
   className?: string;
 };
 
@@ -293,6 +294,7 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
 export const PierreFileViewer = memo(function PierreFileViewer({
   filePath,
   content,
+  heightMode = "scroll",
   className,
 }: PierreFileViewerProps): ReactElement {
   const { theme } = useTheme();
@@ -377,7 +379,7 @@ export const PierreFileViewer = memo(function PierreFileViewer({
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
-      <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
+      <div className={getPierreViewerContainerClassName(heightMode)}>
         <div className="grid min-w-0">
           {isHighlightReady ? (
             <div className="col-start-1 row-start-1 min-w-0">

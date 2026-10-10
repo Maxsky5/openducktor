@@ -1,6 +1,5 @@
 import type { AgentDescriptor, AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { resolveAgentAccentColor } from "./agent-accent-color";
 import { formatTokenCompact } from "./format-token-count";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
@@ -28,16 +27,12 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
   return fallbackAgents.map((entry) => {
     const label = entry.label ?? entry.name ?? entry.id ?? "Unknown";
     const value = entry.id ?? entry.name ?? label;
-    const accentColor = resolveAgentAccentColor(label, entry.color);
     const option: ComboboxOption = {
       value,
       label,
     };
     if (entry.description) {
       option.description = entry.description;
-    }
-    if (accentColor) {
-      option.accentColor = accentColor;
     }
     return option;
   });

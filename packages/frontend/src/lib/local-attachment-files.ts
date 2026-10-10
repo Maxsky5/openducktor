@@ -34,6 +34,9 @@ export const resolveLocalAttachmentPreviewSrc = async (path: string): Promise<st
   if (trimmedPath.length === 0) {
     throw new Error("Attachment preview is unavailable because the local file path is missing.");
   }
+  if (trimmedPath.startsWith("data:")) {
+    return trimmedPath;
+  }
 
   return getShellBridge().resolveLocalAttachmentPreviewSrc(trimmedPath);
 };

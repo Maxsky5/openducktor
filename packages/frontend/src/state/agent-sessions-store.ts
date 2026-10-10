@@ -139,7 +139,9 @@ export const createAgentSessionsStore = (
   };
   const retainLiveNotices = (snapshot: AgentSessionLiveSnapshot): void => {
     const key = agentSessionIdentityKey(snapshot.ref);
-    retainNotice(policyNotices, key, snapshot.policyNotice, buildSessionPolicyNoticeMessage);
+    retainNotice(policyNotices, key, snapshot.policyNotice, (timestamp, message, id) =>
+      buildSessionPolicyNoticeMessage(timestamp, message, id, snapshot.ref.runtimeKind),
+    );
     retainNotice(launchFailures, key, snapshot.launchFailure, buildSessionErrorNoticeMessage);
   };
   const clearLiveNotices = (key?: string): void => {

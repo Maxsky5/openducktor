@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",
+    "./opencode-workflow-plugin": "./src/adapters/opencode/opencode-workflow-plugin.ts",
     "./node-pty": "./src/adapters/node/pty-process-adapter.ts"
   },
   "scripts": {
@@ -33,6 +34,7 @@
     "drizzle-orm": "0.45.2",
     "effect": "4.0.1",
     "file-type": "^22.1.1",
+    "jsonc-parser": "3.3.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",

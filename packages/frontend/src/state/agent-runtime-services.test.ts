@@ -74,7 +74,8 @@ describe("agent runtime services", () => {
         model: { providerId: "p", modelId: "m", profileId: "profile", variant: undefined },
       },
     });
-    expect(getAcceptedMessageAfterSendFailure(error, ref)?.model).toEqual({
+    const accepted = getAcceptedMessageAfterSendFailure(error, ref);
+    expect(accepted?.type === "user_message" ? accepted.model : null).toEqual({
       providerId: "p",
       modelId: "m",
       profileId: "profile",

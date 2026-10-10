@@ -129,7 +129,6 @@ export type AgentChatThreadModel = {
   emptyState: AgentChatEmptyStateModel | null;
   isStarting: boolean;
   isSending: boolean;
-  sessionAgentColors: Record<string, string>;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;

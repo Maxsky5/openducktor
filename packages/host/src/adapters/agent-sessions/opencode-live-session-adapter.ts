@@ -7,6 +7,7 @@ import {
 import {
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
+  type OpenCodeRuntimeConnection,
 } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
@@ -25,6 +26,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
+  AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
@@ -32,7 +34,12 @@ import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
-import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-normalization";
+import {
+  refKey,
+  requireRuntime,
+  toSessionRef,
+  toRuntimeSignalChanges,
+} from "./opencode-live-session-normalization";
 import { createOpenCodeAdapterRelease } from "./opencode-live-session-release";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
@@ -54,11 +61,13 @@ export type OpenCodeLiveSessionObserver = {
 export type OpenCodeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
   observer: OpenCodeLiveSessionObserver,
+  connection: OpenCodeRuntimeConnection,
 ) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
 
 export type OpenCodeRuntimeSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
   observer: OpenCodeLiveSessionObserver,
+  connection: OpenCodeRuntimeConnection,
 ) => Effect.Effect<PreparedOpenCodeLiveSessionAdapter, HostError>;
 
 export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
@@ -88,7 +97,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
-  return (runtimeInput, observer) =>
+  return (runtimeInput, observer, connection) =>
     Effect.gen(function* () {
       const runtime = yield* requireRuntime(runtimeInput);
       const prepared = yield* Effect.tryPromise({
@@ -96,6 +105,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           prepareRuntime({
             runtimeId: runtime.runtimeId,
             runtimeEndpoint: runtime.runtimeRoute.endpoint,
+            connection,
             signal,
           }),
         catch: (cause) =>
@@ -114,6 +124,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       });
       const serializeRuntime = runtimeLane.run;
       const contextLoads = new Map<string, Promise<AgentSessionContextUsage | null>>();
+      const catalogDirectories = new Map<string, Set<string>>();
       let released = false;
 
       const requireActive = (): void => {
@@ -176,6 +187,28 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         signal: OpencodeSessionRuntimeSignal,
       ): Effect.Effect<void, HostError> => {
         switch (signal.type) {
+          case "observation_reset":
+            return serializeRuntime(
+              commit("opencode-live-session.invalidate-pending", () => {
+                state.invalidatePendingRequests();
+                return { value: undefined, changes: [] };
+              }),
+            );
+          case "session_source":
+            return serializeRuntime(
+              commit("opencode-live-session.admit-source", () => ({
+                value: undefined,
+                changes: state.admitSource(signal.source),
+              })),
+            );
+          case "catalog_invalidated":
+          case "runtime_notice":
+            return serializeRuntime(
+              commit("opencode-live-session.runtime-change", () => ({
+                value: undefined,
+                changes: toRuntimeSignalChanges(signal, state.listSnapshots(), catalogDirectories),
+              })),
+            );
           case "context_updated":
             return serializeRuntime(
               commit("opencode-live-session.commit-context", () => ({
@@ -187,10 +220,9 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             return serializeRuntime(
               commit("opencode-live-session.commit-transcript-event", () => {
                 const ref = state.refForExternalSession(signal.externalSessionId);
-                if (!ref) {
-                  return { value: undefined, changes: [] };
-                }
-                const stateChanges = state.applyEvent(ref, signal.event);
+                if (!ref) return { value: undefined, changes: [] };
+                const stateChanges =
+                  signal.provenance === "baseline" ? [] : state.applyEvent(ref, signal.event);
                 if (!isAgentSessionTranscriptEventType(signal.event.type)) {
                   return { value: undefined, changes: stateChanges };
                 }
@@ -198,21 +230,22 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                   ...signal.event,
                   sessionRef: ref,
                 });
+                const change: AgentSessionLiveAdapterChange =
+                  signal.provenance === "baseline"
+                    ? { type: "transcript_event", event, provenance: "baseline" }
+                    : { type: "transcript_event", event };
                 return {
                   value: undefined,
-                  changes: [...stateChanges, { type: "transcript_event", event }],
+                  changes: [...stateChanges, change],
                 };
               }),
             );
           case "session_removed":
+          case "session_fault":
             return serializeRuntime(
-              commit("opencode-live-session.commit-session-removal", () => {
-                const ref = state.refForExternalSession(signal.externalSessionId);
-                return {
-                  value: undefined,
-                  changes: ref ? state.removeSession(ref) : [],
-                };
-              }),
+              commit("opencode-live-session.commit-session-signal", () =>
+                state.applySessionSignal(signal),
+              ),
             );
           case "fault":
             // The route is unavailable from the fault on, before the release completes. The fault
@@ -223,12 +256,17 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 value: undefined,
                 changes: [
                   ...new Set(state.listSnapshots().map((snapshot) => snapshot.ref.repoPath)),
-                ].map((repoPath) => ({
-                  type: "fault" as const,
-                  repoPath,
-                  operation: "opencode-live-session.observe-runtime",
-                  message: signal.message,
-                })),
+                ].map((repoPath) => {
+                  const change = {
+                    type: "fault" as const,
+                    repoPath,
+                    operation: "opencode-live-session.observe-runtime",
+                    message: signal.message,
+                  };
+                  return signal.runtimeOperationFailure
+                    ? { ...change, runtimeOperationFailure: signal.runtimeOperationFailure }
+                    : change;
+                }),
               })),
             ).pipe(
               Effect.flatMap(() =>
@@ -246,6 +284,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       const loadMissingContext = (
         input: AgentSessionLiveLoadContextInput,
       ): Promise<AgentSessionContextUsage | null> => {
+        const readStart = state.readStart();
         const operation = Effect.tryPromise({
           try: () => prepared.connection.loadContextUsage(toSessionRef(input)),
           catch: (cause) =>
@@ -257,7 +296,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           Effect.flatMap((contextUsage) =>
             serializeRuntime(
               commit("opencode-live-session.commit-loaded-context", () =>
-                state.applyLoadedContext(input, contextUsage),
+                state.applyLoadedContext(input, contextUsage, readStart),
               ),
             ),
           ),
@@ -265,18 +304,18 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         return Effect.runPromise(operation);
       };
 
-      const releaseAdapter = serializeRuntime(
-        createOpenCodeAdapterRelease({
-          runtimeId: runtime.runtimeId,
-          close: () => {
-            released = true;
-            contextLoads.clear();
-            return state.release();
-          },
-          releaseNative: () => prepared.release(),
-        }),
-      );
+      const releaseAdapter = createOpenCodeAdapterRelease({
+        runtimeId: runtime.runtimeId,
+        close: () => {
+          released = true;
+          contextLoads.clear();
+          catalogDirectories.clear();
+          return state.release();
+        },
+        releaseNative: () => prepared.release(),
+      });
 
+      const queries = createRuntimeQueryAdapter(prepared.queries);
       const adapter: AgentSessionRuntimeAdapterPort = {
         sessionImport: createRuntimeSessionImportAdapter({
           ...prepared.sessionImport,
@@ -291,7 +330,15 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             };
           },
         }),
-        queries: createRuntimeQueryAdapter(prepared.queries),
+        queries: {
+          ...queries,
+          loadRuntimeCatalog: (input) =>
+            Effect.sync(() => {
+              const directories = catalogDirectories.get(input.repoPath) ?? new Set<string>();
+              directories.add(input.workingDirectory);
+              catalogDirectories.set(input.repoPath, directories);
+            }).pipe(Effect.andThen(queries.loadRuntimeCatalog(input))),
+        },
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
@@ -355,19 +402,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
               Effect.flatMap((route) =>
                 Effect.tryPromise({
                   try: () => {
-                    const request: Parameters<typeof prepared.connection.replyApproval>[0] =
-                      input.message
-                        ? {
-                            ref: route.ref,
-                            nativeRequestId: route.nativeRequestId,
-                            outcome: input.outcome,
-                            message: input.message,
-                          }
-                        : {
-                            ref: route.ref,
-                            nativeRequestId: route.nativeRequestId,
-                            outcome: input.outcome,
-                          };
+                    const request: Parameters<typeof prepared.connection.replyApproval>[0] = {
+                      ref: route.ref,
+                      nativeRequestId: route.nativeRequestId,
+                      outcome: input.outcome,
+                    };
+                    if (input.message) request.message = input.message;
                     return prepared.connection.replyApproval(request);
                   },
                   catch: (cause) =>

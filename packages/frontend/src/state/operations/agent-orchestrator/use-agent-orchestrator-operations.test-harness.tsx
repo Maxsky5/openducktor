@@ -1,7 +1,5 @@
-import {
-  createOpenCodeAgentEngineTestAdapter,
-  createTestOpencodeSdkAdapter,
-} from "./handlers/opencode-agent-engine.test-support";
+import { createOpenCodeAgentEngineTestAdapter } from "./handlers/opencode-agent-engine.test-support";
+import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
 import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
@@ -225,7 +223,7 @@ export const createHookHarness = (args: {
       opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
     },
     agentEngine:
-      args.agentEngine ?? createOpenCodeAgentEngineTestAdapter(createTestOpencodeSdkAdapter()),
+      args.agentEngine ?? createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter()),
     dependencies,
   };
   const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();
