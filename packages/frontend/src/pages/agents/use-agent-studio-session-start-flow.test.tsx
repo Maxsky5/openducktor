@@ -7,7 +7,11 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRuntimeCatalog,
+} from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { type SessionStartWorkflowResult } from "@/features/session-start";
@@ -697,7 +701,88 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession keeps the current runtime and uses the repository Default Model", async () => {
+  test.each([
+    {
+      name: "role default in another runtime",
+      currentSelection: MODEL_SELECTION,
+      selectedSessionIdentity: sessionIdentity("session-spec"),
+      plannerDefault: {
+        runtimeKind: "claude" as const,
+        providerId: "claude",
+        modelId: "default",
+        variant: "high",
+        profileId: "",
+      },
+    },
+    {
+      name: "role default when only the current session runtime is known",
+      currentSelection: null,
+      selectedSessionIdentity: {
+        ...sessionIdentity("session-spec"),
+        runtimeKind: "claude" as const,
+      },
+      plannerDefault: {
+        runtimeKind: "opencode" as const,
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "planner",
+      },
+    },
+    {
+      name: "model, effort, and profile in the same runtime",
+      currentSelection: MODEL_SELECTION,
+      selectedSessionIdentity: sessionIdentity("session-spec"),
+      plannerDefault: {
+        runtimeKind: "opencode" as const,
+        providerId: "anthropic",
+        modelId: "claude-sonnet-4",
+        variant: "thinking",
+        profileId: "planner",
+      },
+    },
+  ])(
+    "handleQuickAction uses the next role's $name",
+    async ({ currentSelection, selectedSessionIdentity, plannerDefault }) => {
+      const harness = createInternalModalHookHarness({
+        ...createBaseArgs(),
+        selectionForNewSession: currentSelection,
+        selectedSessionIdentity,
+        repoSettings: {
+          ...REPO_SETTINGS,
+          agentDefaults: { ...REPO_SETTINGS.agentDefaults, planner: plannerDefault },
+        },
+      });
+
+      await harness.mount();
+      try {
+        await harness.run((state) => {
+          state.handleQuickAction({
+            id: "quick:planner_initial",
+            role: "planner",
+            launchActionId: "planner_initial",
+            label: "Start Planner",
+            description: "Start the next workflow step.",
+            postStartAction: "kickoff",
+            disabled: false,
+          });
+        });
+
+        const modal = await waitForSessionStartModal(harness);
+        const { profileId, ...modelSelection } = plannerDefault;
+        const expectedSelection: AgentModelSelection = modelSelection;
+        if (profileId) {
+          expectedSelection.profileId = profileId;
+        }
+        expect(modal.selectedRuntimeKind).toBe(plannerDefault.runtimeKind);
+        expect(modal.selectedModelSelection).toEqual(expectedSelection);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("handleCreateSession uses the repository Default Model for another role", async () => {
     const currentSelection = {
       runtimeKind: "opencode" as const,
       providerId: "anthropic",
@@ -767,7 +852,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession seeds cross-role modals from the selected session runtime", async () => {
+  test("handleCreateSession uses the repository default runtime for another role", async () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
@@ -826,12 +911,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     const modal = await waitForSessionStartModal(harness);
-    expect(modal.selectedRuntimeKind).toBe("claude");
-    expect(modal.selectedModelSelection).toMatchObject({
-      runtimeKind: "claude",
-      providerId: "claude",
-      modelId: "default",
-      variant: "low",
+    expect(modal.selectedRuntimeKind).toBe("opencode");
+    expect(modal.selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
     });
 
     await harness.unmount();

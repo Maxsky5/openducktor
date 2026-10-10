@@ -156,7 +156,7 @@ export function useAgentStudioSessionStartFlow({
           }),
           request,
           requestedRuntimeKind:
-            request.taskId === taskId
+            request.role === role && request.taskId === taskId
               ? (selectionForNewSession?.runtimeKind ??
                 selectedSessionIdentity?.runtimeKind ??
                 null)
