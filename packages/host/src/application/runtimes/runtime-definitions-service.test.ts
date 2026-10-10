@@ -36,7 +36,7 @@ describe("createRuntimeDefinitionsService", () => {
     expect(definitions[2]?.capabilities.promptInput.supportsSubagentReferences).toBe(false);
   });
 
-  test("reports interrupted-turn resume support for every built-in runtime", () => {
+  test("reports the OpenCode V2 interrupted-turn capability limit", () => {
     const service = createRuntimeDefinitionsService();
 
     const definitions = service.listRuntimeDefinitions();
@@ -45,6 +45,6 @@ describe("createRuntimeDefinitionsService", () => {
       definitions.map(
         (definition) => definition.capabilities.sessionLifecycle.supportsInterruptedTurnResume,
       ),
-    ).toEqual([true, true, true]);
+    ).toEqual([false, true, true]);
   });
 });

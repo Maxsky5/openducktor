@@ -261,7 +261,7 @@ export const prepareWorkflowLaunch = (
     };
   });
 
-export const launchValidationError = (message: string) =>
+const launchValidationError = (message: string) =>
   new HostValidationError({ field: "workflowLaunch", message });
 export const workflowActionId = (request: WorkflowLaunchRequest): SessionLaunchActionId =>
   request.policy.kind === "manual"

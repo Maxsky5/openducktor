@@ -15,6 +15,7 @@ import {
 } from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
+  createHostEventBus,
   createRuntimeDefinitionsService,
   Effect,
   type FilesystemPort,
@@ -34,6 +35,7 @@ import {
   createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
 } from "./electron-host";
 import { HostOperationError } from "../../../../packages/host/src/effect/host-errors";
+import { createFakeOpenCodeV2 } from "../../../../packages/host/src/test-support/opencode-v2-standalone";
 
 type ElectronHostCommandRouterInput = Parameters<
   typeof createProductionElectronHostCommandRouter
@@ -1422,6 +1424,94 @@ describe("createElectronHostCommandRouter", () => {
     }
   }, 10_000);
 
+  test("routes saved OpenCode session stops through the authenticated V2 runtime", async () => {
+    const opencode = await createFakeOpenCodeV2();
+    const ready = Promise.withResolvers<void>();
+    const eventBus = createHostEventBus({ report: ({ cause }) => ready.reject(cause) });
+    const unsubscribe = eventBus.subscribe("openducktor://runtime-changed", (event) => {
+      if (
+        event.channel !== "openducktor://runtime-changed" ||
+        event.payload.type !== "runtime_changed"
+      )
+        return;
+      const { status } = event.payload;
+      if (status.kind !== "opencode") return;
+      if (status.state === "ready") ready.resolve();
+      if (status.state === "error") ready.reject(new Error(JSON.stringify(status.failure)));
+    });
+    const sessionTaskStore = createTaskStore();
+    const sessionStopRouter = await createElectronHostCommandRouter({
+      eventBus,
+      // The native fixture needs the platform's command shell and PATH.
+      processEnv: {
+        ...process.env,
+        OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+      },
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      runtimeHealth: createRuntimeHealth(),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          agentRuntimes: {
+            ...agentRuntimes({ opencode: true }),
+            opencode: { enabled: true, executablePath: opencode.executablePath },
+          },
+        }),
+      ),
+      taskStore: {
+        ...sessionTaskStore,
+        getTaskMetadata: () =>
+          Effect.succeed({
+            spec: {
+              markdown: "# Spec",
+              updatedAt: "2026-01-02T00:00:00Z",
+              revision: 1,
+            },
+            plan: {
+              markdown: "# Plan",
+              updatedAt: "2026-01-02T00:00:00Z",
+              revision: 1,
+            },
+            agentSessions: [
+              {
+                externalSessionId: "external-session-1",
+                role: "build",
+                startedAt: "2026-05-10T10:00:00.000Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo/worktree",
+                selectedModel: null,
+              },
+            ],
+          } satisfies TaskMetadataPayload),
+      },
+    });
+    try {
+      await sessionStopRouter.initialize();
+      await ready.promise;
+      expect(
+        await sessionStopRouter.invoke("agent_session_stop", {
+          request: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            externalSessionId: "external-session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
+        }),
+      ).toEqual({ ok: true });
+      const record = await opencode.readRecord();
+      expect(record.requests.filter(({ path }) => path.endsWith("/interrupt"))).toEqual([
+        { path: "/api/session/external-session-1/interrupt", authorized: true },
+      ]);
+      expect(record.requests.every(({ authorized }) => authorized)).toBe(true);
+    } finally {
+      unsubscribe();
+      await sessionStopRouter.dispose();
+      await opencode.cleanup();
+    }
+  }, 10_000);
+
   test("registers migrated task list host command", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1508,76 +1598,6 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).toEqual([]);
-
-    const sessionAborts: string[] = [];
-    const opencodeServer = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch(request) {
-        const url = new URL(request.url);
-        sessionAborts.push(`${request.method} ${url.pathname}${url.search}`);
-        return Response.json(true);
-      },
-    });
-    const sessionTaskStore = createTaskStore();
-    const sessionStopRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      runtimeHealth: createRuntimeHealth(),
-      runtimeStarter: createRuntimeStarter({
-        type: "local_http",
-        endpoint: opencodeServer.url.origin,
-      }),
-      settingsConfig: createSettingsConfig(globalConfig()),
-      taskStore: {
-        ...sessionTaskStore,
-        getTaskMetadata: () =>
-          Effect.succeed({
-            spec: {
-              markdown: "# Spec",
-              updatedAt: "2026-01-02T00:00:00Z",
-              revision: 1,
-            },
-            plan: {
-              markdown: "# Plan",
-              updatedAt: "2026-01-02T00:00:00Z",
-              revision: 1,
-            },
-            agentSessions: [
-              {
-                externalSessionId: "external-session-1",
-                role: "build",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/worktree",
-                selectedModel: null,
-              },
-            ],
-          } satisfies TaskMetadataPayload),
-      },
-    });
-    try {
-      await sessionStopRouter.initialize();
-      await waitForRuntimeState(sessionStopRouter, ["opencode"], "ready");
-      expect(
-        await sessionStopRouter.invoke("agent_session_stop", {
-          request: {
-            repoPath: "/repo",
-            taskId: "task-1",
-            externalSessionId: "external-session-1",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
-          },
-        }),
-      ).toEqual({ ok: true });
-      expect(sessionAborts).toEqual([
-        "POST /session/external-session-1/abort?directory=%2Frepo%2Fworktree",
-      ]);
-    } finally {
-      await sessionStopRouter.dispose();
-      await opencodeServer.stop(true);
-    }
 
     expect(
       await router.invoke("set_spec", {

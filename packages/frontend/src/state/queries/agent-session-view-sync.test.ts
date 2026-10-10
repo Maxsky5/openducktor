@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import type { AgentSessionRecord, ExternalTaskSyncEvent } from "@openducktor/contracts";
+import { CancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   agentSessionQueryKeys,
-  updateAgentSessionListQuery,
   type AgentSessionReadPort,
+  updateAgentSessionListQuery,
 } from "./agent-sessions";
 import { createAgentSessionViewSync } from "./agent-session-view-sync";
 
@@ -36,26 +36,29 @@ const readPort = (overrides: Partial<TestReadPort> = {}): TestReadPort => ({
 });
 
 describe("AgentSessionViewSync", () => {
-  test("a committed session list completes a task-stream refresh without an error", async () => {
+  test.each([
+    { change: "a committed session update", committed: true },
+    { change: "an external cancellation", committed: false },
+  ])("handles $change during a task-event refresh", async ({ committed }) => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const older = Promise.withResolvers<[]>();
-    const started = Promise.withResolvers<void>();
-    const loadSessions = mock(() => {
-      started.resolve();
-      return older.promise;
-    });
-    const records = [
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const readStarted = Promise.withResolvers<void>();
+    const staleRead = Promise.withResolvers<AgentSessionRecord[]>();
+    const freshRecords: AgentSessionRecord[] = [
       {
-        externalSessionId: "native",
-        role: "qa" as const,
-        runtimeKind: "codex" as const,
-        workingDirectory: "/repo",
-        startedAt: "2026-10-09T00:00:00.000Z",
+        externalSessionId: "new-builder",
+        role: "build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        startedAt: "2026-09-03T20:00:00.000Z",
         selectedModel: null,
       },
     ];
+    const loadSessions = mock(() => {
+      readStarted.resolve();
+      return staleRead.promise;
+    });
     const refreshLiveSessions = mock(async () => undefined);
-    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const unsubscribe = new QueryObserver(queryClient, {
       queryKey,
       queryFn: loadSessions,
@@ -68,20 +71,35 @@ describe("AgentSessionViewSync", () => {
       removeTaskSessions: () => {},
       refreshLiveSessions,
     });
+
     try {
-      const refreshing = sync.reconcileExternalEvent(event());
-      await started.promise;
-      updateAgentSessionListQuery(queryClient, "/repo", {
-        taskId: "task-1",
-        agentSessions: records,
-      });
-      older.resolve([]);
-      await refreshing;
-      expect(queryClient.getQueryState(queryKey)?.status).toBe("success");
-      expect(queryClient.getQueryData<typeof records>(queryKey)).toEqual(records);
-      expect(refreshLiveSessions).toHaveBeenCalledTimes(1);
+      const refresh = sync.reconcileExternalEvent(event());
+      const result = refresh.then(
+        () => ({ ok: true }),
+        (error: CancelledError) => ({ ok: false, error }),
+      );
+      await readStarted.promise;
+      if (committed) {
+        updateAgentSessionListQuery(queryClient, "/repo", {
+          taskId: "task-1",
+          agentSessions: freshRecords,
+        });
+        expect(await result).toEqual({ ok: true });
+        expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
+      } else {
+        await queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
+        expect(await result).toEqual({ ok: false, error: expect.any(CancelledError) });
+        expect(refreshLiveSessions).not.toHaveBeenCalled();
+      }
+      staleRead.resolve([]);
+      await staleRead.promise;
+
+      expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual(
+        committed ? freshRecords : [],
+      );
       expect(loadSessions).toHaveBeenCalledTimes(1);
     } finally {
+      staleRead.resolve([]);
       unsubscribe();
       queryClient.clear();
     }

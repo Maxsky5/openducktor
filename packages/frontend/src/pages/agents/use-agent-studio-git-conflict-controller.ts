@@ -328,7 +328,8 @@ export function useAgentStudioGitConflictController({
         });
       } else {
         toast.success(
-          receipt.acceptedMessage.state === "queued"
+          receipt.acceptedMessage.type === "user_message" &&
+            receipt.acceptedMessage.state === "queued"
             ? `Queued git conflict resolution request for ${conflictRecipientLabel}`
             : `Sent git conflict resolution request to ${conflictRecipientLabel}`,
         );

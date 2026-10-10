@@ -132,7 +132,10 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
           : null;
       if (!acceptedMessage) throw error;
 
-      handledRequestIds = acceptedMessage.resolvedQuestionRequestIds ?? handledRequestIds;
+      handledRequestIds =
+        (acceptedMessage.type === "user_message"
+          ? acceptedMessage.resolvedQuestionRequestIds
+          : undefined) ?? handledRequestIds;
       upsertAcceptedUserMessage(
         responseSession,
         acceptedMessage,

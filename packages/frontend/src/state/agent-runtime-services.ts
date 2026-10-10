@@ -8,6 +8,7 @@ import type {
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type {
+  AcceptedAgentInput,
   AcceptedAgentUserMessage,
   AgentEnginePort,
   AgentRuntimeCatalog,
@@ -134,7 +135,8 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
 
 const toAcceptedAgentUserMessage = (
   event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
-): AcceptedAgentUserMessage => {
+): AcceptedAgentInput => {
+  if (event.type === "command_accepted") return event;
   const { model, sessionRef, ...message } = event;
   const acceptedMessage: AcceptedAgentUserMessage = { ...message };
   if (sessionRef) {
@@ -184,7 +186,12 @@ export const getAgentSessionResumeFailureNotice = (
 export const getAcceptedMessageAfterSendFailure = (
   error: HostInvokeError,
   sessionRef: AgentSessionLiveRef,
-): AcceptedAgentUserMessage | null => {
+): AcceptedAgentInput | null => {
+  if (
+    error.failure?.kind === "agent_session_command_accepted" &&
+    agentSessionRefsEqual(error.failure.sessionRef, sessionRef)
+  )
+    return error.failure.acceptedCommand;
   if (
     error.failure?.kind !== "agent_session_message_accepted" ||
     !agentSessionRefsEqual(error.failure.sessionRef, sessionRef)

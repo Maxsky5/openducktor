@@ -25,6 +25,7 @@ type FileEditDataBase = {
   filePath: string;
   additions: number;
   deletions: number;
+  changeType?: string;
 };
 
 export type FileEditData =
@@ -62,6 +63,7 @@ const buildFileDiffEditData = (
       filePath,
       additions: fileDiff.additions,
       deletions: fileDiff.deletions,
+      changeType: fileDiff.type,
     };
   }
 
@@ -71,6 +73,7 @@ const buildFileDiffEditData = (
     diff: fileDiff.diff,
     additions: fileDiff.additions,
     deletions: fileDiff.deletions,
+    changeType: fileDiff.type,
   };
 };
 

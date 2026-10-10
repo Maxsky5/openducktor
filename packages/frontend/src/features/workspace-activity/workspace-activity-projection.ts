@@ -57,6 +57,7 @@ export const applyWorkspaceActivityEnvelope = (
   }
 
   if (envelope.type === "transcript_event") {
+    if (envelope.provenance === "baseline") return current;
     const key = agentSessionIdentityKey(envelope.event.sessionRef);
     const session = current.sessions.get(key);
     if (!session) {

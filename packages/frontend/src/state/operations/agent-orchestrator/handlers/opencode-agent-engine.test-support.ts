@@ -1,4 +1,4 @@
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import type {
   AgentEnginePort,
   ContinueInterruptedAgentTurnInput,
@@ -7,17 +7,6 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-
-/** Builds an OpenCode adapter bound to one test runtime, as the host binds each adapter. */
-export const createTestOpencodeSdkAdapter = (): OpencodeSdkAdapter =>
-  new OpencodeSdkAdapter({
-    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    runtime: {
-      kind: "opencode",
-      runtimeId: "runtime-opencode-test",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-    },
-  });
 
 const requireOpenCodeRuntime = (runtimeKind: string): void => {
   if (runtimeKind !== "opencode") {
@@ -163,7 +152,7 @@ const bindPolicyInput = <Input extends { runtimeKind: string }>(input: Input) =>
 };
 
 export const createOpenCodeAgentEngineTestAdapter = (
-  adapter: OpencodeSdkAdapter,
+  adapter: AgentRuntimeTestAdapter,
 ): AgentEnginePort => ({
   describeGeneratedImages: async () => {
     throw new Error("Unexpected image metadata read");

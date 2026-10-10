@@ -6,6 +6,8 @@ type QuestionSubmitFooterProps = {
   disabled: boolean;
   isSubmitting: boolean;
   isComplete: boolean;
+  canCancel?: boolean | undefined;
+  onCancel: () => void;
   onReset: () => void;
   onSubmit: () => void;
   onNext?: (() => void) | undefined;
@@ -15,6 +17,8 @@ export const QuestionSubmitFooter = ({
   disabled,
   isSubmitting,
   isComplete,
+  canCancel,
+  onCancel,
   onReset,
   onSubmit,
   onNext,
@@ -25,6 +29,18 @@ export const QuestionSubmitFooter = ({
         {isComplete ? "All questions answered." : "Answer all questions to confirm."}
       </p>
       <div className="flex items-center gap-2">
+        {canCancel ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7"
+            disabled={disabled || isSubmitting}
+            onClick={onCancel}
+          >
+            Cancel question
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"

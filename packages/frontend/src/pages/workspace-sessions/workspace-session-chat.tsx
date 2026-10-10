@@ -162,9 +162,7 @@ export function WorkspaceSessionChat({
     pendingApprovals: chatState.pendingApprovals,
     pendingQuestions: chatState.pendingQuestions,
     skills: skills.skills,
-    profileId: chatState.selectedModel?.profileId,
     runtimeKind: record.runtimeKind,
-    sessionAgentColors: picker.agentAccentColorsByProfileId,
     runtimeReadiness,
   });
   const { readiness, transcript, retryError } = useWorkspaceSessionTranscript({
@@ -250,7 +248,6 @@ export function WorkspaceSessionChat({
     pendingQuestionRequests: chatState.pendingQuestions,
     todos: runtimeData.todos,
     sessionAccentColor: presentation.sessionAccentColor,
-    sessionAgentColors: picker.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey: presentation.subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey: presentation.subagentPendingQuestionCountBySessionKey,
     approvals: {

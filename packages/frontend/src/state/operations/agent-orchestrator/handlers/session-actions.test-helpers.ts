@@ -1,4 +1,4 @@
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import type { AgentEnginePort } from "@openducktor/core";
 import {
   type AgentSessionCollection,
@@ -16,10 +16,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { closeProjectedBackgroundQuestions } from "../session-read-model/agent-session-live-projection";
 import { createSessionTurnState } from "../support/session-turn-state";
 import { createTaskCardFixture } from "../test-utils";
-import {
-  createOpenCodeAgentEngineTestAdapter,
-  createTestOpencodeSdkAdapter,
-} from "./opencode-agent-engine.test-support";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createAgentSessionActions } from "./session-actions";
 
 type BuildSessionOverrides = AgentSessionFixtureOverrides;
@@ -76,7 +73,7 @@ export const createSessionTurnStateFixture = () => {
 
 type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0];
 export type SessionActionTestOverrides = Omit<Partial<SessionActionDependencies>, "adapter"> & {
-  adapter?: AgentEnginePort | OpencodeSdkAdapter;
+  adapter?: AgentEnginePort | AgentRuntimeTestAdapter;
   sessionsRef?: { current: AgentSessionCollection };
 };
 
@@ -86,9 +83,9 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     sessionsRef: overrideSessionsRef,
     ...actionOverrides
   } = overrides;
-  const adapterCandidate = adapterOverride ?? createTestOpencodeSdkAdapter();
+  const adapterCandidate = adapterOverride ?? new AgentRuntimeTestAdapter();
   const adapter =
-    adapterCandidate instanceof OpencodeSdkAdapter
+    adapterCandidate instanceof AgentRuntimeTestAdapter
       ? createOpenCodeAgentEngineTestAdapter(adapterCandidate)
       : adapterCandidate;
   const sessionsRef = overrideSessionsRef ?? createSessionsRef();

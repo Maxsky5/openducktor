@@ -9,6 +9,7 @@ import {
 import {
   agentSessionPendingQuestionRequestSchema,
   agentSessionPendingQuestionRequestFields,
+  projectApprovalGrantSchema,
 } from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
@@ -30,6 +31,24 @@ export type AgentSessionUsageLimit = z.output<typeof agentSessionUsageLimitSchem
 
 export const agentToolDataSchema = z.record(z.string(), z.json());
 export type AgentToolData = z.output<typeof agentToolDataSchema>;
+
+export const agentNativeFileReferenceSchema = z
+  .strictObject({
+    uri: z.string().min(1).optional(),
+    downloadUri: z.string().startsWith("data:").optional(),
+    name: z.string().min(1).optional(),
+    mime: z.string().min(1).optional(),
+    unavailableReason: z.string().min(1).optional(),
+  })
+  .refine((file) => Boolean(file.uri || file.downloadUri || file.name || file.unavailableReason), {
+    message: "A native file must have a URI, name, or unavailable reason.",
+  });
+export type AgentNativeFileReference = z.infer<typeof agentNativeFileReferenceSchema>;
+export const agentToolResultContentSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("text"), text: z.string() }),
+  z.strictObject({ kind: z.literal("file"), file: agentNativeFileReferenceSchema }),
+]);
+export type AgentToolResultContent = z.infer<typeof agentToolResultContentSchema>;
 
 export const agentFileReferenceSchema = z
   .object({
@@ -179,11 +198,14 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       tool: z.string(),
       toolType: agentToolTypeSchema,
       status: z.enum(["pending", "running", "completed", "error"]),
+      /** The model is writing tool arguments. Tool execution has not started. */
+      inputStreaming: z.boolean().optional(),
       preview: z.string().optional(),
       title: z.string().optional(),
       displayLabel: z.string().optional(),
       input: agentToolDataSchema.optional(),
       output: z.string().optional(),
+      resultContent: z.array(agentToolResultContentSchema).optional(),
       error: z.string().optional(),
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
       fileContent: z.array(fileContentSchema.strict()).optional(),
@@ -280,6 +302,8 @@ const transcriptPendingApprovalRequestFields = {
   mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
   metadata: agentToolDataSchema.optional(),
+  persistentGrant: projectApprovalGrantSchema.optional(),
+  rejectsAllPendingApprovals: z.boolean().optional(),
 } satisfies ZodSchemaFields;
 const inferredTranscriptPendingApprovalRequestSchema = z
   .object(transcriptPendingApprovalRequestFields)
@@ -438,6 +462,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
     type: z.literal("session_idle"),
     turnCompleted: z.literal(true).optional(),
+    interruption: z.strictObject({ messageId: z.string().min(1), message: z.string() }).optional(),
   }),
   transcriptEventSchema({
     type: z.literal("session_finished"),

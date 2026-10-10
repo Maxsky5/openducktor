@@ -37,12 +37,14 @@ export type AgentChatMessageMeta =
       tool: string;
       toolType: import("@openducktor/core").AgentToolType;
       status: "pending" | "running" | "completed" | "error";
+      inputStreaming?: boolean;
       preview?: string;
       title?: string;
       displayLabel?: string;
       input?: AgentToolData;
       output?: string;
       error?: string;
+      resultContent?: import("@openducktor/contracts").AgentToolResultContent[];
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
       computerUse?: AgentComputerUse;
@@ -106,7 +108,7 @@ export type AgentChatMessageMeta =
   | {
       kind: "session_notice";
       tone: "cancelled";
-      reason: "user_stopped";
+      reason: "user_stopped" | "session_interrupted";
       title: string;
     }
   | {
@@ -152,7 +154,7 @@ export type AgentMessageSendOptions = {
 
 export type AgentMessageSendReceipt = {
   recipient: AgentSessionIdentity;
-  acceptedMessage: import("@openducktor/core").AcceptedAgentUserMessage;
+  acceptedMessage: import("@openducktor/core").AcceptedAgentInput;
   postAcceptanceFailure: string | null;
 };
 

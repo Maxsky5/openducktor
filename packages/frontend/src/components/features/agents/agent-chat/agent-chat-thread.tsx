@@ -37,7 +37,6 @@ export function AgentChatThread({
     modelCatalog,
     isStarting,
     isSending,
-    sessionAgentColors,
     pendingApprovalRequests,
     pendingQuestionRequests,
     subagentPendingApprovalCountBySessionKey,
@@ -116,7 +115,6 @@ export function AgentChatThread({
           isStarting={isStarting}
           isSending={isSending}
           isInteractionEnabled={isInteractionEnabled}
-          sessionAgentColors={sessionAgentColors}
           subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
           subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
           transcriptTarget={transcriptTarget}
@@ -127,7 +125,7 @@ export function AgentChatThread({
           transcriptNotice={renderedTranscriptNotice}
         />
 
-        {hasBottomStack && session ? (
+        {hasBottomStack ? (
           <div className="min-h-0 overflow-y-auto">
             <AgentChatBottomStack
               sessionKey={sessionKey}
@@ -169,7 +167,6 @@ type AgentChatTranscriptProps = {
   isStarting: boolean;
   isSending: boolean;
   isInteractionEnabled: boolean;
-  sessionAgentColors: Record<string, string>;
   transcriptTarget: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
@@ -277,7 +274,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isStarting,
   isSending,
   isInteractionEnabled,
-  sessionAgentColors,
   transcriptTarget,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
@@ -328,7 +324,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               key={turn.key}
               turn={turn}
               modelCatalog={modelCatalog}
-              sessionAgentColors={sessionAgentColors}
               transcriptTarget={transcriptTarget}
               runtimePresentation={runtimePresentation}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
@@ -414,6 +409,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 
       {sessionAuxiliaryError ? (
         <div
+          role="alert"
           className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground"
           data-notification-attention-kind="error"
           tabIndex={-1}
@@ -451,9 +447,9 @@ const resolveHasBottomStack = (input: {
   runtimeStatusMessage: string | null;
   hasInterruptedTurnResume: boolean;
 }): boolean =>
-  input.hasSession &&
-  (input.hasWaitingInput ||
-    input.hasVisibleTodo ||
-    input.sessionAuxiliaryError !== null ||
-    input.runtimeStatusMessage !== null ||
-    input.hasInterruptedTurnResume);
+  input.sessionAuxiliaryError !== null ||
+  (input.hasSession &&
+    (input.hasWaitingInput ||
+      input.hasVisibleTodo ||
+      input.runtimeStatusMessage !== null ||
+      input.hasInterruptedTurnResume));

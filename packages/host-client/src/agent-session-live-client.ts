@@ -20,7 +20,7 @@ import {
   agentGeneratedImageReadResultSchema,
 } from "@openducktor/contracts";
 import {
-  type AcceptedAgentUserMessage,
+  type AcceptedAgentInput,
   type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
   type AgentSessionControlForkInput,
@@ -43,7 +43,7 @@ import {
   type AgentSessionLiveSnapshotEnvelope,
   type AgentWorkflowSessionStartInput,
   type FileDiff,
-  acceptedAgentUserMessageSchema,
+  acceptedAgentInputSchema,
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
@@ -144,13 +144,11 @@ export class HostAgentSessionLiveClient {
     );
   }
 
-  async agentSessionControlSend(
-    input: AgentSessionControlSendInput,
-  ): Promise<AcceptedAgentUserMessage> {
+  async agentSessionControlSend(input: AgentSessionControlSendInput): Promise<AcceptedAgentInput> {
     return this.invokeFn(
       "agent_session_control_send",
       agentSessionControlSendInputSchema.parse(input),
-      acceptedAgentUserMessageSchema,
+      acceptedAgentInputSchema,
     );
   }
 

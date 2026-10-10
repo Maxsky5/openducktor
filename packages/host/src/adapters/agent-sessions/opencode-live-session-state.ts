@@ -2,7 +2,9 @@ import { assertApprovalAllowed } from "./opencode-approval-authorization";
 import { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
 import type {
   OpencodeRuntimeSnapshotRead,
+  OpencodeRuntimeSnapshotSource,
   OpencodeSessionContextUsage,
+  OpencodeSessionRuntimeSignal,
 } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
@@ -12,7 +14,10 @@ import {
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionLiveAdapterMutation,
+} from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import {
   refKey,
@@ -26,6 +31,7 @@ import {
 } from "./opencode-pending-request-router";
 import { toOpenCodeLiveSession } from "./opencode-live-session-control-summary";
 import { applyOpenCodeSessionSources } from "./opencode-live-session-source-refresh";
+import { applyOpenCodeSessionFault } from "./opencode-live-session-fault";
 import {
   openCodeActivityForPending,
   openCodeActivityFromEvent,
@@ -65,6 +71,10 @@ export const createOpenCodeLiveSessionState = ({
     const previous = sessionsByRef.get(key)?.snapshot;
     sessionsByRef.set(key, session);
     refsByExternalSessionId.set(session.snapshot.ref);
+    const { contextUsage } = session.snapshot;
+    if (contextUsage)
+      contextUsageBySessionId.set(session.snapshot.ref.externalSessionId, contextUsage);
+    else contextUsageBySessionId.delete(session.snapshot.ref.externalSessionId);
     if (previous && openCodeLiveSnapshotsEqual(previous, session.snapshot)) {
       return [];
     }
@@ -80,17 +90,18 @@ export const createOpenCodeLiveSessionState = ({
 
   const setContext = (
     externalSessionId: string,
-    usage: OpencodeSessionContextUsage,
+    usage: OpencodeSessionContextUsage | null,
   ): AgentSessionLiveAdapterChange[] => {
-    const contextUsage = toContextUsage(usage);
+    const contextUsage = usage === null ? null : toContextUsage(usage);
     const ref = refsByExternalSessionId.find(externalSessionId);
     if (!ref) {
-      contextUsageBySessionId.set(externalSessionId, contextUsage);
+      if (contextUsage) contextUsageBySessionId.set(externalSessionId, contextUsage);
+      else contextUsageBySessionId.delete(externalSessionId);
       return [];
     }
     const session = requireSession(ref);
     if (openCodeLiveSnapshotsEqual(session.snapshot, { ...session.snapshot, contextUsage })) {
-      contextUsageBySessionId.set(externalSessionId, contextUsage);
+      versions.snapshotChanged(ref);
       return [];
     }
     const next = {
@@ -100,17 +111,17 @@ export const createOpenCodeLiveSessionState = ({
         "opencode-live-session.set-context",
       ),
     };
-    contextUsageBySessionId.set(externalSessionId, contextUsage);
     return commitSnapshot(next);
   };
 
   const applyLoadedContext = (
     ref: AgentSessionLiveRef,
     usage: OpencodeSessionContextUsage | null,
+    readStart: OpenCodeSessionReadStart,
   ) => {
     const session = sessionsByRef.get(refKey(ref));
-    if (session?.snapshot.contextUsage) {
-      return { value: session.snapshot.contextUsage, changes: [] };
+    if (session?.snapshot.contextUsage || versions.readScope(ref, readStart) !== "session") {
+      return { value: session?.snapshot.contextUsage ?? null, changes: [] };
     }
     if (!usage) {
       return { value: null, changes: [] };
@@ -399,6 +410,22 @@ export const createOpenCodeLiveSessionState = ({
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
       sessionsByRef.get(refKey(ref))?.snapshot.contextUsage ?? null,
     readStart: (): OpenCodeSessionReadStart => versions.readStart(),
+    invalidatePendingRequests: (): void => pendingRequests.clear(),
+    admitSource: (source: OpencodeRuntimeSnapshotSource): AgentSessionLiveAdapterChange[] =>
+      applyOpenCodeSessionSources({
+        repoPath: source.repoPath,
+        runtimeId: runtime.runtimeId,
+        sources: [source],
+        failures: [],
+        sessions: sessionsByRef,
+        contextUsageBySessionId,
+        pendingRequests,
+        readScope: (ref) =>
+          ref.externalSessionId === source.externalSessionId ? "session" : "none",
+        commitStatus,
+        commitSnapshot,
+        removeSession: dropSession,
+      }),
     setContext,
     applyLoadedContext,
     applyControlSummary,
@@ -435,6 +462,23 @@ export const createOpenCodeLiveSessionState = ({
       }),
     completePendingReply,
     removeSession,
+    applySessionSignal: (
+      signal: Extract<OpencodeSessionRuntimeSignal, { type: "session_fault" | "session_removed" }>,
+    ): AgentSessionLiveAdapterMutation<void> => {
+      const ref = refsByExternalSessionId.find(signal.externalSessionId);
+      if (!ref) return { value: undefined, changes: [] };
+      if (signal.type === "session_removed")
+        return { value: undefined, changes: removeSession(ref) };
+      return {
+        value: undefined,
+        changes: applyOpenCodeSessionFault({
+          signal,
+          session: requireSession(ref),
+          pendingRequests,
+          commitSnapshot,
+        }),
+      };
+    },
     refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null =>
       refsByExternalSessionId.find(externalSessionId),
     release: (): AgentSessionLiveRef[] => {

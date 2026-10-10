@@ -4,7 +4,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { CLAUDE_FAST_SPEED_LEVEL } from "./claude-speed-metadata";
 
-export const assertSupportedClaudeLiveEffort = (
+const assertSupportedClaudeLiveEffort = (
   model: AgentModelSelection,
   externalSessionId: string,
 ): "low" | "medium" | "high" | "xhigh" | null => {

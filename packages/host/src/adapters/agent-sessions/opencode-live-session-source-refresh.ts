@@ -1,3 +1,4 @@
+import { agentSessionTranscriptEventSchema } from "@openducktor/contracts";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type {
   OpencodeRuntimeSnapshotFailure,
@@ -9,7 +10,7 @@ import type {
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import { refKey } from "./opencode-live-session-normalization";
+import { refKey, toContextUsage } from "./opencode-live-session-normalization";
 import type {
   OpenCodePendingRequestRouter,
   StagedOpenCodeRequest,
@@ -50,6 +51,7 @@ type StagedSession = {
   readonly session: OpenCodeLiveSession;
   /** The pending input of the read, or null when the read sets only the status. */
   readonly requests: ReadonlyArray<StagedRequest> | null;
+  readonly queuedMessages: ReadonlyArray<AgentSessionLiveAdapterChange>;
 };
 
 export const applyOpenCodeSessionSources = ({
@@ -84,6 +86,7 @@ export const applyOpenCodeSessionSources = ({
       stagedSessions.push({
         session: withReadStatus(current, source.runtimeActivity),
         requests: null,
+        queuedMessages: [],
       });
       continue;
     }
@@ -93,6 +96,9 @@ export const applyOpenCodeSessionSources = ({
     const questions = source.pendingQuestions.map((request) =>
       pendingRequests.stageQuestion(ref, request),
     );
+    let contextUsage = contextUsageBySessionId.get(source.externalSessionId) ?? null;
+    if (source.contextUsage !== undefined)
+      contextUsage = source.contextUsage === null ? null : toContextUsage(source.contextUsage);
     const snapshotInput: OpenCodeLiveSnapshotInput = {
       ref,
       activity: source.runtimeActivity,
@@ -100,7 +106,7 @@ export const applyOpenCodeSessionSources = ({
       startedAt: source.startedAt,
       pendingApprovals: approvals.map(({ request }) => request),
       pendingQuestions: questions.map(({ request }) => request),
-      contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
+      contextUsage,
     };
     if (source.parentExternalSessionId) {
       snapshotInput.parentExternalSessionId = source.parentExternalSessionId;
@@ -122,10 +128,25 @@ export const applyOpenCodeSessionSources = ({
         ),
       },
       requests: [...approvals, ...questions],
+      queuedMessages: (source.queuedMessages ?? []).map((event) => ({
+        type: "transcript_event",
+        event: agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref }),
+      })),
     });
   }
 
   const changes: AgentSessionLiveAdapterChange[] = [];
+  const childrenByParent = new Map<string, AgentSessionLiveRef[]>();
+  for (const { snapshot } of sessions.values()) {
+    if (snapshot.ref.repoPath !== repoPath || !snapshot.parentExternalSessionId) continue;
+    const parentKey = refKey({
+      ...snapshot.ref,
+      externalSessionId: snapshot.parentExternalSessionId,
+    });
+    const children = childrenByParent.get(parentKey) ?? [];
+    children.push(snapshot.ref);
+    childrenByParent.set(parentKey, children);
+  }
   for (const failure of failures) {
     const ref: AgentSessionLiveRef = {
       repoPath: failure.repoPath,
@@ -133,22 +154,37 @@ export const applyOpenCodeSessionSources = ({
       workingDirectory: failure.workingDirectory,
       externalSessionId: failure.externalSessionId,
     };
-    seenKeys.add(refKey(ref));
+    const failureKey = refKey(ref);
     const message = `Failed to refresh OpenCode session '${failure.externalSessionId}' in '${failure.workingDirectory}': ${failure.message}`;
-    // The previous snapshot stays for the conversation, but its status is not current. Skip
-    // the mark when another update confirmed the status during the read.
-    const current = sessions.get(refKey(ref));
-    if (current && readScope(ref) !== "none") {
-      changes.push(...commitSnapshot(withStatusUnavailable(current, message)));
+    // A failed ancestor leaves unread descendants unknown. Keep their snapshots and pending
+    // input. A source or live status confirmed during the read still takes priority.
+    const unreadRefs = [ref];
+    const visited = new Set<string>();
+    for (const unreadRef of unreadRefs) {
+      const key = refKey(unreadRef);
+      if (visited.has(key)) continue;
+      visited.add(key);
+      unreadRefs.push(...(childrenByParent.get(key) ?? []));
+      if (key !== failureKey && seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      const current = sessions.get(key);
+      if (current && readScope(unreadRef) !== "none") {
+        changes.push(...commitSnapshot(withStatusUnavailable(current, message)));
+      }
     }
-    changes.push({
-      type: "fault",
+    const change = {
+      type: "fault" as const,
       repoPath: failure.repoPath,
       ref,
       operation: "opencode-live-session.refresh-session",
       message,
-      statusUnavailable: true,
-    });
+      statusUnavailable: true as const,
+    };
+    changes.push(
+      failure.runtimeOperationFailure
+        ? { ...change, runtimeOperationFailure: failure.runtimeOperationFailure }
+        : change,
+    );
   }
   const missingSessions = [...sessions.values()].filter(
     ({ snapshot }) =>
@@ -159,7 +195,7 @@ export const applyOpenCodeSessionSources = ({
   for (const { snapshot } of missingSessions) {
     changes.push(...removeSession(snapshot.ref));
   }
-  for (const { session, requests } of stagedSessions) {
+  for (const { session, requests, queuedMessages } of stagedSessions) {
     if (requests) {
       for (const request of requests) {
         pendingRequests.save(request);
@@ -169,7 +205,7 @@ export const applyOpenCodeSessionSources = ({
         new Set(requests.map(({ route }) => route.occurrenceId)),
       );
     }
-    changes.push(...commitStatus(session));
+    changes.push(...commitStatus(session), ...queuedMessages);
   }
   return baselineLiveSessionChanges(changes);
 };

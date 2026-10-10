@@ -14,8 +14,12 @@ describe("AgentChatMessageCard system messages", () => {
       "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.";
     const html = renderToStaticMarkup(
       createMessageCardElement({
-        message: buildSessionPolicyNoticeMessage("2026-10-05T10:00:00Z", content, "policy"),
-        sessionAgentColors: {},
+        message: buildSessionPolicyNoticeMessage(
+          "2026-10-05T10:00:00Z",
+          content,
+          "policy",
+          "claude",
+        ),
       }),
     );
 
@@ -41,7 +45,6 @@ describe("AgentChatMessageCard system messages", () => {
             title: "Stopped",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -68,7 +71,6 @@ describe("AgentChatMessageCard system messages", () => {
             title: "Notice",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -91,7 +93,6 @@ describe("AgentChatMessageCard system messages", () => {
             title: "Error",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -121,7 +122,6 @@ describe("AgentChatMessageCard system messages", () => {
             attentionId: "launch-post-error",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -144,7 +144,6 @@ describe("AgentChatMessageCard system messages", () => {
             title: "Compacted",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -175,7 +174,6 @@ describe("AgentChatMessageCard system messages", () => {
             compactionStatus: "running",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -194,7 +192,6 @@ describe("AgentChatMessageCard system messages", () => {
           content: "System prompt:\n\nAlways validate tool inputs before execution.",
           timestamp: "2026-02-22T10:22:00.000Z",
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -211,7 +208,6 @@ describe("AgentChatMessageCard system messages", () => {
           content: LONG_TRANSCRIPT_SAMPLE,
           timestamp: "2026-02-22T10:22:01.000Z",
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -237,7 +233,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -265,7 +260,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -291,7 +285,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionAgentColors: {},
         sessionIdentity: {
           runtimeKind: "claude",
           workingDirectory: "/repo",
@@ -325,7 +318,6 @@ describe("AgentChatMessageCard system messages", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -352,7 +344,6 @@ describe("AgentChatMessageCard system messages", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionAgentColors: {},
         subagentPendingApprovalCount: 1,
       }),
     );
@@ -379,7 +370,6 @@ describe("AgentChatMessageCard system messages", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionAgentColors: {},
         subagentPendingQuestionCount: 1,
       }),
     );
@@ -407,7 +397,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionAgentColors: {},
         subagentPendingApprovalCount: 1,
       }),
     );
@@ -435,7 +424,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -463,7 +451,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 301_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -491,7 +478,6 @@ describe("AgentChatMessageCard system messages", () => {
             endedAtMs: 301_000,
           },
         }),
-        sessionAgentColors: {},
       }),
     );
 
@@ -513,7 +499,6 @@ describe("AgentChatMessageCard system messages", () => {
             completed: true,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 

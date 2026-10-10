@@ -151,7 +151,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "modelPicker"
   | "variantOptions"
   | "selectedSessionContextUsage"
-  | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
   | "handleSelectVariant"
 >;
@@ -177,7 +176,6 @@ export const buildAgentStudioPageModelsArgs = ({
     handleSelectAgentProfile,
     handleSelectVariant,
     agentProfileOptions,
-    agentAccentColorsByProfileId,
     ...restOfModelSelection
   } = modelSelection;
 
@@ -189,7 +187,6 @@ export const buildAgentStudioPageModelsArgs = ({
     modelSelection: {
       ...restOfModelSelection,
       agentOptions: agentProfileOptions,
-      agentAccentColorsByProfileId,
       onSelectAgent: handleSelectAgentProfile,
       onSelectVariant: handleSelectVariant,
     },
@@ -272,7 +269,6 @@ export function useAgentStudioOrchestrationController({
     agentProfileOptions,
     modelPicker,
     variantOptions,
-    agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectVariant,
@@ -448,7 +444,6 @@ export function useAgentStudioOrchestrationController({
       modelPicker,
       variantOptions,
       selectedSessionContextUsage,
-      agentAccentColorsByProfileId,
       handleSelectAgentProfile,
       handleSelectVariant,
     },

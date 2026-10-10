@@ -24,7 +24,6 @@ import {
 
 export { invokeStopAgentSession };
 
-const EMPTY_SESSION_AGENT_COLORS = Object.freeze<Record<string, string>>({});
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;
@@ -41,7 +40,6 @@ type UseAgentChatSurfaceModelArgs = {
   approvals: AgentChatPendingApprovalActions;
   interruptedTurnResume?: AgentChatInterruptedTurnResumeModel | undefined;
   composer?: AgentChatComposerConfig;
-  sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
 };
@@ -62,7 +60,6 @@ export function useAgentChatSurfaceModel({
   approvals,
   interruptedTurnResume,
   composer,
-  sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
@@ -72,7 +69,6 @@ export function useAgentChatSurfaceModel({
       displayedSessionKey: transcript.displayedSessionKey,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
-  const resolvedSessionAgentColors = sessionAgentColors ?? EMPTY_SESSION_AGENT_COLORS;
   const hasComposer = composer !== undefined;
   const composerIsStarting = composer?.isStarting ?? false;
   const composerIsSending = composer?.isSending ?? false;
@@ -90,7 +86,6 @@ export function useAgentChatSurfaceModel({
   const composerModel = useAgentChatComposerModel({
     composer,
     interactionEnabled,
-    sessionAgentColors: resolvedSessionAgentColors,
     composerFormRef,
     composerEditorRef,
     resizeComposerEditor,
@@ -112,7 +107,6 @@ export function useAgentChatSurfaceModel({
     pendingQuestions,
     approvals,
     interruptedTurnResume,
-    sessionAgentColors: resolvedSessionAgentColors,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
     messagesContainerRef,

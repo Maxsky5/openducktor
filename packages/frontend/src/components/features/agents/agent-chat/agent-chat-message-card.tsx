@@ -10,7 +10,6 @@ type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   modelCatalog?: AgentModelCatalog | null;
   isStreamingAssistantMessage?: boolean;
-  sessionAgentColors?: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
   runtimePresentation: AgentChatRuntimePresentation;
   subagentPendingApprovalCount?: number;
@@ -21,7 +20,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   modelCatalog = null,
   isStreamingAssistantMessage = false,
-  sessionAgentColors,
   sessionIdentity,
   runtimePresentation,
   subagentPendingApprovalCount = 0,
@@ -35,7 +33,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       : null;
   const vm = buildAgentChatMessageCardViewModel({
     message,
-    sessionAgentColors,
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     toolCallPresentation,
   });

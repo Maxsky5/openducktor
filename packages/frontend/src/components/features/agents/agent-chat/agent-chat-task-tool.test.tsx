@@ -36,7 +36,6 @@ const createToolElement = (tool: string, fields: Partial<ToolMeta>) =>
         ...fields,
       },
     },
-    sessionAgentColors: {},
   });
 
 const renderTool = (tool: string, fields: Partial<ToolMeta>): string =>

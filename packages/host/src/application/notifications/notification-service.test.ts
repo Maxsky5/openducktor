@@ -16,7 +16,7 @@ import { HostOperationError, HostPathAccessError } from "../../effect/host-error
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { withNotificationConfigCommit } from "../../adapters/config/notification-settings-config";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
+import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createRuntimeHarness,
   runtime,

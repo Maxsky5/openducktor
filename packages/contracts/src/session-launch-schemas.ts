@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   agentSessionControlSummarySchema,
-  acceptedAgentUserMessageSchema,
+  acceptedAgentInputSchema,
   agentSessionUserMessagePartSchema,
 } from "./agent-session-control-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
@@ -14,7 +14,7 @@ export const sessionLaunchResultSchema = z.strictObject({
   /** The saved session. The host omits it when it did not save session ownership. */
   session: agentSessionControlSummarySchema.optional(),
   model: agentSessionModelSelectionSchema.optional(),
-  acceptedMessage: acceptedAgentUserMessageSchema.optional(),
+  acceptedMessage: acceptedAgentInputSchema.optional(),
   /**
    * The first instruction, when it is safe to send again: the runtime did not get it or rejected
    * it. The host omits it after other send failures, because the runtime can have accepted it.

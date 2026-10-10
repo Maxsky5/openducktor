@@ -1,7 +1,7 @@
 import { AgentRuntimeQueryError, type AgentSessionQueryParentPort } from "@openducktor/core";
 import { Effect } from "effect";
 import { ZodError } from "zod";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, readRuntimeOperationFailure } from "../../effect/host-errors";
 import type {
   AgentRuntimeQueryAdapterPort,
   NativeAgentRuntimeQueries,
@@ -44,6 +44,31 @@ export const toRuntimeQueryError = (
   cause: unknown,
 ): RuntimeQueryError => {
   if (cause instanceof RuntimeQueryError) return cause;
+  const operationFailure = readRuntimeOperationFailure(cause)?.runtimeOperationFailure;
+  if (operationFailure) {
+    const code =
+      operationFailure.code === "identity_mismatch"
+        ? "scope_mismatch"
+        : operationFailure.code === "runtime_unavailable" ||
+            operationFailure.code === "unsupported_operation" ||
+            operationFailure.code === "invalid_runtime_response"
+          ? operationFailure.code
+          : "request_failed";
+    const detail = `${operationFailure.summary} ${operationFailure.nativeReason ?? ""} ${operationFailure.nextAction}`;
+    const query = runtimeQueryError(operation, input, code, detail, cause);
+    const failure = { ...query.failure, runtimeOperationFailure: operationFailure };
+    if (operation === "load session history")
+      failure.sessionHistoryFailure = {
+        code: code === "invalid_runtime_response" ? "invalid_runtime_response" : "request_failed",
+        summary: operationFailure.summary,
+        detail,
+      };
+    return new RuntimeQueryError({
+      message: detail,
+      cause,
+      failure,
+    });
+  }
   if (
     cause instanceof HostOperationError &&
     (cause.cause instanceof AgentRuntimeQueryError || cause.cause instanceof ZodError)

@@ -389,7 +389,13 @@ const runAuthoritativeAgentSessionListInvalidation = async (
   if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
     return;
   }
-  await complete({ queryKey, invalidationVersion });
+  try {
+    await complete({ queryKey, invalidationVersion });
+  } catch (error) {
+    const superseded =
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
+    if (!superseded || !isCancelledError(error)) throw error;
+  }
 };
 
 export const invalidateAgentSessionListQuery = async (
@@ -413,26 +419,12 @@ export const refreshAgentSessionListQuery = async (
   taskId: string,
   readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
 ): Promise<void> => {
-  await runAuthoritativeAgentSessionListInvalidation(
-    queryClient,
-    repoPath,
-    taskId,
-    async ({ invalidationVersion }) => {
-      try {
-        await queryClient.fetchQuery({
-          ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-          staleTime: 0,
-        });
-      } catch (error) {
-        const superseded =
-          getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
-        if (superseded && isCancelledError(error)) {
-          return;
-        }
-        throw error;
-      }
-    },
-  );
+  await runAuthoritativeAgentSessionListInvalidation(queryClient, repoPath, taskId, async () => {
+    await queryClient.fetchQuery({
+      ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+      staleTime: 0,
+    });
+  });
 };
 
 export const refreshAgentSessionLists = async (
@@ -446,24 +438,21 @@ export const refreshAgentSessionLists = async (
       const before = sessionOwnershipKey(
         queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? [],
       );
-      let changed = false;
       await runAuthoritativeAgentSessionListInvalidation(
         queryClient,
         repoPath,
         taskId,
-        async ({ queryKey: currentQueryKey }) => {
+        async () => {
           await queryClient.refetchQueries(
             { queryKey, exact: true, type: "active" },
             { throwOnError: true },
           );
-          changed =
-            before !==
-            sessionOwnershipKey(
-              queryClient.getQueryData<AgentSessionRecord[]>(currentQueryKey) ?? [],
-            );
         },
       );
-      return changed;
+      return (
+        before !==
+        sessionOwnershipKey(queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? [])
+      );
     }),
   );
   return ownershipChanged.some(Boolean);

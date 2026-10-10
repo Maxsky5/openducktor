@@ -1,8 +1,4 @@
-export {
-  CODEX_SESSION_ACCENT_COLOR,
-  resolveAgentAccentColor,
-  resolveAgentSessionAccentColor,
-} from "./agent-accent-color";
+export { CODEX_SESSION_ACCENT_COLOR, resolveAgentSessionAccentColor } from "./agent-accent-color";
 export type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,

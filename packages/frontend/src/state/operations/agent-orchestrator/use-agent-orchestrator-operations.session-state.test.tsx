@@ -14,7 +14,7 @@ import {
   createUnavailableBuildTaskFixture,
   host,
   listHarnessSessions,
-  OpencodeSdkAdapter,
+  AgentRuntimeTestAdapter,
   persistedSessionFixture,
   sessionMessagesToArray,
   setupOrchestratorOperationsTestEnvironment,
@@ -126,21 +126,21 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalStopSession = OpencodeSdkAdapter.prototype.stopSession;
-    const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
-    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalStopSession = AgentRuntimeTestAdapter.prototype.stopSession;
+    const originalResumeSession = AgentRuntimeTestAdapter.prototype.resumeSession;
+    const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
+    const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
+    const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.stopSession = async () => {
+    AgentRuntimeTestAdapter.prototype.stopSession = async () => {
       stopCalls += 1;
     };
-    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+    AgentRuntimeTestAdapter.prototype.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
@@ -151,18 +151,18 @@ describe("use-agent-orchestrator-operations session state", () => {
         status: "idle",
       };
     };
-    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
+    AgentRuntimeTestAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+    AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
       },
     });
-    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionTodos = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => [];
 
     const liveSession = createAgentSessionLiveSnapshotFixture({
       activity: "waiting_for_permission",
@@ -255,12 +255,12 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
-      OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
-      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.stopSession = originalStopSession;
+      AgentRuntimeTestAdapter.prototype.resumeSession = originalResumeSession;
+      AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
+      AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
+      AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
@@ -270,26 +270,26 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
-    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
+    const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
+    const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
+    AgentRuntimeTestAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+    AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
       },
     });
-    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionTodos = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => [];
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
@@ -328,10 +328,10 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
-      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
+      AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
+      AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
@@ -339,24 +339,24 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalUpdateSessionModel = OpencodeSdkAdapter.prototype.updateSessionModel;
-    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
-    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalUpdateSessionModel = AgentRuntimeTestAdapter.prototype.updateSessionModel;
+    const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
+    const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     const storedSession = structuredClone(persistedSessionFixture);
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.updateSessionModel = async () => {};
-    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+    AgentRuntimeTestAdapter.prototype.updateSessionModel = async () => {};
+    AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
       },
     });
-    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionTodos = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => [];
 
     const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
 
@@ -406,10 +406,10 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.updateSessionModel = originalUpdateSessionModel;
-      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
-      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.updateSessionModel = originalUpdateSessionModel;
+      AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
+      AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
@@ -503,22 +503,22 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
-    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
+    const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+    AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
       },
     });
-    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionTodos = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => [];
 
     const liveStream = createLiveSessionStreamFixture([
       createAgentSessionLiveSnapshotFixture({
@@ -562,9 +562,9 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
-      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
+      AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
@@ -674,8 +674,8 @@ describe("use-agent-orchestrator-operations session state", () => {
       },
     ];
     let historyCalls = 0;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => {
       historyCalls += 1;
       return baselineHistory;
     };
@@ -752,7 +752,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(historyCalls).toBe(1);
     } finally {
       await harness.unmount();
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
@@ -773,8 +773,8 @@ describe("use-agent-orchestrator-operations session state", () => {
     ];
     const oldRead = Promise.withResolvers<AgentSessionHistoryMessage[]>();
     const historyReads: string[] = [];
-    const originalLoad = OpencodeSdkAdapter.prototype.loadSessionHistory;
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async (input) => {
+    const originalLoad = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async (input) => {
       historyReads.push(input.externalSessionId);
       if (historyReads.length === 3) return oldRead.promise;
       return history(historyReads.length === 4 ? "Fresh answer" : "Baseline");
@@ -859,7 +859,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       oldRead.resolve([]);
       await harness.unmount();
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoad;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoad;
     }
   });
 
@@ -868,17 +868,17 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
-    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalResumeSession = AgentRuntimeTestAdapter.prototype.resumeSession;
+    const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
+    const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
     let resumeCalls = 0;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+    AgentRuntimeTestAdapter.prototype.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
@@ -889,14 +889,14 @@ describe("use-agent-orchestrator-operations session state", () => {
         status: "idle",
       };
     };
-    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+    AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
       },
     });
-    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionTodos = async () => [];
+    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => [];
 
     const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
 
@@ -927,10 +927,10 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
-      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.resumeSession = originalResumeSession;
+      AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
+      AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 

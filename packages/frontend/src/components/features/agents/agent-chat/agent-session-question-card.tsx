@@ -97,8 +97,8 @@ export function AgentSessionQuestionCard({
         question={activeQuestion}
         questionIndex={activeQuestionIndex}
         entry={activeEntry}
-        disabled={disabled || isSubmitting}
-        onSelectOption={(optionLabel) => selectOption(activeQuestionIndex, optionLabel)}
+        disabled={disabled || isSubmitting || Boolean(request.unsupportedReason)}
+        onSelectOption={(optionValue) => selectOption(activeQuestionIndex, optionValue)}
         onToggleFreeText={() => toggleFreeText(activeQuestionIndex)}
         onChangeFreeText={(value) => updateFreeText(activeQuestionIndex, value)}
         panelProps={getPanelProps(String(activeQuestionIndex))}
@@ -145,12 +145,26 @@ export function AgentSessionQuestionCard({
             />
           ) : null}
 
-          {panel}
-
+          {request.unsupportedReason ? (
+            <p role="alert" className="text-sm text-destructive">
+              {request.unsupportedReason}
+            </p>
+          ) : (
+            panel
+          )}
           <QuestionSubmitFooter
             disabled={disabled}
             isSubmitting={isSubmitting}
             isComplete={isComplete}
+            canCancel={request.canCancel}
+            onCancel={() => {
+              clearSubmitError();
+              void onSubmit(request.requestId, []).catch((error) =>
+                setSubmitError(
+                  error instanceof Error ? error.message : "Failed to cancel the form.",
+                ),
+              );
+            }}
             onReset={resetDraft}
             onNext={
               nextQuestionIndex === null ? undefined : () => goToQuestionTab(nextQuestionIndex)

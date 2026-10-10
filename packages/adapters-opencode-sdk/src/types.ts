@@ -1,138 +1,28 @@
-import type { OpenCodeCreationSettings } from "@openducktor/contracts";
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type {
-  AgentModelSelection,
-  AgentRuntimePolicyBinding,
-  AgentSessionScope,
-  AgentSessionSummary,
-  AgentUserMessageDisplayPart,
-  BoundRuntimeRoute,
-  RuntimeWorkingDirectoryRef,
-} from "@openducktor/core";
-import type {
-  PendingBackgroundTaskResult,
-  PendingPartDelta,
-  PendingSubagentInputEvent,
-  PendingSubagentPartEmission,
-  PendingSubagentSessionBinding,
-} from "./event-stream/shared";
-import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
-import type { ParsedOpencodePart } from "./opencode-ingress";
-import type { OpencodeMcpDirectoryBindings } from "./opencode-mcp-bindings";
-import type { RuntimeEventSubscribers } from "./runtime-event-subscribers";
+import type { OpenCodeClient, V2Event } from "@opencode/client";
+import type { AgentSessionScope, OpenCodeCreationSettings } from "@openducktor/contracts";
 
-export type SessionInput = RuntimeWorkingDirectoryRef &
-  AgentRuntimePolicyBinding & {
-    sessionScope?: AgentSessionScope;
-    systemPrompt: string;
-    model?: AgentModelSelection;
-  };
-
-export type QueuedUserMessageSend = {
-  messageId: string;
-  signature: string;
-  attachmentIdentitySignature?: string;
-  attachmentParts?: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[];
-};
-
-export type SessionMessageMetadata = {
-  timestamp: string;
-  model?: AgentModelSelection;
-  parentId?: string;
-  text?: string;
-  hasStopSignal?: boolean;
-  hasSuccessfulStopSignal?: boolean;
-  totalTokens?: number;
-  displayParts?: AgentUserMessageDisplayPart[];
-};
-
-export type SessionStreamTurnStatus = "active" | "idle";
-
-export type SessionRecord = {
-  summary: AgentSessionSummary;
-  input: SessionInput;
-  client: OpencodeClient;
-  externalSessionId: string;
+/** Private process connection. Never include authentication in public routes or records. */
+export type OpenCodeRuntimeConnection = {
   runtimeId: string;
-  /** Keep failed setup blocked until a later attach confirms the rules. */
-  permissionSetupError?: Error;
-  /** Count all pending attaches so one cannot unblock another. */
-  permissionSetupInFlight?: number;
-  streamTurnStatus: SessionStreamTurnStatus;
-  isSendingUserMessage: boolean;
-  isAwaitingRuntimeTurnStart: boolean;
-  activeAssistantMessageId: string | null;
-  completedAssistantMessageIds: Set<string>;
-  pendingCompletedAssistantMessageIds: Set<string>;
-  emittedAssistantMessageIds: Set<string>;
-  emittedUserMessageSignatures: Map<string, string>;
-  emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
-  pendingUserMessageAdmissions: Map<
-    string,
-    { admit: () => void; reject: (cause?: unknown) => void }
-  >;
-  pendingQueuedUserMessages: QueuedUserMessageSend[];
-  partsById: Map<string, ParsedOpencodePart>;
-  partIdsByMessageId: Map<string, Set<string>>;
-  messageRoleById: Map<string, string>;
-  messageMetadataById: Map<string, SessionMessageMetadata>;
-  compactionMessageIds: Set<string>;
-  pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
-  subagentCorrelationKeyByPartId: Map<string, string>;
-  subagentCorrelationKeyByExternalSessionId: Map<string, string>;
-  subagentPartIdByCorrelationKey: Map<string, string>;
-  subagentPartIdByExternalSessionId: Map<string, string>;
-  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
-  pendingSubagentCorrelationKeys: string[];
-  pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
-  pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
-  pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
-  pendingBackgroundTaskResultsByExternalSessionId: Map<string, PendingBackgroundTaskResult[]>;
+  endpoint: string;
+  authentication: { type: "basic"; username: "opencode"; password: string };
 };
-
-export type EventStreamSubscriber = {
-  externalSessionId: string;
-  input: SessionInput;
-};
-
-export type RuntimeEventTransportRecord = {
-  runtimeId: string;
-  runtimeEndpoint: string;
-  controller: AbortController;
-  dispatch: (event: Event) => Promise<boolean>;
-  ready: Promise<void>;
-  streamDone: Promise<void>;
-  subscribers: RuntimeEventSubscribers;
-  observers: Set<(event: Event) => void | Promise<void>>;
-  terminalObservers: Set<(error: Error) => void | Promise<void>>;
-  parentExternalSessionIdByChildExternalSessionId: Map<string, string>;
-};
-
-export type ClientFactory = (input: {
-  runtimeEndpoint: string;
-  workingDirectory?: string;
-}) => OpencodeClient;
-
-export type OpencodeStreamEventLog = {
-  externalSessionId: string;
-  relevant: boolean;
-  event: Event;
-};
-
-export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
-
+export type ClientFactory = (
+  connection: OpenCodeRuntimeConnection,
+  signal?: AbortSignal,
+) => OpenCodeClient;
 export type ReadOpencodeDirectory = <Value>(
   directory: string,
   read: () => Promise<Value>,
 ) => Promise<Value | null>;
-
+export type OpencodeStreamEventLog = {
+  externalSessionId: string;
+  relevant: boolean;
+  event: V2Event;
+};
+export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
 export type OpencodeSdkAdapterOptions = {
   resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
-  now?: () => string;
   createClient?: ClientFactory;
-  /** The one OpenCode runtime this adapter instance controls. */
-  runtime: BoundRuntimeRoute;
-  /** Binds the OpenDucktor MCP server to each session directory. Workflow sessions require it. */
-  mcpBindings?: OpencodeMcpDirectoryBindings;
   logEvent?: OpencodeEventLogger;
 };

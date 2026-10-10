@@ -38,7 +38,7 @@ type UseQuestionDraftState = {
   activeQuestionIndex: number;
   activeQuestion: AgentQuestionRequest["questions"][number] | undefined;
   activeEntry: AgentQuestionDraftEntry | undefined;
-  selectOption: (questionIndex: number, optionLabel: string) => void;
+  selectOption: (questionIndex: number, optionValue: string) => void;
   toggleFreeText: (questionIndex: number) => void;
   updateFreeText: (questionIndex: number, value: string) => void;
   resetDraft: () => void;
@@ -46,7 +46,7 @@ type UseQuestionDraftState = {
 };
 
 const EMPTY_DRAFT_ENTRY: AgentQuestionDraftEntry = {
-  selectedOptionLabels: [],
+  selectedOptionValues: [],
   freeText: "",
   useFreeText: false,
 };
@@ -107,7 +107,7 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
   );
 
   const selectOption = useCallback(
-    (questionIndex: number, optionLabel: string): void => {
+    (questionIndex: number, optionValue: string): void => {
       const question = request.questions[questionIndex];
       if (!question) {
         return;
@@ -116,20 +116,23 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
       clearSubmitError();
 
       setUiState((current) => {
-        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
-        const target = nextDraft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
-        const wasSelected = target.selectedOptionLabels.includes(optionLabel);
-        const nextEntry = toggleAgentQuestionOption(question, target, optionLabel);
+        const draft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = draft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
+        const wasSelected = target.selectedOptionValues.includes(optionValue);
+        const nextEntry = toggleAgentQuestionOption(question, target, optionValue);
         const shouldAdvance =
-          !question.multiple && !wasSelected && nextEntry.selectedOptionLabels.length > 0;
+          !question.multiple && !wasSelected && nextEntry.selectedOptionValues.length > 0;
 
-        nextDraft[questionIndex] =
-          !question.multiple && nextEntry.selectedOptionLabels.length > 0
+        const selectedEntry =
+          !question.multiple && nextEntry.selectedOptionValues.length > 0
             ? {
                 ...nextEntry,
                 useFreeText: false,
               }
             : nextEntry;
+        const nextDraft = draft.map((entry, index) =>
+          index === questionIndex ? selectedEntry : entry,
+        );
 
         if (!shouldAdvance || !hasMultipleQuestions) {
           return {
@@ -161,17 +164,17 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
       clearSubmitError();
 
       setUiState((current) => {
-        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
-        const target = nextDraft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
-        nextDraft[questionIndex] = {
+        const draft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = draft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
+        const updated = {
           ...target,
           useFreeText: !target.useFreeText,
-          selectedOptionLabels:
-            !target.useFreeText && !question.multiple ? [] : target.selectedOptionLabels,
+          selectedOptionValues:
+            !target.useFreeText && !question.multiple ? [] : target.selectedOptionValues,
         };
         return {
           ...current,
-          draft: nextDraft,
+          draft: draft.map((entry, index) => (index === questionIndex ? updated : entry)),
         };
       });
     },
@@ -188,20 +191,20 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
       clearSubmitError();
 
       setUiState((current) => {
-        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
-        const target = nextDraft[questionIndex] ?? {
+        const draft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = draft[questionIndex] ?? {
           ...EMPTY_DRAFT_ENTRY,
           useFreeText: true,
         };
-        nextDraft[questionIndex] = {
+        const updated = {
           ...target,
           freeText: value,
           useFreeText: true,
-          selectedOptionLabels: question.multiple ? target.selectedOptionLabels : [],
+          selectedOptionValues: question.multiple ? target.selectedOptionValues : [],
         };
         return {
           ...current,
-          draft: nextDraft,
+          draft: draft.map((entry, index) => (index === questionIndex ? updated : entry)),
         };
       });
     },

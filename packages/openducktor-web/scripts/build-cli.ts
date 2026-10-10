@@ -70,6 +70,7 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "[name].[ext]",
       "src/cli.ts",
       "src/generated-image-worker.ts",
+      "src/opencode-workflow-plugin.ts",
     ] satisfies readonly [string, ...string[]];
     yield* Effect.tryPromise({
       try: () => runCommand({ command, cwd: packageRoot, label: "Web CLI build" }),

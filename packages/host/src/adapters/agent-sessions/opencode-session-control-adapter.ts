@@ -1,9 +1,13 @@
-import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
+  OpenCodeMessageRejectedError,
+  type OpencodeSessionRuntimeConnection,
+} from "@openducktor/adapters-opencode-sdk";
+import {
+  type AcceptedAgentInput,
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   type AgentSessionUserMessagePart,
-  acceptedAgentUserMessageSchema,
+  acceptedAgentInputSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import type {
@@ -16,7 +20,10 @@ import { toAgentSessionControlSummary } from "../../application/agent-sessions/a
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
@@ -240,39 +247,47 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.tryPromise({
           try: () => connection.sendUserMessage(request, options),
           catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.send-user-message", {
-              runtimeId: runtime.runtimeId,
-              externalSessionId: input.externalSessionId,
-            }),
+            cause instanceof OpenCodeMessageRejectedError
+              ? new AgentSessionMessageRejectedError({
+                  operation: "opencode-live-session.send-user-message",
+                  message: cause.message,
+                  cause,
+                })
+              : toHostOperationError(cause, "opencode-live-session.send-user-message", {
+                  runtimeId: runtime.runtimeId,
+                  externalSessionId: input.externalSessionId,
+                }),
         }).pipe(
           Effect.flatMap((event) =>
             parseOutput(
-              acceptedAgentUserMessageSchema,
+              acceptedAgentInputSchema,
               event,
               "opencode-live-session.normalize-user-message",
             ),
           ),
-          Effect.flatMap((value) =>
-            serializeRuntime(
-              commit("opencode-live-session.commit-user-message", () => {
-                const event = agentSessionTranscriptEventSchema.parse({
-                  ...value,
-                  sessionRef,
-                });
-                return {
-                  value,
-                  changes: [{ type: "transcript_event", event }],
-                };
-              }),
-            ).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AgentSessionMessageAcceptedError(
-                    { sessionRef, acceptedMessage: value, stage: "live_update" },
-                    cause,
+          Effect.flatMap((value): Effect.Effect<AcceptedAgentInput, HostError> =>
+            value.type === "command_accepted"
+              ? Effect.succeed(value)
+              : serializeRuntime(
+                  commit("opencode-live-session.commit-user-message", () => {
+                    const event = agentSessionTranscriptEventSchema.parse({
+                      ...value,
+                      sessionRef,
+                    });
+                    return {
+                      value,
+                      changes: [{ type: "transcript_event", event }],
+                    };
+                  }),
+                ).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new AgentSessionMessageAcceptedError(
+                        { sessionRef, acceptedMessage: value, stage: "live_update" },
+                        cause,
+                      ),
                   ),
-              ),
-            ),
+                ),
           ),
         ),
       );
@@ -300,34 +315,34 @@ export const createOpenCodeSessionControlAdapter = ({
         connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
       ),
     stopSession: (input) =>
-      serializeRuntime(
-        Effect.tryPromise({
-          try: () => connection.stopSession(input),
-          catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.stop-session", {
-              runtimeId: runtime.runtimeId,
-              externalSessionId: input.externalSessionId,
-            }),
-        }).pipe(
-          Effect.flatMap(() =>
+      Effect.tryPromise({
+        try: () => connection.stopSession(input),
+        catch: (cause) =>
+          toHostOperationError(cause, "opencode-live-session.stop-session", {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+          }),
+      }).pipe(
+        Effect.flatMap(() =>
+          serializeRuntime(
             commit("opencode-live-session.commit-stop-session", () => ({
               value: undefined,
-              changes: state.removeSession(input),
+              changes: [],
             })),
           ),
         ),
       ),
     releaseSession: (input) =>
-      serializeRuntime(
-        Effect.tryPromise({
-          try: () => connection.releaseSession(input),
-          catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.release-session", {
-              runtimeId: runtime.runtimeId,
-              externalSessionId: input.externalSessionId,
-            }),
-        }).pipe(
-          Effect.flatMap(() =>
+      Effect.tryPromise({
+        try: () => connection.releaseSession(input),
+        catch: (cause) =>
+          toHostOperationError(cause, "opencode-live-session.release-session", {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+          }),
+      }).pipe(
+        Effect.flatMap(() =>
+          serializeRuntime(
             commit("opencode-live-session.commit-release-session", () => ({
               value: undefined,
               changes: state.removeSession(input),

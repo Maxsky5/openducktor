@@ -572,12 +572,38 @@ function mergeAtIndex(
     return previous;
   }
 
-  const merged = applyMessageTimestamp({ ...existing, ...incoming }, incoming);
+  let merged = applyMessageTimestamp({ ...existing, ...incoming }, incoming);
+  // A queued send response can arrive after the live delivery event.
+  if (
+    existing.role === "user" &&
+    existing.meta?.kind === "user" &&
+    existing.meta.state === "read" &&
+    merged.role === "user" &&
+    merged.meta?.kind === "user" &&
+    merged.meta.state === "queued"
+  ) {
+    merged = applyMessageTimestamp(
+      { ...merged, meta: { ...merged.meta, state: "read" } },
+      existing,
+    );
+  }
   if (areMessagesShallowEqual(existing, merged)) {
     return previous;
   }
 
   const nextMessages = previous.items.slice();
-  nextMessages[index] = merged;
+  // Native inbox consumption can assign the user a later timestamp.
+  if (
+    existing.meta?.kind === "user" &&
+    existing.meta.state === "queued" &&
+    merged.meta?.kind === "user" &&
+    merged.meta.state === "read" &&
+    existing.timestamp !== merged.timestamp
+  ) {
+    nextMessages.splice(index, 1);
+    nextMessages.splice(sessionMessageTimestampInsertionIndex(nextMessages, merged), 0, merged);
+  } else {
+    nextMessages[index] = merged;
+  }
   return createDerivedState(previous, nextMessages);
 }

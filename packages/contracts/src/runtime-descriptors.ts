@@ -51,20 +51,22 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
-    supportsInterruptedTurnResume: true,
+    supportsInterruptedTurnResume: false,
   },
   history: {
     loadable: true,
     fidelity: "message",
     replay: "snapshot",
-    stableItemIds: false,
+    stableItemIds: true,
     stableItemOrder: true,
-    exposesCompletionState: false,
-    limitations: ["OpenCode session history is loaded at message-level fidelity."],
+    exposesCompletionState: true,
+    limitations: [
+      "OpenCode owns V1 history conversion. Unavailable attachments and interrupted tools remain visible. V1 session permissions and plugins do not carry their old behavior into V2.",
+    ],
   },
   approvals: {
     supportedRequestTypes: ["permission_grant", "runtime_tool"],
-    supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+    supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
     omittedPermissionBehavior: "deny",
     pendingVisibility: ["live_snapshot"],
     canClassifyMutatingRequests: true,
@@ -87,18 +89,19 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
       "slash_command",
       "file_reference",
       "folder_reference",
+      "skill_mention",
       "subagent_reference",
     ],
     supportsAttachments: true,
     supportsSlashCommands: true,
     supportsFileSearch: true,
-    supportsSkillReferences: false,
+    supportsSkillReferences: true,
     supportsSubagentReferences: true,
   },
   optionalSurfaces: {
     supportsProfiles: true,
     supportsVariants: true,
-    supportsTodos: true,
+    supportsTodos: false,
     supportsDiff: true,
     supportsFileStatus: true,
     supportsMcpStatus: true,
@@ -292,9 +295,30 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
   readOnlyRoleBlockedTools: [...OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS],
   workflowToolAliasesByCanonical: createOpencodeWorkflowToolAliasesByCanonical(),
   capabilities: OPENCODE_RUNTIME_CAPABILITIES,
+  capabilityLimits: [
+    {
+      scope: "workflow",
+      surface: "subagents",
+      reason:
+        "OpenDucktor workflow sessions do not allow subagent references. Use a workspace conversation for subagents.",
+    },
+    {
+      scope: "runtime",
+      surface: "todos",
+      reason:
+        "OpenCode V2 has no public todo-state API. Historical tool content remains available.",
+    },
+    {
+      scope: "runtime",
+      surface: "interrupted_turn_resume",
+      reason:
+        "OpenCode V2 has no public continuation endpoint. Reopen the conversation and send a new message.",
+    },
+  ],
 } as const satisfies RuntimeDescriptor;
 
 export const CODEX_RUNTIME_DESCRIPTOR = {
+  capabilityLimits: [],
   kind: "codex",
   label: "Codex",
   description: "Local Codex app-server runtime connected through the OpenDucktor MCP bridge.",
@@ -304,6 +328,7 @@ export const CODEX_RUNTIME_DESCRIPTOR = {
 } as const satisfies RuntimeDescriptor;
 
 export const CLAUDE_RUNTIME_DESCRIPTOR = {
+  capabilityLimits: [],
   kind: "claude",
   label: "Claude",
   description: "Local Claude Agent SDK runtime connected through the OpenDucktor MCP bridge.",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -9,7 +9,12 @@ import {
   lastSessionMessageForTest,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { listenToAgentSessionEvents } from "../events/session-events-test-harness";
+import {
+  createSessionUpdater,
+  listenToAgentSessionEvents,
+  type SessionEvent,
+} from "../events/session-events-test-harness";
+import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { createSessionTurnMetadata } from "../support/session-turn-metadata";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import {
@@ -19,12 +24,113 @@ import {
   createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
-import { createTestOpencodeSdkAdapter } from "./opencode-agent-engine.test-support";
 describe("agent-orchestrator/handlers/session-actions stop", () => {
+  test.each(["before", "after"])(
+    "keeps one native interruption notice when it arrives %s the stop reply",
+    async (order) => {
+      const adapter = new AgentRuntimeTestAdapter();
+      let listener: ((event: SessionEvent) => void) | undefined;
+      adapter.subscribeEvents = async (_ref, handler) => {
+        listener = handler;
+        return () => {};
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "running",
+          pendingQuestions: [{ requestId: "form-1", questions: [] }],
+          messages: [
+            {
+              id: "previous-stop",
+              role: "system",
+              content: "Session stopped at your request.",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "session_notice",
+                tone: "cancelled",
+                reason: "user_stopped",
+                title: "Stopped",
+              },
+            },
+            {
+              id: "user-1",
+              role: "user",
+              content: "Ask a question",
+              timestamp: "2026-02-22T08:00:02.000Z",
+            },
+          ],
+        }),
+      ]);
+      const updateSession = createSessionUpdater(sessionsRef);
+      const unsubscribe = await listenToAgentSessionEvents({
+        adapter,
+        sessionsRef,
+        updateSession,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+      });
+      const interruption: SessionEvent = {
+        type: "session_idle",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:10.000Z",
+        interruption: { messageId: "native-stop", message: "Turn interrupted." },
+      };
+      adapter.stopSession = async () => {
+        if (order === "before") listener!(interruption);
+      };
+      const actions = createSessionActions({ adapter, sessionsRef, updateSession });
+      try {
+        await actions.stopAgentSession(getSession(sessionsRef));
+        if (order === "after") listener!(interruption);
+        listener!(interruption);
+        const stopped = getSession(sessionsRef);
+        expect(stopped).toMatchObject({
+          status: "stopped",
+          stopRequestedAt: null,
+          pendingQuestions: [],
+          pendingApprovals: [],
+        });
+        expect(stopped.messages.items.map((message) => message.id)).toEqual([
+          "previous-stop",
+          "user-1",
+          "native-stop",
+        ]);
+        const notice = lastSessionMessageForTest(stopped)!;
+        expect(notice).toEqual({
+          id: "native-stop",
+          role: "system",
+          content: "Turn interrupted.",
+          timestamp: interruption.timestamp,
+          meta: {
+            kind: "session_notice",
+            tone: "cancelled",
+            reason: "session_interrupted",
+            title: "Interrupted",
+          },
+        });
+        expect(
+          historyToChatMessages(
+            [
+              {
+                messageId: "native-stop",
+                role: "system",
+                timestamp: interruption.timestamp,
+                text: "Turn interrupted.",
+                parts: [],
+                notice: { tone: "cancelled", reason: "session_interrupted", title: "Interrupted" },
+              },
+            ],
+            { role: "build" },
+          ),
+        ).toEqual([notice]);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
   test("an old stop result does not stop a new execution episode", async () => {
     const entered = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     adapter.stopSession = () => {
       entered.resolve();
       return finish.promise;
@@ -50,7 +156,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     });
   });
   test("stops a workspace-scoped planner session and clears pending state", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -114,7 +220,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("keeps session active when authoritative session stop fails", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
     adapter.stopSession = async () => {
@@ -182,7 +288,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("keeps terminal event state when the host stop later fails", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const session = buildSession();
     const sessionsRef = createSessionsRef([session]);
     const sessionsStore = createAgentSessionsStore("/tmp/repo");
@@ -210,7 +316,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("records stop intent before awaiting authoritative session stop", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const stopDeferred = createDeferred<void>();
     adapter.stopSession = async () => {
       await stopDeferred.promise;
@@ -240,10 +346,11 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("preserves the user-stopped notice when local stop emits session_finished", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const originalSubscribeEvents = adapter.subscribeEvents;
     const originalStopSession = adapter.stopSession;
-    let sessionEventListener: Parameters<OpencodeSdkAdapter["subscribeEvents"]>[1] | null = null;
+    let sessionEventListener: Parameters<AgentRuntimeTestAdapter["subscribeEvents"]>[1] | null =
+      null;
     adapter.subscribeEvents = async (_externalSessionId, listener) => {
       sessionEventListener = listener;
       return () => {
@@ -378,7 +485,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("appends the user-stopped notice when authoritative stop has no local runtime event", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
     adapter.stopSession = async () => {
@@ -444,7 +551,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("clears renderer turn state after the host stop succeeds", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const callOrder: string[] = [];
     adapter.stopSession = async () => {
       callOrder.push("host-stop");
@@ -473,7 +580,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("stops shared-runtime qa sessions authoritatively without runId", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     let buildStopCalls = 0;
     adapter.stopSession = async (target) => {
       buildStopCalls += 1;
@@ -502,7 +609,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("refreshes task-owned state after the host stops the session", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
 
     const callOrder: string[] = [];
     adapter.stopSession = async () => {
@@ -573,7 +680,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const refreshTaskDataCalls: Array<[string, string | string[] | undefined]> = [];
     let loadSourceSessionCalls = 0;
     let stopCalls = 0;
@@ -614,7 +721,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("does not refresh task state for a repository session", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -652,7 +759,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("stops an unbound live session without task side effects", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -690,7 +797,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("rejects a missing association before stopping the runtime", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     let stopCalls = 0;
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -707,7 +814,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("reports workflow stop refresh failure", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     adapter.stopSession = async () => {};
     const taskCalls: string[] = [];
     const sessionsRef = createSessionsRef([buildSession()]);
@@ -732,7 +839,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("rejects stop without an active workspace", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
@@ -752,7 +859,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   });
 
   test("allows stopping a running session even when role is unavailable", async () => {
-    const adapter = createTestOpencodeSdkAdapter();
+    const adapter = new AgentRuntimeTestAdapter();
     let stopCalls = 0;
     adapter.stopSession = async () => {
       stopCalls += 1;

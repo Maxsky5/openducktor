@@ -2,20 +2,29 @@ import { unexpectedSessionImport } from "../../test-support/session-import-test-
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
-import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
+import { OpenCodeMessageRejectedError } from "@openducktor/adapters-opencode-sdk";
+import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
 import type {
+  PrepareOpencodeSessionRuntime,
+  OpencodeRuntimeSnapshotRead,
+  OpencodeRuntimeSnapshotSource,
+} from "@openducktor/adapters-opencode-sdk";
+import type {
+  AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import { agentSessionLiveEnvelopeSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { toAgentSessionLiveEnvelope } from "../../application/agent-sessions/agent-session-live-envelope";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
+import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter.test-support";
 import {
   createLifecycle,
   createRuntimeHarness,
@@ -25,6 +34,529 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
+  test("invalidates queried catalog scopes without live sessions and keeps runtime ownership", async () => {
+    const harness = createRuntimeHarness();
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const prepare = createOpenCodeLiveSessionAdapterPreparer({
+      liveSessionLifecycle: createLifecycle(changes),
+      prepareRuntime: async (input) => {
+        const prepared = await harness.prepareRuntime(input);
+        return {
+          ...prepared,
+          queries: {
+            ...prepared.queries,
+            loadRuntimeCatalog: async () => ({
+              slashCommands: { status: "available", catalog: { commands: [] } },
+            }),
+          },
+        };
+      },
+    });
+    const prepared = await Effect.runPromise(prepare(runtime));
+    const scopes = [
+      { repoPath: "/repo", workingDirectory: "/repo" },
+      { repoPath: "/repo", workingDirectory: "/repo/worktree" },
+      { repoPath: "/other", workingDirectory: "/other" },
+    ];
+    try {
+      await Effect.runPromise(prepared.startForwarding());
+      for (const scope of [...scopes, scopes[0]!])
+        await Effect.runPromise(
+          prepared.adapter.queries.loadRuntimeCatalog({ ...scope, runtimeKind: "opencode" }),
+        );
+      expect(await Effect.runPromise(prepared.adapter.listSnapshots())).toEqual([]);
+      await harness.emit({ type: "catalog_invalidated", workingDirectory: "/repo/worktree" });
+      await harness.emit({ type: "catalog_invalidated", workingDirectory: "/unknown" });
+      await harness.emit({ type: "catalog_invalidated" });
+      expect(changes).toEqual([
+        {
+          type: "catalog_invalidated",
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
+        { type: "catalog_invalidated", repoPath: "/repo", runtimeKind: "opencode" },
+        { type: "catalog_invalidated", repoPath: "/other", runtimeKind: "opencode" },
+      ]);
+      await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          repoPath: "/live-only",
+          workingDirectory: "/live-only",
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+        }),
+      );
+      changes.length = 0;
+      await harness.emit({ type: "catalog_invalidated", workingDirectory: "/live-only" });
+      expect(changes).toEqual([
+        {
+          type: "catalog_invalidated",
+          repoPath: "/live-only",
+          runtimeKind: "opencode",
+          workingDirectory: "/live-only",
+        },
+      ]);
+    } finally {
+      await Effect.runPromise(prepared.discard());
+    }
+    const replacement = await Effect.runPromise(prepare({ ...runtime, runtimeId: "runtime-2" }));
+    try {
+      await Effect.runPromise(replacement.startForwarding());
+      changes.length = 0;
+      await harness.emit({ type: "catalog_invalidated" });
+      expect(changes).toEqual([]);
+    } finally {
+      await Effect.runPromise(replacement.discard());
+    }
+  });
+
+  test.each(["rejected", "unknown"] as const)(
+    "preserves %s acceptance for a failed OpenCode send",
+    async (acceptance) => {
+      const cause = new Error("OpenCode send failed");
+      const error = acceptance === "rejected" ? new OpenCodeMessageRejectedError(cause) : cause;
+      const send = Promise.withResolvers<void>();
+      const harness = createRuntimeHarness({
+        sendUserMessageBarrier: send.promise,
+        onSendUserMessage: () => send.reject(error),
+      });
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: createLifecycle([]),
+          prepareRuntime: harness.prepareRuntime,
+        })(runtime, ignoreObservationLoss),
+      );
+      try {
+        const result = await Effect.runPromise(
+          Effect.result(
+            prepared.adapter.sendUserMessage({
+              ...ref,
+              sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+              parts: [{ kind: "text", text: "Continue implementation" }],
+            }),
+          ),
+        );
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure instanceof AgentSessionMessageRejectedError).toBe(
+            acceptance === "rejected",
+          );
+          expect(result.failure.message).toContain(cause.message);
+          expect(result.failure.cause).toBe(error);
+        }
+      } finally {
+        await Effect.runPromise(prepared.discard());
+      }
+    },
+  );
+
+  test("routes a child setup fault to its parent without releasing runtime registrations", async () => {
+    const harness = createRuntimeHarness();
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const lost: string[] = [];
+    const releases: string[] = [];
+    const lifecycle = createLifecycle(changes);
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: {
+          ...lifecycle,
+          releaseRuntime: (runtimeId) =>
+            Effect.sync(() => {
+              releases.push(runtimeId);
+              return [];
+            }),
+        },
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime, {
+        ...ignoreObservationLoss,
+        onObservationLost: (message) => {
+          lost.push(message);
+        },
+      }),
+    );
+    const other = {
+      ...ref,
+      repoPath: "/other",
+      workingDirectory: "/other",
+      externalSessionId: "session-2",
+    };
+    try {
+      for (const session of [ref, other])
+        await Effect.runPromise(
+          prepared.adapter.resumeSession({
+            ...session,
+            resumeMode: "reattach",
+            sessionScope: { kind: "repository" },
+          }),
+        );
+      await Effect.runPromise(prepared.startForwarding());
+      const before = await Effect.runPromise(prepared.adapter.listSnapshots());
+      changes.length = 0;
+      await harness.emit({
+        type: "session_fault",
+        externalSessionId: ref.externalSessionId,
+        message: "Child workflow instructions failed. Reopen this workflow.",
+      });
+      expect(
+        changes.map((change) =>
+          agentSessionLiveEnvelopeSchema.parse(toAgentSessionLiveEnvelope(change)),
+        ),
+      ).toEqual([
+        {
+          type: "fault",
+          repoPath: ref.repoPath,
+          ref,
+          operation: "opencode-live-session.observe-session",
+          message: "Child workflow instructions failed. Reopen this workflow.",
+        },
+      ]);
+      expect(await Effect.runPromise(prepared.adapter.listSnapshots())).toEqual(before);
+      expect(lost).toEqual([]);
+      expect(releases).toEqual([]);
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: other.externalSessionId,
+        event: {
+          type: "session_idle",
+          externalSessionId: other.externalSessionId,
+          timestamp: "2026-10-09T10:00:00.000Z",
+        },
+      });
+      expect(
+        (await Effect.runPromise(prepared.adapter.listSnapshots())).find(
+          (snapshot) => snapshot.ref.externalSessionId === other.externalSessionId,
+        )?.activity,
+      ).toBe("idle");
+      await Effect.runPromise(prepared.adapter.stopSession(other));
+      expect(harness.controlCalls.at(-1)).toEqual({ operation: "stop", input: other });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("replays completed subagent history without settling current live work", async () => {
+    const harness = createRuntimeHarness();
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const event = {
+      type: "assistant_part" as const,
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-16T10:02:01.000Z",
+      part: {
+        kind: "subagent" as const,
+        messageId: "msg_parent",
+        partId: "call_child:subagent",
+        correlationKey: "call_child",
+        externalSessionId: "ses_child",
+        status: "running" as const,
+      },
+    };
+    try {
+      await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+        }),
+      );
+      await Effect.runPromise(prepared.startForwarding());
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: ref.externalSessionId,
+        event,
+      });
+      changes.length = 0;
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: ref.externalSessionId,
+        provenance: "baseline",
+        event: { ...event, part: { ...event.part, status: "completed" } },
+      });
+      expect(
+        (await Effect.runPromise(prepared.adapter.listSnapshots())).find(
+          (session) => session.ref.externalSessionId === "ses_child",
+        )?.activity,
+      ).toBe("running");
+      expect(
+        changes.map((change) =>
+          agentSessionLiveEnvelopeSchema.parse(toAgentSessionLiveEnvelope(change)),
+        ),
+      ).toEqual([
+        {
+          type: "transcript_event",
+          provenance: "baseline",
+          event: { ...event, sessionRef: ref, part: { ...event.part, status: "completed" } },
+        },
+      ]);
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: ref.externalSessionId,
+        event: { ...event, part: { ...event.part, status: "completed" } },
+      });
+      expect(
+        (await Effect.runPromise(prepared.adapter.listSnapshots())).find(
+          (session) => session.ref.externalSessionId === "ses_child",
+        )?.activity,
+      ).toBe("idle");
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  for (const operation of ["stopSession", "releaseSession"] as const) {
+    test(`starts native ${operation} while a root snapshot read is pending`, async () => {
+      const harness = createRuntimeHarness();
+      let markReadStarted: () => void = () => undefined;
+      let finishRead: () => void = () => undefined;
+      let markControlStarted: () => void = () => undefined;
+      const readStarted = new Promise<void>((resolve) => {
+        markReadStarted = resolve;
+      });
+      const readGate = new Promise<void>((resolve) => {
+        finishRead = resolve;
+      });
+      const controlStarted = new Promise<void>((resolve) => {
+        markControlStarted = resolve;
+      });
+      const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+        const native = await harness.prepareRuntime(input);
+        return {
+          ...native,
+          connection: {
+            ...native.connection,
+            readSessionSources: async () => {
+              markReadStarted();
+              await readGate;
+              return { sources: [], failures: [] };
+            },
+            [operation]: async (ref: AgentSessionLiveRef) => {
+              markControlStarted();
+              await native.connection[operation](ref);
+            },
+          },
+        };
+      };
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: createLifecycle([]),
+          prepareRuntime,
+        })(runtime),
+      );
+      if (!prepared.adapter.refreshSnapshots) throw new Error("Expected snapshot support");
+      const refresh = Effect.runPromise(prepared.adapter.refreshSnapshots(ref.repoPath, []));
+      await readStarted;
+      const control = Effect.runPromise(prepared.adapter[operation](ref));
+      const startedBeforeReadFinished = await Promise.race([
+        controlStarted.then(() => true),
+        Bun.sleep(200).then(() => false),
+      ]);
+      finishRead();
+      await Promise.all([refresh, control]);
+      expect(startedBeforeReadFinished).toBe(true);
+      expect(harness.controlCalls).toMatchObject([
+        { operation: operation === "stopSession" ? "stop" : "release", input: ref },
+      ]);
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    });
+  }
+  test("cancels native reads before waiting for a runtime snapshot lane on release", async () => {
+    const harness = createRuntimeHarness();
+    let markReadStarted: () => void = () => undefined;
+    let finishRead: () => void = () => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      finishRead = resolve;
+    });
+    const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+      const native = await harness.prepareRuntime(input);
+      return {
+        ...native,
+        connection: {
+          ...native.connection,
+          readSessionSources: async () => {
+            markReadStarted();
+            await readGate;
+            return { sources: [], failures: [] };
+          },
+        },
+        release: async () => {
+          finishRead();
+          await native.release();
+        },
+      };
+    };
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime,
+      })(runtime),
+    );
+    if (!prepared.adapter.refreshSnapshots) throw new Error("Expected snapshot support");
+    const refresh = Effect.runPromise(prepared.adapter.refreshSnapshots(ref.repoPath, []));
+    await readStarted;
+    const release = Effect.runPromise(prepared.adapter.releaseRuntime());
+    const releasedWithoutReadCompletion = await Promise.race([
+      release.then(() => true),
+      Bun.sleep(200).then(() => false),
+    ]);
+    finishRead();
+    await Promise.allSettled([refresh, release]);
+    expect(releasedWithoutReadCompletion).toBe(true);
+    expect(harness.releaseCalls).toEqual([runtime.runtimeId]);
+  });
+  test("publishes parked native messages from the initial source without sending input", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createRuntimeHarness({
+      sessionSources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          repoPath: ref.repoPath,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "repository" },
+          title: "Linked conversation",
+          startedAt: "2026-07-16T10:00:00.000Z",
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+          queuedMessages: [
+            {
+              type: "user_message",
+              externalSessionId: ref.externalSessionId,
+              timestamp: "2026-07-16T10:00:00.000Z",
+              messageId: "msg_parked",
+              message: "Keep queued",
+              parts: [{ kind: "text", text: "Keep queued" }],
+              state: "queued",
+            },
+          ],
+        },
+      ],
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    try {
+      if (!prepared.adapter.refreshSnapshots) throw new Error("Expected snapshot support");
+      await Effect.runPromise(prepared.adapter.refreshSnapshots(ref.repoPath));
+      expect(changes).toContainEqual(
+        expect.objectContaining({
+          type: "transcript_event",
+          event: expect.objectContaining({
+            messageId: "msg_parked",
+            state: "queued",
+            sessionRef: ref,
+          }),
+        }),
+      );
+      expect(harness.controlCalls).toEqual([]);
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+  test("invalidates old pending occurrences on reconnect even when native IDs stay the same", async () => {
+    const harness = createRuntimeHarness();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    try {
+      await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+        }),
+      );
+      await Effect.runPromise(prepared.startForwarding());
+      const source: OpencodeRuntimeSnapshotSource = {
+        repoPath: ref.repoPath,
+        externalSessionId: ref.externalSessionId,
+        workingDirectory: ref.workingDirectory,
+        sessionAssociation: { kind: "repository" as const },
+        title: "Linked",
+        startedAt: "2026-07-16T10:00:00.000Z",
+        runtimeActivity: "idle" as const,
+        pendingApprovals: [
+          {
+            requestId: "permission_native",
+            requestType: "permission_grant" as const,
+            title: "Run check",
+            action: { name: "shell" },
+            supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
+            rejectsAllPendingApprovals: true,
+            persistentGrant: {
+              scope: "project" as const,
+              projectDirectory: "/repo",
+              rules: [{ action: "shell", resource: "bun test*" }],
+            },
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "form_native",
+            questions: [{ header: "Check", question: "Continue?", options: [] }],
+          },
+        ],
+      };
+      await harness.emit({ type: "session_source", source });
+      const approval = (await Effect.runPromise(prepared.adapter.listSnapshots()))[0]
+        ?.pendingApprovals[0];
+      expect(approval).toMatchObject({
+        rejectsAllPendingApprovals: true,
+        supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
+        persistentGrant: {
+          scope: "project",
+          projectDirectory: "/repo",
+          rules: [{ action: "shell", resource: "bun test*" }],
+        },
+      });
+      const oldID = approval?.requestId;
+      if (!oldID) throw new Error("Expected old occurrence");
+      await harness.emit({ type: "observation_reset" });
+      await harness.emit({
+        type: "session_fault",
+        externalSessionId: ref.externalSessionId,
+        message: "Native restore failed.",
+        statusUnavailable: true,
+      });
+      expect((await Effect.runPromise(prepared.adapter.listSnapshots()))[0]).toMatchObject({
+        statusUnavailableReason: "Native restore failed.",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      });
+      await harness.emit({ type: "session_source", source });
+      const newID = (await Effect.runPromise(prepared.adapter.listSnapshots()))[0]
+        ?.pendingApprovals[0]?.requestId;
+      expect(newID).not.toBe(oldID);
+      await expect(
+        Effect.runPromise(
+          prepared.adapter.replyApproval({ ...ref, requestId: oldID, outcome: "approve_once" }),
+        ),
+      ).rejects.toThrow("Unknown or resolved");
+      expect(harness.approvalReplies).toEqual([]);
+      if (!newID) throw new Error("Expected new occurrence");
+      await Effect.runPromise(
+        prepared.adapter.replyApproval({ ...ref, requestId: newID, outcome: "approve_once" }),
+      );
+      expect(harness.approvalReplies[0]).toMatchObject({ nativeRequestId: "permission_native" });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
   test("loads every OpenCode session for task matching", async () => {
     const harness = createRuntimeHarness({
       sessionSources: [
@@ -69,6 +601,210 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       }),
     ]);
   });
+
+  test.each(["root", "child"] as const)(
+    "retains unread descendants and their approvals when the %s refresh fails",
+    async (failedAncestor) => {
+      const childRef = { ...ref, externalSessionId: "child" };
+      const grandchildRef = { ...ref, externalSessionId: "grandchild" };
+      const siblingRef = { ...ref, externalSessionId: "sibling" };
+      const healthyRef = { ...ref, externalSessionId: "healthy" };
+      const source = (
+        sessionRef: AgentSessionLiveRef,
+        parentExternalSessionId?: string,
+      ): OpencodeRuntimeSnapshotSource => {
+        const result: OpencodeRuntimeSnapshotSource = {
+          ...sessionRef,
+          sessionAssociation: { kind: "repository" },
+          title: `Known ${sessionRef.externalSessionId}`,
+          startedAt: "2026-07-16T10:00:00.000Z",
+          runtimeActivity: "running",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        };
+        if (parentExternalSessionId) result.parentExternalSessionId = parentExternalSessionId;
+        return result;
+      };
+      const sources = [
+        source(ref),
+        source(childRef, ref.externalSessionId),
+        {
+          ...source(grandchildRef, childRef.externalSessionId),
+          pendingApprovals: [
+            { requestId: "child-permission", requestType: "file_change" as const, title: "Edit" },
+          ],
+        },
+        source(siblingRef, ref.externalSessionId),
+        source(healthyRef),
+      ];
+      let nextRead: OpencodeRuntimeSnapshotRead = { sources, failures: [] };
+      let readGate: Promise<void> | undefined;
+      let onRead: () => void = () => undefined;
+      const harness = createRuntimeHarness({
+        readSessionSources: async () => {
+          const result = nextRead;
+          onRead();
+          await readGate;
+          return result;
+        },
+      });
+      const changes: AgentSessionLiveAdapterChange[] = [];
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: createLifecycle(changes),
+          prepareRuntime: harness.prepareRuntime,
+        })(runtime, ignoreObservationLoss),
+      );
+      try {
+        const adapter = prepared.adapter;
+        const refreshSnapshots = adapter.refreshSnapshots;
+        if (!refreshSnapshots) throw new Error("Expected OpenCode snapshot refresh.");
+        const refresh = () => Effect.runPromise(refreshSnapshots(ref.repoPath));
+        await Effect.runPromise(prepared.startForwarding());
+        await refresh();
+        const initial = await Effect.runPromise(adapter.listSnapshots());
+        expect(initial).toHaveLength(5);
+        const approvalID = initial.find(
+          (snapshot) => snapshot.ref.externalSessionId === "grandchild",
+        )?.pendingApprovals[0]?.requestId;
+        if (!approvalID) throw new Error("Expected the grandchild approval.");
+
+        const otherRepoRef = {
+          ...ref,
+          repoPath: "/other-repo",
+          workingDirectory: "/other-repo/worktree",
+          externalSessionId: "other-repo-child",
+        };
+        const otherDirectoryRef = {
+          ...ref,
+          workingDirectory: "/repo/other-worktree",
+          externalSessionId: "other-directory-child",
+        };
+        for (const sessionRef of [otherRepoRef, otherDirectoryRef])
+          await harness.emit({
+            type: "session_source",
+            source: source(sessionRef, ref.externalSessionId),
+          });
+
+        const failedRef = failedAncestor === "root" ? ref : childRef;
+        nextRead = {
+          sources: [
+            ...(failedAncestor === "child"
+              ? [source(ref), source(siblingRef, ref.externalSessionId)]
+              : []),
+            { ...source(healthyRef), title: "Updated healthy root" },
+          ],
+          failures: [{ ...failedRef, message: "Native read failed." }],
+        };
+        const started = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        onRead = () => started.resolve();
+        readGate = gate.promise;
+        const refreshing = refresh();
+        try {
+          await started.promise;
+          await harness.emit({
+            type: "session_event",
+            externalSessionId: childRef.externalSessionId,
+            event: {
+              type: "session_idle",
+              externalSessionId: childRef.externalSessionId,
+              timestamp: "2026-07-16T10:02:00.000Z",
+            },
+          });
+        } finally {
+          gate.resolve();
+        }
+        await refreshing;
+        readGate = undefined;
+        const retained = await Effect.runPromise(adapter.listSnapshots());
+        expect(retained.map(({ ref: sessionRef }) => sessionRef.externalSessionId).sort()).toEqual([
+          "child",
+          "grandchild",
+          "healthy",
+          "other-repo-child",
+          "session-1",
+          "sibling",
+        ]);
+        const retainedChild = retained.find(
+          ({ ref: sessionRef }) => sessionRef.externalSessionId === "child",
+        );
+        expect(retainedChild).toMatchObject({ activity: "idle" });
+        expect(retainedChild?.statusUnavailableReason).toBeUndefined();
+        expect(
+          retained.find(({ ref: sessionRef }) => sessionRef.externalSessionId === "grandchild"),
+        ).toMatchObject({
+          pendingApprovals: [{ requestId: approvalID }],
+          statusUnavailableReason: expect.stringContaining("Native read failed."),
+        });
+        const healthy = retained.find(
+          ({ ref: sessionRef }) => sessionRef.externalSessionId === "healthy",
+        );
+        expect(healthy).toMatchObject({ title: "Updated healthy root" });
+        expect(healthy?.statusUnavailableReason).toBeUndefined();
+        expect(changes).toContainEqual({
+          type: "session_removed",
+          ref: otherDirectoryRef,
+          provenance: "baseline",
+        });
+
+        await harness.emit({
+          type: "session_event",
+          externalSessionId: grandchildRef.externalSessionId,
+          event: {
+            type: "session_status",
+            externalSessionId: grandchildRef.externalSessionId,
+            timestamp: "2026-07-16T10:03:00.000Z",
+            status: { type: "busy", message: null },
+          },
+        });
+        const confirmed = await Effect.runPromise(adapter.readSnapshot(grandchildRef));
+        expect(confirmed).toMatchObject({
+          type: "live",
+          session: {
+            pendingApprovals: [{ requestId: approvalID }],
+          },
+        });
+        if (confirmed.type !== "live") throw new Error("Expected the retained grandchild.");
+        expect(confirmed.session.statusUnavailableReason).toBeUndefined();
+        await Effect.runPromise(
+          adapter.replyApproval({
+            ...grandchildRef,
+            requestId: approvalID,
+            outcome: "approve_once",
+          }),
+        );
+        expect(harness.approvalReplies).toEqual([
+          { ref: grandchildRef, nativeRequestId: "child-permission", outcome: "approve_once" },
+        ]);
+
+        nextRead = {
+          sources: sources.map((item) => ({ ...item, pendingApprovals: [] })),
+          failures: [],
+        };
+        await refresh();
+        expect(
+          (await Effect.runPromise(adapter.listSnapshots())).every(
+            (snapshot) => snapshot.statusUnavailableReason === undefined,
+          ),
+        ).toBe(true);
+        await harness.emit({ type: "session_removed", externalSessionId: "grandchild" });
+        expect(await Effect.runPromise(adapter.readSnapshot(grandchildRef))).toEqual({
+          type: "missing",
+          ref: grandchildRef,
+        });
+        nextRead = { sources: [source(ref), source(healthyRef)], failures: [] };
+        await refresh();
+        expect(
+          (await Effect.runPromise(adapter.listSnapshots()))
+            .map(({ ref: sessionRef }) => sessionRef.externalSessionId)
+            .sort(),
+        ).toEqual(["healthy", "other-repo-child", "session-1"]);
+      } finally {
+        await Effect.runPromise(prepared.adapter.releaseRuntime());
+      }
+    },
+  );
 
   test("removes current state when OpenCode deletes an owned session", async () => {
     const harness = createRuntimeHarness();
@@ -449,6 +1185,116 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await expect(first).resolves.toEqual({ totalTokens: 77 });
     await expect(second).resolves.toEqual({ totalTokens: 77 });
     expect(harness.contextLoadCalls).toEqual(["session-1"]);
+  });
+
+  test.each(["measured", "unavailable"])(
+    "does not restore stale context after compaction clears %s usage during a read",
+    async (previousUsage) => {
+      const harness = createRuntimeHarness();
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<{ totalTokens: number }>();
+      const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+        const native = await harness.prepareRuntime(input);
+        return {
+          ...native,
+          connection: {
+            ...native.connection,
+            loadContextUsage: () => {
+              started.resolve();
+              return finish.promise;
+            },
+          },
+        };
+      };
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: createLifecycle([]),
+          prepareRuntime,
+        })(runtime, ignoreObservationLoss),
+      );
+      try {
+        await Effect.runPromise(
+          prepared.adapter.resumeSession({
+            ...ref,
+            resumeMode: "reattach",
+            sessionScope: { kind: "repository" },
+          }),
+        );
+        await Effect.runPromise(prepared.startForwarding());
+        const loading = Effect.runPromise(prepared.adapter.loadContext(ref));
+        await started.promise;
+        if (previousUsage === "measured")
+          await harness.emit({
+            type: "context_updated",
+            externalSessionId: ref.externalSessionId,
+            contextUsage: { totalTokens: 55 },
+          });
+        await harness.emit({
+          type: "context_updated",
+          externalSessionId: ref.externalSessionId,
+          contextUsage: null,
+        });
+        finish.resolve({ totalTokens: 77 });
+        expect(await loading).toBeNull();
+        expect(
+          (await Effect.runPromise(prepared.adapter.listSnapshots()))[0]?.contextUsage,
+        ).toBeNull();
+      } finally {
+        finish.resolve({ totalTokens: 77 });
+        await Effect.runPromise(prepared.adapter.releaseRuntime());
+      }
+    },
+  );
+
+  test("restores native source usage and clears the old measurement after compaction", async () => {
+    const source: OpencodeRuntimeSnapshotSource = {
+      repoPath: ref.repoPath,
+      externalSessionId: ref.externalSessionId,
+      workingDirectory: ref.workingDirectory,
+      sessionAssociation: { kind: "repository" },
+      title: "Restored conversation",
+      startedAt: "2026-07-16T10:02:00.000Z",
+      runtimeActivity: "idle",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: { totalTokens: 3170, model: { providerId: "test", modelId: "test-model" } },
+    };
+    const harness = createRuntimeHarness({ sessionSources: [source] });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime, ignoreObservationLoss),
+    );
+    try {
+      if (!prepared.adapter.refreshSnapshots) throw new Error("Expected snapshot support");
+      await Effect.runPromise(prepared.adapter.refreshSnapshots(ref.repoPath));
+      expect((await Effect.runPromise(prepared.adapter.listSnapshots()))[0]?.contextUsage).toEqual({
+        totalTokens: 3170,
+        providerId: "test",
+        modelId: "test-model",
+      });
+      await Effect.runPromise(prepared.startForwarding());
+      await harness.emit({
+        type: "context_updated",
+        externalSessionId: ref.externalSessionId,
+        contextUsage: { totalTokens: 55 },
+      });
+      source.contextUsage = null;
+      await Effect.runPromise(prepared.adapter.refreshSnapshots(ref.repoPath));
+      await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+        }),
+      );
+      expect(
+        (await Effect.runPromise(prepared.adapter.listSnapshots()))[0]?.contextUsage,
+      ).toBeNull();
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
   });
 
   test("loads context for a persisted session without retaining a live snapshot", async () => {

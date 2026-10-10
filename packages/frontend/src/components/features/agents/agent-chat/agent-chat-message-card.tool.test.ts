@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentToolData } from "@openducktor/contracts";
+import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createDefaultTestChatSettings,
@@ -28,7 +29,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             status: "completed",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -53,7 +53,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             status: "completed",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -84,7 +83,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             observedEndedAtMs: Date.parse("2026-02-20T19:01:00.000Z"),
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -113,7 +111,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             endedAtMs: 2_500,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -141,7 +138,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             endedAtMs: 2_500,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -181,7 +177,6 @@ describe("AgentChatMessageCard tool presentation", () => {
               metadata: { backgroundTaskStatus: outcome },
             },
           },
-          sessionAgentColors: {},
         }),
       );
 
@@ -217,7 +212,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             error: "Task already has a spec",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -244,7 +238,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             error: "command not found",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -271,7 +264,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -280,6 +272,79 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("cursor-pointer");
     expect(html).toContain("fairnest-97f");
   });
+
+  const documentReadCases: Array<{
+    tool: string;
+    status: "pending" | "running" | "completed";
+    flags: AgentToolData;
+    expected: string;
+  }> = [
+    {
+      tool: "read_task_documents",
+      status: "pending",
+      flags: { includeSpec: true },
+      expected: "task-1 · Spec",
+    },
+    {
+      tool: "odt_read_task_documents",
+      status: "running",
+      flags: { includePlan: true },
+      expected: "task-1 · Plan",
+    },
+    {
+      tool: "openducktor_odt_read_task_documents",
+      status: "completed",
+      flags: { includeQaReport: true },
+      expected: "task-1 · QA report",
+    },
+    {
+      tool: "mcp__openducktor__odt_read_task_documents",
+      status: "completed",
+      flags: { includeSpec: true, includePlan: true, includeQaReport: true },
+      expected: "task-1 · Spec, Plan, QA report",
+    },
+    {
+      tool: "read_task_documents",
+      status: "running",
+      flags: { includeSpec: true, includePlan: false, includeQaReport: true },
+      expected: "task-1 · Spec, QA report",
+    },
+  ];
+
+  test.each(documentReadCases)(
+    "previews requested task documents for $tool while $status",
+    ({ tool, status, flags, expected }) => {
+      const html = renderToStaticMarkup(
+        createMessageCardElement({
+          message: {
+            id: "tool-read-documents",
+            role: "tool",
+            content: `Tool ${tool} ${status}`,
+            timestamp: "2026-02-22T10:20:30.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-read-documents",
+              callId: "call-read-documents",
+              tool,
+              toolType: "generic",
+              status,
+              inputStreaming: false,
+              input: { taskId: "task-1", ...flags },
+              preview: "Old document preview",
+              title: "Old document title",
+              output: '{"documents":{"spec":{"markdown":"Returned document body"}}}',
+            },
+          },
+        }),
+      );
+      const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
+      expect(summary?.textContent).toContain(expected);
+      expect(summary?.textContent).not.toContain("Old document");
+      expect(summary?.textContent).not.toContain("Returned document body");
+      expect(html).toContain("Output");
+      expect(html).toContain("Returned document body");
+    },
+  );
 
   test("wraps long unbroken question tool prompts", () => {
     const html = renderToStaticMarkup(
@@ -300,7 +365,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: '{"answers":[["yes"]]}',
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -328,7 +392,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_SAMPLE]] }),
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -401,7 +464,6 @@ describe("AgentChatMessageCard tool presentation", () => {
               output,
             },
           },
-          sessionAgentColors: {},
         }),
       );
 
@@ -430,7 +492,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "Plan updated",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -463,7 +524,6 @@ describe("AgentChatMessageCard tool presentation", () => {
           }),
           supportedApprovalReplyOutcomes: null,
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -491,7 +551,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "contents",
           },
         },
-        sessionAgentColors: {},
         sessionIdentity: null,
       }),
     );
@@ -520,12 +579,48 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "file contents",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
     expect(html).toContain("apps/web/src/contexts/AuthContext.tsx");
     expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
+  });
+
+  test("shows the written-file expand control and keeps the native write result and arguments", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "tool-write-without-diff",
+          role: "tool",
+          content: "Tool write completed",
+          timestamp: "2026-02-22T10:20:36.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-write",
+            callId: "call-write",
+            tool: "write",
+            toolType: "file_edit",
+            status: "completed",
+            input: { path: "src/example.ts", content: "Requested file content" },
+            output: "Created file successfully: src/example.ts",
+            fileContent: [
+              { file: "src/example.ts", content: "Requested file content", type: "modified" },
+            ],
+          },
+        },
+        chatSettings: {
+          ...createDefaultTestChatSettings(),
+          expandFileDiffsByDefault: false,
+        },
+      }),
+    );
+
+    expect(html).not.toContain(
+      "File diff unavailable. The runtime did not return the applied changes.",
+    );
+    expect(html).toContain("lucide-chevron-right");
+    expect(html).toContain(">Input</summary>");
+    expect(html).toContain("Created file successfully: src/example.ts");
   });
 
   test("renders one file edit card per file in a multi-file apply_patch result without a summary description", () => {
@@ -562,7 +657,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "Updated 2 files",
           },
         },
-        sessionAgentColors: {},
         chatSettings: {
           ...createDefaultTestChatSettings(),
           expandFileDiffsByDefault: false,
@@ -600,7 +694,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -611,7 +704,35 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("build_completed");
   });
 
-  test("renders queued workflow tools with purple styling", () => {
+  test("shows progress while the model prepares workflow tool arguments", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "tool-preparing",
+          role: "tool",
+          content: "Tool openducktor_odt_set_plan pending",
+          timestamp: "2026-02-22T10:21:10.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-preparing",
+            callId: "call-preparing",
+            tool: "openducktor_odt_set_plan",
+            toolType: "workflow",
+            status: "pending",
+            inputStreaming: true,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("PREPARING");
+    expect(html).toContain("animate-spin");
+    expect(html).toContain("border-info-border");
+    expect(html).not.toContain("QUEUED");
+    expect(html).not.toContain("RUNNING");
+  });
+
+  test("renders queued workflow tools with completed arguments and purple styling", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -626,11 +747,11 @@ describe("AgentChatMessageCard tool presentation", () => {
             tool: "openducktor_odt_set_plan",
             toolType: "workflow",
             status: "pending",
-            input: {},
+            inputStreaming: false,
+            input: { taskId: "fairnest-98a" },
             output: "",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -640,6 +761,44 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("QUEUED");
     expect(html).not.toContain("RUNNING");
   });
+
+  test.each([true, false])(
+    "shows a queued label only when input completion is explicit: %s",
+    (inputComplete) => {
+      const meta: ToolMeta = {
+        kind: "tool",
+        partId: "part-execute-queued",
+        callId: "call-execute-queued",
+        tool: "execute",
+        toolType: "generic",
+        status: "pending",
+      };
+      if (inputComplete) {
+        meta.inputStreaming = false;
+        meta.input = { code: "console.log(42)" };
+      }
+      const html = renderToStaticMarkup(
+        createMessageCardElement({
+          message: {
+            id: "tool-execute-queued",
+            role: "tool",
+            content: "Tool execute pending",
+            timestamp: "2026-02-22T10:21:10.000Z",
+            meta,
+          },
+        }),
+      );
+      const text = new DOMParser().parseFromString(html, "text/html").body.textContent;
+      if (inputComplete) {
+        expect(text).toContain("Queued");
+        expect(text).toContain("console.log(42)");
+      } else {
+        expect(text).not.toContain("Queued");
+      }
+      expect(text).not.toContain("Preparing arguments");
+      expect(html).toContain("animate-spin");
+    },
+  );
 
   test("renders workflow MCP validation failures as destructive error details", () => {
     const validationError =
@@ -667,7 +826,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             error: validationError,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -700,7 +858,6 @@ describe("AgentChatMessageCard tool presentation", () => {
               "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -728,7 +885,6 @@ describe("AgentChatMessageCard tool presentation", () => {
             output: "",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 

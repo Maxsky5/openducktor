@@ -22,21 +22,21 @@ export class WorktreeActionExitError extends Data.TaggedError("WorktreeActionExi
   ActionOutputFields & { readonly exitCode: number | null; readonly signal: string | null }
 > {}
 
-export class WorktreeActionTimeoutError extends Data.TaggedError("WorktreeActionTimeoutError")<
+class WorktreeActionTimeoutError extends Data.TaggedError("WorktreeActionTimeoutError")<
   ActionOutputFields & { readonly cause?: TerminalServiceError }
 > {}
 
 /** The terminal of a waiting action closed before its command ended. */
-export class WorktreeActionTerminalClosedError extends Data.TaggedError(
+class WorktreeActionTerminalClosedError extends Data.TaggedError(
   "WorktreeActionTerminalClosedError",
 )<ActionOutputFields> {}
 
 /** The terminal process of a waiting action failed before its command ended. */
-export class WorktreeActionTerminalFailedError extends Data.TaggedError(
+class WorktreeActionTerminalFailedError extends Data.TaggedError(
   "WorktreeActionTerminalFailedError",
 )<ActionOutputFields & { readonly reason: string }> {}
 
-export class WorktreeActionStartError extends Data.TaggedError("WorktreeActionStartError")<{
+class WorktreeActionStartError extends Data.TaggedError("WorktreeActionStartError")<{
   readonly actionName: string;
   readonly message: string;
   readonly cause: RepoActionHasNoCommandError | TerminalServiceError;

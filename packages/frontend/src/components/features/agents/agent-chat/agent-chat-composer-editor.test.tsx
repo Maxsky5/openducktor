@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { type ReactElement, useReducer, useRef } from "react";
+import { type ReactElement, useReducer } from "react";
+import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -12,6 +15,7 @@ import {
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
+import { useAgentChatLayout } from "./use-agent-chat-layout";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
 const actualComposerSelectionModule = await import("./agent-chat-composer-selection");
@@ -224,7 +228,9 @@ const EditorHarness = ({
     }
     handleDraftChange = onDraftChange;
   }
-  const editorRef = useRef<HTMLDivElement>(null);
+  const { composerEditorRef: editorRef, resizeComposerEditor } = useAgentChatLayout({
+    displayedSessionKey: "editor-session",
+  });
 
   return (
     <>
@@ -234,7 +240,7 @@ const EditorHarness = ({
         placeholder="Type a message"
         disabled={disabled}
         editorRef={editorRef}
-        onEditorInput={() => {}}
+        onEditorInput={resizeComposerEditor}
         onSend={onSend ?? (() => {})}
         supportsSlashCommands={true}
         supportsFileSearch={supportsFileSearch}
@@ -446,6 +452,38 @@ type FileSearchResolution = {
 };
 
 describe("AgentChatComposerEditor", () => {
+  test("shrinks the editor when the parent clears a sent draft", async () => {
+    await withAnimationFrameTestDriver(async (driver) => {
+      const onDraftChange = () => {};
+      const rendered = render(
+        <EditorHarness
+          slashCommandsError={null}
+          slashCommands={COMMANDS}
+          draft={createComposerDraft("A long message ready to send.")}
+          onDraftChange={onDraftChange}
+        />,
+      );
+      await driver.flushFrames();
+      const editor = getEditorRoot(rendered.container);
+      // Happy DOM has no layout. Model the expanded editor and its empty content height.
+      editor.style.height = "220px";
+      editor.style.overflowY = "auto";
+      Object.defineProperty(editor, "scrollHeight", { configurable: true, value: 44 });
+
+      rendered.rerender(
+        <EditorHarness
+          slashCommandsError={null}
+          slashCommands={COMMANDS}
+          draft={createComposerDraft("")}
+          onDraftChange={onDraftChange}
+        />,
+      );
+      await driver.flushFrames();
+      expect(editor.style.height).toBe("44px");
+      expect(editor.style.overflowY).toBe("hidden");
+      rendered.unmount();
+    });
+  });
   test("exposes the rich editor as a collapsed named combobox", () => {
     render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -603,13 +641,17 @@ describe("AgentChatComposerEditor", () => {
     expect(document.activeElement).toBe(editor);
   });
 
-  test("owns skill popup selection through arrow navigation and tab acceptance", async () => {
+  test("selects an OpenCode skill through arrow navigation and Tab before sending", async () => {
     const onSend = mock(() => {});
+    const support = resolveRuntimePromptInputSupport({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeKind: "opencode",
+    });
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
         slashCommandsError={null}
-        supportsSkillReferences={true}
+        supportsSkillReferences={support.supportsSkillReferences}
         skills={SKILLS}
         onSend={onSend}
       />,
@@ -655,6 +697,8 @@ describe("AgentChatComposerEditor", () => {
     );
     expect(onSend).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
+    fireEvent.keyDown(editor, { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
   });
 
   test("shows the slash-command error state after typing a slash trigger", async () => {

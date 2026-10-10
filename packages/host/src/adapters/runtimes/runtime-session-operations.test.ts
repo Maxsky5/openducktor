@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   codexAppServerClientRequestSchema,
@@ -15,13 +15,6 @@ import {
   type CreateRuntimeSessionOperationsInput,
   createRuntimeSessionOperations,
 } from "./runtime-session-operations";
-
-type FetchRequest = (
-  ...args: Parameters<typeof globalThis.fetch>
-) => ReturnType<typeof globalThis.fetch>;
-
-const fetchFixture = (request: FetchRequest): typeof globalThis.fetch =>
-  Object.assign(request, { preconnect: () => {} });
 
 const openCodeRuntime: RuntimeInstanceSummary = {
   kind: "opencode",
@@ -98,6 +91,7 @@ const unusedPort = (): never => {
 
 const createOperations = (operationsInput: Partial<CreateRuntimeSessionOperationsInput>) =>
   createRuntimeSessionOperations({
+    opencode: { stopSession: unusedPort, probeSessionStatus: unusedPort },
     codexAppServer: { request: unusedPort },
     claudeAgentSdk: { stopSession: unusedPort, probeSessionStatus: unusedPort },
     ...operationsInput,
@@ -177,53 +171,27 @@ describe("Claude runtime session operations", () => {
 });
 
 describe("OpenCode runtime session operations", () => {
-  test("aborts and probes OpenCode sessions through the local runtime endpoint", async () => {
-    const requests: Array<{
-      method: string;
-      pathname: string;
-      directory: string | null;
-    }> = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchFixture(
-      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = input instanceof Request ? input : null;
-        const url = new URL(request?.url ?? input.toString());
-        const method = init?.method ?? request?.method ?? "GET";
-        requests.push({
-          method,
-          pathname: url.pathname,
-          directory: url.searchParams.get("directory"),
-        });
-        if (method === "POST" && url.pathname === "/session/session-1/abort") {
-          return new Response("aborted", { status: 200 });
-        }
-        if (method === "GET" && url.pathname === "/session/status") {
-          return Response.json({ "session-1": { type: "busy" } });
-        }
-        return new Response("not found", { status: 404 });
-      }),
-    );
-    try {
-      await expect(stopSession(openCodeRuntime)).resolves.toBeUndefined();
-      await expect(probeSession(openCodeRuntime, "opencode")).resolves.toEqual({
-        supported: true,
-        hasLiveSession: true,
-      });
-      expect(requests).toEqual([
-        {
-          method: "POST",
-          pathname: "/session/session-1/abort",
-          directory: "/repo/worktree",
-        },
-        {
-          method: "GET",
-          pathname: "/session/status",
-          directory: "/repo/worktree",
-        },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  test("routes stop and status to the owned OpenCode connection", async () => {
+    const stops: unknown[] = [];
+    const probes: unknown[] = [];
+    const opencode: CreateRuntimeSessionOperationsInput["opencode"] = {
+      stopSession: (target, runtime) =>
+        Effect.sync(() => {
+          stops.push({ target, runtime });
+        }),
+      probeSessionStatus: (target, runtime) =>
+        Effect.sync(() => {
+          probes.push({ target, runtime });
+          return { supported: true, hasLiveSession: true };
+        }),
+    };
+    await stopSession(openCodeRuntime, { opencode });
+    expect(await probeSession(openCodeRuntime, "opencode", { opencode })).toEqual({
+      supported: true,
+      hasLiveSession: true,
+    });
+    expect(stops).toEqual([{ target: sessionTarget("opencode"), runtime: openCodeRuntime }]);
+    expect(probes).toEqual(stops);
   });
 });
 

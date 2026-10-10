@@ -4,7 +4,7 @@ Read this guide before you add a runtime or change runtime capabilities, session
 
 | Runtime | Route | Native form |
 |---|---|---|
-| OpenCode, `opencode` | `local_http` | External HTTP runtime |
+| OpenCode, `opencode` | `local_http` | Host-managed V2 standalone process |
 | Codex, `codex` | `stdio` | Host-managed app server |
 | Claude, `claude` | `host_service` | Host-managed SDK service |
 
@@ -21,11 +21,13 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 | `AgentSessionRecord` | Durable data used to reopen a session | Durable |
 | Live-session adapter | Normalized state for running sessions | Runtime process |
 
-`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, and `capabilities`. Shared code reads the descriptor instead of testing the runtime kind.
+`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, `capabilities`, and `capabilityLimits`. Shared code reads the descriptor instead of testing the runtime kind.
 
 `RuntimeInstanceSummary` contains the runtime kind and ID, route, start time, and descriptor. It contains no repository or working directory, because one instance serves every workspace. Keep it at registry and adapter boundaries. A replacement instance receives a new runtime ID.
 
 `RuntimeRoute` can be `local_http`, `stdio`, or `host_service`. A `local_http` route must use the loopback host `localhost`, `127.0.0.1`, or `::1`. Never persist a route. `RuntimeTransport` carries request-scoped `local_http` and `stdio` connections. A host service can resolve inside its host adapter without a new public transport type.
+
+The host keeps OpenCode V2 authentication in its private runtime connection. A public `local_http` route supplies the endpoint only. An adapter must resolve the owned connection before it calls OpenCode.
 
 `AgentSessionRecord` stores the external session ID, role, start time, optional `lastActivityAt`, runtime kind, working directory, and selected model. It does not store an endpoint, route, transport, pending request, event buffer, or native reply ID.
 
@@ -81,6 +83,8 @@ Restoring an idle Claude session must not publish new activity. Publish startup 
 
 Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse the native controller that owns its session state. Route frontend reads through `HostClient`. Check that queries do not resume sessions or change live state. Test reads during live updates and runtime replacement.
 
+`AgentRuntimeQueryService` holds the worktree read guard through scope checks, native reads, and the final runtime check. Workspace session import holds the guard while it inspects and saves the selected source. Native query and import inspection methods must not take the same guard again. OpenCode reads and verifies native session metadata under these host guards. OpenCode control and live reads use their own directory guard.
+
 The host saves `lastActivityAt` in task and workspace session records as epoch milliseconds. The session list reads that field through its existing record queries. Older task records use `startedAt`; older workspace records use `createdAt`. Never read native metadata or load a transcript to get a navigation date.
 
 `agent-session-activity-persistence.ts` saves dates from the ordered live stream at message and turn boundaries. New pending input uses the host clock because request snapshots have no event timestamp. Child activity updates its saved root. Saves use the full session identity and never move the date backwards. Task activity saves do not change the task's edit time. Committed records reach the frontend through the existing live channel.
@@ -88,6 +92,8 @@ The host saves `lastActivityAt` in task and workspace session records as epoch m
 Restore baselines, repeated status reports, title and model edits, streamed text, and idle connection cleanup do not change activity dates. Claude writes native bookkeeping records on restore and shutdown; do not use those records as activity. A context usage read must not persist a resumed Claude session.
 
 Before you map a feature, inspect official SDK types, protocol docs, or runtime source. Check startup, config, auth, models, sessions, activity, history, tools, approvals, questions, context, catalogs, and optional features. Keep a capability off when the public runtime contract lacks the needed data.
+
+Native runtimes own conversion of their stored sessions. Read public migration status and keep saved session IDs and associations while conversion blocks access. Ask the user to complete the native migration flow before retrying. Do not convert private storage, remap IDs, or create replacement conversations.
 
 ## Capability contract
 
@@ -245,9 +251,19 @@ Accept a runtime definition only when its schema is valid, it can run workflow t
 
 OpenDucktor owns root-session admission. Start, resume, and fork controls register returned runtime metadata before a session enters the live-state list. A runtime adapter cannot scan a native session list to add roots. A runtime event can add a descendant only when OpenDucktor registered its parent.
 
+OpenCode child commands inherit the parent's stored OpenDucktor role instructions through an owned native plugin. The plugin exists only in the owned process config. The host binds its private connection through authenticated RPC at startup. Workflow controls bind each working directory through the same native RPC activation barrier before input admission. Credentials stay in memory and never enter the plugin config or a file. Its prompt hook installs instructions before input enters the native inbox. Its context hook rejects a child model request if workflow instructions are missing. A child setup failure reports a fault for the registered parent and keeps other sessions active.
+
+OpenCode supports custom slash commands in every session, typed `$` skill references, and current context usage from the last measured assistant message. Workflow subagent references remain disabled by app policy. Native todos and direct interrupted-turn continuation remain unavailable. Profile names remain visible. OpenDucktor uses theme colors instead of native profile colors.
+
 On reload, the host reads exact root references from durable task session records. A live-state adapter reads only those roots and their verified descendants through exact native APIs. It cannot list native sessions to claim new live roots. The explicit import flow below is a separate discovery path.
 
-A fresh or forked session starts with a running lease. An old native idle event cannot mark it idle before the first turn settles.
+Prompt submission keeps a running lease through preparation and native admission. An old native idle event cannot mark it idle before OpenCode confirms work or a terminal outcome. An empty conversation stays idle.
+
+OpenCode V2 returns a native input ID for `/compact`. Keep its pending activity until that input is delivered, canceled, or removed from the native inbox. A different execution's terminal event does not consume it. Custom slash commands return no input ID, so reject them before submission while execution or other input preparation is active. They remain available for every role when the conversation is idle.
+
+A rejected submission releases its preparation lease and reports the last observed native execution state. A failed reconnect restore keeps the transcript, marks its status unavailable, and removes stale pending request occurrences. Native approval and question replies do not require the OpenDucktor MCP bridge to be connected.
+
+Restored transcript events carry `provenance: "baseline"`. They update the transcript without changing live activity or ending an execution episode.
 
 Resume keeps the current running turn, approval, or question until a newer native event replaces it. One ordered coordinator applies control results and native events.
 
@@ -277,6 +293,14 @@ Keep the original tool ID and reason for success, failure, and denial. Read file
 
 Keep prompt parts typed until the adapter encodes them. History must rebuild the same command, skill, file, attachment, and subagent parts as the live stream.
 
+OpenCode V2 reads its skill catalog with `client.skill.list` for the session working directory. The composer uses `$` for skill references. The adapter sends each selected native skill ID and its mention positions through `skills` on a prompt or command request. OpenCode loads the skill content. The adapter converts native skill references to shared `skill_mention` parts for acceptance, queued input, live delivery, and history. The existing user message renderer displays inline skill chips.
+
+Show the initial system instructions once before the first user message. Keep later native instruction changes in history. Routine profile selection and successful completion update session state without extra system messages.
+
+OpenCode marks an interrupted step with the native `aborted` error type. Keep its interrupted tool details, but do not report the step as a turn error. Its interrupted execution produces one cancellation notice with the native message ID in live output and history. This notice replaces the local stop confirmation when both describe the same stop. Keep baseline provenance through the transcript consumer. A restored interruption must not clear a current stop request or end a new turn.
+
+OpenCode stores the OpenDucktor role prompt in the `openducktor.workflow` instruction entry. Read this entry with the native messages for both history and live restoration. Do not use a later native instruction update or current prompt settings as the stored role prompt. Show native instruction updates separately in their original order.
+
 ### Configuration and catalogs
 
 Use supported SDK options to inherit native auth, providers, settings, instructions, models, skills, commands, permissions, sandbox rules, and MCP servers. Do not create a separate runtime home, edit user settings, or parse private config files.
@@ -284,6 +308,8 @@ Use supported SDK options to inherit native auth, providers, settings, instructi
 OpenDucktor can add session workflow tools, MCP servers, hooks, or instructions. Keep unrelated native config.
 
 Read the effective model catalog from the runtime so proxy and third-party providers remain present. Use native metadata to separate commands, bundled workflows, user skills, and model skills. Keep a bounded classification rule in one runtime module only when the API has no type field.
+
+OpenCode catalog reads register their repository and working directory with the owned runtime adapter. Catalog update events invalidate these scopes even before a live conversation exists. A directory event changes only matching scopes. A global event changes each known repository once. Runtime release clears the registered scopes.
 
 For a repository that is not yet a workspace, `agent_runtime_preview_models` reads Claude, Codex, or OpenCode models through a short-lived native session or process. The host checks the Git path, does not connect the OpenDucktor MCP bridge, and closes the session or process after the read. Keep this preview out of the host runtime registry and use a separate frontend query key.
 
@@ -316,6 +342,10 @@ Existing custom overrides remain active. Users must review, update, or disable o
 Shared role policy lists canonical `odt_*` tools. The descriptor maps them to native aliases and lists native tools blocked for read-only roles.
 
 Inherit native permissions and sandbox settings. Add session hooks through SDK options. Let unclassified tools use the native approval path. Shared code does not edit user settings or parse shell commands.
+
+A persistent approval must show its native scope and rules. Use `Allow for project` for a project grant, and offer it only when the native request supplies rules to save. Show when rejection can cancel other pending requests.
+
+Show question cancellation only when the request has `canCancel: true`. The native adapter sets this flag only when it can cancel that request. Keep the flag through live snapshots and frontend conversion.
 
 Do not block Bash only because a role is read-only. Spec, Planner, and QA need it for search and checks.
 

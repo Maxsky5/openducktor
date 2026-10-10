@@ -16,6 +16,52 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
+  test("keeps streamed reasoning visible before completion under its hydrated identity", async () => {
+    let handleEvent: ((event: SessionEvent) => void) | undefined;
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_session, handler) => {
+        handleEvent = handler;
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+    try {
+      for (const completed of [false, true]) {
+        handleEvent!({
+          type: "assistant_part",
+          externalSessionId: "session-1",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          part: {
+            kind: "reasoning",
+            messageId: "msg-native",
+            partId: "msg-native:reasoning:0",
+            text: completed ? "Checking the source and plan." : "Checking the source",
+            completed,
+          },
+        });
+        const reasoning = getSessionMessages(sessionsRef).filter(
+          (message) => message.meta?.kind === "reasoning",
+        );
+        expect(reasoning).toHaveLength(1);
+        expect(reasoning[0]).toMatchObject({
+          role: "thinking",
+          content: completed ? "Checking the source and plan." : "Checking the source",
+          meta: { partId: "msg-native:reasoning:0", completed },
+        });
+      }
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("flushes queued non-immediate events in a single session commit", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

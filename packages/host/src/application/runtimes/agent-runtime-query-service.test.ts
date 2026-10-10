@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
 import {
+  createPrepareOpencodeSessionRuntime,
+  OpencodeSdkAdapter,
+  type PreparedOpencodeSessionRuntime,
+} from "@openducktor/adapters-opencode-sdk";
+import {
   type AgentSessionLiveSnapshot,
   type RuntimeInstanceSummary,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -7,7 +12,11 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import { z, type JSONType } from "zod";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createRuntimeQueryAdapter } from "../../adapters/agent-sessions/runtime-query-adapter";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
@@ -43,6 +52,7 @@ const harness = async (
   let beforeModels = async () => {};
   let snapshots: AgentSessionLiveSnapshot[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
+  const worktreeReads = createTaskSessionLifecycleCoordinator();
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeKind, runtimeId: "runtime-1" },
     {
@@ -145,7 +155,7 @@ const harness = async (
           ],
         }),
     },
-    worktreeReads: createTaskSessionLifecycleCoordinator(),
+    worktreeReads,
     worktreeFiles: {
       resolvePathWithinRoot: () => Effect.die("Unexpected removed-worktree history lookup"),
     },
@@ -154,6 +164,7 @@ const harness = async (
     service,
     adapter,
     adapterRegistry,
+    worktreeReads,
     calls,
     setBeforeModels: (read: () => Promise<void>) => {
       beforeModels = read;
@@ -378,6 +389,154 @@ const historyRef = {
   externalSessionId: "root",
   runtimePolicy: { kind: "opencode" },
 } as const;
+
+test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
+  "OpenCode session reads finish under the host worktree guard: %s",
+  async (operation) => {
+    const h = await harness();
+    const server = createServer((request, reply) => {
+      reply.setHeader("access-control-allow-origin", "*");
+      reply.setHeader("access-control-allow-headers", "authorization,content-type");
+      if (request.method === "OPTIONS") {
+        reply.writeHead(204);
+        return reply.end();
+      }
+      const path = new URL(request.url!, "http://127.0.0.1").pathname;
+      const respond = (data: JSONType) => {
+        reply.writeHead(200, { "content-type": "application/json" });
+        reply.end(JSON.stringify(data));
+      };
+      if (path === "/api/info")
+        return respond({ version: "2.0.24", pid: 42, urls: [], paths: { tmp: "/tmp" } });
+      if (path.endsWith("/migration/v1")) return respond({ status: "completed" });
+      if (path.endsWith("/instructions/entries")) return respond({ data: [] });
+      if (path.endsWith("/message"))
+        return respond({
+          data: [
+            {
+              id: "msg_retained",
+              type: "user",
+              time: { created: 1 },
+              text: "Retained conversation",
+            },
+          ],
+          cursor: { next: null, prev: null },
+        });
+      if (path.endsWith("/diff")) return respond({ data: [] });
+      if (path.startsWith("/api/session/")) {
+        const id = path.split("/").at(-1)!;
+        const data = {
+          id,
+          projectID: "project-1",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 2 },
+          location: { directory: workingDirectory },
+          model: { providerID: "test", id: "test-model" },
+        } satisfies Awaited<ReturnType<OpencodeSdkAdapter["readNativeSession"]>>;
+        if (id === "cold-child") return respond({ data: { ...data, parentID: "root" } });
+        return respond({ data });
+      }
+      reply.writeHead(500);
+      reply.end("Unexpected native request");
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = z.object({ port: z.number().int().positive() }).parse(server.address());
+    const connection = {
+      runtimeId: h.runtime.runtimeId,
+      endpoint: `http://127.0.0.1:${address.port}`,
+      authentication: {
+        type: "basic" as const,
+        username: "opencode" as const,
+        password: "test-password",
+      },
+    };
+    const controller = new OpencodeSdkAdapter(
+      connection,
+      {
+        resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+      },
+      {
+        readDirectory: (directory, read) =>
+          Effect.runPromise(h.worktreeReads.runWorktreeRead(directory, Effect.promise(read))),
+        ensureMcp: async () => {},
+        admitted: () => {},
+      },
+    );
+    controller.client.event.subscribe = ({ signal } = {}) => ({
+      async *[Symbol.asyncIterator]() {
+        const stopped = Promise.withResolvers<void>();
+        const stop = () => stopped.resolve();
+        signal?.addEventListener("abort", stop, { once: true });
+        try {
+          yield { id: "connected", type: "server.connected" as const, data: {} };
+          await stopped.promise;
+        } finally {
+          signal?.removeEventListener("abort", stop);
+        }
+      },
+    });
+    const prepareRuntime = createPrepareOpencodeSessionRuntime({
+      ...controller.options,
+      createClient: () => controller.client,
+      readDirectory: controller.hooks.readDirectory,
+      resolveMcpServerConfig: async () => {
+        throw new Error("A native read must not install MCP");
+      },
+    });
+    let runtime: PreparedOpencodeSessionRuntime | undefined;
+    try {
+      runtime = await prepareRuntime({
+        runtimeId: connection.runtimeId,
+        runtimeEndpoint: connection.endpoint,
+        connection,
+      });
+      Object.assign(h.adapter.queries, createRuntimeQueryAdapter(runtime.queries));
+      if (operation === "diff") {
+        expect(
+          await Effect.runPromise(
+            h.service.loadSessionDiff(historyRef).pipe(Effect.timeout("2 seconds")),
+          ),
+        ).toEqual([]);
+      } else if (operation === "import inspection") {
+        const importPort = runtime.sessionImport;
+        const source = await Effect.runPromise(
+          h.worktreeReads
+            .runWorktreeRead(
+              workingDirectory,
+              Effect.promise(() => importPort.inspectSession(historyRef)),
+            )
+            .pipe(Effect.timeout("2 seconds")),
+        );
+        expect(source.metadata).toMatchObject({
+          externalSessionId: "root",
+          workingDirectory,
+          runtimeKind: "opencode",
+        });
+      } else {
+        const history = await Effect.runPromise(
+          h.service
+            .loadSessionHistory({
+              ...historyRef,
+              externalSessionId: operation === "child ancestry" ? "cold-child" : "root",
+              sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+            })
+            .pipe(Effect.timeout("2 seconds")),
+        );
+        expect(history).toMatchObject([
+          { messageId: "msg_retained", text: "Retained conversation" },
+        ]);
+      }
+    } finally {
+      await runtime?.release();
+      controller.close();
+      await new Promise<void>((resolve, reject) =>
+        server.close((cause) => (cause ? reject(cause) : resolve())),
+      );
+    }
+  },
+);
 
 test("reads cold history without a live snapshot and requires task ownership when scope is supplied", async () => {
   const h = await harness();

@@ -1,3 +1,4 @@
+import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import { unexpectedNativeSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
@@ -9,6 +10,7 @@ import type {
   OpencodeSessionRuntimeConnection,
   OpencodeSessionRuntimeSignal,
   PrepareOpencodeSessionRuntime,
+  OpenCodeRuntimeConnection,
 } from "@openducktor/adapters-opencode-sdk";
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
@@ -23,6 +25,12 @@ export const runtime: RuntimeInstanceSummary = {
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
   startedAt: "2026-07-16T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+};
+
+export const runtimeConnection: OpenCodeRuntimeConnection = {
+  runtimeId: runtime.runtimeId,
+  endpoint: "http://127.0.0.1:43123",
+  authentication: { type: "basic", username: "opencode", password: "test-only" },
 };
 
 export const ref = {
@@ -260,3 +268,15 @@ export const createLifecycle = (
       ),
     ),
 });
+
+export const createTestOpenCodeLiveSessionAdapterPreparer = (
+  options: import("./opencode-live-session-adapter").CreateOpenCodeLiveSessionAdapterPreparerInput,
+) => {
+  const prepare = createOpenCodeLiveSessionAdapterPreparer(options);
+  return (runtime: RuntimeInstanceSummary, observer = ignoreObservationLoss) =>
+    prepare(runtime, observer, {
+      runtimeId: runtime.runtimeId,
+      endpoint: runtime.runtimeRoute.type === "local_http" ? runtime.runtimeRoute.endpoint : "",
+      authentication: { type: "basic", username: "opencode", password: "test-only" },
+    });
+};
