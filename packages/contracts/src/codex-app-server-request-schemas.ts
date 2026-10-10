@@ -431,10 +431,6 @@ export const codexAppServerRequestParamsSchemas = {
     mockExperimentalField: nullableString,
     experimentalRawEvents: z.boolean().optional(),
   }),
-  "thread/settings/update": z.strictObject({
-    threadId: z.string(),
-    serviceTier: z.string().nullable(),
-  }),
   "thread/name/set": z.strictObject({ threadId: z.string(), name: z.string() }),
   "thread/compact/start": z.strictObject({ threadId: z.string() }),
   "thread/turns/list": z.strictObject({
@@ -519,10 +515,6 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
   z.strictObject({
     method: z.literal("thread/start"),
     params: codexAppServerRequestParamsSchemas["thread/start"],
-  }),
-  z.strictObject({
-    method: z.literal("thread/settings/update"),
-    params: codexAppServerRequestParamsSchemas["thread/settings/update"],
   }),
   z.strictObject({
     method: z.literal("thread/name/set"),

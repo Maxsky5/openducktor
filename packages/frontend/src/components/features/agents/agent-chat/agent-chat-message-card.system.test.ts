@@ -9,7 +9,7 @@ import {
 import { buildMessage } from "./agent-chat-test-fixtures";
 
 describe("AgentChatMessageCard system messages", () => {
-  test("renders a runtime warning card", () => {
+  test("renders a Claude permission mismatch as a warning card", () => {
     const content =
       "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.";
     const html = renderToStaticMarkup(
@@ -18,14 +18,12 @@ describe("AgentChatMessageCard system messages", () => {
         sessionAgentColors: {},
       }),
     );
-    const text = new DOMParser().parseFromString(html, "text/html").body.textContent;
 
     expect(html).toContain("border-warning-border");
     expect(html).toContain("bg-warning-surface");
     expect(html).toContain("text-warning-surface-foreground");
-    expect(html).toContain("Runtime notice");
-    expect(text).toContain(content);
-    expect(html).not.toContain("Claude permission mode mismatch");
+    expect(html).toContain("Claude permission mode mismatch");
+    expect(html).toContain("Check your Claude permission settings.");
   });
 
   test("renders user-stopped session notices as cancelled cards", () => {

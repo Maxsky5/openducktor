@@ -36,7 +36,6 @@ const decodeRecord = (row: WorkspaceSessionRow) =>
         executionTarget: JSON.parse(row.executionTargetJson),
         roleSnapshot: row.roleSnapshotJson === null ? null : JSON.parse(row.roleSnapshotJson),
         selectedModel: row.selectedModelJson === null ? null : JSON.parse(row.selectedModelJson),
-        speed: row.speed,
         generatedTitle: row.generatedTitle,
         manualTitle: row.manualTitle,
         createdAt: row.createdAt,
@@ -60,7 +59,6 @@ const encodeRecord = (record: WorkspaceSession): WorkspaceSessionRow => ({
   executionTargetJson: JSON.stringify(record.executionTarget),
   roleSnapshotJson: record.roleSnapshot === null ? null : JSON.stringify(record.roleSnapshot),
   selectedModelJson: record.selectedModel === null ? null : JSON.stringify(record.selectedModel),
-  speed: record.speed,
   generatedTitle: record.generatedTitle,
   manualTitle: record.manualTitle,
   createdAt: record.createdAt,
@@ -345,12 +343,6 @@ export const createSqliteWorkspaceSessionStore = (
       update(input, "workspaceSessionStore.setSelectedModel", (current) => ({
         ...current,
         selectedModel: input.selectedModel,
-        speed: input.speed === undefined ? current.speed : input.speed,
-      })),
-    setSpeed: (input) =>
-      update(input, "workspaceSessionStore.setSpeed", (current) => ({
-        ...current,
-        speed: input.speed,
       })),
     setGeneratedTitle: (input) =>
       update(input, "workspaceSessionStore.setGeneratedTitle", (current) => ({

@@ -56,6 +56,12 @@ describe("payload-mappers", () => {
     });
   });
 
+  test("normalizeModelInput rejects a speed that OpenCode cannot apply", () => {
+    expect(() =>
+      normalizeModelInput({ providerId: "openai", modelId: "gpt-5", speed: "fast" }),
+    ).toThrow("OpenCode does not support speed 'fast'");
+  });
+
   test("resolveAssistantResponseMessageId falls back from info.id to part.messageID", () => {
     const fromInfo = resolveAssistantResponseMessageId({
       info: { id: "assistant-info-id" },

@@ -28,7 +28,6 @@ const record = (): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1000,
   updatedAt: 1000,
-  speed: "standard",
   archivedAt: null,
 });
 const snapshot = (entry: WorkspaceSession): AgentSessionLiveSnapshot => ({
@@ -60,54 +59,12 @@ describe("Workspace Session records in the shared read model", () => {
       title: "Untitled session",
       historyLoadState: "not_requested",
       sessionAssociation: { kind: "repository" },
-      speed: { choice: "standard", synchronization: "unapplied" },
     });
-    expect(
-      getAgentSession(
-        applyWorkspaceSessionRecords(collection, [{ ...entry, speed: "fast" }]),
-        workspaceSessionIdentity(entry),
-      )?.speed,
-    ).toMatchObject({ choice: "fast", synchronization: "unapplied" });
     expect(
       workspaceSessionTitle({ ...entry, generatedTitle: "Generated", manualTitle: "Manual" }),
     ).toBe("Manual");
     expect(workspaceSessionTitle({ ...entry, generatedTitle: "Generated" })).toBe("Generated");
   });
-
-  test.each(["record first", "live first"])(
-    "keeps live speed confirmation when saved records arrive %s",
-    (order) => {
-      const entry = record();
-      const off = {
-        choice: "standard",
-        synchronization: "confirmed" as const,
-        availability: { status: "available" as const },
-        processing: { status: "off" as const },
-      };
-      const on = {
-        ...off,
-        choice: "fast",
-        processing: { status: "active" as const, level: "fast" },
-      };
-      let current = buildAgentSessionLiveCollection({
-        current: emptyAgentSessionCollection(),
-        snapshots: [{ ...snapshot(entry), speed: off }],
-      });
-      const read = () => getAgentSession(current, workspaceSessionIdentity(entry))?.speed;
-      if (order === "record first") {
-        current = applyWorkspaceSessionRecords(current, [{ ...entry, speed: "fast" }]);
-        expect(read()).toEqual(off);
-      }
-      current = applyAgentSessionLiveDelta({
-        current,
-        envelope: { type: "session_upsert", session: { ...snapshot(entry), speed: on } },
-      });
-      current = applyWorkspaceSessionRecords(current, [entry]);
-      expect(read()).toEqual(on);
-      current = applyWorkspaceSessionRecords(current, [{ ...entry, speed: "fast" }]);
-      expect(read()).toEqual(on);
-    },
-  );
 
   test("retains loaded history when an authoritative snapshot omits the session", () => {
     const entry = record();

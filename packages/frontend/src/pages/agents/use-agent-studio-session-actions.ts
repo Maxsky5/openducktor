@@ -61,7 +61,6 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
-  speedForNewSession?: string | undefined;
   newSessionCatalog?: AgentModelCatalog | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
@@ -125,7 +124,6 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
-  speedForNewSession,
   newSessionCatalog,
   reusablePrompts,
   repoSettings,
@@ -169,7 +167,6 @@ export function useAgentStudioSessionActions({
     canStartRole,
     isSessionWorking: sessionState.isSessionWorking,
     selectionForNewSession,
-    speedForNewSession,
     newSessionCatalog: newSessionCatalog ?? null,
     repoSettings,
     workspaceId: activeWorkspaceId,

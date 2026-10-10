@@ -17,7 +17,7 @@ import {
 
 export type SessionModelActionDependencies = {
   workspaceRepoPath: string | null;
-  adapter: Pick<AgentEnginePort, "updateSessionModel" | "updateSessionSpeed">;
+  adapter: Pick<AgentEnginePort, "updateSessionModel">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
 };
@@ -39,6 +39,7 @@ const toSessionModelSettings = (
     modelId: selection.modelId,
     variant: selection.variant,
   };
+  if (selection.speed !== undefined) model.speed = selection.speed;
   if (session.runtimeKind === "opencode" && selection.profileId !== undefined)
     model.profileId = selection.profileId;
   return model;
@@ -76,18 +77,5 @@ export const createSessionModelActions = ({
     }
   };
 
-  const updateAgentSessionSpeed = async (
-    identity: AgentSessionIdentity,
-    speed: string,
-  ): Promise<void> => {
-    const session = requireLoadedSession(readSessionSnapshot, identity);
-    const sessionScope = requireBoundSessionAssociation(session, "change fast mode");
-    const confirmed = await adapter.updateSessionSpeed({
-      ...toRuntimeSessionRef(requireWorkspaceRepoPath(workspaceRepoPath), session),
-      sessionScope,
-      speed,
-    });
-    updateSession(identity, (current) => ({ ...current, speed: confirmed }));
-  };
-  return { updateAgentSessionModel, updateAgentSessionSpeed };
+  return { updateAgentSessionModel };
 };

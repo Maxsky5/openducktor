@@ -1,5 +1,3 @@
-import { initialSpeedState } from "@openducktor/core";
-import { SessionTurnAdmission } from "@openducktor/core";
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import {
@@ -10,7 +8,6 @@ import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
 const createSession = (): ClaudeSessionContext => ({
-  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -33,7 +30,6 @@ const createSession = (): ClaudeSessionContext => ({
   runtimeId: "runtime-1",
   startedAt: "2026-06-25T12:00:00.000Z",
   summary: {
-    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",

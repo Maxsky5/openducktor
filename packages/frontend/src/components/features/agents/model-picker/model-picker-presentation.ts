@@ -1,5 +1,4 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { findCatalogModel } from "@/lib/model-catalog-selection";
 import type { ModelPickerFavoriteState } from "./model-picker";
 import type { ModelPickerRuntime, ModelPickerValue, ModelPickerView } from "./model-picker-model";
 
@@ -23,10 +22,9 @@ export function resolveModelPickerPresentation({
   const selectedRuntime = runtimes.find(
     (runtime) => runtime.descriptor.kind === value?.runtimeKind,
   );
-  const selectedCatalog = selectedRuntime?.resource.catalog;
-  const selectedModel = selectedCatalog && value ? findCatalogModel(selectedCatalog, value) : null;
-  const selectedValue =
-    selectedModel && value ? { ...value, modelId: selectedModel.modelId } : null;
+  const selectedModel = selectedRuntime?.resource.catalog?.models.find(
+    (model) => model.providerId === value?.providerId && model.modelId === value?.modelId,
+  );
   const triggerRuntime = selectedRuntime?.descriptor ?? null;
   const triggerModelLabel = selectedModel?.modelName ?? value?.modelId ?? placeholder;
   const triggerAriaLabel = triggerRuntime
@@ -65,12 +63,5 @@ export function resolveModelPickerPresentation({
     return `No ${activeRuntime?.descriptor.label ?? "runtime"} models are available.`;
   })();
 
-  return {
-    selectedValue,
-    triggerRuntime,
-    triggerModelLabel,
-    triggerAriaLabel,
-    visibleResources,
-    emptyMessage,
-  };
+  return { triggerRuntime, triggerModelLabel, triggerAriaLabel, visibleResources, emptyMessage };
 }

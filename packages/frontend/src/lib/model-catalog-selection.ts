@@ -1,6 +1,4 @@
-import type { AgentModelCatalog } from "@openducktor/core";
-
-export { findCatalogModel } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 
 type CatalogProfile = NonNullable<AgentModelCatalog["profiles"]>[number];
 type CatalogModel = AgentModelCatalog["models"][number];
@@ -18,6 +16,17 @@ const findCatalogProfile = (
   profileId: string,
 ): CatalogProfile | null => {
   return catalogProfilesFor(catalog).find((profile) => profileIdFor(profile) === profileId) ?? null;
+};
+
+export const findCatalogModel = (
+  catalog: AgentModelCatalog,
+  selection: Pick<AgentModelSelection, "providerId" | "modelId">,
+): CatalogModel | null => {
+  return (
+    catalog.models.find(
+      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
+    ) ?? null
+  );
 };
 
 export const pickCatalogDefaultModel = (catalog: AgentModelCatalog): CatalogModel | null => {
@@ -39,6 +48,20 @@ export const normalizeCatalogVariant = (
   }
 
   return model.variants[0] || undefined;
+};
+
+/** A selection without `speed` uses standard speed. */
+export const STANDARD_SPEED = "standard";
+
+export const normalizeCatalogSpeed = (
+  model: Pick<CatalogModel, "speedLevels">,
+  speed: string | undefined,
+): string | undefined =>
+  speed && model.speedLevels?.some((level) => level.id === speed) ? speed : undefined;
+
+export const withSpeed = (selection: AgentModelSelection, speed: string): AgentModelSelection => {
+  const { speed: _speed, ...rest } = selection;
+  return speed === STANDARD_SPEED ? rest : { ...rest, speed };
 };
 
 export const pickVisibleCatalogDefaultProfileId = (

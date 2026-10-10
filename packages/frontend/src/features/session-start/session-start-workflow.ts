@@ -59,6 +59,7 @@ export const startSessionWorkflow = async ({
   let hostDecision: WorkflowLaunchDecision;
   if (decision.startMode === "reuse") {
     hostDecision = { startMode: "reuse", sourceSession: decision.sourceSession };
+    if (decision.speed !== undefined) hostDecision.speed = decision.speed;
   } else {
     const selection = decision.selectedModel;
     if (!selection.runtimeKind)
@@ -69,7 +70,6 @@ export const startSessionWorkflow = async ({
         ? { startMode: "fork", sourceSession: decision.sourceSession, selectedModel }
         : { startMode: "fresh", selectedModel };
   }
-  if (decision.speed !== undefined) hostDecision.speed = decision.speed;
   const launch: WorkflowLaunchRequest = {
     launchAttemptId,
     workspaceId,

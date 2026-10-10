@@ -77,7 +77,6 @@ const association = (repoPath = "/alpha", externalSessionId = "root"): Workspace
   manualTitle: null,
   createdAt: 1,
   updatedAt: 1,
-  speed: "standard",
   archivedAt: null,
 });
 const transition = (

@@ -31,7 +31,8 @@ export const createWorkflowLaunchSubmission = (deps: WorkflowLaunchDependencies)
         record.selectedModel?.providerId !== attempt.snapshot.model?.providerId ||
         record.selectedModel?.modelId !== attempt.snapshot.model?.modelId ||
         record.selectedModel?.variant !== attempt.snapshot.model?.variant ||
-        record.selectedModel?.profileId !== attempt.snapshot.model?.profileId
+        record.selectedModel?.profileId !== attempt.snapshot.model?.profileId ||
+        record.selectedModel?.speed !== attempt.snapshot.model?.speed
       )
         return yield* launchValidationError(
           "The session model changed after launch. Inspect the session before recovery.",

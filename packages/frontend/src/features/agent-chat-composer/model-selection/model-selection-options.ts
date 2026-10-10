@@ -1,7 +1,6 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { resolveAgentAccentColor, toPrimaryAgentOptions } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
 type ModelSelectionOptions = {
@@ -18,7 +17,13 @@ const findSelectedModelEntry = (
   if (!selectionCatalog || !selectedModelSelection) {
     return null;
   }
-  return findCatalogModel(selectionCatalog, selectedModelSelection);
+  return (
+    selectionCatalog.models.find(
+      (entry) =>
+        entry.providerId === selectedModelSelection.providerId &&
+        entry.modelId === selectedModelSelection.modelId,
+    ) ?? null
+  );
 };
 
 const toAgentProfileOptionsWithSelectedFallback = (

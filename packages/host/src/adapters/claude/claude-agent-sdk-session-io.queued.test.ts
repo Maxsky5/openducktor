@@ -2,8 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { flushQueuedClaudeUserMessage } from "./claude-agent-sdk-session-dispatch";
+import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   createClaudeQueryFixture,
   createClaudeSession,

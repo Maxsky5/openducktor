@@ -103,7 +103,6 @@ test("custom config session ownership and import do not read other installations
     manualTitle: null,
     createdAt: 1,
     updatedAt: 1,
-    speed: "standard",
     archivedAt: null,
   };
   try {

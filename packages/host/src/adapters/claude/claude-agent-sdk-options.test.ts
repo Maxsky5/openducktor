@@ -1,5 +1,3 @@
-import { initialSpeedState } from "@openducktor/core";
-import { SessionTurnAdmission } from "@openducktor/core";
 import { describe, expect, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import * as fsPromises from "node:fs/promises";
@@ -7,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ClaudePolicyFields, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -28,7 +26,6 @@ import type {
 } from "./claude-agent-sdk-types";
 
 const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
-  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -51,7 +48,6 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   runtimeId: "claude-runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
   summary: {
-    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
@@ -82,7 +78,6 @@ const createRepositorySession = (): ClaudeSessionContext => {
     systemPrompt: "Help with this repository",
   };
   session.summary = {
-    ...session.summary,
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
@@ -438,10 +433,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     try {
       const options = await buildOptions(session, undefined, policy);
       expect(options.permissionMode).toBe("auto");
-      expect<unknown>(options.settings).toEqual({
-        permissions: policy.permissions,
-        fastMode: false,
-      });
+      expect<unknown>(options.settings).toEqual({ permissions: policy.permissions });
       expect(options).not.toHaveProperty("allowedTools");
       expect(options.sandbox).toEqual({
         ...policy.sandbox,
@@ -484,9 +476,13 @@ describe("buildClaudeAgentSdkOptions", () => {
       const options = await buildOptions(session, undefined, null, {
         resume: "00000000-0000-4000-8000-000000000001",
       });
-      for (const field of ["permissionMode", "sandbox", "allowDangerouslySkipPermissions"])
+      for (const field of [
+        "permissionMode",
+        "settings",
+        "sandbox",
+        "allowDangerouslySkipPermissions",
+      ])
         expect(options).not.toHaveProperty(field);
-      expect(options.settings).toEqual({ fastMode: false });
       const args = captureSdkLaunchArgs(options);
       expect(args).toContain("--resume=00000000-0000-4000-8000-000000000001");
       expect(args).not.toContain("--permission-mode");
@@ -917,6 +913,24 @@ describe("buildClaudeAgentSdkOptions", () => {
 
     expect(options.model).toBe("claude-sonnet-4-6-20260601");
     expect(options.effort).toBe("xhigh");
+  });
+
+  test.each([
+    [undefined, false],
+    ["fast", true],
+  ])("sets an explicit fast-mode flag for speed %p", async (speed, fastMode) => {
+    const session = createSession();
+    const model: AgentModelSelection = {
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+    };
+    if (speed) model.speed = speed;
+    session.input.model = model;
+
+    const options = await buildOptions(session);
+
+    expect<unknown>(options.settings).toEqual({ fastMode });
   });
 
   test("rejects a Claude effort variant that the SDK does not support", async () => {

@@ -1,4 +1,3 @@
-import { initialSpeedState, SessionTurnAdmission } from "@openducktor/core";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
@@ -65,11 +64,9 @@ const summary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
-  speed: initialSpeedState("standard", "confirmed"),
 } as const satisfies AgentSessionSummary;
 
 const session: ClaudeSessionContext = {
-  turnAdmission: new SessionTurnAdmission(),
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -175,7 +172,6 @@ type MutationBarrier = {
 
 const createHarness = async (
   workingDirectoryDependenciesOverride: RuntimeWorkingDirectoryDependencies = workingDirectoryDependencies,
-  contexts: ReadonlyMap<string, ClaudeSessionContext> = sessionsById,
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
@@ -223,10 +219,6 @@ const createHarness = async (
     return Effect.succeed(summary);
   };
   const service = {
-    setSpeedChoiceRecorder: () => {},
-    holdSessionTurns: () => Effect.die("Unexpected turn hold"),
-    setSessionSpeedState: () => Effect.die("Unexpected speed state"),
-    updateSessionSpeed: () => Effect.die("Unexpected speed change"),
     ...unexpectedRuntimeQueries,
     loadToolCatalog: () => Effect.die("Unexpected Claude tool catalog read"),
     inspectSessionForImport: (
@@ -312,7 +304,7 @@ const createHarness = async (
     liveSessionLifecycle,
     service,
     sessionStore: {
-      get: (externalSessionId) => contexts.get(externalSessionId),
+      get: (externalSessionId) => sessionsById.get(externalSessionId),
     },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
@@ -392,58 +384,6 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
-  test.each(["current", "other repo", "other directory", "other runtime"])(
-    "projects only the current session model (%s)",
-    async (owner) => {
-      const context: ClaudeSessionContext = {
-        ...session,
-        input: {
-          ...session.input,
-          repoPath: owner === "other repo" ? "/other-repo" : session.input.repoPath,
-          workingDirectory:
-            owner === "other directory" ? "/other-dir" : session.input.workingDirectory,
-        },
-        runtimeId: owner === "other runtime" ? "runtime-2" : session.runtimeId,
-        model: { providerId: "claude", modelId: "opus", variant: "high" },
-      };
-      const harness = await createHarness(
-        workingDirectoryDependencies,
-        new Map([["session-1", context]]),
-      );
-      await Effect.runPromise(harness.adapter.startSession(startInput));
-      const first = await Effect.runPromise(harness.adapter.readSnapshot(sessionRef));
-      expect(first).toMatchObject({ type: "live" });
-      if (owner === "current") {
-        expect(first).toMatchObject({
-          session: { model: { providerId: "claude", modelId: "opus", variant: "high" } },
-        });
-        expect(harness.changes).toContainEqual(
-          expect.objectContaining({
-            type: "session_upsert",
-            snapshot: expect.objectContaining({
-              model: { providerId: "claude", modelId: "opus", variant: "high" },
-            }),
-          }),
-        );
-      } else if (first.type === "live") expect(first.session.model).toBeUndefined();
-      context.model = { providerId: "claude", modelId: "sonnet", variant: "low" };
-      const read = await Effect.runPromise(harness.adapter.readSnapshot(sessionRef));
-      const list = await Effect.runPromise(harness.adapter.listSnapshots());
-      if (owner === "current") {
-        expect(read).toMatchObject({
-          session: { model: { providerId: "claude", modelId: "sonnet", variant: "low" } },
-        });
-        expect(list).toMatchObject([
-          { model: { providerId: "claude", modelId: "sonnet", variant: "low" } },
-        ]);
-      } else {
-        if (read.type === "live") expect(read.session.model).toBeUndefined();
-        expect(list[0]?.model).toBeUndefined();
-      }
-      await Effect.runPromise(harness.adapter.releaseRuntime());
-    },
-  );
-
   test("delegates interrupted-turn resume to the Claude service", async () => {
     const harness = await createHarness(workingDirectoryDependencies);
     const calls: Array<{ input: unknown; runtimeId: string }> = [];
@@ -2163,7 +2103,6 @@ describe("Claude host live-session adapter", () => {
             updatedAt: null,
           },
           selectedModel: null,
-          speed: null,
           attach: Effect.succeed({ ...otherSummary, externalSessionId: "session-3" }),
         }),
       );

@@ -1,10 +1,3 @@
-import { launchClaudeSession } from "./claude-agent-sdk-session-launch";
-import { bindClaudeSpeedWriter } from "./claude-session-speed-observation";
-import { ClaudeSessionSpeedControl } from "./claude-session-speed-control";
-import type {
-  AgentSessionControlUpdateSpeedInput,
-  AgentSessionSpeedState,
-} from "@openducktor/contracts";
 import { updateClaudeSessionModel } from "./claude-session-model-update";
 import {
   resumeRetainedClaudeSession,
@@ -12,7 +5,6 @@ import {
 } from "./claude-session-title-update";
 import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
-import type { AgentSessionSettingsRef } from "../../ports/agent-session-live-adapter-port";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -42,6 +34,7 @@ import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
 import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
+import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
 import {
   type ClaudeWorkspaceFileSearch,
@@ -59,6 +52,10 @@ import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
 } from "./claude-agent-sdk-pending-input";
+import {
+  createClaudeAgentSdkSession,
+  type CreateClaudeAgentSdkSessionInput,
+} from "./claude-agent-sdk-session-factory";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
@@ -97,7 +94,6 @@ const defaultClaudeAgentSdkServiceDependencies: ClaudeContextUsageDependencies =
 };
 
 class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
-  private readonly speedControl: ClaudeSessionSpeedControl;
   private readonly now: () => string;
   private readonly randomId: () => string;
   private readonly sessionStore: ClaudeSessionStore;
@@ -113,17 +109,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     const sessionStoreInput: Parameters<typeof createClaudeAgentSdkSessionStore>[0] = {
       now: this.now,
     };
-    if (input.emit) sessionStoreInput.emit = input.emit;
+    if (input.emit) {
+      sessionStoreInput.emit = input.emit;
+    }
     this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
     this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
-    this.speedControl = new ClaudeSessionSpeedControl({
-      findSession: (id) => this.sessionStore.get(id),
-      requireSession: (id) => requireClaudeSession(this.sessionStore, id),
-      createSession: (request, runtimeId, launch) => this.createSession(request, runtimeId, launch),
-      now: this.now,
-      emit: this.emit.bind(this),
-      onBackgroundFailure: input.onBackgroundFailure,
-    });
     this.untrackFileSearchSessions = trackClaudeFileSearchSessions({
       fileSearch: this.fileSearch,
       sessionStore: this.sessionStore,
@@ -148,15 +138,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       Effect.flatMap((scope) => {
         const existing = this.sessionStore.get(input.externalSessionId);
         if (existing) {
-          return Effect.gen({ self: this }, function* () {
-            yield* fromPromise("claudeRuntime.resumeSession", async () =>
-              assertClaudeSessionRef(existing, input, "resume"),
-            );
-            yield* this.speedControl.restoreSpeed(existing, input.speed);
-            return yield* fromPromise("claudeRuntime.resumeSession", () =>
-              resumeRetainedClaudeSession({ runtimeId, scope, session: existing }),
-            );
-          });
+          return fromPromise("claudeRuntime.resumeSession", () =>
+            resumeRetainedClaudeSession({ request: input, runtimeId, scope, session: existing }),
+          );
         }
         return this.createSession(
           input,
@@ -193,7 +177,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           ).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
-                if (existing) this.sessionStore.close(existing);
+                if (existing) {
+                  this.sessionStore.close(existing);
+                }
               }),
             ),
             Effect.mapError((cause) =>
@@ -225,7 +211,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   releaseSession(input: SessionRef) {
     return fromPromise("claudeRuntime.releaseSession", async () => {
       const session = this.sessionStore.get(input.externalSessionId);
-      if (!session) return;
+      if (!session) {
+        return;
+      }
       assertClaudeSessionRef(session, input, "release");
       this.sessionStore.close(session);
       await flushClaudeLiveContextUsageRefresh(session);
@@ -296,16 +284,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       return {
         metadata,
         selectedModel,
-        speed: null,
         attach: this.createSession(
           {
             ...input,
             runtimeKind: "claude",
-            model: selectedModel ?? undefined,
             sessionScope: { kind: "repository" },
             runtimePolicy: { kind: "claude" },
             systemPrompt: "",
-            speed: null,
           },
           runtimeId,
           {
@@ -326,27 +311,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  private speedChoiceRecorder?: Parameters<ClaudeAgentSdkService["setSpeedChoiceRecorder"]>[0];
-
-  setSpeedChoiceRecorder(
-    recorder: Parameters<ClaudeAgentSdkService["setSpeedChoiceRecorder"]>[0],
-  ): void {
-    this.speedChoiceRecorder = recorder;
-  }
-
-  holdSessionTurns(input: AgentSessionSettingsRef, runtimeId: string) {
-    return this.speedControl.holdSessionTurns(input, runtimeId);
-  }
-  setSessionSpeedState(input: SessionRef, state: AgentSessionSpeedState) {
-    return this.speedControl.setSessionSpeedState(input, state);
-  }
-  updateSessionSpeed(
-    input: AgentSessionControlUpdateSpeedInput,
-    retainedState?: AgentSessionSpeedState,
-  ) {
-    return this.speedControl.updateSessionSpeed(input, retainedState);
-  }
-
   updateSessionTitle(input: AgentSessionControlUpdateTitleInput) {
     return updateClaudeSessionTitle(input, { sessionStore: this.sessionStore });
   }
@@ -363,27 +327,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           try: () => assertClaudeSessionRef(session, input, "send message"),
           catch: (cause) => toHostOperationError(cause, "claudeRuntime.prepare-send"),
         });
-        bindClaudeSpeedWriter(session, this.sessionStore, input, this.speedChoiceRecorder);
-        yield* this.speedControl.restoreSpeed(session, input.speed);
         return session;
       }).pipe(Effect.mapError(messageSubmissionRejected("claudeRuntime.prepare-send")));
-      let enteredSend = false;
-      return yield* fromPromise("claudeRuntime.sendUserMessage", () => {
-        const send = () => {
-          enteredSend = true;
-          return sendClaudeUserMessage({
-            messageInput: input,
-            session,
-            now: this.now,
-            randomId: this.randomId,
-            emit: this.emit.bind(this),
-          });
-        };
-        return session.turnAdmission.run(send);
-      }).pipe(
-        Effect.mapError((cause) =>
-          enteredSend ? cause : messageSubmissionRejected("claudeRuntime.prepare-send")(cause),
-        ),
+      return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
+        sendClaudeUserMessage({
+          messageInput: input,
+          session,
+          now: this.now,
+          randomId: this.randomId,
+          emit: this.emit.bind(this),
+        }),
       );
     });
   }
@@ -448,15 +401,59 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     sessionInput: ClaudeSessionLaunchInput,
     onContinuationAdmission?: () => void,
   ) {
-    return launchClaudeSession(input, runtimeId, sessionInput, onContinuationAdmission, {
-      loadRuntimeCatalog: (request) => this.loadRuntimeCatalog(request),
-      serviceInput: this.input,
-      fileSearch: this.fileSearch,
-      now: this.now,
-      randomId: this.randomId,
-      sessionStore: this.sessionStore,
-      emit: this.emit.bind(this),
-      recordSpeedChoice: this.speedChoiceRecorder,
+    return Effect.gen({ self: this }, function* () {
+      const isNew = !sessionInput.options.resume || sessionInput.options.forkSession === true;
+      const claudePolicy = isNew
+        ? yield* this.input.launchPolicy.resolve({
+            role: input.sessionScope.kind === "workflow" ? input.sessionScope.role : null,
+          })
+        : null;
+      const launchSessionInput = { ...sessionInput, claudePolicy };
+      const resumeSessionId = sessionInput.options.resume;
+      const initialTodos = resumeSessionId
+        ? yield* fromPromise("claudeRuntime.loadSessionTodos", () =>
+            loadClaudeTodos({
+              ...input,
+              externalSessionId: resumeSessionId,
+            }),
+          )
+        : [];
+      const mcpCommand = yield* resolveOpenDucktorMcpCommand({
+        runtimeDistribution: this.input.runtimeDistribution,
+        toolDiscovery: this.input.toolDiscovery,
+      }).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "claudeRuntime.resolveMcpCommand", {
+            repoPath: input.repoPath,
+          }),
+        ),
+      );
+      const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
+      yield* fromPromise("claudeRuntime.prewarmFileSearch", async () => {
+        this.fileSearch.prewarm(input.workingDirectory);
+      });
+      const createSessionInput: CreateClaudeAgentSdkSessionInput = {
+        emit: this.emit.bind(this),
+        initialTodos,
+        input,
+        now: this.now,
+        randomId: this.randomId,
+        resolvedDependencies: {
+          claudeExecutablePath: this.input.claudeExecutablePath,
+          mcpBridgeConnection,
+          mcpCommand,
+        },
+        runtimeId,
+        serviceInput: this.input,
+        sessionInput: launchSessionInput,
+        sessionStore: this.sessionStore,
+      };
+      if (onContinuationAdmission) {
+        createSessionInput.onContinuationAdmission = onContinuationAdmission;
+      }
+      return yield* fromPromise("claudeRuntime.createSession", () =>
+        createClaudeAgentSdkSession(createSessionInput),
+      );
     });
   }
 

@@ -82,6 +82,9 @@ export const normalizePersistedSelection = (
   if (selection.profileId) {
     normalizedSelection.profileId = selection.profileId;
   }
+  if (selection.speed) {
+    normalizedSelection.speed = selection.speed;
+  }
   return normalizedSelection;
 };
 

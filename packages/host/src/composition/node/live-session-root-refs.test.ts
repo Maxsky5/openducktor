@@ -44,7 +44,6 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       manualTitle: null,
       createdAt: 1,
       updatedAt: 1,
-      speed: "standard",
       archivedAt: null,
     };
     for (const session of [chat, { ...chat, id: "draft", externalSessionId: null }])

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
-import { initialSpeedState } from "@openducktor/core";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
 import { toClaudeSendInput } from "../../adapters/agent-sessions/claude-live-session-service-inputs";
@@ -127,7 +126,6 @@ function createSession(ref: AgentSessionLiveRef): ClaudeSession {
       sessionScope: { kind: "repository" },
     },
     summary: {
-      speed: initialSpeedState("standard", "confirmed"),
       externalSessionId: ref.externalSessionId,
       runtimeKind: "claude",
       workingDirectory: ref.workingDirectory,
@@ -143,7 +141,7 @@ async function publishSdkMessage(
   session: ClaudeSession,
   message: SDKMessage,
 ): Promise<void> {
-  const projection = createClaudeLiveSessionState(() => session.model);
+  const projection = createClaudeLiveSessionState();
   const events: Parameters<typeof h.emit>[0][] = [];
   handleClaudeSdkMessage({
     session,

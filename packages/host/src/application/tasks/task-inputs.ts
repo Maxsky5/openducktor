@@ -33,7 +33,6 @@ export type AgentSessionUpsertInput = TaskIdInput & {
 export type AgentSessionUpdateModelInput = TaskIdInput & {
   identity: AgentSessionIdentity;
   selectedModel: AgentSessionRecord["selectedModel"];
-  speed?: string | null;
 };
 
 export type AgentSessionDeleteInput = TaskIdInput & {

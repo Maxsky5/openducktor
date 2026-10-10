@@ -40,7 +40,6 @@ export type CodexTurnLifecycleContext = {
   emitUserMessage(event: AcceptedAgentUserMessage): AcceptedAgentUserMessage;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   codexPolicyForSession(session: CodexSessionState): CodexEffectivePolicy;
-  prepareSpeed?: (session: CodexSessionState, model: AgentModelSelection) => Promise<void>;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
@@ -191,7 +190,7 @@ type CodexTurnStart = {
   readonly cancelExpectedEcho: (() => void) | null;
 };
 
-const prepareCodexTurn = async (
+const runCodexTurn = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   parts: AgentUserMessagePart[],
@@ -264,13 +263,21 @@ const prepareCodexTurn = async (
     model,
   };
   context.activeTurnsBySessionId.set(session.threadId, activeTurnState);
+  context.setSessionLiveStatus(session, {
+    classification: "running",
+  });
 
   const client = context.clientForRuntime(session.runtimeId);
   let policy: CodexEffectivePolicy;
   try {
     policy = context.codexPolicyForSession(session);
+  } catch (error) {
+    turnSettled = true;
+    context.activeTurnsBySessionId.delete(session.threadId);
+    throw new CodexMessageRejectedError(error instanceof Error ? error : new Error(String(error)));
+  }
+  try {
     await context.validateModel(client, session.runtimeId, model);
-    await context.prepareSpeed?.(session, model);
     requireRetainedTurnSession(context, session);
   } catch (error) {
     activeTurnState.markTurnSettled();
@@ -296,7 +303,6 @@ const prepareCodexTurn = async (
   const turnInput: Parameters<typeof client.turnStart>[0] = {
     threadId: session.threadId,
     input,
-    serviceTier: session.serviceTier ?? null,
     ...toTransportModelSelection(model),
   };
   if (!session.preserveNativeSettings) {
@@ -304,9 +310,6 @@ const prepareCodexTurn = async (
     turnInput.approvalsReviewer = codexApprovalsReviewer(policy);
     turnInput.sandboxPolicy = sandboxPolicy;
   }
-  context.setSessionLiveStatus(session, {
-    classification: "running",
-  });
   const turnStartPromise = client
     .turnStart(turnInput)
     .then((result) => {
@@ -341,25 +344,6 @@ const prepareCodexTurn = async (
     context.emitUserMessage(acceptedUserMessage);
   }
   return { acceptedUserMessage, turnStartPromise, cancelExpectedEcho };
-};
-
-const runCodexTurn = (
-  ...args: Parameters<typeof prepareCodexTurn>
-): ReturnType<typeof prepareCodexTurn> => {
-  const session = args[0].sessions.get(args[1]);
-  if (!session) return Promise.reject(new Error(`Unknown Codex session '${args[1]}'.`));
-  let enteredPreparation = false;
-  return session.turnAdmission
-    .run(() => {
-      enteredPreparation = true;
-      return prepareCodexTurn(...args);
-    })
-    .catch((error) => {
-      if (enteredPreparation) throw error;
-      throw new CodexMessageRejectedError(
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    });
 };
 
 export const startCodexTurnForSession = async (

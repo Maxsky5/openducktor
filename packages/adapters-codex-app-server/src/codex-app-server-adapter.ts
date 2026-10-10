@@ -1,12 +1,3 @@
-import { codexServiceTier, CodexSessionSpeedControl } from "./codex-session-speed";
-import { CodexMessageRejectedError } from "./codex-message-rejected-error";
-import { initialSpeedState } from "@openducktor/core";
-import type {
-  AgentSessionLiveRef,
-  AgentSessionControlUpdateSpeedInput,
-  AgentSessionSpeedState,
-  AgentSpeedRuntimeObservation,
-} from "@openducktor/contracts";
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
@@ -260,7 +251,6 @@ export class CodexAppServerAdapter
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
-  private readonly speed: CodexSessionSpeedControl;
   private readonly threadInventory = new CodexThreadInventoryReader();
   private readonly generatedImages: CodexGeneratedImageResolver;
   private readonly subagents = new CodexSubagentLinkState();
@@ -275,20 +265,10 @@ export class CodexAppServerAdapter
     );
     const onLiveSessionMutation = options.onLiveSessionMutation;
     const onCatalogInvalidated = options.onCatalogInvalidated;
-    this.speed = new CodexSessionSpeedControl({
-      runtimeClients: this.runtimeClients,
-      models: this.models,
-      recordSpeedChoice: options.recordSpeedChoice,
-      isCurrent: (session) => this.localSessions.get(session.threadId) === session,
-    });
     const runtimeEventsDepsBase: Omit<
       ConstructorParameters<typeof CodexRuntimeSessionEvents>[0],
       "subscribeEvents" | "onRuntimeEventQueueFailure"
     > = {
-      observeSpeed: (session, tier, model, isCurrent) =>
-        this.speed.observe(session, tier, model, isCurrent),
-      applySpeedReport: (session, tier, model, isCurrent) =>
-        this.speed.applyReport(session, tier, model, isCurrent),
       prepareImageGenerations: options.prepareImageGenerations,
       respondServerRequest: options.respondServerRequest,
       sessions: {
@@ -349,7 +329,6 @@ export class CodexAppServerAdapter
       runtimeEvents: this.runtimeEvents,
     });
     this.contextUsageLoader = new CodexContextUsageLoader({
-      readSpeedChoice: (session, tier) => this.speed.reportedChoice(session, tier),
       runtimeClients: this.runtimeClients,
       runtimeEvents: this.runtimeEvents,
       localSessions: this.localSessions,
@@ -480,14 +459,7 @@ export class CodexAppServerAdapter
       }),
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
-    const serviceTier = await this.speed.tier(
-      client,
-      runtimeId,
-      model.modelId,
-      input.speed ?? "standard",
-    );
     const response = await client.threadStart({
-      serviceTier,
       ...codexTransportPolicy(policy),
       config,
       cwd: input.workingDirectory,
@@ -495,7 +467,6 @@ export class CodexAppServerAdapter
       historyMode: "paginated",
       model: transportModel.model,
     });
-    this.speed.assertTierAccepted(serviceTier, response.serviceTier);
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
     const session = sessionStateFromThreadStart(
@@ -505,11 +476,6 @@ export class CodexAppServerAdapter
       response,
       sessionPolicy.kind === "repository" ? undefined : title,
     );
-    session.serviceTier = serviceTier;
-    session.summary.speed = {
-      ...initialSpeedState(input.speed ?? "standard", "confirmed"),
-      availability: this.speed.availability,
-    };
     const { summary } = session;
     session.firstTurnHistory = new CodexFirstTurnHistory();
     this.localSessions.remember(session);
@@ -551,33 +517,16 @@ export class CodexAppServerAdapter
         const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
         await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
         const config = await this.threadConfig(input.repoPath, sessionPolicy);
-        const request: CodexAppServerThreadResumeParams = {
+        const response = await client.threadResume({
           config,
           threadId: input.externalSessionId,
           excludeTurns: true,
-        };
-        if (input.speed !== null)
-          request.serviceTier = await this.speed.tier(
-            client,
-            runtimeId,
-            (input.model ?? current.model)?.modelId ?? "",
-            input.speed ?? "standard",
-          );
-        const response = await client.threadResume(request);
-        this.speed.assertTierAccepted(request.serviceTier, response.serviceTier);
+        });
         if (
           response.thread.id !== input.externalSessionId ||
           response.cwd !== input.workingDirectory
         )
           throw new Error("Codex resumed a different conversation or directory.");
-        current.serviceTier = codexServiceTier(response.serviceTier);
-        current.summary.speed = initialSpeedState(
-          input.speed === null
-            ? await this.speed.reportedChoice(current, response.serviceTier)
-            : (input.speed ?? "standard"),
-          "confirmed",
-        );
-        current.turnAdmission.setBlocked(current.summary.speed.choice === null);
         const previousTitleState = this.freshTitleState.get(current);
         this.freshTitleState.set(current, "pending");
         let firstTurnCompleted: boolean;
@@ -633,10 +582,6 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
-    const serviceTier =
-      input.speed === null
-        ? undefined
-        : await this.speed.tier(client, runtimeId, model.modelId, input.speed ?? "standard");
     const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
       config: await this.threadConfig(input.repoPath, sessionPolicy),
@@ -645,7 +590,6 @@ export class CodexAppServerAdapter
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     };
-    if (serviceTier !== undefined) threadResumeInput.serviceTier = serviceTier;
     const checkFirstTurn =
       sessionPolicy.kind === "repository" &&
       (!current || this.freshTitleState.get(current) === "pending");
@@ -653,17 +597,7 @@ export class CodexAppServerAdapter
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
     const response = await client.threadResume(threadResumeInput);
-    this.speed.assertTierAccepted(threadResumeInput.serviceTier, response.serviceTier);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    session.serviceTier = codexServiceTier(response.serviceTier);
-    session.summary.speed = initialSpeedState(
-      input.speed === null
-        ? await this.speed.reportedChoice(session, response.serviceTier)
-        : (input.speed ?? "standard"),
-      "confirmed",
-    );
-    if (current) session.turnAdmission = current.turnAdmission;
-    session.turnAdmission.setBlocked(session.summary.speed.choice === null);
     if (!current) this.localSessions.remember(session);
     if (checkFirstTurn) this.freshTitleState.set(session, "pending");
     let firstTurnCompleted = true;
@@ -692,8 +626,6 @@ export class CodexAppServerAdapter
   async continueInterruptedTurn(
     input: ContinueInterruptedAgentTurnInput,
   ): Promise<AgentSessionSummary> {
-    if (input.speed === null)
-      throw new Error("The native speed choice is unknown. Set fast mode before continuing work.");
     assertCodexRuntimePolicyBinding(input, "continue Codex turn");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input.sessionScope,
@@ -814,18 +746,9 @@ export class CodexAppServerAdapter
     if (input.systemPrompt && !preserveNativeSettings) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
-    threadResumeInput.serviceTier = await this.speed.tier(
-      client,
-      runtimeId,
-      model.modelId,
-      input.speed ?? "standard",
-    );
     const response = await client.threadResume(threadResumeInput);
-    this.speed.assertTierAccepted(threadResumeInput.serviceTier, response.serviceTier);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
-    session.serviceTier = codexServiceTier(response.serviceTier);
-    session.summary.speed = initialSpeedState(input.speed ?? "standard", "confirmed");
     session.preserveNativeSettings = preserveNativeSettings;
     const repositoryTitle = sessionPolicy.kind === "repository" ? sessionPolicy.title : undefined;
     try {
@@ -867,14 +790,7 @@ export class CodexAppServerAdapter
       }),
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
-    const serviceTier = await this.speed.tier(
-      client,
-      runtimeId,
-      model.modelId,
-      input.speed ?? "standard",
-    );
     const response = await client.threadFork({
-      serviceTier,
       ...codexTransportPolicy(policy),
       config,
       threadId: input.parentExternalSessionId,
@@ -883,15 +799,9 @@ export class CodexAppServerAdapter
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     });
-    this.speed.assertTierAccepted(serviceTier, response.serviceTier);
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
-    session.serviceTier = serviceTier;
-    session.summary.speed = {
-      ...initialSpeedState(input.speed ?? "standard", "confirmed"),
-      availability: this.speed.availability,
-    };
     const { summary } = session;
     this.localSessions.remember(session);
     if (title !== undefined) {
@@ -947,50 +857,6 @@ export class CodexAppServerAdapter
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
     requireNativeAdmission = false,
   ): Promise<AcceptedAgentUserMessage> {
-    try {
-      if (
-        session.summary.speed?.synchronization === "uncertain" ||
-        (input.speed === null && session.summary.speed?.choice === null)
-      )
-        throw new Error("Set fast mode explicitly before sending another message.");
-      if (
-        input.speed !== null &&
-        (session.summary.speed?.synchronization !== "confirmed" ||
-          session.summary.speed.choice !== (input.speed ?? "standard"))
-      ) {
-        const release = await this.runtimeEvents.holdSessionSettings(session);
-        const choice = input.speed ?? "standard";
-        try {
-          const client = this.runtimeClients.clientForRuntime(session.runtimeId);
-          const tier = await this.speed.tier(
-            client,
-            session.runtimeId,
-            requireModelSelection(input.model ?? session.model).modelId,
-            choice,
-          );
-          await this.speed.applyTier(session, tier);
-          session.serviceTier = tier;
-          session.summary.speed = initialSpeedState(choice, "confirmed");
-          session.turnAdmission.setBlocked(false);
-        } catch (cause) {
-          session.summary.speed = {
-            ...initialSpeedState(choice),
-            reason: {
-              code: "restore_failed",
-              message: "Could not restore fast mode. Turn it off or resolve the runtime error.",
-            },
-          };
-          session.turnAdmission.setBlocked(true);
-          throw cause;
-        } finally {
-          await release();
-        }
-      }
-    } catch (error) {
-      throw new CodexMessageRejectedError(
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    }
     let resolvedQuestionRequestIds: readonly string[];
     if (systemInvocation.kind === "manual_session_compaction") {
       resolvedQuestionRequestIds = [];
@@ -1010,18 +876,11 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
-      let enteredCompaction = false;
       try {
-        await session.turnAdmission.run(() => {
-          enteredCompaction = true;
-          return client.threadCompactStart({ threadId: session.threadId });
-        });
+        await client.threadCompactStart({ threadId: session.threadId });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const failure = new Error(
-          `Codex failed to compact thread '${session.threadId}': ${message}`,
-        );
-        throw enteredCompaction ? failure : new CodexMessageRejectedError(failure);
+        throw new Error(`Codex failed to compact thread '${session.threadId}': ${message}`);
       }
       return acceptedUserMessage;
     }
@@ -1044,11 +903,8 @@ export class CodexAppServerAdapter
 
   async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "load runtime catalog");
-    const readModels = async (): Promise<AgentModelCatalog> => {
-      const catalog = toCatalog(await this.models.list(client, runtimeId));
-      catalog.speedAvailability = this.speed.availability;
-      return catalog;
-    };
+    const readModels = async (): Promise<AgentModelCatalog> =>
+      toCatalog(await this.models.list(client, runtimeId));
     const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> =>
       slashCommandCatalogSchema.parse({
         commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
@@ -1295,23 +1151,18 @@ export class CodexAppServerAdapter
     );
   }
 
-  async openExistingSession(
-    input: PolicyBoundSessionRef & { speed?: string | null | undefined },
-  ): Promise<RuntimeSessionImportSource> {
+  async openExistingSession(input: PolicyBoundSessionRef): Promise<RuntimeSessionImportSource> {
     const { metadata, session } = await this.resumeExistingThread(input);
     return {
       metadata,
       selectedModel: session.model ? { ...session.model, runtimeKind: "codex" } : null,
-      speed: session.summary.speed?.choice ?? null,
       attach: async () => {
         this.localSessions.remember(session);
       },
     };
   }
 
-  private async resumeExistingThread(
-    input: PolicyBoundSessionRef & { speed?: string | null | undefined },
-  ) {
+  private async resumeExistingThread(input: PolicyBoundSessionRef) {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
     const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -1321,29 +1172,14 @@ export class CodexAppServerAdapter
       "open existing Codex session",
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
-    const request: CodexAppServerThreadResumeParams = {
+    const response = await client.threadResume({
       config,
       threadId: input.externalSessionId,
       excludeTurns: true,
-    };
-    if (input.speed !== null && input.speed !== undefined)
-      request.serviceTier = await this.speed.tier(
-        client,
-        runtimeId,
-        input.model?.modelId ?? "",
-        input.speed ?? "standard",
-      );
-    const response = await client.threadResume(request);
-    this.speed.assertTierAccepted(request.serviceTier, response.serviceTier);
+    });
     if (response.thread.id !== input.externalSessionId || response.cwd !== input.workingDirectory)
       throw new Error("Codex resumed a different conversation or directory.");
     const session = sessionStateFromExistingThread(input, runtimeId, undefined, response);
-    session.serviceTier = codexServiceTier(response.serviceTier);
-    session.summary.speed = initialSpeedState(
-      await this.speed.reportedChoice(session, response.serviceTier),
-      "confirmed",
-    );
-    session.turnAdmission.setBlocked(session.summary.speed.choice === null);
     session.preserveNativeSettings = true;
     session.summary = { ...session.summary, title: metadata.title ?? input.externalSessionId };
     return { client, metadata, response, session };
@@ -1359,58 +1195,11 @@ export class CodexAppServerAdapter
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    session.settingsRevision = (session.settingsRevision ?? 0) + 1;
     if (input.model) {
       session.model = input.model;
       return;
     }
     delete session.model;
-  }
-
-  async holdSessionTurns(
-    input: Omit<AgentSessionControlUpdateSpeedInput, "speed">,
-    binding: PolicyBoundSessionRef,
-  ): Promise<() => Promise<void>> {
-    if (!this.localSessions.get(input.externalSessionId)) {
-      const handle = await this.openExistingSession({ ...binding, speed: null });
-      await handle.attach();
-    }
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    assertCodexSessionRef(session, input, "hold next turn admission for");
-    return this.runtimeEvents.holdSessionSettings(session);
-  }
-
-  setSessionSpeedState(input: AgentSessionLiveRef, state: AgentSessionSpeedState): void {
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    assertCodexSessionRef(session, input, "confirm fast mode for");
-    session.summary.speed = state;
-    session.turnAdmission.setBlocked(
-      state.synchronization !== "confirmed" || state.choice === null,
-    );
-  }
-
-  async updateSessionSpeed(
-    input: AgentSessionControlUpdateSpeedInput,
-  ): Promise<AgentSpeedRuntimeObservation> {
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    assertCodexSessionRef(session, input, "change fast mode for");
-    const client = this.runtimeClients.clientForRuntime(session.runtimeId);
-    const tier = await this.speed.tier(
-      client,
-      session.runtimeId,
-      session.model?.modelId ?? "",
-      input.speed,
-    );
-    await this.speed.applyTier(session, tier);
-    session.serviceTier = tier;
-    return {
-      reportedChoice: input.speed,
-      availability: this.speed.availability,
-      processing: { status: input.speed === "standard" ? "off" : "unknown" },
-    };
   }
 
   async updateSessionTitle(
@@ -1466,9 +1255,7 @@ export class CodexAppServerAdapter
       : resolveCodexPolicyBoundSession({ ...resolution, bindMissing: false });
   }
 
-  private async ensureSessionState(
-    input: PolicyBoundSessionRef & { speed?: string | null | undefined },
-  ): Promise<AgentSessionSummary> {
+  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "ensure Codex session state");
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -1500,14 +1287,6 @@ export class CodexAppServerAdapter
     if (model) {
       threadResumeInput.model = toTransportModelSelection(model).model;
     }
-    if ((input.speed !== null && input.speed !== undefined) || "parts" in input) {
-      threadResumeInput.serviceTier = await this.speed.tier(
-        client,
-        runtimeId,
-        model?.modelId ?? "",
-        input.speed ?? "standard",
-      );
-    }
     const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -1516,10 +1295,6 @@ export class CodexAppServerAdapter
         tolerateFailure: true,
       });
     }
-    const choice = await this.speed.reportedChoice(session, response.serviceTier);
-    session.serviceTier = codexServiceTier(response.serviceTier);
-    session.summary.speed = initialSpeedState(choice, choice === null ? "unapplied" : "confirmed");
-    session.turnAdmission.setBlocked(choice === null);
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
       session,
@@ -1900,7 +1675,6 @@ export class CodexAppServerAdapter
       pendingApprovals,
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
-      speed: session.summary.speed,
     };
     if (session.summary.sessionAssociation.kind === "repository") {
       snapshot.repositoryScope = session.summary.sessionAssociation;
@@ -2138,7 +1912,6 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
       validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),
-      prepareSpeed: (session, model) => this.speed.prepareTurn(session, model),
       ensureRuntimeEventSubscription: (runtimeId) =>
         this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId),
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>

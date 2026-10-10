@@ -1,26 +1,11 @@
-import {
-  assertClaudeSessionAcceptingMessages,
-  pushClaudeSdkUserMessage,
-  applyClaudeSessionModel,
-  restoreClaudeSessionModelAfterQueuedTurns,
-  rollbackClaudeSessionModel,
-  flushQueuedClaudeUserMessage,
-} from "./claude-agent-sdk-session-dispatch";
-import {
-  observeClaudeSessionModel,
-  prepareClaudeTurnSpeed,
-} from "./claude-session-speed-preparation";
-import {
-  commitClaudeSessionChoiceReport,
-  observeClaudeSpeed,
-} from "./claude-session-speed-observation";
-import { renameSession } from "@anthropic-ai/claude-agent-sdk";
+import { renameSession, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AcceptedAgentUserMessage,
+  type AgentModelSelection,
   classifySystemSlashCommandInvocation,
   type SendAgentUserMessageInput,
 } from "@openducktor/core";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
 import {
   flushClaudeLiveContextUsageRefresh,
@@ -31,11 +16,15 @@ import { isClaudeContinuationAdmission } from "./claude-agent-sdk-continuation-a
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
-import { assertClaudeSessionModelUpdateSupported } from "./claude-agent-sdk-session-model";
+import {
+  assertClaudeSessionModelUpdateSupported,
+  toClaudeFlagSettings,
+} from "./claude-agent-sdk-session-model";
 import {
   canFlushQueuedClaudeUserMessage,
   canPushSdkUserMessageNow,
   canRestoreClaudeSessionModelAfterQueuedTurns,
+  hasActiveSdkUserTurn,
 } from "./claude-agent-sdk-session-queue-policy";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
@@ -47,6 +36,130 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
+
+const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
+  if (session.activity !== "stopped") {
+    return;
+  }
+  throw new HostValidationError({
+    field: "externalSessionId",
+    message:
+      "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
+    details: {
+      externalSessionId: session.externalSessionId,
+      activity: session.activity,
+    },
+  });
+};
+
+const pushClaudeSdkUserMessage = (session: ClaudeSession, message: SDKUserMessage): void => {
+  session.activeSdkUserTurnCount += 1;
+  session.sdkState = "running";
+  try {
+    session.queue.push(message);
+  } catch (error) {
+    session.activeSdkUserTurnCount -= 1;
+    throw error;
+  }
+};
+
+export const applyClaudeSessionModel = async (
+  session: ClaudeSession,
+  model: AgentModelSelection | null | undefined,
+  force = false,
+): Promise<void> => {
+  assertClaudeSessionAcceptingMessages(session);
+  const nextModel = model ?? undefined;
+  assertClaudeSessionModelUpdateSupported(session, nextModel);
+
+  const previousModel = session.model;
+  const modelChanged = force || previousModel?.modelId !== nextModel?.modelId;
+  const changed = {
+    effort: force || previousModel?.variant !== nextModel?.variant,
+    // An unknown native speed may come from user defaults, so set it explicitly.
+    speed: force || previousModel === undefined || previousModel.speed !== nextModel?.speed,
+  };
+  const settingsChanged = changed.effort || changed.speed;
+  try {
+    if (modelChanged) {
+      await session.query.setModel(nextModel?.modelId);
+      assertClaudeSessionAcceptingMessages(session);
+    }
+    if (settingsChanged) {
+      await session.query.applyFlagSettings(
+        toClaudeFlagSettings(nextModel, session.externalSessionId, changed),
+      );
+      assertClaudeSessionAcceptingMessages(session);
+    }
+  } catch (cause) {
+    if (isClaudeSessionStopped(session)) {
+      throw cause;
+    }
+    const rollbackFailures: string[] = [];
+    if (settingsChanged) {
+      try {
+        await session.query.applyFlagSettings(
+          toClaudeFlagSettings(previousModel, session.externalSessionId, changed),
+        );
+      } catch (rollbackCause) {
+        rollbackFailures.push(`settings: ${errorMessage(rollbackCause)}`);
+      }
+    }
+    if (modelChanged) {
+      try {
+        await session.query.setModel(previousModel?.modelId);
+      } catch (rollbackCause) {
+        rollbackFailures.push(`model: ${errorMessage(rollbackCause)}`);
+      }
+    }
+    if (rollbackFailures.length > 0) {
+      throw new HostOperationError({
+        operation: "claude.session.model.update",
+        message: `Claude model update failed and rollback was incomplete: ${rollbackFailures.join(
+          "; ",
+        )}`,
+        cause,
+        details: {
+          externalSessionId: session.externalSessionId,
+          rollbackFailures,
+        },
+      });
+    }
+    throw cause;
+  }
+  session.model = nextModel;
+};
+
+const restoreClaudeSessionModelAfterQueuedTurns = async (session: ClaudeSession): Promise<void> => {
+  const model = session.modelAfterQueuedTurns;
+  if (model === undefined) {
+    return;
+  }
+  await applyClaudeSessionModel(session, model);
+  delete session.modelAfterQueuedTurns;
+};
+
+const rollbackClaudeSessionModel = async (input: {
+  cause: unknown;
+  operation: string;
+  previousModel: AgentModelSelection | undefined;
+  session: ClaudeSession;
+}): Promise<void> => {
+  const { cause, operation, previousModel, session } = input;
+  try {
+    await applyClaudeSessionModel(session, previousModel);
+  } catch (rollbackCause) {
+    throw new HostOperationError({
+      operation,
+      message: `Claude message delivery failed and model rollback was incomplete: ${errorMessage(rollbackCause)}`,
+      cause,
+      details: {
+        externalSessionId: session.externalSessionId,
+        rollbackFailure: errorMessage(rollbackCause),
+      },
+    });
+  }
+};
 
 export const consumeClaudeSession = async (input: {
   emit: ClaudeAgentSdkEventEmitter;
@@ -100,71 +213,10 @@ export const consumeClaudeSession = async (input: {
   try {
     for await (const message of session.query) {
       const timestamp = readClaudeSdkMessageTimestamp(message, now);
-      const firstModelReport =
-        message.type === "system" &&
-        message.subtype === "init" &&
-        session.nativeModel === undefined;
-      if (message.type === "system" && message.subtype === "init") {
-        if (session.nativeModel === undefined)
-          session.nativeModel = { modelId: message.model, effort: message.effort };
-        else if (
-          session.nativeModel.modelId !== message.model ||
-          (message.effort !== undefined && session.nativeModel.effort !== message.effort)
-        )
-          await observeClaudeSessionModel(
-            session,
-            { modelId: message.model, effort: message.effort },
-            emit,
-            timestamp,
-            onBackgroundFailure,
-          );
-      }
-      if (
-        message.type === "system" &&
-        message.subtype === "model_refusal_fallback" &&
-        message.scope !== "local"
-      )
-        await observeClaudeSessionModel(
-          session,
-          { modelId: message.fallback_model },
-          emit,
-          timestamp,
-          onBackgroundFailure,
-        );
       if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
         continuationAdmitted = true;
         onContinuationAdmission();
       }
-      if ("fast_mode_state" in message || "fast_mode_disabled_reason" in message) {
-        if (message.type === "system" && message.subtype === "init")
-          await commitClaudeSessionChoiceReport(session, message, onBackgroundFailure);
-        const observation = observeClaudeSpeed(
-          session,
-          message,
-          message.type === "system" && message.subtype === "init",
-        );
-        emit(session, {
-          type: "session_speed_changed",
-          externalSessionId: session.externalSessionId,
-          timestamp,
-          observation,
-        });
-      }
-      // Saved model metadata does not describe a cold attachment's native settings.
-      if (
-        firstModelReport &&
-        session.preserveNativeSettings &&
-        session.speedInitialized &&
-        message.type === "system" &&
-        message.subtype === "init"
-      )
-        await observeClaudeSessionModel(
-          session,
-          { modelId: message.model, effort: message.effort },
-          emit,
-          timestamp,
-          onBackgroundFailure,
-        );
       handleClaudeSdkMessage({
         session,
         message,
@@ -177,7 +229,7 @@ export const consumeClaudeSession = async (input: {
         scheduleClaudeLiveContextUsageRefresh({ emit, onBackgroundFailure, session, timestamp });
       }
       if (canRestoreClaudeSessionModelAfterQueuedTurns(session)) {
-        await restoreClaudeSessionModelAfterQueuedTurns(session, emit, timestamp);
+        await restoreClaudeSessionModelAfterQueuedTurns(session);
       }
       const shouldFlushQueuedMessage =
         (message.type === "system" &&
@@ -257,14 +309,10 @@ export const sendClaudeUserMessage = async (input: {
   if (messageInput.model) {
     acceptedMessage.model = messageInput.model;
   }
+  session.acceptedUserMessages.push(acceptedMessage);
+  session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
+  session.activity = "running";
   try {
-    if (canSendImmediately) {
-      await prepareClaudeTurnSpeed(session, emit, timestamp);
-      assertClaudeSessionAcceptingMessages(session);
-    }
-    session.acceptedUserMessages.push(acceptedMessage);
-    session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
-    session.activity = "running";
     if (canSendImmediately) {
       pushClaudeSdkUserMessage(session, sdkMessage);
       if (isManualCompaction) {
@@ -279,19 +327,16 @@ export const sendClaudeUserMessage = async (input: {
       session.queuedSdkMessages.push(sdkMessage);
     }
   } catch (cause) {
-    const accepted = session.acceptedUserMessages.at(-1) === acceptedMessage;
-    if (accepted) session.acceptedUserMessages.pop();
+    session.acceptedUserMessages.pop();
     if (isClaudeSessionStopped(session)) {
       throw cause;
     }
-    if (accepted) {
-      session.pendingUserTurnCount = previousPendingUserTurnCount;
-      session.activity = previousActivity;
-      if (previousSdkState === undefined) {
-        delete session.sdkState;
-      } else {
-        session.sdkState = previousSdkState;
-      }
+    session.pendingUserTurnCount = previousPendingUserTurnCount;
+    session.activity = previousActivity;
+    if (previousSdkState === undefined) {
+      delete session.sdkState;
+    } else {
+      session.sdkState = previousSdkState;
     }
     if (modelApplied) {
       await rollbackClaudeSessionModel({
@@ -324,6 +369,121 @@ export const sendClaudeUserMessage = async (input: {
     acceptedEvent.model = messageInput.model;
   }
   return acceptedEvent;
+};
+
+export const flushQueuedClaudeUserMessage = (input: {
+  emit: ClaudeAgentSdkEventEmitter;
+  now: () => string;
+  session: ClaudeSession;
+}): Promise<void> => {
+  const { emit, now, session } = input;
+  if (session.activity === "stopped" || session.queuedSdkMessages.length === 0) {
+    return Promise.resolve();
+  }
+  if (hasActiveSdkUserTurn(session)) {
+    return Promise.resolve();
+  }
+  if (session.sdkState === "running") {
+    return Promise.resolve();
+  }
+  const nextMessage = session.queuedSdkMessages[0];
+  if (!nextMessage) {
+    return Promise.resolve();
+  }
+  const timestamp = now();
+  const previousActivity = session.activity;
+  const previousSdkState = session.sdkState;
+  session.activity = "running";
+  const acceptedMessage = session.acceptedUserMessages.find(
+    (message) => message.messageId === nextMessage.uuid,
+  );
+  const previousModel = session.model;
+  const previousModelAfterQueuedTurns = session.modelAfterQueuedTurns;
+  let modelApplied = false;
+  let removedFromQueue = false;
+  return Promise.resolve()
+    .then(async () => {
+      if (acceptedMessage?.model) {
+        if (session.modelAfterQueuedTurns === undefined) {
+          session.modelAfterQueuedTurns = previousModel ?? null;
+        }
+        await applyClaudeSessionModel(session, acceptedMessage.model);
+        modelApplied = true;
+      }
+      assertClaudeSessionAcceptingMessages(session);
+      if (session.queuedSdkMessages[0] !== nextMessage) {
+        throw new HostOperationError({
+          operation: "claudeRuntime.flushQueuedUserMessage",
+          message: `Claude session '${session.externalSessionId}' user-message queue changed while preparing its next message.`,
+          details: { externalSessionId: session.externalSessionId },
+        });
+      }
+      session.queuedSdkMessages.shift();
+      removedFromQueue = true;
+      pushClaudeSdkUserMessage(session, nextMessage);
+      if (acceptedMessage?.isManualCompaction) {
+        beginClaudeManualCompaction({
+          session,
+          timestamp,
+          messageId: acceptedMessage.messageId,
+          emit: (event) => emit(session, event),
+        });
+      }
+    })
+    .then(() => {
+      assertClaudeSessionAcceptingMessages(session);
+      if (acceptedMessage && !acceptedMessage.isManualCompaction) {
+        const acceptedEvent: AcceptedAgentUserMessage = {
+          type: "user_message",
+          externalSessionId: session.externalSessionId,
+          timestamp,
+          messageId: acceptedMessage.messageId,
+          message: acceptedMessage.text,
+          parts: acceptedMessage.parts,
+          state: "read",
+        };
+        if (acceptedMessage.model) {
+          acceptedEvent.model = acceptedMessage.model;
+        }
+        emit(session, acceptedEvent);
+      }
+      emit(session, {
+        type: "session_status",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        status: { type: "busy", message: null },
+      });
+    })
+    .catch(async (cause) => {
+      if (session.activity === "stopped") {
+        throw cause;
+      }
+      if (removedFromQueue) {
+        session.queuedSdkMessages.unshift(nextMessage);
+      }
+      session.activity = previousActivity;
+      if (previousSdkState === undefined) {
+        delete session.sdkState;
+      } else {
+        session.sdkState = previousSdkState;
+      }
+      if (modelApplied) {
+        await rollbackClaudeSessionModel({
+          cause,
+          operation: "claudeRuntime.flushQueuedUserMessage",
+          previousModel,
+          session,
+        });
+      } else {
+        session.model = previousModel;
+      }
+      if (previousModelAfterQueuedTurns === undefined) {
+        delete session.modelAfterQueuedTurns;
+      } else {
+        session.modelAfterQueuedTurns = previousModelAfterQueuedTurns;
+      }
+      throw cause;
+    });
 };
 
 export const renameClaudeSessionIfNeeded = async (input: {

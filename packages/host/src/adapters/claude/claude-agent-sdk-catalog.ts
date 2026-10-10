@@ -28,7 +28,7 @@ import {
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
-import { readClaudeSpeedAvailability } from "./claude-speed-metadata";
+import { CLAUDE_FAST_SPEED_LEVEL, readClaudeSpeedAvailability } from "./claude-speed-metadata";
 
 export { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 export { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
@@ -175,37 +175,33 @@ const toClaudeModelCatalog = (
   profiles: [],
 });
 
-export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => ({
-  id: model.value,
-  providerId: "claude",
-  providerName: "Claude",
-  modelId: model.value,
-  resolvedModelId: model.resolvedModel,
-  modelName: model.displayName,
-  variants: [...(model.supportedEffortLevels ?? [])],
-  // Claude omits this flag for models that do not support fast mode.
-  speedLevels:
-    model.supportsFastMode === true
-      ? [
-          { id: "standard", label: "Standard" },
-          { id: "fast", label: "Fast" },
-        ]
-      : [{ id: "standard", label: "Standard" }],
-  liveSessionUpdates: {
-    profile: false,
-    variants: (model.supportedEffortLevels ?? []).filter((variant) => variant !== "max"),
-  },
-  attachmentSupport: {
-    image: true,
-    audio: false,
-    video: false,
-    pdf: true,
-    mimeTypes: {
-      image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
-      pdf: ["application/pdf"],
+export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => {
+  const descriptor: AgentModelDescriptor = {
+    id: model.value,
+    providerId: "claude",
+    providerName: "Claude",
+    modelId: model.value,
+    modelName: model.displayName,
+    variants: [...(model.supportedEffortLevels ?? [])],
+    liveSessionUpdates: {
+      profile: false,
+      variants: (model.supportedEffortLevels ?? []).filter((variant) => variant !== "max"),
     },
-  },
-});
+    attachmentSupport: {
+      image: true,
+      audio: false,
+      video: false,
+      pdf: true,
+      mimeTypes: {
+        image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+        pdf: ["application/pdf"],
+      },
+    },
+  };
+  // Claude omits this flag for models without fast mode.
+  if (model.supportsFastMode === true) descriptor.speedLevels = [CLAUDE_FAST_SPEED_LEVEL];
+  return descriptor;
+};
 
 type ClaudeSlashCommandCatalog = Extract<
   AgentEvent,

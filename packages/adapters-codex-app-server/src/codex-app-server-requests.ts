@@ -375,7 +375,6 @@ export const codexNotificationTurnId = (notification: CodexNotificationRecord): 
     case "skills/changed":
     case "serverRequest/resolved":
     case "thread/status/changed":
-    case "thread/settings/updated":
       return null;
     case "turn/started":
     case "turn/completed":

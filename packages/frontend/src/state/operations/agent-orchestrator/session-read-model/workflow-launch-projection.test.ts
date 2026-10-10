@@ -55,48 +55,27 @@ test.each(["codex", "opencode", "claude"] as const)(
   },
 );
 
-test.each(["priority", null])(
-  "registers saved preparation ownership with speed %s before record delivery",
-  (choice) => {
-    const store = createAgentSessionsStore("/repo");
-    const queryClient = new QueryClient();
-    const key = agentSessionQueryKeys.list("/repo", "task");
-    queryClient.setQueryData(key, []);
-    projectWorkflowLaunch(store, queryClient, {
-      ...outcome,
-      liveSession: {
-        ref: { repoPath: outcome.repoPath, ...outcome.session! },
-        activity: "idle",
-        title: "Native session",
-        startedAt: outcome.session!.startedAt,
-        contextUsage: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        speed: {
-          choice,
-          synchronization: "confirmed",
-          availability: { status: "available" },
-          processing: { status: "unknown" },
-        },
-      },
-    });
-    expect(store.getSessionSnapshot(outcome.session!)).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task", role: "build" },
-      livePresence: "present",
-      status: "idle",
-      selectedModel: model,
-      historyLoadState: "not_requested",
-      speed: { choice },
-    });
-    expect(queryClient.getQueryData<AgentSessionRecord[]>(key)).toEqual([
-      expect.objectContaining({ externalSessionId: "saved", role: "build", speed: choice }),
-    ]);
-    queryClient.clear();
-  },
-);
+test("registers saved preparation ownership before live delivery without reading history", () => {
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient();
+  const key = agentSessionQueryKeys.list("/repo", "task");
+  queryClient.setQueryData(key, []);
+  projectWorkflowLaunch(store, queryClient, outcome);
+  expect(store.getSessionSnapshot(outcome.session!)).toMatchObject({
+    sessionAssociation: { kind: "workflow", taskId: "task", role: "build" },
+    livePresence: "present",
+    status: "idle",
+    selectedModel: model,
+    historyLoadState: "not_requested",
+  });
+  expect(queryClient.getQueryData<AgentSessionRecord[]>(key)).toEqual([
+    expect.objectContaining({ externalSessionId: "saved", role: "build" }),
+  ]);
+  queryClient.clear();
+});
 
 test.each(["both", "store", "cache"] as const)(
-  "a late launch response preserves the model and speed already bound in the %s",
+  "a late launch response preserves the model already bound in the %s",
   (binding) => {
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient();
@@ -106,28 +85,16 @@ test.each(["both", "store", "cache"] as const)(
       ...outcome.session!,
       role: outcome.role,
       selectedModel,
-      speed: "priority",
     };
     if (binding !== "cache") {
       projectWorkflowLaunch(store, queryClient, outcome);
-      store.updateSession(outcome.session!, (session) => ({
-        ...session,
-        selectedModel,
-        speed: {
-          choice: "priority",
-          synchronization: "confirmed",
-          availability: { status: "available" },
-          processing: { status: "active", level: "priority" },
-        },
-      }));
+      store.updateSession(outcome.session!, (session) => ({ ...session, selectedModel }));
     }
     queryClient.setQueryData(key, binding === "store" ? [] : [record]);
 
     projectWorkflowLaunch(store, queryClient, outcome);
 
     expect(store.getSessionSnapshot(outcome.session!)?.selectedModel).toEqual(selectedModel);
-    expect(store.getSessionSnapshot(outcome.session!)?.speed?.choice).toBe("priority");
-    expect(queryClient.getQueryData<AgentSessionRecord[]>(key)?.[0]?.speed).toBe("priority");
     expect(queryClient.getQueryData<AgentSessionRecord[]>(key)?.[0]?.selectedModel).toEqual(
       selectedModel,
     );

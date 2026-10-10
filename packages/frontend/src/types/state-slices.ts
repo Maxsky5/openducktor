@@ -279,7 +279,6 @@ export type AgentOperationsContextValue = {
   ) => Promise<AgentMessageSendReceipt | null>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
-  updateAgentSessionSpeed: (session: AgentSessionIdentity, enabled: string) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,

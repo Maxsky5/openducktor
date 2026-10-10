@@ -47,7 +47,6 @@ type AgentStudioOrchestrationActionsContext = {
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
-  updateAgentSessionSpeed: AgentOperationsContextValue["updateAgentSessionSpeed"];
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
@@ -121,7 +120,6 @@ type AgentStudioPageModelsSessionActionsContext = Parameters<
 
 type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioChatComposer>,
-  | "speed"
   | "selectedModelSelection"
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
@@ -225,7 +223,6 @@ export function useAgentStudioOrchestrationController({
     continueInterruptedTurn,
     stopAgentSession,
     updateAgentSessionModel,
-    updateAgentSessionSpeed,
     replyAgentApproval,
     answerAgentQuestion,
     selectAgentStudioSelection,
@@ -243,9 +240,7 @@ export function useAgentStudioOrchestrationController({
 
   const {
     selectionForNewSession,
-    speedForNewSession,
     newSessionCatalog,
-    speed,
     selectedModelSelection,
     prepareSelectedSessionModelForSend,
     selectedModelDescriptor,
@@ -286,12 +281,10 @@ export function useAgentStudioOrchestrationController({
     workspaceRepoPath,
     selectedSession,
     role: view.role,
-    draftScopeKey: `${workspaceRepoPath}|${view.taskId}|${view.role}`,
     reusablePrompts,
     repoSettings,
     favoriteState: agentModelFavoriteState,
     updateAgentSessionModel,
-    updateAgentSessionSpeed,
   });
 
   const {
@@ -339,7 +332,6 @@ export function useAgentStudioOrchestrationController({
     agentStudioReady,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
-    speedForNewSession,
     newSessionCatalog,
     reusablePrompts,
     repoSettings,
@@ -425,7 +417,6 @@ export function useAgentStudioOrchestrationController({
       loadAgentSessionHistory: actions.loadAgentSessionHistory,
     },
     modelSelection: {
-      speed,
       selectedModelSelection,
       selectedModelDescriptor,
       isSelectionCatalogLoading,

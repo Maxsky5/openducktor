@@ -1,5 +1,3 @@
-import type { SpeedControlModel } from "@/components/features/agents/speed-select";
-import { useAgentStudioSpeed } from "./use-agent-studio-speed";
 import type { ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -37,6 +35,8 @@ import {
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
 import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
+import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
+import type { SpeedControlModel } from "@/components/features/agents/speed-select";
 import {
   type ChatComposerPromptInputRuntimeSource,
   resolveChatComposerPromptInputRuntime,
@@ -59,8 +59,6 @@ import type { AgentStudioSelectedSessionState } from "../selected-session/select
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
-  draftScopeKey?: string;
-  updateAgentSessionSpeed?: (session: AgentSessionIdentity, choice: string) => Promise<void>;
   selectedSession: AgentStudioSelectedSessionState;
   role: AgentRole;
   reusablePrompts: ReusablePrompt[];
@@ -79,7 +77,6 @@ type UseAgentStudioChatComposerArgs = {
 
 type AgentStudioChatComposerState = {
   speed: SpeedControlModel | undefined;
-  speedForNewSession: string;
   selectionForNewSession: AgentModelSelection | null;
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
@@ -123,6 +120,26 @@ type AgentStudioChatComposerState = {
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
+
+const useAgentStudioSpeed = ({
+  identity,
+  isLoaded,
+  draftKey,
+  isRuntimeReady,
+  ...input
+}: Omit<Parameters<typeof useSpeedControl>[0], "key" | "disabled"> & {
+  identity: AgentSessionIdentity | null;
+  isLoaded: boolean;
+  draftKey: string;
+  isRuntimeReady: boolean;
+}) =>
+  useSpeedControl({
+    ...input,
+    key: identity
+      ? `${identity.runtimeKind}|${identity.workingDirectory}|${identity.externalSessionId}`
+      : draftKey,
+    disabled: !isRuntimeReady || (identity !== null && !isLoaded),
+  });
 
 const canSelectProfile = (
   hasSessionTarget: boolean,
@@ -175,8 +192,6 @@ const pickLoader = <Loader>(load: Loader | undefined, defaultLoad: Loader): Load
 
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
-  draftScopeKey,
-  updateAgentSessionSpeed,
   selectedSession,
   role,
   reusablePrompts,
@@ -506,6 +521,7 @@ export function useAgentStudioChatComposer({
     handleSelectAgentProfile,
     handleSelectModelPair: applyModelPair,
     handleSelectVariant,
+    handleSelectSpeed,
   } = useModelSelectionActions({
     loadedSessionIdentity,
     updateAgentSessionModel,
@@ -556,22 +572,19 @@ export function useAgentStudioChatComposer({
     },
   };
 
-  const { speed, speedForNewSession } = useAgentStudioSpeed({
-    workspaceRepoPath,
-    draftScopeKey,
-    role,
+  const speed = useAgentStudioSpeed({
     identity: selectedSessionIdentity,
-    runtimeKind: selectedTargetRuntimeKind,
-    modelPickerRuntimes,
-    model: selectedSessionModel,
-    draftModel: selectionForNewSession,
-    session: loadedSession,
+    isLoaded: loadedSession !== null,
+    draftKey: `${workspaceRepoPath}|${role}`,
     isRuntimeReady,
-    onLiveChange: updateAgentSessionSpeed,
+    runtimeKind: selectedTargetRuntimeKind,
+    catalog: selectionCatalog,
+    selection: selectedModelSelection,
+    onSelect: handleSelectSpeed,
   });
+
   return {
     speed,
-    speedForNewSession,
     newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,

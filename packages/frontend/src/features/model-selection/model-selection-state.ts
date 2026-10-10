@@ -2,6 +2,7 @@ import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import {
   findCatalogModel,
+  normalizeCatalogSpeed,
   normalizeCatalogVariant,
   normalizeVisibleCatalogProfileId,
   pickCatalogDefaultModel,
@@ -83,6 +84,10 @@ export const coerceVisibleSelectionToCatalog = (
   if (profileId) {
     normalizedSelection.profileId = profileId;
   }
+  const speed = normalizeCatalogSpeed(model, selection.speed);
+  if (speed) {
+    normalizedSelection.speed = speed;
+  }
   return normalizedSelection;
 };
 
@@ -101,7 +106,8 @@ export const isSameSelection = (
     a.modelId === b.modelId &&
     a.runtimeKind === b.runtimeKind &&
     (a.variant ?? "") === (b.variant ?? "") &&
-    (a.profileId ?? "") === (b.profileId ?? "")
+    (a.profileId ?? "") === (b.profileId ?? "") &&
+    a.speed === b.speed
   );
 };
 
@@ -302,6 +308,10 @@ export const resolveModelSelectionForModelChange = ({
   }
   if (profileId) {
     selection.profileId = profileId;
+  }
+  const speed = normalizeCatalogSpeed(model, currentSelection?.speed);
+  if (speed) {
+    selection.speed = speed;
   }
   return selection;
 };

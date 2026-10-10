@@ -1,3 +1,4 @@
+import type { AgentSessionControlContinueInterruptedTurnInput } from "../../ports/agent-session-live-adapter-port";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlForkInput,
@@ -108,7 +109,6 @@ export const toClaudeStartInput = (
 ): StartAgentSessionInput => {
   const result: StartAgentSessionInput = {
     repoPath: input.repoPath,
-    speed: input.speed ?? "standard",
     workingDirectory: input.workingDirectory,
     sessionScope: input.sessionScope,
     systemPrompt: input.systemPrompt,
@@ -121,11 +121,29 @@ export const toClaudeStartInput = (
 };
 
 export const toClaudeResumeInput = (
-  input: Omit<AgentSessionControlResumeInput, "resumeMode"> & { speed?: string | null },
+  input: AgentSessionControlResumeInput,
 ): ResumeAgentSessionInput => {
   const result: ResumeAgentSessionInput = {
     repoPath: input.repoPath,
-    speed: input.speed,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    sessionScope: input.sessionScope,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    result.systemPrompt = input.systemPrompt;
+  }
+  return result;
+};
+
+export const toClaudeContinueInput = (
+  input: AgentSessionControlContinueInterruptedTurnInput,
+): ResumeAgentSessionInput => {
+  const result: ResumeAgentSessionInput = {
+    repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,
@@ -143,7 +161,6 @@ export const toClaudeResumeInput = (
 export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgentSessionInput => {
   const result: ForkAgentSessionInput = {
     repoPath: input.repoPath,
-    speed: input.speed ?? "standard",
     workingDirectory: input.workingDirectory,
     sessionScope: input.sessionScope,
     systemPrompt: input.systemPrompt,
@@ -179,11 +196,10 @@ const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMe
 };
 
 export const toClaudeSendInput = (
-  input: AgentSessionControlSendInput & { speed?: string | null },
+  input: AgentSessionControlSendInput,
 ): SendAgentUserMessageInput => {
   const result: SendAgentUserMessageInput = {
     repoPath: input.repoPath,
-    speed: input.speed,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,

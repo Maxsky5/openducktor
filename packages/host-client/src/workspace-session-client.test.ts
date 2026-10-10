@@ -13,7 +13,6 @@ const makeDraft = (): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1000,
   updatedAt: 1000,
-  speed: "standard",
   archivedAt: null,
 });
 
@@ -99,7 +98,6 @@ test("reads archive impact and forwards explicit worktree removal through the ho
     manualTitle: null,
     createdAt: 1,
     updatedAt: 1,
-    speed: "standard",
     archivedAt: 2,
   };
   const client = createHostClient(async (command, args, schema) => {

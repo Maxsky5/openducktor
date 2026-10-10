@@ -72,7 +72,6 @@ export const workspaceSessionCreateInputSchema = z
     workspaceId: workspaceIdSchema,
     runtimeKind: runtimeKindSchema,
     selectedModel: agentSessionModelSelectionSchema.nullable(),
-    speed: z.string().min(1).optional(),
     customAgentRoleId: z.string().min(1).nullable(),
     location: z.enum(["local_repo_root", "local_worktree"]),
     worktree: workspaceSessionWorktreeInputSchema.optional(),
@@ -105,10 +104,6 @@ export type WorkspaceSessionStartResult = z.infer<typeof workspaceSessionStartRe
 
 export const workspaceSessionSetDraftModelInputSchema = workspaceSessionRefInputSchema.extend({
   selectedModel: agentSessionModelSelectionSchema,
-});
-
-export const workspaceSessionSetDraftSpeedInputSchema = workspaceSessionRefInputSchema.extend({
-  speed: z.string().min(1),
 });
 
 export const workspaceSessionRenameInputSchema = workspaceSessionRefInputSchema.extend({

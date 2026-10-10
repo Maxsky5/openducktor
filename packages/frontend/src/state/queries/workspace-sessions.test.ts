@@ -19,7 +19,6 @@ const session = (id: string, updatedAt = 1000): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1000,
   updatedAt,
-  speed: "standard",
   archivedAt: null,
 });
 

@@ -31,7 +31,6 @@ type SessionActions = {
   ) => Promise<AgentMessageSendReceipt | null>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
-  updateAgentSessionSpeed: (session: AgentSessionIdentity, enabled: string) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
@@ -105,7 +104,6 @@ export const createOrchestratorPublicOperations = ({
   continueInterruptedTurn: sessionActions.continueInterruptedTurn,
   // The caller reports a failure, because a send waits for this update and shows its own error.
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
-  updateAgentSessionSpeed: sessionActions.updateAgentSessionSpeed,
   replyAgentApproval: sessionActions.replyAgentApproval,
   answerAgentQuestion: sessionActions.answerAgentQuestion,
 });

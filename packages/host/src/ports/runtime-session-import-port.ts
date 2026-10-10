@@ -5,7 +5,6 @@ import type { HostError } from "../effect/host-errors";
 export type HostSessionImportSource = {
   metadata: WorkspaceSessionExternal;
   selectedModel: AgentSessionModelSelection | null;
-  speed: string | null;
   attach: Effect.Effect<void, HostError>;
 };
 export type RuntimeSessionImportPort = {

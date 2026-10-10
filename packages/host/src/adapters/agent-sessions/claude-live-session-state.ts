@@ -1,6 +1,5 @@
 import {
   type AgentSessionContextUsage,
-  type AgentSessionSpeedState,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveRef,
@@ -28,6 +27,9 @@ const refKey = (ref: AgentSessionLiveRef): string =>
 
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
+
+const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
+  agentSessionLiveSnapshotSchema.parse(snapshot);
 
 const toApprovalRequest = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
@@ -96,12 +98,7 @@ const subagentStartedAt = (
 };
 
 /** Live projection of every session of one Claude runtime, across all repositories. */
-export const createClaudeLiveSessionState = (
-  readModel: (ref: AgentSessionLiveRef) => AgentSessionLiveSnapshot["model"],
-) => {
-  // Attachment and native reports can change the model before the next live event.
-  const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
-    agentSessionLiveSnapshotSchema.parse({ ...snapshot, model: readModel(snapshot.ref) });
+export const createClaudeLiveSessionState = () => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
   const retiredSessionKeys = new Set<string>();
@@ -141,7 +138,6 @@ export const createClaudeLiveSessionState = (
       pendingApprovals: [],
       pendingQuestions: [],
       contextUsage: null,
-      speed: isRoot ? session.summary.speed : undefined,
     };
     if (session.summary.sessionAssociation.kind === "repository") {
       snapshot.repositoryScope = session.summary.sessionAssociation;
@@ -282,10 +278,6 @@ export const createClaudeLiveSessionState = (
     const key = refKey(ref);
     if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
       return [];
-    }
-    if (event.type === "session_speed_changed") {
-      const current = ensureSnapshot(session, ref, event.timestamp);
-      return commitSnapshot({ ...current, speed: session.summary.speed });
     }
     if (event.type === "session_context_error") {
       return [
@@ -445,13 +437,6 @@ export const createClaudeLiveSessionState = (
       retiredSessionKeys.delete(refKey(ref));
     },
     removeSession: removeSessionTree,
-    applySpeed: (
-      ref: AgentSessionLiveRef,
-      speed: AgentSessionSpeedState,
-    ): AgentSessionLiveAdapterChange[] => {
-      const current = readSnapshot(ref);
-      return current ? commitSnapshot({ ...current, speed }) : [];
-    },
     /** Summaries carry no repository, so the caller passes the repository of the request. */
     applyControlSummary: (
       repoPath: string,
@@ -482,7 +467,6 @@ export const createClaudeLiveSessionState = (
         pendingApprovals: current?.pendingApprovals ?? [],
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
-        speed: summary.speed ?? current?.speed,
       };
       if (summary.sessionAssociation.kind === "repository") {
         nextSnapshot.repositoryScope = summary.sessionAssociation;

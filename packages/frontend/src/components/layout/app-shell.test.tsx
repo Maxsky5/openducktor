@@ -1082,7 +1082,6 @@ describe("AppShell session navigation", () => {
     manualTitle: null,
     createdAt: 1_000,
     updatedAt: 1_000,
-    speed: "standard",
     archivedAt: null,
   });
 

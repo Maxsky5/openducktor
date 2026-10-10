@@ -1,5 +1,3 @@
-import type { WorkspaceSessionImportCatalog as Catalog } from "./workspace-session-import-catalog";
-import { attachImportedWorkspaceSession } from "./workspace-session-speed-persistence";
 import {
   workspaceSessionExternalSchema,
   type WorkspaceSessionExternal,
@@ -20,13 +18,14 @@ import {
 } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
+import type { RuntimeSessionImportPort } from "../../ports/runtime-session-import-port";
 import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
 import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-persistence-callbacks";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
 import { classifyWorkspaceCheckout } from "./workspace-checkout";
-import { createSerialLane } from "../../effect/serial-gate";
+import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
 
 const MAX_CATALOGS = 8;
 const MAX_RECORDS = 100_000;
@@ -34,6 +33,30 @@ const MAX_BYTES = 64 * 1024 * 1024;
 const LIFETIME = 10 * 60_000;
 const invalid = (message: string) =>
   new HostValidationError({ field: "externalSessionId", message });
+type Catalog = {
+  workspaceId: string;
+  runtimeKind: string;
+  repoPath: string;
+  runtimeId: string;
+  controller: AbortController;
+  result: Deferred.Deferred<WorkspaceSessionExternal[], HostError>;
+  fiber?: Fiber.Fiber<void, never>;
+  expiry?: Fiber.Fiber<void, never>;
+  cursors: Map<string, { search: string; offset: number; pageSize: number }>;
+  gate: SerialLane;
+  readers: Set<Fiber.Fiber<WorkspaceSessionExternal[], HostError>>;
+  failure?: HostError;
+  discovery?: {
+    owned: Set<string>;
+    allowed: Set<string>;
+    eligibleDirectories: Map<string, boolean>;
+    records: Map<string, WorkspaceSessionExternal>;
+    reader: ReturnType<RuntimeSessionImportPort["scanSessions"]>;
+    done: boolean;
+    bytes: number;
+    scanned: number;
+  };
+};
 type Dependencies = Pick<WorkspaceSessionServiceDependencies, "store" | "runtime" | "git"> & {
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getWorkspaceCatalog">;
   registry: AgentSessionLiveAdapterRegistryPort;
@@ -422,7 +445,6 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                       generatedTitle: null,
                       roleSnapshot: null,
                       selectedModel: source.selectedModel ?? null,
-                      speed: source.speed,
                       createdAt: now,
                       updatedAt: now,
                       archivedAt: null,
@@ -433,19 +455,12 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
               );
               if (!saved.created) return { ...saved, openError: null };
               const opened = yield* Effect.exit(
-                attachImportedWorkspaceSession(
-                  source,
-                  adapter,
-                  ref,
-                  scope,
-                  saved.session,
-                  dependencies.store,
-                  publishUpdated,
+                source.attach.pipe(
+                  Effect.andThen(publishUpdated(input.workspaceId, saved.session)),
                 ),
               );
               return {
                 ...saved,
-                session: Exit.isSuccess(opened) ? opened.value : saved.session,
                 openError: Exit.isFailure(opened)
                   ? `The chat was saved, but opening failed: ${causeMessage(opened.cause)}. Open the saved chat to retry.`
                   : null,

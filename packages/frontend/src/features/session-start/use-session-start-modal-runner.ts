@@ -16,8 +16,10 @@ import { supportsTaskTargetBranchSelection } from "./constants";
 import { isSessionStartFailureFeedbackHandled } from "./session-start-orchestration";
 import type {
   NewSessionStartDecision,
+  ReuseSessionStartDecision,
   SessionStartExistingSessionOption,
 } from "./session-start-types";
+import { STANDARD_SPEED, withSpeed } from "@/lib/model-catalog-selection";
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
@@ -32,7 +34,7 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
-type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt" | "speed">;
+type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt">;
 
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalOpenRequest,
@@ -430,14 +432,21 @@ export const buildSessionStartModalDecision = ({
       requestContext,
     );
 
-    return {
+    const decision: ReuseSessionStartDecision = {
       startMode: "reuse",
       sourceSession,
       ...buildLaunchFields(input),
     };
+    if (input.speed !== undefined)
+      decision.speed = input.speed === STANDARD_SPEED ? null : input.speed;
+    return decision;
   }
 
-  const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
+  // A fresh or forked session uses only the speed chosen for this start.
+  const resolvedSelectedModel = withSpeed(
+    requireSelectedModel(selectedModel, requestContext),
+    input.speed ?? STANDARD_SPEED,
+  );
 
   if (input.startMode === "fork") {
     const sourceSession = requireSourceSession(
@@ -476,7 +485,6 @@ const buildLaunchFields = (input: SessionStartDecisionInput): LaunchFields => {
   const fields: LaunchFields = {};
   if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
   if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
-  if (input.speed !== undefined) fields.speed = input.speed;
   return fields;
 };
 

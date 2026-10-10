@@ -177,8 +177,6 @@ export const upsertAgentSession = (
     );
     if (existingIndex >= 0) {
       const stored = sessions[existingIndex];
-      if (stored && compactSession.speed === undefined && stored.speed !== undefined)
-        compactSession.speed = stored.speed;
       sessions[existingIndex] =
         stored?.lastActivityAt === undefined
           ? compactSession
@@ -209,6 +207,7 @@ export const upsertAgentSession = (
 export const updateAgentSessionModel = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["updateAgentSessionModel"]>[0],
+  updatedAt: Date,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
@@ -228,9 +227,10 @@ export const updateAgentSessionModel = (
         }),
       );
     }
-    const nextRecord = { ...existing, selectedModel: input.selectedModel };
-    if (input.speed !== undefined) nextRecord.speed = input.speed;
-    const updated = yield* compactAgentSessionForStorage(nextRecord);
+    const updated = yield* compactAgentSessionForStorage({
+      ...existing,
+      selectedModel: input.selectedModel,
+    });
     const nextSessions = sessions.map((entry) =>
       hasSameAgentSessionIdentity(entry, input.identity) ? updated : entry,
     );
@@ -240,6 +240,7 @@ export const updateAgentSessionModel = (
           .update(tasks)
           .set({
             agentSessionsJson: encodeAgentSessionBatch(nextSessions),
+            updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
       "sqliteTaskRepository.updateAgentSessionModel.updateTask",

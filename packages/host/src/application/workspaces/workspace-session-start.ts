@@ -47,7 +47,6 @@ export const createWorkspaceSessionStart = (
                   ? { kind: "repository" }
                   : { kind: "repository", title: startTitle },
               systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
-              speed: session.speed ?? "standard",
             };
             if (session.selectedModel !== null) startInput.model = session.selectedModel;
             const runtimeSession = yield* live.startSession(startInput);

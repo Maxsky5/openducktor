@@ -23,7 +23,6 @@ export const createRuntimeSessionImportAdapter = (
     }).pipe(
       Effect.map((source) => ({
         metadata: source.metadata,
-        speed: source.speed,
         selectedModel: source.selectedModel,
         attach: Effect.tryPromise({
           try: () => source.attach(),

@@ -130,6 +130,6 @@ export const buildSessionPolicyNoticeMessage = (
       kind: "session_notice",
       tone: "warning",
       reason: "runtime_policy",
-      title: "Runtime notice",
+      title: "Claude permission mode mismatch",
     },
   });

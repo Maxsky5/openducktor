@@ -5,7 +5,6 @@ import {
   workspaceSessionRefInputSchema,
   workspaceSessionRenameInputSchema,
   workspaceSessionSetDraftModelInputSchema,
-  workspaceSessionSetDraftSpeedInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { z } from "zod";
@@ -65,14 +64,6 @@ export const createWorkspaceSessionCommandHandlers = (
         Effect.flatMap((input) =>
           service
             .setDraftModel(input)
-            .pipe(Effect.tap((session) => publishUpdated(input.workspaceId, session))),
-        ),
-      ),
-    workspace_session_set_draft_speed: (args) =>
-      parseInput(workspaceSessionSetDraftSpeedInputSchema, args).pipe(
-        Effect.flatMap((input) =>
-          service
-            .setDraftSpeed(input)
             .pipe(Effect.tap((session) => publishUpdated(input.workspaceId, session))),
         ),
       ),

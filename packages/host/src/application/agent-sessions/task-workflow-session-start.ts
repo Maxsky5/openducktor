@@ -79,7 +79,6 @@ export const createStartTaskWorkflowSession =
             workingDirectory: prepared.workingDirectory,
             sessionScope: scope,
             systemPrompt: input.systemPrompt,
-            speed: input.speed ?? "standard",
             model: input.model,
           };
           // Cancellation must retain the returned identity so cleanup can stop the session.

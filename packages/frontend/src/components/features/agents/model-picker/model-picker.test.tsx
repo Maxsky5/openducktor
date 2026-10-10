@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentModelFavorite,
-  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
@@ -261,47 +260,6 @@ describe("ModelPicker", () => {
 
     expect(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" })).toBeTruthy();
     expect(container.querySelector('svg[viewBox="0 0 512 512"]')).toBeTruthy();
-  });
-
-  test("resolves a saved canonical Claude ID to its label and selected alias row", async () => {
-    render(
-      <ModelPicker
-        runtimes={[
-          {
-            descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
-            isEnabledForFavorites: true,
-            resource: {
-              status: "ready",
-              catalog: {
-                models: [
-                  {
-                    id: "sonnet",
-                    providerId: "claude",
-                    providerName: "Claude",
-                    modelId: "sonnet",
-                    resolvedModelId: "claude-sonnet-5-5",
-                    modelName: "Sonnet 5.5",
-                    variants: [],
-                  },
-                ],
-                defaultModelsByProvider: {},
-              },
-            },
-          },
-        ]}
-        value={{ runtimeKind: "claude", providerId: "claude", modelId: "claude-sonnet-5-5" }}
-        favoriteState={favoriteState()}
-        selectionPolicy={{ kind: "runtime_locked", runtimeKind: "claude", reason: "" }}
-        onValueChange={() => {}}
-      />,
-    );
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Select model, Claude, Sonnet 5.5" }));
-    });
-    expect(
-      screen.getByRole("button", { name: "Select Sonnet 5.5 model" }).getAttribute("aria-pressed"),
-    ).toBe("true");
   });
 
   test("keeps foreign runtimes visible, inert, and explained in a locked context", async () => {

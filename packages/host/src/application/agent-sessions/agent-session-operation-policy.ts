@@ -4,7 +4,6 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
-  AgentSessionControlUpdateSpeedInput,
   AgentSessionLiveRef,
   AgentSessionModelSettings,
 } from "@openducktor/contracts";
@@ -12,25 +11,15 @@ import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 
 export type PreparedSessionResume = {
-  input: AgentSessionControlResumeInput & { speed?: string | null };
+  input: AgentSessionControlResumeInput;
   save(summary: AgentSessionControlSummary): Effect.Effect<void, HostError>;
 };
 
 export type PreparedSessionModelUpdate = {
   input: AgentSessionControlUpdateModelInput;
   previousModel: AgentSessionModelSettings | null;
-  previousSpeed: string | null;
   /** A successful save returns publication work. Publication cannot undo the save. */
-  save(speed?: string | null): Effect.Effect<Effect.Effect<void, HostError>, HostError>;
-};
-
-export type PreparedSessionSpeedUpdate = {
-  model: AgentSessionModelSettings | null;
-  choice: string | null;
-  save(
-    choice: string | null,
-    model?: AgentSessionModelSettings,
-  ): Effect.Effect<Effect.Effect<void, HostError>, HostError>;
+  save: Effect.Effect<Effect.Effect<void, HostError>, HostError>;
 };
 
 /** Internal owner policy. Only the command module runs native controls. */
@@ -50,7 +39,7 @@ export type AgentSessionOperationPolicy = {
   ): Effect.Effect<PreparedSessionResume, HostError>;
   prepareSend(
     input: AgentSessionControlSendInput,
-  ): Effect.Effect<AgentSessionControlSendInput & { speed?: string | null }, HostError>;
+  ): Effect.Effect<AgentSessionControlSendInput, HostError>;
   recordAcceptedMessage(
     ref: AgentSessionLiveRef,
     accepted: AcceptedAgentUserMessage,
@@ -58,8 +47,5 @@ export type AgentSessionOperationPolicy = {
   prepareModelUpdate(
     input: AgentSessionControlUpdateModelInput,
   ): Effect.Effect<PreparedSessionModelUpdate, HostError>;
-  prepareSpeedUpdate(
-    input: AgentSessionControlUpdateSpeedInput,
-  ): Effect.Effect<PreparedSessionSpeedUpdate, HostError>;
   validateRef(ref: AgentSessionLiveRef): Effect.Effect<void, HostError>;
 };

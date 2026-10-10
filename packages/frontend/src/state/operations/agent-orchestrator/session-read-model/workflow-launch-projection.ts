@@ -25,16 +25,16 @@ export const projectWorkflowLaunch = (
   const saved = queryClient
     .getQueryData<AgentSessionRecord[]>(key)
     ?.find((record) => matchesAgentSessionIdentity(record, outcome.session!));
-  const retained = !saved && bound ? toPersistedSessionRecord(current) : undefined;
-  // Launch results fill missing ownership. Current bindings own later settings changes.
+  // Launch results fill missing ownership. Current bindings own later model changes.
   const record: AgentSessionRecord = saved ?? {
     externalSessionId: outcome.session.externalSessionId,
     runtimeKind: outcome.session.runtimeKind,
     workingDirectory: outcome.session.workingDirectory,
     startedAt: outcome.session.startedAt,
     role: outcome.role,
-    selectedModel: retained ? retained.selectedModel : (outcome.model ?? null),
-    speed: retained ? retained.speed : (outcome.liveSession?.speed?.choice ?? null),
+    selectedModel: bound
+      ? toPersistedSessionRecord(current).selectedModel
+      : (outcome.model ?? null),
   };
   if (!saved)
     queryClient.setQueryData<AgentSessionRecord[]>(key, (records) =>

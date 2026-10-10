@@ -22,7 +22,6 @@ export const createClaudeSessionImportAdapter = (
       return {
         metadata: handle.metadata,
         selectedModel: handle.selectedModel,
-        speed: handle.speed,
         attach: () =>
           Effect.runPromise(publish(input.repoPath, () => handle.attach)).then(() => undefined),
       };

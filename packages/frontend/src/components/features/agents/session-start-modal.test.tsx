@@ -1,11 +1,6 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import {
-  CLAUDE_RUNTIME_DESCRIPTOR,
-  CODEX_RUNTIME_DESCRIPTOR,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeKind,
-} from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -19,14 +14,11 @@ import { SessionStartModal, type SessionStartModalModel } from "./session-start-
 enableReactActEnvironment();
 
 const noop = () => {};
-const existingSessionOption = (
-  externalSessionId: string,
-  runtimeKind: RuntimeKind = "opencode",
-) => ({
-  value: `${runtimeKind}\u0000${externalSessionId}\u0000/repo/worktree`,
+const existingSessionOption = (externalSessionId: string) => ({
+  value: `opencode\u0000${externalSessionId}\u0000/repo/worktree`,
   sourceSession: {
     externalSessionId,
-    runtimeKind,
+    runtimeKind: "opencode" as const,
     workingDirectory: "/repo/worktree",
   },
   label: "Session #1",
@@ -165,7 +157,6 @@ describe("SessionStartModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     expect(onConfirm).toHaveBeenCalledWith({
-      speed: "standard",
       runInBackground: false,
       startMode: "fresh",
       sourceSessionOptionValue: null,
@@ -173,6 +164,66 @@ describe("SessionStartModal", () => {
 
     expect(screen.getByRole("button", { name: /start session/i })).toBeTruthy();
 
+    unmount();
+  });
+
+  test("starts a reused session from its speed and submits the changed speed", async () => {
+    const onConfirm = mock(() => {});
+    const claudeModel = { runtimeKind: "claude" as const, providerId: "claude", modelId: "opus" };
+    const source = {
+      ...existingSessionOption("session-1"),
+      selectedModel: { ...claudeModel, speed: "fast" },
+    };
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          selectedModelSelection: claudeModel,
+          selectedRuntimeKind: "claude",
+          modelPickerRuntimes: [
+            {
+              descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+              isEnabledForFavorites: true,
+              resource: {
+                status: "ready",
+                catalog: {
+                  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+                  models: [
+                    {
+                      id: "opus",
+                      providerId: "claude",
+                      providerName: "Claude",
+                      modelId: "opus",
+                      modelName: "Opus",
+                      variants: [],
+                      speedLevels: [{ id: "fast", label: "Fast" }],
+                    },
+                  ],
+                  defaultModelsByProvider: {},
+                },
+              },
+            },
+          ],
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [source],
+          selectedSourceSessionValue: source.value,
+          onConfirm,
+        }),
+      }),
+    );
+
+    const speed = screen.getByRole("button", { name: "Speed" });
+    expect(speed.textContent).toContain("Fast");
+    await act(async () => fireEvent.click(speed));
+    await act(async () => fireEvent.click(screen.getByRole("option", { name: "Standard" })));
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "reuse",
+      sourceSessionOptionValue: source.value,
+      speed: "standard",
+    });
     unmount();
   });
 
@@ -223,91 +274,32 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
-  test.each([
-    {
-      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-      sourceSpeed: undefined,
-      needsChoice: false,
-      submittedSpeed: "standard",
-    },
-    {
-      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-      sourceSpeed: null,
-      needsChoice: false,
-      submittedSpeed: undefined,
-    },
-    {
-      runtime: CODEX_RUNTIME_DESCRIPTOR,
-      sourceSpeed: null,
-      needsChoice: true,
-      submittedSpeed: "standard",
-    },
-    {
-      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
-      sourceSpeed: null,
-      needsChoice: true,
-      submittedSpeed: "standard",
-    },
-    {
-      runtime: CODEX_RUNTIME_DESCRIPTOR,
-      sourceSpeed: "priority",
-      needsChoice: false,
-      submittedSpeed: "priority",
-    },
-  ])(
-    "checks reuse speed before confirming with $runtime.kind and $sourceSpeed",
-    async ({ runtime, sourceSpeed, needsChoice, submittedSpeed }) => {
-      const onConfirm = mock(() => {});
-      const source: SessionStartModalModel["existingSessionOptions"][number] =
-        existingSessionOption("session-1", runtime.kind);
-      if (sourceSpeed !== undefined) source.speed = sourceSpeed;
-      const { unmount } = render(
-        createElement(SessionStartModal, {
-          model: createModel({
-            selectedRuntimeKind: runtime.kind,
-            isSelectionCatalogLoading: true,
-            modelPickerRuntimes: [],
-            selectedModelSelection: null,
-            availableStartModes: ["fresh", "reuse"],
-            selectedStartMode: "reuse",
-            existingSessionOptions: [source],
-            selectedSourceSessionValue: source.value,
-            onConfirm,
-          }),
+  test("allows reuse confirm while catalog is loading", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          isSelectionCatalogLoading: true,
+          selectedModelSelection: null,
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
+          onConfirm,
         }),
-      );
-      try {
-        const confirm = screen.getByRole<HTMLButtonElement>("button", { name: "Start session" });
-        const background = screen.getByRole<HTMLButtonElement>("button", {
-          name: "Run in background",
-        });
-        expect(confirm.disabled).toBe(needsChoice);
-        expect(background.disabled).toBe(needsChoice);
-        if (needsChoice) {
-          fireEvent.click(confirm);
-          fireEvent.click(background);
-          fireEvent.submit(confirm.closest("form")!);
-          expect(onConfirm).not.toHaveBeenCalled();
-          await act(async () => fireEvent.click(screen.getByRole("button", { name: "Speed" })));
-          await act(async () => fireEvent.click(screen.getByRole("option", { name: "Standard" })));
-          expect(confirm.disabled).toBe(false);
-          expect(background.disabled).toBe(false);
-        }
-        fireEvent.click(confirm);
-        fireEvent.click(background);
-        const input = {
-          startMode: "reuse",
-          sourceSessionOptionValue: source.value,
-        };
-        if (submittedSpeed !== undefined) Object.assign(input, { speed: submittedSpeed });
-        expect(onConfirm).toHaveBeenCalledTimes(2);
-        expect(onConfirm).toHaveBeenNthCalledWith(1, { ...input, runInBackground: false });
-        expect(onConfirm).toHaveBeenNthCalledWith(2, { ...input, runInBackground: true });
-      } finally {
-        unmount();
-      }
-    },
-  );
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "reuse",
+      sourceSessionOptionValue: existingSessionOption("session-1").value,
+    });
+
+    unmount();
+  });
 
   test("disables fresh-session selection and confirm while the catalog loads", () => {
     const onConfirm = mock(() => {});

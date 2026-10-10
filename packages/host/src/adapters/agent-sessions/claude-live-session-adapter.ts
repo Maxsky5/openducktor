@@ -1,5 +1,3 @@
-import { createClaudeSessionSettingsControls } from "./claude-session-settings-controls";
-import { agentSessionRefsEqual } from "@openducktor/core";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
@@ -16,16 +14,19 @@ import {
 } from "@openducktor/contracts";
 import {
   AgentSessionResumeError,
+  type AgentSessionResumeNextActionOverrides,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { createNativeSpeedWriter } from "./native-speed-writer";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
 import {
   type HostError,
   type HostOperationErrorAggregate,
+  HostOperationError,
+  HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
@@ -46,6 +47,7 @@ import {
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import {
   requireClaudePolicy,
+  toClaudeContinueInput,
   toClaudeForkInput,
   toClaudeLoadContextInput,
   toClaudeReplyApprovalInput,
@@ -57,10 +59,8 @@ import {
 } from "./claude-live-session-service-inputs";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 import {
-  preAdmissionNextActionOverrides,
   parseClaudeLiveSessionOutput,
   requireClaudeHostServiceRuntime,
-  requireClaudeSessionContext,
   toClaudeLiveSessionRef,
 } from "./claude-live-session-runtime-guards";
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
@@ -71,6 +71,10 @@ export type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
+const preAdmissionNextActionOverrides = (cause: unknown): AgentSessionResumeNextActionOverrides =>
+  cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
+    ? { continuation_failed: "Send a new message to continue." }
+    : {};
 
 export const createClaudeLiveSessionAdapterPreparer =
   ({
@@ -83,25 +87,11 @@ export const createClaudeLiveSessionAdapterPreparer =
   (runtimeInput) =>
     Effect.gen(function* () {
       const runtime = yield* requireClaudeHostServiceRuntime(runtimeInput);
-      const state = createClaudeLiveSessionState((ref) => {
-        const session = sessionStore.get(ref.externalSessionId);
-        return session?.runtimeId === runtime.runtimeId &&
-          agentSessionRefsEqual(
-            { ...session.input, externalSessionId: session.externalSessionId },
-            ref,
-          )
-          ? session.model
-          : undefined;
-      });
+      const state = createClaudeLiveSessionState();
       const binding = liveSessionLifecycle.createRuntimeRegistration({
         runtimeId: runtime.runtimeId,
         runtimeKind: runtime.kind,
       });
-
-      const recordSpeedChoice = createNativeSpeedWriter(binding);
-      service.setSpeedChoiceRecorder((ref, ...args) =>
-        recordSpeedChoice({ ...ref, runtimeKind: "claude" }, ...args),
-      );
 
       const commit = <Value>(
         operation: string,
@@ -156,8 +146,27 @@ export const createClaudeLiveSessionAdapterPreparer =
             externalSessionId,
           });
 
-      const requireSessionContext = (id: string) =>
-        requireClaudeSessionContext(sessionStore, runtime.runtimeId, id);
+      const requireSessionContext = (externalSessionId: string) =>
+        Effect.try({
+          try: () => {
+            const session = sessionStore.get(externalSessionId);
+            if (!session) {
+              throw new HostValidationError({
+                field: "externalSessionId",
+                message: `Unknown Claude session '${externalSessionId}'.`,
+                details: { externalSessionId, runtimeId: runtime.runtimeId },
+              });
+            }
+            return session;
+          },
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? cause
+              : toHostOperationError(cause, "claude-live-session.require-session", {
+                  runtimeId: runtime.runtimeId,
+                  externalSessionId,
+                }),
+        });
 
       const resolvePendingInput = (
         operation: string,
@@ -339,7 +348,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               Effect.flatMap(() =>
                 runSummary(operation, input.repoPath, () =>
                   service.continueInterruptedTurn(
-                    toClaudeResumeInput(input),
+                    toClaudeContinueInput(input),
                     runtime.runtimeId,
                     () => {
                       continuationAdmitted = true;
@@ -432,14 +441,16 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
             );
           }),
-        ...createClaudeSessionSettingsControls({
-          service,
-          runtimeId: runtime.runtimeId,
-          sessionError,
-          state,
-          commit,
-          runControlMutation: (effect) => eventCoordinator.runControlMutation(effect),
-        }),
+        updateSessionModel: (input) =>
+          eventCoordinator.runControlMutation(
+            service
+              .updateSessionModel(input, runtime.runtimeId)
+              .pipe(
+                Effect.mapError(
+                  sessionError("claude-live-session.update-session-model", input.externalSessionId),
+                ),
+              ),
+          ),
         updateSessionTitle: (input) =>
           runTitleUpdate("claude-live-session.update-session-title", input.repoPath, () =>
             service.updateSessionTitle(input),

@@ -1,14 +1,15 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
+import { toast } from "sonner";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import {
   resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
   resolveModelSelectionForVariantChange,
 } from "@/features/model-selection/model-selection-state";
+import { withSpeed } from "@/lib/model-catalog-selection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { reportModelUpdateError } from "./model-update-error";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
@@ -19,7 +20,11 @@ const findSelectedCatalogModel = (
   if (!catalog || !selection) {
     return null;
   }
-  return findCatalogModel(catalog, selection);
+  return (
+    catalog.models.find(
+      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
+    ) ?? null
+  );
 };
 
 export const useModelSelectionActions = ({
@@ -107,9 +112,30 @@ export const useModelSelectionActions = ({
       if (variants[0]) {
         nextSelection.variant = variants[0];
       }
+      if (selectedModelSelection?.speed && !nextSelection.speed) {
+        toast.info(
+          "Speed was set to Standard because this model does not support the previous level.",
+        );
+      }
       applySelection(nextSelection);
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection],
+  );
+
+  // The speed control reports its own failure, so this handler returns the update.
+  const handleSelectSpeed = useCallback(
+    async (speed: string): Promise<void> => {
+      if (!selectedModelSelection) {
+        return;
+      }
+      const selection = withSpeed(selectedModelSelection, speed);
+      if (loadedSessionIdentity) {
+        await updateAgentSessionModel(loadedSessionIdentity, selection);
+        return;
+      }
+      applyDraftSelection(selection);
+    },
+    [applyDraftSelection, loadedSessionIdentity, selectedModelSelection, updateAgentSessionModel],
   );
 
   const handleSelectVariant = useCallback(
@@ -137,9 +163,11 @@ export const useModelSelectionActions = ({
     handleSelectAgentProfile,
     handleSelectModelPair,
     handleSelectVariant,
+    handleSelectSpeed,
   } satisfies {
     handleSelectAgentProfile: (profileId: string) => void;
     handleSelectModelPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
     handleSelectVariant: (variant: string) => void;
+    handleSelectSpeed: (speed: string) => Promise<void>;
   };
 };

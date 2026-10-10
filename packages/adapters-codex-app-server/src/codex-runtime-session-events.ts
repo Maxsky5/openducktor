@@ -51,8 +51,6 @@ import {
 } from "./codex-runtime-events";
 import type { CodexRuntimeNotification } from "./codex-runtime-event-schema";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
-import { CodexHeldSettings } from "./codex-held-settings";
-import { codexServiceTier } from "./codex-session-speed";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import {
@@ -72,16 +70,7 @@ import type {
   CodexUserInput,
 } from "./types";
 
-type CodexSpeedObserver = (
-  session: CodexSessionState,
-  tier: string | null,
-  model: AgentModelSelection,
-  isCurrent: () => boolean,
-) => Promise<void>;
-
 type CodexRuntimeSessionEventsDepsBase = {
-  observeSpeed?: CodexSpeedObserver;
-  applySpeedReport?: CodexSpeedObserver;
   prepareImageGenerations?: CodexAppServerAdapterOptions["prepareImageGenerations"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
@@ -198,8 +187,6 @@ export class CodexRuntimeSessionEvents {
   private readonly runtimeEventProcessingByRuntimeId = new Map<string, Promise<void>>();
   private readonly runtimeEventGenerationByRuntimeId = new Map<string, symbol>();
   private readonly activeMutationByRuntimeId = new Map<string, CodexRuntimeLiveSessionMutation>();
-  private readonly heldSettings = new CodexHeldSettings();
-  private nextEventOrder = 0;
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
   private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
@@ -244,12 +231,6 @@ export class CodexRuntimeSessionEvents {
     }
     return this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
       this.enqueueRuntimeStreamEvent(event, generation, onRuntimeEventQueueFailure);
-    });
-  }
-
-  holdSessionSettings(session: CodexSessionState): Promise<() => Promise<void>> {
-    return this.heldSettings.hold(session, async () => {
-      await this.runtimeEventProcessingByRuntimeId.get(session.runtimeId);
     });
   }
 
@@ -314,75 +295,14 @@ export class CodexRuntimeSessionEvents {
     event: CodexRuntimeStreamEvent,
     generation: symbol,
     onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
-    observeSpeed?: CodexSpeedObserver,
-  ): Promise<void> {
-    if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation)
-      return Promise.resolve();
-    const order = this.nextEventOrder++;
-    const settingsOwner =
-      event.kind === "notification" && event.message.method === "thread/settings/updated"
-        ? this.resolveRuntimeStreamEventSessionOwner(event.message.params.threadId, event.runtimeId)
-        : undefined;
-    const settingsRevision = settingsOwner?.targetSession.settingsRevision;
-    const acknowledged =
-      settingsOwner?.targetSession.pendingSpeedReport &&
-      event.kind === "notification" &&
-      event.message.method === "thread/settings/updated" &&
-      codexServiceTier(event.message.params.threadSettings.serviceTier) ===
-        codexServiceTier(settingsOwner.targetSession.pendingSpeedReport.serviceTier);
-    if (acknowledged) settingsOwner.targetSession.pendingSpeedReport?.acknowledge();
-    const deferSettings = () =>
-      observeSpeed === undefined &&
-      settingsOwner !== undefined &&
-      this.heldSettings.defer(settingsOwner.retainedSession, order, (modelBeforeHold) => {
-        if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, settingsOwner))
-          return Promise.resolve();
-        return this.enqueueRuntimeStreamEvent(
-          event,
-          generation,
-          onRuntimeEventQueueFailure,
-          (session, tier, model, isCurrent) => {
-            const applyReport = this.deps.applySpeedReport;
-            if (!applyReport) throw new Error("Codex held settings observation is not configured.");
-            // A speed-only acknowledgement must not undo a later model choice or rollback.
-            const selectedModel =
-              acknowledged && model.modelId === modelBeforeHold?.modelId
-                ? (session.model ?? model)
-                : model;
-            return applyReport(
-              session,
-              acknowledged ? (session.serviceTier ?? null) : tier,
-              selectedModel,
-              isCurrent,
-            );
-          },
-        );
-      });
-    if (deferSettings()) return Promise.resolve();
+  ): void {
     const previous =
       this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
     const processing = previous.then(() => {
       if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
         return;
       }
-      if (
-        settingsOwner &&
-        !this.runtimeStreamEventCanDeliver(event.runtimeId, generation, settingsOwner)
-      )
-        return;
-      if (deferSettings()) return;
-      if (
-        settingsOwner &&
-        observeSpeed === undefined &&
-        settingsOwner.targetSession.settingsRevision !== settingsRevision
-      )
-        return;
-      return this.processRuntimeStreamEventMutation(
-        event,
-        generation,
-        observeSpeed ?? this.deps.observeSpeed,
-        deferSettings,
-      );
+      return this.processRuntimeStreamEventMutation(event, generation);
     });
     const cleanup = processing.then(
       () => undefined,
@@ -397,14 +317,11 @@ export class CodexRuntimeSessionEvents {
         this.runtimeEventProcessingByRuntimeId.delete(event.runtimeId);
       }
     });
-    return cleanup;
   }
 
   private async processRuntimeStreamEventMutation(
     event: CodexRuntimeStreamEvent,
     generation: symbol,
-    observeSpeed: CodexSpeedObserver | undefined,
-    deferSettings: () => boolean,
   ): Promise<void> {
     const mutation: CodexRuntimeLiveSessionMutation = {
       runtimeId: event.runtimeId,
@@ -421,7 +338,7 @@ export class CodexRuntimeSessionEvents {
           throw new Error(event.message);
         }
         if (owner) {
-          await this.processRuntimeStreamEventForSession(owner, event, observeSpeed, deferSettings);
+          await this.processRuntimeStreamEventForSession(owner, event);
         }
       } catch (error) {
         if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
@@ -938,8 +855,6 @@ export class CodexRuntimeSessionEvents {
   private async processRuntimeStreamEventForSession(
     owner: CodexRuntimeStreamEventSessionOwner,
     event: CodexRuntimeStreamEvent,
-    observeSpeed: CodexSpeedObserver | undefined,
-    deferSettings: () => boolean,
   ): Promise<void> {
     if (event.kind === "fault") {
       throw new Error(event.message);
@@ -958,12 +873,10 @@ export class CodexRuntimeSessionEvents {
           ?.retainedSession !== owner.retainedSession
       )
         return;
-      if (deferSettings()) return;
       await this.handlePendingNotifications(
         owner.targetSession,
         [{ ...event.message, receivedAt: event.receivedAt }],
         preparedImage,
-        observeSpeed,
       );
       return;
     }
@@ -1055,39 +968,18 @@ export class CodexRuntimeSessionEvents {
   private async handlePendingNotifications(
     session: CodexSessionState,
     notifications: CodexNotificationRecord[],
-    preparedImageGeneration: AgentImageGenerationPart | undefined,
-    observeSpeed: CodexSpeedObserver | undefined,
+    preparedImageGeneration?: AgentImageGenerationPart,
   ): Promise<void> {
     await handleCodexPendingNotifications(
-      this.streamingContext(session, observeSpeed),
+      this.streamingContext(session),
       session,
       notifications,
       preparedImageGeneration,
     );
   }
 
-  private streamingContext(
-    scopedSession?: CodexSessionState,
-    observeSpeed = this.deps.observeSpeed,
-  ): CodexStreamingContext {
-    const generation =
-      scopedSession && this.runtimeEventGenerationByRuntimeId.get(scopedSession.runtimeId);
-    const owner =
-      scopedSession &&
-      this.resolveRuntimeStreamEventSessionOwner(scopedSession.threadId, scopedSession.runtimeId);
+  private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
-      observeSpeed:
-        observeSpeed &&
-        ((session, tier, model) =>
-          observeSpeed(
-            session,
-            tier,
-            model,
-            () =>
-              generation !== undefined &&
-              owner !== undefined &&
-              this.runtimeStreamEventCanDeliver(session.runtimeId, generation, owner),
-          )),
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       syntheticUserMessageEchoesByThreadId: this.syntheticUserMessageEchoesByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,

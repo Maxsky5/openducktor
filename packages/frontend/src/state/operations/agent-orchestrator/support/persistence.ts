@@ -1,6 +1,5 @@
 import type { AgentSessionAssociation, AgentSessionRecord } from "@openducktor/contracts";
 import {
-  initialSpeedState,
   describeAgentSessionScope,
   formatWorkflowAgentSessionTitle,
   requireSessionWorkingDirectory,
@@ -37,6 +36,9 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     if (session.selectedModel.profileId) {
       selectedModel.profileId = session.selectedModel.profileId;
     }
+    if (session.selectedModel.speed) {
+      selectedModel.speed = session.selectedModel.speed;
+    }
   }
 
   return {
@@ -46,7 +48,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     runtimeKind,
     workingDirectory: session.workingDirectory,
     selectedModel,
-    speed: session.speed ? session.speed.choice : "standard",
   };
 };
 
@@ -87,7 +88,6 @@ export const fromPersistedSessionRecord = ({
     contextUsageError: null,
     pendingApprovals: [],
     pendingQuestions: [],
-    speed: initialSpeedState(record.speed === undefined ? "standard" : record.speed),
     selectedModel: record.selectedModel
       ? normalizePersistedSelection({
           ...record.selectedModel,
@@ -135,10 +135,5 @@ export const toPersistedSessionView = ({
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,
     selectedModel: persisted.selectedModel,
-    speed:
-      current.speed &&
-      (current.livePresence === "present" || current.speed.choice === persisted.speed?.choice)
-        ? current.speed
-        : persisted.speed,
   };
 };

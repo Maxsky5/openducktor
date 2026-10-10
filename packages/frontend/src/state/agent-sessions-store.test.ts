@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { initialSpeedState } from "@openducktor/core";
-import { buildReusableSessionOptions } from "@/features/session-start/session-start-reuse-options";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection } from "./agent-session-collection";
@@ -510,43 +508,6 @@ describe("createAgentSessionsStore repository retention", () => {
 });
 
 describe("createAgentSessionsStore activity snapshots", () => {
-  test.each(["workflow", "repository"] as const)(
-    "publishes speed changes in %s summaries",
-    (kind) => {
-      const store = createAgentSessionsStore();
-      const session = createAgentSessionFixture({
-        sessionAssociation:
-          kind === "workflow" ? { kind, taskId: "task-1", role: "spec" } : { kind },
-        speed: initialSpeedState("standard", "confirmed"),
-      });
-      store.replaceSession(session);
-      const published: Array<string | null | undefined> = [];
-      const summaries = () => {
-        const snapshot = store.getActivitySnapshot();
-        return kind === "workflow" ? snapshot.sessions : snapshot.repositorySessions;
-      };
-      const unsubscribe = store.subscribe(() => {
-        published.push(summaries()[0]?.speed?.choice);
-      });
-      try {
-        for (const choice of ["fast", "standard", null]) {
-          store.replaceSession({ ...session, speed: initialSpeedState(choice, "confirmed") });
-          expect(summaries()[0]?.speed?.choice).toBe(choice);
-          if (kind === "workflow") {
-            const options = buildReusableSessionOptions({
-              sessions: store.getActivitySnapshot().sessions,
-              role: "spec",
-            });
-            expect(options[0]?.speed).toBe(choice);
-          }
-        }
-        expect(published).toEqual(["fast", "standard", null]);
-      } finally {
-        unsubscribe();
-      }
-    },
-  );
-
   test("reuses the activity snapshot when only non-activity fields change", () => {
     const store = createAgentSessionsStore();
     const baseSession = createAgentSessionFixture({

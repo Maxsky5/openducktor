@@ -4,7 +4,6 @@ import {
   type CodexAppServerThreadItem,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
-import { SessionTurnAdmission } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -153,7 +152,6 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
 const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
 
 const createSession = (threadId: string): CodexSessionState => ({
-  turnAdmission: new SessionTurnAdmission(),
   summary: {
     externalSessionId: threadId,
     title: threadId,

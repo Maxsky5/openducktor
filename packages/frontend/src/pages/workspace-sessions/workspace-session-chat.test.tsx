@@ -79,7 +79,6 @@ test.each(["local_repo_root", "local_worktree"] as const)(
           };
     const entry: WorkspaceSession = {
       id: "draft-comments",
-      speed: "standard",
       runtimeKind: "opencode",
       externalSessionId: null,
       executionTarget,
@@ -243,9 +242,6 @@ const createWorkspaceChatHarness = ({
     sendAgentMessage,
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
-    updateAgentSessionSpeed: async () => {
-      throw new Error("Unexpected speed change.");
-    },
     updateAgentSessionModel: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
@@ -360,7 +356,6 @@ const createPresentationScenario = (
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
   const entry: WorkspaceSession = {
     id: "presentation-session",
-    speed: "standard",
     runtimeKind,
     externalSessionId: "native-parent",
     executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
@@ -768,7 +763,6 @@ test("a missing workspace session retries observation, keeps failure visible, an
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
   const entry: WorkspaceSession = {
     id: "missing-session",
-    speed: "standard",
     runtimeKind: "opencode",
     externalSessionId: "missing-native",
     executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
@@ -848,7 +842,6 @@ test("returning to a retained chat expands requests without clearing drafts, whi
     manualTitle: null,
     createdAt: 1000,
     updatedAt: 1000,
-    speed: "standard",
     archivedAt: null,
   };
   const session = createAgentSessionFixture({
@@ -952,7 +945,6 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       manualTitle: null,
       createdAt: 1000,
       updatedAt: 1000,
-      speed: "standard",
       archivedAt: null,
     };
     const messages = [
@@ -1113,7 +1105,6 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
     manualTitle: null,
     createdAt: 1000,
     updatedAt: 1000,
-    speed: "standard",
     archivedAt: null,
   };
   const session = createAgentSessionFixture({

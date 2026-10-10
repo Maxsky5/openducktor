@@ -43,20 +43,6 @@
       "when": 1791125128897,
       "tag": "0005_session_activity",
       "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1791412497201,
-      "tag": "0006_bright_flatman",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1791546855502,
-      "tag": "0007_session_speed",
-      "breakpoints": true
     }
   ]
 }

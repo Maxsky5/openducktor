@@ -391,9 +391,6 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
       retryRead: () => {},
       retryMutation: () => {},
     },
-    updateAgentSessionSpeed: async () => {
-      throw new Error("Unexpected speed change.");
-    },
     updateAgentSessionModel: async () => {},
     loadCatalog: async () => runtimeCatalog({ models: CATALOG }),
     ...hookOverrides,

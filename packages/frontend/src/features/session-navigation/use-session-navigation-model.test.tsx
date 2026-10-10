@@ -62,7 +62,6 @@ const chat = (id: string, workingDirectory: string, updatedAt: number): Workspac
   createdAt: updatedAt,
   lastActivityAt: updatedAt,
   updatedAt,
-  speed: "standard",
   archivedAt: null,
 });
 

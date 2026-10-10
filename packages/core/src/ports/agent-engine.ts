@@ -131,14 +131,11 @@ export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
     sessionScope: AgentSessionScope;
     systemPrompt: string;
     model?: AgentModelSelection;
-    speed?: string | null | undefined;
   };
 
-export type ResumeAgentSessionInput = PolicyBoundSessionControlRef & {
-  speed?: string | null | undefined;
-};
+export type ResumeAgentSessionInput = PolicyBoundSessionControlRef;
 
-export type ContinueInterruptedAgentTurnInput = ResumeAgentSessionInput;
+export type ContinueInterruptedAgentTurnInput = PolicyBoundSessionControlRef;
 
 export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
@@ -146,7 +143,6 @@ export type ForkAgentSessionInput = StartAgentSessionInput & {
 };
 
 export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
-  speed?: string | null | undefined;
   parts: AgentUserMessagePart[];
   resolvedQuestionRequestIds?: string[];
   model?: AgentModelSelection;
@@ -243,7 +239,6 @@ export type AgentSessionSummary = {
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   firstTurnCompleted?: boolean;
-  speed?: import("@openducktor/contracts").AgentSessionSpeedState;
 };
 
 /**
@@ -288,9 +283,6 @@ export interface AgentSessionControlPort {
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
   updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
-  updateSessionSpeed(
-    input: import("@openducktor/contracts").AgentSessionControlUpdateSpeedInput,
-  ): Promise<import("@openducktor/contracts").AgentSessionSpeedState>;
   sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
   stopSession(input: SessionRef): Promise<void>;
 }

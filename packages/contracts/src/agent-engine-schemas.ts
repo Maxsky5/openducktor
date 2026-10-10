@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { agentSpeedAvailabilitySchema, agentSpeedLevelSchema } from "./agent-speed-schemas";
 import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
+import { agentSpeedAvailabilitySchema, agentSpeedLevelSchema } from "./agent-speed-schemas";
 import {
   agentSessionTodoItemSchema,
   agentSessionUsageLimitSchema,
@@ -37,7 +37,6 @@ export const agentModelDescriptorSchema = z
     providerId: nonEmptyStringSchema,
     providerName: nonEmptyStringSchema,
     modelId: nonEmptyStringSchema,
-    resolvedModelId: nonEmptyStringSchema.optional(),
     modelName: nonEmptyStringSchema,
     variants: z.array(z.string()),
     speedLevels: z.array(agentSpeedLevelSchema).optional(),

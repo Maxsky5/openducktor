@@ -1,9 +1,3 @@
-import type {
-  AgentSessionControlUpdateSpeedInput,
-  AgentSessionSpeedState,
-  AgentSpeedRuntimeObservation,
-  AgentSessionModelSettings,
-} from "@openducktor/contracts";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import type {
@@ -36,8 +30,8 @@ import type {
   RuntimeKind,
   SlashCommandCatalog,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../effect/host-errors";
+import type { Effect } from "effect";
+import type { HostError } from "../effect/host-errors";
 import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
 export type AgentSessionCatalogInvalidation = {
@@ -98,31 +92,11 @@ export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBind
   readonly runtimeId: string;
   readonly runtimeKind: RuntimeKind;
   readonly #run: RunLiveMutation;
-  readonly recordSpeedChoice: (
-    ref: AgentSessionLiveRef,
-    choice: string | null,
-    isCurrent: () => boolean,
-    model?: import("@openducktor/contracts").AgentSessionModelSettings,
-    previousChoice?: string | null,
-  ) => Effect.Effect<Effect.Effect<void, HostError>, HostError>;
 
-  constructor(
-    binding: AgentSessionLiveAdapterBinding,
-    run: RunLiveMutation,
-    recordSpeedChoice?: AgentSessionLiveRegistration["recordSpeedChoice"],
-  ) {
+  constructor(binding: AgentSessionLiveAdapterBinding, run: RunLiveMutation) {
     this.runtimeId = binding.runtimeId;
     this.runtimeKind = binding.runtimeKind;
     this.#run = run;
-    this.recordSpeedChoice =
-      recordSpeedChoice ??
-      (() =>
-        Effect.fail(
-          new HostValidationError({
-            field: "speed",
-            message: "Fast-mode persistence is not configured for this host.",
-          }),
-        ));
   }
 
   readonly runMutation: RunLiveMutation = (mutation) => this.#run(mutation);
@@ -182,36 +156,19 @@ type AgentSessionLiveAdapterBase = {
 export type AgentSessionControlContinueInterruptedTurnInput = Omit<
   AgentSessionControlResumeInput,
   "resumeMode"
-> & { speed?: string | null };
+>;
 
 /** `renamed` commits the new summary. `not_attached` means the runtime holds no session with that id. */
 export type AgentSessionTitleUpdateOutcome =
   | { readonly status: "renamed" }
   | { readonly status: "not_attached" };
 
-/** Saved metadata names the next turn's model. Past replies can name a different model. */
-export type AgentSessionSettingsRef = Omit<AgentSessionControlUpdateSpeedInput, "speed"> & {
-  model?: AgentSessionModelSettings | undefined;
-};
-
 export type AgentSessionControlAdapterPort = {
-  readonly holdSessionTurns: (
-    input: AgentSessionSettingsRef,
-  ) => Effect.Effect<Effect.Effect<void, HostError>, HostError>;
-  readonly setSessionSpeedState: (
-    input: AgentSessionLiveRef,
-    state: AgentSessionSpeedState,
-  ) => Effect.Effect<void, HostError>;
-  readonly updateSessionSpeed: (
-    input: AgentSessionControlUpdateSpeedInput,
-    /** Prior confirmed state in a held model change; omit when native fast mode must be enabled or restored. */
-    retainedState?: AgentSessionSpeedState,
-  ) => Effect.Effect<AgentSpeedRuntimeObservation, HostError>;
   readonly startSession: (
     input: AgentSessionControlStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
-    input: AgentSessionControlResumeInput & { speed?: string | null },
+    input: AgentSessionControlResumeInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly continueInterruptedTurn: (
     input: AgentSessionControlContinueInterruptedTurnInput,
@@ -220,7 +177,7 @@ export type AgentSessionControlAdapterPort = {
     input: AgentSessionControlForkInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
-    input: AgentSessionControlSendInput & { speed?: string | null },
+    input: AgentSessionControlSendInput,
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,

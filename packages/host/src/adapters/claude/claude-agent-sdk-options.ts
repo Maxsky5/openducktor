@@ -16,6 +16,7 @@ import {
   type OpenDucktorMcpBridgeConnection,
 } from "../mcp/openducktor-mcp-environment";
 import { createClaudeCanUseTool } from "./claude-agent-sdk-permissions";
+import { toClaudeFastMode } from "./claude-agent-sdk-session-model";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudePreToolUseHook } from "./claude-agent-sdk-pre-tool-use-hook";
 import {
@@ -137,8 +138,7 @@ export const buildClaudeAgentSdkOptions = async ({
   ]);
   const overlay = claudePolicy;
   const permissionMode = overlay?.permissionMode;
-  // Cold attachment uses model metadata for controls and leaves native settings unchanged.
-  const model = preserveNativeSettings ? undefined : input.model;
+  const model = input.model;
   const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
   const systemPrompt = [
     "systemPrompt" in input && input.systemPrompt ? input.systemPrompt : null,
@@ -225,27 +225,17 @@ export const buildClaudeAgentSdkOptions = async ({
       message:
         "Managed Claude settings permit execution when isolation is unavailable. Ask your administrator to set sandbox.failIfUnavailable to true before launching an enabled sandbox.",
     });
-  const flagSettings: import("@anthropic-ai/claude-agent-sdk").Settings = {};
+  const settings: Exclude<Options["settings"], string | undefined> = {};
   if (overlay?.permissions) {
-    const permissions: NonNullable<
-      Exclude<Options["settings"], string | undefined>["permissions"]
-    > = {};
+    const permissions: NonNullable<typeof settings.permissions> = {};
     for (const action of ["allow", "ask", "deny"] as const) {
       const rules = overlay.permissions[action];
       if (rules !== undefined) permissions[action] = rules;
     }
-    flagSettings.permissions = permissions;
-    options.settings = flagSettings;
+    settings.permissions = permissions;
   }
-  if (input.speed !== null && (!preserveNativeSettings || input.speed !== undefined)) {
-    if (input.speed !== undefined && input.speed !== "standard" && input.speed !== "fast")
-      throw new HostValidationError({
-        field: "speed",
-        message: "Claude does not support this speed level.",
-      });
-    flagSettings.fastMode = input.speed === "fast";
-    options.settings = flagSettings;
-  }
+  if (model) settings.fastMode = toClaudeFastMode(model);
+  if (Object.keys(settings).length > 0) options.settings = settings;
   // Enforce failure on unsupported isolation, including an inherited enabled sandbox.
   if (!nativePreservation) {
     const sandbox = structuredClone(overlay?.sandbox ?? {});

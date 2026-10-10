@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   createSessionEventBatcher,
   isImmediateSessionEvent,
-  prepareForcedQueuedSessionEvents,
   type QueuedSessionEvent,
   type SessionEventBatcher,
 } from "./session-event-batching";
@@ -22,43 +21,6 @@ const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSession
 };
 
 describe("session-event-batching", () => {
-  test.each([
-    ["normal", "fast first"],
-    ["normal", "todos first"],
-    ["forced", "fast first"],
-    ["forced", "todos first"],
-  ] as const)("keeps the latest speed and todo updates on a %s flush with %s", (flush, order) => {
-    const fast: Extract<QueuedSessionEvent, { type: "session_speed_changed" }> = {
-      type: "session_speed_changed",
-      externalSessionId: "session-1",
-      timestamp: "2026-02-22T08:00:01.000Z",
-      observation: { reportedChoice: "fast", processing: { status: "active", level: "fast" } },
-    };
-    const todos: Extract<QueuedSessionEvent, { type: "session_todos_updated" }> = {
-      type: "session_todos_updated",
-      externalSessionId: "session-1",
-      timestamp: "2026-02-22T08:00:01.100Z",
-      todos: [{ id: "todo-1", content: "Check fast mode", status: "completed", priority: "high" }],
-    };
-    const priorFast = { ...fast, observation: { reportedChoice: "standard" } };
-    const priorTodos = {
-      ...todos,
-      todos: todos.todos.map((todo) => ({ ...todo, status: "pending" as const })),
-    };
-    const events =
-      order === "fast first"
-        ? [priorFast, priorTodos, fast, todos]
-        : [priorTodos, priorFast, todos, fast];
-    const ready =
-      flush === "normal"
-        ? prepareQueuedEvents(createSessionEventBatcher(), events).readyEvents
-        : prepareForcedQueuedSessionEvents(
-            events.map((event) => ({ event, routeKey: event.externalSessionId })),
-          ).map((item) => item.event);
-
-    expect(ready).toEqual(order === "fast first" ? [fast, todos] : [todos, fast]);
-  });
-
   test("preserves repeated status transitions queued in the same batch", () => {
     const batcher = createSessionEventBatcher();
     const prepared = prepareQueuedEvents(batcher, [

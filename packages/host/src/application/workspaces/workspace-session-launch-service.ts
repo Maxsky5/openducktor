@@ -1,4 +1,6 @@
 import type {
+  AgentSessionControlSendInput,
+  AgentSessionControlResumeInput,
   WorkspaceSessionLaunchRead,
   WorkspaceSessionLaunchRef,
   WorkspaceSessionLaunchRequest,
@@ -9,10 +11,7 @@ import { HostValidationError, toHostOperationError } from "../../effect/host-err
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { toControlSessionRef } from "../agent-sessions/task-workflow-session-storage";
 import { createSessionLaunchService } from "../agent-sessions/session-launch-service";
-import type {
-  SessionLaunchContext,
-  SessionLaunchSendInput,
-} from "../agent-sessions/session-launch-types";
+import type { SessionLaunchContext } from "../agent-sessions/session-launch-types";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import { createWorkspaceSessionStart } from "./workspace-session-start";
@@ -56,7 +55,8 @@ export const createWorkspaceSessionLaunchService = (
         session.selectedModel?.providerId !== model?.providerId ||
         session.selectedModel?.modelId !== model?.modelId ||
         session.selectedModel?.variant !== model?.variant ||
-        session.selectedModel?.profileId !== model?.profileId
+        session.selectedModel?.profileId !== model?.profileId ||
+        session.selectedModel?.speed !== model?.speed
       )
         return yield* invalid(
           "The saved session or model changed after launch. Inspect the chat before retrying.",
@@ -132,13 +132,12 @@ export const createWorkspaceSessionLaunchService = (
           attempt.updateOwner({ record: session });
           attempt.ownershipSaved();
           if (session.selectedModel) attempt.updateOwner({ model: session.selectedModel });
-          const input: SessionLaunchSendInput = {
+          const input: AgentSessionControlSendInput = {
             repoPath: scope.repoPath,
             externalSessionId: session.externalSessionId,
             runtimeKind: session.runtimeKind,
             workingDirectory: session.executionTarget.workingDirectory,
             sessionScope: { kind: "repository" },
-            speed: session.speed,
             parts,
           };
           if (session.selectedModel) input.model = session.selectedModel;
@@ -167,13 +166,12 @@ export const createWorkspaceSessionLaunchService = (
                 status: "idle",
               });
             else {
-              const resume: Parameters<typeof deps.commands.resumeSession>[0] = {
+              const resume: AgentSessionControlResumeInput = {
                 ...ref,
                 sessionScope: input.sessionScope,
                 resumeMode: "reattach",
               };
               if (input.model) resume.model = input.model;
-              if (input.speed !== undefined) resume.speed = input.speed;
               attempt.retainSession(yield* deps.commands.resumeSession(resume));
             }
           }
@@ -193,13 +191,12 @@ export const createWorkspaceSessionLaunchService = (
             toControlSessionRef(input.repoPath, attempt.snapshot.session!),
           );
           if (live.type === "missing") {
-            const resume: Parameters<typeof deps.commands.resumeSession>[0] = {
+            const resume: AgentSessionControlResumeInput = {
               ...toControlSessionRef(input.repoPath, attempt.snapshot.session!),
               sessionScope: input.sessionScope,
               resumeMode: "reattach",
             };
             if (input.model) resume.model = input.model;
-            if (input.speed !== undefined) resume.speed = input.speed;
             yield* deps.commands.resumeSession(resume);
           }
           yield* send(attempt);

@@ -10,7 +10,6 @@ import type { SessionLaunchActionId } from "./session-start-launch-options";
 export type SessionStartExistingSessionOption = {
   value: string;
   sourceSession: AgentSessionIdentity;
-  speed?: string | null;
   label: string;
   description: string;
   secondaryLabel?: string;
@@ -32,7 +31,6 @@ export type NewSessionStartRequest = {
 
 export type FreshSessionStartDecision = {
   startMode: "fresh";
-  speed?: string | null;
   selectedModel: AgentModelSelection;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
@@ -40,15 +38,15 @@ export type FreshSessionStartDecision = {
 
 export type ReuseSessionStartDecision = {
   startMode: "reuse";
-  speed?: string | null;
   sourceSession: AgentSessionIdentity;
+  /** Omit to keep the source speed. Null sets standard speed. */
+  speed?: string | null;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
 };
 
 export type ForkSessionStartDecision = {
   startMode: "fork";
-  speed?: string | null;
   selectedModel: AgentModelSelection;
   sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;

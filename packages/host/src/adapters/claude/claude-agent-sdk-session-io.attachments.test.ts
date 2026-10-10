@@ -5,8 +5,7 @@ import { join } from "node:path";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { applyClaudeSessionModel } from "./claude-agent-sdk-session-dispatch";
+import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   createClaudeQueryFixture,
   createClaudeSession,

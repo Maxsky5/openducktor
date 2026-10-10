@@ -14,10 +14,6 @@ import {
 } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { LiveStateCoordinator } from "./live-state-coordinator";
-import type {
-  AgentSessionPersistencePort,
-  SpeedCommit,
-} from "../../ports/agent-session-persistence-port";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 import { createRetryableCleanup } from "../../effect/retryable-cleanup";
 import { createLiveRuntimeRelease, type OpenRelease } from "./agent-session-live-runtime-release";
@@ -37,9 +33,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   refreshSnapshots,
   observedRepoPaths,
   onDetach,
-  recordSpeedChoice,
 }: {
-  readonly recordSpeedChoice?: AgentSessionPersistencePort["recordSpeedChoice"];
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
   readonly publishChanges: (
@@ -161,36 +155,15 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
         return release;
       }),
     createRuntimeRegistration: (binding) => {
-      const registration = new AgentSessionLiveRegistration(
-        binding,
-        (mutation) =>
-          coordinator.run(
-            Effect.gen(function* () {
-              const result = yield* mutation;
-              // Cleanup can drain native events. A detached lease cannot publish them.
-              if (activeRegistrations.has(registration)) yield* publishChanges(result.changes);
-              return result.value;
-            }),
-          ),
-        recordSpeedChoice
-          ? (ref, choice, isCurrent, model, previousChoice) => {
-              // Reads run outside the lock. Check ownership at each write and publication.
-              const commit: SpeedCommit = (write) =>
-                coordinator.run(
-                  Effect.gen(function* () {
-                    yield* requireAttached(registration);
-                    if (!isCurrent())
-                      return yield* new HostOperationError({
-                        operation: "agent-session-live.session-detached",
-                        message:
-                          "This session was released before its speed change completed. Set speed in the current session.",
-                      });
-                    return yield* write;
-                  }),
-                );
-              return recordSpeedChoice(ref, choice, commit, model, previousChoice);
-            }
-          : undefined,
+      const registration = new AgentSessionLiveRegistration(binding, (mutation) =>
+        coordinator.run(
+          Effect.gen(function* () {
+            const result = yield* mutation;
+            // Cleanup can drain native events. A detached lease cannot publish them.
+            if (activeRegistrations.has(registration)) yield* publishChanges(result.changes);
+            return result.value;
+          }),
+        ),
       );
       return registration;
     },

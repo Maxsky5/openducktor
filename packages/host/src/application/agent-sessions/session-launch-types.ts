@@ -7,8 +7,6 @@ import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 
-export type SessionLaunchSendInput = AgentSessionControlSendInput & { speed?: string | null };
-
 export type SessionLaunchRef = { launchAttemptId: string; workspaceId: string; repoPath: string };
 export type SessionLaunchInitial<State extends SessionLaunchState> = {
   snapshot: State;
@@ -22,10 +20,10 @@ export type SessionLaunchOwnerState<State extends SessionLaunchState> = Partial<
 export type SessionLaunchContext<Request, State extends SessionLaunchState> = {
   readonly request: Request;
   readonly snapshot: Readonly<State>;
-  readonly sendInput: SessionLaunchSendInput | undefined;
+  readonly sendInput: AgentSessionControlSendInput | undefined;
   updateOwner: (state: SessionLaunchOwnerState<State>) => void;
   retainSession: (session: NonNullable<SessionLaunchState["session"]>) => void;
-  retainInstruction: (input: SessionLaunchSendInput) => void;
+  retainInstruction: (input: AgentSessionControlSendInput) => void;
   targetSession: (ref: AgentSessionLiveRef) => void;
   ownershipSaved: () => void;
   stopSession: SessionLaunchRuntimePort["stopSession"];

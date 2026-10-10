@@ -1,4 +1,3 @@
-import { initialSpeedState } from "@openducktor/core";
 import { describe, expect, test } from "bun:test";
 import {
   createClaudeSessionSummary,
@@ -22,7 +21,6 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   },
   query: emptyClaudeQuery(),
   summary: {
-    speed: initialSpeedState("standard", "confirmed"),
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo/worktree",

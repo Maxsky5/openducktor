@@ -13,7 +13,6 @@ import {
   agentSessionStatusFromActivity,
   describeAgentSessionScope,
   resolveAgentSessionAssociationTransition,
-  SessionTurnAdmission,
 } from "@openducktor/core";
 import {
   codexThreadStatusSnapshot,
@@ -23,7 +22,7 @@ import {
 } from "./codex-app-server-threads";
 import { codexSessionRef } from "./codex-session-ref";
 import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
-import { CODEX_MODEL_PROVIDER_ID } from "./model-catalog";
+import { CODEX_MODEL_PROVIDER_ID, CODEX_STANDARD_SERVICE_TIER } from "./model-catalog";
 import type {
   CodexSessionState,
   CodexThreadForkResult,
@@ -49,7 +48,6 @@ const buildSessionState = (
 ): CodexSessionState => {
   const sessionState: CodexSessionState = {
     summary,
-    turnAdmission: new SessionTurnAdmission(),
     systemPrompt: input.systemPrompt ?? "",
     runtimeId,
     repoPath: input.repoPath,
@@ -223,6 +221,9 @@ export const sessionStateFromExistingThread = (
     };
     if (response.reasoningEffort !== null) {
       session.model.variant = response.reasoningEffort;
+    }
+    if (response.serviceTier !== null && response.serviceTier !== CODEX_STANDARD_SERVICE_TIER) {
+      session.model.speed = response.serviceTier;
     }
   }
   delete session.liveStatus;

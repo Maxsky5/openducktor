@@ -2,13 +2,9 @@ import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
 import { createRuntimeRegistryPort } from "../../tasks/test-support/task-workflow-harness";
 import { createTestRuntimeAdmissionGate } from "../../../test-support/runtime-admission-test-gate";
-import { agentSessionRefKey, initialSpeedState } from "@openducktor/core";
-import { createAgentSessionCommandService } from "../agent-session-command-service";
-import { unexpectedRuntimeQueries } from "../../../test-support/runtime-query-test-doubles";
+import { agentSessionRefKey } from "@openducktor/core";
 import {
   type AgentSessionControlSendInput,
-  type AgentSessionControlStartInput,
-  type AgentSessionControlForkInput,
   type AgentSessionRecord,
   type AgentSessionLiveSnapshot,
   type RuntimeKind,
@@ -41,11 +37,7 @@ import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
 } from "../../../ports/agent-session-send-error";
-import {
-  HostOperationError,
-  HostValidationError,
-  toHostOperationError,
-} from "../../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 
 export const createLaunchHarness = async (
   runtimeKind: RuntimeKind = "codex",
@@ -92,9 +84,7 @@ export const createLaunchHarness = async (
     forks: string[] = [],
     resumes: string[] = [],
     stops: string[] = [];
-  const sends: Array<AgentSessionControlSendInput & { speed?: string | null }> = [];
-  const startInputs: AgentSessionControlStartInput[] = [];
-  const forkInputs: AgentSessionControlForkInput[] = [];
+  const sends: AgentSessionControlSendInput[] = [];
   const snapshots: WorkflowLaunchSnapshot[] = [];
   const removedWorktrees: string[] = [];
   const deletedBranches: string[] = [];
@@ -106,46 +96,9 @@ export const createLaunchHarness = async (
   let worktreeExists = true;
   let sendGate: Effect.Effect<void> = Effect.void;
   let storeGate: Effect.Effect<void> = Effect.void;
-  const queries = {
-    ...unexpectedRuntimeQueries,
-    loadRuntimeCatalog: () =>
-      (gates.catalog ?? Effect.void).pipe(
-        Effect.as({
-          models: {
-            status: "available" as const,
-            catalog: {
-              models: [
-                {
-                  id: "provider/model",
-                  providerId: "provider",
-                  providerName: "Provider",
-                  modelId: "model",
-                  modelName: "Model",
-                  variants: ["medium"],
-                  supportsReasoning: true,
-                  speedLevels: [
-                    { id: "standard", label: "Standard" },
-                    { id: "fast", label: "Fast" },
-                  ],
-                },
-              ],
-              defaultModelsByProvider: {},
-            },
-          },
-        }),
-      ),
-  };
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeId: "runtime", runtimeKind },
     {
-      queries,
-      holdSessionTurns: () => Effect.succeed(Effect.void),
-      setSessionSpeedState: (ref, speed) =>
-        Effect.sync(() => {
-          const current = live.get(agentSessionRefKey(ref));
-          if (current) live.set(agentSessionRefKey(ref), { ...current, speed });
-        }),
-      updateSessionSpeed: (input) => Effect.succeed({ reportedChoice: input.speed }),
       listSnapshots: () => Effect.succeed([...live.values()]),
       readSnapshot: (ref) =>
         Effect.succeed(
@@ -157,7 +110,6 @@ export const createLaunchHarness = async (
         Effect.sync(() => {
           const externalSessionId = `session-${starts.length + 1}`;
           starts.push(externalSessionId);
-          startInputs.push(input);
           const session: AgentSessionLiveSnapshot = {
             ref: {
               repoPath: input.repoPath,
@@ -167,8 +119,6 @@ export const createLaunchHarness = async (
             },
             activity: "idle",
             title: "Native",
-            model: input.model,
-            speed: initialSpeedState(input.speed ?? "standard", "confirmed"),
             startedAt: timestamp,
             pendingApprovals: [],
             pendingQuestions: [],
@@ -181,7 +131,6 @@ export const createLaunchHarness = async (
             workingDirectory: input.workingDirectory,
             startedAt: timestamp,
             status: "idle" as const,
-            speed: session.speed,
           };
         }).pipe(
           Effect.flatMap((summary) => (gates.nativeStart ?? Effect.void).pipe(Effect.as(summary))),
@@ -190,7 +139,6 @@ export const createLaunchHarness = async (
         Effect.sync(() => {
           const externalSessionId = `fork-${forks.length + 1}`;
           forks.push(input.parentExternalSessionId);
-          forkInputs.push(input);
           const session: AgentSessionLiveSnapshot = {
             ref: {
               repoPath: input.repoPath,
@@ -200,8 +148,6 @@ export const createLaunchHarness = async (
             },
             activity: "idle",
             title: "Child",
-            model: input.model,
-            speed: initialSpeedState(input.speed ?? "standard", "confirmed"),
             startedAt: timestamp,
             pendingApprovals: [],
             pendingQuestions: [],
@@ -214,7 +160,6 @@ export const createLaunchHarness = async (
             workingDirectory: input.workingDirectory,
             startedAt: timestamp,
             status: "idle" as const,
-            speed: session.speed,
           };
         }).pipe(
           Effect.flatMap((summary) => (gates.nativeFork ?? Effect.void).pipe(Effect.as(summary))),
@@ -222,27 +167,7 @@ export const createLaunchHarness = async (
       resumeSession: (input) =>
         Effect.sync(() => {
           resumes.push(input.externalSessionId);
-          const speed = initialSpeedState(
-            input.speed ?? null,
-            input.speed === null ? "unapplied" : "confirmed",
-          );
-          live.set(agentSessionRefKey(input), {
-            ref: {
-              repoPath: input.repoPath,
-              runtimeKind: input.runtimeKind,
-              workingDirectory: input.workingDirectory,
-              externalSessionId: input.externalSessionId,
-            },
-            activity: "idle",
-            title: "Resumed",
-            model: input.model,
-            speed,
-            startedAt: timestamp,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            contextUsage: null,
-          });
-          return { ...input, speed, startedAt: timestamp, status: "idle" as const };
+          return { ...input, startedAt: timestamp, status: "idle" as const };
         }),
       sendUserMessage: (input) =>
         Effect.gen(function* () {
@@ -321,21 +246,13 @@ export const createLaunchHarness = async (
           ),
         ),
       agentSessionUpdateModel: (input) =>
-        Effect.suspend(() => {
-          if (saveFailure) return Effect.fail(failure("Settings save failed"));
+        Effect.sync(() => {
           const index = records.findIndex(
-            (record) =>
-              record.externalSessionId === input.identity.externalSessionId &&
-              record.runtimeKind === input.identity.runtimeKind &&
-              record.workingDirectory === input.identity.workingDirectory,
+            (record) => record.externalSessionId === input.identity.externalSessionId,
           );
-          if (index < 0) return Effect.succeed(false);
-          records[index] = {
-            ...records[index]!,
-            selectedModel: input.selectedModel,
-            speed: input.speed === undefined ? records[index]!.speed : input.speed,
-          };
-          return Effect.succeed(true);
+          if (index < 0) return false;
+          records[index] = { ...records[index]!, selectedModel: input.selectedModel };
+          return true;
         }),
       transitionTask: (input) =>
         Effect.sync(() => {
@@ -437,36 +354,6 @@ export const createLaunchHarness = async (
       readOutputTail: () => Effect.die(new Error("unexpected terminal output")),
     }),
   });
-  const commands = createAgentSessionCommandService({
-    canonicalizeRepoPath: git.canonicalizePath,
-    runtime,
-    tasks,
-    taskReader,
-    taskLifecycle: lifecycle,
-    taskSessionStart: preparation,
-    persistTaskModel: (input) =>
-      tasks.agentSessionUpdateModelDeferredPublication(input).pipe(
-        Effect.mapError((cause) => toHostOperationError(cause, "task-session.persist-settings")),
-        Effect.map(({ updated, publish }) => ({
-          updated,
-          publish: publish.pipe(
-            Effect.mapError((cause) =>
-              toHostOperationError(cause, "task-session.publish-settings"),
-            ),
-          ),
-        })),
-      ),
-    repositoryPolicy: {
-      run: (_ref, _operation, effect) => effect,
-      runSend: (_ref, effect) => effect,
-      validateRef: () => Effect.void,
-      prepareResume: (input) => Effect.succeed({ input, save: () => Effect.void }),
-      prepareSend: (input) => Effect.succeed(input),
-      recordAcceptedMessage: () => Effect.void,
-      prepareSpeedUpdate: () => Effect.die(new Error("Unexpected repository speed update")),
-      prepareModelUpdate: () => Effect.die(new Error("Unexpected repository model update")),
-    },
-  });
   const service = createWorkflowLaunchService({
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
@@ -476,7 +363,31 @@ export const createLaunchHarness = async (
     git,
     definitions: { listRuntimeDefinitions: () => [descriptor] },
     registry,
-    queries,
+    queries: {
+      loadRuntimeCatalog: () =>
+        (gates.catalog ?? Effect.void).pipe(
+          Effect.as({
+            models: {
+              status: "available",
+              catalog: {
+                models: [
+                  {
+                    id: "provider/model",
+                    providerId: "provider",
+                    providerName: "Provider",
+                    modelId: "model",
+                    modelName: "Model",
+                    variants: ["medium"],
+                    speedLevels: [{ id: "fast", label: "Fast" }],
+                    supportsReasoning: true,
+                  },
+                ],
+                defaultModelsByProvider: {},
+              },
+            },
+          }),
+        ),
+    },
     provider: { getContext: () => Effect.succeed(provider) },
     worktrees: {
       getTaskWorktree: () =>
@@ -484,9 +395,6 @@ export const createLaunchHarness = async (
     },
     runtime: {
       ...runtime,
-      sendUserMessage: commands.sendUserMessage,
-      resumeSession: commands.resumeSession,
-      updateSessionSpeed: commands.updateSessionSpeed,
       read: (ref) =>
         (gates.finalObservation ?? Effect.void).pipe(Effect.andThen(runtime.read(ref))),
       holdWorkflowLaunch: (ref, held) =>
@@ -546,8 +454,6 @@ export const createLaunchHarness = async (
   });
   return {
     service,
-    adapter,
-    queries,
     sendEntered,
     lifecycle,
     enablePullRequests: () => {
@@ -572,13 +478,10 @@ export const createLaunchHarness = async (
       });
     },
     runtime,
-    commands,
     records,
     runtimeAdmission,
     live,
     starts,
-    startInputs,
-    forkInputs,
     forks,
     resumes,
     stops,

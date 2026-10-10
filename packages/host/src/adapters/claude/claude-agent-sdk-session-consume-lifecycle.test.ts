@@ -3,11 +3,12 @@ import type { Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   applyClaudeSessionModel,
+  consumeClaudeSession,
   flushQueuedClaudeUserMessage,
-} from "./claude-agent-sdk-session-dispatch";
+  sendClaudeUserMessage,
+} from "./claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
   createClaudeSession,

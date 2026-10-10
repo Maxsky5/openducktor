@@ -1,9 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import type {
-  WorkflowLaunchDecision,
-  WorkflowLaunchRequest,
-  WorkflowLaunchSnapshot,
-} from "@openducktor/contracts";
+import type { WorkflowLaunchRequest, WorkflowLaunchSnapshot } from "@openducktor/contracts";
 import { startSessionWorkflow, WorkflowLaunchFailure } from "./session-start-workflow";
 import type { ResolvedSessionStartDecision } from "./session-start-types";
 
@@ -133,14 +129,9 @@ test.each(["accepted", "unknown", "rejected", "not_submitted"] as const)(
   },
 );
 
-test.each([
-  ["fresh", "priority"],
-  ["reuse", "priority"],
-  ["fork", "priority"],
-  ["reuse", undefined],
-] as const)(
-  "submits the %s decision with speed %s, edited kickoff, and launch options",
-  async (startMode, speed) => {
+test.each(["fresh", "reuse", "fork"] as const)(
+  "submits the %s decision with its edited kickoff and launch options",
+  async (startMode) => {
     const sourceSession = {
       externalSessionId: session.externalSessionId,
       runtimeKind: session.runtimeKind,
@@ -148,14 +139,13 @@ test.each([
     };
     const targetBranch = { branch: "release", remote: "origin" };
     const beforeStartAction = { action: "human_request_changes" as const, note: "Fix the result" };
-    const decision: WorkflowLaunchDecision & ResolvedSessionStartDecision = (
+    const decision = (
       startMode === "reuse"
-        ? { startMode, sourceSession }
+        ? { startMode, sourceSession, speed: null }
         : startMode === "fork"
           ? { startMode, sourceSession, selectedModel }
           : { startMode, selectedModel }
     ) satisfies ResolvedSessionStartDecision;
-    if (speed !== undefined) decision.speed = speed;
     const launch = mock(async (request: WorkflowLaunchRequest) => outcome(request));
     await startSessionWorkflow({
       ...args,

@@ -24,7 +24,6 @@ const record = (): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1,
   updatedAt: 1,
-  speed: "standard",
   archivedAt: null,
 });
 describe("Workspace Session notifications", () => {

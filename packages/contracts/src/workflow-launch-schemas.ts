@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { agentSessionModelSelectionSchema, agentSessionRecordSchema } from "./session-schemas";
+import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { sessionLaunchStateSchema } from "./session-launch-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
@@ -22,17 +22,14 @@ export type SessionLaunchActionId = (typeof sessionLaunchActionIds)[number];
 
 export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
   z
-    .object({
-      startMode: z.literal("fresh"),
-      selectedModel: agentSessionModelSelectionSchema,
-      speed: agentSessionRecordSchema.shape.speed,
-    })
+    .object({ startMode: z.literal("fresh"), selectedModel: agentSessionModelSelectionSchema })
     .strict(),
   z
     .object({
       startMode: z.literal("reuse"),
       sourceSession: agentSessionLiveRefSchema.omit({ repoPath: true }),
-      speed: agentSessionRecordSchema.shape.speed,
+      // Omit to keep the source speed. Null sets standard speed.
+      speed: z.string().min(1).nullable().optional(),
     })
     .strict(),
   z
@@ -40,7 +37,6 @@ export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
       startMode: z.literal("fork"),
       selectedModel: agentSessionModelSelectionSchema,
       sourceSession: agentSessionLiveRefSchema.omit({ repoPath: true }),
-      speed: agentSessionRecordSchema.shape.speed,
     })
     .strict(),
 ]);

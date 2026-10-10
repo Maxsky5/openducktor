@@ -1,4 +1,4 @@
-import { SpeedSelect, type SpeedControlModel } from "@/components/features/agents/speed-select";
+import { SpeedSelect } from "@/components/features/agents/speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
@@ -7,11 +7,9 @@ import type { useWorkspaceSessionModelPicker } from "./use-workspace-session-mod
 export function WorkspaceSessionModelFields({
   model,
   disabled,
-  speed,
 }: {
   model: ReturnType<typeof useWorkspaceSessionModelPicker>;
   disabled: boolean;
-  speed?: SpeedControlModel | undefined;
 }) {
   return (
     <>
@@ -41,7 +39,7 @@ export function WorkspaceSessionModelFields({
               placeholder="Not supported"
             />
           </div>
-          <SpeedSelect model={speed} label="Speed" />
+          <SpeedSelect model={model.speed && { ...model.speed, disabled }} label="Speed" />
         </div>
       </div>
       {model.supportsProfiles && (

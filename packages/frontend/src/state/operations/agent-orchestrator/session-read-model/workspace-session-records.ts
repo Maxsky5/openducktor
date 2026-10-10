@@ -8,7 +8,7 @@ import {
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { agentSessionRefKey, initialSpeedState } from "@openducktor/core";
+import { agentSessionRefKey } from "@openducktor/core";
 import { createSessionMessagesState } from "../support/messages";
 
 export const workspaceSessionIdentity = (record: WorkspaceSession): AgentSessionIdentity | null =>
@@ -114,11 +114,6 @@ export const applyWorkspaceSessionRecords = (
       sessionAssociation: { kind: "repository" },
       title: workspaceSessionTitle(record),
       selectedModel: record.selectedModel ?? session.selectedModel,
-      speed:
-        current?.speed &&
-        (current.livePresence === "present" || current.speed.choice === record.speed)
-          ? current.speed
-          : initialSpeedState(record.speed),
     };
     collection = replaceAgentSession(collection, next);
   }

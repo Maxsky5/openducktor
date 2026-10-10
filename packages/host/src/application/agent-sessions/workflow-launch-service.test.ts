@@ -4,7 +4,6 @@ import { agentSessionLiveEnvelopeSchema } from "@openducktor/contracts";
 import type {
   AgentSessionControlSendInput,
   WorkflowLaunchRequest,
-  WorkflowLaunchDecision,
   WorkflowLaunchSnapshot,
 } from "@openducktor/contracts";
 import {
@@ -463,91 +462,6 @@ test.each(["manual", "automatic", "fork"] as const)(
   },
 );
 
-test.each([
-  { catalogProviderId: "provider", exactEntry: false },
-  { catalogProviderId: "other-provider", exactEntry: false },
-  { catalogProviderId: "provider", exactEntry: true },
-])(
-  "reuse matches the saved Claude provider and prefers an exact model row: %j",
-  async ({ catalogProviderId, exactEntry }) => {
-    const h = await createLaunchHarness("claude");
-    const selectedModel = { ...modelFor("claude"), modelId: "claude-opus-5-5" };
-    const source = {
-      externalSessionId: "source",
-      runtimeKind: "claude" as const,
-      workingDirectory: "/worktrees/task",
-      role: "build" as const,
-      startedAt: timestamp,
-      selectedModel,
-      speed: "standard",
-    };
-    h.records.push(source);
-    const catalog = await Effect.runPromise(h.queries.loadRuntimeCatalog());
-    h.queries.loadRuntimeCatalog = () =>
-      Effect.succeed({
-        ...catalog,
-        models: {
-          ...catalog.models,
-          catalog: {
-            ...catalog.models.catalog,
-            models: [
-              {
-                ...catalog.models.catalog.models[0]!,
-                id: `${catalogProviderId}/opus`,
-                providerId: catalogProviderId,
-                modelId: "opus",
-                resolvedModelId: selectedModel.modelId,
-                variants: exactEntry ? ["alias-only"] : ["medium"],
-              },
-              ...(exactEntry
-                ? [
-                    {
-                      ...catalog.models.catalog.models[0]!,
-                      id: `${selectedModel.providerId}/${selectedModel.modelId}`,
-                      modelId: selectedModel.modelId,
-                    },
-                  ]
-                : []),
-            ],
-          },
-        },
-      });
-    h.setTaskStatus("in_progress");
-    const result = await Effect.runPromise(
-      h.service.launch({
-        ...requestFor("claude"),
-        policy: {
-          kind: "manual",
-          actionId: "build_after_qa_rejected",
-          decision: {
-            startMode: "reuse",
-            sourceSession: {
-              externalSessionId: source.externalSessionId,
-              runtimeKind: source.runtimeKind,
-              workingDirectory: source.workingDirectory,
-            },
-          },
-        },
-      }),
-    );
-    expect(h.starts).toHaveLength(0);
-    if (catalogProviderId === selectedModel.providerId) {
-      expect(result.failure).toBeUndefined();
-      expect(result.acceptance).toBe("accepted");
-      expect(result.session?.externalSessionId).toBe(source.externalSessionId);
-      expect(h.records[0]?.selectedModel).toEqual(selectedModel);
-      expect(h.resumes).toEqual([source.externalSessionId]);
-      expect(h.sends).toHaveLength(1);
-      expect(h.sends[0]?.model).toEqual(selectedModel);
-    } else {
-      expect(result.phase).toBe("failed");
-      expect(result.failure?.message).toContain("unavailable");
-      expect(h.resumes).toHaveLength(0);
-      expect(h.sends).toHaveLength(0);
-    }
-  },
-);
-
 test.each(["opencode", "codex", "claude"] as const)(
   "sends the complete typed task draft after its caller leaves: %s",
   async (runtimeKind) => {
@@ -842,33 +756,7 @@ test.each(["opencode", "codex", "claude"] as const)(
       },
     };
     h.setTaskStatus("in_progress");
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const release = yield* Deferred.make<void>();
-        return yield* Effect.gen(function* () {
-          h.setSendGate(Deferred.await(release));
-          const launch = yield* Effect.forkChild(h.service.launch(request));
-          yield* Deferred.await(h.sendEntered);
-          const ownership = h.envelopes
-            .map((event) => agentSessionLiveEnvelopeSchema.parse(event))
-            .filter((event) => event.type === "task_session_records_updated");
-          expect(ownership).toEqual([
-            {
-              type: "task_session_records_updated",
-              repoPath: "/repo",
-              taskId: "task",
-              agentSessions: h.records,
-              liveSession: expect.objectContaining({
-                ref: expect.objectContaining({ externalSessionId: "source", runtimeKind: kind }),
-                activity: "idle",
-              }),
-            },
-          ]);
-          yield* Deferred.succeed(release, undefined);
-          return yield* Fiber.join(launch);
-        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
-      }),
-    );
+    const result = await Effect.runPromise(h.service.launch(request));
     expect(result.acceptance).toBe("accepted");
     expect(result.session?.externalSessionId).toBe("source");
     expect(h.starts).toHaveLength(0);
@@ -876,6 +764,43 @@ test.each(["opencode", "codex", "claude"] as const)(
     expect(h.sends[0]?.model).toEqual(modelFor(kind));
   },
 );
+
+test.each([
+  { speed: "fast", saved: { ...modelFor("claude"), speed: "fast" } },
+  { speed: null, saved: modelFor("claude") },
+])("reuse saves speed $speed before its kickoff turn", async ({ speed, saved }) => {
+  const h = await createLaunchHarness("claude");
+  h.records.push({
+    externalSessionId: "source",
+    runtimeKind: "claude",
+    workingDirectory: "/worktrees/task",
+    role: "build",
+    startedAt: timestamp,
+    selectedModel: speed ? modelFor("claude") : { ...modelFor("claude"), speed: "fast" },
+  });
+  h.setTaskStatus("in_progress");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("claude"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_qa_rejected",
+        decision: {
+          startMode: "reuse",
+          sourceSession: {
+            externalSessionId: "source",
+            runtimeKind: "claude",
+            workingDirectory: "/worktrees/task",
+          },
+          speed,
+        },
+      },
+    }),
+  );
+  expect(result.acceptance).toBe("accepted");
+  expect(h.records[0]?.selectedModel).toEqual(saved);
+  expect(h.sends[0]?.model).toEqual(saved);
+});
 
 test.each(["rejected", "unknown", "accepted"] as const)(
   "retains session identity and exact send failure with %s acceptance",
@@ -936,53 +861,25 @@ test.each(["codex", "claude", "opencode"] as const)(
   },
 );
 
-test.each(["fresh", "cold_reuse"] as const)(
-  "a %s publication failure after ownership commit retains the session and does not clean its worktree",
-  async (mode) => {
-    const h = await createLaunchHarness();
-    const request = requestFor("codex");
-    if (mode === "cold_reuse") {
-      h.records.push({
-        externalSessionId: "source",
-        runtimeKind: "codex",
-        workingDirectory: "/worktrees/task",
-        role: "build",
-        startedAt: timestamp,
-        selectedModel: modelFor("codex"),
-        speed: "standard",
-      });
-      request.policy = {
-        kind: "manual",
-        actionId: "build_after_qa_rejected",
-        decision: {
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "source",
-            runtimeKind: "codex",
-            workingDirectory: "/worktrees/task",
-          },
-        },
-      };
-      h.setTaskStatus("in_progress");
-    }
-    h.setPublishFailure();
-    const result = await Effect.runPromise(h.service.launch(request));
-    expect(result.ownershipSaved).toBe(true);
-    expect(result.recoveryAllowed).toBe(false);
-    expect(h.records).toHaveLength(1);
-    expect(h.stops).toHaveLength(0);
-    expect(result.failure?.message).toBe("Ownership publication failed");
-    expect(result.failure?.stage).toBe("publication");
-    await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
-      "recovery is unavailable",
-    );
-    expect((await Effect.runPromise(h.service.read(request)))[0]).toEqual(result);
-    expect(h.sends).toHaveLength(0);
-    expect(h.starts).toHaveLength(mode === "fresh" ? 1 : 0);
-    expect(h.resumes).toEqual(mode === "fresh" ? [] : ["source"]);
-    expect(h.records).toHaveLength(1);
-  },
-);
+test("a publication failure after ownership commit retains the session and does not clean its worktree", async () => {
+  const h = await createLaunchHarness();
+  h.setPublishFailure();
+  const request = requestFor("codex");
+  const result = await Effect.runPromise(h.service.launch(request));
+  expect(result.ownershipSaved).toBe(true);
+  expect(result.recoveryAllowed).toBe(false);
+  expect(h.records).toHaveLength(1);
+  expect(h.stops).toHaveLength(0);
+  expect(result.failure?.message).toBe("Ownership publication failed");
+  expect(result.failure?.stage).toBe("publication");
+  await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
+    "recovery is unavailable",
+  );
+  expect((await Effect.runPromise(h.service.read(request)))[0]).toEqual(result);
+  expect(h.sends).toHaveLength(0);
+  expect(h.starts).toHaveLength(1);
+  expect(h.records).toHaveLength(1);
+});
 
 test.each(["opencode", "codex", "claude"] as const)(
   "fork %s uses the exact task-owned parent and stores the child before admission",
@@ -1197,121 +1094,4 @@ test("host shutdown joins native submission before stopping and rejects new laun
   await expect(
     Effect.runPromise(h.service.launch(requestFor("codex", "after-shutdown"))),
   ).rejects.toThrow("admission is closed");
-});
-
-test.each(["fresh", "fork"] as const)(
-  "%s launch saves the requested speed before native submission",
-  async (mode) => {
-    const h = await createLaunchHarness("codex");
-    const request = requestFor("codex");
-    if (mode === "fork") {
-      h.enablePullRequests();
-      h.setTaskStatus("human_review");
-      h.records.push({
-        externalSessionId: "source",
-        runtimeKind: "codex",
-        workingDirectory: "/worktrees/task",
-        role: "build",
-        startedAt: timestamp,
-        selectedModel: modelFor("codex"),
-        speed: "standard",
-      });
-      request.policy = {
-        kind: "manual",
-        actionId: "build_pull_request_generation",
-        decision: {
-          startMode: "fork",
-          sourceSession: h.records[0]!,
-          selectedModel: modelFor("codex"),
-          speed: "fast",
-        },
-      };
-    } else
-      request.policy = {
-        kind: "manual",
-        actionId: "build_implementation_start",
-        decision: { startMode: "fresh", selectedModel: modelFor("codex"), speed: "fast" },
-      };
-    const outcome = await Effect.runPromise(h.service.launch(request));
-    expect(outcome.acceptance).toBe("accepted");
-    expect((mode === "fresh" ? h.startInputs : h.forkInputs)[0]?.speed).toBe("fast");
-    expect(h.records.at(-1)?.speed).toBe("fast");
-    expect(h.sends[0]?.speed).toBe("fast");
-  },
-);
-
-test.each([undefined, "fast"] as const)(
-  "reuse launch applies its saved or requested speed, then retries the current saved choice: %s",
-  async (speed) => {
-    const h = await createLaunchHarness("codex");
-    const source = requestFor("codex", "source");
-    if (source.policy.kind === "manual" && speed === undefined)
-      source.policy.decision.speed = "fast";
-    const created = await Effect.runPromise(
-      h.service.launch({ ...source, instruction: { kind: "none" } }),
-    );
-    const decision: WorkflowLaunchDecision = {
-      startMode: "reuse",
-      sourceSession: created.session!,
-    };
-    if (speed !== undefined) decision.speed = speed;
-    const request: WorkflowLaunchRequest = {
-      ...requestFor("codex", "reuse"),
-      policy: {
-        kind: "manual",
-        actionId: "build_after_qa_rejected",
-        decision,
-      },
-    };
-    h.setSendFailure("rejected");
-    const failed = await Effect.runPromise(h.service.launch(request));
-    expect(failed.recoveryAllowed).toBe(true);
-    expect(h.records[0]?.speed).toBe("fast");
-    expect(h.sends[0]?.speed).toBe("fast");
-    await Effect.runPromise(
-      h.commands.updateSessionSpeed({
-        repoPath: "/repo",
-        ...created.session!,
-        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
-        speed: "standard",
-      }),
-    );
-    h.setSendFailure(null);
-    expect((await Effect.runPromise(h.service.recover(request))).acceptance).toBe("accepted");
-    expect(h.sends[1]?.speed).toBe("standard");
-    expect(h.starts).toHaveLength(1);
-  },
-);
-
-test("reuse with an unknown native speed rejects before submission and permits an explicit choice before Retry", async () => {
-  const h = await createLaunchHarness("codex");
-  const created = await Effect.runPromise(
-    h.service.launch({ ...requestFor("codex", "source"), instruction: { kind: "none" } }),
-  );
-  h.records[0]!.speed = null;
-  for (const snapshot of h.live.values())
-    snapshot.speed = { ...snapshot.speed!, choice: null, synchronization: "unapplied" };
-  const request: WorkflowLaunchRequest = {
-    ...requestFor("codex", "reuse"),
-    policy: {
-      kind: "manual",
-      actionId: "build_after_qa_rejected",
-      decision: { startMode: "reuse", sourceSession: created.session! },
-    },
-  };
-  const failed = await Effect.runPromise(h.service.launch(request));
-  expect(failed).toMatchObject({ acceptance: "rejected", recoveryAllowed: true });
-  expect(h.sends).toHaveLength(0);
-  expect(h.records[0]?.speed).toBeNull();
-  await Effect.runPromise(
-    h.commands.updateSessionSpeed({
-      repoPath: "/repo",
-      ...created.session!,
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
-      speed: "standard",
-    }),
-  );
-  expect((await Effect.runPromise(h.service.recover(request))).acceptance).toBe("accepted");
-  expect(h.sends[0]?.speed).toBe("standard");
-  expect(h.starts).toHaveLength(1);
 });

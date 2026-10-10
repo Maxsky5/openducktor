@@ -18,7 +18,6 @@ export type AgentSessionSummary = AgentSessionIdentity &
     pendingApprovalCount: number;
     pendingQuestionCount: number;
     selectedModel: AgentSessionState["selectedModel"];
-    speed?: AgentSessionState["speed"];
   };
 
 export type AgentActivitySessionsSnapshot = {
@@ -91,7 +90,6 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     activityState: getAgentSessionActivityStateFromSession(session),
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,
-    speed: session.speed,
     pendingApprovalCount: session.pendingApprovals.length,
     pendingQuestionCount: session.pendingQuestions.length,
   };
@@ -117,7 +115,6 @@ const sameSummary = (left: AgentSessionSummary | undefined, right: AgentSessionS
   left.startedAt === right.startedAt &&
   left.workingDirectory === right.workingDirectory &&
   left.selectedModel === right.selectedModel &&
-  left.speed === right.speed &&
   left.runtimeKind === right.runtimeKind &&
   left.pendingApprovalCount === right.pendingApprovalCount &&
   left.pendingQuestionCount === right.pendingQuestionCount;
@@ -185,7 +182,6 @@ const repositoryActivitySummaries = (
       ...toAgentSessionIdentity(session),
       startedAt: session.startedAt,
       selectedModel: session.selectedModel,
-      speed: session.speed,
       activityState: getAgentSessionActivityStateFromSession(session),
       pendingApprovalCount: session.pendingApprovals.length,
       pendingQuestionCount: session.pendingQuestions.length,
@@ -197,7 +193,6 @@ const repositoryActivitySummaries = (
       prior.title === summary.title &&
       prior.startedAt === summary.startedAt &&
       prior.selectedModel === summary.selectedModel &&
-      prior.speed === summary.speed &&
       prior.activityState === summary.activityState &&
       prior.pendingApprovalCount === summary.pendingApprovalCount &&
       prior.pendingQuestionCount === summary.pendingQuestionCount &&

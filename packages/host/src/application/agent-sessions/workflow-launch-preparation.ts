@@ -15,10 +15,8 @@ import {
   AUTOPILOT_ACTION_DEFINITIONS,
   buildAgentKickoffPrompt,
   buildAgentSystemPrompt,
-  findCatalogModel,
   getSessionLaunchAction,
   mergePromptOverrides,
-  modelSpeedLevels,
   resolvePullRequestTarget,
 } from "@openducktor/core";
 import { Effect } from "effect";
@@ -52,10 +50,6 @@ export type WorkflowLaunchPreparationDependencies = {
   definitions: RuntimeDefinitionsService;
   registry: Pick<RuntimeRegistryPort, "requireReady">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
-  runtime: Pick<
-    ReturnType<typeof import("./agent-session-command-service").createAgentSessionCommandService>,
-    "updateSessionSpeed"
-  >;
   provider: Pick<GitProviderService, "getContext">;
 };
 export const prepareWorkflowLaunch = (
@@ -159,9 +153,10 @@ export const prepareWorkflowLaunch = (
       const selectedModel = latest?.selectedModel;
       const defaultModel = config.agentDefaults[action.role] ?? config.defaultModel;
       const requireModel = (): AgentSessionModelSelection => {
+        // A fork starts at standard speed.
         const model =
           automatic.id === "startGeneratePullRequest" && selectedModel
-            ? selectedModel
+            ? withSpeed(selectedModel, null)
             : defaultModel;
         if (!model)
           throw launchValidationError(
@@ -236,7 +231,6 @@ export const prepareWorkflowLaunch = (
         `Action '${actionId}' does not permit '${decision.startMode}'.`,
       );
     let model: AgentSessionModelSelection | undefined;
-    let speed = decision.speed === undefined ? "standard" : decision.speed;
     if (decision.startMode !== "fresh") {
       const source = decision.sourceSession;
       const records = yield* deps.tasks.agentSessionsList({ repoPath, taskId: request.taskId });
@@ -245,8 +239,6 @@ export const prepareWorkflowLaunch = (
         return yield* launchValidationError(
           `Task '${request.taskId}' does not own the selected ${action.role} source '${source.externalSessionId}'.`,
         );
-      if (decision.startMode === "reuse" && decision.speed === undefined)
-        speed = stored.speed === undefined ? "standard" : stored.speed;
       const sourcePath = yield* deps.git.canonicalizePath(source.workingDirectory);
       if (normalizePathForComparison(sourcePath) === normalizePathForComparison(repoPath)) {
         if (decision.startMode === "fork")
@@ -260,35 +252,30 @@ export const prepareWorkflowLaunch = (
           source.workingDirectory,
           task.id,
         );
-      model =
-        decision.startMode === "reuse"
-          ? (stored.selectedModel ?? undefined)
-          : decision.selectedModel;
+      if (decision.startMode === "reuse") {
+        model = stored.selectedModel ?? undefined;
+        if (decision.speed !== undefined) {
+          if (!model)
+            return yield* launchValidationError(
+              "The source session has no model. Select a model before you change its speed.",
+            );
+          model = withSpeed(model, decision.speed);
+        }
+      } else model = decision.selectedModel;
       if (model && model.runtimeKind !== source.runtimeKind)
         return yield* launchValidationError(
           "Fork model must use the source runtime. Select a model from that runtime.",
         );
     } else model = decision.selectedModel;
-    if (decision.startMode !== "reuse" && speed === null)
-      return yield* launchValidationError(
-        "The speed choice is unknown. Set speed explicitly before starting a session.",
-      );
     const runtimeKind =
       decision.startMode === "fresh"
         ? decision.selectedModel.runtimeKind
         : decision.sourceSession.runtimeKind;
     yield* validateWorkflowRuntimeSelection(
       deps,
-      { repoPath, runtimeKind, role: action.role, startMode: decision.startMode, speed },
+      { repoPath, runtimeKind, role: action.role, startMode: decision.startMode },
       model,
     );
-    if (decision.startMode === "reuse" && decision.speed !== undefined && decision.speed !== null)
-      yield* deps.runtime.updateSessionSpeed({
-        repoPath,
-        ...decision.sourceSession,
-        sessionScope: { kind: "workflow", taskId: request.taskId, role: action.role },
-        speed: decision.speed,
-      });
     if (request.beforeStartAction) {
       yield* deps.tasks
         .humanRequestChanges({
@@ -346,7 +333,7 @@ export const prepareWorkflowLaunch = (
         });
       parts = [{ kind: "text", text }];
     }
-    return { kind: "prepared" as const, action, decision, model, speed, systemPrompt, parts };
+    return { kind: "prepared" as const, action, decision, model, systemPrompt, parts };
   });
 
 export const launchValidationError = (message: string) =>
@@ -378,13 +365,11 @@ export const validateWorkflowRuntimeSelection = (
     runtimeKind,
     role,
     startMode,
-    speed,
   }: {
     repoPath: string;
     runtimeKind: RuntimeKind;
     role: AgentRole;
     startMode: WorkflowLaunchDecision["startMode"];
-    speed?: string | null;
   },
   model?: AgentSessionModelSelection,
 ) =>
@@ -409,10 +394,16 @@ export const validateWorkflowRuntimeSelection = (
         return yield* launchValidationError(
           `Cannot validate ${runtimeKind} model: ${models?.status === "failed" ? models.message : "Runtime returned no model catalog."} Check the runtime and model settings.`,
         );
-      const entry = findCatalogModel(models.catalog, model);
+      const entry = models.catalog.models.find(
+        (item) => item.providerId === model.providerId && item.modelId === model.modelId,
+      );
       if (!entry || (model.variant !== undefined && !entry.variants.includes(model.variant)))
         return yield* launchValidationError(
           `Model '${model.providerId}/${model.modelId}' or variant '${model.variant ?? ""}' is unavailable on '${runtimeKind}'. Correct the selected or configured model.`,
+        );
+      if (model.speed !== undefined && !entry.speedLevels?.some(({ id }) => id === model.speed))
+        return yield* launchValidationError(
+          `Speed '${model.speed}' is unavailable for model '${model.providerId}/${model.modelId}'. Select a supported speed.`,
         );
       if (
         model.profileId !== undefined &&
@@ -426,17 +417,16 @@ export const validateWorkflowRuntimeSelection = (
         return yield* launchValidationError(
           `Profile '${model.profileId}' is unavailable on '${runtimeKind}'. Correct the selected or configured profile.`,
         );
-      if (
-        startMode !== "reuse" &&
-        speed &&
-        speed !== "standard" &&
-        !modelSpeedLevels(descriptor, models.catalog, model)?.some((level) => level.id === speed)
-      )
-        return yield* launchValidationError(
-          `Speed '${speed}' is unavailable for model '${model.providerId}/${model.modelId}' on '${runtimeKind}'. Select Standard or a supported speed.`,
-        );
     }
   });
+
+const withSpeed = (
+  model: AgentSessionModelSelection,
+  speed: string | null,
+): AgentSessionModelSelection => {
+  const { speed: _speed, ...selection } = model;
+  return speed === null ? selection : { ...selection, speed };
+};
 
 const toPromptTask = (task: TaskCard) => ({
   taskId: task.id,

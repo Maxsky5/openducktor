@@ -122,7 +122,6 @@ export const createAgentSessionActions = ({
     stopAgentSession,
     continueInterruptedTurn,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,
-    updateAgentSessionSpeed: modelActions.updateAgentSessionSpeed,
     replyAgentApproval: pendingInputActions.replyAgentApproval,
     answerAgentQuestion: pendingInputActions.answerAgentQuestion,
   };

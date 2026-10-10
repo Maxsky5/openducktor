@@ -28,7 +28,6 @@ export const invokeStopAgentSession = (
 };
 
 export type AgentChatComposerConfig = {
-  speed?: import("../speed-select").SpeedControlModel | undefined;
   displayedSessionKey: string | null;
   selectedSession: AgentChatComposerSelectedSession | null;
   isSessionModelCatalogLoading: boolean;
@@ -53,6 +52,7 @@ export type AgentChatComposerConfig = {
     outputLimit?: number;
   } | null;
   selectedModelSelection: AgentModelSelection | null;
+  speed?: AgentChatComposerModel["speed"];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null | undefined;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -127,7 +127,6 @@ export function useAgentChatComposerModel({
 
     const model: AgentChatComposerModel = {
       displayedSessionKey: composer.displayedSessionKey,
-      speed: composer.speed,
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
@@ -145,6 +144,7 @@ export function useAgentChatComposerModel({
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
+      speed: composer.speed,
       isSelectionCatalogLoading: composer.isSelectionCatalogLoading,
       supportsAttachments: composer.supportsAttachments,
       supportsSlashCommands: composer.supportsSlashCommands,

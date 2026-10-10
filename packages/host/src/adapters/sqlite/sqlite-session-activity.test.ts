@@ -232,7 +232,6 @@ test("workspace activity has its own saved time and keeps legacy records", async
     manualTitle: null,
     createdAt: 10,
     updatedAt: 100,
-    speed: "standard",
     archivedAt: null,
   };
   await Effect.runPromise(store.create({ ...scope, session }));

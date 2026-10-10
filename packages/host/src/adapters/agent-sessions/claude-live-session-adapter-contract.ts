@@ -59,10 +59,6 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "stopSession"
     | "stopSessionsForRuntime"
     | "updateSessionModel"
-    | "updateSessionSpeed"
-    | "setSessionSpeedState"
-    | "holdSessionTurns"
-    | "setSpeedChoiceRecorder"
     | "updateSessionTitle"
   >;
   readonly sessionStore: {

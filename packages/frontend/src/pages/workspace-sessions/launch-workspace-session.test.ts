@@ -13,7 +13,6 @@ const createRecord = (): WorkspaceSession => ({
   externalSessionId: "native",
   executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
   selectedModel: null,
-  speed: "standard",
   roleSnapshot: null,
   generatedTitle: null,
   manualTitle: "Old title",

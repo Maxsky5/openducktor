@@ -1,4 +1,3 @@
-import type { AgentModelCatalog, AgentSessionModelSettings } from "@openducktor/contracts";
 import type { AgentRuntimeCatalogSurfaceRead } from "../ports/agent-engine";
 import { AgentRuntimeQueryError } from "../ports/agent-runtime-query-error";
 
@@ -18,16 +17,3 @@ export const readCatalogSurface = async <Catalog>(
     return { status: "failed", cause };
   }
 };
-
-export const findCatalogModel = (
-  catalog: AgentModelCatalog,
-  selection: Pick<AgentSessionModelSettings, "providerId" | "modelId">,
-): AgentModelCatalog["models"][number] | null =>
-  catalog.models.find(
-    (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
-  ) ??
-  catalog.models.find(
-    (model) =>
-      model.providerId === selection.providerId && model.resolvedModelId === selection.modelId,
-  ) ??
-  null;

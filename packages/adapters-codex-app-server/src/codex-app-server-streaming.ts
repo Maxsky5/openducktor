@@ -44,7 +44,6 @@ import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
-import { CODEX_MODEL_PROVIDER_ID } from "./model-catalog";
 import type { CodexNotificationRecord, CodexSessionState, CodexUserInput } from "./types";
 import { type CodexAsyncQuestionState, parseCodexAsyncQuestionItem } from "./codex-async-questions";
 
@@ -66,13 +65,6 @@ export type CodexUserMessageEcho = {
 };
 
 export type CodexStreamingContext = {
-  observeSpeed?:
-    | ((
-        session: CodexSessionState,
-        tier: string | null,
-        model: AgentModelSelection,
-      ) => Promise<void>)
-    | undefined;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
@@ -663,22 +655,6 @@ export const handleCodexPendingNotifications = async (
       context.flushQueuedUserMessagesLater(activeTurn);
     }
 
-    if (notification.method === "thread/settings/updated") {
-      if (!context.observeSpeed) throw new Error("Codex speed observation is not configured.");
-      const settings = notification.params.threadSettings;
-      try {
-        await context.observeSpeed(session, settings.serviceTier, {
-          runtimeKind: "codex",
-          providerId: CODEX_MODEL_PROVIDER_ID,
-          modelId: settings.model,
-          variant: settings.effort ?? undefined,
-        });
-      } finally {
-        // Record publication can fail after the live settings have changed.
-        context.markSnapshotChanged(session.runtimeId, session.threadId);
-      }
-      continue;
-    }
     if (notification.method === "turn/started") {
       context.setSessionLiveStatus(session, {
         classification: "running",

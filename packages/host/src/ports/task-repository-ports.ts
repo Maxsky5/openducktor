@@ -129,7 +129,6 @@ export type AgentSessionRepository = {
     taskId: string;
     identity: AgentSessionIdentity;
     selectedModel: AgentSessionRecord["selectedModel"];
-    speed?: string | null;
   }): Effect.Effect<boolean, TaskStoreError>;
   deleteAgentSession(input: {
     repoPath: string;

@@ -32,7 +32,10 @@ import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionControlContinueInterruptedTurnInput,
+  AgentSessionLiveAdapterChange,
+} from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
@@ -176,7 +179,7 @@ type ControllerHarnessOptions = {
 type AgentControlInputs = {
   starts: StartAgentSessionInput[];
   resumes: ResumeAgentSessionInput[];
-  continuations: ResumeAgentSessionInput[];
+  continuations: AgentSessionControlContinueInterruptedTurnInput[];
   forks: ForkAgentSessionInput[];
   sends: SendAgentUserMessageInput[];
 };
@@ -320,15 +323,6 @@ const createControllerHarness = ({
         releaseRuntime: () => {
           snapshots = [];
           releaseRuntime();
-        },
-        holdSessionTurns: async () => {
-          throw new Error("Unexpected turn hold");
-        },
-        setSessionSpeedState: () => {
-          throw new Error("Unexpected speed state");
-        },
-        updateSessionSpeed: async () => {
-          throw new Error("Unexpected speed change");
         },
         startSession: async (input: StartAgentSessionInput) => {
           controlInputs.starts.push(input);

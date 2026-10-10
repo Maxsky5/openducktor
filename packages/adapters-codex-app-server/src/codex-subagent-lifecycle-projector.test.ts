@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
-import { SessionTurnAdmission } from "@openducktor/core";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 const createSession = (threadId: string, runtimeId = "runtime-1"): CodexSessionState => ({
-  turnAdmission: new SessionTurnAdmission(),
   summary: {
     externalSessionId: threadId,
     title: threadId,

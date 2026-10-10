@@ -401,9 +401,6 @@ const createAgentOperationsValue = (): AgentOperationsContextValue => ({
   sendAgentMessage: sendAgentMessageMock,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
-  updateAgentSessionSpeed: async () => {
-    throw new Error("Unexpected speed change.");
-  },
   updateAgentSessionModel: updateAgentSessionModelMock,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

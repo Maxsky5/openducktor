@@ -32,11 +32,10 @@ export const withAgentSessionTitle = <Value extends object>(
  * Sets the summary title and the repository association title.
  * Other association kinds keep their stored value.
  */
-export const withSummaryTitle = <Summary extends AgentSessionSummary>(
-  summary: Summary,
+export const withSummaryTitle = (
+  summary: AgentSessionSummary,
   title: string,
-): Omit<Summary, "title" | "sessionAssociation"> &
-  Pick<AgentSessionSummary, "title" | "sessionAssociation"> => ({
+): AgentSessionSummary => ({
   ...summary,
   title,
   sessionAssociation:
@@ -50,14 +49,13 @@ export const withSummaryTitle = <Summary extends AgentSessionSummary>(
  * Use it when the runtime rejects a title update, so the summary reports the
  * runtime title. Other association kinds keep their stored value.
  */
-export const withoutSummaryTitle = <Summary extends AgentSessionSummary>(
-  summary: Summary,
-): Omit<Summary, "title" | "sessionAssociation"> &
-  Pick<AgentSessionSummary, "title" | "sessionAssociation"> => {
-  const { title: _title, sessionAssociation, ...rest } = summary;
+export const withoutSummaryTitle = (summary: AgentSessionSummary): AgentSessionSummary => {
+  const { title: _title, ...rest } = summary;
   return {
     ...rest,
     sessionAssociation:
-      sessionAssociation.kind === "repository" ? { kind: "repository" } : sessionAssociation,
+      summary.sessionAssociation.kind === "repository"
+        ? { kind: "repository" }
+        : summary.sessionAssociation,
   };
 };

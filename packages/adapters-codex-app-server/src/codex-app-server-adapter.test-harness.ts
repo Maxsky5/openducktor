@@ -429,7 +429,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
               inputModalities: ["text"],
               modelSpecialty: null,
               multiAgentVersion: null,
-              serviceTiers: [],
+              serviceTiers: [{ id: "priority", name: "Fast", description: "Fast processing" }],
               supportsPersonality: true,
               isDefault: true,
               upgrade: null,
@@ -453,7 +453,6 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;
       }
-      case "thread/settings/update":
       case "thread/name/set":
       case "thread/compact/start":
       case "turn/interrupt":

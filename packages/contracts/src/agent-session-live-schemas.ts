@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { agentSessionSpeedStateSchema } from "./agent-speed-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -106,7 +105,6 @@ export const agentSessionLiveSnapshotSchema = z
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
-    speed: agentSessionSpeedStateSchema.optional(),
     policyNotice: z
       .object({
         messageId: nonEmptyStringSchema,

@@ -1,5 +1,3 @@
-import { workspaceSessionStoreEffect as storeEffect } from "./workspace-session-store-errors";
-import { prepareWorkspaceSpeedUpdate } from "./workspace-session-speed-persistence";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
@@ -15,8 +13,14 @@ import {
   planRuntimeTitleRename,
   runtimeTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
-import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostOperationError,
+  HostValidationError,
+  isHostError,
+} from "../../effect/host-errors";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
+import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   WorkspaceSessionStorePort,
   WorkspaceSessionStoreRef,
@@ -138,7 +142,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const prepare = <Input extends AgentSessionControlResumeInput | AgentSessionControlSendInput>(
     input: Input,
-  ): Effect.Effect<Input & { speed?: string | null }, HostError> =>
+  ): Effect.Effect<Input, HostError> =>
     Effect.gen(function* () {
       if (input.sessionScope.kind !== "repository") return input;
       const known = yield* findActive(input);
@@ -146,7 +150,6 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const storedTitle = runtimeTitle(known.session);
       const prepared = {
         ...input,
-        speed: known.session.speed,
         sessionScope:
           storedTitle === null
             ? input.sessionScope
@@ -400,20 +403,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }),
     prepareSend: prepare,
     validateRef,
-    prepareSpeedUpdate: (input) =>
-      findActive(input).pipe(
-        Effect.flatMap((known) => prepareWorkspaceSpeedUpdate(known, store, publishUpdated)),
-      ),
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {
         const known = yield* findActive(input);
-        if (!known)
-          return {
-            input,
-            previousModel: null,
-            previousSpeed: "standard",
-            save: () => Effect.succeed(Effect.void),
-          };
+        if (!known) return { input, previousModel: null, save: Effect.succeed(Effect.void) };
         if (input.model === null)
           return yield* Effect.fail(
             new HostValidationError({
@@ -425,21 +418,18 @@ export const createWorkspaceSessionRuntimePersistence = ({
         return {
           input,
           previousModel: known.session.selectedModel,
-          previousSpeed: known.session.speed,
-          save: (speed) =>
-            Effect.suspend(() =>
-              storeEffect(
-                store.setSelectedModel({
-                  ...known.ref,
-                  speed: speed === undefined ? known.session.speed : speed,
-                  selectedModel: {
-                    ...model,
-                    runtimeKind: input.runtimeKind,
-                    profileId: model.profileId ?? known.session.selectedModel?.profileId,
-                  },
-                }),
-              ),
-            ).pipe(Effect.map((saved) => publishUpdated(known.ref.workspaceId, saved))),
+          save: Effect.suspend(() =>
+            storeEffect(
+              store.setSelectedModel({
+                ...known.ref,
+                selectedModel: {
+                  ...model,
+                  runtimeKind: input.runtimeKind,
+                  profileId: model.profileId ?? known.session.selectedModel?.profileId,
+                },
+              }),
+            ),
+          ).pipe(Effect.map((saved) => publishUpdated(known.ref.workspaceId, saved))),
         };
       }),
     recordAcceptedMessage: (ref, message) => recordAcceptedMessage(ref, message, true),
@@ -473,3 +463,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }),
   };
 };
+
+const storeEffect = <A>(effect: Effect.Effect<A, TaskStoreError>): Effect.Effect<A, HostError> =>
+  effect.pipe(
+    Effect.mapError((cause) =>
+      isHostError(cause)
+        ? cause
+        : new HostOperationError({
+            operation: "workspaceSession.persist",
+            message: cause.message,
+            cause,
+          }),
+    ),
+  );

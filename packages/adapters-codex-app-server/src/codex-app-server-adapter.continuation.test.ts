@@ -103,7 +103,6 @@ const createContinuationAdapter = ({
             resumeCount += 1;
             return {
               ...codexThreadStartResultFixture(threadId, "thread/resume"),
-              serviceTier: "default",
               thread: codexThreadFixture({
                 id: threadId,
                 cwd,
@@ -176,7 +175,6 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       threadId: "thread-1",
       input: [],
       approvalPolicy: "on-request",
-      serviceTier: null,
     });
   });
 
@@ -194,7 +192,6 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
 
     // Native settings stay unchanged, but the workspace MCP server is still bound.
     expect(calls.find((call) => call.method === "thread/resume")?.params).toEqual({
-      serviceTier: null,
       config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
       threadId: "thread-1",
       excludeTurns: true,

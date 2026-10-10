@@ -3,7 +3,7 @@ import {
   type CodexAppServerThreadResumeParams,
 } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
-import { agentSessionRefsEqual, initialSpeedState } from "@openducktor/core";
+import { agentSessionRefsEqual } from "@openducktor/core";
 import type { CodexLocalSessionState } from "./codex-local-session-state";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -13,14 +13,13 @@ import {
 } from "./codex-session-lifecycle";
 import { codexTransportPolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
-import { codexServiceTier } from "./codex-session-speed";
 import {
   type CodexSessionScopePolicy,
   resolveCodexSessionScopePolicy,
 } from "./codex-session-scope-policy";
 import type { CodexThreadConfig } from "./codex-managed-mcp";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
-import type { CodexLiveSessionLocator, CodexSessionContextUsage, CodexSessionState } from "./types";
+import type { CodexLiveSessionLocator, CodexSessionContextUsage } from "./types";
 
 type ContextUsageLoadGuard = {
   refs: readonly SessionRef[];
@@ -42,7 +41,6 @@ type CodexContextUsageLoaderDeps = {
     sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
   ): Promise<CodexThreadConfig>;
   clearThreadInventory(runtimeId: string): void;
-  readSpeedChoice(session: CodexSessionState, tier: string | null): Promise<string | null>;
 };
 
 export class CodexContextUsageLoader {
@@ -94,17 +92,6 @@ export class CodexContextUsageLoader {
               input.model,
               response,
             );
-            const choice = await this.wait(
-              guard,
-              this.deps.readSpeedChoice(recoveredSession, response.serviceTier),
-            );
-            this.assertActive(guard);
-            recoveredSession.serviceTier = codexServiceTier(response.serviceTier);
-            recoveredSession.summary.speed = initialSpeedState(
-              choice,
-              choice === null ? "unapplied" : "confirmed",
-            );
-            recoveredSession.turnAdmission.setBlocked(choice === null);
             recoveredSession.preserveNativeSettings = input.sessionScope?.kind === "repository";
             this.deps.localSessions.remember(
               preserveRuntimeContextForExistingThread(

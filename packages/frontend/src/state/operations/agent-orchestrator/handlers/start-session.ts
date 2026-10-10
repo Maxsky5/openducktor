@@ -38,7 +38,6 @@ export const createStartAgentSession =
         };
       else decision = { startMode: input.startMode, selectedModel };
     }
-    if (input.speed !== undefined) decision.speed = input.speed;
     const request: WorkflowLaunchRequest = {
       launchAttemptId: crypto.randomUUID(),
       workspaceId: repo.workspaceId,

@@ -277,9 +277,6 @@ let agentOperations: AgentOperationsContextValue = {
   sendAgentMessage: mock(async () => null),
   stopAgentSession: mock(async () => undefined),
   continueInterruptedTurn: mock(async () => undefined),
-  updateAgentSessionSpeed: async () => {
-    throw new Error("Unexpected speed change.");
-  },
   updateAgentSessionModel: mock(async () => undefined),
   replyAgentApproval: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
@@ -758,9 +755,6 @@ beforeEach(async () => {
     sendAgentMessage: mock(async () => null),
     stopAgentSession: mock(async () => undefined),
     continueInterruptedTurn: mock(async () => undefined),
-    updateAgentSessionSpeed: async () => {
-      throw new Error("Unexpected speed change.");
-    },
     updateAgentSessionModel: mock(async () => undefined),
     replyAgentApproval: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),

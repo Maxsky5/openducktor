@@ -7,7 +7,6 @@ import {
   resolvePreferredModelSelection,
 } from "@/features/model-selection/model-selection-state";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { findCatalogModel } from "@/lib/model-catalog-selection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const availableRuntimeKindFor = (
@@ -156,11 +155,10 @@ const coerceSessionSelectionToCatalog = ({
     return null;
   }
 
-  const coercedSelection = coerceVisibleSelectionToCatalog(selectionCatalog, {
+  return coerceVisibleSelectionToCatalog(selectionCatalog, {
     ...selection,
     runtimeKind: sessionRuntimeKind,
   });
-  return coercedSelection ? { ...coercedSelection, modelId: selection.modelId } : null;
 };
 
 const pickSessionCatalogDefaultSelection = (
@@ -181,7 +179,9 @@ const coerceLiveSessionRepairSelection = (
   if (!selection) {
     return null;
   }
-  const model = findCatalogModel(selectionCatalog, selection);
+  const model = selectionCatalog.models.find(
+    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
+  );
   if (!model?.liveSessionUpdates?.variants) {
     return selection;
   }

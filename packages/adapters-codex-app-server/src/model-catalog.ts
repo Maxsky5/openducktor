@@ -11,6 +11,8 @@ import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
 import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
 export const CODEX_MODEL_PROVIDER_ID = "codex";
+/** Codex uses this service tier for standard speed. */
+export const CODEX_STANDARD_SERVICE_TIER = "default";
 
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
@@ -39,12 +41,20 @@ const validateModelSelection = (
       `Codex model '${model.providerId}/${model.modelId}' does not support reasoning effort '${model.variant}'.`,
     );
   }
+  if (model.speed !== undefined && !record.serviceTiers.some((tier) => tier.id === model.speed)) {
+    throw new Error(
+      `Codex model '${model.providerId}/${model.modelId}' does not support service tier '${model.speed}'.`,
+    );
+  }
 };
 
-export const toTransportModelSelection = (model: AgentModelSelection) =>
-  model.variant === undefined
-    ? { model: model.modelId }
-    : { model: model.modelId, effort: codexAppServerReasoningEffortSchema.parse(model.variant) };
+export const toTransportModelSelection = (model: AgentModelSelection) => {
+  // An explicit null keeps a native default tier from changing the selected speed.
+  const transport = { model: model.modelId, serviceTier: model.speed ?? null };
+  return model.variant === undefined
+    ? transport
+    : { ...transport, effort: codexAppServerReasoningEffortSchema.parse(model.variant) };
+};
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
   return {
@@ -55,23 +65,28 @@ const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSup
   };
 };
 
-export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog => ({
-  runtime: CODEX_RUNTIME_DESCRIPTOR,
-  models: response.data.map((model) => ({
+const toModelDescriptor = (
+  model: CodexModelListResponse["data"][number],
+): AgentModelCatalog["models"][number] => {
+  const descriptor: AgentModelCatalog["models"][number] = {
     id: model.id,
     providerId: CODEX_MODEL_PROVIDER_ID,
     providerName: "Codex",
     modelId: model.model,
     modelName: model.displayName,
-    speedLevels: [
-      { id: "standard", label: "Standard" },
-      ...model.serviceTiers
-        .filter((tier) => tier.id !== "default" && tier.id !== "standard")
-        .map((tier) => ({ id: tier.id, label: tier.name, description: tier.description })),
-    ],
     variants: model.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
     attachmentSupport: toAttachmentSupport(model.inputModalities),
-  })),
+  };
+  const speedLevels = model.serviceTiers
+    .filter((tier) => tier.id !== CODEX_STANDARD_SERVICE_TIER)
+    .map((tier) => ({ id: tier.id, label: tier.name, description: tier.description }));
+  if (speedLevels.length > 0) descriptor.speedLevels = speedLevels;
+  return descriptor;
+};
+
+export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog => ({
+  runtime: CODEX_RUNTIME_DESCRIPTOR,
+  models: response.data.map(toModelDescriptor),
   defaultModelsByProvider: response.data.some((model) => model.isDefault)
     ? {
         [CODEX_MODEL_PROVIDER_ID]:

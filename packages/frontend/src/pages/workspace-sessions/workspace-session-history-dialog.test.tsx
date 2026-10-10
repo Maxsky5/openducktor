@@ -22,7 +22,6 @@ const archivedRecord = (index: number): WorkspaceSession => ({
   manualTitle: null,
   createdAt: 1000,
   updatedAt: 1000,
-  speed: "standard",
   archivedAt: 2000 - index,
 });
 

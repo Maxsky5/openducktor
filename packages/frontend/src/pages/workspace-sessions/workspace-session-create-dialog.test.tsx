@@ -338,7 +338,6 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     });
     await waitFor(() => expect(requests.length).toBe(1), { timeout: 800 });
     expect(requests[0]).toEqual({
-      speed: "standard",
       workspaceId: "A",
       runtimeKind: "opencode",
       selectedModel: {
@@ -432,7 +431,6 @@ test("creates a worktree chat with one request and no confirmation step", async 
           manualTitle: null,
           createdAt: 1000,
           updatedAt: 1000,
-          speed: "standard",
           archivedAt: null,
         },
       };

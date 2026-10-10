@@ -4,7 +4,6 @@ import type {
   PermissionResult,
   Query,
   SDKMessage,
-  SDKSystemMessage,
   SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -91,11 +90,6 @@ export type ClaudeSessionInput =
 
 export type ClaudeSessionActivity = "idle" | "running" | "stopped";
 
-export type ClaudeModelReport = {
-  modelId: string;
-  effort?: SDKSystemMessage["effort"];
-};
-
 export type ClaudeManualCompactionState = {
   boundaryReceived: boolean;
   messageId: string;
@@ -110,22 +104,11 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "initializationResult"
     | "mcpServerStatus"
     | "setModel"
-    | "supportedModels"
   >;
 
 export type ClaudeSession = ClaudeBackgroundToolState &
   ErrorState & {
     disabledTools?: ReadonlySet<string>;
-    recordSpeedChoice?: (
-      choice: string | null,
-      model?: import("@openducktor/contracts").AgentSessionModelSettings,
-      previousChoice?: string | null,
-    ) => Promise<() => Promise<void>>;
-    turnAdmission: import("@openducktor/core").SessionTurnAdmission;
-    nativeModel?: ClaudeModelReport;
-    pendingModelReports?: Array<ClaudeModelReport & { timestamp: string }>;
-    preserveNativeSettings?: boolean;
-    speedInitialized?: boolean;
     appliedPermissionMode?: string;
     requestedPermissionMode?: string;
     acceptedUserMessages: ClaudeAcceptedUserMessage[];
@@ -154,7 +137,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     queue: AsyncInputQueue<SDKUserMessage>;
     runtimeId: string;
     startedAt: string;
-    summary: AgentSessionSummary & { speed: NonNullable<AgentSessionSummary["speed"]> };
+    summary: AgentSessionSummary;
     streamAssistantMessageOrdinal: number;
     streamAssistantMessageIdsByBlockIndex: Map<number, string>;
     hiddenSubagentTaskIds?: Set<string>;

@@ -34,9 +34,6 @@ import {
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
-  type AgentSessionControlUpdateSpeedInput,
-  agentSessionControlUpdateSpeedInputSchema,
-  agentSessionSpeedStateSchema,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveLoadDiffInput,
@@ -183,14 +180,6 @@ export class HostAgentSessionLiveClient {
       "agent_session_control_update_model",
       agentSessionControlUpdateModelInputSchema.parse(input),
       voidResultSchema,
-    );
-  }
-
-  async agentSessionControlUpdateSpeed(input: AgentSessionControlUpdateSpeedInput) {
-    return this.invokeFn(
-      "agent_session_control_update_speed",
-      agentSessionControlUpdateSpeedInputSchema.parse(input),
-      agentSessionSpeedStateSchema,
     );
   }
 

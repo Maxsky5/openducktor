@@ -5,7 +5,7 @@ import type {
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import { getClaudeSessionMetadata } from "./claude-session-metadata";
-import { applyClaudeSessionModel } from "./claude-agent-sdk-session-dispatch";
+import { applyClaudeSessionModel } from "./claude-agent-sdk-session-io";
 import type { ClaudeSessionLaunchInput } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {

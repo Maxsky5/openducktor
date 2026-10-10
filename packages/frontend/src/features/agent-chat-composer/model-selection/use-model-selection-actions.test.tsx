@@ -262,6 +262,70 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
+  test.each([
+    { live: true, speed: "fast", expected: { ...claudeSelection, speed: "fast" } },
+    { live: false, speed: "standard", expected: claudeSelection },
+  ])("applies speed $speed to the selected model with live=$live", async (change) => {
+    const updateAgentSessionModel = mock(async () => {});
+    const applyDraftSelection = mock(() => {});
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: change.live ? loadedClaudeSession : null,
+        selectedModelSelection: { ...claudeSelection, speed: "fast" },
+        updateAgentSessionModel,
+        applyDraftSelection,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => state.handleSelectSpeed(change.speed));
+
+    if (change.live)
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, change.expected);
+    else expect(applyDraftSelection).toHaveBeenCalledWith(change.expected);
+    await harness.unmount();
+  });
+
+  test("resets speed and notifies when the next model does not support it", async () => {
+    const originalToastInfo = toast.info;
+    const toastInfo = mock(() => "");
+    toast.info = toastInfo;
+    const updateAgentSessionModel = mock(async () => {});
+    const selectionCatalog: AgentModelCatalog = {
+      ...claudeCatalog,
+      models: [
+        { ...claudeCatalog.models[0]!, speedLevels: [{ id: "fast", label: "Fast" }] },
+        { ...claudeCatalog.models[0]!, id: "claude/sonnet", modelId: "sonnet" },
+      ],
+    };
+    const harness = createHarness(
+      createBaseProps({
+        selectedModelSelection: { ...claudeSelection, speed: "fast" },
+        selectionCatalog,
+        updateAgentSessionModel,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "claude", providerId: "claude", modelId: "sonnet" },
+          selectionCatalog,
+        );
+      });
+
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(
+        loadedClaudeSession,
+        expect.not.objectContaining({ speed: expect.anything() }),
+      );
+      expect(toastInfo).toHaveBeenCalledTimes(1);
+    } finally {
+      toast.info = originalToastInfo;
+      await harness.unmount();
+    }
+  });
+
   test("surfaces live model update failures", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

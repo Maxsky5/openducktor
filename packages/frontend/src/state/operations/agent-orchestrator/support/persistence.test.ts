@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { initialSpeedState } from "@openducktor/core";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   toPersistedSessionIdentity,
   toPersistedSessionRecord,
-  toPersistedSessionView,
 } from "./persistence";
 
 const recordFixture: AgentSessionRecord = {
@@ -27,30 +25,6 @@ const loadRecordFixture = (record: AgentSessionRecord = recordFixture): AgentSes
   fromPersistedSessionRecord({ taskId: "task-1", record });
 
 describe("agent-orchestrator/support/persistence", () => {
-  test.each([
-    { presence: "present", saved: "standard", expected: "fast", synchronization: "confirmed" },
-    { presence: "absent", saved: "fast", expected: "fast", synchronization: "confirmed" },
-    { presence: "absent", saved: "standard", expected: "standard", synchronization: "unapplied" },
-  ] as const)(
-    "keeps live speed for $presence sessions with saved $saved",
-    ({ presence, saved, expected, synchronization }) => {
-      const speed = {
-        ...initialSpeedState("fast", "confirmed"),
-        availability: { status: "available" as const },
-        processing: { status: "active" as const, level: "fast" },
-      };
-      const view = toPersistedSessionView({
-        taskId: "task-1",
-        record: { ...recordFixture, speed: saved },
-        current: { ...loadRecordFixture(), livePresence: presence, speed },
-      });
-      expect(view.speed?.choice).toBe(expected);
-      expect(view.speed?.synchronization).toBe(synchronization);
-      if (expected === "fast") expect(view.speed).toEqual(speed);
-      else expect(view.speed?.processing).toEqual({ status: "off" });
-    },
-  );
-
   test("loads persisted sessions as idle until runtime state is read", () => {
     const loadedSession = loadRecordFixture();
     expect(loadedSession.status).toBe("idle");
@@ -101,6 +75,23 @@ describe("agent-orchestrator/support/persistence", () => {
     const persisted = toPersistedSessionRecord(withPendingInput);
     expect("pendingApprovals" in persisted).toBe(false);
     expect("pendingQuestions" in persisted).toBe(false);
+  });
+
+  test("keeps the selected speed through load and persistence", () => {
+    const record: AgentSessionRecord = {
+      ...recordFixture,
+      runtimeKind: "claude",
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "opus",
+        speed: "fast",
+      },
+    };
+
+    expect(toPersistedSessionRecord(loadRecordFixture(record)).selectedModel).toEqual(
+      record.selectedModel,
+    );
   });
 
   test("persists compact session fields", () => {

@@ -65,7 +65,6 @@ type UseAgentStudioSessionStartFlowArgs = {
   canStartRole: CanStartRole;
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
-  speedForNewSession?: string | undefined;
   newSessionCatalog?: AgentModelCatalog | null;
   repoSettings: RepoSettingsInput | null;
   workspaceId: string | null;
@@ -99,7 +98,6 @@ export function useAgentStudioSessionStartFlow({
   canStartRole,
   isSessionWorking,
   selectionForNewSession,
-  speedForNewSession,
   newSessionCatalog,
   repoSettings,
   workspaceId,
@@ -313,11 +311,7 @@ export function useAgentStudioSessionStartFlow({
         taskId,
         launchActionId,
       });
-      const decision: ResolvedSessionStartDecision = {
-        startMode: "fresh",
-        selectedModel,
-        speed: speedForNewSession ?? "standard",
-      };
+      const decision: ResolvedSessionStartDecision = { startMode: "fresh", selectedModel };
       if (supportsTaskTargetBranchSelection(role, launchActionId)) {
         if (!repoSettings)
           throw new Error("Repository settings are unavailable. Reload before starting a session.");
@@ -364,7 +358,6 @@ export function useAgentStudioSessionStartFlow({
       selectionForNewSession,
       newSessionCatalog,
       availableRuntimeDefinitions,
-      speedForNewSession,
       taskId,
       repoSettings,
       selectedTask,

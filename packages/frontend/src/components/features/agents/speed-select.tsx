@@ -1,19 +1,20 @@
-import type { AgentSessionSpeedState, AgentSpeedLevel } from "@openducktor/contracts";
+import type { AgentSpeedLevel } from "@openducktor/contracts";
 import { Zap, ZapOff } from "lucide-react";
 import { type ReactElement, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { STANDARD_SPEED } from "@/lib/model-catalog-selection";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import "./speed-select.css";
 
 export type SpeedControlModel = {
   key: string;
-  livePresence: AgentSessionState["livePresence"];
-  eligibility: "supported" | "unsupported" | "unknown";
-  levels: AgentSpeedLevel[] | undefined;
-  state: AgentSessionSpeedState;
+  /** The selected level ID, or `standard`. */
+  choice: string;
+  /** The levels above standard that the selected model supports. */
+  levels: AgentSpeedLevel[];
+  blockedReason: string | undefined;
   pending: boolean;
   disabled: boolean;
   error: string | null;
@@ -36,13 +37,12 @@ export function SpeedSelect({
   const labelId = useId();
   const control = useSpeedError(model?.error);
   const [menuOpen, setMenuOpen] = useState(false);
-  if (!model || hideSpeed(model)) return null;
-  const { state } = model;
-  const pending = model.pending || state.synchronization === "pending";
+  if (!model || (model.levels.length === 0 && model.choice === STANDARD_SPEED)) return null;
+  const { choice, pending } = model;
   const disabled = model.disabled || pending;
-  const reason = speedReason(model);
+  const reason = model.error ?? model.blockedReason;
   const options = speedOptions(model);
-  const choiceLabel = speedLabel(options, state.choice);
+  const choiceLabel = speedLabel(options, choice);
   return (
     <span className={cn("inline-grid shrink-0 gap-1.5", className)}>
       {label && (
@@ -62,7 +62,7 @@ export function SpeedSelect({
               onAnimationEnd={(event) => event.currentTarget.classList.remove("is-shaking")}
             >
               <Combobox
-                value={state.choice ?? ""}
+                value={choice}
                 options={options}
                 searchable={false}
                 wrapOptionLabels
@@ -74,7 +74,7 @@ export function SpeedSelect({
                       trigger: (
                         <SpeedButton
                           label={choiceLabel}
-                          choice={state.choice}
+                          choice={choice}
                           disabled={disabled}
                           className={cn(pending && "disabled:opacity-100", triggerClassName)}
                         />
@@ -82,9 +82,8 @@ export function SpeedSelect({
                     }
                   : {})}
                 {...(label ? { triggerAriaLabelledBy: labelId } : {})}
-                onValueChange={(choice) => {
-                  if (choice !== state.choice || state.synchronization !== "confirmed")
-                    model.onChange(choice);
+                onValueChange={(next) => {
+                  if (next !== choice) model.onChange(next);
                 }}
                 triggerClassName={cn("w-36", pending && "disabled:opacity-100", triggerClassName)}
                 className="w-max min-w-36 max-w-64"
@@ -106,8 +105,8 @@ export function SpeedSelect({
   );
 }
 
-function speedLabel(options: ComboboxOption[], choice: string | null): string {
-  return options.find((option) => option.value === choice)?.label ?? choice ?? "Select speed";
+function speedLabel(options: ComboboxOption[], choice: string): string {
+  return options.find((option) => option.value === choice)?.label ?? choice;
 }
 
 function useSpeedError(error: string | null | undefined) {
@@ -129,7 +128,7 @@ function SpeedButton({
   ...props
 }: {
   label: string;
-  choice: string | null;
+  choice: string;
 } & React.ComponentProps<typeof Button>): ReactElement {
   return (
     <Button
@@ -146,47 +145,18 @@ function SpeedButton({
   );
 }
 
-function SpeedIcon({ choice, className }: { choice: string | null; className?: string }) {
-  const Icon = choice === null || choice === "standard" ? ZapOff : Zap;
-  return (
-    <Icon
-      aria-hidden="true"
-      data-speed={choice ?? "standard"}
-      className={cn("speed-icon", className)}
-    />
-  );
+function SpeedIcon({ choice, className }: { choice: string; className?: string }) {
+  const Icon = choice === STANDARD_SPEED ? ZapOff : Zap;
+  return <Icon aria-hidden="true" data-speed={choice} className={cn("speed-icon", className)} />;
 }
 
-function hideSpeed({ eligibility, state, livePresence }: SpeedControlModel): boolean {
-  return (
-    eligibility !== "supported" &&
-    state.choice === "standard" &&
-    (state.synchronization === "confirmed" ||
-      (state.synchronization === "unapplied" && livePresence !== "present"))
-  );
-}
-
-function speedReason({ state, error }: SpeedControlModel): string | undefined {
-  if (error) return error;
-  if (state.reason) return state.reason.message;
-  if (
-    (state.processing.status === "cooldown" || state.processing.status === "standard") &&
-    state.processing.reason
-  )
-    return state.processing.reason.message;
-  if (state.availability.status !== "available") return state.availability.reason?.message;
-  return undefined;
-}
-
-function speedOptions({ levels, state, eligibility }: SpeedControlModel): ComboboxOption[] {
-  const blocked =
-    state.availability.status === "blocked" || state.choice === null || eligibility !== "supported";
-  return (levels ?? [{ id: "standard", label: "Standard" }]).map((level) => {
+function speedOptions({ levels, blockedReason }: SpeedControlModel): ComboboxOption[] {
+  return [{ id: STANDARD_SPEED, label: "Standard" }, ...levels].map((level) => {
     const option: ComboboxOption = {
       value: level.id,
       label: level.label,
       icon: <SpeedIcon choice={level.id} className="size-3.5" />,
-      disabled: level.id !== "standard" && blocked,
+      disabled: level.id !== STANDARD_SPEED && blockedReason !== undefined,
     };
     if (level.description) option.description = level.description;
     return option;

@@ -17,11 +17,7 @@ import type {
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
-import {
-  type HostError,
-  HostValidationError,
-  toHostOperationError,
-} from "../../effect/host-errors";
+import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
@@ -146,23 +142,7 @@ export const createOpenCodeSessionControlAdapter = ({
     );
 
   return {
-    holdSessionTurns: () => Effect.succeed(Effect.void),
-    setSessionSpeedState: () => Effect.void,
-    updateSessionSpeed: () =>
-      Effect.fail(
-        new HostValidationError({
-          field: "speed",
-          message: "OpenCode does not support fast mode.",
-        }),
-      ),
     startSession: (input) => {
-      if (input.speed != null && input.speed !== "standard")
-        return Effect.fail(
-          new HostValidationError({
-            field: "speed",
-            message: "OpenCode does not support fast mode. Disable it before starting a session.",
-          }),
-        );
       const request: Parameters<typeof connection.startSession>[0] = {
         repoPath: input.repoPath,
         runtimeKind: "opencode",
@@ -227,13 +207,6 @@ export const createOpenCodeSessionControlAdapter = ({
         );
     },
     forkSession: (input) => {
-      if (input.speed != null && input.speed !== "standard")
-        return Effect.fail(
-          new HostValidationError({
-            field: "speed",
-            message: "OpenCode does not support fast mode. Disable it before forking a session.",
-          }),
-        );
       const request: Parameters<typeof connection.forkSession>[0] = {
         repoPath: input.repoPath,
         runtimeKind: "opencode",

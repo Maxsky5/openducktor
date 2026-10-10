@@ -22,7 +22,6 @@ import { CodexAppServerAdapter } from "./index";
 import type { CodexJsonRpcRequest } from "./types";
 
 const expectedThreadPolicy = {
-  serviceTier: null,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   sandbox: "workspace-write",
@@ -30,7 +29,6 @@ const expectedThreadPolicy = {
 const workflowThreadConfig = (role: AgentRole, repoPath = "/repo") =>
   expectedThreadConfig(repoPath, AGENT_ROLE_TOOL_POLICY[role]);
 const expectedTurnPolicy = (workingDirectory: string) => ({
-  serviceTier: null,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   sandboxPolicy: codexSandboxPolicy(defaultCodexEffectivePolicy(), workingDirectory),
@@ -386,6 +384,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Hello Codex" }], []),
         model: "gpt-5",
+        serviceTier: null,
         effort: "medium",
       },
     });
@@ -421,7 +420,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     );
 
     expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
-      serviceTier: null,
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandbox: "workspace-write",
@@ -432,13 +430,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: "gpt-5",
     });
     expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
-      serviceTier: null,
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
       threadId: "thread/start-runtime-live",
       input: toCodexTurnInputList([{ kind: "text", text: "Build it" }], []),
       model: "gpt-5",
+      serviceTier: null,
       effort: "medium",
     });
   });
@@ -610,7 +608,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     );
   });
 
-  test("updates the session model used for subsequent turns", async () => {
+  test("updates the session model and speed used for subsequent turns", async () => {
     const { adapter, transports } = createHarness();
 
     await adapter.startSession({
@@ -628,7 +626,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+      model: { providerId: "openai", modelId: "gpt-5", variant: "high", speed: "priority" },
     });
 
     await adapter.sendUserMessage(
@@ -647,6 +645,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         threadId: "thread/start-runtime-live",
         input: toCodexTurnInputList([{ kind: "text", text: "Use deeper reasoning" }], []),
         model: "gpt-5",
+        serviceTier: "priority",
         effort: "high",
       },
     });

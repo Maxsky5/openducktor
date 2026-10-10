@@ -23,6 +23,9 @@ export const normalizeModelInput = (
   if (!model) {
     return {};
   }
+  if (model.speed !== undefined) {
+    throw new Error(`OpenCode does not support speed '${model.speed}'. Select standard speed.`);
+  }
 
   const normalized: NormalizedModelInput = {
     model: {

@@ -2,9 +2,6 @@ import type {
   ClaudeToolCatalog,
   ClaudeToolCatalogInput,
   AgentSessionContextUsage,
-  AgentSessionControlUpdateSpeedInput,
-  AgentSessionSpeedState,
-  AgentSpeedRuntimeObservation,
   AgentSessionControlUpdateTitleInput,
   FileDiff,
   FileStatus,
@@ -40,7 +37,6 @@ import type {
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
-import type { AgentSessionSettingsRef } from "../../ports/agent-session-live-adapter-port";
 
 export type ClaudeAgentSdkServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
@@ -53,27 +49,6 @@ export type ClaudeAgentSdkService = {
   loadToolCatalog(
     input: ClaudeToolCatalogInput,
   ): Effect.Effect<ClaudeToolCatalog, ClaudeAgentSdkServiceError>;
-  setSpeedChoiceRecorder(
-    recorder: (
-      ref: SessionRef,
-      choice: string | null,
-      isCurrent: () => boolean,
-      model?: import("@openducktor/contracts").AgentSessionModelSettings,
-      previousChoice?: string | null,
-    ) => Promise<() => Promise<void>>,
-  ): void;
-  holdSessionTurns(
-    input: AgentSessionSettingsRef,
-    runtimeId: string,
-  ): Effect.Effect<Effect.Effect<void, ClaudeAgentSdkServiceError>, ClaudeAgentSdkServiceError>;
-  setSessionSpeedState(
-    input: SessionRef,
-    state: AgentSessionSpeedState,
-  ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
-  updateSessionSpeed(
-    input: AgentSessionControlUpdateSpeedInput,
-    retainedState?: AgentSessionSpeedState,
-  ): Effect.Effect<AgentSpeedRuntimeObservation, ClaudeAgentSdkServiceError>;
   inspectSessionForImport(
     input: SessionRef,
     runtimeId: string,
@@ -81,7 +56,6 @@ export type ClaudeAgentSdkService = {
     {
       metadata: import("@openducktor/contracts").WorkspaceSessionExternal;
       selectedModel: import("@openducktor/contracts").AgentSessionModelSelection | null;
-      speed: string | null;
       attach: Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
     },
     ClaudeAgentSdkServiceError

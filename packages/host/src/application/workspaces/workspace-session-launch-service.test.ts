@@ -179,8 +179,6 @@ test.each(["opencode", "codex", "claude"] as const)(
   "saves and sends a workspace draft after the caller leaves: %s",
   async (kind) => {
     const h = await createPersistenceHarness(database, kind, true);
-    const speed = kind === "opencode" ? "standard" : "fast";
-    await Effect.runPromise(h.store.setSpeed({ ...h.storeRef, speed }));
     const service = h.launchService();
     const gate = await Effect.runPromise(Deferred.make<void>());
     h.state.beforeBind = Deferred.await(gate);
@@ -215,16 +213,14 @@ test.each(["opencode", "codex", "claude"] as const)(
     expect(outcome.acceptance).toBe("accepted");
     expect(outcome.ownershipSaved).toBe(true);
     expect(h.starts).toHaveLength(1);
-    expect(h.starts[0]?.speed).toBe(speed);
     expect(h.inputs).toHaveLength(1);
     expect(h.inputs[0]).toMatchObject({
       parts: request.parts,
       systemPrompt: "Original instructions.",
       model: h.record.selectedModel,
-      speed,
       workingDirectory: h.ref.workingDirectory,
     });
-    expect(await h.get()).toMatchObject({ externalSessionId: h.ref.externalSessionId, speed });
+    expect((await h.get()).externalSessionId).toBe(h.ref.externalSessionId);
   },
 );
 
