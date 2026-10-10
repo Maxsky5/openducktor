@@ -250,8 +250,6 @@ const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
   return harness;
 };
 
-const WAIT_TIMEOUT_MS = 750;
-
 const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
   await waitFor(() => {
     expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
@@ -262,12 +260,9 @@ const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
 };
 
 const waitForTaskApprovalModalClosed = async (): Promise<void> => {
-  await waitFor(
-    () => {
-      expect(latestHarnessValue?.taskApprovalModal).toBeNull();
-    },
-    { timeout: WAIT_TIMEOUT_MS },
-  );
+  await waitFor(() => {
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+  });
 };
 
 const createTaskApprovalContextFixture = (
@@ -1521,7 +1516,6 @@ describe("useTaskApprovalFlow", () => {
       expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
-    await waitForTaskApprovalModalClosed();
 
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
       mergeMethod: "squash",
@@ -1579,7 +1573,6 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitForTaskApprovalModalClosed();
 
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
       mergeMethod: "merge_commit",
@@ -1589,6 +1582,7 @@ describe("useTaskApprovalFlow", () => {
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
     expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
+    await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
@@ -1632,13 +1626,13 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitForTaskApprovalModalClosed();
 
     expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
     });
+    await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
       description: "session lookup failed",
     });
@@ -1693,13 +1687,13 @@ describe("useTaskApprovalFlow", () => {
       expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
-    await waitForTaskApprovalModalClosed();
 
     expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
       remote: "origin",
     });
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
       description: "session lookup failed",
     });
@@ -1743,12 +1737,6 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
     expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
@@ -1808,12 +1796,6 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     await act(async () => {
       latestHarnessValue?.taskGitConflictDialog?.onAbort();
@@ -1875,12 +1857,6 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     await act(async () => {
       latestHarnessValue?.taskGitConflictDialog?.onAskBuilder();
@@ -1943,12 +1919,6 @@ describe("useTaskApprovalFlow", () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     await act(async () => {
       latestHarnessValue?.taskGitConflictDialog?.onAskBuilder();
@@ -2352,12 +2322,6 @@ describe("useTaskApprovalFlow", () => {
       expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskApprovalModal?.errorMessage).not.toBeNull();
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
@@ -2425,12 +2389,6 @@ describe("useTaskApprovalFlow", () => {
       expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
-    await waitFor(
-      () => {
-        expect(latestHarnessValue?.taskApprovalModal?.errorMessage).not.toBeNull();
-      },
-      { timeout: WAIT_TIMEOUT_MS },
-    );
 
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
       "Git push failed with no output.",

@@ -1,8 +1,7 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient, UseQueryResult } from "@tanstack/react-query";
 import { useQueries } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
-import { getSessionReads } from "./agent-session-reads";
+import { useCallback, useMemo } from "react";
 import {
   type AgentSessionReadPort,
   agentSessionListQueryOptions,
@@ -20,7 +19,13 @@ export type AgentSessionListsState = {
 
 export type AgentSessionListTarget = { repoPath: string; taskId: string };
 
-/** Share canonical task queries across workspaces and batch their host reads per workspace. */
+/**
+ * Read the saved session lists of tasks in one or more repositories.
+ *
+ * Each list keeps its own shared query. Lists of one repository that read together share one
+ * host request. `combine` receives one read per target in normalized target order:
+ * repositories in first-seen order, task IDs sorted within each repository.
+ */
 export function useAgentSessionListQueries<Result>({
   targets,
   enabled,
@@ -32,29 +37,10 @@ export function useAgentSessionListQueries<Result>({
   enabled: boolean;
   queryClient: QueryClient;
   readPort?: AgentSessionReadPort | undefined;
-  combine: (
-    reads: AgentSessionListQueryResult[],
-    targets: readonly AgentSessionListTarget[],
-  ) => Result;
+  combine: (reads: AgentSessionListRead[], targets: readonly AgentSessionListTarget[]) => Result;
 }): Result {
   const targetsKey = toTargetsKey(targets);
   const normalizedTargets = useMemo(() => toTargets(targetsKey), [targetsKey]);
-  useEffect(() => {
-    if (!enabled) return;
-    const tasksByRepo = new Map<string, string[]>();
-    for (const { repoPath, taskId } of normalizedTargets) {
-      const tasks = tasksByRepo.get(repoPath) ?? [];
-      tasks.push(taskId);
-      tasksByRepo.set(repoPath, tasks);
-    }
-    const reads = getSessionReads(queryClient);
-    const releases = [...tasksByRepo].map(([repoPath, taskIds]) =>
-      reads.registerDemand(repoPath, taskIds),
-    );
-    return () => {
-      for (const release of releases) release();
-    };
-  }, [enabled, normalizedTargets, queryClient]);
   const combineLists = useCallback(
     (lists: AgentSessionListQueryResult[]): Result =>
       combine(lists, enabled ? normalizedTargets : []),
@@ -69,7 +55,7 @@ export function useAgentSessionListQueries<Result>({
             // A failed exact refresh waits for its owner to retry instead of refetching on mount.
             const listFailed = queryClient.getQueryState(queryKey)?.status === "error";
             return {
-              ...agentSessionListQueryOptions(queryClient, repoPath, taskId, readPort),
+              ...agentSessionListQueryOptions(repoPath, taskId, readPort),
               enabled: !listFailed,
             };
           })
@@ -98,7 +84,7 @@ export const useAgentSessionLists = ({
     [normalizedTaskIds, repoPath],
   );
   const combine = useCallback(
-    (reads: AgentSessionListQueryResult[]): AgentSessionListsState => {
+    (reads: AgentSessionListRead[]): AgentSessionListsState => {
       const data = Object.fromEntries(
         normalizedTaskIds.map((taskId, index) => [taskId, reads[index]?.data ?? []]),
       );
@@ -109,11 +95,7 @@ export const useAgentSessionLists = ({
       if (failedRead) {
         return { data, error: failedRead.error, isPending: false };
       }
-      return {
-        data,
-        error: null,
-        isPending: reads.some((read) => read.isPending || read.isFetching || read.isStale),
-      };
+      return { data, error: null, isPending: reads.some((read) => read.status === "pending") };
     },
     [normalizedTaskIds, shouldReadLists],
   );
@@ -127,6 +109,7 @@ export const useAgentSessionLists = ({
   });
 };
 
+/** One task's saved session list. */
 export type AgentSessionListRead = Pick<AgentSessionListQueryResult, "data" | "error" | "status">;
 
 type UseAgentSessionListsArgs = {

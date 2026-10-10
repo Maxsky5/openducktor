@@ -14,7 +14,6 @@ export const createTaskQueryUseCases = ({
 }: CreateTaskServiceInput): Pick<
   TaskService,
   | "listTasks"
-  | "listExistingTaskIds"
   | "listKanbanTasks"
   | "listTaskIds"
   | "getTaskMetadata"
@@ -24,10 +23,6 @@ export const createTaskQueryUseCases = ({
   | "agentSessionsListForTasks"
   | "agentSessionUpsert"
 > => ({
-  listExistingTaskIds(input) {
-    return taskStore.listExistingTaskIds(input);
-  },
-
   listTasks(input) {
     return Effect.gen(function* () {
       const tasks = yield* taskStore.listTasks(input);

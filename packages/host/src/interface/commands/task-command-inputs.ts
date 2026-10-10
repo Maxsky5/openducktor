@@ -8,8 +8,6 @@ import {
   type TaskStopImpactRequest,
   taskStopImpactRequestSchema,
   taskUpdatePatchSchema,
-  tasksExistingIdsInputSchema,
-  type TasksExistingIdsInput,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import type {
@@ -69,16 +67,6 @@ const readRequiredString = (record: CommandInputRecord, key: string, label: stri
 export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return { repoPath: readRequiredString(record, "repoPath") };
-};
-
-export const parseExistingTaskIdsInput = (input: HostCommandArgs): TasksExistingIdsInput => {
-  const parsed = tasksExistingIdsInputSchema.safeParse(input);
-  if (parsed.success) return parsed.data;
-  throw new HostValidationError({
-    message: `tasks_existing_ids input is invalid: ${parsed.error.message}`,
-    field: "input",
-    cause: parsed.error,
-  });
 };
 
 export const parseTaskStopImpactInput = (input: HostCommandArgs): TaskStopImpactRequest => {

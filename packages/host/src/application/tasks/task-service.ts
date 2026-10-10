@@ -129,9 +129,6 @@ export type TaskServiceError =
 
 export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
-  listExistingTaskIds(
-    input: Parameters<TaskStorePort["listExistingTaskIds"]>[0],
-  ): Effect.Effect<string[], TaskServiceError>;
   listKanbanTasks(input: RepoPathInput): Effect.Effect<TaskCard[], TaskServiceError>;
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
   listTaskIds(input: RepoPathInput): Effect.Effect<string[], TaskServiceError>;
@@ -436,7 +433,6 @@ const createTaskServiceImplementation = (
     listKanbanTasks: (input) => mapTaskServiceErrors(service.listKanbanTasks(input)),
     listTaskIds: (input) => mapTaskServiceErrors(service.listTaskIds(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
-    listExistingTaskIds: (input) => mapTaskServiceErrors(service.listExistingTaskIds(input)),
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
     planGet: (input) => mapTaskServiceErrors(service.planGet(input)),
     qaApproved: (input) => mapTaskServiceErrors(service.qaApproved(input)),

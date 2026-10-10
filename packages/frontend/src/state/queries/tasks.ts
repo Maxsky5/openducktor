@@ -17,23 +17,7 @@ export const taskQueryKeys = {
   kanbanData: (repoPath: string) => taskQueryKeys.repoData(repoPath),
   /** Under the repository data prefix, so task events mark it stale with the task list. */
   ids: (repoPath: string) => [...taskQueryKeys.repoDataPrefix(repoPath), "ids"] as const,
-  existingIdsPrefix: () => [...taskQueryKeys.all, "existing-ids"] as const,
-  existingIds: (repoPath: string, taskIds: string[]) =>
-    [...taskQueryKeys.existingIdsPrefix(), repoPath, [...taskIds].sort()] as const,
 };
-
-export const loadExistingTaskIdsFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-  readPort: Pick<typeof host, "tasksExistingIds">,
-): Promise<string[]> =>
-  queryClient.fetchQuery({
-    queryKey: taskQueryKeys.existingIds(repoPath, taskIds),
-    queryFn: () => readPort.tasksExistingIds(repoPath, taskIds),
-    staleTime: 0,
-    gcTime: 0,
-  });
 
 export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (repoPath: string) =>
   queryOptions({
@@ -51,10 +35,13 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
 export const unfilteredRepoTaskDataQueryOptions = repoTaskDataQueryOptions;
 
 /** The IDs of all tasks of a repository, also closed tasks that the Kanban list hides. */
-export const repoTaskIdsQueryOptions = (repoPath: string) =>
+export const repoTaskIdsQueryOptions = (
+  repoPath: string,
+  readPort: Pick<typeof host, "taskIdsList"> = host,
+) =>
   queryOptions({
     queryKey: taskQueryKeys.ids(repoPath),
-    queryFn: (): Promise<string[]> => host.taskIdsList(repoPath),
+    queryFn: (): Promise<string[]> => readPort.taskIdsList(repoPath),
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 

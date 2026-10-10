@@ -56,13 +56,17 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 
 Agent session lists stay fresh until a task event invalidates them or an explicit refresh requests current records. Session-list queries do not retry on mount after a failure.
 
+Each task has its own session-list query. The query function sends its read through a shared batch in `agent-session-list-batch.ts`. Reads of one workspace that start before the next microtask share one `agentSessionsListForTasks` request. Each workspace has at most one session-list request in progress. Reads that start during that request share the next request. The batch rejects a response that omits a requested task, repeats a task, or adds a task.
+
+A task event marks the reads in progress for its tasks as stale. A stale read reads again before it completes, so a read that started before the event cannot complete the event. The task stream reconciles the session lists of consecutive received events together.
+
 Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
-Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. Advance the list's read revision and complete pending reads with the committed records so an older response cannot replace them. Workspace session updates use their existing record event. These updates do not trigger another read.
+Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. It also completes the reads in progress for that task with the committed records, so an older response cannot replace them. Workspace session updates use their existing record event. These updates do not trigger another read.
 
-A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot reads again the observed session lists of inactive workspaces. Unobserved lists stay stale until a view needs them.
+A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps and reads again the observed session lists of inactive workspaces, and removes the others. The Kanban task list hides older done tasks. Before a snapshot removes the session state of a task that the Kanban list omits, it reads `taskIdsList` to confirm that the task no longer exists.
 
 ### Checks and file data
 

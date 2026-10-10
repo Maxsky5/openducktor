@@ -11,6 +11,8 @@ type TaskStreamTransport = {
   ) => Promise<TaskStreamSubscription>;
 };
 
+type ChangeFrame = Extract<TaskStreamFrame, { type: "change" }>;
+
 type OwnedSubscription = {
   subscription: TaskStreamSubscription | null;
   generation: number;
@@ -49,11 +51,6 @@ export const createTaskStreamController = ({
   let recoveryPromise: Promise<boolean> | null = null;
   let stopPromise: Promise<void> | null = null;
   let processedCursor: TaskEventCursor | null = null;
-  let admissionCursor: TaskEventCursor | null = null;
-  const admittedChanges = new Map<
-    string,
-    Promise<{ succeeded: true } | { succeeded: false; cause: unknown }>
-  >();
   let acknowledgedCursor: TaskEventCursor | null = null;
   let processing = false;
   let stopped = false;
@@ -66,7 +63,7 @@ export const createTaskStreamController = ({
   let acknowledging: Acknowledgement | null = null;
   let awaitingReplayCursor: TaskEventCursor | null = null;
   let pendingSnapshot: Extract<TaskStreamFrame, { type: "snapshot_required" }> | null = null;
-  const pendingChanges = new Map<string, Extract<TaskStreamFrame, { type: "change" }>>();
+  const pendingChanges = new Map<string, ChangeFrame>();
 
   const compareCursor = (left: TaskEventCursor, right: TaskEventCursor): number => {
     if (left.epoch !== right.epoch) {
@@ -134,26 +131,23 @@ export const createTaskStreamController = ({
     return true;
   };
 
-  const applyChange = async (
+  /** Reconcile consecutive changes together, so their session reads share requests. */
+  const applyChanges = async (
     owner: OwnedSubscription,
-    frame: Extract<TaskStreamFrame, { type: "change" }>,
+    frames: ChangeFrame[],
     frameGeneration: number,
-  ): Promise<boolean> => {
-    admitChanges();
-    const completion = admittedChanges.get(frameKey(frame.cursor));
-    if (!completion) throw new Error("Task change was not admitted in cursor order.");
-    const [taskResult, result] = await Promise.all([
-      taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath()).then(
-        () => ({ succeeded: true as const }),
-        (cause: unknown) => ({ succeeded: false as const, cause }),
-      ),
-      completion,
+  ): Promise<void> => {
+    await Promise.all([
+      (async () => {
+        for (const frame of frames) {
+          // Task views apply in event order and read the active workspace when each event starts.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
+          await taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath());
+        }
+      })(),
+      agentSessionViewSync.reconcileExternalEvents(frames.map((frame) => frame.event)),
     ]);
-    if (!taskResult.succeeded) throw taskResult.cause;
-    if (!result.succeeded) throw result.cause;
-    if (!isActive(owner, frameGeneration)) return false;
-    processedCursor = frame.cursor;
-    return acknowledge(owner, frame.cursor, frameGeneration);
+    if (isActive(owner, frameGeneration)) processedCursor = frames[frames.length - 1]!.cursor;
   };
 
   const applySnapshot = async (
@@ -166,20 +160,17 @@ export const createTaskStreamController = ({
     let succeeded = false;
     try {
       const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
-      if (!isActive(owner, frameGeneration)) return false;
       await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
-      succeeded = isActive(owner, frameGeneration);
+      succeeded = true;
     } finally {
-      if (isActive(owner, frameGeneration)) onSnapshotFinished?.(activeRepoPath, succeeded);
+      onSnapshotFinished?.(activeRepoPath, succeeded);
     }
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
   };
 
-  const nextChange = (
-    after = processedCursor,
-  ): Extract<TaskStreamFrame, { type: "change" }> | null => {
+  const nextChange = (after: TaskEventCursor | null): ChangeFrame | null => {
     if (!after) {
       return [...pendingChanges.values()].find((frame) => frame.cursor.sequence === 0) ?? null;
     }
@@ -191,20 +182,13 @@ export const createTaskStreamController = ({
     );
   };
 
-  const admitChanges = (): void => {
-    if (stopped || paused || pendingSnapshot) return;
-    let change = nextChange(admissionCursor ?? processedCursor);
-    while (change) {
-      const frame = change;
-      admissionCursor = frame.cursor;
-      // Start reads in cursor order so nearby changes can share a batch. Acknowledge them in order.
-      const completion = agentSessionViewSync.reconcileExternalEvent(frame.event).then(
-        () => ({ succeeded: true as const }),
-        (cause: unknown) => ({ succeeded: false as const, cause }),
-      );
-      admittedChanges.set(frameKey(frame.cursor), completion);
-      change = nextChange(admissionCursor);
+  /** The received changes that follow the processed cursor without a gap. */
+  const nextChanges = (): ChangeFrame[] => {
+    const frames: ChangeFrame[] = [];
+    for (let frame = nextChange(processedCursor); frame; frame = nextChange(frame.cursor)) {
+      frames.push(frame);
     }
+    return frames;
   };
 
   const markRecovered = (): void => {
@@ -224,9 +208,6 @@ export const createTaskStreamController = ({
 
     if (frame.type === "snapshot_required") {
       operationGeneration += 1;
-      agentSessionViewSync.stopPending("snapshot");
-      admittedChanges.clear();
-      admissionCursor = frame.cursor;
       pendingChanges.clear();
       pendingSnapshot = frame;
       awaitingReplayCursor = null;
@@ -270,7 +251,6 @@ export const createTaskStreamController = ({
     }
 
     pendingChanges.set(frameKey(frame.cursor), frame);
-    admitChanges();
     requestDrain();
   };
 
@@ -335,9 +315,6 @@ export const createTaskStreamController = ({
       awaitingReplayCursor = null;
       pendingChanges.clear();
       pendingSnapshot = null;
-      admittedChanges.clear();
-      admissionCursor = processedCursor;
-      agentSessionViewSync.stopPending("stop");
     }
     try {
       await acquire(cursor);
@@ -418,7 +395,8 @@ export const createTaskStreamController = ({
 
         if (processedCursor && !cursorsEqual(processedCursor, acknowledgedCursor)) {
           if (cursorsEqual(processedCursor, awaitingReplayCursor)) return;
-          const replay = pendingChanges.get(frameKey(processedCursor));
+          // The host requires one acknowledgement per frame, without a skipped sequence.
+          const replay = nextChange(acknowledgedCursor);
           if (!replay) return;
           try {
             const acknowledged = await acknowledge(owner, replay.cursor, frameGeneration);
@@ -434,20 +412,14 @@ export const createTaskStreamController = ({
           }
         }
 
-        admitChanges();
-        const change = nextChange();
-        if (!change) return;
+        const changes = nextChanges();
+        if (changes.length === 0) return;
         try {
-          const acknowledged = await applyChange(owner, change, frameGeneration);
-          if (!acknowledged) continue;
-          pendingChanges.delete(frameKey(change.cursor));
-          admittedChanges.delete(frameKey(change.cursor));
-          markRecovered();
+          // The next pass acknowledges each processed change in cursor order.
+          await applyChanges(owner, changes, frameGeneration);
         } catch (error) {
           if (!isActive(owner, frameGeneration)) continue;
-          const acknowledgementFailed = cursorsEqual(processedCursor, change.cursor);
-          const recoveryCursor = acknowledgementFailed ? acknowledgedCursor : null;
-          if (!(await startRecovery(error, recoveryCursor, acknowledgementFailed))) return;
+          if (!(await startRecovery(error, null, false))) return;
         }
       }
     } catch (error) {
@@ -472,9 +444,6 @@ export const createTaskStreamController = ({
     stop: (): Promise<void> => {
       if (!stopPromise) {
         stopped = true;
-        operationGeneration += 1;
-        agentSessionViewSync.stopPending("stop");
-        admittedChanges.clear();
         stopPromise = (async () => {
           await startPromise?.catch(() => {});
           await recoveryPromise?.catch(() => {});

@@ -40,18 +40,6 @@ export const taskRows = (
     return rows;
   });
 
-export const existingTaskIds = (
-  session: TaskStoreSession,
-  taskIds: string[],
-): Effect.Effect<string[], SqliteTaskStoreReadError> =>
-  session
-    .execute(
-      (database) => database.select({ id: tasks.id }).from(tasks).where(inArray(tasks.id, taskIds)),
-      "sqliteTaskStore.existingTaskIds.selectTasks",
-      { taskIds },
-    )
-    .pipe(Effect.map((rows) => rows.map((row) => row.id)));
-
 const getTaskRow = (
   session: TaskStoreSession,
   taskId: string,

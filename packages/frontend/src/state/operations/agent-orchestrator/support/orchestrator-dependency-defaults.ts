@@ -5,12 +5,8 @@ import type { AgentOrchestratorDependencies } from "./orchestrator-ports";
 
 export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorDependencies => ({
   queryClient: appQueryClient,
-  hostPort: {
-    agentSessionsListForTasks: (repoPath, taskIds) =>
-      host.agentSessionsListForTasks(repoPath, taskIds),
-    taskMetadataGet: (repoPath, taskId) => host.taskMetadataGet(repoPath, taskId),
-    taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
-  },
+  // Session-list reads batch per read port, so they share the port of the other app reads.
+  hostPort: host,
   liveSessionHostPort: {
     agentSessionLiveLoadContext: (...args) => host.agentSessionLiveLoadContext(...args),
     agentSessionLiveRead: (...args) => host.agentSessionLiveRead(...args),

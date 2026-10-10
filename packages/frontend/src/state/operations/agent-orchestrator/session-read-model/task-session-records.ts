@@ -43,24 +43,19 @@ export const readCachedTaskSessionRecords = (
   repoPath: string,
   taskIds: string[],
 ): TaskSessionRecords | null => {
-  const ids = normalizeAgentSessionTaskIds(taskIds);
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
   const recordsByTaskId: TaskSessionRecordsByTaskId = {};
-  for (const taskId of ids) {
+  for (const taskId of normalizedTaskIds) {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
     const state = queryClient.getQueryState(queryKey);
     const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
-    if (
-      state?.status !== "success" ||
-      state.isInvalidated ||
-      state.fetchStatus !== "idle" ||
-      records === undefined
-    ) {
+    if (state?.status !== "success" || state.isInvalidated || records === undefined) {
       return null;
     }
     recordsByTaskId[taskId] = records;
   }
   return toTaskSessionRecords(
-    ids.map((id) => ({ id })),
+    normalizedTaskIds.map((id) => ({ id })),
     recordsByTaskId,
   );
 };
