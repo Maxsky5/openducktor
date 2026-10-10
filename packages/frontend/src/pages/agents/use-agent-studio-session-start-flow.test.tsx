@@ -8,7 +8,6 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
-import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { type SessionStartWorkflowResult } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
@@ -69,7 +68,6 @@ const createRunSessionStartWorkflow = (
   overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
 ) =>
   createSessionStartWorkflowRunner({
-    queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
     sendAgentMessage: async () => null,
@@ -991,11 +989,9 @@ describe("useAgentStudioSessionStartFlow", () => {
 
       expect(updateCalls).toEqual([]);
       expect(sendAgentMessage).not.toHaveBeenCalled();
-      expect(toastErrorMock).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Workflow launch failed for task-1.",
-        expect.objectContaining({ description: "start failed" }),
-      );
+      expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
+        description: "start failed",
+      });
     });
 
     await harness.unmount();
@@ -1249,16 +1245,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       agent: "build",
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      sessionIdentity("session-existing"),
-      [
-        expect.objectContaining({
-          kind: "text",
-          text: expect.any(String),
-        }),
-      ],
-      { errorAttentionId: expect.any(String) },
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
+      { kind: "text", text: expect.any(String) },
+    ]);
 
     await harness.unmount();
   });

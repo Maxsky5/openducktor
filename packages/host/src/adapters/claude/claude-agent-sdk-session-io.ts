@@ -1,4 +1,4 @@
-import { renameSession, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AcceptedAgentUserMessage,
   type AgentModelSelection,
@@ -261,6 +261,7 @@ export const sendClaudeUserMessage = async (input: {
   now: () => string;
   randomId: () => string;
   session: ClaudeSession;
+  onSent?: (() => void) | undefined;
 }): Promise<AcceptedAgentUserMessage> => {
   const { emit, messageInput, now, randomId, session } = input;
   const isManualCompaction =
@@ -350,6 +351,7 @@ export const sendClaudeUserMessage = async (input: {
     }
     throw cause;
   }
+  input.onSent?.();
   emit(session, {
     type: "session_status",
     externalSessionId: session.externalSessionId,
@@ -484,17 +486,4 @@ export const flushQueuedClaudeUserMessage = (input: {
       }
       throw cause;
     });
-};
-
-export const renameClaudeSessionIfNeeded = async (input: {
-  session: ClaudeSession;
-  title: string | undefined;
-}): Promise<void> => {
-  const title = input.title?.trim();
-  if (!title) {
-    return;
-  }
-  await renameSession(input.session.externalSessionId, title, {
-    dir: input.session.input.workingDirectory,
-  });
 };

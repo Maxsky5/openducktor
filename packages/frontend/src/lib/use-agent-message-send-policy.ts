@@ -18,29 +18,25 @@ export function useAgentMessageSendPolicy(): NonNullable<
   useLayoutEffect(() => {
     current.current = { runtime, runtimeStatus, readModel };
   }, [runtime, runtimeStatus, readModel]);
-  return useCallback<NonNullable<AgentMessageSendOptions["assertCanSubmit"]>>(
-    (session, ownsStart = false): void => {
-      const { runtime, runtimeStatus, readModel } = current.current;
-      const fault = readModel.getSessionFault(session);
-      const reason = getAgentMessageSendBlockedReason({
-        session,
-        runtime:
-          runtime.allRuntimeDefinitions.find((entry) => entry.kind === session.runtimeKind) ?? null,
-        readiness: deriveRuntimeReadiness({
-          hasWorkspace: true,
-          runtimeDefinitions: runtime.allRuntimeDefinitions,
-          isLoadingRuntimeDefinitions: runtime.isLoadingRuntimeDefinitions,
-          runtimeDefinitionsError: runtime.runtimeDefinitionsError,
-          runtimeStatus,
-          runtimeTarget: runtimeReadinessTargetForRuntime(session.runtimeKind),
-        }),
-        readModel: readModel.sessionReadModelLoadState,
-        readOnlyReason: fault?.source === "workspace-target" ? fault.message : null,
-        pending: false,
-        allowStarting: ownsStart,
-      });
-      if (reason) throw new Error(reason);
-    },
-    [],
-  );
+  return useCallback<NonNullable<AgentMessageSendOptions["assertCanSubmit"]>>((session): void => {
+    const { runtime, runtimeStatus, readModel } = current.current;
+    const fault = readModel.getSessionFault(session);
+    const reason = getAgentMessageSendBlockedReason({
+      session,
+      runtime:
+        runtime.allRuntimeDefinitions.find((entry) => entry.kind === session.runtimeKind) ?? null,
+      readiness: deriveRuntimeReadiness({
+        hasWorkspace: true,
+        runtimeDefinitions: runtime.allRuntimeDefinitions,
+        isLoadingRuntimeDefinitions: runtime.isLoadingRuntimeDefinitions,
+        runtimeDefinitionsError: runtime.runtimeDefinitionsError,
+        runtimeStatus,
+        runtimeTarget: runtimeReadinessTargetForRuntime(session.runtimeKind),
+      }),
+      readModel: readModel.sessionReadModelLoadState,
+      readOnlyReason: fault?.source === "workspace-target" ? fault.message : null,
+      pending: false,
+    });
+    if (reason) throw new Error(reason);
+  }, []);
 }

@@ -10,7 +10,6 @@ import {
   createPersistenceHarness,
   waitFor,
 } from "./test-support/workspace-session-runtime-persistence-harness";
-import { createNodeSessionLaunchControls } from "../../composition/node/node-session-launch-controls";
 
 let database: SqliteTaskStoreTestHarness;
 beforeEach(async () => {
@@ -20,22 +19,25 @@ afterEach(async () => {
   await database.cleanup();
 });
 
-test.each(
-  (["cancel", "shutdown"] as const).flatMap((action) =>
-    (["attachments", "native", "hold"] as const).map((stage) => [action, stage] as const),
-  ),
-)("%s during %s leaves the workspace draft unbound", async (action, stage) => {
+const yieldToFibers = Effect.gen(function* () {
+  for (let index = 0; index < 20; index += 1) yield* Effect.yieldNow;
+});
+
+const textRequest = (h: Awaited<ReturnType<typeof createPersistenceHarness>>) => ({
+  ...h.storeRef,
+  parts: [{ kind: "text" as const, text: "First" }],
+});
+
+test("shutdown during the native start leaves the workspace draft unbound", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
   const entered = await Effect.runPromise(Deferred.make<void>());
   const release = await Effect.runPromise(Deferred.make<void>());
-  const pause = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)));
-  if (stage === "attachments") h.state.beforeResolveParts = pause;
-  else if (stage === "native") h.state.nativeStart = pause;
-  else h.state.beforeSnapshot = pause;
+  h.state.nativeStart = Deferred.succeed(entered, undefined).pipe(
+    Effect.andThen(Deferred.await(release)),
+  );
   const service = h.launchService();
   const request: WorkspaceSessionLaunchRequest = {
     ...h.storeRef,
-    launchAttemptId: "canceled-preparation",
     parts: [
       {
         kind: "attachment",
@@ -52,127 +54,66 @@ test.each(
   const launch = Effect.runFork(service.launch(request));
   try {
     await Effect.runPromise(Deferred.await(entered));
-    const cancel = Effect.runFork(
-      action === "cancel" ? service.cancel(request) : service.shutdown(),
-    );
-    await Effect.runPromise(Effect.yieldNow);
+    // The native start cannot be interrupted, so shutdown waits for it and its cleanup.
+    const shutdown = Effect.runFork(service.shutdown());
+    await Effect.runPromise(yieldToFibers);
+    expect(shutdown.pollUnsafe()).toBeUndefined();
     await Effect.runPromise(Deferred.succeed(release, undefined));
+    await Effect.runPromise(Fiber.join(shutdown));
     const outcome = await Effect.runPromise(Fiber.join(launch));
-    await Effect.runPromise(Fiber.join(cancel));
-    expect(outcome).toMatchObject({
-      phase: "canceled",
-      acceptance: "not_submitted",
-      ownershipSaved: false,
-      recoveryAllowed: false,
-    });
-    expect(h.starts).toHaveLength(stage === "attachments" ? 0 : 1);
+    expect(outcome.status).toBe("canceled");
+    expect(outcome.session).toBeUndefined();
+    expect(outcome.unsentInstruction).toBeUndefined();
+    expect(h.starts).toHaveLength(1);
     expect(h.inputs).toEqual([]);
     expect(h.stops).toEqual([]);
-    expect(h.releases).toEqual(stage === "attachments" ? [] : [h.ref]);
+    expect(h.releases).toEqual([h.ref]);
     expect((await h.get()).externalSessionId).toBeNull();
   } finally {
     await Effect.runPromise(Deferred.succeed(release, undefined));
     await Effect.runPromise(Fiber.join(launch));
-    await Effect.runPromise(service.shutdown());
   }
 });
 
-test.each(["stop", "resend"] as const)(
-  "%s retires rejected workspace launch recovery",
-  async (action) => {
-    const h = await createPersistenceHarness(database, "codex", true);
-    const service = h.launchService();
-    h.state.rejectSend = true;
-    const request = {
-      ...h.storeRef,
-      launchAttemptId: "attempt",
-      parts: [{ kind: "text" as const, text: "First" }],
-    };
-    const failed = await Effect.runPromise(service.launch(request));
-    expect(failed.recoveryAllowed).toBe(true);
-    h.state.rejectSend = false;
-    const { commands } = createNodeSessionLaunchControls(h.live, [service]);
-    if (action === "stop") await Effect.runPromise(commands.stopSession(h.ref));
-    else
-      await Effect.runPromise(
-        commands.sendUserMessage({
-          ...h.ref,
-          sessionScope: { kind: "repository" },
-          parts: request.parts,
-        }),
-      );
-    const [retired] = await Effect.runPromise(service.read(request));
-    expect(retired).toMatchObject({ phase: "canceled", recoveryAllowed: false });
-    expect(retired?.failure).toEqual(failed.failure);
-    await expect(Effect.runPromise(service.recover(request))).rejects.toThrow(
-      "recovery is unavailable",
-    );
-    expect(h.inputs.filter((input) => "parts" in input)).toHaveLength(action === "stop" ? 1 : 2);
-    expect(h.starts).toHaveLength(1);
-    expect(h.stops).toEqual(action === "stop" ? [h.ref] : []);
-    expect((await h.get()).externalSessionId).toBe("native");
-  },
-);
-
-test("a composer resend cannot race an active workspace launch recovery", async () => {
+test("shutdown during the starting hold stops the created session without a send", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
-  const service = h.launchService();
-  h.state.rejectSend = true;
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "attempt",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
-  expect((await Effect.runPromise(service.launch(request))).recoveryAllowed).toBe(true);
-  h.state.rejectSend = false;
   const entered = await Effect.runPromise(Deferred.make<void>());
   const release = await Effect.runPromise(Deferred.make<void>());
-  h.state.beforeControl = Deferred.succeed(entered, undefined).pipe(
+  h.state.beforeSnapshot = Deferred.succeed(entered, undefined).pipe(
     Effect.andThen(Deferred.await(release)),
   );
-  const recovery = Effect.runFork(service.recover(request));
-  const { commands } = createNodeSessionLaunchControls(h.live, [service]);
+  const service = h.launchService();
+  const launch = Effect.runFork(service.launch(textRequest(h)));
   try {
     await Effect.runPromise(Deferred.await(entered));
-    const resend = commands.sendUserMessage({
-      ...h.ref,
-      sessionScope: { kind: "repository" },
-      parts: request.parts,
-    });
-    const result = await Effect.runPromise(
-      Effect.result(resend).pipe(Effect.timeout("100 millis")),
-    );
-    expect(result).toMatchObject({
-      _tag: "Failure",
-      failure: { message: expect.stringContaining("launch is in progress") },
-    });
+    const shutdown = Effect.runFork(service.shutdown());
+    await Effect.runPromise(yieldToFibers);
+    expect(shutdown.pollUnsafe()).toBeUndefined();
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await Effect.runPromise(Fiber.join(shutdown));
+    const outcome = await Effect.runPromise(Fiber.join(launch));
+    expect(outcome.status).toBe("canceled");
+    expect(outcome.unsentInstruction).toBeUndefined();
+    expect(h.inputs).toEqual([]);
+    expect(h.stops.map((ref) => ref.externalSessionId)).toEqual(["native"]);
   } finally {
     await Effect.runPromise(Deferred.succeed(release, undefined));
-    await Effect.runPromise(Fiber.join(recovery));
+    await Effect.runPromise(Fiber.join(launch));
   }
-  expect(h.inputs.filter((input) => "parts" in input)).toHaveLength(2);
 });
 
-test("retains a saved workspace session when resume fails and retries its first instruction", async () => {
+test("a failed resume of a saved workspace session fails without a new session", async () => {
   const h = await createPersistenceHarness(database, "codex", false);
   h.state.beforeControl = Effect.fail(
     new HostOperationError({ operation: "resume", message: "Native resume refused" }),
   );
-  const service = h.launchService();
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "resume-failed",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
-  const failed = await Effect.runPromise(service.launch(request));
-  expect(failed.session?.externalSessionId).toBe("native");
-  expect(failed.failure?.message).toContain("Native resume refused");
-  expect(failed.recoveryAllowed).toBe(true);
-  h.state.beforeControl = Effect.void;
-  const recovered = await Effect.runPromise(service.recover(request));
-  expect(recovered.acceptance).toBe("accepted");
+  const outcome = await Effect.runPromise(h.launchService().launch(textRequest(h)));
+  expect(outcome.status).toBe("failed");
+  expect(outcome.failure?.message).toContain("Native resume refused");
+  expect(outcome.session).toBeUndefined();
   expect(h.starts).toHaveLength(0);
-  expect(h.inputs.filter((input) => "parts" in input)).toHaveLength(1);
+  expect(h.inputs).toEqual([]);
+  expect((await h.get()).externalSessionId).toBe("native");
 });
 
 test.each(["opencode", "codex", "claude"] as const)(
@@ -184,7 +125,6 @@ test.each(["opencode", "codex", "claude"] as const)(
     h.state.beforeBind = Deferred.await(gate);
     const request: WorkspaceSessionLaunchRequest = {
       ...h.storeRef,
-      launchAttemptId: "attempt",
       parts: [
         { kind: "text", text: "Review " },
         {
@@ -208,12 +148,8 @@ test.each(["opencode", "codex", "claude"] as const)(
     await Effect.runPromise(Fiber.interrupt(caller));
     expect((await h.get()).externalSessionId).toBeNull();
     await Effect.runPromise(Deferred.succeed(gate, undefined));
-    const outcome = await Effect.runPromise(service.launch(request));
-    expect(outcome.phase).toBe("completed");
-    expect(outcome.acceptance).toBe("accepted");
-    expect(outcome.ownershipSaved).toBe(true);
+    await waitFor(() => h.inputs.length === 1);
     expect(h.starts).toHaveLength(1);
-    expect(h.inputs).toHaveLength(1);
     expect(h.inputs[0]).toMatchObject({
       parts: request.parts,
       systemPrompt: "Original instructions.",
@@ -224,17 +160,12 @@ test.each(["opencode", "codex", "claude"] as const)(
   },
 );
 
-test("keeps model changes behind the first instruction", async () => {
+test("a model change waits for the session start, and the first send keeps the saved model", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
   const service = h.launchService();
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "attempt",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
   const gate = await Effect.runPromise(Deferred.make<void>());
   h.state.beforeControl = Deferred.await(gate);
-  const caller = Effect.runFork(service.launch(request));
+  const caller = Effect.runFork(service.launch(textRequest(h)));
   await waitFor(() => h.starts.length === 1 && h.operationGate.isActive(h.storeRef));
   let changed = false;
   const change = Effect.runFork(
@@ -255,72 +186,38 @@ test("keeps model changes behind the first instruction", async () => {
   await Effect.runPromise(Effect.yieldNow);
   expect(changed).toBe(false);
   await Effect.runPromise(Deferred.succeed(gate, undefined));
-  expect((await Effect.runPromise(Fiber.join(caller))).acceptance).toBe("accepted");
+  expect((await Effect.runPromise(Fiber.join(caller))).status).toBe("completed");
   await Effect.runPromise(Fiber.join(change));
   expect(changed).toBe(true);
   expect(h.inputs[0]?.model).toEqual(h.record.selectedModel ?? undefined);
 });
 
-test("blocks another send when runtime acceptance is unknown", async () => {
+test("a failed first send returns the saved session and the unsent message", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
-  const service = h.launchService();
   h.state.failSend = true;
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "attempt",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
-  const failed = await Effect.runPromise(service.launch(request));
-  expect(failed.acceptance).toBe("unknown");
-  expect(failed.recoveryAllowed).toBe(false);
-  h.state.failSend = false;
-  await expect(Effect.runPromise(service.recover(request))).rejects.toThrow(
-    "recovery is unavailable",
-  );
+  const request = textRequest(h);
+  const outcome = await Effect.runPromise(h.launchService().launch(request));
+  expect(outcome).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "native" },
+    failure: { message: "runtime rejected message" },
+  });
+  expect(outcome.unsentInstruction).toEqual(request.parts);
+  expect(outcome.acceptedMessage).toBeUndefined();
   expect(h.inputs).toHaveLength(1);
   expect(h.starts).toHaveLength(1);
-});
-
-test("retries a rejected instruction once on the same saved session", async () => {
-  const h = await createPersistenceHarness(database, "codex", true);
-  const service = h.launchService();
-  h.state.rejectSend = true;
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "attempt",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
-  const failed = await Effect.runPromise(service.launch(request));
-  expect(failed.acceptance).toBe("rejected");
-  expect(failed.recoveryAllowed).toBe(true);
-  h.state.rejectSend = false;
-  const results = await Promise.all([
-    Effect.runPromise(service.recover(request)),
-    Effect.runPromise(service.recover(request)),
-  ]);
-  expect(results.map((result) => result.acceptance)).toEqual(["accepted", "accepted"]);
-  expect(h.starts).toHaveLength(1);
-  expect(h.inputs.filter((input) => "parts" in input).map((input) => input.parts)).toEqual([
-    request.parts,
-    request.parts,
-  ]);
+  expect(h.stops).toEqual([]);
+  expect((await h.get()).externalSessionId).toBe("native");
 });
 
 test("keeps native acceptance when saving message details fails", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
-  const service = h.launchService();
   h.state.failActivity = true;
-  const request = {
-    ...h.storeRef,
-    launchAttemptId: "attempt",
-    parts: [{ kind: "text" as const, text: "First" }],
-  };
-  const failed = await Effect.runPromise(service.launch(request));
-  expect(failed.acceptance).toBe("accepted");
-  expect(failed.acceptedMessage?.messageId).toBe("user-1");
-  expect(failed.recoveryAllowed).toBe(false);
-  h.state.failActivity = false;
-  await Effect.runPromise(service.recover(request));
+  const outcome = await Effect.runPromise(h.launchService().launch(textRequest(h)));
+  expect(outcome.status).toBe("failed");
+  expect(outcome.acceptedMessage?.messageId).toBe("user-1");
+  expect(outcome.unsentInstruction).toBeUndefined();
+  expect(outcome.failure?.message).toContain("activity write failed");
   expect(h.starts).toHaveLength(1);
   expect(h.inputs).toHaveLength(1);
 });
@@ -328,16 +225,9 @@ test("keeps native acceptance when saving message details fails", async () => {
 test("a starting hold failure releases the unbound native session", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
   h.state.failSnapshot = true;
-  const outcome = await Effect.runPromise(
-    h.launchService().launch({
-      ...h.storeRef,
-      launchAttemptId: "attempt",
-      parts: [{ kind: "text", text: "First" }],
-    }),
-  );
-  expect(outcome.phase).toBe("failed");
-  expect(outcome.acceptance).toBe("not_submitted");
-  expect(outcome.ownershipSaved).toBe(false);
+  const outcome = await Effect.runPromise(h.launchService().launch(textRequest(h)));
+  expect(outcome.status).toBe("failed");
+  expect(outcome.session).toBeUndefined();
   expect(outcome.failure?.message).toContain("snapshot read failed");
   expect(h.starts).toHaveLength(1);
   expect(h.releases).toEqual([h.ref]);

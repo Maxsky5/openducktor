@@ -220,11 +220,6 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     readSessionHistory: async () => [],
     loadAgentSessionHistory: async () => null,
     loadAgentSessionContext: loadAgentSessionContextRef.current,
-    startAgentSession: async () => ({
-      externalSessionId: "session-started",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-    }),
     sendAgentMessage: async () => null,
     stopAgentSession: async () => undefined,
     continueInterruptedTurn: async () => undefined,

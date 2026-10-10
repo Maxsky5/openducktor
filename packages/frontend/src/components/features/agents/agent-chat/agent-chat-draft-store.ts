@@ -31,7 +31,6 @@ type DraftMemoryEntry = {
   version: number;
   userVersion: number;
   persistedVersion: number;
-  launchAttemptId?: string | undefined;
   cancelMaxFlush: (() => void) | null;
   cancelTrailingFlush: (() => void) | null;
   isFlushing: boolean;
@@ -48,22 +47,6 @@ export type AgentChatDraftCleanupTarget = AgentChatDraftSessionIdentity & {
 const MAX_WAIT_MS = 2_000;
 const TRAILING_WAIT_MS = 1_000;
 const draftEntries = new Map<string, DraftMemoryEntry>();
-const clearListeners = new Map<string, Set<() => void>>();
-let draftVersion = 0;
-
-export const subscribeAgentChatDraftClear = (
-  identity: AgentChatDraftIdentity,
-  onClear: () => void,
-): (() => void) => {
-  const key = toAgentChatDraftStorageKey(identity);
-  const listeners = clearListeners.get(key) ?? new Set<() => void>();
-  listeners.add(onClear);
-  clearListeners.set(key, listeners);
-  return () => {
-    listeners.delete(onClear);
-    if (listeners.size === 0) clearListeners.delete(key);
-  };
-};
 
 let storageOverride: DraftStorage | null = null;
 let attachmentStager: AttachmentStager = stageLocalAttachmentFile;
@@ -286,7 +269,6 @@ const persistEntrySnapshot = async (entry: DraftMemoryEntry): Promise<void> => {
     taskId: entry.taskId,
     draft: entry.draft,
     updatedAt: nowProvider().toISOString(),
-    launchAttemptId: entry.launchAttemptId,
   });
   if (writeResult.status === "oversized") {
     throw new Error(
@@ -329,7 +311,6 @@ export const hydrateAgentChatDraft = (
   cleanupExpiredAgentChatDraftsOnce();
 
   let draft = createEmptyComposerDraft();
-  let launchAttemptId: string | undefined;
   try {
     const result = readAgentChatDraftFromStorage({
       storage: getDraftStorage(),
@@ -338,14 +319,12 @@ export const hydrateAgentChatDraft = (
     });
     if (result.status === "restored") {
       draft = result.value.draft;
-      launchAttemptId = result.value.launchAttemptId;
     }
   } catch (error) {
     reportPersistenceError(error);
   }
 
   const entry = createEntry(identity, taskId, draft);
-  entry.launchAttemptId = launchAttemptId;
   draftEntries.set(toAgentChatDraftStorageKey(identity), entry);
   return draft;
 };
@@ -354,14 +333,10 @@ export const setAgentChatDraft = (
   identity: AgentChatDraftIdentity,
   taskId: string | null,
   draft: AgentChatComposerDraft,
-  options?: { launchAttemptId?: string | undefined },
 ): number => {
   const entry = upsertEntry(identity, taskId, draft);
   entry.version += 1;
-  // A cleared and recreated entry must not match an earlier submitted draft.
-  entry.userVersion = ++draftVersion;
-  // Ordinary edits stop this draft from belonging to a failed launch.
-  entry.launchAttemptId = options?.launchAttemptId;
+  entry.userVersion += 1;
   scheduleEntryFlush(entry);
   return entry.userVersion;
 };
@@ -373,29 +348,11 @@ export const clearAgentChatDraft = (
   identity: AgentChatDraftIdentity,
   options?: {
     onlyIfVersion?: number | null;
-    onlyIfLaunchAttemptId?: string;
     throwOnStorageError?: boolean;
   },
 ): boolean => {
   const key = toAgentChatDraftStorageKey(identity);
   const entry = draftEntries.get(key);
-  if (options?.onlyIfLaunchAttemptId !== undefined) {
-    let launchAttemptId = entry?.launchAttemptId;
-    if (!entry) {
-      try {
-        const stored = readAgentChatDraftFromStorage({
-          storage: getDraftStorage(),
-          identity,
-          now: nowProvider(),
-        });
-        if (stored.status === "restored") launchAttemptId = stored.value.launchAttemptId;
-      } catch (error) {
-        reportPersistenceError(error);
-        return false;
-      }
-    }
-    if (launchAttemptId !== options.onlyIfLaunchAttemptId) return false;
-  }
   if (
     options?.onlyIfVersion !== undefined &&
     options.onlyIfVersion !== null &&
@@ -411,7 +368,6 @@ export const clearAgentChatDraft = (
       clearEntryTimers(entry);
       draftEntries.delete(key);
     }
-    clearListeners.get(key)?.forEach((notify) => notify());
     return true;
   }
 
@@ -426,7 +382,6 @@ export const clearAgentChatDraft = (
     reportPersistenceError(error);
   }
 
-  clearListeners.get(key)?.forEach((notify) => notify());
   return true;
 };
 

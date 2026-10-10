@@ -90,7 +90,7 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     startSession: (input) => {
       if (input.sessionScope.kind === "workflow") {
         return Promise.reject(
-          new Error("Workflow sessions must start through agentSessionWorkflowStart."),
+          new Error("Workflow sessions must start through agentSessionWorkflowLaunch."),
         );
       }
       const startInput: AgentRepositorySessionStartInput = {

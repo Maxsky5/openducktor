@@ -188,7 +188,7 @@ describe("agent runtime services", () => {
           sessionScope,
           systemPrompt: "Build",
         }),
-      ).rejects.toThrow("Workflow sessions must start through agentSessionWorkflowStart.");
+      ).rejects.toThrow("Workflow sessions must start through agentSessionWorkflowLaunch.");
       await agentEngine.resumeSession({ ...sessionRef, sessionScope, resumeMode: "reattach" });
       await agentEngine.forkSession({
         repoPath: sessionRef.repoPath,

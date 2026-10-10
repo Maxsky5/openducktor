@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { SessionStartWorkflowResult } from "@/features/session-start";
+import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import type { AgentRole } from "@openducktor/core";
 import { toast } from "sonner";
 import type {
@@ -39,6 +40,7 @@ export const startKanbanSessionFlow = async ({
     request,
     decision,
     task,
+    onPostStartMessageFailure: showSessionStartMessageRecovery,
   };
   if (isCurrent) workflowInput.isCurrent = isCurrent;
   const workflow = await runSessionStartWorkflow(workflowInput);

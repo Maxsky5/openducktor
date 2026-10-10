@@ -63,7 +63,7 @@ describe("notification delivery and previews", () => {
     const onFailure = mock(() => {});
     const onSoundPlayed = mock(() => {});
     let fail = true;
-    const inApp = { deliver: mock(async () => {}) };
+    const inApp = { dismiss: () => {}, deliver: mock(async () => {}) };
     const runtime = createNotificationRuntime({
       bridge: createBridge(),
       selectSettings: async () => createDefaultNotificationSettings(),
@@ -87,7 +87,7 @@ describe("notification delivery and previews", () => {
   });
 
   test("uses the settings navigation target in both explicit tests", async () => {
-    const inApp = { deliver: mock(async () => {}) };
+    const inApp = { dismiss: () => {}, deliver: mock(async () => {}) };
     const showOsNotification = mock(async () => ({ status: "shown" as const }));
     const runtime = createNotificationRuntime({
       bridge: createBridge({ showOsNotification }),
@@ -117,6 +117,7 @@ describe("notification delivery and previews", () => {
       settings.kinds["agent.session_error"].enabled = mode !== "disabled";
       settings.kinds["agent.session_error"].target = mode === "os" ? "os" : "in_app";
       const inApp = {
+        dismiss: () => {},
         deliver: mock(async () => {
           throw new Error("Toast failed");
         }),
@@ -193,7 +194,7 @@ describe("notification delivery and previews", () => {
       selectSettings: async () => settings,
       navigate: async () => {},
       onFailure,
-      inApp: { deliver: async () => Promise.reject(new Error("toast failed")) },
+      inApp: { dismiss: () => {}, deliver: async () => Promise.reject(new Error("toast failed")) },
     });
 
     const inAppDelivered = await runtime.publishAndWait(

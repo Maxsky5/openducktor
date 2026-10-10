@@ -3,7 +3,7 @@ import type {
   AgentSessionLiveRef,
   AcceptedAgentUserMessage,
 } from "@openducktor/contracts";
-import { type HostError, HostOperationError } from "../effect/host-errors";
+import { HostOperationError } from "../effect/host-errors";
 
 type AcceptedMessageFailure = Extract<
   HostInvokeFailure,
@@ -23,15 +23,14 @@ export class AgentSessionMessageAcceptedError extends HostOperationError {
   }
 }
 
-/** The runtime did not accept this message. */
+/**
+ * The runtime rejected the message and did not take it as input. The caller can send it again.
+ * A timeout or a lost connection does not prove a rejection.
+ */
 export class AgentSessionMessageRejectedError extends HostOperationError {}
 
-export const messageSubmissionRejected = (operation: string) => (cause: HostError) =>
-  new AgentSessionMessageRejectedError({ operation, message: cause.message, cause });
-
 export const messageAcceptedFailure =
-  (sessionRef: AgentSessionLiveRef, acceptedMessage: AcceptedAgentUserMessage) =>
-  (cause: HostError) =>
+  (sessionRef: AgentSessionLiveRef, acceptedMessage: AcceptedAgentUserMessage) => (cause: Error) =>
     new AgentSessionMessageAcceptedError(
       {
         sessionRef: {

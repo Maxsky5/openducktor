@@ -6,7 +6,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const actions = createSessionActions({ updateSession: () => null });
 
     expect(actions.sendAgentMessage).toBeInstanceOf(Function);
-    expect(actions.startAgentSession).toBeInstanceOf(Function);
     expect(actions.stopAgentSession).toBeInstanceOf(Function);
   });
 });

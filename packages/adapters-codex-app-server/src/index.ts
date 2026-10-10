@@ -1,7 +1,6 @@
 export { CodexAppServerAdapter, createCodexAppServerClient } from "./codex-app-server-adapter";
 export { toCatalog as toCodexModelCatalog } from "./model-catalog";
 export { CodexMessageAcceptedError } from "./codex-message-accepted-error";
-export { CodexMessageRejectedError } from "./codex-message-rejected-error";
 export { CodexQuestionHistory } from "./codex-question-history";
 export type {
   CodexAppServerAdapterOptions,

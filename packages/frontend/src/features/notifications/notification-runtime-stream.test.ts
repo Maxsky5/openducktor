@@ -112,6 +112,60 @@ test.each(["new", "replay"] as const)(
   },
 );
 
+test("a session error that another view shows skips or closes its in-app toast", async () => {
+  const h = harness();
+  const stop = h.runtime.subscribe();
+  h.finishAttachment();
+  await h.attachment;
+  const sessionError = (errorId: string, sequence: number): NotificationStreamFrame => ({
+    type: "occurrence",
+    cursor: { epoch, sequence },
+    selected: {
+      occurrence: {
+        occurrenceId: `agent.session_error:session-1:${errorId}`,
+        kind: "agent.session_error",
+        repoPath: "/repo",
+        repositoryLabel: "Repo",
+        status: "The session launch failed.",
+        navigationTarget: {
+          type: "session_error",
+          repoPath: "/repo",
+          session: {
+            externalSessionId: "session-1",
+            runtimeKind: "codex",
+            workingDirectory: "/repo",
+          },
+          errorId,
+        },
+      },
+      settings: h.settings,
+      preferenceRevision: 1,
+    },
+  });
+  try {
+    h.emit({ type: "attached", reason: "new", cursor: { epoch, sequence: 1 }, health: [] });
+    // The other view shows the error first, so the host notification has no in-app toast.
+    h.runtime.markInAppFeedbackHandled("early");
+    h.emit(sessionError("early", 2));
+    await waitFor(() => expect(h.showOsNotification).toHaveBeenCalledTimes(1), { timeout: 500 });
+    expect(h.delivery.deliverInApp).not.toHaveBeenCalled();
+
+    // The host toast shows first, so the mark closes it.
+    h.emit(sessionError("late", 3));
+    await waitFor(() => expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1), {
+      timeout: 500,
+    });
+    h.runtime.markInAppFeedbackHandled("late");
+    await waitFor(
+      () =>
+        expect(h.delivery.dismissInApp).toHaveBeenCalledWith("agent.session_error:session-1:late"),
+      { timeout: 500 },
+    );
+  } finally {
+    stop();
+  }
+});
+
 test("recovers stream and publication failures only when both paths are healthy", async () => {
   const h = harness();
   const stop = h.runtime.subscribe();

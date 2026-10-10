@@ -12,10 +12,6 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskMetadataGet: (repoPath, taskId) => host.taskMetadataGet(repoPath, taskId),
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },
-  runtimeHostPort: {
-    gitCanonicalizePath: (...args) => host.gitCanonicalizePath(...args),
-    agentSessionWorkflowLaunch: (...args) => host.agentSessionWorkflowLaunch(...args),
-  },
   liveSessionHostPort: {
     agentSessionLiveLoadContext: (...args) => host.agentSessionLiveLoadContext(...args),
     agentSessionLiveRead: (...args) => host.agentSessionLiveRead(...args),

@@ -67,9 +67,6 @@ const operations = (
   readSessionHistory,
   loadAgentSessionHistory,
   loadAgentSessionContext: async () => undefined,
-  startAgentSession: async () => {
-    throw new Error("Not configured");
-  },
   sendAgentMessage: async () => null,
   stopAgentSession: async () => undefined,
   continueInterruptedTurn: async () => undefined,

@@ -127,10 +127,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       );
     },
 
-    launchWorkflow: async () => {
-      throw new Error("Unexpected workflow launch.");
-    },
-
     loadRepoPromptOverrides: async () => ({}),
 
     liveSessionHost: {

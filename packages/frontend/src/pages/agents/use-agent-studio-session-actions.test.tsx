@@ -8,8 +8,10 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
   type RuntimeDescriptor,
+  type WorkflowLaunchRequest,
+  type WorkflowLaunchResult,
 } from "@openducktor/contracts";
-import { QueryClient, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -54,6 +56,7 @@ import {
 } from "./agent-studio-test-utils";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
+import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 
 enableReactActEnvironment();
 
@@ -147,7 +150,6 @@ const createRunSessionStartWorkflow = (
   overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
 ) =>
   createSessionStartWorkflowRunner({
-    queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
     sendAgentMessage: async () => null,
@@ -2602,58 +2604,157 @@ describe("direct submission context isolation", () => {
   );
 });
 
-test.each(["accepted", "unknown", "rejected", "unreadable"] as const)(
-  "task drafts respect the real runner first-send outcome: %s",
-  async (acceptance) => {
-    const send = mock(async () => null);
-    const launch = mock(async (request: import("@openducktor/contracts").WorkflowLaunchRequest) => {
-      if (acceptance === "unreadable") throw new Error("Disconnected");
-      return {
-        ...request,
-        role: "spec" as const,
-        phase: "failed" as const,
-        acceptance,
-        recoveryAllowed: acceptance === "rejected",
-        ownershipSaved: true,
-        completedPreStartActions: [],
-        session: {
-          ...sessionIdentity("saved"),
-          startedAt: "2026-10-04T00:00:00Z",
-          status: "idle" as const,
-        },
-        failure: { message: "Native send failed", stage: "send", cleanupErrors: [] },
-      };
-    });
-    const harness = createHookHarness({
-      ...createBaseArgs(),
+const savedSession = {
+  ...sessionIdentity("saved"),
+  startedAt: "2026-10-04T00:00:00Z",
+  status: "idle" as const,
+};
+
+const createFirstSendHarness = (
+  launch: (request: WorkflowLaunchRequest) => Promise<WorkflowLaunchResult>,
+  feedbackHandled = false,
+) => {
+  const send = mock(async () => null);
+  const harness = createHookHarness({
+    ...createBaseArgs(),
+    sendAgentMessage: send,
+    runSessionStartWorkflow: createHostRunner({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      client: { agentSessionWorkflowLaunch: launch },
       sendAgentMessage: send,
-      runSessionStartWorkflow: createHostRunner({
-        workspaceId: "workspace",
-        repoPath: "/repo",
-        client: {
-          agentSessionWorkflowLaunch: launch,
-          agentSessionWorkflowLaunchRead: async () => [],
-          agentSessionWorkflowLaunchRecover: async () => {
-            throw new Error("Unexpected resend");
-          },
+      notifications: {
+        publishSessionStarted: () => {},
+        publishSessionError: async () => feedbackHandled,
+        markInAppFeedbackHandled: () => {},
+        reportFailure: () => {},
+      },
+    }),
+  });
+  return { harness, send };
+};
+
+const failedLaunch = (
+  request: WorkflowLaunchRequest,
+  overrides: Partial<WorkflowLaunchResult>,
+): WorkflowLaunchResult => ({
+  workspaceId: request.workspaceId,
+  repoPath: request.repoPath,
+  taskId: request.taskId,
+  role: "spec",
+  status: "failed",
+  startMode: "fresh",
+  session: savedSession,
+  failure: { message: "Native send failed", cleanupErrors: [], noticeId: "launch-failure:1" },
+  ...overrides,
+});
+
+describe("first task draft send", () => {
+  test.each([false, true])(
+    "restores a rejected draft into the new session composer without a second toast, notification shown=%s",
+    async (feedbackHandled) => {
+      const launch = mock(async (request: WorkflowLaunchRequest) =>
+        failedLaunch(request, {
+          unsentInstruction: [{ kind: "text", text: "First instruction" }],
+        }),
+      );
+      const { harness, send } = createFirstSendHarness(launch, feedbackHandled);
+      await harness.mount();
+      try {
+        let result: AgentChatSendResult | undefined;
+        await harness.run(async (state) => {
+          result = await state.onSend(createComposerDraft("First instruction"));
+        });
+        expect(result).toEqual({
+          kind: "recover_draft",
+          originKey: agentStudioChatDraftScopeKey("workspace-1", {
+            taskId: "task-1",
+            role: "spec",
+            session: null,
+          }),
+          recoveryKey: agentStudioChatDraftScopeKey("workspace-1", {
+            taskId: "task-1",
+            role: "spec",
+            session: sessionIdentity("saved"),
+          }),
+          error: expect.objectContaining({ message: "Native send failed" }),
+          // The host reports a failed launch in its saved session, whatever the browser shows.
+          inAppFeedbackHandled: true,
+        });
+        expect(launch).toHaveBeenCalledTimes(1);
+        expect(launch.mock.calls[0]?.[0].instruction).toEqual({
+          kind: "message",
+          parts: [{ kind: "text", text: "First instruction" }],
+        });
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps the draft cleared when the runtime accepted the message before a failure", async () => {
+    const launch = mock(async (request: WorkflowLaunchRequest) =>
+      failedLaunch(request, {
+        acceptedMessage: {
+          type: "user_message",
+          externalSessionId: "saved",
+          messageId: "message-1",
+          message: "First instruction",
+          parts: [],
+          timestamp: "2026-10-04T00:00:00Z",
+          state: "read",
         },
+        failure: { message: "Stream closed after acceptance", cleanupErrors: [] },
       }),
-    });
+    );
+    const { harness, send } = createFirstSendHarness(launch);
+    await harness.mount();
+    try {
+      let result: AgentChatSendResult | undefined;
+      await harness.run(async (state) => {
+        result = await state.onSend(createComposerDraft("First instruction"));
+      });
+      expect(result).toBe(true);
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    [
+      "a launch without a saved session",
+      async (request: WorkflowLaunchRequest) =>
+        failedLaunch(request, {
+          session: undefined,
+          unsentInstruction: [{ kind: "text", text: "First instruction" }],
+          failure: { message: "Runtime is offline", cleanupErrors: [] },
+        }),
+      "Runtime is offline",
+    ],
+    [
+      "a transport error",
+      async (): Promise<WorkflowLaunchResult> => {
+        throw new Error("Disconnected");
+      },
+      "Disconnected",
+    ],
+  ] as const)("rejects the send after %s", async (_name, launchImpl, message) => {
+    const launch = mock(launchImpl);
+    const { harness, send } = createFirstSendHarness(launch);
     await harness.mount();
     try {
       await harness.run(async (state) => {
-        const result = await state.onSend(createComposerDraft("First instruction"));
-        if (acceptance === "rejected")
-          expect(result).toMatchObject({
-            kind: "recover_draft",
-            launchAttemptId: launch.mock.calls[0]?.[0].launchAttemptId,
-          });
-        else expect(result).toBe(true);
+        await expect(state.onSend(createComposerDraft("First instruction"))).rejects.toThrow(
+          message,
+        );
       });
       expect(launch).toHaveBeenCalledTimes(1);
       expect(send).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
-  },
-);
+  });
+});

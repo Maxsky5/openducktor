@@ -1,21 +1,18 @@
 import { expect, test } from "bun:test";
-import type { AgentSessionRecord, WorkflowLaunchSnapshot } from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkflowLaunchResult } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { projectWorkflowLaunch } from "./workflow-launch-projection";
 
 const model = { runtimeKind: "codex" as const, providerId: "openai", modelId: "model" };
-const outcome: WorkflowLaunchSnapshot = {
-  launchAttemptId: "attempt",
+const outcome: WorkflowLaunchResult = {
   workspaceId: "workspace",
   repoPath: "/repo",
   taskId: "task",
   role: "build",
-  phase: "completed",
-  acceptance: "not_submitted",
-  ownershipSaved: true,
-  completedPreStartActions: [],
+  status: "completed",
+  startMode: "fresh",
   model,
   session: {
     externalSessionId: "saved",
@@ -25,35 +22,6 @@ const outcome: WorkflowLaunchSnapshot = {
     status: "idle",
   },
 };
-
-test.each(["codex", "opencode", "claude"] as const)(
-  "publishes %s ownership and running activity in one store change",
-  (runtimeKind) => {
-    const store = createAgentSessionsStore("/repo");
-    const queryClient = new QueryClient();
-    const statuses: string[] = [];
-    store.subscribe(() => {
-      const session = store.getSessionSnapshot({ ...outcome.session!, runtimeKind });
-      if (session) statuses.push(session.status);
-    });
-    projectWorkflowLaunch(store, queryClient, {
-      ...outcome,
-      session: { ...outcome.session!, runtimeKind },
-      model: { ...model, runtimeKind },
-      liveSession: {
-        ref: { repoPath: "/repo", ...outcome.session!, runtimeKind },
-        activity: "running",
-        title: "Native session",
-        startedAt: outcome.session!.startedAt,
-        contextUsage: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
-    });
-    expect(statuses).toEqual(["running"]);
-    queryClient.clear();
-  },
-);
 
 test("registers saved preparation ownership before live delivery without reading history", () => {
   const store = createAgentSessionsStore("/repo");
@@ -120,41 +88,35 @@ test("preparation presentation preserves newer activity and cannot populate a di
   queryClient.clear();
 });
 
-test("a completed launch presents native pending input before ownership events arrive", () => {
+test("a failed launch registers its saved session without claiming live presence", () => {
   const store = createAgentSessionsStore("/repo");
   const queryClient = new QueryClient();
-  const snapshot: WorkflowLaunchSnapshot = {
+  projectWorkflowLaunch(store, queryClient, {
     ...outcome,
-    acceptance: "accepted",
-    liveSession: {
-      ref: {
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/worktree",
-        externalSessionId: "saved",
-      },
-      activity: "waiting_for_question",
-      title: "Native session",
-      startedAt: outcome.session!.startedAt,
-      contextUsage: null,
-      pendingApprovals: [],
-      pendingQuestions: [{ requestId: "native-question", questions: [] }],
-    },
-  };
-  projectWorkflowLaunch(store, queryClient, snapshot);
-  expect(store.getSessionSnapshot(outcome.session!)).toMatchObject({
-    livePresence: "present",
-    status: "idle",
-    pendingQuestions: [{ requestId: "native-question" }],
+    status: "failed",
+    failure: { message: "Kickoff failed", cleanupErrors: [] },
+  });
+  const session = store.getSessionSnapshot(outcome.session!);
+  expect(session).toMatchObject({
+    sessionAssociation: { kind: "workflow", taskId: "task", role: "build" },
     historyLoadState: "not_requested",
   });
-  store.updateSession(outcome.session!, (session) => ({
-    ...session,
-    status: "idle",
-    pendingQuestions: [],
-  }));
-  projectWorkflowLaunch(store, queryClient, snapshot);
-  expect(store.getSessionSnapshot(outcome.session!)?.pendingQuestions).toEqual([]);
-  expect(store.getSessionSnapshot(outcome.session!)?.status).toBe("idle");
+  expect(session?.livePresence).not.toBe("present");
+  queryClient.clear();
+});
+
+test("a launch without a saved session changes nothing", () => {
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient();
+  const key = agentSessionQueryKeys.list("/repo", "task");
+  queryClient.setQueryData(key, []);
+  const { session: _session, ...withoutSession } = outcome;
+  projectWorkflowLaunch(store, queryClient, {
+    ...withoutSession,
+    status: "failed",
+    failure: { message: "Runtime is offline", cleanupErrors: [] },
+  });
+  expect(store.listSessionSnapshots()).toEqual([]);
+  expect(queryClient.getQueryData<AgentSessionRecord[]>(key)).toEqual([]);
   queryClient.clear();
 });

@@ -72,7 +72,7 @@ describe("createAgentSessionsStore session snapshots", () => {
           timestamp: "2026-10-03T10:00:00Z",
         },
       };
-      store.applyLivePolicyNotices({ type: "session_upsert", session: snapshot });
+      store.applyLiveNotices({ type: "session_upsert", session: snapshot });
       const siblings = [
         { ...session, runtimeKind: "codex" as const },
         { ...session, workingDirectory: "/repo/other" },
@@ -82,13 +82,13 @@ describe("createAgentSessionsStore session snapshots", () => {
         expect(getSessionMessageCount(store.getSessionSnapshot(sibling)!)).toBe(0);
       }
       if (cleanup === "removed") {
-        store.applyLivePolicyNotices({ type: "session_removed", ref: snapshot.ref });
+        store.applyLiveNotices({ type: "session_removed", ref: snapshot.ref });
       } else if (cleanup === "snapshot") {
-        store.applyLivePolicyNotices({ type: "snapshot", repoPath: "/repo", sessions: [] });
+        store.applyLiveNotices({ type: "snapshot", repoPath: "/repo", sessions: [] });
       } else {
         store.resetWorkspace("/other");
         // A late callback from the previous workspace must not retain feedback here.
-        store.applyLivePolicyNotices({ type: "session_upsert", session: snapshot });
+        store.applyLiveNotices({ type: "session_upsert", session: snapshot });
         store.replaceSession(session);
         expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
         store.resetWorkspace("/repo");
@@ -97,6 +97,62 @@ describe("createAgentSessionsStore session snapshots", () => {
       expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
     },
   );
+
+  test("shows a launch failure from a fresh snapshot in time order until the snapshot clears it", () => {
+    const store = createAgentSessionsStore("/repo");
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+    });
+    const launchFailure = {
+      messageId: "launch-failure:1",
+      message: "The session launch failed: Timed out. Inspect the session.",
+      timestamp: "2026-10-10T10:00:00Z",
+    };
+    const snapshot: AgentSessionLiveSnapshot = {
+      ref: {
+        repoPath: "/repo",
+        externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+      },
+      activity: "idle",
+      title: "Builder",
+      startedAt: "2026-10-10T09:00:00Z",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+      launchFailure,
+    };
+    // A browser that opens after the launch only receives the snapshot.
+    store.applyLiveNotices({ type: "snapshot", repoPath: "/repo", sessions: [snapshot] });
+    store.replaceSession({
+      ...session,
+      messages: createSessionMessagesState(session.externalSessionId, [
+        { id: "before", role: "user", content: "Earlier", timestamp: "2026-10-10T09:30:00Z" },
+        { id: "after", role: "assistant", content: "Later", timestamp: "2026-10-10T10:30:00Z" },
+      ]),
+    });
+    const messages = store.getSessionSnapshot(session)!.messages.items;
+    expect(messages.map((message) => message.id)).toEqual([
+      "before",
+      launchFailure.messageId,
+      "after",
+    ]);
+    expect(messages[1]).toMatchObject({
+      role: "system",
+      content: launchFailure.message,
+      meta: { kind: "session_notice", tone: "error", reason: "session_error" },
+    });
+
+    store.applyLiveNotices({
+      type: "session_upsert",
+      session: { ...snapshot, launchFailure: undefined },
+    });
+    store.replaceSession(session);
+    expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
+  });
 
   test("publishes repository activity and pending input without leaking it into workflow summaries", () => {
     const store = createAgentSessionsStore("/repo");

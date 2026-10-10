@@ -237,6 +237,8 @@ const toLivePendingQuestion = (
   return liveRequest;
 };
 
+type CodexSendOptions = { requireNativeAdmission?: boolean; onSent?: () => void };
+
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -815,9 +817,13 @@ export class CodexAppServerAdapter
     return summary;
   }
 
+  /**
+   * With `requireNativeAdmission`, the send resolves only after Codex accepts the message.
+   * `onSent` runs when the native request that carries the message goes to Codex.
+   */
   async sendUserMessage(
     input: SendAgentUserMessageInput,
-    options: { requireNativeAdmission?: boolean } = {},
+    options: CodexSendOptions = {},
   ): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
     resolveCodexSessionScopePolicy(
@@ -836,26 +842,16 @@ export class CodexAppServerAdapter
     );
     return session instanceof Promise
       ? session.then((boundSession) =>
-          this.sendUserMessageFromBoundSession(
-            input,
-            boundSession,
-            systemInvocation,
-            options.requireNativeAdmission,
-          ),
+          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation, options),
         )
-      : this.sendUserMessageFromBoundSession(
-          input,
-          session,
-          systemInvocation,
-          options.requireNativeAdmission,
-        );
+      : this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
   }
 
   private async sendUserMessageFromBoundSession(
     input: SendAgentUserMessageInput,
     session: CodexSessionState,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
-    requireNativeAdmission = false,
+    options: CodexSendOptions,
   ): Promise<AcceptedAgentUserMessage> {
     let resolvedQuestionRequestIds: readonly string[];
     if (systemInvocation.kind === "manual_session_compaction") {
@@ -877,20 +873,24 @@ export class CodexAppServerAdapter
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
       try {
-        await client.threadCompactStart({ threadId: session.threadId });
+        const compacting = client.threadCompactStart({ threadId: session.threadId });
+        options.onSent?.();
+        await compacting;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Codex failed to compact thread '${session.threadId}': ${message}`);
       }
       return acceptedUserMessage;
     }
+    const context = this.turnLifecycleContext();
+    if (options.onSent) context.onSent = options.onSent;
     const accepted = await startCodexTurnForSession(
-      this.turnLifecycleContext(),
+      context,
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
-      requireNativeAdmission || resolvedQuestionRequestIds.length > 0,
+      options.requireNativeAdmission === true || resolvedQuestionRequestIds.length > 0,
       resolvedQuestionRequestIds,
     );
     this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);

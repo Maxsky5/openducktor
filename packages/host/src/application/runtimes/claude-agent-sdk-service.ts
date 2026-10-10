@@ -36,6 +36,7 @@ import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 
 export type ClaudeAgentSdkServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
@@ -103,9 +104,14 @@ export type ClaudeAgentSdkService = {
   updateSessionTitle(
     input: AgentSessionControlUpdateTitleInput,
   ): Effect.Effect<AgentSessionTitleUpdateResult, ClaudeAgentSdkServiceError>;
+  /**
+   * `onSent` runs when the message enters the Claude SDK input queue or the host queue for a later
+   * turn.
+   */
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,
+    options?: Pick<AgentSessionSendOptions, "onSent">,
   ): Effect.Effect<AcceptedAgentUserMessage, ClaudeAgentSdkServiceError>;
   prepareApprovalReply(
     input: ReplyApprovalInput,

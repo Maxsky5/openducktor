@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Deferred, Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { createTaskSessionLifecycleCoordinator } from "./task-session-lifecycle-coordinator";
 
 test("worktree lifecycle waits for active reads and blocks new reads", async () => {
@@ -164,41 +164,5 @@ test("each execution of a task lifecycle Effect checks and reserves the task", a
         expect(overlap._tag).toBe("Failure");
       }),
     ),
-  );
-});
-
-test("an inherited launch permit expires before a later reservation owns the task", async () => {
-  const coordinator = createTaskSessionLifecycleCoordinator();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      const staleWorker = yield* coordinator.runReservedTaskOperation(
-        "/repo",
-        "task",
-        Effect.forkDetach(
-          Deferred.await(gate).pipe(
-            Effect.andThen(
-              Effect.result(
-                Effect.scoped(
-                  coordinator.acquireLifecycle("/repo", ["task"], "late internal operation"),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      yield* coordinator.runReservedTaskOperation(
-        "/repo",
-        "task",
-        Effect.gen(function* () {
-          yield* Deferred.succeed(gate, undefined);
-          const attempted = yield* Fiber.join(staleWorker);
-          expect(attempted._tag).toBe("Failure");
-          yield* Effect.scoped(
-            coordinator.acquireLifecycle("/repo", ["task"], "current internal operation"),
-          );
-        }),
-      );
-    }),
   );
 });

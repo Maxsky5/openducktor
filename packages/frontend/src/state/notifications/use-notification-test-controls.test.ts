@@ -63,7 +63,7 @@ test.each([
       navigate: async () => {},
       onFailure: () => {},
       onCoordinationRecovered: () => {},
-      inApp: { deliver: async () => {} },
+      inApp: { dismiss: () => {}, deliver: async () => {} },
       sound: {
         play: async () => {
           if (soundFails) throw new Error("Sound failed.");
@@ -77,6 +77,7 @@ test.each([
       sessionStartNotifications: {
         publishSessionStarted: () => {},
         publishSessionError: async () => false,
+        markInAppFeedbackHandled: () => {},
         reportFailure: () => {},
       },
     };

@@ -6,11 +6,7 @@ import {
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import {
-  createPrepareOpencodeSessionRuntime,
-  OpenCodeMessageRejectedError,
-  type OpencodeSessionRuntimeSignal,
-} from "./index";
+import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
 import { permissionAskedEvent, sessionStatusEvent } from "./event-stream.test-support";
 import type { OpencodePermissionRule } from "./workflow-tool-permissions";
 import { TEST_MCP_SERVER_CONFIG } from "./test-support";
@@ -538,10 +534,17 @@ describe("OpenCode session runtime connection", () => {
         await finish.promise;
         return status(...args);
       };
-      sending = prepared.connection.sendUserMessage(userSend(root, kind)).then(
-        (message) => ({ message }),
-        (error: Error) => ({ error: error.message }),
-      );
+      let sent = false;
+      sending = prepared.connection
+        .sendUserMessage(userSend(root, kind), {
+          onSent: () => {
+            sent = true;
+          },
+        })
+        .then(
+          (message) => ({ message }),
+          (error: Error) => ({ error: error.message }),
+        );
       await started.promise;
       if (action === "stop") await prepared.connection.stopSession(root);
       else await prepared.connection.releaseSession(root);
@@ -554,10 +557,37 @@ describe("OpenCode session runtime connection", () => {
       finish.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(calls).toEqual([]);
+      // The send stopped before the native request, so OpenCode never received the message.
+      expect(sent).toBe(false);
     } finally {
       finish.resolve();
       await prepared.release();
       await sending;
+    }
+  });
+
+  test("reports the native prompt request to the send caller", async () => {
+    const harness = createLiveClientHarness();
+    harness.setPendingApproval(false);
+    const calls: string[] = [];
+    recordNativeSends(harness, calls);
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const root = workflowRoot();
+    try {
+      await prepared.connection.startSession({
+        ...root,
+        runtimePolicy: { kind: "opencode" },
+        systemPrompt: "Build it",
+      });
+      const sentAfter: string[][] = [];
+      await prepared.connection.sendUserMessage(userSend(root, "prompt"), {
+        onSent: () => {
+          sentAfter.push([...calls]);
+        },
+      });
+      expect(sentAfter).toEqual([["prompt"]]);
+    } finally {
+      await prepared.release();
     }
   });
 
@@ -2383,10 +2413,8 @@ test("reports failed reload permission setup and excludes the workflow tree", as
     }
     for (const result of await sends) {
       expect(result.status).toBe("rejected");
-      if (result.status === "rejected") {
-        expect(result.reason).toBeInstanceOf(OpenCodeMessageRejectedError);
+      if (result.status === "rejected")
         expect(result.reason.message).toContain("permission API unavailable");
-      }
     }
     harness.client.session.get = get;
     expect((await restoring).sources).toEqual([]);

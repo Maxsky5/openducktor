@@ -1,7 +1,6 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
@@ -35,7 +34,6 @@ const createRunSessionStartWorkflow = (
   overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
 ) =>
   createSessionStartWorkflowRunner({
-    queryClient: new QueryClient(),
     workspaceId: null,
     startAgentSession: async () => sessionIdentity("session-new"),
     sendAgentMessage: async () => null,
@@ -179,6 +177,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
             notifications: {
               publishSessionStarted: () => {},
               publishSessionError: async () => feedbackHandled,
+              markInAppFeedbackHandled: () => {},
               reportFailure: () => {},
             },
           }),
@@ -221,7 +220,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
         if (fails) {
           expect(toastErrorMock).toHaveBeenCalledTimes(1);
           expect(toastErrorMock).toHaveBeenCalledWith(
-            "First message failed for task-1.",
+            "Session started, but the first message failed.",
             expect.objectContaining({
               description: "kickoff failed",
               action: expect.objectContaining({ label: "Retry message" }),

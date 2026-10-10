@@ -9,6 +9,8 @@ import {
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { WorkflowLaunchResult } from "@openducktor/contracts";
+import type { AgentUserMessagePart } from "@openducktor/core";
 import {
   createAgentSessionFixture,
   createAgentSessionSummaryFixture,
@@ -631,55 +633,44 @@ function createRetryHarness(
         status: "idle",
       });
       const identity = toAgentSessionIdentity(builder);
-      let retained: import("@openducktor/contracts").WorkflowLaunchSnapshot;
-      const parts = [{ kind: "text" as const, text: request.message }];
+      const parts: AgentUserMessagePart[] = [{ kind: "text", text: request.message ?? "" }];
       const workflow = await startSessionWorkflow({
         workspaceId: args.workspaceId!,
         repoPath: "/repo",
-        launchAttemptId: `attempt-${workflows.length + 1}`,
         request,
         decision: {
           startMode: "fresh",
           selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
         },
-        readSessionSnapshot: () => builder,
         client: {
-          agentSessionWorkflowLaunchRead: async () => [retained],
           agentSessionWorkflowLaunch: async (launch) => {
-            retained = {
-              launchAttemptId: launch.launchAttemptId,
+            expect(launch.instruction).toEqual({ kind: "message", parts });
+            const result: WorkflowLaunchResult = {
               workspaceId: launch.workspaceId,
               repoPath: launch.repoPath,
               taskId: launch.taskId,
               role: "build",
-              phase: "failed",
-              acceptance: "rejected",
-              ownershipSaved: true,
-              completedPreStartActions: [],
-              recoveryAllowed: true,
+              status: "completed",
+              startMode: "fresh",
               session: { ...identity, startedAt: builder.startedAt, status: "idle" },
             };
             try {
-              await send(identity, parts);
+              const receipt = await send(identity, parts);
+              if (receipt) result.acceptedMessage = receipt.acceptedMessage;
             } catch (cause) {
-              retained.failure = {
+              result.status = "failed";
+              result.unsentInstruction = parts;
+              result.failure = {
                 message: cause instanceof Error ? cause.message : String(cause),
-                stage: "send",
                 cleanupErrors: [],
               };
             }
-            return retained;
+            return result;
           },
-          agentSessionWorkflowLaunchRecover: async () => {
-            const receipt = await send(identity, parts);
-            return {
-              ...retained,
-              phase: "completed",
-              acceptance: "accepted",
-              failure: undefined,
-              acceptedMessage: receipt!.acceptedMessage,
-            };
-          },
+        },
+        sendAgentMessage: async (session, parts, options) => {
+          options?.assertCanSubmit?.(builder);
+          return send(toAgentSessionIdentity(session), parts);
         },
       });
       workflows.push(workflow);

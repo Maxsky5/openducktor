@@ -5,11 +5,12 @@ import { createTestRuntimeAdmissionGate } from "../../../test-support/runtime-ad
 import { agentSessionRefKey } from "@openducktor/core";
 import {
   type AgentSessionControlSendInput,
+  type AgentSessionModelSelection,
   type AgentSessionRecord,
   type AgentSessionLiveSnapshot,
+  type AgentRole,
   type RuntimeKind,
   type WorkflowLaunchRequest,
-  type WorkflowLaunchSnapshot,
   RUNTIME_DESCRIPTORS_BY_KIND,
   GITHUB_PROVIDER_DESCRIPTOR,
   repositoryGitProviderContextSchema,
@@ -30,26 +31,26 @@ import { createTaskServiceWithMutationProgressTestDouble } from "../../../test-s
 import { createEventPublishingTaskService } from "../../tasks/event-publishing-task-service";
 import { createTaskSessionStartPreparationService } from "../../tasks/worktrees/task-session-start-preparation-service";
 import { createTaskSessionLifecycleCoordinator } from "../../tasks/worktrees/task-session-lifecycle-coordinator";
+import { createAgentSessionCommandService } from "../agent-session-command-service";
 import { createAgentSessionLiveStateService } from "../agent-session-live-state-service";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import { createWorkflowLaunchService } from "../workflow-launch-service";
+import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-adapter-port";
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
 } from "../../../ports/agent-session-send-error";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 
+const unexpected = (operation: string) => () =>
+  Effect.die(new Error(`Unexpected ${operation} in the workflow launch harness.`));
+
 export const createLaunchHarness = async (
   runtimeKind: RuntimeKind = "codex",
   gates: {
-    preparingPublication?: Effect.Effect<void>;
-    catalog?: Effect.Effect<void>;
     holdRelease?: Effect.Effect<void>;
-    admissionRelease?: Effect.Effect<void>;
-    finalObservation?: Effect.Effect<void>;
-    finalPublication?: Effect.Effect<void, HostOperationError>;
-    canceledPublication?: Effect.Effect<void, HostOperationError>;
-    preparedStart?: Effect.Effect<void>;
+    /** Pauses before the worktree preparation starts. */
+    beforePrepare?: Effect.Effect<void>;
     forkSourceRead?: Effect.Effect<void>;
     nativeStart?: Effect.Effect<void>;
     nativeFork?: Effect.Effect<void>;
@@ -77,6 +78,7 @@ export const createLaunchHarness = async (
   });
   const settings = settingsSnapshotSchema.parse({ theme: "system" });
   let provider: import("@openducktor/contracts").RepositoryGitProviderContext = null;
+  let providerFailure = false;
   const sendEntered = await Effect.runPromise(Deferred.make<void>());
   const records: AgentSessionRecord[] = [];
   const live = new Map<string, AgentSessionLiveSnapshot>();
@@ -85,17 +87,35 @@ export const createLaunchHarness = async (
     resumes: string[] = [],
     stops: string[] = [];
   const sends: AgentSessionControlSendInput[] = [];
-  const snapshots: WorkflowLaunchSnapshot[] = [];
+  const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
+  const publications: string[] = [];
   const removedWorktrees: string[] = [];
   const deletedBranches: string[] = [];
   const envelopes: unknown[] = [];
-  let sendFailure: "rejected" | "unknown" | "accepted" | null = null;
+  let catalogLoads = 0;
+  let sendFailure: "rejected" | "uncertain" | "accepted" | null = null;
   let publishFailure = false;
   let saveFailure = false;
-  let stopFailure: "rejected" | "stopped" | null = null;
   let worktreeExists = true;
   let sendGate: Effect.Effect<void> = Effect.void;
+  // The native fake asks a blocking question after each accepted message.
+  let questionAfterSend = true;
   let storeGate: Effect.Effect<void> = Effect.void;
+  let publicationGate: Effect.Effect<void> = Effect.void;
+  const liveSnapshot = (
+    repoPath: string,
+    workingDirectory: string,
+    externalSessionId: string,
+    title: string,
+  ): AgentSessionLiveSnapshot => ({
+    ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
+    activity: "idle",
+    title,
+    startedAt: timestamp,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    contextUsage: null,
+  });
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeId: "runtime", runtimeKind },
     {
@@ -110,20 +130,12 @@ export const createLaunchHarness = async (
         Effect.sync(() => {
           const externalSessionId = `session-${starts.length + 1}`;
           starts.push(externalSessionId);
-          const session: AgentSessionLiveSnapshot = {
-            ref: {
-              repoPath: input.repoPath,
-              runtimeKind,
-              workingDirectory: input.workingDirectory,
-              externalSessionId,
-            },
-            activity: "idle",
-            title: "Native",
-            startedAt: timestamp,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            contextUsage: null,
-          };
+          const session = liveSnapshot(
+            input.repoPath,
+            input.workingDirectory,
+            externalSessionId,
+            "Native",
+          );
           live.set(agentSessionRefKey(session.ref), session);
           return {
             externalSessionId,
@@ -139,20 +151,12 @@ export const createLaunchHarness = async (
         Effect.sync(() => {
           const externalSessionId = `fork-${forks.length + 1}`;
           forks.push(input.parentExternalSessionId);
-          const session: AgentSessionLiveSnapshot = {
-            ref: {
-              repoPath: input.repoPath,
-              runtimeKind,
-              workingDirectory: input.workingDirectory,
-              externalSessionId,
-            },
-            activity: "idle",
-            title: "Child",
-            startedAt: timestamp,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            contextUsage: null,
-          };
+          const session = liveSnapshot(
+            input.repoPath,
+            input.workingDirectory,
+            externalSessionId,
+            "Child",
+          );
           live.set(agentSessionRefKey(session.ref), session);
           return {
             externalSessionId,
@@ -167,11 +171,26 @@ export const createLaunchHarness = async (
       resumeSession: (input) =>
         Effect.sync(() => {
           resumes.push(input.externalSessionId);
-          return { ...input, startedAt: timestamp, status: "idle" as const };
+          const session = liveSnapshot(
+            input.repoPath,
+            input.workingDirectory,
+            input.externalSessionId,
+            "Resumed",
+          );
+          live.set(agentSessionRefKey(session.ref), session);
+          return {
+            externalSessionId: input.externalSessionId,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            startedAt: timestamp,
+            status: "idle" as const,
+          };
         }),
-      sendUserMessage: (input) =>
+      sendUserMessage: (input, options) =>
         Effect.gen(function* () {
           sends.push(input);
+          sendOptions.push(options);
+          options?.onSent?.();
           yield* Deferred.succeed(sendEntered, undefined);
           yield* sendGate;
           const accepted = {
@@ -185,12 +204,12 @@ export const createLaunchHarness = async (
           };
           if (sendFailure === "rejected")
             return yield* new AgentSessionMessageRejectedError({
-              operation: "native.send",
-              message: "Exact rejection",
+              operation: "native",
+              message: "The model is not available.",
             });
-          if (sendFailure === "unknown") return yield* failure("Native connection lost");
+          if (sendFailure === "uncertain") return yield* failure("Native connection lost");
           const current = live.get(agentSessionRefKey(input));
-          if (current)
+          if (current && questionAfterSend)
             live.set(agentSessionRefKey(input), {
               ...current,
               activity: "waiting_for_question",
@@ -204,11 +223,9 @@ export const createLaunchHarness = async (
           return accepted;
         }),
       stopSession: (ref) =>
-        Effect.gen(function* () {
+        Effect.sync(() => {
           stops.push(ref.externalSessionId);
-          if (stopFailure === "rejected") return yield* failure("Exact stop failure");
           live.delete(agentSessionRefKey(ref));
-          if (stopFailure === "stopped") return yield* failure("Exact stop failure");
         }),
       releaseSession: () => Effect.void,
     },
@@ -274,8 +291,16 @@ export const createLaunchHarness = async (
       runMutation: (_path, mutation) => mutation,
       publishExternalTaskCreated: () => Effect.void,
       syncRepoPullRequests: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
-      publishTasksUpdated: () =>
-        publishFailure ? Effect.fail(failure("Ownership publication failed")) : Effect.void,
+      publishTasksUpdated: (_repoPath, _changes, operation) =>
+        publicationGate.pipe(
+          Effect.andThen(
+            Effect.suspend(() => {
+              if (publishFailure) return Effect.fail(failure("Ownership publication failed"));
+              publications.push(operation);
+              return Effect.void;
+            }),
+          ),
+        ),
     },
   });
   const workspaceSettings = createWorkspaceSettingsServiceTestDouble({
@@ -354,6 +379,25 @@ export const createLaunchHarness = async (
       readOutputTail: () => Effect.die(new Error("unexpected terminal output")),
     }),
   });
+  // The first instruction uses the same workflow send policy as a composer message.
+  const commands = createAgentSessionCommandService({
+    canonicalizeRepoPath: git.canonicalizePath,
+    runtime,
+    tasks,
+    taskReader,
+    taskLifecycle: lifecycle,
+    taskSessionStart: preparation,
+    persistTaskModel: unexpected("task model update"),
+    repositoryPolicy: {
+      run: unexpected("repository operation"),
+      runSend: unexpected("repository send"),
+      prepareResume: unexpected("repository resume"),
+      prepareSend: unexpected("repository send"),
+      recordAcceptedMessage: unexpected("repository message record"),
+      prepareModelUpdate: unexpected("repository model update"),
+      validateRef: unexpected("repository validation"),
+    },
+  });
   const service = createWorkflowLaunchService({
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
@@ -365,10 +409,11 @@ export const createLaunchHarness = async (
     registry,
     queries: {
       loadRuntimeCatalog: () =>
-        (gates.catalog ?? Effect.void).pipe(
-          Effect.as({
+        Effect.sync(() => {
+          catalogLoads += 1;
+          return {
             models: {
-              status: "available",
+              status: "available" as const,
               catalog: {
                 models: [
                   {
@@ -377,7 +422,7 @@ export const createLaunchHarness = async (
                     providerName: "Provider",
                     modelId: "model",
                     modelName: "Model",
-                    variants: ["medium"],
+                    variants: ["medium", "high"],
                     speedLevels: [{ id: "fast", label: "Fast" }],
                     supportsReasoning: true,
                   },
@@ -385,41 +430,25 @@ export const createLaunchHarness = async (
                 defaultModelsByProvider: {},
               },
             },
-          }),
-        ),
+          };
+        }),
     },
-    provider: { getContext: () => Effect.succeed(provider) },
+    provider: {
+      getContext: () =>
+        providerFailure ? Effect.fail(failure("Provider read failed")) : Effect.succeed(provider),
+    },
     worktrees: {
       getTaskWorktree: () =>
         Effect.succeed(worktreeExists ? { workingDirectory: "/worktrees/task" } : null),
     },
     runtime: {
       ...runtime,
-      read: (ref) =>
-        (gates.finalObservation ?? Effect.void).pipe(Effect.andThen(runtime.read(ref))),
+      sendUserMessage: commands.sendUserMessage,
       holdWorkflowLaunch: (ref, held) =>
         (held ? (gates.startingHold ?? Effect.void) : (gates.holdRelease ?? Effect.void)).pipe(
           Effect.andThen(runtime.holdWorkflowLaunch(ref, held)),
         ),
     },
-    lifecycle,
-    withProcessStartAdmission: (_path, work) =>
-      work.pipe(Effect.ensuring(gates.admissionRelease ?? Effect.void)),
-    publish: (value) =>
-      (value.phase === "completed"
-        ? (gates.finalPublication ?? Effect.void)
-        : value.phase === "canceled"
-          ? (gates.canceledPublication ?? Effect.void)
-          : value.phase === "preparing"
-            ? (gates.preparingPublication ?? Effect.void)
-            : Effect.void
-      ).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            snapshots.push(value);
-          }),
-        ),
-      ),
     sessions: createTaskSessionOperations({
       canonicalizeRepoPath: git.canonicalizePath,
       runtime,
@@ -435,13 +464,7 @@ export const createLaunchHarness = async (
       taskSessionStart: {
         ...preparation,
         prepare: (input) =>
-          preparation
-            .prepare(input)
-            .pipe(
-              Effect.flatMap((prepared) =>
-                (gates.preparedStart ?? Effect.void).pipe(Effect.as(prepared)),
-              ),
-            ),
+          (gates.beforePrepare ?? Effect.void).pipe(Effect.andThen(preparation.prepare(input))),
       },
       writes: {
         saveSession: tasks.agentSessionUpsertDeferredPublication,
@@ -454,28 +477,70 @@ export const createLaunchHarness = async (
   });
   return {
     service,
+    commands,
     sendEntered,
     lifecycle,
-    enablePullRequests: () => {
+    enablePullRequests: (enabled = true) => {
       provider = repositoryGitProviderContextSchema.parse({
         descriptor: GITHUB_PROVIDER_DESCRIPTOR,
         config: {
           id: "github",
-          enabled: true,
+          enabled,
           autoDetected: false,
           repository: { host: "github.com", owner: "example", name: "repo" },
         },
-        health: {
-          providerId: "github",
-          enabled: true,
-          available: true,
-          executablePath: "gh",
-          version: "gh version 2.95",
-          authenticated: true,
-          account: "example",
-          repositoryMappingValid: true,
-        },
+        health: enabled
+          ? {
+              providerId: "github",
+              enabled: true,
+              available: true,
+              executablePath: "gh",
+              version: "gh version 2.95",
+              authenticated: true,
+              account: "example",
+              repositoryMappingValid: true,
+            }
+          : {
+              providerId: "github",
+              enabled: false,
+              available: false,
+              executablePath: null,
+              version: null,
+              authenticated: false,
+              account: null,
+              repositoryMappingValid: null,
+              reason: "GitHub provider is not enabled for this repository.",
+            },
       });
+    },
+    /** Adds a session that the task owns. A live session also gets a runtime snapshot. */
+    addTaskSession: (
+      externalSessionId: string,
+      options: {
+        role?: AgentRole;
+        selectedModel?: AgentSessionModelSelection;
+        live?: boolean;
+        pendingQuestion?: { blocking: boolean };
+      } = {},
+    ) => {
+      const workingDirectory = "/worktrees/task";
+      records.push({
+        externalSessionId,
+        runtimeKind,
+        workingDirectory,
+        role: options.role ?? "build",
+        startedAt: timestamp,
+        selectedModel: options.selectedModel ?? modelFor(runtimeKind),
+      });
+      if (options.live) {
+        const snapshot = liveSnapshot("/repo", workingDirectory, externalSessionId, "Existing");
+        if (options.pendingQuestion)
+          snapshot.pendingQuestions = [
+            { requestId: "open-question", questions: [], ...options.pendingQuestion },
+          ];
+        live.set(agentSessionRefKey(snapshot.ref), snapshot);
+      }
+      return { externalSessionId, runtimeKind, workingDirectory };
     },
     runtime,
     records,
@@ -486,12 +551,14 @@ export const createLaunchHarness = async (
     resumes,
     stops,
     sends,
-    snapshots,
+    sendOptions,
+    publications,
     removedWorktrees,
     deletedBranches,
     envelopes,
     settings,
     config,
+    catalogLoads: () => catalogLoads,
     getTask: () => task,
     setTaskType: (issueType: typeof task.issueType) => {
       task = { ...task, issueType };
@@ -508,11 +575,11 @@ export const createLaunchHarness = async (
     setPublishFailure: () => {
       publishFailure = true;
     },
+    setProviderFailure: () => {
+      providerFailure = true;
+    },
     setSaveFailure: () => {
       saveFailure = true;
-    },
-    setStopFailure: (value: NonNullable<typeof stopFailure>) => {
-      stopFailure = value;
     },
     setWorktreeExists: (value: boolean) => {
       worktreeExists = value;
@@ -520,8 +587,14 @@ export const createLaunchHarness = async (
     setSendGate: (value: typeof sendGate) => {
       sendGate = value;
     },
+    setQuestionAfterSend: (value: boolean) => {
+      questionAfterSend = value;
+    },
     setStoreGate: (value: typeof storeGate) => {
       storeGate = value;
+    },
+    setPublicationGate: (value: typeof publicationGate) => {
+      publicationGate = value;
     },
   };
 };
@@ -533,11 +606,7 @@ export const modelFor = (runtimeKind: RuntimeKind) => ({
   modelId: "model",
   variant: "medium",
 });
-export const requestFor = (
-  runtimeKind: RuntimeKind,
-  launchAttemptId = "attempt",
-): WorkflowLaunchRequest => ({
-  launchAttemptId,
+export const requestFor = (runtimeKind: RuntimeKind): WorkflowLaunchRequest => ({
   workspaceId: "workspace",
   repoPath: "/repo",
   taskId: "task",
@@ -546,7 +615,7 @@ export const requestFor = (
     actionId: "build_implementation_start",
     decision: { startMode: "fresh", selectedModel: modelFor(runtimeKind) },
   },
-  instruction: { kind: "kickoff", text: "\n  retained instruction\n" },
+  instruction: { kind: "kickoff", text: "\n  first instruction\n" },
 });
 export const failure = (message: string) =>
   new HostOperationError({ operation: "native", message });

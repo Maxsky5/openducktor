@@ -6,6 +6,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
   type WorkspaceSessionLaunchRequest,
+  type WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import { act, type ReactElement, type ReactNode, useState } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
@@ -100,13 +101,31 @@ test.each(["local_repo_root", "local_worktree"] as const)(
     });
     const store = createAgentSessionsStore(workspace.repoPath);
     const sends: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[] = [];
-    const launch = mock(async (request: WorkspaceSessionLaunchRequest) => ({
-      ...request,
-      phase: "completed" as const,
-      acceptance: "accepted" as const,
-      ownershipSaved: true,
-      record: { ...entry, externalSessionId: session.externalSessionId },
-    }));
+    const launch = mock(
+      async (request: WorkspaceSessionLaunchRequest): Promise<WorkspaceSessionLaunchResult> => ({
+        workspaceId: request.workspaceId,
+        repoPath: request.repoPath,
+        sessionId: request.sessionId,
+        status: "completed",
+        record: { ...entry, externalSessionId: session.externalSessionId },
+        session: {
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+          startedAt: session.startedAt,
+          status: "idle",
+        },
+        acceptedMessage: {
+          type: "user_message",
+          externalSessionId: session.externalSessionId,
+          messageId: "accepted-1",
+          timestamp: session.startedAt,
+          message: "Review",
+          parts: [],
+          state: "read",
+        },
+      }),
+    );
     configureShellBridge(
       createShellBridgeFixture({
         client: {
@@ -235,9 +254,6 @@ const createWorkspaceChatHarness = ({
     },
     loadAgentSessionContext: async () => {
       counters.runtimeReads += 1;
-    },
-    startAgentSession: async () => {
-      throw new Error("Unexpected session startup");
     },
     sendAgentMessage,
     stopAgentSession: async () => {},

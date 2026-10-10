@@ -33,7 +33,6 @@ import { AgentStudioStateProvider } from "./providers/agent-studio-state-provide
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
 import { AppRuntimeProvider } from "./providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
-import { WorkflowLaunchRecoveryProvider } from "./providers/workflow-launch-recovery-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "./providers/delegation-state-provider";
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
@@ -69,9 +68,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                         <AgentStudioStateProvider agentEngine={agentEngine}>
                           <AppLifecycleStateProvider>
                             <TerminalActivityProvider>
-                              <WorkflowLaunchRecoveryProvider>
-                                <AutopilotProvider>{children}</AutopilotProvider>
-                              </WorkflowLaunchRecoveryProvider>
+                              <AutopilotProvider>{children}</AutopilotProvider>
                             </TerminalActivityProvider>
                           </AppLifecycleStateProvider>
                         </AgentStudioStateProvider>

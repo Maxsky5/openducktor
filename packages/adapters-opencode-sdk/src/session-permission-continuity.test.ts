@@ -7,7 +7,6 @@ import {
   defaultRepoRuntimeInput,
 } from "./test-support";
 import type { OpencodePermissionRule } from "./workflow-tool-permissions";
-import { OpenCodeMessageRejectedError } from "./index";
 
 const nativeRules = (): OpencodePermissionRule[] => [
   { permission: "bash", pattern: "git *", action: "allow" },
@@ -213,7 +212,6 @@ describe("OpenCode session permission continuity", () => {
       try {
         const error = await send;
         expect(error).toBeInstanceOf(Error);
-        if (kind === "message") expect(error).toBeInstanceOf(OpenCodeMessageRejectedError);
         expect(String(error)).toContain("permissions");
         expect(mock.session.promptAsyncCalls).toHaveLength(0);
       } finally {

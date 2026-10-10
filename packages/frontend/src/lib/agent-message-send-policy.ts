@@ -3,7 +3,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
 import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
-import { matchesAgentSessionIdentity } from "./agent-session-identity";
 import { deriveLoadedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export const getBusyAgentMessageBlockedReason = (
@@ -23,7 +22,6 @@ export const getAgentMessageSendBlockedReason = (input: {
   readOnlyReason: string | null;
   pending: boolean;
   isDraft?: boolean;
-  allowStarting?: boolean;
 }): string | null => {
   if (input.pending) return "Wait for the current send or session change to finish.";
   if (input.readModel.kind === "failed")
@@ -50,17 +48,6 @@ export const getAgentMessageSendBlockedReason = (input: {
   if (transcriptState.kind !== "visible") return "Wait for the session transcript to load.";
   if (isAgentSessionBlockedOnInput(input.session))
     return "Answer or reject the blocking approval or question before sending a message.";
-  if (input.session.status === "starting" && !input.allowStarting)
-    return "Wait for the session to finish starting.";
+  if (input.session.status === "starting") return "Wait for the session to finish starting.";
   return getBusyAgentMessageBlockedReason(input.session.status === "running", input.runtime);
-};
-
-/** Registration can precede the first live episode. Bind once, then reject later episodes. */
-export const createAgentMessageStartOwner = (start: AgentSessionState) => {
-  let episode = start.executionEpisodeId;
-  return (session: AgentSessionState): boolean => {
-    if (!matchesAgentSessionIdentity(session, start)) return false;
-    episode ??= session.executionEpisodeId;
-    return session.executionEpisodeId === episode;
-  };
 };

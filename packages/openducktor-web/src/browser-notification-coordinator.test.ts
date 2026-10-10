@@ -415,7 +415,7 @@ describe("browser notification coordinator", () => {
           navigate: async () => {},
           onFailure,
           onCoordinationRecovered: () => {},
-          inApp: { deliver },
+          inApp: { dismiss: () => {}, deliver },
           sound: { play },
         });
         try {

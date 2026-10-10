@@ -8,9 +8,10 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import type {
-  CodexAppServerRespondInput,
-  CodexAppServerStreamEvent,
+import {
+  CodexAppServerRpcError,
+  type CodexAppServerRespondInput,
+  type CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
 import {
   type CodexAppServerClientRequest,
@@ -186,7 +187,7 @@ export const createCodexAppServerTransport = (
         return;
       }
       request.reject(
-        new HostOperationError({
+        new CodexAppServerRpcError({
           operation: `codexAppServerTransport.request.${request.method}`,
           message: `Codex app-server request ${request.method} failed for runtime ${runtimeId}: ${error.data.message}`,
           cause: message.error,

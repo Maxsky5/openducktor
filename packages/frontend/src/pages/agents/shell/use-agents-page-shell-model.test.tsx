@@ -273,7 +273,6 @@ let agentOperations: AgentOperationsContextValue = {
   readSessionHistory: mock(async () => []),
   loadAgentSessionHistory: mock(async () => null),
   loadAgentSessionContext: mock(async () => undefined),
-  startAgentSession: mock(async () => sessionIdentity("session-1")),
   sendAgentMessage: mock(async () => null),
   stopAgentSession: mock(async () => undefined),
   continueInterruptedTurn: mock(async () => undefined),
@@ -554,6 +553,7 @@ const notificationContextValue: NotificationContextValue = {
   sessionStartNotifications: {
     publishSessionStarted: () => {},
     publishSessionError: async () => true,
+    markInAppFeedbackHandled: () => {},
     reportFailure: () => {},
   },
 };
@@ -751,7 +751,6 @@ beforeEach(async () => {
     readSessionHistory: mock(async () => []),
     loadAgentSessionHistory: mock(async () => null),
     loadAgentSessionContext: mock(async () => undefined),
-    startAgentSession: mock(async () => sessionIdentity("session-1")),
     sendAgentMessage: mock(async () => null),
     stopAgentSession: mock(async () => undefined),
     continueInterruptedTurn: mock(async () => undefined),

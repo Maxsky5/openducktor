@@ -1,18 +1,10 @@
-import { expect, mock, spyOn, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type WorkflowLaunchRequest,
-  type WorkflowLaunchSnapshot,
-} from "@openducktor/contracts";
-import { createHostClient } from "@openducktor/host-client";
-import { QueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import type { RunEventListener } from "@/lib/shell-bridge";
-import { createNotificationPolicy } from "../notifications/notification-policy";
-import { buildSessionStartErrorOccurrence } from "../notifications/session-start-occurrences";
-import { observeWorkflowLaunches } from "../session-start/workflow-launch-observation";
-import { presentWorkflowLaunchOutcome } from "../session-start/session-start-message-recovery";
-import type { SessionStartNotificationInput } from "../session-start/session-start-orchestration";
+import { expect, mock, test } from "bun:test";
+import type { WorkflowLaunchRequest, WorkflowLaunchResult } from "@openducktor/contracts";
+import type {
+  SessionStartNotificationInput,
+  SessionStartNotificationPublisher,
+} from "../session-start/session-start-orchestration";
+import { SessionStartWorkflowError } from "../session-start/session-start-orchestration";
 import { executeAutopilotAction } from "./autopilot-actions";
 
 const args = {
@@ -20,41 +12,54 @@ const args = {
   task: { id: "task", title: "Requested task" },
   actionId: "startBuilder" as const,
 };
-const unexpectedRecovery = async (): Promise<WorkflowLaunchSnapshot> => {
-  throw new Error("Recovery must remain explicit");
+const session = {
+  externalSessionId: "saved",
+  runtimeKind: "codex" as const,
+  workingDirectory: "/worktree/task",
+  startedAt: "2026-10-03T12:00:00.000Z",
+  status: "running" as const,
 };
-const result = (request: WorkflowLaunchRequest): WorkflowLaunchSnapshot => ({
-  launchAttemptId: request.launchAttemptId,
+const result = (
+  request: WorkflowLaunchRequest,
+  overrides: Partial<WorkflowLaunchResult> = {},
+): WorkflowLaunchResult => ({
   workspaceId: request.workspaceId,
   repoPath: request.repoPath,
   taskId: request.taskId,
   role: "build",
-  phase: "completed",
-  acceptance: "accepted",
-  ownershipSaved: true,
-  completedPreStartActions: [],
-  session: {
-    externalSessionId: "saved",
-    runtimeKind: "codex",
-    workingDirectory: "/worktree/task",
-    startedAt: "2026-10-03T12:00:00.000Z",
-    status: "running",
-  },
+  status: "completed",
+  startMode: "fresh",
+  session: { ...session },
+  ...overrides,
 });
+const createNotifications = () => {
+  const publishSessionStarted = mock((_input: SessionStartNotificationInput) => {});
+  const publishSessionError = mock(
+    async (_input: SessionStartNotificationInput, _message?: string) => true,
+  );
+  const reportFailure = mock(() => {});
+  const notifications: SessionStartNotificationPublisher = {
+    publishSessionStarted,
+    publishSessionError,
+    markInAppFeedbackHandled: () => {},
+    reportFailure,
+  };
+  return { notifications, publishSessionStarted, publishSessionError, reportFailure };
+};
 
-test("automatic execution needs only observed identity and action, with no browser reads", async () => {
+test("sends one automatic launch with only the workspace, task, and action", async () => {
   const launch = mock(async (request: WorkflowLaunchRequest) => result(request));
   const outcome = await executeAutopilotAction({
     ...args,
-    client: {
-      agentSessionWorkflowLaunch: launch,
-      agentSessionWorkflowLaunchRead: async () => [],
-      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
-    },
+    client: { agentSessionWorkflowLaunch: launch },
   });
-  expect(outcome.kind).toBe("started");
+  expect(outcome).toEqual({
+    kind: "started",
+    message: "Started Start Builder for task.",
+    postStartActionError: null,
+  });
+  expect(launch).toHaveBeenCalledTimes(1);
   expect(launch.mock.calls[0]?.[0]).toEqual({
-    launchAttemptId: expect.any(String),
     workspaceId: "workspace",
     repoPath: "/repo",
     taskId: "task",
@@ -63,214 +68,119 @@ test("automatic execution needs only observed identity and action, with no brows
   });
 });
 
-test("shows the host's automatic skip reason", async () => {
+test("returns the host skip reason and publishes nothing", async () => {
+  const { notifications, publishSessionStarted, publishSessionError } = createNotifications();
   const outcome = await executeAutopilotAction({
     ...args,
     client: {
-      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
-      agentSessionWorkflowLaunchRead: async () => [],
-      agentSessionWorkflowLaunch: async (request) => ({
-        ...result(request),
-        phase: "skipped",
-        skipReason: "No Builder source",
-      }),
+      agentSessionWorkflowLaunch: async (request) =>
+        result(request, { status: "skipped", skipReason: "No Builder source", session: undefined }),
     },
+    notifications,
   });
   expect(outcome).toEqual({ kind: "skipped", message: "No Builder source" });
+  expect(publishSessionStarted).not.toHaveBeenCalled();
+  expect(publishSessionError).not.toHaveBeenCalled();
 });
 
-test("notification failure does not change an accepted launch or submit it twice", async () => {
-  const launch = mock(async (request: WorkflowLaunchRequest) => result(request));
-  const reportFailure = mock(() => {});
+test("returns a failure after the session was saved as a post-start error", async () => {
+  const { notifications, publishSessionStarted, publishSessionError } = createNotifications();
   const outcome = await executeAutopilotAction({
     ...args,
     client: {
-      agentSessionWorkflowLaunch: launch,
-      agentSessionWorkflowLaunchRead: async () => [],
-      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
+      agentSessionWorkflowLaunch: async (request) =>
+        result(request, {
+          status: "failed",
+          failure: { message: "Kickoff failed", cleanupErrors: [], noticeId: "launch-failure:1" },
+        }),
     },
-    notifications: {
-      publishSessionStarted: () => {
-        throw new Error("Notification failed");
+    notifications,
+  });
+  expect(outcome.kind).toBe("started");
+  if (outcome.kind !== "started") throw new Error("Expected a started outcome");
+  expect(outcome.postStartActionError).toBeInstanceOf(SessionStartWorkflowError);
+  expect(outcome.postStartActionError?.message).toBe("Kickoff failed");
+  // The host reports the failure in the saved session, so Autopilot adds no notification.
+  expect(outcome.postStartActionError).toHaveProperty("feedbackHandled", true);
+  expect(publishSessionStarted).not.toHaveBeenCalled();
+  expect(publishSessionError).not.toHaveBeenCalled();
+});
+
+test("notifies a failure that the host could not report in the session", async () => {
+  const { notifications, publishSessionError } = createNotifications();
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: {
+      agentSessionWorkflowLaunch: async (request) =>
+        result(request, {
+          status: "failed",
+          failure: { message: "Kickoff failed", cleanupErrors: ["Report failed"] },
+        }),
+    },
+    notifications,
+  });
+  if (outcome.kind !== "started") throw new Error("Expected a started outcome");
+  // Without a session notice, Autopilot must show the failure itself.
+  expect(publishSessionError).toHaveBeenCalledTimes(1);
+  expect(outcome.postStartActionError).toHaveProperty("feedbackHandled", true);
+});
+
+test("throws a start error when the host saved no session", async () => {
+  const { notifications, publishSessionError } = createNotifications();
+  publishSessionError.mockImplementation(async () => false);
+  let thrown: unknown;
+  try {
+    await executeAutopilotAction({
+      ...args,
+      client: {
+        agentSessionWorkflowLaunch: async (request) =>
+          result(request, {
+            status: "failed",
+            session: undefined,
+            failure: { message: "Runtime is offline", cleanupErrors: ["Cannot remove worktree"] },
+          }),
       },
-      publishSessionError: async () => false,
-      reportFailure,
-    },
+      notifications,
+    });
+  } catch (cause) {
+    thrown = cause;
+  }
+  expect(thrown).toBeInstanceOf(SessionStartWorkflowError);
+  expect(thrown).toHaveProperty("feedbackHandled", false);
+  expect(thrown).toHaveProperty(
+    "message",
+    "Runtime is offline Cleanup failed: Cannot remove worktree",
+  );
+  expect(publishSessionError).toHaveBeenCalledTimes(1);
+  expect(publishSessionError.mock.calls[0]?.[0]).not.toHaveProperty("session");
+});
+
+test("publishes session started only when the host started a fresh or forked session", async () => {
+  for (const startMode of ["fresh", "fork", "reuse"] as const) {
+    const { notifications, publishSessionStarted, publishSessionError } = createNotifications();
+    const outcome = await executeAutopilotAction({
+      ...args,
+      client: { agentSessionWorkflowLaunch: async (request) => result(request, { startMode }) },
+      notifications,
+    });
+    expect(outcome).toMatchObject({ kind: "started", postStartActionError: null });
+    expect(publishSessionError).not.toHaveBeenCalled();
+    expect(publishSessionStarted).toHaveBeenCalledTimes(startMode === "reuse" ? 0 : 1);
+  }
+});
+
+test("a notification failure does not change a completed launch", async () => {
+  const { notifications, publishSessionStarted, reportFailure } = createNotifications();
+  publishSessionStarted.mockImplementation(() => {
+    throw new Error("Notification failed");
+  });
+  const launch = mock(async (request: WorkflowLaunchRequest) => result(request));
+  const outcome = await executeAutopilotAction({
+    ...args,
+    client: { agentSessionWorkflowLaunch: launch },
+    notifications,
   });
   expect(outcome.postStartActionError).toBeNull();
   expect(launch).toHaveBeenCalledTimes(1);
   expect(reportFailure).toHaveBeenCalledTimes(1);
 });
-
-test("a disconnected automatic caller reads its accepted attempt without launching again", async () => {
-  let retained: WorkflowLaunchSnapshot | undefined;
-  const launch = mock(async (request: WorkflowLaunchRequest): Promise<WorkflowLaunchSnapshot> => {
-    retained = result(request);
-    throw new Error("Transport disconnected");
-  });
-  const read = mock(async (ref: import("@openducktor/contracts").WorkflowLaunchRef) => {
-    if (!retained) throw new Error("Expected the admitted attempt");
-    expect(ref.launchAttemptId).toBe(retained.launchAttemptId);
-    return [retained];
-  });
-  const outcome = await executeAutopilotAction({
-    ...args,
-    client: {
-      agentSessionWorkflowLaunch: launch,
-      agentSessionWorkflowLaunchRead: read,
-      agentSessionWorkflowLaunchRecover: unexpectedRecovery,
-    },
-  });
-  expect(outcome.postStartActionError).toBeNull();
-  expect(launch).toHaveBeenCalledTimes(1);
-  expect(read).toHaveBeenCalledTimes(1);
-});
-
-test("unknown automatic admission includes inspection guidance in failure delivery", async () => {
-  const publishSessionError = mock(
-    async (_input: SessionStartNotificationInput, _message: string) => false,
-  );
-  const showError = spyOn(toast, "error").mockImplementation(() => "toast");
-  const failure = { stage: "send" as const, message: "Exact transport failure", cleanupErrors: [] };
-  try {
-    const outcome = await executeAutopilotAction({
-      ...args,
-      client: {
-        agentSessionWorkflowLaunchRead: async () => [],
-        agentSessionWorkflowLaunchRecover: unexpectedRecovery,
-        agentSessionWorkflowLaunch: async (request) => ({
-          ...result(request),
-          phase: "failed",
-          acceptance: "unknown",
-          recoveryAllowed: false,
-          failure,
-        }),
-      },
-      notifications: {
-        publishSessionStarted: () => {},
-        publishSessionError,
-        reportFailure: () => {},
-      },
-    });
-    expect(publishSessionError).toHaveBeenCalledTimes(1);
-    expect(publishSessionError.mock.calls[0]?.[1]).toBe(
-      "Exact transport failure Runtime acceptance is unknown. Inspect the saved session before sending another instruction.",
-    );
-    expect(showError.mock.calls.at(-1)?.[1]?.action).toBeUndefined();
-    expect(outcome.postStartActionError?.message).toContain("Inspect the saved session");
-    expect(failure.message).toBe("Exact transport failure");
-  } finally {
-    showError.mockRestore();
-  }
-});
-
-test.each(["before", "after"] as const)(
-  "Autopilot suppresses duplicate failure feedback when observation arrives %s its result",
-  async (order) => {
-    const queryClient = new QueryClient();
-    let listener: RunEventListener = () => {};
-    let retained: WorkflowLaunchSnapshot | undefined;
-    const client = createHostClient(async () => {
-      throw new Error("Unexpected host read");
-    });
-    client.agentSessionWorkflowLaunchRead = async () => [];
-    client.agentSessionWorkflowLaunchRecover = async () => {
-      throw new Error("Recovery must remain explicit");
-    };
-    client.agentSessionWorkflowLaunch = async (request) => {
-      retained = {
-        ...result(request),
-        phase: "failed",
-        acceptance: "rejected",
-        recoveryAllowed: true,
-        failure: { stage: "send", message: "Exact first-instruction failure", cleanupErrors: [] },
-      };
-      if (order === "before")
-        listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
-      return retained;
-    };
-    const settings = createDefaultNotificationSettings();
-    settings.kinds["agent.session_error"] = { enabled: true, target: "both", sound: "inherit" };
-    settings.osFocus = "always_send";
-    settings.soundFocus = "always_play";
-    settings.volumePercent = 50;
-    const genericFeedback = mock(async () => {});
-    const os = mock(async () => ({ status: "shown" as const }));
-    const sound = mock(async () => {});
-    const policy = createNotificationPolicy({
-      inApp: { deliver: genericFeedback },
-      os: { deliver: os },
-      sound: { play: sound },
-      onFailure: () => {},
-    });
-    const localFeedback = spyOn(toast, "error").mockImplementation(() => "recovery-toast");
-    const stop = await observeWorkflowLaunches({
-      workspaceId: args.activeWorkspace.workspaceId,
-      repoPath: args.activeWorkspace.repoPath,
-      taskIds: [args.task.id],
-      queryClient,
-      bridge: {
-        client,
-        subscribeRunEvents: async (next) => {
-          listener = next;
-          return () => {};
-        },
-      },
-      onSnapshot: (snapshot) => {
-        presentWorkflowLaunchOutcome(snapshot, client);
-      },
-      onError: (cause) => {
-        throw cause;
-      },
-    });
-    try {
-      const outcome = await executeAutopilotAction({
-        ...args,
-        client,
-        notifications: {
-          publishSessionStarted: () => {
-            throw new Error("A failed launch must not publish Started");
-          },
-          publishSessionError: async (input, message) => {
-            const occurrence = buildSessionStartErrorOccurrence(
-              { repoPath: "/repo", repositoryLabel: "Repo" },
-              input,
-              message,
-            );
-            const local = await policy.dispatch(
-              occurrence,
-              { phase: "local", inAppFeedbackHandled: input.inAppFeedbackHandled === true },
-              settings,
-            );
-            if (local.externalPlan)
-              await policy.dispatch(occurrence, { phase: "external", appFocused: true }, settings);
-            return local.inAppDelivered;
-          },
-          reportFailure: (cause) => {
-            throw cause;
-          },
-        },
-      });
-      if (order === "after")
-        listener({ type: "workflow_launch_updated", snapshot: JSON.stringify(retained) });
-      expect(outcome.postStartActionError).toHaveProperty("feedbackHandled", true);
-      expect(localFeedback).toHaveBeenCalled();
-      const ids = new Set(localFeedback.mock.calls.map(([, options]) => options?.id));
-      expect(ids.size).toBe(1);
-      expect(localFeedback.mock.calls.at(-1)).toEqual([
-        "First message failed for task.",
-        expect.objectContaining({
-          description: "Exact first-instruction failure",
-          action: expect.objectContaining({ label: "Retry message" }),
-        }),
-      ]);
-      expect(genericFeedback).not.toHaveBeenCalled();
-      expect(os).toHaveBeenCalledTimes(1);
-      expect(sound).toHaveBeenCalledTimes(1);
-    } finally {
-      stop();
-      queryClient.clear();
-      localFeedback.mockRestore();
-    }
-  },
-);

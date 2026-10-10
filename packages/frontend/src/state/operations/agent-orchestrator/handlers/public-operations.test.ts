@@ -4,14 +4,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
-const BUILD_SELECTION = {
-  runtimeKind: "opencode" as const,
-  providerId: "openai",
-  modelId: "gpt-5",
-  variant: "default",
-  profileId: "build",
-};
-
 const SESSION_IDENTITY = {
   externalSessionId: "session-1",
   taskId: "task-1",
@@ -36,13 +28,6 @@ type PublicAgentEngine = Parameters<typeof createOrchestratorPublicOperations>[0
 
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
-    startAgentSession: async () => ({
-      externalSessionId: "session-started",
-      taskId: "task-1",
-      role: "build" as const,
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktrees/session-started",
-    }),
     sendAgentMessage: async () => null,
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
@@ -83,35 +68,6 @@ const createPublicOperations = (
   });
 
 describe("agent-orchestrator-public-operations", () => {
-  test("rethrows start errors without adding a toast", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createPublicOperations({
-      agentEngine: createAgentEngine(),
-      sessionActions: createSessionActions({
-        startAgentSession: async () => {
-          throw new Error("start failed");
-        },
-      }),
-    });
-
-    try {
-      await expect(
-        operations.startAgentSession({
-          taskId: "task-1",
-          role: "build" as const,
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("start failed");
-      expect(toastError).not.toHaveBeenCalled();
-    } finally {
-      toast.error = originalToastError;
-    }
-  });
-
   test("shows toast and rethrows send errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

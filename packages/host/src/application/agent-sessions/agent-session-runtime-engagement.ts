@@ -45,9 +45,9 @@ export const createRuntimeSessionEngagement = () => {
         adapter
           .forkSession(input)
           .pipe(Effect.tap((summary) => engage(adapter.binding, summary.externalSessionId))),
-      sendUserMessage: (input) =>
+      sendUserMessage: (input, options) =>
         adapter
-          .sendUserMessage(input)
+          .sendUserMessage(input, options)
           .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
     }),
     /** Records each session that an approval or question reply serves. */

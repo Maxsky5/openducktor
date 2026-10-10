@@ -34,6 +34,21 @@ import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
+/** Host options for one user message. */
+export type AgentSessionSendOptions = {
+  /**
+   * The send returns only after the runtime accepts the message. Only Codex supports it: it waits
+   * for the `turn/start` or `turn/steer` answer. OpenCode reports a failed async prompt without its
+   * message ID, and Claude names the message only in a later reply, so they ignore it.
+   */
+  readonly requireNativeAdmission?: boolean;
+  /**
+   * The adapter calls it when it sends the native request that carries the message. If the send
+   * fails before this call, the runtime did not get the message.
+   */
+  readonly onSent?: () => void;
+};
+
 export type AgentSessionCatalogInvalidation = {
   readonly repoPath: string;
   readonly runtimeKind: RuntimeKind;
@@ -178,6 +193,7 @@ export type AgentSessionControlAdapterPort = {
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
     input: AgentSessionControlSendInput,
+    options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,

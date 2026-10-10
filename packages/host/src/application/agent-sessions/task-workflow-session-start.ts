@@ -50,6 +50,7 @@ export const createStartTaskWorkflowSession =
         let summary: AgentSessionControlSummary | null = null;
         let stored = false;
         const publications: Array<Effect.Effect<void, TaskServiceError>> = [];
+        const publishAll = Effect.forEach(publications, (publish) => publish, { discard: true });
 
         const cleanupUnstoredStart = () =>
           Effect.gen(function* () {
@@ -72,7 +73,16 @@ export const createStartTaskWorkflowSession =
           if (input.targetWorkingDirectory) {
             preparationInput.targetWorkingDirectory = input.targetWorkingDirectory;
           }
-          prepared = yield* taskSessionStart.prepare(preparationInput);
+          // Record the prepared worktree before an interruption can skip its rollback.
+          prepared = yield* Effect.uninterruptibleMask((restore) =>
+            restore(taskSessionStart.prepare(preparationInput)).pipe(
+              Effect.tap((value) =>
+                Effect.sync(() => {
+                  prepared = value;
+                }),
+              ),
+            ),
+          );
           const runtimeInput: AgentSessionControlStartInput = {
             repoPath,
             runtimeKind: prepared.runtimeKind,
@@ -165,14 +175,19 @@ export const createStartTaskWorkflowSession =
             const stopped = yield* Effect.result(
               progress.stop(toControlSessionRef(repoPath, summary)),
             );
-            if (stopped._tag === "Success") {
+            // The saved ownership remains, so readers must still receive it.
+            const published = yield* Effect.result(publishAll);
+            const cleanupFailures = [stopped, published].flatMap((result) =>
+              result._tag === "Failure" ? [result.failure] : [],
+            );
+            if (cleanupFailures.length === 0) {
               return yield* Effect.fail(completed.failure);
             }
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "task-workflow-session.complete-start",
-                message: `${errorMessage(completed.failure)} Cleanup failed: ${stopped.failure.message}`,
-                cause: { completionFailure: completed.failure, stopFailure: stopped.failure },
+                message: `${errorMessage(completed.failure)} Cleanup failed: ${cleanupFailures.map((failure) => failure.message).join(" ")}`,
+                cause: { completionFailure: completed.failure, cleanupFailures },
                 details: {
                   repoPath,
                   taskId: scope.taskId,
@@ -181,10 +196,7 @@ export const createStartTaskWorkflowSession =
               }),
             );
           }
-          return {
-            session: summary,
-            publish: Effect.forEach(publications, (publish) => publish, { discard: true }),
-          };
+          return { session: summary, publish: publishAll };
         }).pipe(
           Effect.onInterrupt(() =>
             (stored && summary

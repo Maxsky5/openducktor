@@ -243,14 +243,24 @@ describe("OpenCode live session controls", () => {
         parentExternalSessionId: "parent-1",
       }),
     );
+    let sent = 0;
     const accepted = await Effect.runPromise(
-      adapter.sendUserMessage({
-        ...controlRef,
-        sessionScope: startInput.sessionScope,
-        parts: [{ kind: "text", text: "Hello" }],
-      }),
+      adapter.sendUserMessage(
+        {
+          ...controlRef,
+          sessionScope: startInput.sessionScope,
+          parts: [{ kind: "text", text: "Hello" }],
+        },
+        {
+          onSent: () => {
+            sent += 1;
+          },
+        },
+      ),
     );
     expect(accepted.type).toBe("user_message");
+    // The OpenCode connection reports when it sends the native request.
+    expect(sent).toBe(1);
     expect(publishedChanges.filter((change) => change.type === "transcript_event")).toEqual([
       {
         type: "transcript_event",

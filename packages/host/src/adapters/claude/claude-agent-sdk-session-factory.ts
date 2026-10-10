@@ -7,8 +7,11 @@ import {
   type ClaudeAgentSdkOptionsDependencies,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
-import { reconcileClaudeSessionTitle } from "./claude-session-title-update";
+import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
+import {
+  reconcileClaudeSessionTitle,
+  renameClaudeSessionIfNeeded,
+} from "./claude-session-title-update";
 import {
   type ClaudeSessionLaunchInput,
   requireClaudeOpenDucktorMcpForScope,

@@ -1,6 +1,5 @@
 import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { TaskMutationCommittedError } from "./task-mutation-committed-error";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import type { TaskSyncService } from "./sync/task-sync-service";
@@ -97,18 +96,12 @@ export const createEventPublishingTaskService = ({
         }
         return yield* Effect.fail(result.failure);
       }
-      yield* taskSyncService
-        .publishTasksUpdated(repoPath, successChanges(result.success), operation, statusChanges)
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new TaskMutationCommittedError({
-                operation,
-                message: cause.message,
-                cause: cause.cause ?? cause,
-              }),
-          ),
-        );
+      yield* taskSyncService.publishTasksUpdated(
+        repoPath,
+        successChanges(result.success),
+        operation,
+        statusChanges,
+      );
       return result.success;
     }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 

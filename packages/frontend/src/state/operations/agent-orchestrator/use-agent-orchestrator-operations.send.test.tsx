@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { taskWorktreeQueryKeys, taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
-import { terminalQueryKeys } from "@/state/queries/terminals";
 import {
   acceptedUserMessageForInput,
-  BUILD_SELECTION,
   createAgentSessionLiveSnapshotFixture,
   createHookHarness,
   createLiveSessionStreamFixture,
@@ -17,7 +14,7 @@ import {
   taskFixture,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
-describe("use-agent-orchestrator-operations start and send", () => {
+describe("use-agent-orchestrator-operations send", () => {
   let restoreEnvironment: (() => void) | null = null;
 
   beforeEach(async () => {
@@ -46,166 +43,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(harness.getLatest().operations).toBe(firstOperations);
     } finally {
       await harness.unmount();
-    }
-  });
-
-  test("successful workflow start clears a cached missing worktree for only its task", async () => {
-    const dependencies = createTestDependencies();
-    const keys = [null, taskFixture.updatedAt].map((taskVersion) =>
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-1", taskVersion }),
-    );
-    const otherKeys = [
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-2" }),
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/other/repo", taskId: "task-1" }),
-    ];
-    for (const key of [...keys, ...otherKeys]) dependencies.queryClient.setQueryData(key, null);
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-      dependencies,
-    });
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().operations.startAgentSession({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        });
-      });
-      for (const key of keys)
-        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
-      for (const key of otherKeys)
-        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(false);
-      await expect(
-        dependencies.queryClient.fetchQuery(
-          taskWorktreeQueryOptions({
-            repoPath: "/tmp/repo",
-            taskId: "task-1",
-            hostClient: dependencies.hostPort,
-          }),
-        ),
-      ).resolves.toEqual({ workingDirectory: "/tmp/repo/worktree" });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("successful workflow start reads the terminals of only its task again", async () => {
-    const dependencies = createTestDependencies();
-    const taskKey = terminalQueryKeys.task({ repoPath: "/tmp/repo", taskId: "task-1" });
-    const otherKey = terminalQueryKeys.task({ repoPath: "/tmp/repo", taskId: "task-2" });
-    for (const key of [taskKey, otherKey])
-      dependencies.queryClient.setQueryData(key, { hostInstanceId: "host-1", terminals: [] });
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-      dependencies,
-    });
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        await harness.getLatest().operations.startAgentSession({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        });
-      });
-      expect(dependencies.queryClient.getQueryState(taskKey)?.isInvalidated).toBe(true);
-      expect(dependencies.queryClient.getQueryState(otherKey)?.isInvalidated).toBe(false);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("invalidates only the failed workflow task's worktree queries", async () => {
-    const failure = new Error("workflow start failed");
-    const dependencies = createTestDependencies(
-      {},
-      {
-        agentSessionWorkflowLaunch: async () => {
-          throw failure;
-        },
-      },
-    );
-    const failedKeys = [null, taskFixture.updatedAt].map((taskVersion) =>
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-1", taskVersion }),
-    );
-    const otherKeys = [
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-2" }),
-      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/other/repo", taskId: "task-1" }),
-    ];
-    for (const key of [...failedKeys, ...otherKeys]) {
-      dependencies.queryClient.setQueryData(key, {
-        workingDirectory: "/tmp/repo/worktree",
-        source: "active_build_run",
-      });
-    }
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-      dependencies,
-    });
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        await expect(
-          harness.getLatest().operations.startAgentSession({
-            taskId: "task-1",
-            role: "build",
-            startMode: "fresh",
-            selectedModel: BUILD_SELECTION,
-          }),
-        ).rejects.toBe(failure);
-      });
-      for (const key of failedKeys) {
-        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
-      }
-      for (const key of otherKeys) {
-        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(false);
-      }
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("sends immediately after preparation when the live stream has not delivered the new session", async () => {
-    const originalSend = OpencodeSdkAdapter.prototype.sendUserMessage;
-    let sends = 0;
-    OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
-      sends += 1;
-      return acceptedUserMessageForInput(input);
-    };
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-      dependencies: createTestDependencies(),
-    });
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        const session = await harness.getLatest().operations.startAgentSession({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        });
-        await harness
-          .getLatest()
-          .operations.sendAgentMessage(session, [
-            { kind: "text", text: "First interactive instruction" },
-          ]);
-      });
-      expect(sends).toBe(1);
-    } finally {
-      await harness.unmount();
-      OpencodeSdkAdapter.prototype.sendUserMessage = originalSend;
     }
   });
 
@@ -255,7 +92,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
             { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -326,7 +162,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
             { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -392,7 +227,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
             { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });

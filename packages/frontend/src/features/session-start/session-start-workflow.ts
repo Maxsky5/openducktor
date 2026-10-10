@@ -1,42 +1,42 @@
 import type {
-  WorkflowLaunchRequest,
-  WorkflowLaunchRef,
-  WorkflowLaunchSnapshot,
+  AgentSessionUserMessagePart,
   WorkflowLaunchDecision,
+  WorkflowLaunchRequest,
+  WorkflowLaunchResult,
 } from "@openducktor/contracts";
+import { sessionLaunchFailureMessage, type AgentUserMessagePart } from "@openducktor/core";
 import type {
+  AgentMessageSendOptions,
   AgentMessageSendReceipt,
   AgentSessionIdentity,
-  AgentSessionState,
 } from "@/types/agent-orchestrator";
-import { host } from "@/state/operations/shared/host";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
+import type { host } from "@/state/operations/shared/host";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { updateSessionLaunchDraft } from "./session-launch-draft-recovery";
-
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 export type { SessionStartBeforeAction, SessionStartPostAction } from "./session-start-types";
 
+export type SendAgentMessage = AgentOperationsContextValue["sendAgentMessage"];
+
 export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartActionError: Error | null;
+  /**
+   * Sends the unsent first instruction again. It does nothing while a send runs or after one
+   * succeeds.
+   */
   retryPostStartMessage?: () => Promise<void>;
   postStartMessageReceipt?: AgentMessageSendReceipt;
 };
 
-export type WorkflowLaunchClient = Pick<
-  typeof host,
-  | "agentSessionWorkflowLaunch"
-  | "agentSessionWorkflowLaunchRecover"
-  | "agentSessionWorkflowLaunchRead"
->;
+export type WorkflowLaunchClient = Pick<typeof host, "agentSessionWorkflowLaunch">;
 
 type StartSessionWorkflowArgs = {
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
   workspaceId: string;
   repoPath: string;
-  launchAttemptId: string;
-  client?: WorkflowLaunchClient;
-  readSessionSnapshot?: (identity: AgentSessionIdentity) => AgentSessionState | null;
+  client: WorkflowLaunchClient;
+  sendAgentMessage: SendAgentMessage;
 };
 
 /** The host completes the launch even if the browser leaves or changes its selection. */
@@ -45,37 +45,19 @@ export const startSessionWorkflow = async ({
   decision,
   workspaceId,
   repoPath,
-  launchAttemptId,
-  client = host,
-  readSessionSnapshot,
+  client,
+  sendAgentMessage,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
   request.assertBeforeLaunch?.();
-  if (request.assertCanSubmit && decision.startMode === "reuse") {
-    const source = readSessionSnapshot?.(decision.sourceSession);
-    if (!source)
-      throw new Error("The selected session is missing. Reload session data before sending.");
-    request.assertCanSubmit(source);
-  }
-  let hostDecision: WorkflowLaunchDecision;
-  if (decision.startMode === "reuse") {
-    hostDecision = { startMode: "reuse", sourceSession: decision.sourceSession };
-    if (decision.speed !== undefined) hostDecision.speed = decision.speed;
-  } else {
-    const selection = decision.selectedModel;
-    if (!selection.runtimeKind)
-      throw new Error("Session start requires a selected runtime and model.");
-    const selectedModel = { ...selection, runtimeKind: selection.runtimeKind };
-    hostDecision =
-      decision.startMode === "fork"
-        ? { startMode: "fork", sourceSession: decision.sourceSession, selectedModel }
-        : { startMode: "fresh", selectedModel };
-  }
   const launch: WorkflowLaunchRequest = {
-    launchAttemptId,
     workspaceId,
     repoPath,
     taskId: request.taskId,
-    policy: { kind: "manual", actionId: request.launchActionId, decision: hostDecision },
+    policy: {
+      kind: "manual",
+      actionId: request.launchActionId,
+      decision: toWorkflowLaunchDecision(request, decision),
+    },
     instruction: { kind: "none" },
   };
   if (request.postStartAction === "send_message")
@@ -89,123 +71,89 @@ export const startSessionWorkflow = async ({
     if (request.message) launch.instruction.feedback = request.message;
   }
   if (decision.targetBranch) launch.targetBranch = decision.targetBranch;
-  if (request.targetWorkingDirectory)
-    launch.targetWorkingDirectory = request.targetWorkingDirectory;
   if (request.beforeStartAction) launch.beforeStartAction = request.beforeStartAction;
-  if (decision.startMode === "fresh" && request.queueIfBusy) launch.queueIfBusy = true;
-  const ref = { launchAttemptId, workspaceId, repoPath, taskId: request.taskId };
-  const result = workflowLaunchResult(await submitWorkflowLaunch(launch, client), ref, client);
-  const recover = result.retryPostStartMessage;
-  if (recover && (request.assertBeforeLaunch || request.assertCanSubmit))
-    result.retryPostStartMessage = async () => {
-      request.assertBeforeLaunch?.();
-      if (request.assertCanSubmit) {
-        const session = readSessionSnapshot?.(result);
-        if (!session)
-          throw new Error("The selected session is missing. Reload session data before sending.");
-        request.assertCanSubmit(session);
-      }
-      await recover();
-    };
-  return result;
-};
-
-export const submitWorkflowLaunch = async (
-  request: WorkflowLaunchRequest,
-  client: Pick<
-    WorkflowLaunchClient,
-    "agentSessionWorkflowLaunch" | "agentSessionWorkflowLaunchRead"
-  >,
-): Promise<WorkflowLaunchSnapshot> => {
-  const { launchAttemptId, workspaceId, repoPath, taskId } = request;
-  const ref = { launchAttemptId, workspaceId, repoPath, taskId };
-  let outcome: WorkflowLaunchSnapshot;
-  try {
-    outcome = await client.agentSessionWorkflowLaunch(request);
-  } catch (cause) {
-    let retained: WorkflowLaunchSnapshot | undefined;
-    try {
-      [retained] = await client.agentSessionWorkflowLaunchRead(ref);
-    } catch (readCause) {
-      throw new WorkflowLaunchObservationError(
-        ref,
-        cause instanceof Error ? cause : new Error(String(cause)),
-        readCause instanceof Error ? readCause : new Error(String(readCause)),
-      );
-    }
-    if (!retained || ["queued", "preparing", "sending"].includes(retained.phase))
-      throw new WorkflowLaunchObservationError(
-        ref,
-        cause instanceof Error ? cause : new Error(String(cause)),
-      );
-    outcome = retained;
-  }
-  return outcome;
-};
-
-export const workflowLaunchResult = (
-  outcome: WorkflowLaunchSnapshot,
-  ref: WorkflowLaunchRef,
-  client: Pick<WorkflowLaunchClient, "agentSessionWorkflowLaunchRecover">,
-): SessionStartWorkflowResult => {
-  if (!outcome.session || !outcome.ownershipSaved) throw new WorkflowLaunchFailure(outcome);
+  const outcome = await client.agentSessionWorkflowLaunch(launch);
+  if (!outcome.session) throw new WorkflowLaunchFailure(outcome);
+  const session = toAgentSessionIdentity(outcome.session);
   const result: SessionStartWorkflowResult = {
-    ...outcome.session,
+    ...session,
     postStartActionError:
-      outcome.failure || outcome.phase === "canceled" ? new WorkflowLaunchFailure(outcome) : null,
+      outcome.status === "completed" ? null : new WorkflowLaunchFailure(outcome),
   };
-  if (outcome.acceptance === "accepted" && outcome.acceptedMessage) {
+  if (outcome.acceptedMessage)
     result.postStartMessageReceipt = {
-      recipient: toAgentSessionIdentity(outcome.session),
+      recipient: session,
       acceptedMessage: outcome.acceptedMessage,
       postAcceptanceFailure: result.postStartActionError?.message ?? null,
     };
-  }
-  if (outcome.recoveryAllowed === true) {
+  const unsentInstruction = outcome.unsentInstruction
+    ? toAgentUserMessageParts(outcome.unsentInstruction)
+    : null;
+  if (unsentInstruction) {
+    let sent = false;
+    let pending = false;
     result.retryPostStartMessage = async () => {
-      const recovered = await client.agentSessionWorkflowLaunchRecover({
-        launchAttemptId: ref.launchAttemptId,
-        workspaceId: ref.workspaceId,
-        repoPath: ref.repoPath,
-        taskId: ref.taskId,
-      });
-      updateSessionLaunchDraft(recovered);
-      if (recovered.failure || recovered.phase !== "completed")
-        throw new WorkflowLaunchFailure(recovered);
+      if (pending || sent) return;
+      pending = true;
+      try {
+        const options: AgentMessageSendOptions = {};
+        const { assertBeforeLaunch, assertCanSubmit } = request;
+        if (assertBeforeLaunch || assertCanSubmit)
+          options.assertCanSubmit = (recipient) => {
+            assertBeforeLaunch?.();
+            assertCanSubmit?.(recipient);
+          };
+        if (request.postStartAction === "kickoff") options.preserveTextWhitespace = true;
+        sent = (await sendAgentMessage(session, unsentInstruction, options)) !== null;
+      } finally {
+        pending = false;
+      }
     };
   }
   return result;
 };
 
+const toAgentUserMessageParts = (parts: AgentSessionUserMessagePart[]): AgentUserMessagePart[] =>
+  // SAFETY: Parsed host results never hold an explicit undefined field, which is the only
+  // difference between the contract parts and the core parts.
+  parts as AgentUserMessagePart[];
+
+const toWorkflowLaunchDecision = (
+  request: SessionStartFlowRequest,
+  decision: ResolvedSessionStartDecision,
+): WorkflowLaunchDecision => {
+  if (decision.startMode === "reuse") {
+    const reuse: Extract<WorkflowLaunchDecision, { startMode: "reuse" }> = {
+      startMode: "reuse",
+      sourceSession: decision.sourceSession,
+    };
+    if (decision.speed !== undefined) reuse.speed = decision.speed;
+    return reuse;
+  }
+  const { runtimeKind } = decision.selectedModel;
+  if (!runtimeKind) throw new Error("Session start requires a selected runtime and model.");
+  const selectedModel = { ...decision.selectedModel, runtimeKind };
+  if (decision.startMode === "fork")
+    return { startMode: "fork", sourceSession: decision.sourceSession, selectedModel };
+  const fresh: WorkflowLaunchDecision = { startMode: "fresh", selectedModel };
+  if (request.targetWorkingDirectory) fresh.targetWorkingDirectory = request.targetWorkingDirectory;
+  return fresh;
+};
+
 export class WorkflowLaunchFailure extends Error {
-  constructor(readonly outcome: WorkflowLaunchSnapshot) {
-    const message =
-      outcome.failure?.message ??
-      outcome.skipReason ??
-      (outcome.phase === "canceled"
-        ? "Workflow launch was canceled."
-        : "Workflow launch did not complete.");
-    const cleanup = outcome.failure?.cleanupErrors ?? [];
-    const guidance =
-      outcome.acceptance === "unknown"
-        ? " Runtime acceptance is unknown. Inspect the saved session before sending another instruction."
-        : "";
-    super(message + (cleanup.length ? ` Cleanup failed: ${cleanup.join("; ")}` : "") + guidance);
+  constructor(readonly outcome: WorkflowLaunchResult) {
+    super(workflowLaunchFailureMessage(outcome));
     this.name = "WorkflowLaunchFailure";
   }
 }
 
-/** Keep the attempt ID for inspection after reconnect. This error does not permit another send. */
-export class WorkflowLaunchObservationError extends Error {
-  constructor(
-    readonly launch: WorkflowLaunchRef,
-    readonly transportCause: Error,
-    readonly readCause?: Error,
-  ) {
-    super(
-      `${transportCause.message}. Inspect workflow launch '${launch.launchAttemptId}' after reconnect before sending another instruction.`,
-      { cause: transportCause },
-    );
-    this.name = "WorkflowLaunchObservationError";
-  }
-}
+const workflowLaunchFailureMessage = (outcome: WorkflowLaunchResult): string => {
+  if (outcome.failure) return sessionLaunchFailureMessage(outcome.failure);
+  if (outcome.skipReason !== undefined) return outcome.skipReason;
+  if (outcome.status === "canceled") return "Workflow launch was canceled.";
+  return "Workflow launch returned no saved session.";
+};
+
+/** The session notice of a failure that the host showed in the session and notified. */
+export const hostLaunchNoticeId = (cause: Error): string | undefined =>
+  cause instanceof WorkflowLaunchFailure ? cause.outcome.failure?.noticeId : undefined;

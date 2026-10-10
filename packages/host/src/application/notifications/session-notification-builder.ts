@@ -10,7 +10,7 @@ import type {
 import { agentSessionRefKey } from "@openducktor/core";
 import { pendingInputIdentity } from "./pending-input-identity";
 
-type SessionNotificationSource = {
+export type SessionNotificationSource = {
   association: AgentSessionScope | null;
   snapshot: AgentSessionLiveSnapshot;
 };

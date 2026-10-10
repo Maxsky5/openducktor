@@ -1,5 +1,4 @@
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
-import { messageSubmissionRejected } from "../../ports/agent-session-send-error";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
@@ -17,7 +16,7 @@ import {
   type AgentSessionResumeNextActionOverrides,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import { InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
@@ -63,6 +62,7 @@ import {
   requireClaudeHostServiceRuntime,
   toClaudeLiveSessionRef,
 } from "./claude-live-session-runtime-guards";
+
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export { createClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export type {
@@ -71,6 +71,7 @@ export type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
+
 const preAdmissionNextActionOverrides = (cause: unknown): AgentSessionResumeNextActionOverrides =>
   cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
     ? { continuation_failed: "Send a new message to continue." }
@@ -384,60 +385,45 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
             ),
           ),
-        sendUserMessage: (input) =>
+        sendUserMessage: (input, options) =>
           Effect.suspend(() => {
             let acceptedMessage: AcceptedAgentUserMessage | null = null;
-            let enteredSend = false;
             return requireSessionWorkingDirectory(input, "send-user-message").pipe(
               Effect.flatMap(() =>
                 eventCoordinator.runControlMutation(
-                  Effect.suspend(() => {
-                    enteredSend = true;
-                    return Effect.gen(function* () {
-                      const event = yield* service
-                        .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId)
-                        .pipe(
-                          Effect.mapError(
-                            sessionError(
-                              "claude-live-session.send-user-message",
-                              input.externalSessionId,
-                            ),
+                  Effect.gen(function* () {
+                    const output = yield* service
+                      .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId, options)
+                      .pipe(
+                        Effect.mapError(
+                          sessionError(
+                            "claude-live-session.send-user-message",
+                            input.externalSessionId,
                           ),
-                        );
-                      const accepted = yield* parseClaudeLiveSessionOutput(
-                        acceptedAgentUserMessageSchema,
-                        event,
-                        "claude-live-session.normalize-user-message",
+                        ),
                       );
-                      acceptedMessage = accepted;
-                      const session = yield* requireSessionContext(input.externalSessionId);
-                      return yield* commit("claude-live-session.publish-user-message", () => {
-                        state.reactivateSession(input);
-                        return {
-                          value: accepted,
-                          changes: state.applyEvent(
-                            session,
-                            toClaudeRuntimeUserMessageEvent(accepted),
-                          ),
-                        };
-                      });
+                    const accepted = yield* parseClaudeLiveSessionOutput(
+                      acceptedAgentUserMessageSchema,
+                      output,
+                      "claude-live-session.normalize-user-message",
+                    );
+                    acceptedMessage = accepted;
+                    const session = yield* requireSessionContext(input.externalSessionId);
+                    return yield* commit("claude-live-session.publish-user-message", () => {
+                      state.reactivateSession(input);
+                      return {
+                        value: accepted,
+                        changes: state.applyEvent(
+                          session,
+                          toClaudeRuntimeUserMessageEvent(accepted),
+                        ),
+                      };
                     });
                   }),
                 ),
               ),
               Effect.mapError((cause) =>
-                acceptedMessage
-                  ? new AgentSessionMessageAcceptedError(
-                      {
-                        sessionRef: toClaudeLiveSessionRef(input),
-                        acceptedMessage,
-                        stage: "live_update",
-                      },
-                      cause,
-                    )
-                  : enteredSend
-                    ? cause
-                    : messageSubmissionRejected("claude-live-session.prepare-send")(cause),
+                acceptedMessage ? messageAcceptedFailure(input, acceptedMessage)(cause) : cause,
               ),
             );
           }),

@@ -161,9 +161,6 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     readSessionHistory: async () => [],
     loadAgentSessionHistory: async () => null,
     loadAgentSessionContext: async () => undefined,
-    startAgentSession: async () => {
-      throw new Error("Not configured");
-    },
     sendAgentMessage: async () => null,
     stopAgentSession: async () => undefined,
     continueInterruptedTurn: async () => undefined,

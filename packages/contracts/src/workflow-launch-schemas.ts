@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
-import { sessionLaunchStateSchema } from "./session-launch-schemas";
-import { agentRoleSchema } from "./agent-workflow-schemas";
+import { sessionLaunchResultSchema } from "./session-launch-schemas";
+import { agentRoleSchema, agentSessionStartModeSchema } from "./agent-workflow-schemas";
 import { agentSessionControlSendInputSchema } from "./agent-session-control-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
 import { AUTOPILOT_ACTION_IDS } from "./config-schemas";
@@ -22,7 +22,14 @@ export type SessionLaunchActionId = (typeof sessionLaunchActionIds)[number];
 
 export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
   z
-    .object({ startMode: z.literal("fresh"), selectedModel: agentSessionModelSelectionSchema })
+    .object({
+      startMode: z.literal("fresh"),
+      selectedModel: agentSessionModelSelectionSchema,
+      /**
+       * The fresh session must start in this directory. The host accepts only the task worktree.
+       */
+      targetWorkingDirectory: z.string().min(1).optional(),
+    })
     .strict(),
   z
     .object({
@@ -42,7 +49,6 @@ export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
 ]);
 export const workflowLaunchRequestSchema = z
   .object({
-    launchAttemptId: z.string().min(1),
     workspaceId: z.string().min(1),
     repoPath: z.string().min(1),
     taskId: z.string().min(1),
@@ -73,30 +79,18 @@ export const workflowLaunchRequestSchema = z
         .strict(),
     ]),
     targetBranch: gitTargetBranchSchema.optional(),
-    targetWorkingDirectory: z.string().min(1).optional(),
     beforeStartAction: z
       .object({ action: z.literal("human_request_changes"), note: z.string() })
       .strict()
       .optional(),
-    queueIfBusy: z.boolean().optional(),
   })
   .strict();
 export type WorkflowLaunchRequest = z.infer<typeof workflowLaunchRequestSchema>;
 export type WorkflowLaunchDecision = z.infer<typeof workflowLaunchDecisionSchema>;
-export const workflowLaunchRefSchema = workflowLaunchRequestSchema.pick({
-  workspaceId: true,
-  repoPath: true,
-  taskId: true,
-  launchAttemptId: true,
-});
-export type WorkflowLaunchRef = z.infer<typeof workflowLaunchRefSchema>;
-export const workflowLaunchReadSchema = workflowLaunchRefSchema.extend({
-  launchAttemptId: z.string().min(1).optional(),
-});
-export type WorkflowLaunchRead = z.infer<typeof workflowLaunchReadSchema>;
-export const workflowLaunchSnapshotSchema = sessionLaunchStateSchema.extend({
+export const workflowLaunchResultSchema = sessionLaunchResultSchema.extend({
   taskId: z.string(),
   role: agentRoleSchema,
-  completedPreStartActions: z.array(z.enum(["human_request_changes", "target_branch"])),
+  /** The start mode that the host chose. It is absent when the launch ended before that choice. */
+  startMode: agentSessionStartModeSchema.optional(),
 });
-export type WorkflowLaunchSnapshot = z.infer<typeof workflowLaunchSnapshotSchema>;
+export type WorkflowLaunchResult = z.infer<typeof workflowLaunchResultSchema>;

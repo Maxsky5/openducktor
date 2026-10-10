@@ -22,8 +22,6 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const client = useMemo(
     () => ({
       agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, host.agentSessionWorkflowLaunch),
-      agentSessionWorkflowLaunchRead: host.agentSessionWorkflowLaunchRead,
-      agentSessionWorkflowLaunchRecover: host.agentSessionWorkflowLaunchRecover,
     }),
     [queryClient],
   );

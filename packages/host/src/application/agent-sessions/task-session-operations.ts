@@ -146,42 +146,47 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             runtimeKind: parent.runtimeKind,
             workingDirectory: parent.workingDirectory,
           };
-          yield* progress.checkCanceled();
-          const summary = yield* runtime.forkSession(runtimeInput);
-          const stored = yield* Effect.result(
+          // An interruption must not lose the forked identity, so cleanup can stop the session.
+          return yield* Effect.uninterruptible(
             Effect.gen(function* () {
-              yield* progress.created(summary);
               yield* progress.checkCanceled();
-              const saved = yield* storeWorkflowSession(writes.saveSession, {
-                repoPath,
-                sessionScope: scope,
-                model: input.model,
-                selectedModel: undefined,
-                summary,
-              });
-              progress.saved();
-              return { session: summary, publish: saved.publish };
+              const summary = yield* runtime.forkSession(runtimeInput);
+              const stored = yield* Effect.result(
+                Effect.gen(function* () {
+                  yield* progress.created(summary);
+                  yield* progress.checkCanceled();
+                  const saved = yield* storeWorkflowSession(writes.saveSession, {
+                    repoPath,
+                    sessionScope: scope,
+                    model: input.model,
+                    selectedModel: undefined,
+                    summary,
+                  });
+                  progress.saved();
+                  return { session: summary, publish: saved.publish };
+                }),
+              );
+              if (stored._tag === "Success") return stored.success;
+              if (stored.failure instanceof TaskSessionOwnershipCommittedError)
+                return yield* Effect.fail(stored.failure);
+              const cleaned = yield* Effect.result(
+                progress.stop(toControlSessionRef(repoPath, summary)),
+              );
+              if (cleaned._tag === "Failure")
+                return yield* new HostOperationError({
+                  operation: "task-workflow-session.store-control-result",
+                  message: stored.failure.message + " Cleanup failed: " + cleaned.failure.message,
+                  cause: { storeFailure: stored.failure, cleanupFailure: cleaned.failure },
+                  details: {
+                    repoPath,
+                    externalSessionId: summary.externalSessionId,
+                    storeFailure: stored.failure,
+                    cleanupFailure: cleaned.failure,
+                  },
+                });
+              return yield* Effect.fail(stored.failure);
             }),
           );
-          if (stored._tag === "Success") return stored.success;
-          if (stored.failure instanceof TaskSessionOwnershipCommittedError)
-            return yield* Effect.fail(stored.failure);
-          const cleaned = yield* Effect.result(
-            progress.stop(toControlSessionRef(repoPath, summary)),
-          );
-          if (cleaned._tag === "Failure")
-            return yield* new HostOperationError({
-              operation: "task-workflow-session.store-control-result",
-              message: stored.failure.message + " Cleanup failed: " + cleaned.failure.message,
-              cause: { storeFailure: stored.failure, cleanupFailure: cleaned.failure },
-              details: {
-                repoPath,
-                externalSessionId: summary.externalSessionId,
-                storeFailure: stored.failure,
-                cleanupFailure: cleaned.failure,
-              },
-            });
-          return yield* Effect.fail(stored.failure);
         }),
       );
     },

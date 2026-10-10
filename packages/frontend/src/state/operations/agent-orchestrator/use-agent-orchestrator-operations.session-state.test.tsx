@@ -206,7 +206,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [persistedSessionFixture] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -372,7 +371,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [storedSession] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -542,7 +540,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [persistedSessionFixture] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -619,7 +616,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [codexRecord] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -698,7 +694,6 @@ describe("use-agent-orchestrator-operations session state", () => {
               ? [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }]
               : [{ taskId: "task-1", agentSessions: [] }],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -801,7 +796,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [persistedSessionFixture, secondRecord] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -913,7 +907,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [persistedSessionFixture] },
           ],
         },
-        {},
         liveStream.portOverrides,
       ),
     });
@@ -963,7 +956,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             { taskId: "task-1", agentSessions: [persistedSessionFixture] },
           ],
         },
-        {},
         {
           ...liveStream.portOverrides,
           agentSessionLiveLoadContext: async (input) => {

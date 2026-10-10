@@ -1,23 +1,21 @@
-import type { AgentSessionRecord, WorkflowLaunchSnapshot } from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkflowLaunchResult } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { toPersistedSessionRecord, toPersistedSessionView } from "../support/persistence";
-import { applyAgentSessionLiveDelta } from "./agent-session-live-projection";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { replaceAgentSession } from "@/state/agent-session-collection";
 
-/** Present saved ownership and native activity without waiting for task-query delivery. */
+/**
+ * Shows the saved session before the task query returns it. A new session from a completed launch
+ * starts as live. The live stream owns all later activity.
+ */
 export const projectWorkflowLaunch = (
   store: AgentSessionsStore,
   queryClient: QueryClient,
-  outcome: WorkflowLaunchSnapshot,
+  outcome: WorkflowLaunchResult,
 ): void => {
-  if (
-    !outcome.ownershipSaved ||
-    !outcome.session ||
-    store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath
-  )
+  if (!outcome.session || store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath)
     return;
   const current = store.getSessionSnapshot(outcome.session) ?? undefined;
   const bound = current?.sessionAssociation.kind === "workflow";
@@ -42,17 +40,9 @@ export const projectWorkflowLaunch = (
     );
   const session = toPersistedSessionView({ taskId: outcome.taskId, record, current });
   if (bound) session.selectedModel = current.selectedModel;
-  if (!current && outcome.phase === "completed") {
+  if (!current && outcome.status === "completed") {
     session.livePresence = "present";
     session.status = outcome.session.status;
   }
-  store.setSessionCollection((collection) => {
-    const next = replaceAgentSession(collection, session);
-    return outcome.liveSession && current?.livePresence !== "present"
-      ? applyAgentSessionLiveDelta({
-          current: next,
-          envelope: { type: "session_upsert", session: outcome.liveSession },
-        })
-      : next;
-  });
+  store.setSessionCollection((collection) => replaceAgentSession(collection, session));
 };

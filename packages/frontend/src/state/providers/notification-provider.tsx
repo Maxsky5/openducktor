@@ -134,6 +134,9 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           input.inAppFeedbackHandled,
         );
       },
+      markInAppFeedbackHandled(errorId) {
+        runtime.markInAppFeedbackHandled(errorId);
+      },
       reportFailure(_cause, input) {
         console.error("Session start notification failed.", {
           launchAttemptId: input.launchAttemptId,

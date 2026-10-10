@@ -7,7 +7,6 @@ import {
   type WorkspaceAgentStudioStateAction,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
 import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
@@ -50,7 +49,6 @@ const createRunSessionStartWorkflow = (
   overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
 ) =>
   createSessionStartWorkflowRunner({
-    queryClient: new QueryClient(),
     workspaceId: "workspace-1",
     startAgentSession: async () => sessionIdentity("session-new"),
     sendAgentMessage: async () => null,

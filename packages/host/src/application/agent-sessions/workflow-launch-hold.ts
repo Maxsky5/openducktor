@@ -1,10 +1,4 @@
 import type { AgentSessionLiveRef, AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { Effect } from "effect";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
-import {
-  AgentSessionMessageAcceptedError,
-  AgentSessionMessageRejectedError,
-} from "../../ports/agent-session-send-error";
 import { agentSessionRefKey } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
@@ -17,7 +11,10 @@ type HeldLaunch = {
   deferredIdle: Map<"session_idle" | "session_status" | "session_finished", TranscriptChange>;
 };
 
-/** Idle startup events must not end the first turn or hide a pending input. */
+/**
+ * Idle startup events must not end the first turn or hide a pending input. Errors pass through.
+ * The launch releases the hold when it settles and then publishes the current snapshot.
+ */
 export const createWorkflowLaunchHold = () => {
   const holds = new Map<string, HeldLaunch>();
   return {
@@ -45,10 +42,6 @@ export const createWorkflowLaunchHold = () => {
       const key = agentSessionRefKey(event.sessionRef);
       const held = holds.get(key);
       if (!held) return change;
-      if (event.type === "session_error" || event.type === "turn_error") {
-        holds.delete(key);
-        return change;
-      }
       if (
         event.type === "session_idle" ||
         event.type === "session_finished" ||
@@ -75,23 +68,3 @@ export const createWorkflowLaunchHold = () => {
         : snapshot,
   };
 };
-
-// A failed first chat message must also release a hold from session preparation.
-export const releaseHoldAfterSendFailure = (
-  release: Effect.Effect<void, HostError>,
-  cause: HostError,
-): Effect.Effect<never, HostError> =>
-  Effect.gen(function* () {
-    const released = yield* Effect.result(release);
-    if (released._tag === "Success") return yield* Effect.fail(cause);
-    const failure = new HostOperationError({
-      operation: "agent-session.send-message.cleanup",
-      message: cause.message + " Starting state cleanup failed: " + released.failure.message,
-      cause: { sendFailure: cause, cleanupFailure: released.failure },
-    });
-    if (cause instanceof AgentSessionMessageAcceptedError)
-      return yield* Effect.fail(new AgentSessionMessageAcceptedError(cause.failure, failure));
-    if (cause instanceof AgentSessionMessageRejectedError)
-      return yield* Effect.fail(new AgentSessionMessageRejectedError(failure));
-    return yield* Effect.fail(failure);
-  });

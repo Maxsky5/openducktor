@@ -41,11 +41,13 @@ export const workflowClosedOccurrence = (suffix: string): NotificationOccurrence
 
 export const createDeliveryAdapters = () => {
   const deliverInApp = mock(async () => {});
+  const dismissInApp = mock((_occurrenceId: string) => {});
   const playSound = mock(async () => {});
   return {
     deliverInApp,
+    dismissInApp,
     playSound,
-    inApp: { deliver: deliverInApp },
+    inApp: { dismiss: dismissInApp, deliver: deliverInApp },
     sound: { play: playSound },
   };
 };

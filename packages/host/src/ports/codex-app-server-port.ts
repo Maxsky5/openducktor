@@ -1,9 +1,10 @@
 import { Context, type Effect } from "effect";
 import type { CodexAppServerRuntimeStreamEvent } from "@openducktor/contracts";
-import type {
-  HostOperationErrorAggregate,
-  HostResourceErrorAggregate,
-  HostValidationErrorAggregate,
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  type HostResourceErrorAggregate,
+  type HostValidationErrorAggregate,
 } from "../effect/host-errors";
 import type {
   CodexAppServerClientRequest,
@@ -14,6 +15,12 @@ import type {
   CodexAppServerRespondError,
   CodexAppServerRespondResult,
 } from "./codex-app-server-protocol";
+
+/** Codex answered the request with a JSON-RPC error, so it did not run the request. */
+export class CodexAppServerRpcError extends HostOperationError<{
+  runtimeId: string;
+  method: CodexAppServerRequestMethod;
+}> {}
 
 export type CodexAppServerError =
   | HostOperationErrorAggregate

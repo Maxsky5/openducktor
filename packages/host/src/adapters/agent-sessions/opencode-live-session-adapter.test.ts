@@ -2,11 +2,7 @@ import { unexpectedSessionImport } from "../../test-support/session-import-test-
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
-import {
-  OpenCodeMessageRejectedError,
-  type PrepareOpencodeSessionRuntime,
-} from "@openducktor/adapters-opencode-sdk";
-import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
+import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
@@ -29,46 +25,6 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
-  test.each(["rejected", "unknown"] as const)(
-    "preserves %s acceptance for a failed OpenCode send",
-    async (acceptance) => {
-      const cause = new Error("OpenCode send failed");
-      const error = acceptance === "rejected" ? new OpenCodeMessageRejectedError(cause) : cause;
-      const send = Promise.withResolvers<void>();
-      const harness = createRuntimeHarness({
-        sendUserMessageBarrier: send.promise,
-        onSendUserMessage: () => send.reject(error),
-      });
-      const prepared = await Effect.runPromise(
-        createOpenCodeLiveSessionAdapterPreparer({
-          liveSessionLifecycle: createLifecycle([]),
-          prepareRuntime: harness.prepareRuntime,
-        })(runtime, ignoreObservationLoss),
-      );
-      try {
-        const result = await Effect.runPromise(
-          Effect.result(
-            prepared.adapter.sendUserMessage({
-              ...ref,
-              sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-              parts: [{ kind: "text", text: "Continue implementation" }],
-            }),
-          ),
-        );
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure instanceof AgentSessionMessageRejectedError).toBe(
-            acceptance === "rejected",
-          );
-          expect(result.failure.message).toContain(cause.message);
-          expect(result.failure.cause).toBe(error);
-        }
-      } finally {
-        await Effect.runPromise(prepared.discard());
-      }
-    },
-  );
-
   test("loads every OpenCode session for task matching", async () => {
     const harness = createRuntimeHarness({
       sessionSources: [

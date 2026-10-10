@@ -17,6 +17,7 @@ Rules:
 - The store is the renderer projection of the latest host snapshot and ordered changes. It is not the source of runtime activity, pending input, context, or routes.
 - `useAgentOrchestratorOperations` owns the commit that writes the store and, when needed, durable records.
 - A repository refresh commits through this store once. Do not add a second session collection.
+- The store keeps the `policyNotice` and `launchFailure` of each live snapshot. It puts them back into the session messages after each commit. It inserts a launch failure in timestamp order.
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
 - All reads and writes target the active repository. A session outside the active collection resolves to no session.
@@ -340,9 +341,9 @@ Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent
 
 ## Session actions
 
-Files: `handlers/start-session.ts`, `handlers/session-actions.ts`, `handlers/send-agent-message.ts`, `handlers/stop-session.ts`, `handlers/session-model-actions.ts`, `handlers/pending-input-actions.ts`, and `handlers/public-operations.ts`.
+Files: `handlers/session-actions.ts`, `handlers/send-agent-message.ts`, `handlers/stop-session.ts`, `handlers/session-model-actions.ts`, `handlers/pending-input-actions.ts`, and `handlers/public-operations.ts`.
 
-Owns launch requests, interactive send, stop, model update, pending-input replies, and presentation.
+Owns interactive send, stop, model update, pending-input replies, and presentation. `features/session-start` owns launch requests.
 
 The host owns complete workflow execution.
 
@@ -360,8 +361,8 @@ Rules:
 - Start requests capture workspace and task identity before host admission.
 - The host saves ownership before the first instruction and preserves it after a send or publication failure.
 - Runtime events cannot attach an unrelated root session.
-- The runner presents the host result and offers only host-authorized recovery.
-- Kanban and the task content of the Sessions page supply local recovery presentation before notification delivery.
+- The runner presents the host result. If the runtime did not get or rejected the first instruction, the runner offers Retry. Retry sends the returned instruction through the shared send handler. Other send failures show the host error without Retry.
+- Kanban and the task content of the Sessions page supply the Retry toast before notification delivery. The runner then marks the `failure.noticeId` as handled, so the host notification skips its in-app toast. A composer start restores the draft in the new session instead.
 - Manual starts and Autopilot use the same host launch service.
 - Sessionless send uses the same start-availability rule as an explicit start.
 - The start modal reads runtime definitions from runtime availability context.

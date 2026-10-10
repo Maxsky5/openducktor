@@ -33,6 +33,7 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
   AgentSessionControlContinueInterruptedTurnInput,
+  AgentSessionSendOptions,
   AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
@@ -49,6 +50,15 @@ export type AgentSessionLiveStateService = {
     ref: AgentSessionLiveRef,
     records: TaskAgentSessions,
   ) => Effect.Effect<void, HostError>;
+  /**
+   * Keeps a failed launch in the live session snapshot until the next accepted message. The
+   * snapshot update shows it in the session and raises a session error notification. Returns the
+   * notice id, or null when the session is not live and nothing can show the failure.
+   */
+  readonly reportLaunchFailure: (
+    ref: AgentSessionLiveRef,
+    message: string,
+  ) => Effect.Effect<string | null, HostError>;
   readonly holdWorkflowLaunch: (
     ref: AgentSessionLiveRef,
     held: boolean,
@@ -90,6 +100,7 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
     input: AgentSessionControlSendInput,
+    options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,

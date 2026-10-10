@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { TaskCard, TaskWorktreeSummary, WorkflowLaunchSnapshot } from "@openducktor/contracts";
+import type { TaskCard, TaskWorktreeSummary, WorkflowLaunchResult } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
@@ -112,6 +112,7 @@ const createNotificationContext = (
   sessionStartNotifications: {
     publishSessionStarted: () => {},
     publishSessionError: async () => true,
+    markInAppFeedbackHandled: () => {},
     reportFailure: () => {},
   },
   ...overrides,
@@ -134,9 +135,6 @@ const agentOperations: AgentOperationsContextValue = {
   },
   loadAgentSessionHistory: async () => null,
   loadAgentSessionContext: async () => {},
-  startAgentSession: async () => {
-    throw new Error("Unexpected session start.");
-  },
   sendAgentMessage: async () => null,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
@@ -155,35 +153,30 @@ describe("AutopilotProvider", () => {
       let worktree: TaskWorktreeSummary | null = null;
       bridge.client.taskWorktreeGet = mock(async () => worktree);
       bridge.client.agentSessionWorkflowLaunch = mock(
-        async (request): Promise<WorkflowLaunchSnapshot> => {
+        async (request): Promise<WorkflowLaunchResult> => {
           worktree = { workingDirectory: "/worktrees/task-1" };
-          return {
-            launchAttemptId: request.launchAttemptId,
+          const base: WorkflowLaunchResult = {
             workspaceId: request.workspaceId,
             repoPath: request.repoPath,
             taskId: request.taskId,
             role: "build",
-            phase,
-            acceptance: phase === "completed" ? "accepted" : "not_submitted",
-            ownershipSaved: phase === "completed",
-            completedPreStartActions: [],
-            ...(phase === "completed"
-              ? {
-                  session: {
-                    externalSessionId: "native",
-                    runtimeKind: "codex",
-                    workingDirectory: "/worktrees/task-1",
-                    startedAt: "2026-10-08T00:00:00Z",
-                    status: "idle",
-                  } as const,
-                }
-              : {
-                  failure: {
-                    message: "Start failed after worktree creation",
-                    stage: "session",
-                    cleanupErrors: [],
-                  } as const,
-                }),
+            status: phase,
+            startMode: "fresh",
+          };
+          if (phase === "failed")
+            return {
+              ...base,
+              failure: { message: "Start failed after worktree creation", cleanupErrors: [] },
+            };
+          return {
+            ...base,
+            session: {
+              externalSessionId: "native",
+              runtimeKind: "codex",
+              workingDirectory: "/worktrees/task-1",
+              startedAt: "2026-10-08T00:00:00Z",
+              status: "idle",
+            },
           };
         },
       );

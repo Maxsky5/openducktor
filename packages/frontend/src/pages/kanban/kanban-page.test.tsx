@@ -166,6 +166,7 @@ const notificationContextValue = {
   sessionStartNotifications: {
     publishSessionStarted: publishSessionStartedMock,
     publishSessionError: publishSessionErrorMock,
+    markInAppFeedbackHandled: () => {},
     reportFailure: reportSessionNotificationFailureMock,
   },
 } satisfies NotificationContextValue;
@@ -397,7 +398,6 @@ const createAgentOperationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: async () => [],
   loadAgentSessionHistory: async () => null,
   loadAgentSessionContext: async () => undefined,
-  startAgentSession: startAgentSessionMock,
   sendAgentMessage: sendAgentMessageMock,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
@@ -854,23 +854,16 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
     const launchClient = createWorkflowLaunchClient({
-      queryClient: createQueryClient(),
       workspaceId: "repo",
       startAgentSession: startAgentSessionMock,
       sendAgentMessage: sendAgentMessageMock,
     });
     const savedLaunch = hostClient.agentSessionWorkflowLaunch;
-    const savedRead = hostClient.agentSessionWorkflowLaunchRead;
-    const savedRecover = hostClient.agentSessionWorkflowLaunchRecover;
     hostClient.agentSessionWorkflowLaunch = launchClient.agentSessionWorkflowLaunch;
-    hostClient.agentSessionWorkflowLaunchRead = launchClient.agentSessionWorkflowLaunchRead;
-    hostClient.agentSessionWorkflowLaunchRecover = launchClient.agentSessionWorkflowLaunchRecover;
     toastSpies = [
       {
         mockRestore: () => {
           hostClient.agentSessionWorkflowLaunch = savedLaunch;
-          hostClient.agentSessionWorkflowLaunchRead = savedRead;
-          hostClient.agentSessionWorkflowLaunchRecover = savedRecover;
         },
       },
       spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
@@ -1327,45 +1320,42 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest("kickoff send failure publishes a session error after session start", async () => {
-    sendAgentMessageMock.mockImplementationOnce(async () => {
-      throw new Error("config unavailable");
-    });
+  kanbanTest(
+    "kickoff send failure offers Retry and leaves the session error to the host",
+    async () => {
+      sendAgentMessageMock.mockImplementationOnce(async () => {
+        throw new Error("config unavailable");
+      });
 
-    const renderer = await renderPage();
+      const renderer = await renderPage();
 
-    await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
-    });
+      await act(async () => {
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      });
 
-    await confirmSessionStartModal(renderer, {
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
+      await confirmSessionStartModal(renderer, {
+        modelId: "openai/gpt-5",
+        profileId: "build-agent",
+        variant: "default",
+      });
 
-    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
-    expect(renderer.getLocation()).toBe(
-      "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fsession-1",
-    );
-    expect(publishSessionErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: "TASK-123",
-        role: "build",
-        session: sessionIdentity("session-1"),
-      }),
-      "config unavailable",
-    );
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "First message failed for TASK-123.",
-      expect.objectContaining({ action: expect.objectContaining({ label: "Retry message" }) }),
-    );
+      expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+      expect(renderer.getLocation()).toBe(
+        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fsession-1",
+      );
+      // The host reports the failed launch in the saved session.
+      expect(publishSessionErrorMock).not.toHaveBeenCalled();
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Session started, but the first message failed.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Retry message" }) }),
+      );
 
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
 
   kanbanTest("session start failure publishes one task-level session error", async () => {
     startAgentSessionMock.mockImplementationOnce(async () => {
@@ -1386,19 +1376,14 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitForMockCall(startAgentSessionMock);
     expect(publishSessionErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: "TASK-123", role: "build", inAppFeedbackHandled: true }),
+      expect.objectContaining({ taskId: "TASK-123", role: "build" }),
       "Worktree path already exists for task TASK-123",
     );
     expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty("session");
-    expect(toastErrorMock).toHaveBeenCalledTimes(1);
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Workflow launch failed for TASK-123.",
-      expect.objectContaining({
-        description: "Worktree path already exists for task TASK-123",
-        id: expect.any(String),
-        action: undefined,
-      }),
+    expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty(
+      "inAppFeedbackHandled",
     );
+    expect(toastErrorMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
 
     await act(async () => {

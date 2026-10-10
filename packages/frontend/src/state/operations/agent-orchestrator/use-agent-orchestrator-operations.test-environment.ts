@@ -36,31 +36,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
         taskWorktreeGet: async () => ({ workingDirectory: "/tmp/repo/worktree" }),
         workspaceGetRepoConfig: async () => repoConfig,
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-        agentSessionWorkflowLaunch: async (input) => ({
-          launchAttemptId: input.launchAttemptId,
-          workspaceId: input.workspaceId,
-          repoPath: input.repoPath,
-          taskId: input.taskId,
-          role: "build",
-          phase: "completed",
-          acceptance: "not_submitted",
-          ownershipSaved: true,
-          model:
-            input.policy.kind === "manual" && input.policy.decision.startMode !== "reuse"
-              ? input.policy.decision.selectedModel
-              : undefined,
-          completedPreStartActions: [],
-          session: {
-            externalSessionId: "session-1",
-            runtimeKind:
-              input.policy.kind === "manual" && input.policy.decision.startMode !== "reuse"
-                ? input.policy.decision.selectedModel.runtimeKind
-                : "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-            startedAt: "2026-02-22T08:00:00.000Z",
-            status: "idle",
-          },
-        }),
       },
     }),
   );
