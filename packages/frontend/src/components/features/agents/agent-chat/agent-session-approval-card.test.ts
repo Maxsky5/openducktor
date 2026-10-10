@@ -42,6 +42,40 @@ describe("resolveApprovalReplyOutcomes", () => {
 });
 
 describe("AgentSessionApprovalCard", () => {
+  test("shows lasting project scope and saved rules before sending always", async () => {
+    const onReply = mock(async () => {});
+    const view = render(
+      createElement(AgentSessionApprovalCard, {
+        request: {
+          ...approvalRequest,
+          supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
+          persistentGrant: {
+            scope: "project",
+            projectDirectory: "/repo",
+            rules: [{ action: "shell", resource: "git status*" }],
+          },
+          rejectsAllPendingApprovals: true,
+        },
+        runtimeSupportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
+        onReply,
+      }),
+    );
+    try {
+      expect(view.getByText(/future sessions in/).textContent).toContain("/repo");
+      expect(view.getByText("shell: git status*")).toBeTruthy();
+      expect(
+        view.getByText("Reject cancels all pending approvals in this conversation."),
+      ).toBeTruthy();
+      expect(onReply).not.toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(view.getByRole("button", { name: "Allow for project" }));
+      });
+      expect(onReply).toHaveBeenCalledWith("approval-1", "approve_always");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("collapse keeps feedback visible and preserves reply availability", async () => {
     const onReply = mock(async () => {});
     const props = {

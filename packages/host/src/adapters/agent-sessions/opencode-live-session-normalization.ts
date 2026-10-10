@@ -1,13 +1,18 @@
-import type { OpencodeSessionContextUsage } from "@openducktor/adapters-opencode-sdk";
+import type {
+  OpencodeSessionContextUsage,
+  OpencodeSessionRuntimeSignal,
+} from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
   type AgentSessionLiveRef,
+  type AgentSessionLiveSnapshot,
   agentSessionContextUsageSchema,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
+import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 
 export type OpenCodeRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "opencode";
@@ -46,6 +51,44 @@ export const toSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => (
   workingDirectory: ref.workingDirectory,
   externalSessionId: ref.externalSessionId,
 });
+
+export const toRuntimeSignalChanges = (
+  signal: Extract<OpencodeSessionRuntimeSignal, { type: "catalog_invalidated" | "runtime_notice" }>,
+  snapshots: readonly AgentSessionLiveSnapshot[],
+  catalogDirectories: ReadonlyMap<string, ReadonlySet<string>>,
+): AgentSessionLiveAdapterChange[] => {
+  const repoPaths = new Set(
+    snapshots
+      .filter(
+        (snapshot) =>
+          signal.type === "runtime_notice" ||
+          !signal.workingDirectory ||
+          snapshot.ref.workingDirectory === signal.workingDirectory,
+      )
+      .map((snapshot) => snapshot.ref.repoPath),
+  );
+  if (signal.type === "catalog_invalidated")
+    for (const [repoPath, directories] of catalogDirectories)
+      if (!signal.workingDirectory || directories.has(signal.workingDirectory))
+        repoPaths.add(repoPath);
+  return [...repoPaths].map((repoPath): AgentSessionLiveAdapterChange => {
+    if (signal.type === "runtime_notice")
+      return {
+        type: "runtime_notice",
+        repoPath,
+        runtimeKind: "opencode",
+        message: signal.message,
+      };
+    const change = {
+      type: "catalog_invalidated" as const,
+      repoPath,
+      runtimeKind: "opencode" as const,
+    };
+    return signal.workingDirectory
+      ? { ...change, workingDirectory: signal.workingDirectory }
+      : change;
+  });
+};
 
 export const parseOutput = <Schema extends z.ZodType, Input>(
   schema: Schema,

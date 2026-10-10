@@ -16,6 +16,28 @@ const parseUserMessageArticle = (html: string) => {
 };
 
 describe("AgentChatMessageCard messages", () => {
+  test.each([
+    { prefix: "System prompt:\n\n", label: "Show system prompt" },
+    { prefix: "Instructions update:\n\n", label: "Show instruction update" },
+  ])("keeps $label collapsed with its own label", ({ prefix, label }) => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "instructions",
+          role: "system",
+          content: `${prefix}Instructions from the runtime.`,
+          timestamp: "2026-10-09T10:00:00Z",
+        },
+      }),
+    );
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const details = document.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(false);
+    expect(details?.querySelector("summary")?.textContent?.trim()).toBe(label);
+    expect(details?.textContent).toContain("Instructions from the runtime.");
+  });
+
   test("shows only the runtime when Codex history omits the turn model", () => {
     const [message] = historyToChatMessages(
       [
@@ -66,7 +88,6 @@ describe("AgentChatMessageCard messages", () => {
             variant: "high",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -108,7 +129,6 @@ describe("AgentChatMessageCard messages", () => {
             claude: "sonnet",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -134,7 +154,6 @@ describe("AgentChatMessageCard messages", () => {
           },
         },
         ...createCodexMessageCardTestProps(),
-        sessionAgentColors: {},
       }),
     );
 
@@ -156,7 +175,6 @@ describe("AgentChatMessageCard messages", () => {
             profileId: "planner-main",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -164,7 +182,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).not.toContain("border-l-2");
   });
 
-  test("renders assistant footer color from message agent metadata", () => {
+  test("uses the runtime accent for an assistant with a custom profile", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -180,14 +198,10 @@ describe("AgentChatMessageCard messages", () => {
             modelId: "gpt-5.3-codex",
           },
         },
-        sessionAgentColors: {
-          "Hephaestus (Deep Agent)": "#2f6fed",
-          "Ares (Legacy Agent)": "#f97316",
-        },
       }),
     );
 
-    expect(html).toContain("background-color:#2f6fed");
+    expect(html).toContain("background-color:var(--odt-runtime-accent-opencode)");
     expect(html).not.toContain("background-color:#f97316");
   });
 
@@ -205,7 +219,6 @@ describe("AgentChatMessageCard messages", () => {
             isFinal: true,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -229,7 +242,6 @@ describe("AgentChatMessageCard messages", () => {
           },
         },
         isStreamingAssistantMessage: false,
-        sessionAgentColors: {},
       }),
     );
 
@@ -252,7 +264,6 @@ describe("AgentChatMessageCard messages", () => {
           },
         },
         isStreamingAssistantMessage: true,
-        sessionAgentColors: {},
       }),
     );
 
@@ -274,7 +285,6 @@ describe("AgentChatMessageCard messages", () => {
           },
         },
         isStreamingAssistantMessage: true,
-        sessionAgentColors: {},
       }),
     );
 
@@ -297,7 +307,6 @@ describe("AgentChatMessageCard messages", () => {
             isFinal: true,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -318,7 +327,6 @@ describe("AgentChatMessageCard messages", () => {
             completed: true,
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -340,10 +348,6 @@ describe("AgentChatMessageCard messages", () => {
             modelId: "gpt-5.3-codex",
             profileId: "Hephaestus (Deep Agent)",
           },
-        },
-        sessionAgentColors: {
-          "Hephaestus (Deep Agent)": "#2f6fed",
-          "Ares (Legacy Agent)": "#f97316",
         },
       }),
     );
@@ -371,7 +375,6 @@ describe("AgentChatMessageCard messages", () => {
             state: "read",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -387,9 +390,6 @@ describe("AgentChatMessageCard messages", () => {
           role: "user",
           content: "Use the fallback color.",
           timestamp: "2026-02-22T10:26:00.000Z",
-        },
-        sessionAgentColors: {
-          "Ares (Legacy Agent)": "#f97316",
         },
       }),
     );
@@ -413,7 +413,6 @@ describe("AgentChatMessageCard messages", () => {
           },
         },
         ...createCodexMessageCardTestProps(),
-        sessionAgentColors: {},
       }),
     );
 
@@ -434,7 +433,6 @@ describe("AgentChatMessageCard messages", () => {
             state: "queued",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -459,7 +457,6 @@ describe("AgentChatMessageCard messages", () => {
             state: "read",
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -501,7 +498,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -547,7 +543,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -592,7 +587,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -636,7 +630,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -683,7 +676,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -735,7 +727,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -774,7 +765,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -807,7 +797,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -844,7 +833,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -887,7 +875,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -929,7 +916,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -968,7 +954,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 
@@ -1004,7 +989,6 @@ describe("AgentChatMessageCard messages", () => {
             ],
           },
         },
-        sessionAgentColors: {},
       }),
     );
 

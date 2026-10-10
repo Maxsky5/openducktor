@@ -2127,6 +2127,7 @@ describe("useRepoSessionReadModel", () => {
     });
     const transcriptEnvelope = {
       type: "transcript_event",
+      provenance: "baseline",
       event: {
         type: "assistant_message",
         externalSessionId: record.externalSessionId,
@@ -2150,7 +2151,10 @@ describe("useRepoSessionReadModel", () => {
         state.emit(transcriptEnvelope);
       });
 
-      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(transcriptEnvelope.event);
+      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(
+        transcriptEnvelope.event,
+        "baseline",
+      );
 
       await state.harness.update({ ...state.props, isLoadingTasks: false });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
@@ -2720,7 +2724,7 @@ describe("useRepoSessionReadModel", () => {
         message: "Live-session observation failed: The runtime lost this session.",
       });
       expect(state.harness.getLatest().getSessionFault(secondIdentity)).toBeNull();
-      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(transcriptEvent);
+      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(transcriptEvent, undefined);
     } finally {
       await state.harness.unmount();
     }

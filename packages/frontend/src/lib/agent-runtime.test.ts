@@ -133,6 +133,7 @@ describe("agent-runtime capability policies", () => {
           ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
           supportsFileSearch: true,
           supportedParts: ["text"],
+          supportsSkillReferences: false,
           supportsSubagentReferences: false,
         },
       },

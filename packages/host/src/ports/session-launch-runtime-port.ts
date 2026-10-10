@@ -1,5 +1,5 @@
 import type {
-  AcceptedAgentUserMessage,
+  AcceptedAgentInput,
   AgentSessionControlSendInput,
   AgentSessionLiveRef,
   AgentSessionLiveReadInput,
@@ -14,7 +14,7 @@ export type SessionLaunchRuntimePort = {
   sendUserMessage: (
     input: AgentSessionControlSendInput,
     options?: AgentSessionSendOptions,
-  ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
+  ) => Effect.Effect<AcceptedAgentInput, HostError>;
   read: (input: AgentSessionLiveReadInput) => Effect.Effect<AgentSessionLiveReadResult, HostError>;
   holdWorkflowLaunch: (ref: AgentSessionLiveRef, held: boolean) => Effect.Effect<void, HostError>;
   /** Returns the id of the session notice that shows the failure, or null when none can. */

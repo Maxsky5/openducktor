@@ -109,6 +109,7 @@ export const createPersistenceHarness = async (
   const titleAttempts: string[] = [];
   const titleState: NativeTitleState = { nativeTitle: null };
   const beforeControl: Effect.Effect<void, HostError> = Effect.void;
+  const beforeTitle: Effect.Effect<void, HostError> = Effect.void;
   const state = {
     ...titleState,
     failSend: false,
@@ -131,7 +132,7 @@ export const createPersistenceHarness = async (
     beforeBind: Effect.void,
     beforeControl,
     beforeModelSave: Effect.void,
-    beforeTitle: Effect.void,
+    beforeTitle,
     beforeTitleSave: Effect.void,
     onGateRequest: () => {},
     active: false,

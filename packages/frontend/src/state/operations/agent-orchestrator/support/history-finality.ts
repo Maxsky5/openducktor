@@ -1,7 +1,7 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 
 export const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): boolean => {
-  if (message.role !== "assistant") {
+  if (message.role !== "assistant" || message.error !== undefined) {
     return false;
   }
 

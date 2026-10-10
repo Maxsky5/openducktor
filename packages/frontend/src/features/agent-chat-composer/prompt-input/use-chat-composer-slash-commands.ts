@@ -111,8 +111,6 @@ export const useChatComposerSlashCommands = ({
     slashCommandsError = resolved.error;
     isSlashCommandsLoading = slashCommandsQuery.isLoading;
   }
-  // OpenCode supports slash commands but not skills, so this surface retries the
-  // catalog on its own.
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const retrySlashCommands =

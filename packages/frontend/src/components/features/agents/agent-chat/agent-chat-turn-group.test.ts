@@ -40,7 +40,6 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
     isActive: false,
     activeStreamingAssistantMessageId: null,
   },
-  sessionAgentColors: {},
   transcriptTarget: createSessionIdentity(),
   runtimePresentation: {
     runtimeKind: "opencode",
@@ -57,7 +56,6 @@ const baseTurnRowProps = (
 ): AgentChatTurnRowProps => ({
   row: { kind: "message", key: "parent-session:assistant-1", message: createMessage() },
   isStreamingAssistantMessage: false,
-  sessionAgentColors: { build: "text-sky-700" },
   sessionIdentity: createSessionIdentity(),
   runtimePresentation: {
     runtimeKind: "opencode",
@@ -340,30 +338,18 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
-  test("rebuilt equal colors and identities do not invalidate turn groups", () => {
-    const props = baseProps({ sessionAgentColors: { build: "text-sky-700" } });
+  test("rebuilt equal identities do not invalidate turn groups", () => {
+    const props = baseProps({});
 
     expect(
       areAgentChatTurnGroupPropsEqual(
         props,
         baseProps({
           ...props,
-          sessionAgentColors: { build: "text-sky-700" },
           transcriptTarget: createSessionIdentity(),
         }),
       ),
     ).toBe(true);
-  });
-
-  test("changed color values invalidate turn groups", () => {
-    const props = baseProps({ sessionAgentColors: { build: "text-sky-700" } });
-
-    expect(
-      areAgentChatTurnGroupPropsEqual(
-        props,
-        baseProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
-      ),
-    ).toBe(false);
   });
 
   test("changed model catalogs invalidate turn groups", () => {
@@ -383,7 +369,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
-  test("turn row comparator accepts rebuilt equal colors and identities", () => {
+  test("turn row comparator accepts rebuilt equal identities", () => {
     const props = baseTurnRowProps();
 
     expect(
@@ -391,21 +377,9 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         props,
         baseTurnRowProps({
           ...props,
-          sessionAgentColors: { build: "text-sky-700" },
           sessionIdentity: createSessionIdentity(),
         }),
       ),
     ).toBe(true);
-  });
-
-  test("turn row comparator rejects changed color values", () => {
-    const props = baseTurnRowProps();
-
-    expect(
-      areAgentChatTurnRowPropsEqual(
-        props,
-        baseTurnRowProps({ ...props, sessionAgentColors: { build: "text-rose-700" } }),
-      ),
-    ).toBe(false);
   });
 });

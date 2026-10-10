@@ -32,34 +32,6 @@ export const buildRepositoryScopedPermissionRules = (
     runtimeDescriptor,
   });
 
-/** OpenCode uses the last matching rule. Keep native order and put workflow rules last. */
-export const addPermissionRules = (
-  native: OpencodePermissionRule[],
-  controls: OpencodePermissionRule[],
-): OpencodePermissionRule[] => {
-  if (
-    controls.length <= native.length &&
-    permissionRulesEqual(native.slice(native.length - controls.length), controls)
-  ) {
-    return native;
-  }
-  return [...native, ...controls];
-};
-
-export const permissionRulesEqual = (
-  left: OpencodePermissionRule[],
-  right: OpencodePermissionRule[],
-): boolean =>
-  left.length === right.length &&
-  left.every((rule, index) => {
-    const other = right[index];
-    return (
-      other?.permission === rule.permission &&
-      other.pattern === rule.pattern &&
-      other.action === rule.action
-    );
-  });
-
 const buildScopePermissionRules = (input: {
   role: AgentRole | null;
   runtimeDescriptor: RuntimeDescriptor;
@@ -104,10 +76,6 @@ const buildToolRules = (
   role: AgentRole | null,
 ): OpencodePermissionRule[] => {
   const actions = new Map<string, PermissionAction>();
-  if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
-    actions.set("subtask", "deny");
-  }
-
   actions.set("odt_*", "deny");
   for (const prefix of OPENCODE_ODT_TOOL_ID_PREFIXES) {
     actions.set(`${prefix}*`, "deny");

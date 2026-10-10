@@ -54,6 +54,7 @@ Notes:
 - VS Code recommends Microsoft's `TypeScript 7` extension and enables its native language service through the tracked `.vscode` settings. Other editors must use a TypeScript 7-aware language server instead of the removed `tsserver` protocol.
 - OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`.
 - You can override the OpenCode binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
+- The OpenCode executable must provide V2. Read the [runtime integration guide](docs/runtime-integration-guide.md) before you change an adapter or test native migration.
 - Claude support uses an external Claude Code installation and its existing authentication. You can
   override its binary path with `OPENDUCKTOR_CLAUDE_BINARY`.
 - Azure DevOps Services sign-in uses the OpenDucktor Microsoft Entra public client registration. Register it for accounts in any organizational directory and personal Microsoft accounts, enable public client flows, and add the Azure DevOps delegated `user_impersonation` permission. Development builds can override its public client ID with `OPENDUCKTOR_AZURE_DEVOPS_CLIENT_ID`.

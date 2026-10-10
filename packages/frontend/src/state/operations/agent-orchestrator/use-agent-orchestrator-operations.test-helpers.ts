@@ -1,7 +1,7 @@
 import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 
-export { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+export { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
 export { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 export { toast } from "sonner";
 export { clearAppQueryClient } from "@/lib/query-client";

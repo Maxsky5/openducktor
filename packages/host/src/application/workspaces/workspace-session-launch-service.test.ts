@@ -215,7 +215,7 @@ test("keeps native acceptance when saving message details fails", async () => {
   h.state.failActivity = true;
   const outcome = await Effect.runPromise(h.launchService().launch(textRequest(h)));
   expect(outcome.status).toBe("failed");
-  expect(outcome.acceptedMessage?.messageId).toBe("user-1");
+  expect(outcome.acceptedMessage).toMatchObject({ type: "user_message", messageId: "user-1" });
   expect(outcome.unsentInstruction).toBeUndefined();
   expect(outcome.failure?.message).toContain("activity write failed");
   expect(h.starts).toHaveLength(1);

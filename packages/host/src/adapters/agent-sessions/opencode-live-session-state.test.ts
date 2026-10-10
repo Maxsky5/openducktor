@@ -242,7 +242,7 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor session.");
     }
 
-    expect(state.applyLoadedContext(ref, { totalTokens: 42 })).toMatchObject({
+    expect(state.applyLoadedContext(ref, { totalTokens: 42 }, state.readStart())).toMatchObject({
       value: { totalTokens: 42 },
       changes: [{ type: "session_upsert" }],
     });

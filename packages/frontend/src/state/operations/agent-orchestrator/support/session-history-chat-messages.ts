@@ -1,3 +1,4 @@
+import { buildSessionErrorNoticeMessage } from "./session-notice-messages";
 import { settleImageGenerationMessages } from "./image-generation-settlement";
 import { createImageGenerationMessage } from "./image-generation-messages";
 import type {
@@ -118,6 +119,7 @@ const historyPartToChatMessage = (
         toolType: part.toolType,
         status: part.status,
       };
+      if (part.inputStreaming !== undefined) meta.inputStreaming = part.inputStreaming;
       if (part.preview) {
         meta.preview = part.preview;
       }
@@ -136,6 +138,7 @@ const historyPartToChatMessage = (
       if (error) {
         meta.error = error;
       }
+      if (part.resultContent) meta.resultContent = part.resultContent;
       if (part.fileDiffs) {
         meta.fileDiffs = part.fileDiffs;
       }
@@ -367,31 +370,12 @@ export const historyToChatMessages = (
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
-        const notice = message.notice;
-        const { reason, title, tone } = notice;
-        if (reason === "session_forked") {
-          meta = {
-            kind: "session_notice",
-            tone,
-            reason,
-            title,
-            parentExternalSessionId: notice.parentExternalSessionId,
-          };
-        } else if (reason === "session_error") {
-          meta = {
-            kind: "session_notice",
-            tone,
-            reason,
-            title,
-          };
-          if (notice.usageLimit) meta.usageLimit = notice.usageLimit;
+        if (message.notice.reason === "session_error") {
+          const { usageLimit, ...notice } = message.notice;
+          meta = { kind: "session_notice", ...notice };
+          if (usageLimit) meta.usageLimit = usageLimit;
         } else {
-          meta = {
-            kind: "session_notice",
-            tone,
-            reason,
-            title,
-          };
+          meta = { kind: "session_notice", ...message.notice };
         }
       }
 
@@ -409,6 +393,11 @@ export const historyToChatMessages = (
       }
       next.push(primaryMessage);
     }
+
+    if (message.role === "assistant" && message.error)
+      next.push(
+        buildSessionErrorNoticeMessage(message.timestamp, message.error, message.messageId),
+      );
 
     if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {
       const parsed = Date.parse(message.timestamp);

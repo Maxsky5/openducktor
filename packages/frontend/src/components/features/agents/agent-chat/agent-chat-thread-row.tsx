@@ -12,7 +12,6 @@ type AgentChatTranscriptRowProps = {
   row: AgentChatTranscriptRow;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
   isStreamingAssistantMessage: boolean;
-  sessionAgentColors: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
   runtimePresentation: AgentChatRuntimePresentation;
   subagentPendingApprovalCount?: number;
@@ -23,7 +22,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   modelCatalog = null,
   isStreamingAssistantMessage,
-  sessionAgentColors,
   sessionIdentity,
   runtimePresentation,
   subagentPendingApprovalCount = 0,
@@ -44,7 +42,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             message={row.message}
             modelCatalog={modelCatalog}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
-            sessionAgentColors={sessionAgentColors}
             sessionIdentity={sessionIdentity}
             runtimePresentation={runtimePresentation}
             subagentPendingApprovalCount={subagentPendingApprovalCount}

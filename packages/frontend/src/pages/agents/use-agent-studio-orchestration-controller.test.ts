@@ -159,7 +159,6 @@ const createBaseArgs = (): BuildArgs => {
       variantOptions: [],
       handleSelectAgentProfile,
       handleSelectVariant,
-      agentAccentColorsByProfileId: {},
       selectedSessionContextUsage: null,
     },
     chatSettings: createChatSettingsFixture({

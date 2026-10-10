@@ -1,3 +1,4 @@
+import { buildContentEntries } from "./agent-chat-content-keys";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { CircleSlash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -91,7 +92,9 @@ export function AgentSessionApprovalCard({
                   void onReply(request.requestId, outcome);
                 }}
               >
-                {OUTCOME_LABELS[outcome] ?? outcome}
+                {outcome === "approve_always" && request.persistentGrant?.scope === "project"
+                  ? "Allow for project"
+                  : (OUTCOME_LABELS[outcome] ?? outcome)}
               </Button>
             ))}
           </div>
@@ -135,11 +138,36 @@ const formatToolInput = (
 ): string => JSON.stringify(input, null, 2);
 
 function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactElement {
+  const grantEntries = buildContentEntries(request.persistentGrant?.rules ?? [], (rule) =>
+    JSON.stringify([rule.action, rule.resource]),
+  );
   const toolInputText =
     request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
 
   return (
     <div className="space-y-1">
+      {request.persistentGrant ? (
+        <p className="text-xs text-foreground">
+          Allow for project saves this grant for future sessions in{" "}
+          <code>{request.persistentGrant.projectDirectory}</code>.
+        </p>
+      ) : null}
+      {request.rejectsAllPendingApprovals ? (
+        <p className="text-xs text-foreground">
+          Reject cancels all pending approvals in this conversation.
+        </p>
+      ) : null}
+      {request.persistentGrant?.rules ? (
+        <ul className="text-xs text-muted-foreground">
+          {grantEntries.map(({ value: rule, key }) => (
+            <li key={key}>
+              <code>
+                {rule.action}: {rule.resource}
+              </code>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {request.title ? (
         <p className="text-sm font-medium text-foreground">{request.title}</p>
       ) : null}

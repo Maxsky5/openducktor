@@ -1,111 +1,89 @@
 import { describe, expect, test } from "bun:test";
-import { EventEmitter } from "node:events";
-import { PassThrough } from "node:stream";
-import { Effect } from "effect";
-import type { ProcessTreeTerminator } from "../../infrastructure/process/process-tree";
-import {
-  buildOpenCodeExecutableProbeEnvironment,
-  createOpenCodeExecutableProbe,
-} from "./opencode-executable-probe";
+import { spawn } from "node:child_process";
+import { Effect, Fiber } from "effect";
+import { createFakeOpenCodeV2 } from "../../test-support/opencode-v2-standalone";
+import { createOpenCodeExecutableProbe } from "./opencode-executable-probe";
 
-describe("createOpenCodeExecutableProbe", () => {
-  test("starts the selected executable as a local server and checks its health protocol", async () => {
-    const spawnCalls: Array<{ command: string; args: string[] }> = [];
-    const readinessCalls: Array<[number, number]> = [];
-    const stoppedPids: number[] = [];
-    const child = Object.assign(new EventEmitter(), {
-      pid: 42,
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-    });
-    const processTreeTerminator: ProcessTreeTerminator = (input) => {
-      stoppedPids.push(input.pid);
-      return Effect.void;
-    };
-    const probe = createOpenCodeExecutableProbe({
-      portAllocator: () => Effect.succeed(4567),
-      readEnv: () => ({ PATH: "/usr/bin" }),
-      processTreeTerminator,
-      readinessProbe(port, timeoutMs) {
-        readinessCalls.push([port, timeoutMs]);
-        return Effect.succeed(true);
-      },
-      spawnProcess(command, args) {
-        spawnCalls.push({ command, args });
-        return child;
-      },
-    });
-
-    await Effect.runPromise(probe.probeExecutable("/usr/local/bin/opencode"));
-
-    expect(spawnCalls).toEqual([
-      {
-        command: "/usr/local/bin/opencode",
-        args: ["serve", "--hostname", "127.0.0.1", "--port", "4567"],
-      },
-    ]);
-    expect(readinessCalls).toEqual([[4567, 250]]);
-    expect(stoppedPids).toEqual([42]);
-  });
-
-  test("handles a spawn error after a child is returned without a pid", async () => {
-    const child = Object.assign(new EventEmitter(), {
-      pid: undefined,
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-    });
-    const probe = createOpenCodeExecutableProbe({
-      portAllocator: () => Effect.succeed(4567),
-      spawnProcess: () => child,
-    });
-
-    const exit = await Effect.runPromiseExit(probe.probeExecutable("/missing/opencode"));
-
-    expect(exit._tag).toBe("Failure");
-    expect(child.listenerCount("error")).toBe(1);
-    expect(() => child.emit("error", new Error("spawn failed"))).not.toThrow();
-  });
-
-  test("preserves an operational failure when the server exits before readiness", async () => {
-    const child = Object.assign(new EventEmitter(), {
-      pid: 42,
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-    });
-    const probe = createOpenCodeExecutableProbe({
-      portAllocator: () => Effect.succeed(4567),
-      processTreeTerminator: () => Effect.void,
-      readinessProbe: () => {
-        child.emit("close", 2);
-        return Effect.succeed(false);
-      },
-      retryDelayMs: 1,
-      spawnProcess: () => child,
-    });
-
-    const failure = await Effect.runPromise(
-      Effect.flip(probe.probeExecutable("/usr/local/bin/not-opencode")),
-    );
-
-    expect(failure._tag).toBe("HostOperationError");
-    if (failure._tag !== "HostOperationError") {
-      throw new Error(`Expected HostOperationError, received ${failure._tag}`);
+describe("OpenCode V2 executable probe", () => {
+  test("uses native stdio readiness, authentication, inherited config, and releases stdin", async () => {
+    const fixture = await createFakeOpenCodeV2();
+    let child: ReturnType<typeof spawn> | undefined;
+    try {
+      const probe = createOpenCodeExecutableProbe({
+        readEnv: () => ({
+          ...process.env,
+          OPENCODE_CONFIG_CONTENT: '{"custom":true}',
+          ODT_TEST_MARKER: "inherited",
+        }),
+        spawnProcess: (command, args, options) => {
+          const started = spawn(command, args, options);
+          child = started;
+          return started;
+        },
+      });
+      await Effect.runPromise(probe.probeExecutable(fixture.executablePath));
+      const record = await fixture.readRecord();
+      expect(record).toMatchObject({
+        args: ["serve", "--stdio", "--port", "0", "--hostname", "127.0.0.1"],
+        config: '{"custom":true}',
+        marker: "inherited",
+        requests: [{ path: "/api/info", authorized: true }],
+      });
+      expect(record.passwordLength).toBeGreaterThanOrEqual(40);
+      expect(child?.stdin?.writableEnded).toBe(true);
+      expect(child?.exitCode !== null || child?.signalCode !== null).toBe(true);
+    } finally {
+      child?.kill();
+      await fixture.cleanup();
     }
-    expect(failure.operation).toBe("opencodeExecutableProbe.startServer");
   });
-});
-
-describe("buildOpenCodeExecutableProbeEnvironment", () => {
-  test("removes inherited server authentication from the private health probe", () => {
-    expect(
-      buildOpenCodeExecutableProbeEnvironment({
-        OPENCODE_SERVER_USERNAME: "user",
-        OPENCODE_SERVER_PASSWORD: "password",
-        PATH: "/usr/bin",
-      }),
-    ).toEqual({
-      OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
-      PATH: "/usr/bin",
+  for (const mode of ["v1", "malformed", "silent", "exit"] as const) {
+    test(`fails with an actionable error and cleans up a ${mode} executable`, async () => {
+      const fixture = await createFakeOpenCodeV2(mode);
+      let child: ReturnType<typeof spawn> | undefined;
+      try {
+        const probe = createOpenCodeExecutableProbe({
+          startupTimeoutMs: mode === "silent" ? 80 : 500,
+          spawnProcess: (command, args, options) => {
+            const started = spawn(command, args, options);
+            child = started;
+            return started;
+          },
+        });
+        await expect(
+          Effect.runPromise(probe.probeExecutable(fixture.executablePath)),
+        ).rejects.toThrow(/OpenCode.*V2|OpenCode.*readiness/);
+        expect(child?.stdin?.writableEnded).toBe(true);
+      } finally {
+        child?.kill();
+        await fixture.cleanup();
+      }
     });
+  }
+  test("interruption releases a child that has not sent readiness", async () => {
+    const fixture = await createFakeOpenCodeV2("silent");
+    let child: ReturnType<typeof spawn> | undefined;
+    let spawned!: () => void;
+    const started = new Promise<void>((resolve) => {
+      spawned = resolve;
+    });
+    try {
+      const probe = createOpenCodeExecutableProbe({
+        spawnProcess: (command, args, options) => {
+          const running = spawn(command, args, options);
+          child = running;
+          spawned();
+          return running;
+        },
+      });
+      const fiber = Effect.runFork(probe.probeExecutable(fixture.executablePath));
+      await started;
+      await Effect.runPromise(Fiber.interrupt(fiber));
+      expect(child?.stdin?.writableEnded).toBe(true);
+      expect(child?.exitCode !== null || child?.signalCode !== null).toBe(true);
+    } finally {
+      child?.kill();
+      await fixture.cleanup();
+    }
   });
 });

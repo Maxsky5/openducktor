@@ -62,7 +62,7 @@ export const projectWorkspaceSessionLaunch = (
   store.setSessionCollection((collection) => {
     const current = getAgentSession(collection, session);
     let next = applyWorkspaceSessionRecords(collection, [boundRecord]);
-    if (outcome.acceptedMessage) {
+    if (outcome.acceptedMessage?.type === "user_message") {
       const withRecords = getAgentSession(next, session);
       if (withRecords)
         next = replaceAgentSession(next, {
@@ -73,7 +73,7 @@ export const projectWorkspaceSessionLaunch = (
           ),
         });
     }
-    if (outcome.acceptedMessage && current?.livePresence !== "present")
+    if (outcome.acceptedMessage?.type === "user_message" && current?.livePresence !== "present")
       next = applyAgentSessionLiveDelta({
         current: next,
         envelope: {

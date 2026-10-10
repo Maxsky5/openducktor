@@ -4,7 +4,7 @@ import type {
   ExternalTaskSyncEvent,
   TaskAgentSessions,
 } from "@openducktor/contracts";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { CancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   agentSessionListQueryOptions,
   agentSessionQueryKeys,
@@ -201,7 +201,10 @@ describe("AgentSessionViewSync", () => {
     }
   });
 
-  test("a committed session list completes a refresh in progress", async () => {
+  test.each([
+    { change: "a committed session update", committed: true },
+    { change: "an external cancellation", committed: false },
+  ])("handles $change during a task-event refresh", async ({ committed }) => {
     const olderRead = Promise.withResolvers<TaskAgentSessions[]>();
     const readStarted = Promise.withResolvers<void>();
     const readPort = createReadPort(() => {
@@ -212,21 +215,33 @@ describe("AgentSessionViewSync", () => {
     try {
       harness.observe("task-1");
       const refreshing = harness.reconcile([event(["task-1"])]);
+      const result = refreshing.then(
+        () => ({ ok: true }),
+        (error: CancelledError) => ({ ok: false, error }),
+      );
       await readStarted.promise;
-      updateAgentSessionListQuery(harness.queryClient, "/repo", {
-        taskId: "task-1",
-        agentSessions: [session("committed")],
-      });
+      if (committed) {
+        updateAgentSessionListQuery(harness.queryClient, "/repo", {
+          taskId: "task-1",
+          agentSessions: [session("committed")],
+        });
+        expect(await result).toEqual({ ok: true });
+        expect(harness.refreshLiveSessions).toHaveBeenCalledWith("/repo");
+      } else {
+        await harness.queryClient.cancelQueries(
+          { queryKey: agentSessionQueryKeys.list("/repo", "task-1"), exact: true },
+          { revert: false },
+        );
+        expect(await result).toEqual({ ok: false, error: expect.any(CancelledError) });
+        expect(harness.refreshLiveSessions).not.toHaveBeenCalled();
+      }
       olderRead.resolve([{ taskId: "task-1", agentSessions: [] }]);
-      await refreshing;
+      await olderRead.promise;
 
-      expect(
-        harness.queryClient.getQueryState(agentSessionQueryKeys.list("/repo", "task-1"))?.status,
-      ).toBe("success");
-      expect(harness.records("task-1")).toEqual([session("committed")]);
+      expect(harness.records("task-1")).toEqual(committed ? [session("committed")] : []);
       expect(readPort.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
-      expect(harness.refreshLiveSessions).toHaveBeenCalledTimes(1);
     } finally {
+      olderRead.resolve([{ taskId: "task-1", agentSessions: [] }]);
       harness.dispose();
     }
   });

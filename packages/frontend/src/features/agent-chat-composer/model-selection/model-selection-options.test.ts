@@ -48,13 +48,12 @@ describe("model-selection-options", () => {
     expect(options.variantOptions).toEqual([{ value: "high", label: "high" }]);
   });
 
-  test("derives catalog-backed agent colors", () => {
-    expect(
-      resolveModelSelectionOptions({
-        selectionCatalog: makeCatalogWithProfile(),
-        selectedModelSelection: makeSelectedSessionModel(),
-      }).agentAccentColorsByProfileId,
-    ).toEqual({ "build-agent": "#f59e0b" });
+  test("does not use native profile colors in picker options", () => {
+    const options = resolveModelSelectionOptions({
+      selectionCatalog: makeCatalogWithProfile(),
+      selectedModelSelection: makeSelectedSessionModel(),
+    });
+    expect(options.agentProfileOptions).toEqual([{ value: "build-agent", label: "build-agent" }]);
   });
 
   test("filters active-session variants to live-updatable options", () => {

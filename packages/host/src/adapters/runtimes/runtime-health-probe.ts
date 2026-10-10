@@ -11,7 +11,6 @@ import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-
 
 const VERSION_TIMEOUT_MS = 2_000;
 const OPENCODE_VERSION_OPTIONS: SystemCommandRunOptions = {
-  env: { OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}' },
   timeoutMs: VERSION_TIMEOUT_MS,
 };
 const VERSION_OPTIONS_BY_KIND = {

@@ -123,7 +123,6 @@ describe("useAgentChatComposerModel", () => {
           return true;
         }),
         interactionEnabled: true,
-        sessionAgentColors: {},
         composerFormRef,
         composerEditorRef,
         resizeComposerEditor: () => {},

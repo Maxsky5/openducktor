@@ -95,6 +95,89 @@ const createCardHarness = (props: CardProps) => {
 };
 
 describe("AgentSessionQuestionCard", () => {
+  test("submits an empty native option value in a required multiselect", async () => {
+    const request = buildRequest({
+      questions: [
+        {
+          header: "Choice",
+          question: "Choose a preference",
+          multiple: true,
+          required: true,
+          custom: false,
+          options: [{ label: "No preference", value: "", description: "Use no preference" }],
+        },
+      ],
+    });
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {});
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+    try {
+      await harness.clickButtonByText("No preference");
+      expect(harness.getButtonDisabled("Confirm Answers")).toBe(false);
+      expect(screen.getByText("No preference")).toBeTruthy();
+      await harness.clickButtonByText("Confirm Answers");
+      expect(onSubmit).toHaveBeenCalledWith("request-1", [[""]]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+  test("submits native option values and permits an unanswered optional field", async () => {
+    const request = buildRequest({
+      questions: [
+        {
+          header: "Choice",
+          question: "Choose a value",
+          required: true,
+          custom: false,
+          options: [
+            { label: "Friendly choice", value: " native_value ", description: "A native value" },
+          ],
+        },
+        { header: "Optional", question: "Add a note", required: false, custom: true, options: [] },
+      ],
+    });
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {
+      throw new Error("Retry native form");
+    });
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+    try {
+      await harness.clickButtonByText("Friendly choice");
+      await harness.clickTabByText("Summary");
+      expect(harness.getButtonDisabled("Confirm Answers")).toBe(false);
+      await harness.clickButtonByText("Confirm Answers");
+      await waitFor(() => expect(screen.getByText("Retry native form")).toBeTruthy());
+      expect(onSubmit).toHaveBeenCalledWith("request-1", [[" native_value "], []]);
+      expect(screen.getByText("Friendly choice")).toBeTruthy();
+      await harness.clickButtonByText("Confirm Answers");
+      expect(onSubmit).toHaveBeenCalledTimes(2);
+      expect(onSubmit.mock.calls[1]).toEqual(["request-1", [[" native_value "], []]]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+  test("keeps unsupported forms visible and permits cancellation with failed feedback", async () => {
+    const request = buildRequest({
+      canCancel: true,
+      unsupportedReason: "Native numeric fields cannot be answered here.",
+    });
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {
+      throw new Error("Native cancellation failed");
+    });
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+    try {
+      expect(screen.getByRole("alert").textContent).toContain("Native numeric fields");
+      expect(harness.getButtonDisabled("Confirm Answers")).toBe(true);
+      await harness.clickButtonByText("Cancel question");
+      await waitFor(() => expect(screen.getByText("Native cancellation failed")).toBeTruthy());
+      expect(onSubmit).toHaveBeenCalledWith("request-1", []);
+      expect(harness.getButtonDisabled("Cancel question")).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("collapse preserves answers, text, tabs, focus, and errors through a new visit", async () => {
     const request = buildRequest({
       questions: [
@@ -267,7 +350,7 @@ describe("AgentSessionQuestionCard", () => {
       ],
     });
     const reProject = (): AgentQuestionRequest => structuredClone(request);
-    const onSubmit = mock(async () => {});
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {});
     const harness = createCardHarness({ request, onSubmit });
     await harness.mount();
 
@@ -343,7 +426,7 @@ describe("AgentSessionQuestionCard", () => {
         },
       ],
     });
-    const onSubmit = mock(async () => {});
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {});
     const harness = createCardHarness({ request, onSubmit });
     await harness.mount();
 
@@ -362,25 +445,30 @@ describe("AgentSessionQuestionCard", () => {
     await harness.unmount();
   });
 
-  test("enables submit after completion and sends normalized answers", async () => {
-    const onSubmit = mock(async () => {});
-    const harness = createCardHarness({
-      request: buildRequest(),
-      onSubmit,
-    });
-    await harness.mount();
+  test.each([undefined, false])(
+    "hides cancellation (%s) and submits normalized answers",
+    async (canCancel) => {
+      const onSubmit = mock<CardProps["onSubmit"]>(async () => {});
+      const harness = createCardHarness({
+        request: buildRequest({ canCancel }),
+        onSubmit,
+      });
+      await harness.mount();
+      try {
+        expect(screen.queryByRole("button", { name: "Cancel question" })).toBeNull();
+        expect(harness.getButtonDisabled("Confirm Answers")).toBe(true);
 
-    expect(harness.getButtonDisabled("Confirm Answers")).toBe(true);
+        await harness.clickButtonByText("Frontend");
+        expect(harness.getButtonDisabled("Confirm Answers")).toBe(false);
 
-    await harness.clickButtonByText("Frontend");
-    expect(harness.getButtonDisabled("Confirm Answers")).toBe(false);
-
-    await harness.clickButtonByText("Confirm Answers");
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith("request-1", [["Frontend"]]);
-
-    await harness.unmount();
-  });
+        await harness.clickButtonByText("Confirm Answers");
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+        expect(onSubmit).toHaveBeenCalledWith("request-1", [["Frontend"]]);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("reset clears draft answers and disables submit again", async () => {
     const harness = createCardHarness({

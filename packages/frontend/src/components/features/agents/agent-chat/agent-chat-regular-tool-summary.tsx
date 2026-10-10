@@ -20,6 +20,11 @@ type RegularToolSummaryProps = {
   hasExpandableDetails: boolean;
 };
 
+const QueuedToolLabel = ({ meta }: { meta: ToolMeta }): ReactElement | null =>
+  getToolLifecyclePhase(meta) === "queued" && meta.inputStreaming === false ? (
+    <span className="shrink-0 text-pending-muted">Queued</span>
+  ) : null;
+
 export const RegularToolSummary = ({
   meta,
   messageContent,
@@ -65,6 +70,7 @@ export const RegularToolSummary = ({
         {toolIcon(meta)}
       </span>
       <p className="shrink-0 font-medium text-current">{displayName}</p>
+      <QueuedToolLabel meta={meta} />
       {summaryText.length > 0 ? (
         <p className="truncate text-muted-foreground">{summaryText}</p>
       ) : null}

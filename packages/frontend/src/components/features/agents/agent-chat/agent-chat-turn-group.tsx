@@ -16,7 +16,6 @@ const AgentChatTurnRow = memo(function AgentChatTurnRow({
   row,
   modelCatalog = null,
   isStreamingAssistantMessage,
-  sessionAgentColors,
   sessionIdentity,
   runtimePresentation,
   subagentPendingApprovalCount,
@@ -28,7 +27,6 @@ const AgentChatTurnRow = memo(function AgentChatTurnRow({
         row={row}
         modelCatalog={modelCatalog}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
-        sessionAgentColors={sessionAgentColors}
         sessionIdentity={sessionIdentity}
         runtimePresentation={runtimePresentation}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
@@ -41,7 +39,6 @@ const AgentChatTurnRow = memo(function AgentChatTurnRow({
 export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   modelCatalog = null,
-  sessionAgentColors,
   transcriptTarget,
   runtimePresentation,
   subagentPendingApprovalCountBySessionKey,
@@ -58,7 +55,6 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
             row,
             turn.activeStreamingAssistantMessageId,
           )}
-          sessionAgentColors={sessionAgentColors}
           sessionIdentity={transcriptTarget}
           runtimePresentation={runtimePresentation}
           subagentPendingApprovalCount={readSubagentPendingApprovalCount(

@@ -77,6 +77,8 @@ OpenDucktor runs on macOS, Windows, and Linux.
 
 OpenDucktor supports local OpenCode, Codex, and Claude Code runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 
+The OpenCode runtime requires OpenCode V2. Complete native migration before you open existing V1 sessions. See the [runtime integration guide](docs/runtime-integration-guide.md) for shared runtime contracts.
+
 Task data is stored in an OpenDucktor-managed SQLite database, so no external task-store CLI is required for normal app use.
 
 ## Core Features

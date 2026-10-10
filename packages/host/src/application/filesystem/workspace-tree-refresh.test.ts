@@ -40,6 +40,7 @@ const withRepository = async (
 };
 
 describe("workspace tree refresh", () => {
+  // This case starts real Git processes for setup, inventory, and both context reads.
   test("full refresh includes Git badges for edits made during the inventory read", async () => {
     await withRepository(async (root) => {
       const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
@@ -77,7 +78,7 @@ describe("workspace tree refresh", () => {
         await Effect.runPromise(service.dispose());
       }
     });
-  });
+  }, 10_000);
 
   // Each case starts real Git processes for the stale reads and the tree refresh.
   test.each(["full", "incremental"] as const)(

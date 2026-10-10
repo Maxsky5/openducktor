@@ -91,7 +91,6 @@ export type AgentStudioChatModelSelectionContext = {
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
   onSelectVariant: (variant: string) => void;
-  agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
 };
 
@@ -168,9 +167,7 @@ export function useAgentStudioChatModel({
     pendingApprovals: pendingApprovalRequests,
     pendingQuestions: pendingQuestionRequests,
     skills: modelSelection.skills,
-    profileId: selectedSessionModel?.profileId,
     runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
-    sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     runtimeReadiness: selectedSessionState.runtimeReadiness,
   });
   const chatContextUsage = useMemo(
@@ -466,7 +463,6 @@ export function useAgentStudioChatModel({
     approvals,
     interruptedTurnResume,
     composer: composerConfig,
-    sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
   });

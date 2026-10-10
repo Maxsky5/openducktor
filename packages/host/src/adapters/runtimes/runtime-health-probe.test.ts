@@ -212,7 +212,6 @@ describe("createRuntimeHealthProbe", () => {
         executablePaths.opencode,
         ["--version"],
         {
-          env: { OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}' },
           timeoutMs: 2_000,
         },
       ],

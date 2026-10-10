@@ -127,6 +127,7 @@ export const createAgentSessionCommandService = ({
           Effect.gen(function* () {
             const prepared = yield* policy.prepareSend(ref);
             const accepted = yield* runtime.sendUserMessage(prepared, options);
+            if (accepted.type === "command_accepted") return accepted;
             yield* policy.recordAcceptedMessage(ref, accepted).pipe(
               Effect.mapError(
                 (cause) =>

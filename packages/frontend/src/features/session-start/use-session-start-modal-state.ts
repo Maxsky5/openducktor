@@ -7,7 +7,6 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
-import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
 import type {
   ModelPickerRuntime,
@@ -304,15 +303,11 @@ export function useSessionStartModalState({
     if (!fallbackProfileId) {
       return [];
     }
-    const accentColor = resolveAgentAccentColor(fallbackProfileId);
     const fallbackOption: ComboboxOption = {
       value: fallbackProfileId,
       label: fallbackProfileId,
       description: "Current default runtime profile",
     };
-    if (accentColor) {
-      fallbackOption.accentColor = accentColor;
-    }
     return [fallbackOption];
   }, [catalog, visibleSelection?.profileId]);
 

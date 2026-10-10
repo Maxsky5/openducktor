@@ -414,35 +414,47 @@ const createPresentationScenario = (
 };
 
 test.each(["model", "effort", "profile"] as const)(
-  "keeps the workspace draft editor active and gates Resume while saving %s",
+  "keeps the workspace draft editor active and gates supported Resume controls while saving %s",
   async (control) => {
+    const descriptor =
+      control === "profile" ? OPENCODE_RUNTIME_DESCRIPTOR : CLAUDE_RUNTIME_DESCRIPTOR;
+    const modelIds: readonly [string, string] =
+      descriptor.kind === "claude" ? ["sonnet", "opus"] : ["gpt-5", "gpt-6"];
+    const [initialModel, nextModel] = modelIds;
+    const providerId = descriptor.kind === "claude" ? "anthropic" : "openai";
+    const modelTrigger = `Select model, ${descriptor.label}, ${initialModel}`;
     const { Harness, workspace, entry, session, operations, definitions } =
-      createPresentationScenario("opencode", [
+      createPresentationScenario(descriptor.kind, [
         buildMessage("user", "Continue the interrupted turn", { id: "interrupted-user" }),
       ]);
+    definitions.runtimeDefinitions = [descriptor];
+    definitions.availableRuntimeDefinitions = [descriptor];
     entry.selectedModel = {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
+      runtimeKind: descriptor.kind,
+      providerId,
+      modelId: initialModel,
       variant: "low",
-      profileId: "build",
     };
+    if (control === "profile") entry.selectedModel.profileId = "build";
     definitions.loadRepoRuntimeCatalog = async () => ({
       models: {
         status: "available",
         catalog: {
-          models: ["gpt-5", "gpt-6"].map((modelId) => ({
-            id: `openai/${modelId}`,
-            providerId: "openai",
-            providerName: "OpenAI",
+          models: modelIds.map((modelId) => ({
+            id: `${providerId}/${modelId}`,
+            providerId,
+            providerName: descriptor.kind === "claude" ? "Anthropic" : "OpenAI",
             modelId,
             modelName: modelId,
             variants: ["low", "high"],
           })),
-          profiles: [
-            { name: "build", mode: "primary" },
-            { name: "review", mode: "primary" },
-          ],
+          profiles:
+            control === "profile"
+              ? [
+                  { name: "build", mode: "primary" },
+                  { name: "review", mode: "primary" },
+                ]
+              : [],
           defaultModelsByProvider: {},
         },
       },
@@ -488,21 +500,25 @@ test.each(["model", "effort", "profile"] as const)(
     try {
       await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
       const editor = view.getByRole("combobox", { name: "Message composer" });
-      const resume = view.getByRole("button", { name: "Resume" });
-      expect(resume.hasAttribute("disabled")).toBe(false);
+      const resume = view.queryByRole("button", { name: "Resume" });
+      if (control === "profile") expect(resume).toBeNull();
+      else {
+        expect(resume).not.toBeNull();
+        expect(resume?.hasAttribute("disabled")).toBe(false);
+      }
       typeIntoComposer(view.container, "Unsent draft");
       const card = editor.closest(".rounded-xl");
       expect(card).not.toBeNull();
       const cardClass = card?.className;
       const triggerName = {
-        model: "Select model, OpenCode, gpt-5",
+        model: modelTrigger,
         effort: "low",
         profile: "build",
       }[control];
       await act(async () => fireEvent.click(view.getByRole("button", { name: triggerName })));
       const option =
         control === "model"
-          ? view.getByRole("button", { name: "Select gpt-6 model" })
+          ? view.getByRole("button", { name: `Select ${nextModel} model` })
           : view.getByRole("option", { name: control === "effort" ? "high" : "review" });
       await act(async () => fireEvent.click(option));
       expect(updateModel).toHaveBeenCalledTimes(1);
@@ -517,44 +533,48 @@ test.each(["model", "effort", "profile"] as const)(
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(resume.isConnected).toBe(true);
-      expect(resume.hasAttribute("disabled")).toBe(true);
-      await act(async () => fireEvent.click(resume));
+      if (resume) {
+        expect(resume.isConnected).toBe(true);
+        expect(resume.hasAttribute("disabled")).toBe(true);
+        await act(async () => fireEvent.click(resume));
+      }
       expect(resumeTurn).not.toHaveBeenCalled();
       expect(
         view.queryByText("Wait for the current send or session change before resuming."),
       ).toBeNull();
-      expect(
-        view
-          .getByRole("button", { name: "Select model, OpenCode, gpt-5" })
-          .getAttribute("aria-disabled"),
-      ).toBe("true");
+      expect(view.getByRole("button", { name: modelTrigger }).getAttribute("aria-disabled")).toBe(
+        "true",
+      );
       typeIntoComposer(view.container, "Unsent draft edited while saving");
       await act(async () => save.resolve());
       expect(editor.isConnected).toBe(true);
       expect(editor.textContent).toContain("Unsent draft edited while saving");
       expect(card?.className).toBe(cardClass);
-      expect(resume.isConnected).toBe(true);
-      expect(resume.hasAttribute("disabled")).toBe(false);
+      if (resume) {
+        expect(resume.isConnected).toBe(true);
+        expect(resume.hasAttribute("disabled")).toBe(false);
+      }
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         false,
       );
       expect(
         view.getByRole("button", {
           name: {
-            model: "Select model, OpenCode, gpt-6",
+            model: `Select model, ${descriptor.label}, ${nextModel}`,
             effort: "high",
             profile: "review",
           }[control],
         }),
       ).toBeTruthy();
-      await act(async () => fireEvent.click(resume));
-      expect(resumeTurn).toHaveBeenCalledTimes(1);
-      expect(resumeTurn).toHaveBeenCalledWith({
-        runtimeKind: session.runtimeKind,
-        externalSessionId: session.externalSessionId,
-        workingDirectory: session.workingDirectory,
-      });
+      if (resume) {
+        await act(async () => fireEvent.click(resume));
+        expect(resumeTurn).toHaveBeenCalledTimes(1);
+        expect(resumeTurn).toHaveBeenCalledWith({
+          runtimeKind: session.runtimeKind,
+          externalSessionId: session.externalSessionId,
+          workingDirectory: session.workingDirectory,
+        });
+      } else expect(view.queryByRole("button", { name: "Resume" })).toBeNull();
     } finally {
       save.resolve();
       view.unmount();

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionScope } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
+import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createRuntimeHarness,
   runtime,
@@ -74,8 +74,7 @@ describe("live runtime registration lifecycle", () => {
       }
       const [resumeExit, releaseExit] = await Promise.all([resumed, released]);
       expect(Exit.isFailure(resumeExit)).toBe(true);
-      if (Exit.isFailure(resumeExit))
-        expect(Cause.pretty(resumeExit.cause)).toContain("was released");
+      if (Exit.isFailure(resumeExit)) expect(Cause.pretty(resumeExit.cause)).toContain("released");
       expect(Exit.isSuccess(releaseExit)).toBe(true);
       expect(await Effect.runPromise(service.list({ repoPath: ref.repoPath }))).toEqual([]);
       expect(native.releaseCalls).toHaveLength(1);

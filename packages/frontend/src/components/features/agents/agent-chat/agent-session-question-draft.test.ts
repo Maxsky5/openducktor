@@ -42,19 +42,19 @@ describe("agent-session-question-draft", () => {
   test("creates initial draft with custom-only question in free text mode", () => {
     const draft = createAgentQuestionDraft(request);
     expect(draft).toHaveLength(3);
-    expect(draft[0]).toMatchObject({ selectedOptionLabels: [], freeText: "", useFreeText: false });
-    expect(draft[2]).toMatchObject({ selectedOptionLabels: [], freeText: "", useFreeText: true });
+    expect(draft[0]).toMatchObject({ selectedOptionValues: [], freeText: "", useFreeText: false });
+    expect(draft[2]).toMatchObject({ selectedOptionValues: [], freeText: "", useFreeText: true });
   });
 
   test("normalizes invalid selections against available options", () => {
     const draft = normalizeAgentQuestionDraft(request, [
-      { selectedOptionLabels: ["A", "INVALID"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: ["X", "Y", "Z"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: ["INVALID"], freeText: "hello", useFreeText: true },
+      { selectedOptionValues: ["A", "INVALID"], freeText: "", useFreeText: false },
+      { selectedOptionValues: ["X", "Y", "Z"], freeText: "", useFreeText: false },
+      { selectedOptionValues: ["INVALID"], freeText: "hello", useFreeText: true },
     ]);
-    expect(draft[0]?.selectedOptionLabels).toEqual(["A"]);
-    expect(draft[1]?.selectedOptionLabels).toEqual(["X", "Y"]);
-    expect(draft[2]?.selectedOptionLabels).toEqual([]);
+    expect(draft[0]?.selectedOptionValues).toEqual(["A"]);
+    expect(draft[1]?.selectedOptionValues).toEqual(["X", "Y"]);
+    expect(draft[2]?.selectedOptionValues).toEqual([]);
   });
 
   test("single-choice toggle keeps only one selected option", () => {
@@ -63,23 +63,23 @@ describe("agent-session-question-draft", () => {
       throw new Error("Missing single-choice test fixture");
     }
     let entry: AgentQuestionDraftEntry = {
-      selectedOptionLabels: [],
+      selectedOptionValues: [],
       freeText: "",
       useFreeText: false,
     };
     entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "A");
-    expect(entry.selectedOptionLabels).toEqual(["A"]);
+    expect(entry.selectedOptionValues).toEqual(["A"]);
     entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "B");
-    expect(entry.selectedOptionLabels).toEqual(["B"]);
+    expect(entry.selectedOptionValues).toEqual(["B"]);
     entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "B");
-    expect(entry.selectedOptionLabels).toEqual([]);
+    expect(entry.selectedOptionValues).toEqual([]);
   });
 
   test("builds answers with free text overriding single-choice selection", () => {
     const draft = [
-      { selectedOptionLabels: ["A"], freeText: "custom single", useFreeText: true },
-      { selectedOptionLabels: ["X"], freeText: "custom many", useFreeText: true },
-      { selectedOptionLabels: [], freeText: "custom only", useFreeText: true },
+      { selectedOptionValues: ["A"], freeText: "custom single", useFreeText: true },
+      { selectedOptionValues: ["X"], freeText: "custom many", useFreeText: true },
+      { selectedOptionValues: [], freeText: "custom only", useFreeText: true },
     ];
     expect(buildAgentQuestionAnswers(request, draft)).toEqual([
       ["custom single"],
@@ -90,16 +90,16 @@ describe("agent-session-question-draft", () => {
 
   test("requires every question to be answered", () => {
     const incompleteDraft = [
-      { selectedOptionLabels: ["A"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: ["X"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: [], freeText: "", useFreeText: true },
+      { selectedOptionValues: ["A"], freeText: "", useFreeText: false },
+      { selectedOptionValues: ["X"], freeText: "", useFreeText: false },
+      { selectedOptionValues: [], freeText: "", useFreeText: true },
     ];
     expect(isAgentQuestionRequestComplete(request, incompleteDraft)).toBe(false);
 
     const completeDraft = [
-      { selectedOptionLabels: ["A"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: ["X"], freeText: "", useFreeText: false },
-      { selectedOptionLabels: [], freeText: "filled", useFreeText: true },
+      { selectedOptionValues: ["A"], freeText: "", useFreeText: false },
+      { selectedOptionValues: ["X"], freeText: "", useFreeText: false },
+      { selectedOptionValues: [], freeText: "filled", useFreeText: true },
     ];
     expect(isAgentQuestionRequestComplete(request, completeDraft)).toBe(true);
   });

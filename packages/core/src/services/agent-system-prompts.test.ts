@@ -48,7 +48,9 @@ describe("buildAgentSystemPrompt", () => {
       "Artifact discipline:",
       "Fail-fast rules:",
       "OpenDucktor workflow tools are native MCP tools.",
-      "Allowed tools for this role:",
+      "Allowed OpenDucktor workflow tools for this role:",
+      "Use the invocation method advertised by the runtime.",
+      "Native research tools, shell commands, and subagents use the runtime's tool catalog and configured permissions.",
       'odt_read_task_assets({"taskId": string, "assetIds": string[]})',
       "Use this exact taskId literal in every task-bound odt_* call: task-42.",
       'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: "open"|"spec_ready"|"ready_for_dev"|"in_progress"|"blocked"|"ai_review"|"human_review", "title"?: string, "tags"?: string[], "limit"?: number})',
@@ -341,7 +343,7 @@ describe("buildAgentSystemPrompt", () => {
 
   test.each([
     ["system.shared.workflow_guards", 7, 8, "build"],
-    ["system.shared.tool_protocol", 8, 9, "build"],
+    ["system.shared.tool_protocol", 9, 10, "build"],
     ["system.shared.task_context", 3, 4, "build"],
     ["system.role.spec.base", 6, 7, "spec"],
     ["system.role.planner.base", 7, 8, "planner"],
