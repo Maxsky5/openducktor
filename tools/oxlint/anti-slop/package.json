@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.83.0"
+    "@oxlint/plugins": "1.87.0"
   },
   "version": "1.0.0-beta.1"
 }
