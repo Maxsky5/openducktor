@@ -817,11 +817,11 @@ export function AgentChatComposer({
   const hasBlockingAttachments = Object.keys(attachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
-  const isSendOrModelPending = isSubmitting || isModelChangePending(model);
+  const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
 
   const sendDisabled =
     isSendOrModelPending ||
-    isComposerInputDisabled ||
+    isSendInputBlocked(model, isComposerInputDisabled) ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, pendingSendItems);
@@ -918,5 +918,6 @@ export function AgentChatComposer({
   );
 }
 
-const isModelChangePending = (model: AgentChatComposerModel): boolean =>
-  Boolean(model.isSavingModel) || model.speed?.pending === true;
+// A speed change blocks only send, so the model and effort controls keep their state.
+const isSendInputBlocked = (model: AgentChatComposerModel, isInputDisabled: boolean): boolean =>
+  isInputDisabled || model.speed?.pending === true;

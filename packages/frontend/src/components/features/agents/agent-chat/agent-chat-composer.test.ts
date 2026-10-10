@@ -358,6 +358,8 @@ describe("AgentChatComposer", () => {
 
       expect(html).toContain('aria-label="Speed: Fast"');
       expect(html.includes('aria-label="Send message" disabled')).toBe(pending);
+      // A speed change must not lock the model and effort controls.
+      expect(html).not.toContain("Model selection is unavailable right now.");
     },
   );
 
