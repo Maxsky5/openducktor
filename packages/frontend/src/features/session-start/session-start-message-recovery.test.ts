@@ -1,7 +1,6 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { expect, mock, spyOn, test } from "bun:test";
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement } from "react";
 import { toast, type Action } from "sonner";
@@ -56,7 +55,7 @@ test("renders Retry below the recovery error at full width", async () => {
 });
 
 test.each(["in_app", "both", "os", "disabled"] as const)(
-  "shows one recovery toast and preserves external delivery with %s notifications",
+  "shows one recovery toast and leaves the session error notification to the host with %s notifications",
   async (target) => {
     const settings = createDefaultNotificationSettings();
     settings.osFocus = "always_send";
@@ -124,12 +123,11 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
     };
     const start = mock(async () => session);
     let failSend = true;
-    const send = mock(async () => {
+    const send = mock(async (..._args: unknown[]) => {
       if (failSend) throw new Error("First message failed");
       return null;
     });
     const runSessionStartWorkflow = createSessionStartWorkflowRunner({
-      queryClient: new QueryClient(),
       workspaceId: "workspace-1",
       startAgentSession: start,
       sendAgentMessage: send,
@@ -145,6 +143,7 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
             message,
             input.inAppFeedbackHandled,
           ),
+        markInAppFeedbackHandled: () => {},
         reportFailure: () => {},
       },
     });
@@ -170,10 +169,9 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
       });
       expect(genericToast).not.toHaveBeenCalled();
       expect(recoveryToast).toHaveBeenCalledTimes(1);
-      expect(showOsNotification).toHaveBeenCalledTimes(
-        target === "both" || target === "os" ? 1 : 0,
-      );
-      expect(playSound).toHaveBeenCalledTimes(target === "disabled" ? 0 : 1);
+      // The host session error event drives the notification, so the browser adds none.
+      expect(showOsNotification).not.toHaveBeenCalled();
+      expect(playSound).not.toHaveBeenCalled();
       const action = recoveryToast.mock.calls[0]?.[1]?.action;
       expect(action).toEqual(
         expect.objectContaining({ label: "Retry message", onClick: expect.any(Function) }),
@@ -184,7 +182,11 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
       retryAction.onClick();
       expect(start).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(2);
-      expect(send.mock.calls[0]).toEqual(send.mock.calls[1]);
+      const [firstRecipient, ...firstSend] = send.mock.calls[0] ?? [];
+      const [retryRecipient, ...retrySend] = send.mock.calls[1] ?? [];
+      expect(firstRecipient).toMatchObject(session);
+      expect(retryRecipient).toMatchObject(session);
+      expect(retrySend).toEqual(firstSend);
     } finally {
       stop();
       recoveryToast.mockRestore();

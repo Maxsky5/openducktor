@@ -50,7 +50,6 @@ import type {
   AgentSessionState,
 } from "./agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
-import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
 import type { AgentSessionTransientFault } from "./agent-session-transient-fault";
 import type { HostRuntimeStatusMap, HostStatusSnapshot, ObservedCheck } from "./diagnostics";
 
@@ -271,7 +270,6 @@ export type AgentOperationsContextValue = {
   ) => Promise<AgentSessionHistoryMessage[]>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   loadAgentSessionContext: (session: AgentSessionContextLoadTarget) => Promise<void>;
-  startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
   sendAgentMessage: (
     session: AgentSessionIdentity,
     parts: AgentUserMessagePart[],

@@ -1,3 +1,4 @@
+import { renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionControlUpdateTitleInput } from "@openducktor/contracts";
 import {
   type AgentSessionScope,
@@ -7,7 +8,6 @@ import {
   withSummaryTitle,
   withoutSummaryTitle,
 } from "@openducktor/core";
-import { renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
 import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
@@ -70,4 +70,17 @@ export const resumeRetainedClaudeSession = async (input: {
     title: agentSessionTitle(input.scope),
   });
   return input.session.summary;
+};
+
+export const renameClaudeSessionIfNeeded = async (input: {
+  session: ClaudeSession;
+  title: string | undefined;
+}): Promise<void> => {
+  const title = input.title?.trim();
+  if (!title) {
+    return;
+  }
+  await renameSession(input.session.externalSessionId, title, {
+    dir: input.session.input.workingDirectory,
+  });
 };

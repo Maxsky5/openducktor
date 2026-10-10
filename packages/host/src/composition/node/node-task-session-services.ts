@@ -4,7 +4,6 @@ import {
   createAgentRuntimeQueryService,
   type AgentRuntimeQueryDependencies,
 } from "../../application/runtimes/agent-runtime-query-service";
-import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createWorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
@@ -50,11 +49,7 @@ export const createNodeTaskSessionServices = ({
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   repositoryPolicy: AgentSessionOperationPolicy;
-  workflowLaunch: Pick<
-    Parameters<typeof createWorkflowLaunchService>[0],
-    "withProcessStartAdmission" | "resolveParts"
-  > & {
-    eventBus: HostEventBusPort | undefined;
+  workflowLaunch: Pick<Parameters<typeof createWorkflowLaunchService>[0], "resolveParts"> & {
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
   };
 }) => {
@@ -116,16 +111,6 @@ export const createNodeTaskSessionServices = ({
   const workflowLaunchService = createWorkflowLaunchService({
     resolveParts: workflowLaunch.resolveParts,
     queries: agentRuntimeQueries,
-    withProcessStartAdmission: workflowLaunch.withProcessStartAdmission,
-    publish: (snapshot) =>
-      Effect.try({
-        try: () =>
-          workflowLaunch.eventBus?.publish({
-            channel: "openducktor://run-event",
-            payload: { type: "workflow_launch_updated", snapshot: JSON.stringify(snapshot) },
-          }),
-        catch: (cause) => toHostOperationError(cause, "workflow-launch.publish"),
-      }),
     settings: taskServiceInput.workspaceSettingsService,
     tasks: eventServices.taskService,
     taskReader: taskServiceInput.taskStore,
@@ -137,8 +122,11 @@ export const createNodeTaskSessionServices = ({
       resolver: taskServiceInput.gitProviderResolver,
       workspaceSettingsService: taskServiceInput.workspaceSettingsService,
     }),
-    runtime: agentSessionLiveStateService,
-    lifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
+    // The first instruction uses the same workflow send policy as a composer message.
+    runtime: {
+      ...agentSessionLiveStateService,
+      sendUserMessage: agentSessionCommandService.sendUserMessage,
+    },
     sessions: createTaskSessionOperations({
       canonicalizeRepoPath,
       runtime: agentSessionLiveStateService,

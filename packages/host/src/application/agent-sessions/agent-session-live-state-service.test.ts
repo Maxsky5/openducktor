@@ -392,7 +392,7 @@ test.each(["before", "after"] as const)(
 );
 
 test.each(["turn_error", "session_error"] as const)(
-  "publishes native %s during a launch hold and drops earlier idle signals",
+  "passes native %s through a launch hold and republishes idle state on release",
   async (type) => {
     const { service, events } = createHarness();
     const snapshot = liveSnapshot("failed");
@@ -407,7 +407,13 @@ test.each(["turn_error", "session_error"] as const)(
       }),
     );
     await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, true));
-    const event: AgentSessionTranscriptEvent = {
+    const idle: AgentSessionTranscriptEvent = {
+      type: "session_idle",
+      sessionRef: snapshot.ref,
+      externalSessionId: snapshot.ref.externalSessionId,
+      timestamp: "2026-10-04T00:00:01.000Z",
+    };
+    const failure: AgentSessionTranscriptEvent = {
       type,
       sessionRef: snapshot.ref,
       externalSessionId: snapshot.ref.externalSessionId,
@@ -419,32 +425,148 @@ test.each(["turn_error", "session_error"] as const)(
         Effect.succeed({
           value: undefined,
           changes: [
-            {
-              type: "transcript_event",
-              event: {
-                type: "session_idle",
-                sessionRef: snapshot.ref,
-                externalSessionId: snapshot.ref.externalSessionId,
-                timestamp: "2026-10-04T00:00:01.000Z",
-              },
-            },
-            { type: "transcript_event", event },
+            { type: "transcript_event", event: idle },
+            { type: "transcript_event", event: failure },
             { type: "session_upsert", snapshot },
           ],
         }),
       ),
     );
-    expect(events.filter((envelope) => envelope.type === "transcript_event")).toEqual([
-      { type: "transcript_event", event },
-    ]);
-    const failed = await Effect.runPromise(service.read(snapshot.ref));
-    expect(failed.type === "live" && failed.session.activity).toBe("idle");
+    const transcript = () => events.filter((envelope) => envelope.type === "transcript_event");
+    expect(transcript()).toEqual([{ type: "transcript_event", event: failure }]);
+    // The error does not end the hold, so the first turn still shows as running.
+    const held = await Effect.runPromise(service.read(snapshot.ref));
+    expect(held.type === "live" && held.session.activity).toBe("running");
+    const published = events.length;
+
     await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, false));
-    expect(events.filter((envelope) => envelope.type === "transcript_event")).toEqual([
-      { type: "transcript_event", event },
+
+    const released = events.slice(published);
+    expect(released.filter((envelope) => envelope.type === "transcript_event")).toEqual([
+      { type: "transcript_event", event: idle },
     ]);
+    const releasedSnapshots = released.flatMap((envelope) =>
+      envelope.type === "session_upsert" ? [envelope.session] : [],
+    );
+    expect(releasedSnapshots.map((session) => session.activity)).toEqual(["idle"]);
+    const settled = await Effect.runPromise(service.read(snapshot.ref));
+    expect(settled.type === "live" && settled.session.activity).toBe("idle");
   },
 );
+
+test("a launch failure stays in session snapshots and notifies once until an accepted message", async () => {
+  const envelopes: AgentSessionLiveEnvelope[] = [];
+  const occurrences: string[] = [];
+  const projector = createSessionOccurrenceProjector({
+    repositoryLabel: "Repo",
+    resolveAssociation: () => ({ kind: "workflow", taskId: "task-1", role: "build" }),
+    resolveTask: (id) => ({ id, title: "Task" }),
+  });
+  const current = liveSnapshot("launched");
+  const other = liveSnapshot("other");
+  const service = createAgentSessionLiveStateService({
+    runtimeAdmission: passThroughAdmission,
+    adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
+    publish: (envelope) => envelopes.push(envelope),
+    observeNotificationInput: (envelope, provenance) => {
+      occurrences.push(...projector.accept(envelope, provenance).map((notice) => notice.kind));
+    },
+  });
+  const binding = service.createRuntimeRegistration({
+    runtimeId: "launch-runtime",
+    runtimeKind: "codex",
+  });
+  await Effect.runPromise(
+    service.registerRuntimeAdapter({
+      ...titleControlAdapter(() => Effect.die(new Error("unexpected title update"))),
+      ...fakeAdapter({ runtimeId: "launch-runtime", snapshots: () => [current, other] }),
+      supportsSessionControl: true,
+      binding,
+      sendUserMessage: (input) =>
+        Effect.succeed({
+          type: "user_message" as const,
+          externalSessionId: input.externalSessionId,
+          timestamp: "2026-10-10T10:02:00.000Z",
+          messageId: "message-1",
+          message: "Continue",
+          parts: [{ kind: "text" as const, text: "Continue" }],
+          state: "read" as const,
+        }),
+    }),
+  );
+  const message =
+    "The session launch failed: Timed out. Inspect the session before you send it again.";
+  const published = envelopes.length;
+  await Effect.runPromise(service.reportLaunchFailure(current.ref, message));
+
+  // The failure is host state. It updates the snapshot and does not end the runtime turn.
+  const reported = envelopes.slice(published);
+  expect(reported).toMatchObject([
+    {
+      type: "session_upsert",
+      session: { ref: current.ref, launchFailure: { message } },
+    },
+  ]);
+  const upsert = reported[0];
+  if (upsert?.type !== "session_upsert" || !upsert.session.launchFailure)
+    throw new Error("Expected the launch failure in the session snapshot.");
+  const launchFailure = upsert.session.launchFailure;
+  expect(occurrences).toEqual(["agent.session_error"]);
+  // A later snapshot update with the same failure does not notify again.
+  await Effect.runPromise(service.holdWorkflowLaunch(current.ref, true));
+  await Effect.runPromise(service.holdWorkflowLaunch(current.ref, false));
+  expect(occurrences).toEqual(["agent.session_error"]);
+
+  // A browser that attaches later receives the failure in the session snapshot.
+  await Effect.runPromise(service.refresh({ repoPath: current.ref.repoPath }));
+  const attached = envelopes.at(-1);
+  if (attached?.type !== "snapshot") throw new Error("Expected a fresh snapshot.");
+  expect(attached.sessions.map((session) => session.launchFailure)).toEqual([
+    launchFailure,
+    undefined,
+  ]);
+  await expect(Effect.runPromise(service.read(current.ref))).resolves.toMatchObject({
+    session: { launchFailure },
+  });
+
+  await Effect.runPromise(
+    service.sendUserMessage({
+      ...current.ref,
+      sessionScope: { kind: "repository" },
+      parts: [{ kind: "text", text: "Continue" }],
+    }),
+  );
+  const read = await Effect.runPromise(service.read(current.ref));
+  expect(read.type === "live" && read.session.launchFailure).toBeUndefined();
+});
+
+test("a launch failure of a session that is not live is left to the caller", async () => {
+  const envelopes: AgentSessionLiveEnvelope[] = [];
+  const current = liveSnapshot("launched");
+  const service = createAgentSessionLiveStateService({
+    runtimeAdmission: passThroughAdmission,
+    adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
+    publish: (envelope) => envelopes.push(envelope),
+  });
+  await Effect.runPromise(
+    service.registerRuntimeAdapter(
+      fakeAdapter({ runtimeId: "launch-runtime", snapshots: () => [current] }),
+    ),
+  );
+  const published = envelopes.length;
+  const detached = liveSnapshot("detached").ref;
+  // Nothing can show this failure, so the launch result must not claim a notice.
+  await expect(
+    Effect.runPromise(service.reportLaunchFailure(detached, "The session launch failed.")),
+  ).resolves.toBeNull();
+  expect(envelopes.slice(published)).toEqual([]);
+  await Effect.runPromise(service.refresh({ repoPath: current.ref.repoPath }));
+  const attached = envelopes.at(-1);
+  if (attached?.type !== "snapshot") throw new Error("Expected a fresh snapshot.");
+  expect(attached.sessions.map((session) => session.launchFailure)).toEqual([undefined]);
+});
 
 describe("createAgentSessionLiveStateService", () => {
   test("does not read saved roots when the adapter has no snapshot refresh", async () => {

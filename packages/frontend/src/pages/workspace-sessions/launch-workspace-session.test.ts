@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { WorkspaceSession, WorkspaceSessionLaunchSnapshot } from "@openducktor/contracts";
+import type { WorkspaceSession, WorkspaceSessionLaunchResult } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -21,63 +21,13 @@ const createRecord = (): WorkspaceSession => ({
   archivedAt: null,
 });
 
-test.each(["codex", "opencode", "claude"] as const)(
-  "a %s workspace launch publishes running without an idle step",
-  (runtimeKind) => {
-    const record = { ...createRecord(), runtimeKind };
-    const session = {
-      runtimeKind,
-      externalSessionId: "native",
-      workingDirectory: "/repo",
-      startedAt: new Date(1000).toISOString(),
-      status: "idle" as const,
-    };
-    const store = createAgentSessionsStore("/repo");
-    const client = new QueryClient();
-    const statuses: string[] = [];
-    store.subscribe(() => {
-      const current = store.getSessionSnapshot(session);
-      if (current) statuses.push(current.status);
-    });
-    projectWorkspaceSessionLaunch(
-      {
-        launchAttemptId: "attempt",
-        workspaceId: "workspace",
-        repoPath: "/repo",
-        sessionId: record.id,
-        phase: "completed",
-        acceptance: "accepted",
-        ownershipSaved: true,
-        record,
-        session,
-        liveSession: {
-          ref: { ...session, repoPath: "/repo" },
-          activity: "running",
-          title: "Native session",
-          startedAt: session.startedAt,
-          contextUsage: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-        },
-      },
-      store,
-      client,
-    );
-    expect(statuses).toEqual(["running"]);
-    client.clear();
-  },
-);
-
 test("a delayed launch preserves newer workspace metadata and native input", () => {
   const record = createRecord();
-  const outcome: WorkspaceSessionLaunchSnapshot = {
-    launchAttemptId: "attempt",
+  const outcome: WorkspaceSessionLaunchResult = {
     workspaceId: "workspace",
     repoPath: "/repo",
     sessionId: "saved",
-    phase: "completed",
-    acceptance: "accepted",
-    ownershipSaved: true,
+    status: "completed",
     record,
     session: {
       runtimeKind: "codex",
@@ -85,20 +35,6 @@ test("a delayed launch preserves newer workspace metadata and native input", () 
       workingDirectory: "/repo",
       startedAt: new Date(1000).toISOString(),
       status: "idle",
-    },
-    liveSession: {
-      ref: {
-        runtimeKind: "codex",
-        externalSessionId: "native",
-        workingDirectory: "/repo",
-        repoPath: "/repo",
-      },
-      startedAt: new Date(1000).toISOString(),
-      title: "Old title",
-      activity: "idle",
-      contextUsage: null,
-      pendingQuestions: [],
-      pendingApprovals: [],
     },
   };
   const store = createAgentSessionsStore("/repo");
@@ -148,10 +84,10 @@ test.each(["record", "runtime", "directory", "execution-kind"] as const)(
       createShellBridgeFixture({
         client: {
           workspaceSessionLaunch: async (request) => ({
-            ...request,
-            phase: "completed",
-            acceptance: "accepted",
-            ownershipSaved: true,
+            workspaceId: request.workspaceId,
+            repoPath: request.repoPath,
+            sessionId: request.sessionId,
+            status: "completed",
             record: returned,
           }),
         },
@@ -161,7 +97,6 @@ test.each(["record", "runtime", "directory", "execution-kind"] as const)(
       await expect(
         launchWorkspaceSession(
           {
-            launchAttemptId: "attempt",
             workspaceId: "workspace",
             repoPath: "/repo",
             sessionId: record.id,

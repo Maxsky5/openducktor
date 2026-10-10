@@ -1,32 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Exit, Fiber } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 
 const ref = { workspaceId: "workspace", sessionId: "session" };
 
 describe("Workspace Session operation gate", () => {
-  test("allows nested controls but keeps child fibers behind the held permit", async () => {
-    const gate = createWorkspaceSessionOperationGate();
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          let child: Fiber.Fiber<string, never> | undefined;
-          yield* gate.run(
-            ref,
-            Effect.gen(function* () {
-              expect(yield* gate.run(ref, Effect.succeed("nested"))).toBe("nested");
-              child = yield* Effect.forkScoped(gate.run(ref, Effect.succeed("child")));
-              yield* TestClock.adjust(0);
-              expect(child.pollUnsafe()).toBeUndefined();
-            }),
-          );
-          expect(yield* Fiber.join(child!)).toBe("child");
-          expect(gate.isActive(ref)).toBe(false);
-        }),
-      ).pipe(Effect.provide(TestClock.layer())),
-    );
-  });
   test.each([
     { workspaceId: "workspace", sessionId: "another-session" },
     { workspaceId: "another-workspace", sessionId: "session" },

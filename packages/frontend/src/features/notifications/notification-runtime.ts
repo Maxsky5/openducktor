@@ -63,6 +63,9 @@ export const createNotificationRuntime = ({
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
   const activeHealth = new Map<string, NotificationHealth>();
   const localErrorPublications = new Set<string>();
+  // Session errors that another view already shows, and the in-app toasts shown for errors.
+  const handledErrorIds = new Set<string>();
+  const shownErrorToasts = new Map<string, string>();
   const coordinatedOccurrences = new Set<string>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
   const requestPermission = async () => {
@@ -185,6 +188,25 @@ export const createNotificationRuntime = ({
     return localResult.inAppDelivered;
   };
 
+  /** Delivers a host occurrence. A handled session error goes out without its in-app toast. */
+  const dispatchHostOccurrence = async (
+    occurrence: NotificationOccurrence,
+    settings: NotificationSettings,
+  ): Promise<void> => {
+    const target = occurrence.navigationTarget;
+    const errorId = target.type === "session_error" ? target.errorId : null;
+    const delivered = await dispatch(
+      occurrence,
+      settings,
+      undefined,
+      errorId !== null && handledErrorIds.has(errorId),
+    );
+    if (errorId === null || !delivered) return;
+    // The other view can mark the error while this toast is on its way.
+    if (handledErrorIds.has(errorId)) inApp.dismiss(occurrence.occurrenceId);
+    else shownErrorToasts.set(errorId, occurrence.occurrenceId);
+  };
+
   const publishAndWait = async (
     rawOccurrence: NotificationOccurrence,
     localErrorMessage?: string,
@@ -219,6 +241,14 @@ export const createNotificationRuntime = ({
       void publishAndWait(rawOccurrence);
     },
     publishAndWait,
+    /** Another view shows this session error, so its host notification skips the in-app toast. */
+    markInAppFeedbackHandled(errorId: string): void {
+      handledErrorIds.add(errorId);
+      const occurrenceId = shownErrorToasts.get(errorId);
+      if (occurrenceId === undefined) return;
+      shownErrorToasts.delete(errorId);
+      inApp.dismiss(occurrenceId);
+    },
     subscribe(): () => void {
       let disposed = false;
       let stopStream: (() => void) | null = null;
@@ -258,7 +288,7 @@ export const createNotificationRuntime = ({
           }
           const { occurrence, settings } = frame.selected;
           if (!localErrorPublications.has(occurrence.occurrenceId))
-            void dispatch(occurrence, settings).catch((cause) =>
+            void dispatchHostOccurrence(occurrence, settings).catch((cause) =>
               reportCoordinationFailure("publication", occurrence, cause),
             );
         },
@@ -271,7 +301,7 @@ export const createNotificationRuntime = ({
         .catch(reportStreamFailure);
       const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
         if (localErrorPublications.has(occurrence.occurrenceId)) return;
-        void dispatch(occurrence, settings).catch((cause) =>
+        void dispatchHostOccurrence(occurrence, settings).catch((cause) =>
           reportCoordinationFailure("publication", occurrence, cause),
         );
       });

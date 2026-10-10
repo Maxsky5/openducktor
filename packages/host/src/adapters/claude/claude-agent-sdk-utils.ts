@@ -46,23 +46,28 @@ type ClaudeStringPropertySource =
 export const INIT_TIMEOUT_MS = 60_000;
 export const CONTINUATION_ADMISSION_TIMEOUT_MS = 30_000;
 
+const toClaudeServiceError = (operation: string, cause: unknown): ClaudeAgentSdkServiceError => {
+  if (cause instanceof HostValidationError || cause instanceof HostOperationError) {
+    return cause;
+  }
+  return new HostOperationError({
+    operation,
+    message: errorMessage(cause),
+    cause,
+  });
+};
+
 export const fromPromise = <A>(
   operation: string,
   run: () => Promise<A>,
 ): Effect.Effect<A, ClaudeAgentSdkServiceError> =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) => {
-      if (cause instanceof HostValidationError || cause instanceof HostOperationError) {
-        return cause;
-      }
-      return new HostOperationError({
-        operation,
-        message: errorMessage(cause),
-        cause,
-      });
-    },
-  });
+  Effect.tryPromise({ try: run, catch: (cause) => toClaudeServiceError(operation, cause) });
+
+export const fromSync = <A>(
+  operation: string,
+  run: () => A,
+): Effect.Effect<A, ClaudeAgentSdkServiceError> =>
+  Effect.try({ try: run, catch: (cause) => toClaudeServiceError(operation, cause) });
 
 export const withTimeout = async <A>(
   promise: Promise<A>,

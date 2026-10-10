@@ -143,6 +143,7 @@ const notificationContextValue = {
   sessionStartNotifications: {
     publishSessionStarted: () => {},
     publishSessionError: async () => true,
+    markInAppFeedbackHandled: () => {},
     reportFailure: () => {},
   },
 } satisfies NotificationContextValue;

@@ -48,26 +48,6 @@ export function useAgentChatComposerDraftState({
   const nextPersistence = scope.persistence;
 
   useLayoutEffect(() => {
-    const onClear = () => {
-      const current = latestStateRef.current;
-      if (current.key !== nextKey) return;
-      const cleared = { ...current, draft: createEmptyComposerDraft() };
-      latestStateRef.current = cleared;
-      setState(cleared);
-    };
-    // Activity stops subscriptions while hidden. Read the store when the pane resumes.
-    const current = latestStateRef.current;
-    if (
-      nextPersistence &&
-      current.persistence?.targetKey === nextPersistence.targetKey &&
-      draftHasMeaningfulContent(current.draft) &&
-      !draftHasMeaningfulContent(nextPersistence.hydrate())
-    )
-      onClear();
-    return nextPersistence?.subscribeClear?.(onClear);
-  }, [nextKey, nextPersistence]);
-
-  useLayoutEffect(() => {
     latestStateRef.current = state;
   }, [state]);
 
@@ -204,21 +184,12 @@ export function useAgentChatComposerDraftState({
         if (current.key === recovery.recoveryKey && draftHasMeaningfulContent(current.draft)) {
           return;
         }
-        const persistence =
-          current.key === recovery.recoveryKey ? current.persistence : recovery.persistence;
-        if (
-          current.key !== recovery.recoveryKey &&
-          persistence &&
-          draftHasMeaningfulContent(persistence.hydrate())
-        )
-          return;
-        persistence?.set(snapshot.draft, { launchAttemptId: recovery.launchAttemptId });
         pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
-        if (persistence) {
-          pendingRecoveryRef.current.delete(recovery.recoveryKey);
-          void persistence.flush();
-        }
         if (current.key === recovery.recoveryKey) {
+          if (current.persistence) {
+            current.persistence.set(snapshot.draft);
+            pendingRecoveryRef.current.delete(current.key);
+          }
           const restored = { ...current, draft: snapshot.draft };
           latestStateRef.current = restored;
           setState(restored);

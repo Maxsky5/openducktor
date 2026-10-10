@@ -3,8 +3,9 @@ import { Deferred, Effect, Fiber } from "effect";
 import { agentSessionLiveEnvelopeSchema } from "@openducktor/contracts";
 import type {
   AgentSessionControlSendInput,
+  AgentSessionLiveRef,
+  RuntimeKind,
   WorkflowLaunchRequest,
-  WorkflowLaunchSnapshot,
 } from "@openducktor/contracts";
 import {
   createLaunchHarness,
@@ -14,461 +15,654 @@ import {
   failure,
 } from "./test-support/workflow-launch-harness";
 import { createNodeSessionLaunchControls } from "../../composition/node/node-session-launch-controls";
-import { createWorkflowLaunchCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
+
+const runtimeKinds: RuntimeKind[] = ["opencode", "codex", "claude"];
+const createdRef: AgentSessionLiveRef = {
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/worktrees/task",
+  externalSessionId: "session-1",
+};
+const builderScope = { kind: "workflow" as const, taskId: "task", role: "build" as const };
+
+/** Lets forked launches reach their next wait point. */
+const yieldToFibers = Effect.gen(function* () {
+  for (let index = 0; index < 20; index += 1) yield* Effect.yieldNow;
+});
+
+const pausePoint = async () => {
+  const entered = await Effect.runPromise(Deferred.make<void>());
+  const release = await Effect.runPromise(Deferred.make<void>());
+  return {
+    entered,
+    release,
+    pause: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    open: Deferred.succeed(release, undefined),
+  };
+};
+
+const reuseRequest = (
+  sourceSession: Omit<AgentSessionLiveRef, "repoPath">,
+  parts: AgentSessionControlSendInput["parts"] = [{ kind: "text", text: "Resolve the conflict." }],
+): WorkflowLaunchRequest => ({
+  ...requestFor("codex"),
+  policy: {
+    kind: "manual",
+    actionId: "build_rebase_conflict_resolution",
+    decision: { startMode: "reuse", sourceSession },
+  },
+  instruction: { kind: "message", parts },
+});
 
 test.each(["codex", "claude", "opencode"] as const)(
   "%s publishes saved task ownership before the first native send",
   async (runtimeKind) => {
     const h = await createLaunchHarness(runtimeKind);
+    const send = await pausePoint();
+    h.setSendGate(Deferred.await(send.release));
     await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const release = yield* Deferred.make<void>();
-          h.setSendGate(Deferred.await(release));
-          const launch = yield* Effect.forkChild(h.service.launch(requestFor(runtimeKind)));
-          yield* Deferred.await(h.sendEntered);
-          expect(
-            h.envelopes.map((event) => agentSessionLiveEnvelopeSchema.parse(event)),
-          ).toContainEqual({
-            type: "task_session_records_updated",
-            repoPath: "/repo",
-            taskId: "task",
-            agentSessions: h.records,
-            liveSession: expect.objectContaining({
-              activity: "running",
-              ref: expect.objectContaining({ runtimeKind }),
-            }),
-          });
-          yield* Deferred.succeed(release, undefined);
-          expect((yield* Fiber.join(launch)).phase).toBe("completed");
-        }),
-      ),
+      Effect.gen(function* () {
+        const launch = yield* Effect.forkChild(h.service.launch(requestFor(runtimeKind)));
+        yield* Deferred.await(h.sendEntered);
+        expect(
+          h.envelopes.map((event) => agentSessionLiveEnvelopeSchema.parse(event)),
+        ).toContainEqual({
+          type: "task_session_records_updated",
+          repoPath: "/repo",
+          taskId: "task",
+          agentSessions: h.records,
+          liveSession: expect.objectContaining({
+            activity: "running",
+            ref: expect.objectContaining({ runtimeKind }),
+          }),
+        });
+        yield* send.open;
+        expect((yield* Fiber.join(launch)).status).toBe("completed");
+      }).pipe(Effect.ensuring(send.open)),
     );
   },
 );
 
-test("task startup failure keeps saved ownership but blocks message recovery", async () => {
-  const h = await createLaunchHarness("codex", {
-    completion: Effect.fail(failure("Task transition failed")),
-  });
-  const request = requestFor("codex");
-  const result = await Effect.runPromise(h.service.launch(request));
-  expect(result).toMatchObject({
-    phase: "failed",
-    ownershipSaved: true,
-    acceptance: "not_submitted",
-    recoveryAllowed: false,
-    failure: { message: "Task transition failed" },
-  });
-  expect(h.records).toHaveLength(1);
-  expect(h.getTask().status).toBe("ready_for_dev");
-  await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
-    "recovery is unavailable",
-  );
-  expect(h.sends).toEqual([]);
-  expect(h.resumes).toEqual([]);
-});
-
-test.each(["rejected", "not_submitted"] as const)(
-  "Cancel keeps recovery disabled for a settled task launch with %s acceptance",
-  async (acceptance) => {
-    const h = await createLaunchHarness();
-    if (acceptance === "rejected") h.setSendFailure("rejected");
-    else h.setPublishFailure();
-    const request = requestFor("codex");
-    const failed = await Effect.runPromise(h.service.launch(request));
-    expect(failed.acceptance).toBe(acceptance);
-    expect(failed.recoveryAllowed).toBe(acceptance === "rejected");
-    const ref = {
-      launchAttemptId: request.launchAttemptId,
-      workspaceId: request.workspaceId,
-      repoPath: request.repoPath,
-      taskId: request.taskId,
-    };
-    const commands = createWorkflowLaunchCommandHandlers(h.service);
-    const publications = h.snapshots.length;
-    const canceled = await Effect.runPromise(commands.agent_session_workflow_launch_cancel(ref));
-    expect(canceled).toEqual({
-      ...failed,
-      phase: acceptance === "rejected" ? "canceled" : "failed",
-      recoveryAllowed: false,
-    });
-    expect((await Effect.runPromise(h.service.read(ref)))[0]).toEqual(canceled);
-    expect(h.snapshots.slice(publications)).toEqual(acceptance === "rejected" ? [canceled] : []);
-    expect(await Effect.runPromise(commands.agent_session_workflow_launch_cancel(ref))).toEqual(
-      canceled,
-    );
-    expect(h.snapshots.slice(publications)).toEqual(acceptance === "rejected" ? [canceled] : []);
-    await expect(Effect.runPromise(h.service.recover(ref))).rejects.toThrow(
-      "recovery is unavailable",
-    );
-    expect(h.sends).toHaveLength(acceptance === "rejected" ? 1 : 0);
-    expect(h.stops).toHaveLength(0);
-  },
-);
-
-test("Cancel reports a failed publication and keeps recovery disabled", async () => {
-  const h = await createLaunchHarness("codex", {
-    canceledPublication: Effect.fail(failure("Cancellation publication failed")),
-  });
-  h.setSendFailure("rejected");
-  const request = requestFor("codex");
-  await Effect.runPromise(h.service.launch(request));
-  const result = await Effect.runPromise(Effect.result(h.service.cancel(request)));
-  expect(result._tag).toBe("Failure");
-  if (result._tag === "Failure")
-    expect(result.failure.message).toContain("Cancellation publication failed");
-  expect((await Effect.runPromise(h.service.read(request)))[0]).toMatchObject({
-    phase: "canceled",
-    recoveryAllowed: false,
-  });
-});
-
-test.each(["rejected", "not_submitted"] as const)(
-  "Stop keeps recovery disabled for a settled task launch with %s acceptance",
-  async (acceptance) => {
-    const h = await createLaunchHarness();
-    if (acceptance === "rejected") h.setSendFailure("rejected");
-    else h.setPublishFailure();
-    const request = requestFor("codex");
-    const failed = await Effect.runPromise(h.service.launch(request));
-    expect(failed.acceptance).toBe(acceptance);
-    expect(failed.recoveryAllowed).toBe(acceptance === "rejected");
-    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-    await Effect.runPromise(
-      commands.stopSession({ repoPath: request.repoPath, ...failed.session! }),
-    );
-    const [stopped] = await Effect.runPromise(h.service.read(request));
-    const phase = acceptance === "rejected" ? "canceled" : "failed";
-    expect(stopped).toMatchObject({ phase, recoveryAllowed: false });
-    expect(stopped?.session).toEqual(failed.session);
-    expect(stopped?.failure).toEqual(failed.failure);
-    await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
-      "recovery is unavailable",
-    );
-    expect(h.sends).toHaveLength(acceptance === "rejected" ? 1 : 0);
-    expect(h.stops).toEqual([failed.session!.externalSessionId]);
-    expect(h.snapshots.at(-1)).toMatchObject({ phase, recoveryAllowed: false });
-  },
-);
-
-test.each(["succeeds", "fails"] as const)(
-  "Stop still runs after recovery publication fails, native Stop %s",
-  async (outcome) => {
-    const stopFails = outcome === "fails";
-    const h = await createLaunchHarness("codex", {
-      canceledPublication: Effect.fail(failure("Recovery publication failed")),
-    });
-    h.setSendFailure("rejected");
-    const request = requestFor("codex");
-    const failed = await Effect.runPromise(h.service.launch(request));
-    if (stopFails) h.setStopFailure("rejected");
-    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-    const result = await Effect.runPromise(
-      Effect.result(commands.stopSession({ repoPath: request.repoPath, ...failed.session! })),
-    );
-    expect(result._tag).toBe("Failure");
-    if (result._tag === "Failure") {
-      expect(result.failure.message).toContain("Recovery publication failed");
-      if (stopFails) expect(result.failure.message).toContain("Exact stop failure");
-    }
-    expect(h.stops).toEqual([failed.session!.externalSessionId]);
-    expect((await Effect.runPromise(h.service.read(request)))[0]?.recoveryAllowed).toBe(false);
-  },
-);
-
-test("Stop leaves a different task session's recovery available", async () => {
-  const h = await createLaunchHarness();
-  h.setSendFailure("rejected");
-  const firstRequest = requestFor("codex", "first");
-  const secondRequest = requestFor("codex", "second");
-  const first = await Effect.runPromise(h.service.launch(firstRequest));
-  const second = await Effect.runPromise(h.service.launch(secondRequest));
-  expect(first.recoveryAllowed).toBe(true);
-  expect(second.recoveryAllowed).toBe(true);
-  const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-  await Effect.runPromise(
-    commands.stopSession({ repoPath: firstRequest.repoPath, ...first.session! }),
-  );
-  expect((await Effect.runPromise(h.service.read(secondRequest)))[0]?.recoveryAllowed).toBe(true);
-  h.setSendFailure(null);
-  expect((await Effect.runPromise(h.service.recover(secondRequest))).acceptance).toBe("accepted");
-  expect(h.sends.at(-1)?.externalSessionId).toBe(second.session!.externalSessionId);
-});
-
-test("a closed runtime gate permits recovery without a second session", async () => {
-  const h = await createLaunchHarness();
-  h.setStoreGate(
-    Effect.sync(() =>
-      h.runtimeAdmission.close("codex", {
-        state: "stopping",
-        message: "The runtime is stopping.",
-        nextAction: "Restart the runtime.",
+test.each(runtimeKinds)(
+  "fresh %s launch saves ownership and sends the first instruction with no browser",
+  async (kind) => {
+    const h = await createLaunchHarness(kind);
+    const result = await Effect.runPromise(h.service.launch(requestFor(kind)));
+    expect(result).toEqual({
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      taskId: "task",
+      role: "build",
+      startMode: "fresh",
+      status: "completed",
+      model: modelFor(kind),
+      session: {
+        externalSessionId: "session-1",
+        runtimeKind: kind,
+        workingDirectory: "/worktrees/task",
+        startedAt: timestamp,
+        status: "idle",
+      },
+      acceptedMessage: expect.objectContaining({
+        externalSessionId: "session-1",
+        messageId: "message-1",
       }),
-    ),
-  );
-  const request = requestFor("codex");
-  const failed = await Effect.runPromise(h.service.launch(request));
-  expect(failed.acceptance).toBe("rejected");
-  expect(failed.recoveryAllowed).toBe(true);
-  expect(h.sends).toHaveLength(0);
-  h.runtimeAdmission.open("codex");
-  expect((await Effect.runPromise(h.service.recover(request))).acceptance).toBe("accepted");
-  expect(h.starts).toHaveLength(1);
+    });
+    expect(h.records).toHaveLength(1);
+    expect(h.sends).toHaveLength(1);
+    expect(h.sends[0]).toMatchObject({
+      externalSessionId: "session-1",
+      model: modelFor(kind),
+      parts: [{ kind: "text", text: "\n  first instruction\n" }],
+      sessionScope: builderScope,
+    });
+    expect(h.sends[0]?.systemPrompt).toContain("Task context");
+    expect(h.getTask().status).toBe("in_progress");
+    const state = await Effect.runPromise(
+      h.runtime.read({ repoPath: "/repo", ...result.session! }),
+    );
+    expect(state.type === "live" && state.session.activity).toBe("waiting_for_question");
+  },
+);
+
+test("Resolve conflicts with Reuse existing sends the message to the live Builder session", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder", { live: true });
+  const parts: AgentSessionControlSendInput["parts"] = [
+    { kind: "text", text: "Resolve the rebase conflict in " },
+    {
+      kind: "file_reference",
+      file: { id: "file", path: "src/main.ts", name: "main.ts", kind: "code" },
+    },
+  ];
+  const result = await Effect.runPromise(h.service.launch(reuseRequest(sourceSession, parts)));
+  expect(result).toMatchObject({
+    status: "completed",
+    role: "build",
+    startMode: "reuse",
+    model: modelFor("codex"),
+    session: { externalSessionId: "builder", workingDirectory: "/worktrees/task" },
+    acceptedMessage: { externalSessionId: "builder" },
+  });
+  expect(result.failure).toBeUndefined();
+  expect(h.starts).toEqual([]);
+  expect(h.forks).toEqual([]);
+  expect(h.resumes).toEqual([]);
   expect(h.sends).toHaveLength(1);
+  expect(h.sends[0]).toMatchObject({
+    externalSessionId: "builder",
+    workingDirectory: "/worktrees/task",
+    model: modelFor("codex"),
+    parts,
+    sessionScope: builderScope,
+  });
+  expect(h.records.map((record) => record.externalSessionId)).toEqual(["builder"]);
+});
+
+test.each(runtimeKinds)(
+  "reuse %s resumes the saved source without creating a session",
+  async (kind) => {
+    const h = await createLaunchHarness(kind);
+    h.setTaskStatus("in_progress");
+    const sourceSession = h.addTaskSession("source");
+    const result = await Effect.runPromise(
+      h.service.launch({
+        ...requestFor(kind),
+        policy: {
+          kind: "manual",
+          actionId: "build_after_qa_rejected",
+          decision: { startMode: "reuse", sourceSession },
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      startMode: "reuse",
+      session: { externalSessionId: "source" },
+      acceptedMessage: { externalSessionId: "source" },
+    });
+    expect(h.starts).toHaveLength(0);
+    expect(h.resumes).toEqual(["source"]);
+    expect(h.sends[0]?.model).toEqual(modelFor(kind));
+  },
+);
+
+test.each([
+  { speed: "fast", saved: { ...modelFor("claude"), speed: "fast" } },
+  { speed: null, saved: modelFor("claude") },
+])("reuse saves speed $speed before its kickoff turn", async ({ speed, saved }) => {
+  const h = await createLaunchHarness("claude");
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("source", {
+    selectedModel: speed ? modelFor("claude") : { ...modelFor("claude"), speed: "fast" },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("claude"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_qa_rejected",
+        decision: { startMode: "reuse", sourceSession, speed },
+      },
+    }),
+  );
+  expect(result.status).toBe("completed");
+  expect(h.records[0]?.selectedModel).toEqual(saved);
+  expect(h.sends[0]?.model).toEqual(saved);
+});
+
+test.each(runtimeKinds)(
+  "fork %s uses the task-owned parent and saves the child before the first send",
+  async (kind) => {
+    const h = await createLaunchHarness(kind);
+    h.enablePullRequests();
+    h.setTaskStatus("human_review");
+    const sourceSession = h.addTaskSession("parent");
+    const result = await Effect.runPromise(
+      h.service.launch({
+        ...requestFor(kind),
+        policy: {
+          kind: "manual",
+          actionId: "build_pull_request_generation",
+          decision: { startMode: "fork", sourceSession, selectedModel: modelFor(kind) },
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      startMode: "fork",
+      session: { externalSessionId: "fork-1", workingDirectory: "/worktrees/task" },
+      acceptedMessage: { externalSessionId: "fork-1" },
+    });
+    expect(h.forks).toEqual(["parent"]);
+    expect(h.starts).toHaveLength(0);
+    expect(h.records.map((record) => record.externalSessionId)).toEqual(["parent", "fork-1"]);
+    expect(h.sends.map((input) => input.externalSessionId)).toEqual(["fork-1"]);
+  },
+);
+
+test("manual reuse loads no runtime catalog and keeps a stored model that the catalog does not list", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("in_progress");
+  const retired = { ...modelFor("codex"), modelId: "retired-model", variant: "retired" };
+  const sourceSession = h.addTaskSession("builder", { live: true, selectedModel: retired });
+  const result = await Effect.runPromise(h.service.launch(reuseRequest(sourceSession)));
+  expect(result).toMatchObject({ status: "completed", model: retired });
+  expect(h.catalogLoads()).toBe(0);
+  expect(h.sends.map((input) => input.model)).toEqual([retired]);
+});
+
+test("a reuse launch refuses a source session that waits for blocking input", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  const sourceSession = h.addTaskSession("builder", {
+    live: true,
+    pendingQuestion: { blocking: true },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...reuseRequest(sourceSession),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_human_request_changes",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction: { kind: "kickoff", feedback: "Rename the helper." },
+      beforeStartAction: { action: "human_request_changes", note: "Rename the helper." },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: { message: expect.stringContaining("waiting for an approval or question") },
+  });
+  expect(result.session).toBeUndefined();
+  expect(h.getTask().status).toBe("human_review");
+  expect(h.sends).toEqual([]);
+});
+
+test("a reuse launch answers open background questions with its first message", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder", {
+    live: true,
+    pendingQuestion: { blocking: false },
+  });
+  const result = await Effect.runPromise(h.service.launch(reuseRequest(sourceSession)));
+  expect(result.status).toBe("completed");
+  expect(h.sends).toHaveLength(1);
+  expect(h.sends[0]?.resolvedQuestionRequestIds).toEqual(["open-question"]);
+});
+
+test("a second manual launch for the same task waits for the first and both complete", async () => {
+  const h = await createLaunchHarness();
+  h.setQuestionAfterSend(false);
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  const conflictParts: AgentSessionControlSendInput["parts"] = [
+    { kind: "text", text: "Resolve the conflict." },
+  ];
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const first = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(h.sendEntered);
+      const second = yield* Effect.forkChild(
+        h.service.launch(
+          reuseRequest(
+            {
+              externalSessionId: "session-1",
+              runtimeKind: "codex",
+              workingDirectory: "/worktrees/task",
+            },
+            conflictParts,
+          ),
+        ),
+      );
+      yield* yieldToFibers;
+      expect(second.pollUnsafe()).toBeUndefined();
+      expect(h.sends).toHaveLength(1);
+      yield* send.open;
+      expect(yield* Fiber.join(first)).toMatchObject({ status: "completed", startMode: "fresh" });
+      expect(yield* Fiber.join(second)).toMatchObject({
+        status: "completed",
+        startMode: "reuse",
+        session: { externalSessionId: "session-1" },
+      });
+    }).pipe(Effect.ensuring(send.open)),
+  );
+  expect(h.starts).toEqual(["session-1"]);
+  expect(h.sends.map((input) => [input.externalSessionId, input.parts])).toEqual([
+    ["session-1", [{ kind: "text", text: "\n  first instruction\n" }]],
+    ["session-1", conflictParts],
+  ]);
 });
 
 test("automatic actions for one task wait for the prior launch to finish", async () => {
   const h = await createLaunchHarness();
-  const release = await Effect.runPromise(Deferred.make<void>());
-  h.setSendGate(Deferred.await(release));
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
   await Effect.runPromise(
     Effect.gen(function* () {
       const planner = yield* Effect.forkChild(
         h.service.launch({
-          ...requestFor("codex", "planner"),
+          ...requestFor("codex"),
           policy: { kind: "automatic", actionId: "startPlanner" },
         }),
       );
       yield* Deferred.await(h.sendEntered);
-      const request: WorkflowLaunchRequest = {
-        ...requestFor("codex", "builder"),
-        policy: { kind: "automatic", actionId: "startBuilder" },
-      };
-      const builder = yield* Effect.forkChild(h.service.launch(request));
-      yield* Effect.yieldNow;
-      expect((yield* h.service.read(request))[0]?.phase).toBe("queued");
+      const builder = yield* Effect.forkChild(
+        h.service.launch({
+          ...requestFor("codex"),
+          policy: { kind: "automatic", actionId: "startBuilder" },
+        }),
+      );
+      yield* yieldToFibers;
       expect(h.starts).toEqual(["session-1"]);
-      yield* Deferred.succeed(release, undefined);
-      expect(yield* Fiber.join(planner)).toMatchObject({
-        phase: "completed",
-        acceptance: "accepted",
-      });
-      expect(yield* Fiber.join(builder)).toMatchObject({
-        phase: "completed",
-        acceptance: "accepted",
-      });
-    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
+      yield* send.open;
+      expect(yield* Fiber.join(planner)).toMatchObject({ status: "completed", role: "planner" });
+      expect(yield* Fiber.join(builder)).toMatchObject({ status: "completed", role: "build" });
+    }).pipe(Effect.ensuring(send.open)),
   );
   expect(h.records.map((record) => record.role)).toEqual(["planner", "build"]);
   expect(h.sends.map((input) => input.externalSessionId)).toEqual(["session-1", "session-2"]);
   expect(h.getTask().status).toBe("in_progress");
 });
 
-test("Stop cancels every queued reuse before it waits for launch publication", async () => {
-  const publishing = await Effect.runPromise(Deferred.make<void>());
-  const releasePublication = await Effect.runPromise(Deferred.make<void>());
-  const nextPublication = await Effect.runPromise(Deferred.make<void>());
-  const nextSend = await Effect.runPromise(Deferred.make<void>());
-  let publications = 0;
-  const h = await createLaunchHarness("codex", {
-    canceledPublication: Effect.suspend(() =>
-      ++publications === 1
-        ? Deferred.succeed(publishing, undefined).pipe(
-            Effect.andThen(Deferred.await(releasePublication)),
-          )
-        : Deferred.succeed(nextPublication, undefined).pipe(Effect.asVoid),
-    ),
-  });
-  const saved = await Effect.runPromise(
-    h.service.launch({
-      ...requestFor("codex", "source"),
-      instruction: { kind: "none" },
-    }),
-  );
-  const request: WorkflowLaunchRequest = {
-    ...requestFor("codex", "first"),
-    queueIfBusy: true,
-    policy: {
-      kind: "manual",
-      actionId: "build_after_qa_rejected",
-      decision: { startMode: "reuse", sourceSession: saved.session! },
-    },
-  };
-  const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const releaseSend = yield* Deferred.make<void>();
-      h.setSendGate(
-        Effect.suspend(() =>
-          h.sends.length === 1
-            ? Deferred.await(releaseSend)
-            : Deferred.succeed(nextSend, undefined).pipe(Effect.asVoid),
-        ),
-      );
-      const first = yield* Effect.forkChild(h.service.launch(request));
-      yield* Deferred.await(h.sendEntered);
-      const second = yield* Effect.forkChild(
-        h.service.launch({ ...request, launchAttemptId: "second" }),
-      );
-      yield* Effect.yieldNow;
-      const [queued] = yield* h.service.read({ ...request, launchAttemptId: "second" });
-      expect(queued?.phase).toBe("queued");
-      const stop = yield* Effect.forkChild(
-        commands.stopSession({ repoPath: request.repoPath, ...saved.session! }),
-      );
-      yield* Effect.yieldNow;
-      yield* Deferred.succeed(releaseSend, undefined);
-      yield* Deferred.await(publishing);
-      // Wait for the next worker's send or canceled publication while Stop still waits.
-      yield* Effect.race(Deferred.await(nextSend), Deferred.await(nextPublication));
-      yield* Deferred.succeed(releasePublication, undefined);
-      expect(yield* Fiber.join(first)).toMatchObject({ phase: "canceled", acceptance: "accepted" });
-      expect(yield* Fiber.join(second)).toMatchObject({
-        phase: "canceled",
-        acceptance: "not_submitted",
-      });
-      yield* Fiber.join(stop);
-    }).pipe(Effect.ensuring(Deferred.succeed(releasePublication, undefined))),
-  );
-  expect(h.sends).toHaveLength(1);
-  expect(h.stops).toEqual([saved.session!.externalSessionId]);
-});
-
-test.each(["stopped", "other", "fresh"] as const)(
-  "Stop during queued automatic QA preserves the %s session choice",
-  async (choice) => {
-    const h = await createLaunchHarness();
-    h.settings.autopilot.alwaysStartQaReviewsFresh = choice === "fresh";
-    h.setTaskStatus("ai_review");
-    const qaRequest: WorkflowLaunchRequest = {
-      ...requestFor("codex", "qa-source"),
-      policy: {
-        kind: "manual",
-        actionId: "qa_review",
-        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
-      },
-      instruction: { kind: "none" },
-    };
-    const source = await Effect.runPromise(h.service.launch(qaRequest));
-    let other: WorkflowLaunchSnapshot | undefined;
-    if (choice === "other") {
-      h.records[0]!.startedAt = "2026-10-02T12:00:00.000Z";
-      other = await Effect.runPromise(
-        h.service.launch({ ...qaRequest, launchAttemptId: "other-qa" }),
-      );
-    }
-    h.setTaskStatus("in_progress");
-    const release = await Effect.runPromise(Deferred.make<void>());
-    h.setSendGate(Deferred.await(release));
-    const request: WorkflowLaunchRequest = {
-      ...requestFor("codex", "queued-qa"),
-      policy: { kind: "automatic", actionId: "startQa" },
-    };
-    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const builder = yield* Effect.forkChild(h.service.launch(requestFor("codex", "builder")));
-        yield* Deferred.await(h.sendEntered);
-        h.setTaskStatus("ai_review");
-        const automatic = yield* Effect.forkChild(h.service.launch(request));
-        yield* Effect.yieldNow;
-        expect((yield* h.service.read(request))[0]).toMatchObject({ phase: "queued" });
-        yield* commands.stopSession({ repoPath: request.repoPath, ...source.session! });
-        expect(h.sends).toHaveLength(1);
-        yield* Deferred.succeed(release, undefined);
-        expect((yield* Fiber.join(builder)).phase).toBe("completed");
-        const result = yield* Fiber.join(automatic);
-        if (choice === "stopped") {
-          expect(result).toMatchObject({
-            phase: "canceled",
-            acceptance: "not_submitted",
-            ownershipSaved: false,
-            recoveryAllowed: false,
-          });
-          expect(h.sends).toHaveLength(1);
-        } else {
-          expect(result).toMatchObject({ phase: "completed", acceptance: "accepted" });
-          expect(result.session?.externalSessionId).not.toBe(source.session!.externalSessionId);
-          if (other)
-            expect(result.session?.externalSessionId).toBe(other.session!.externalSessionId);
-          expect(h.sends).toHaveLength(2);
-        }
-        expect(h.resumes).toHaveLength(0);
-        expect(h.stops).toEqual([source.session!.externalSessionId]);
-        expect(h.snapshots.at(-1)).toEqual(result);
-        if (choice === "stopped") {
-          const later = yield* h.service.launch({ ...request, launchAttemptId: "later-qa" });
-          expect(later).toMatchObject({ phase: "completed", acceptance: "accepted" });
-          expect(later.session?.externalSessionId).toBe(source.session!.externalSessionId);
-          expect(h.resumes).toEqual([source.session!.externalSessionId]);
-          expect(h.sends).toHaveLength(2);
-        }
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-    );
-  },
-);
-
-test.each(["manual", "automatic", "fork"] as const)(
-  "Stop during %s preparation prevents a later reuse send without canceling a fork child",
-  async (mode) => {
-    const entered = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    let paused = false;
-    const gate = Effect.suspend(() =>
-      paused
-        ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
-        : Effect.void,
-    );
+test.each(["before its first native send", "after native acceptance"] as const)(
+  "task lifecycle work for the same task is not rejected while a launch waits %s",
+  async (point) => {
+    const wait = await pausePoint();
     const h = await createLaunchHarness(
       "codex",
-      mode === "automatic" ? { catalog: gate } : { preparingPublication: gate },
+      point === "after native acceptance" ? { holdRelease: wait.pause } : {},
     );
-    const original = await Effect.runPromise(h.service.launch(requestFor("codex", "source")));
-    const sourceSession = original.session!;
-    h.sends.splice(0);
-    if (mode === "fork") {
-      h.enablePullRequests();
-      h.setTaskStatus("human_review");
-    }
-    const request: WorkflowLaunchRequest = {
-      ...requestFor("codex"),
-      policy:
-        mode === "automatic"
-          ? { kind: "automatic", actionId: "startReviewQaFeedbacks" }
-          : {
-              kind: "manual",
-              actionId:
-                mode === "fork" ? "build_pull_request_generation" : "build_after_qa_rejected",
-              decision:
-                mode === "fork"
-                  ? { startMode: "fork", sourceSession, selectedModel: modelFor("codex") }
-                  : { startMode: "reuse", sourceSession },
-            },
-    };
-    const ref = { repoPath: request.repoPath, ...sourceSession };
-    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
-    paused = true;
+    if (point === "before its first native send") h.setPublicationGate(wait.pause);
+    const other = h.addTaskSession("other", { live: true });
     await Effect.runPromise(
       Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(h.service.launch(request));
-        yield* Deferred.await(entered);
-        const [attempt] = yield* h.service.read(request);
-        expect(attempt?.session).toBeUndefined();
-        const stop = yield* Effect.forkChild(commands.stopSession(ref));
-        yield* Effect.yieldNow;
-        const stoppedEarly = stop.pollUnsafe() !== undefined;
-        yield* Deferred.succeed(release, undefined);
-        const result = yield* Fiber.join(launch);
-        yield* Fiber.join(stop);
-        expect(result.phase).toBe(mode === "fork" ? "completed" : "canceled");
-        expect(stoppedEarly).toBe(mode === "fork");
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
+        const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+        yield* Deferred.await(wait.entered);
+        expect(h.sends).toHaveLength(point === "after native acceptance" ? 1 : 0);
+        yield* Effect.scoped(
+          h.lifecycle.acquireLifecycle("/repo", ["task"], "run a task lifecycle operation"),
+        );
+        const accepted = yield* h.commands.sendUserMessage({
+          repoPath: "/repo",
+          ...other,
+          sessionScope: builderScope,
+          parts: [{ kind: "text", text: "Message for another Builder session" }],
+        });
+        expect(accepted.externalSessionId).toBe("other");
+        yield* wait.open;
+        expect((yield* Fiber.join(launch)).status).toBe("completed");
+      }).pipe(Effect.ensuring(wait.open)),
     );
-    expect(h.stops).toEqual([sourceSession.externalSessionId]);
-    expect(h.resumes).toHaveLength(0);
-    expect(h.sends).toHaveLength(mode === "fork" ? 1 : 0);
-    if (mode === "fork") expect(h.sends[0]?.externalSessionId).toBe("fork-1");
+    expect(h.sends.map((input) => input.externalSessionId).sort()).toEqual(["other", "session-1"]);
   },
 );
 
-test.each(["opencode", "codex", "claude"] as const)(
+test.each(["kickoff", "message"] as const)(
+  "a rejected first send returns the saved session and the unsent %s instruction",
+  async (instruction) => {
+    const h = await createLaunchHarness();
+    h.setSendFailure("rejected");
+    const parts: AgentSessionControlSendInput["parts"] = [
+      { kind: "text", text: "Review " },
+      {
+        kind: "file_reference",
+        file: { id: "file", path: "src/main.ts", name: "main.ts", kind: "code" },
+      },
+    ];
+    const request: WorkflowLaunchRequest =
+      instruction === "kickoff"
+        ? requestFor("codex")
+        : { ...requestFor("codex"), instruction: { kind: "message", parts } };
+    const result = await Effect.runPromise(h.service.launch(request));
+    expect(result).toMatchObject({
+      status: "failed",
+      session: { externalSessionId: "session-1" },
+      failure: { message: "The model is not available.", cleanupErrors: [] },
+    });
+    expect(result.unsentInstruction).toEqual(
+      instruction === "kickoff" ? [{ kind: "text", text: "\n  first instruction\n" }] : parts,
+    );
+    expect(result.acceptedMessage).toBeUndefined();
+    expect(h.records).toHaveLength(1);
+    expect(h.sends).toHaveLength(1);
+    expect(h.stops).toEqual([]);
+  },
+);
+
+test("a first send without an answer returns no instruction and asks the user to inspect the session", async () => {
+  const h = await createLaunchHarness();
+  h.setSendFailure("uncertain");
+  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(result).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "session-1" },
+    failure: {
+      message:
+        "Native connection lost. The runtime can have received the first instruction. Inspect the session before you send it again.",
+      cleanupErrors: [],
+    },
+  });
+  expect(result.unsentInstruction).toBeUndefined();
+  expect(result.acceptedMessage).toBeUndefined();
+  expect(h.sends).toHaveLength(1);
+});
+
+test("the first send reaches the runtime adapter with its native admission options", async () => {
+  const h = await createLaunchHarness();
+  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(result.status).toBe("completed");
+  expect(h.sendOptions).toEqual([{ requireNativeAdmission: true, onSent: expect.any(Function) }]);
+});
+
+test("a browser that attaches after the caller left sees the launch failure in the session", async () => {
+  const h = await createLaunchHarness();
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  h.setSendFailure("uncertain");
+  const failures = () =>
+    h.envelopes
+      .map((event) => agentSessionLiveEnvelopeSchema.parse(event))
+      .flatMap((envelope) =>
+        envelope.type === "session_upsert" && envelope.session.launchFailure
+          ? [{ ref: envelope.session.ref, launchFailure: envelope.session.launchFailure }]
+          : [],
+      );
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const caller = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(h.sendEntered);
+      // The browser closes. The host worker still settles the launch.
+      yield* Fiber.interrupt(caller);
+      yield* Deferred.succeed(send.release, undefined);
+      for (let attempt = 0; attempt < 100 && failures().length === 0; attempt += 1)
+        yield* Effect.sleep(1);
+    }),
+  );
+  const [failure] = failures();
+  if (!failure) throw new Error("Expected the launch failure in the session.");
+  expect(failure.launchFailure.message).toBe(
+    "The session launch failed: Native connection lost. The runtime can have received the first instruction. Inspect the session before you send it again.",
+  );
+  // The failure is host state. It must not end the runtime turn in the transcript.
+  expect(
+    h.envelopes
+      .map((event) => agentSessionLiveEnvelopeSchema.parse(event))
+      .filter(
+        (envelope) =>
+          envelope.type === "transcript_event" &&
+          (envelope.event.type === "turn_error" || envelope.event.type === "session_error"),
+      ),
+  ).toEqual([]);
+  const published = h.envelopes.length;
+
+  await Effect.runPromise(h.runtime.refresh({ repoPath: failure.ref.repoPath }));
+  const attached = h.envelopes
+    .slice(published)
+    .map((event) => agentSessionLiveEnvelopeSchema.parse(event))
+    .find((envelope) => envelope.type === "snapshot");
+  if (attached?.type !== "snapshot") throw new Error("Expected a fresh snapshot.");
+  expect(attached.sessions).toContainEqual(
+    expect.objectContaining({ ref: failure.ref, launchFailure: failure.launchFailure }),
+  );
+});
+
+test("an accepted first send that fails afterwards returns the accepted message and no unsent instruction", async () => {
+  const h = await createLaunchHarness();
+  h.setSendFailure("accepted");
+  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(result).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "session-1" },
+    acceptedMessage: { externalSessionId: "session-1", messageId: "message-1" },
+    failure: { message: expect.stringContaining("Exact publication failure") },
+  });
+  expect(result.unsentInstruction).toBeUndefined();
+  expect(h.sends).toHaveLength(1);
+  expect(h.stops).toEqual([]);
+});
+
+test("canceling a reuse target cancels its queued launch without a send or a stop", async () => {
+  const h = await createLaunchHarness();
+  const sourceSession = h.addTaskSession("builder", { live: true });
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const first = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(h.sendEntered);
+      const queued = yield* Effect.forkChild(h.service.launch(reuseRequest(sourceSession)));
+      yield* yieldToFibers;
+      h.service.cancelSessionLaunches({ repoPath: "/repo", ...sourceSession });
+      yield* send.open;
+      expect((yield* Fiber.join(first)).status).toBe("completed");
+      const canceled = yield* Fiber.join(queued);
+      expect(canceled).toMatchObject({
+        status: "canceled",
+        failure: { message: "Session launch was canceled.", cleanupErrors: [] },
+      });
+      expect(canceled.session).toBeUndefined();
+      expect(canceled.unsentInstruction).toBeUndefined();
+    }).pipe(Effect.ensuring(send.open)),
+  );
+  expect(h.sends.map((input) => input.externalSessionId)).toEqual(["session-1"]);
+  expect(h.stops).toEqual([]);
+  expect(h.resumes).toEqual([]);
+});
+
+test("a canceled reuse launch does not stop the reused session", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder", { live: true });
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const launch = yield* Effect.forkChild(h.service.launch(reuseRequest(sourceSession)));
+      yield* Deferred.await(h.sendEntered);
+      // Shutdown interrupts the pending send. It must not wait for the runtime to answer.
+      yield* h.service.shutdown();
+      const result = yield* Fiber.join(launch);
+      expect(result).toMatchObject({
+        status: "canceled",
+        session: { externalSessionId: "builder" },
+      });
+      expect(result.acceptedMessage).toBeUndefined();
+    }).pipe(Effect.ensuring(send.open)),
+  );
+  expect(h.stops).toEqual([]);
+  const state = await Effect.runPromise(h.runtime.read({ repoPath: "/repo", ...sourceSession }));
+  expect(state.type).toBe("live");
+});
+
+test.each(["before", "during"] as const)(
+  "Stop %s the first send cancels a fresh launch and stops its session",
+  async (point) => {
+    const h = await createLaunchHarness();
+    const wait = await pausePoint();
+    if (point === "before") h.setPublicationGate(wait.pause);
+    else h.setSendGate(wait.pause);
+    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+        yield* Deferred.await(wait.entered);
+        yield* commands.stopSession(createdRef);
+        yield* wait.open;
+        const result = yield* Fiber.join(launch);
+        expect(result).toMatchObject({
+          status: "canceled",
+          session: { externalSessionId: "session-1" },
+        });
+        if (point === "before") {
+          expect(result.failure?.message).toBe("Session launch was canceled.");
+          expect(result.acceptedMessage).toBeUndefined();
+        } else expect(result.acceptedMessage?.externalSessionId).toBe("session-1");
+        expect(result.unsentInstruction).toBeUndefined();
+      }).pipe(Effect.ensuring(wait.open)),
+    );
+    expect(h.sends).toHaveLength(point === "before" ? 0 : 1);
+    // After an accepted send, settlement stops again: the Stop can come before the turn starts.
+    expect(h.stops).toEqual(point === "before" ? ["session-1"] : ["session-1", "session-1"]);
+    expect(h.records).toHaveLength(1);
+  },
+);
+
+test("shutdown interrupts a pending first send, stops its session, and rejects new launches", async () => {
+  const h = await createLaunchHarness();
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(h.sendEntered);
+      // Shutdown returns only after the worker settled and stopped the session it created.
+      yield* h.service.shutdown();
+      expect(h.stops).toEqual(["session-1"]);
+      const rejected = yield* Effect.result(h.service.launch(requestFor("codex")));
+      expect(rejected._tag).toBe("Failure");
+      if (rejected._tag === "Failure")
+        expect(rejected.failure.message).toContain("does not accept new session launches");
+      const result = yield* Fiber.join(launch);
+      expect(result).toMatchObject({
+        status: "canceled",
+        session: { externalSessionId: "session-1" },
+      });
+      expect(result.acceptedMessage).toBeUndefined();
+      expect(result.unsentInstruction).toBeUndefined();
+    }).pipe(Effect.ensuring(send.open)),
+  );
+  expect(h.starts).toEqual(["session-1"]);
+  expect(h.stops).toEqual(["session-1"]);
+});
+
+test("a task start completion failure after save publishes the saved record and stops the session", async () => {
+  const h = await createLaunchHarness("codex", {
+    completion: Effect.fail(failure("Task transition failed")),
+  });
+  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(result).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "session-1" },
+    failure: { message: "Task transition failed" },
+  });
+  expect(result.unsentInstruction).toBeUndefined();
+  expect(h.publications).toEqual(["agent-session-create"]);
+  expect(h.records.map((record) => record.externalSessionId)).toEqual(["session-1"]);
+  expect(h.stops).toEqual(["session-1"]);
+  expect(h.sends).toEqual([]);
+  expect(h.getTask().status).toBe("ready_for_dev");
+});
+
+test.each(runtimeKinds)(
   "sends the complete typed task draft after its caller leaves: %s",
   async (runtimeKind) => {
     const h = await createLaunchHarness(runtimeKind);
-    const gate = await Effect.runPromise(Deferred.make<void>());
-    h.setStoreGate(Deferred.await(gate));
-    const request = requestFor(runtimeKind);
+    const store = await pausePoint();
+    h.setStoreGate(Deferred.await(store.release));
     const parts: AgentSessionControlSendInput["parts"] = [
       { kind: "text", text: "Review this " },
       {
@@ -486,549 +680,63 @@ test.each(["opencode", "codex", "claude"] as const)(
         },
       },
     ];
-    request.instruction = { kind: "message", parts };
+    const ref = { ...createdRef, runtimeKind };
     await Effect.runPromise(
       Effect.gen(function* () {
-        const caller = yield* Effect.forkChild(h.service.launch(request));
+        const caller = yield* Effect.forkChild(
+          h.service.launch({ ...requestFor(runtimeKind), instruction: { kind: "message", parts } }),
+        );
         while (h.starts.length === 0) yield* Effect.yieldNow;
         yield* Fiber.interrupt(caller);
-        yield* Deferred.succeed(gate, undefined);
-        const result = yield* h.service.launch(request);
-        expect(result.acceptance).toBe("accepted");
-        expect(h.starts).toHaveLength(1);
-        expect(h.sends).toHaveLength(1);
-        expect(h.sends[0]?.parts).toEqual(parts);
-        expect(h.records[0]?.externalSessionId).toBe(result.session?.externalSessionId);
-      }),
+        yield* store.open;
+        // The hold ends when the detached launch settles.
+        while ((yield* h.runtime.read(ref)).type !== "live") yield* Effect.yieldNow;
+        while (true) {
+          const state = yield* h.runtime.read(ref);
+          if (state.type === "live" && state.session.activity === "waiting_for_question") break;
+          yield* Effect.yieldNow;
+        }
+      }).pipe(Effect.ensuring(store.open)),
     );
-  },
-);
-
-test.each([
-  ["finalObservation", "cancel"],
-  ["finalObservation", "shutdown"],
-  ["finalObservation", "session_stop"],
-  ["admissionRelease", "cancel"],
-  ["finalPublication", "cancel"],
-  ["finalPublication", "session_stop"],
-] as const)(
-  "%s cancellation through %s settles the exact saved session",
-  async (boundary, action) => {
-    const entered = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    const h = await createLaunchHarness("codex", {
-      [boundary]: Deferred.succeed(entered, undefined).pipe(
-        Effect.andThen(Deferred.await(release)),
-      ),
-    });
-    const request = requestFor("codex");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(h.service.launch(request));
-        yield* Deferred.await(entered);
-        const [pending] = yield* h.service.read(request);
-        const ref = {
-          repoPath: request.repoPath,
-          externalSessionId: pending!.session!.externalSessionId,
-          runtimeKind: pending!.session!.runtimeKind,
-          workingDirectory: pending!.session!.workingDirectory,
-        };
-        const cancel = yield* Effect.forkChild(
-          action === "shutdown"
-            ? h.service.shutdown()
-            : action === "session_stop"
-              ? h.service
-                  .cancelSessionBeforeStop(ref)
-                  .pipe(Effect.andThen(h.runtime.stopSession(ref)))
-              : Effect.all([h.service.cancel(request), h.service.cancel(request)]).pipe(
-                  Effect.asVoid,
-                ),
-        );
-        yield* Effect.yieldNow;
-        expect(cancel.pollUnsafe()).toBeUndefined();
-        expect(h.stops).toHaveLength(0);
-        yield* Deferred.succeed(release, undefined);
-        const outcome = yield* Fiber.join(launch);
-        yield* Fiber.join(cancel);
-        expect(outcome).toMatchObject({
-          phase: "canceled",
-          acceptance: "accepted",
-          ownershipSaved: true,
-          recoveryAllowed: false,
-        });
-        expect(h.snapshots.at(-1)?.phase).toBe("canceled");
-        expect(h.stops).toEqual([ref.externalSessionId]);
-        expect(yield* h.runtime.read(ref)).toMatchObject({ type: "missing" });
-        expect(h.records).toHaveLength(1);
-        expect(h.sends).toHaveLength(1);
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-    );
-  },
-);
-
-test.each(["rejected", "stopped"] as const)(
-  "cancellation during failed final publication retains failures and the %s native state",
-  async (nativeStop) => {
-    const entered = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    const h = await createLaunchHarness("codex", {
-      finalPublication: Deferred.succeed(entered, undefined).pipe(
-        Effect.andThen(Deferred.await(release)),
-        Effect.andThen(Effect.fail(failure("Exact final publication failure"))),
-      ),
-    });
-    h.setStopFailure(nativeStop);
-    const request = requestFor("codex");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(h.service.launch(request));
-        yield* Deferred.await(entered);
-        const cancel = yield* Effect.forkChild(h.service.cancel(request));
-        yield* Effect.yieldNow;
-        yield* Deferred.succeed(release, undefined);
-        const outcome = yield* Fiber.join(launch);
-        expect(yield* Fiber.join(cancel)).toEqual(outcome);
-        expect(outcome).toMatchObject({
-          phase: "canceled",
-          acceptance: "accepted",
-          ownershipSaved: true,
-          recoveryAllowed: false,
-          failure: {
-            message: "Exact final publication failure",
-            cleanupErrors: ["Exact stop failure"],
-          },
-        });
-        expect(h.stops).toEqual([outcome.session!.externalSessionId]);
-        if (nativeStop === "stopped") expect(outcome.liveSession).toBeUndefined();
-        else expect(outcome.liveSession?.activity).toBe("waiting_for_question");
-        expect(h.records).toHaveLength(1);
-        expect(h.snapshots.at(-1)?.phase).toBe("canceled");
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-    );
-  },
-);
-
-test.each(["holdRelease", "admissionRelease"] as const)(
-  "recovery joins an unfinished failed launch through %s cleanup",
-  async (boundary) => {
-    const entered = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    const h = await createLaunchHarness("codex", {
-      [boundary]: Deferred.succeed(entered, undefined).pipe(
-        Effect.andThen(Deferred.await(release)),
-      ),
-    });
-    h.setSendFailure("rejected");
-    const request = requestFor("codex");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(h.service.launch(request));
-        yield* Deferred.await(entered);
-        const [pending] = yield* h.service.read(request);
-        h.setSendFailure(null);
-        const recovery = yield* Effect.forkChild(h.service.recover(request));
-        yield* Effect.yieldNow;
-        yield* Deferred.succeed(release, undefined);
-        const [original, recovered] = yield* Effect.all([
-          Fiber.join(launch),
-          Fiber.join(recovery),
-        ]).pipe(Effect.timeout("500 millis"));
-        expect(pending!.recoveryAllowed).toBe(false);
-        expect(original.phase).toBe("failed");
-        expect(recovered.phase).toBe("completed");
-        expect(recovered.session).toEqual(original.session);
-        expect(h.starts).toHaveLength(1);
-        expect(h.sends).toHaveLength(2);
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-    );
-  },
-);
-
-test.each(["cancel", "shutdown"] as const)(
-  "%s joins failed launch cleanup before stopping the saved session",
-  async (action) => {
-    const entered = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    const h = await createLaunchHarness("codex", {
-      holdRelease: Deferred.succeed(entered, undefined).pipe(
-        Effect.andThen(Deferred.await(release)),
-      ),
-    });
-    h.setPublishFailure();
-    const request = requestFor("codex");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(h.service.launch(request));
-        yield* Deferred.await(entered);
-        const cancellation = yield* Effect.forkChild(
-          action === "cancel"
-            ? h.service.cancel(request).pipe(Effect.asVoid)
-            : h.service.shutdown(),
-        );
-        yield* Effect.yieldNow;
-        expect(cancellation.pollUnsafe()).toBeUndefined();
-        yield* Deferred.succeed(release, undefined);
-        yield* Fiber.join(cancellation);
-        const outcome = yield* Fiber.join(launch);
-        expect(outcome.phase).toBe("canceled");
-        expect(h.stops).toEqual([outcome.session!.externalSessionId]);
-        expect(h.sends).toHaveLength(0);
-        expect(outcome.recoveryAllowed).toBe(false);
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-    );
-  },
-);
-
-test.each(["opencode", "codex", "claude"] as const)(
-  "fresh %s launch saves ownership and awaits native admission with no browser",
-  async (kind) => {
-    const h = await createLaunchHarness(kind);
-    const request = requestFor(kind);
-    const result = await Effect.runPromise(h.service.launch(request));
-    expect(result).toMatchObject({
-      workspaceId: "workspace",
-      repoPath: "/repo",
-      taskId: "task",
-      phase: "completed",
-      acceptance: "accepted",
-      ownershipSaved: true,
-      liveSession: {
-        activity: "waiting_for_question",
-        pendingQuestions: [{ requestId: "question" }],
-      },
-    });
-    expect(h.records).toHaveLength(1);
+    expect(h.starts).toHaveLength(1);
     expect(h.sends).toHaveLength(1);
-    expect(h.sends[0]?.parts).toEqual([{ kind: "text", text: "\n  retained instruction\n" }]);
-    expect(h.getTask().status).toBe("in_progress");
-    expect(h.sends[0]?.systemPrompt).toContain("Task context");
-    const state = await Effect.runPromise(
-      h.runtime.read({ repoPath: "/repo", ...result.session! }),
-    );
-    expect(state.type === "live" && state.session.activity).toBe("waiting_for_question");
+    expect(h.sends[0]?.parts).toEqual(parts);
+    expect(h.records.map((record) => record.externalSessionId)).toEqual(["session-1"]);
   },
 );
 
-test("caller interruption does not cancel the admitted host worker", async () => {
-  const h = await createLaunchHarness();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      h.setStoreGate(Deferred.await(gate));
-      const caller = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
-      yield* Effect.yieldNow;
-      yield* Fiber.interrupt(caller);
-      yield* Deferred.succeed(gate, undefined);
-    }),
-  );
-  // Read the same attempt by joining its retained completion, without another launch.
-  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
-  expect(result.acceptance).toBe("accepted");
-  expect(h.starts).toHaveLength(1);
-  expect(h.sends).toHaveLength(1);
-});
-
-test.each(["opencode", "codex", "claude"] as const)(
-  "reuse %s resumes the exact saved source without creating a session or reading history",
-  async (kind) => {
-    const h = await createLaunchHarness(kind);
-    h.records.push({
-      externalSessionId: "source",
-      runtimeKind: kind,
-      workingDirectory: "/worktrees/task",
-      role: "build",
-      startedAt: timestamp,
-      selectedModel: modelFor(kind),
-    });
-    const request: WorkflowLaunchRequest = {
-      ...requestFor(kind),
-      policy: {
-        kind: "manual",
-        actionId: "build_after_qa_rejected",
-        decision: {
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "source",
-            runtimeKind: kind,
-            workingDirectory: "/worktrees/task",
-          },
-        },
-      },
-    };
-    h.setTaskStatus("in_progress");
-    const result = await Effect.runPromise(h.service.launch(request));
-    expect(result.acceptance).toBe("accepted");
-    expect(result.session?.externalSessionId).toBe("source");
-    expect(h.starts).toHaveLength(0);
-    expect(h.resumes).toEqual(["source"]);
-    expect(h.sends[0]?.model).toEqual(modelFor(kind));
-  },
-);
-
-test.each([
-  { speed: "fast", saved: { ...modelFor("claude"), speed: "fast" } },
-  { speed: null, saved: modelFor("claude") },
-])("reuse saves speed $speed before its kickoff turn", async ({ speed, saved }) => {
-  const h = await createLaunchHarness("claude");
-  h.records.push({
-    externalSessionId: "source",
-    runtimeKind: "claude",
-    workingDirectory: "/worktrees/task",
-    role: "build",
-    startedAt: timestamp,
-    selectedModel: speed ? modelFor("claude") : { ...modelFor("claude"), speed: "fast" },
-  });
-  h.setTaskStatus("in_progress");
-  const result = await Effect.runPromise(
-    h.service.launch({
-      ...requestFor("claude"),
-      policy: {
-        kind: "manual",
-        actionId: "build_after_qa_rejected",
-        decision: {
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "source",
-            runtimeKind: "claude",
-            workingDirectory: "/worktrees/task",
-          },
-          speed,
-        },
-      },
-    }),
-  );
-  expect(result.acceptance).toBe("accepted");
-  expect(h.records[0]?.selectedModel).toEqual(saved);
-  expect(h.sends[0]?.model).toEqual(saved);
-});
-
-test.each(["rejected", "unknown", "accepted"] as const)(
-  "retains session identity and exact send failure with %s acceptance",
-  async (acceptance) => {
-    const h = await createLaunchHarness();
-    h.setSendFailure(acceptance);
-    const request = requestFor("codex");
-    const result = await Effect.runPromise(h.service.launch(request));
-    expect(result).toMatchObject({
-      phase: "failed",
-      acceptance,
-      ownershipSaved: true,
-      session: { externalSessionId: "session-1" },
-    });
-    expect(h.records).toHaveLength(1);
-    expect(h.stops).toHaveLength(0);
-    h.setSendFailure(null);
-    if (acceptance === "unknown")
-      await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
-        "Inspect the saved session",
-      );
-    else {
-      const results = await Promise.all([
-        Effect.runPromise(h.service.recover(request)),
-        Effect.runPromise(h.service.recover(request)),
-      ]);
-      expect(results.every((item) => item.acceptance === "accepted")).toBe(true);
-      expect(h.sends).toHaveLength(acceptance === "rejected" ? 2 : 1);
-    }
-    expect(h.starts).toHaveLength(1);
-  },
-);
-
-test.each(["codex", "claude", "opencode"] as const)(
-  "recovery reattaches a missing %s session and sends only the rejected instruction",
-  async (runtimeKind) => {
-    const h = await createLaunchHarness(runtimeKind);
-    const request = requestFor(runtimeKind);
-    h.setSendFailure("rejected");
-    const failed = await Effect.runPromise(h.service.launch(request));
-    expect(failed).toMatchObject({ phase: "failed", acceptance: "rejected", ownershipSaved: true });
-    h.live.clear();
-    h.setSendFailure(null);
-
-    const recovered = await Effect.runPromise(h.service.recover(request));
-
-    expect(recovered).toMatchObject({
-      phase: "completed",
-      acceptance: "accepted",
-      session: failed.session,
-    });
-    expect(h.resumes).toEqual([failed.session!.externalSessionId]);
-    expect(h.sends).toHaveLength(2);
-    expect(h.sends[1]).toEqual(h.sends[0]);
-    expect(h.starts).toHaveLength(1);
-    expect(h.records).toHaveLength(1);
-    expect(h.stops).toHaveLength(0);
-  },
-);
-
-test("a publication failure after ownership commit retains the session and does not clean its worktree", async () => {
+test("a publication failure after ownership save returns the saved session without a send", async () => {
   const h = await createLaunchHarness();
   h.setPublishFailure();
-  const request = requestFor("codex");
-  const result = await Effect.runPromise(h.service.launch(request));
-  expect(result.ownershipSaved).toBe(true);
-  expect(result.recoveryAllowed).toBe(false);
+  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(result).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "session-1" },
+    failure: { message: "Ownership publication failed" },
+  });
+  expect(result.unsentInstruction).toBeUndefined();
   expect(h.records).toHaveLength(1);
   expect(h.stops).toHaveLength(0);
-  expect(result.failure?.message).toBe("Ownership publication failed");
-  expect(result.failure?.stage).toBe("publication");
-  await expect(Effect.runPromise(h.service.recover(request))).rejects.toThrow(
-    "recovery is unavailable",
-  );
-  expect((await Effect.runPromise(h.service.read(request)))[0]).toEqual(result);
   expect(h.sends).toHaveLength(0);
-  expect(h.starts).toHaveLength(1);
-  expect(h.records).toHaveLength(1);
+  expect(h.removedWorktrees).toEqual([]);
 });
 
-test.each(["opencode", "codex", "claude"] as const)(
-  "fork %s uses the exact task-owned parent and stores the child before admission",
-  async (kind) => {
-    const h = await createLaunchHarness(kind);
-    h.enablePullRequests();
-    h.setTaskStatus("human_review");
-    h.records.push({
-      externalSessionId: "parent",
-      runtimeKind: kind,
-      workingDirectory: "/worktrees/task",
-      role: "build",
-      startedAt: timestamp,
-      selectedModel: modelFor(kind),
-    });
-    const result = await Effect.runPromise(
-      h.service.launch({
-        ...requestFor(kind),
-        policy: {
-          kind: "manual",
-          actionId: "build_pull_request_generation",
-          decision: {
-            startMode: "fork",
-            sourceSession: {
-              externalSessionId: "parent",
-              runtimeKind: kind,
-              workingDirectory: "/worktrees/task",
-            },
-            selectedModel: modelFor(kind),
-          },
-        },
-      }),
-    );
-    expect(result).toMatchObject({
-      phase: "completed",
-      acceptance: "accepted",
-      ownershipSaved: true,
-      session: { externalSessionId: "fork-1", workingDirectory: "/worktrees/task" },
-    });
-    expect(h.forks).toEqual(["parent"]);
-    expect(h.starts).toHaveLength(0);
-    expect(h.records.map((record) => record.externalSessionId)).toEqual(["parent", "fork-1"]);
-    expect(h.sends[0]?.externalSessionId).toBe("fork-1");
-  },
-);
-
-test("starting state suppresses native idle until admission and preserves pending questions", async () => {
+test("the launch hold shows a running session until the launch settles", async () => {
   const h = await createLaunchHarness();
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
   await Effect.runPromise(
     Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      h.setSendGate(Deferred.await(gate));
-      const worker = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
-      yield* Deferred.await(h.sendEntered);
-      const result = yield* h.service.read({
-        workspaceId: "workspace",
-        repoPath: "/repo",
-        taskId: "task",
-        launchAttemptId: "attempt",
-      });
-      const ref = { repoPath: "/repo", ...result[0]!.session! };
-      const live = yield* h.runtime.read(ref);
-      expect(live.type === "live" && live.session.activity).toBe("running");
-      const conflict = yield* Effect.exit(
-        h.lifecycle.runReservedTaskOperation("/repo", "task", Effect.void),
-      );
-      expect(conflict._tag).toBe("Failure");
-      yield* Deferred.succeed(gate, undefined);
-      yield* Fiber.join(worker);
-      const settled = yield* h.runtime.read(ref);
-      expect(settled.type === "live" && settled.session.activity).toBe("waiting_for_question");
-    }),
-  );
-});
-
-test("explicit cancellation joins in-flight acceptance and stops the exact saved session", async () => {
-  const h = await createLaunchHarness();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      h.setSendGate(Deferred.await(gate));
       const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
       yield* Deferred.await(h.sendEntered);
-      const cancel = yield* Effect.forkChild(
-        h.service.cancel({
-          workspaceId: "workspace",
-          repoPath: "/repo",
-          taskId: "task",
-          launchAttemptId: "attempt",
-        }),
-      );
-      yield* Effect.yieldNow;
-      yield* Deferred.succeed(gate, undefined);
-      const result = yield* Fiber.join(launch);
-      yield* Fiber.join(cancel);
-      expect(result).toMatchObject({
-        phase: "canceled",
-        acceptance: "accepted",
-        ownershipSaved: true,
-      });
-    }),
+      const held = yield* h.runtime.read(createdRef);
+      expect(held.type === "live" && held.session.activity).toBe("running");
+      yield* send.open;
+      expect((yield* Fiber.join(launch)).status).toBe("completed");
+      const settled = yield* h.runtime.read(createdRef);
+      expect(settled.type === "live" && settled.session.activity).toBe("waiting_for_question");
+    }).pipe(Effect.ensuring(send.open)),
   );
-  expect(h.starts).toHaveLength(1);
-  expect(h.sends).toHaveLength(1);
-  expect(h.stops).toEqual(["session-1"]);
-  expect(h.records).toHaveLength(1);
-});
-
-test("the session stop command joins launch admission and owns the single native stop", async () => {
-  const h = await createLaunchHarness();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      h.setSendGate(Deferred.await(gate));
-      const request = requestFor("codex");
-      const launch = yield* Effect.forkChild(h.service.launch(request));
-      yield* Deferred.await(h.sendEntered);
-      const [attempt] = yield* h.service.read(request);
-      const ref = { repoPath: request.repoPath, ...attempt!.session! };
-      const stop = yield* Effect.forkChild(
-        h.service.cancelSessionBeforeStop(ref).pipe(Effect.andThen(h.runtime.stopSession(ref))),
-      );
-      yield* Effect.yieldNow;
-      expect(h.stops).toHaveLength(0);
-      yield* Deferred.succeed(gate, undefined);
-      expect(yield* Fiber.join(launch)).toMatchObject({
-        phase: "canceled",
-        acceptance: "accepted",
-      });
-      yield* Fiber.join(stop);
-    }),
-  );
-  expect(h.stops).toEqual(["session-1"]);
-  expect(h.records).toHaveLength(1);
-  expect(h.sends).toHaveLength(1);
-});
-
-test("recovery rejects removed ownership before native resume or another send", async () => {
-  const h = await createLaunchHarness();
-  h.setSendFailure("rejected");
-  const request = requestFor("codex");
-  await Effect.runPromise(h.service.launch(request));
-  h.records.splice(0);
-  h.live.clear();
-  const result = await Effect.runPromise(h.service.recover(request));
-  expect(result.failure?.message).toContain("no longer owned");
-  expect(h.resumes).toHaveLength(0);
-  expect(h.sends).toHaveLength(1);
-  expect(h.starts).toHaveLength(1);
 });
 
 test("an ownership save failure stops the native session before the first send", async () => {
@@ -1036,62 +744,37 @@ test("an ownership save failure stops the native session before the first send",
   h.setSaveFailure();
   const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
   expect(result).toMatchObject({
-    phase: "failed",
-    ownershipSaved: false,
+    status: "failed",
     failure: { message: "Ownership save failed" },
   });
+  expect(result.session).toBeUndefined();
+  expect(result.unsentInstruction).toBeUndefined();
   expect(h.records).toHaveLength(0);
   expect(h.sends).toHaveLength(0);
   expect(h.stops).toEqual(["session-1"]);
 });
 
-test("cancellation during a failed ownership save does not repeat native cleanup", async () => {
+test("shutdown during a failed ownership save stops the native session once", async () => {
   const h = await createLaunchHarness();
   h.setSaveFailure();
+  const store = await pausePoint();
+  h.setStoreGate(store.pause);
   await Effect.runPromise(
     Effect.gen(function* () {
-      const entered = yield* Deferred.make<void>();
-      const gate = yield* Deferred.make<void>();
-      h.setStoreGate(
-        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate))),
-      );
-      const request = requestFor("codex");
-      const launch = yield* Effect.forkChild(h.service.launch(request));
-      yield* Deferred.await(entered);
-      const cancel = yield* Effect.forkChild(h.service.cancel(request));
-      yield* Effect.yieldNow;
-      yield* Deferred.succeed(gate, undefined);
-      expect(yield* Fiber.join(launch)).toMatchObject({
-        phase: "canceled",
-        ownershipSaved: false,
-        failure: { message: "Ownership save failed" },
-      });
-      yield* Fiber.join(cancel);
-    }),
+      const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(store.entered);
+      // The ownership save cannot be interrupted, so shutdown waits for it.
+      const shutdown = yield* Effect.forkChild(h.service.shutdown());
+      yield* yieldToFibers;
+      expect(shutdown.pollUnsafe()).toBeUndefined();
+      yield* store.open;
+      yield* Fiber.join(shutdown);
+      const result = yield* Fiber.join(launch);
+      expect(result.status).toBe("canceled");
+      expect(result.session).toBeUndefined();
+    }).pipe(Effect.ensuring(store.open)),
   );
   expect(h.stops).toEqual(["session-1"]);
   expect(h.sends).toHaveLength(0);
   expect(h.records).toHaveLength(0);
-});
-
-test("host shutdown joins native submission before stopping and rejects new launches", async () => {
-  const h = await createLaunchHarness();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      h.setSendGate(Deferred.await(gate));
-      const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
-      yield* Deferred.await(h.sendEntered);
-      const shutdown = yield* Effect.forkChild(h.service.shutdown());
-      yield* Effect.yieldNow;
-      expect(h.stops).toHaveLength(0);
-      yield* Deferred.succeed(gate, undefined);
-      yield* Fiber.join(shutdown);
-      expect((yield* Fiber.join(launch)).phase).toBe("canceled");
-    }),
-  );
-  expect(h.stops).toEqual(["session-1"]);
-  await expect(
-    Effect.runPromise(h.service.launch(requestFor("codex", "after-shutdown"))),
-  ).rejects.toThrow("admission is closed");
 });

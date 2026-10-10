@@ -128,6 +128,7 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     sessionStartNotifications: {
       publishSessionStarted: () => {},
       publishSessionError: async () => true,
+      markInAppFeedbackHandled: () => {},
       reportFailure: () => {},
     },
   } satisfies NotificationContextValue;

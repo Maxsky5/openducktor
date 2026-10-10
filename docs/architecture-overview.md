@@ -50,16 +50,32 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 The host owns complete workflow launches.
 
 1. The frontend sends one request with the requested workspace, task, action, user choices, and instruction.
-2. The host validates the request and starts an independent worker.
-   A fresh workflow role creates or reuses the task worktree and runs its worktree-creation actions through terminals.
+2. The host validates the request and starts an independent worker. Launches for one task run one at a time, in arrival order. A fresh workflow role creates or reuses the task worktree and runs its worktree-creation actions through terminals.
 3. The worker starts, resumes, or forks the selected native session and saves task ownership.
-4. The worker submits the first instruction and reports acceptance with the saved session identity.
-5. Renderer attachment receives ordered live state and transcript events through the existing channel.
+4. The worker sends the first instruction through the normal workflow send policy.
+5. The host returns the result.
+6. Renderer attachment receives ordered live state and transcript events through the existing channel.
+
+Launch rules:
+
+- A frontend workspace change does not cancel an admitted workflow launch.
+- Stop cancels a launch that targets the stopped session. A canceled launch sends no first instruction. If the runtime accepted the first instruction during the Stop, settlement stops the session again.
+- Host shutdown interrupts launch workers and waits for their cleanup before it stops runtimes and the task store.
+- A launch asks the runtime adapter to return only after the runtime accepts the first instruction. The Codex adapter waits for the `turn/start` or `turn/steer` answer. The Claude and OpenCode adapters return their normal send receipt. A later runtime failure shows as a session error.
+- Only a fresh decision can name a target working directory. The host accepts only the canonical task worktree.
+- Only Autopilot launches that use the configured default model check the runtime catalog.
+- A reuse launch refuses a session that waits for an approval or a blocking question. Its first instruction answers open background questions.
+- Each runtime adapter calls the `onSent` send option when it sends the native request that carries the message.
+- If the first send fails before `onSent`, or the runtime rejects the instruction, the result returns the instruction. The frontend can send it again through the normal send path. A Codex JSON-RPC error is a rejection.
+- Other failures after `onSent`, such as a timeout or a lost reply, do not prove that the runtime did not get the instruction. The result does not return it. The error tells the user to inspect the session.
+- The host keeps the last launch failure of a live saved session in memory while it runs. The session snapshot carries it as `launchFailure`. A browser that attaches later also shows it. The next accepted message clears it.
+- The host sends one session error notification for each new `launchFailure`, also after the session goes away and comes back. A launch failure is host state, so it does not end the runtime turn.
+- A failed launch result carries `failure.noticeId` only when the host showed the failure in the live session. Without it, for example when the session could not resume, the browser shows and notifies the failure itself.
+- When the browser shows a Retry toast for a reported failure, the host notification goes out without its in-app toast.
 
 Session rules:
 
 - `spec`, `planner`, and `qa` reject mutating permission requests. If the reply fails, keep the request open and emit a system error.
-- A frontend workspace change does not cancel an admitted workflow launch. Explicit cancellation joins submission and retains saved task ownership.
 - Register and start the live adapter before the runtime can emit events. Release it when the runtime stops.
 - Read transcript history only for the selected session. A history read does not discover pending input or delay live state.
 

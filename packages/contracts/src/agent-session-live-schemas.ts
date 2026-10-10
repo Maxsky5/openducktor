@@ -92,6 +92,14 @@ export type AgentSessionLivePendingQuestionRequest = z.infer<
   typeof agentSessionLivePendingQuestionRequestSchema
 >;
 
+const agentSessionLiveNoticeSchema = z
+  .object({
+    messageId: nonEmptyStringSchema,
+    message: z.string(),
+    timestamp: isoTimestampSchema,
+  })
+  .strict();
+
 export const agentSessionLiveSnapshotSchema = z
   .object({
     ref: agentSessionLiveRefSchema,
@@ -105,14 +113,12 @@ export const agentSessionLiveSnapshotSchema = z
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
-    policyNotice: z
-      .object({
-        messageId: nonEmptyStringSchema,
-        message: z.string(),
-        timestamp: isoTimestampSchema,
-      })
-      .strict()
-      .optional(),
+    policyNotice: agentSessionLiveNoticeSchema.optional(),
+    /**
+     * The failure of the last host launch of this session. The host keeps it in memory while it
+     * runs, so a new attachment shows it. The next accepted message clears it.
+     */
+    launchFailure: agentSessionLiveNoticeSchema.optional(),
     /**
      * Why `activity` is not current. A failed status read sets it on the kept snapshot, and
      * the next status update clears it. Other updates keep it.

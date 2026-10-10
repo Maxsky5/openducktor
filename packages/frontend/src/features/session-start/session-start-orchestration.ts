@@ -1,20 +1,19 @@
 import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { presentWorkflowLaunchOutcome } from "./session-start-message-recovery";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { host } from "@/state/operations/shared/host";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 export type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 import {
-  type WorkflowLaunchClient,
+  hostLaunchNoticeId,
+  type SendAgentMessage,
   type SessionStartWorkflowResult,
   startSessionWorkflow,
-  WorkflowLaunchFailure,
+  type WorkflowLaunchClient,
 } from "./session-start-workflow";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 
@@ -39,17 +38,9 @@ type BuildSessionStartModalRequestArgs = {
   selectedTask?: Pick<TaskCard, "targetBranch" | "targetBranchError"> | null;
 };
 
-type StartFromDecisionArgs = {
+export type RunSessionStartWorkflowInput = {
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
-  workspaceId: string | null;
-  repoPath: string | null;
-  launchAttemptId: string;
-  client?: WorkflowLaunchClient;
-  readSessionSnapshot?: Parameters<typeof startSessionWorkflow>[0]["readSessionSnapshot"];
-};
-
-export type RunSessionStartWorkflowInput = Pick<StartFromDecisionArgs, "request" | "decision"> & {
   isCurrent?: () => boolean;
   task: TaskCard | null;
   onPostStartMessageFailure?: (result: SessionStartWorkflowResult) => void;
@@ -78,6 +69,8 @@ export type SessionStartNotificationPublisher = {
     input: SessionStartNotificationInput,
     localErrorMessage?: string,
   ): Promise<boolean>;
+  /** Another view shows this host session error, so its notification skips the in-app toast. */
+  markInAppFeedbackHandled(errorId: string): void;
   reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
 };
 
@@ -94,10 +87,35 @@ export class SessionStartWorkflowError extends Error {
 export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
   cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
 
-type CreateSessionStartWorkflowRunnerArgs = Pick<
-  StartFromDecisionArgs,
-  "workspaceId" | "repoPath" | "client" | "readSessionSnapshot"
-> & {
+/** Publishes a start error once. It returns true when the app already showed the error. */
+export const publishSessionStartError = async (
+  notifications: SessionStartNotificationPublisher | undefined,
+  input: SessionStartNotificationInput,
+  error: Error,
+  reportFailure: (cause: unknown) => void,
+): Promise<boolean> => {
+  const noticeId = hostLaunchNoticeId(error);
+  if (noticeId !== undefined) {
+    try {
+      if (input.inAppFeedbackHandled) notifications?.markInAppFeedbackHandled(noticeId);
+    } catch (cause) {
+      reportFailure(cause);
+    }
+    return true;
+  }
+  try {
+    return (await notifications?.publishSessionError(input, error.message)) === true;
+  } catch (cause) {
+    reportFailure(cause);
+    return false;
+  }
+};
+
+type CreateSessionStartWorkflowRunnerArgs = {
+  workspaceId: string | null;
+  repoPath: string | null;
+  client: WorkflowLaunchClient;
+  sendAgentMessage: SendAgentMessage;
   notifications?: SessionStartNotificationPublisher;
   createLaunchAttemptId?: () => string;
 };
@@ -106,7 +124,7 @@ export const createSessionStartWorkflowRunner = ({
   workspaceId,
   repoPath,
   client,
-  readSessionSnapshot,
+  sendAgentMessage,
   notifications,
   createLaunchAttemptId = () => crypto.randomUUID(),
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
@@ -130,44 +148,22 @@ export const createSessionStartWorkflowRunner = ({
         });
       }
     };
-    const args: StartFromDecisionArgs = {
-      request: input.request,
-      decision: input.decision,
-      workspaceId,
-      repoPath,
-      launchAttemptId,
-    };
-
-    if (client) args.client = client;
-    if (readSessionSnapshot) args.readSessionSnapshot = readSessionSnapshot;
-    const presentFailure = (error: Error): boolean => {
-      if (!(error instanceof WorkflowLaunchFailure)) return false;
-      try {
-        return presentWorkflowLaunchOutcome(error.outcome, client ?? host);
-      } catch (cause) {
-        reportNotificationFailure(cause);
-        return false;
-      }
-    };
-    const publishFailure = async (
-      error: Error,
-      notification: SessionStartNotificationInput,
-    ): Promise<boolean> => {
-      let handled = presentFailure(error);
-      if (handled) notification.inAppFeedbackHandled = true;
-      try {
-        const delivered = await notifications?.publishSessionError(notification, error.message);
-        handled ||= delivered === true;
-      } catch (cause) {
-        reportNotificationFailure(cause);
-      }
-      return handled;
-    };
+    const publishFailure = (error: Error, notification: SessionStartNotificationInput) =>
+      publishSessionStartError(notifications, notification, error, reportNotificationFailure);
     let result: SessionStartWorkflowResult;
     try {
       if (input.isCurrent && !input.isCurrent())
         throw new Error("The session start context changed. Start again in the current workspace.");
-      result = await startFromDecision(args);
+      if (!workspaceId || !repoPath)
+        throw new Error("Session start requires an explicit workspace and repository.");
+      result = await startSessionWorkflow({
+        request: input.request,
+        decision: input.decision,
+        workspaceId,
+        repoPath,
+        client,
+        sendAgentMessage,
+      });
     } catch (cause) {
       const startError = cause instanceof Error ? cause : new Error(String(cause));
       const feedbackHandled = await publishFailure(startError, notificationInput);
@@ -181,6 +177,7 @@ export const createSessionStartWorkflowRunner = ({
       if (result.retryPostStartMessage && input.onPostStartMessageFailure) {
         try {
           input.onPostStartMessageFailure(result);
+          notificationWithSession.inAppFeedbackHandled = true;
         } catch (cause) {
           reportNotificationFailure(cause);
         }
@@ -188,7 +185,10 @@ export const createSessionStartWorkflowRunner = ({
       const feedbackHandled = await publishFailure(postStartActionError, notificationWithSession);
       return {
         ...result,
-        postStartActionError: new SessionStartWorkflowError(postStartActionError, feedbackHandled),
+        postStartActionError: new SessionStartWorkflowError(
+          postStartActionError,
+          notificationWithSession.inAppFeedbackHandled === true || feedbackHandled,
+        ),
       };
     }
     try {
@@ -258,29 +258,6 @@ export const buildSessionStartModalRequest = ({
   }
 
   return modalRequest;
-};
-
-const startFromDecision = async ({
-  request,
-  decision,
-  workspaceId,
-  repoPath,
-  launchAttemptId,
-  client = host,
-  readSessionSnapshot,
-}: StartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
-  if (!workspaceId || !repoPath)
-    throw new Error("Session start requires an explicit workspace and repository.");
-  const input: Parameters<typeof startSessionWorkflow>[0] = {
-    request,
-    decision,
-    workspaceId,
-    repoPath,
-    launchAttemptId,
-    client,
-  };
-  if (readSessionSnapshot) input.readSessionSnapshot = readSessionSnapshot;
-  return startSessionWorkflow(input);
 };
 
 const launchActionSupportsReusableSessions = (

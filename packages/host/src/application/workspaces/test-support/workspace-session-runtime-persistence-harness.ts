@@ -1,4 +1,3 @@
-import { AgentSessionMessageRejectedError } from "../../../ports/agent-session-send-error";
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
 import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
 import type {
@@ -112,7 +111,6 @@ export const createPersistenceHarness = async (
   const beforeControl: Effect.Effect<void, HostError> = Effect.void;
   const state = {
     ...titleState,
-    rejectSend: false,
     failSend: false,
     failSnapshot: false,
     failModel: false,
@@ -302,13 +300,6 @@ export const createPersistenceHarness = async (
             Effect.andThen(
               Effect.suspend(() => {
                 inputs.push(input);
-                if (state.rejectSend)
-                  return Effect.fail(
-                    new AgentSessionMessageRejectedError({
-                      operation: "test",
-                      message: "Native send rejected",
-                    }),
-                  );
                 if (state.failSend) return failure("runtime rejected message");
                 const acceptedMessage = accepted();
                 if (!state.publishAcceptedMessageDuringSend) return Effect.succeed(acceptedMessage);
@@ -472,7 +463,6 @@ export const createPersistenceHarness = async (
               }),
             ),
           ),
-        publish: () => Effect.void,
         publishUpdated: (workspaceId, session) =>
           Effect.sync(() => {
             updates.push({ workspaceId, session });

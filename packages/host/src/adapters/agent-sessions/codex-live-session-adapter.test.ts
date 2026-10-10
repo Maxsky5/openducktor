@@ -199,6 +199,7 @@ const createControllerHarness = ({
   const liveContextLoads: unknown[] = [];
   const policyBoundContextLoads: unknown[] = [];
   const sessionDiffLoads: unknown[] = [];
+  const sendOptions: Array<{ requireNativeAdmission?: boolean } | undefined> = [];
   const controlInputs: AgentControlInputs = {
     starts: [],
     resumes: [],
@@ -345,8 +346,12 @@ const createControllerHarness = ({
           controlInputs.forks.push(input);
           return controlSummary;
         },
-        sendUserMessage: async (input: SendAgentUserMessageInput) => {
+        sendUserMessage: async (
+          input: SendAgentUserMessageInput,
+          options?: { requireNativeAdmission?: boolean },
+        ) => {
           controlInputs.sends.push(input);
+          sendOptions.push(options);
           return {
             type: "user_message" as const,
             externalSessionId: "thread-1",
@@ -402,6 +407,7 @@ const createControllerHarness = ({
     policyBoundContextLoads,
     sessionDiffLoads,
     controlInputs,
+    sendOptions,
   };
 };
 
@@ -947,6 +953,30 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       ]);
     }
     expect(harness.controlInputs.sends[0]?.resolvedQuestionRequestIds).toEqual(["question-1"]);
+  });
+
+  test("forwards send options to the Codex controller", async () => {
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy: () => Effect.succeed(codexPolicy),
+        createController: harness.createController,
+      })(runtime),
+    );
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const send = { ...ref, sessionScope, parts: [{ kind: "text" as const, text: "Hello" }] };
+    await Effect.runPromise(prepared.adapter.sendUserMessage(send));
+    await Effect.runPromise(
+      prepared.adapter.sendUserMessage(send, { requireNativeAdmission: true }),
+    );
+    expect(harness.sendOptions).toEqual([undefined, { requireNativeAdmission: true }]);
   });
 
   test("requires scope and accepts repository scope for direct Codex controls", async () => {

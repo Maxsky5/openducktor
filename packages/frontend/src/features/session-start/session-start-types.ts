@@ -71,10 +71,10 @@ export type SessionStartBeforeAction = {
 export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
-  queueIfBusy?: boolean;
   message?: string;
   parts?: AgentSessionUserMessagePart[];
   assertBeforeLaunch?: () => void;
+  /** Checks the recipient before a retry sends the first instruction again. */
   assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
   beforeStartAction?: SessionStartBeforeAction;
 };

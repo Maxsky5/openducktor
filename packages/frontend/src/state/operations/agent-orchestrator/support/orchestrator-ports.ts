@@ -12,11 +12,6 @@ export type AgentOrchestratorHostPort = AgentSessionReadPort & {
   taskWorktreeGet: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
 };
 
-export type AgentOrchestratorRuntimeHostPort = {
-  gitCanonicalizePath: typeof host.gitCanonicalizePath;
-  agentSessionWorkflowLaunch: typeof host.agentSessionWorkflowLaunch;
-};
-
 export type AgentOrchestratorLiveSessionHostPort = {
   agentSessionLiveLoadContext: typeof host.agentSessionLiveLoadContext;
   agentSessionLiveRead: typeof host.agentSessionLiveRead;
@@ -31,6 +26,5 @@ export type AgentOrchestratorLiveSessionHostPort = {
 export type AgentOrchestratorDependencies = {
   queryClient: QueryClient;
   hostPort: AgentOrchestratorHostPort;
-  runtimeHostPort: AgentOrchestratorRuntimeHostPort;
   liveSessionHostPort: AgentOrchestratorLiveSessionHostPort;
 };

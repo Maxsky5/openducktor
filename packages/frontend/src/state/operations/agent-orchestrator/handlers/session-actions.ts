@@ -9,8 +9,6 @@ import { createContinueInterruptedTurn } from "./continue-interrupted-turn";
 import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
-import { createStartAgentSession } from "./start-session";
-import { host } from "../../shared/host";
 import { createStopAgentSession } from "./stop-session";
 import { createRefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
 
@@ -25,7 +23,6 @@ type SessionActionsDependencies = {
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
-  launchWorkflow: typeof host.agentSessionWorkflowLaunch;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
@@ -43,7 +40,6 @@ export const createAgentSessionActions = ({
   sessionTurnState,
   updateSession,
   closeBackgroundQuestions,
-  launchWorkflow,
   loadRepoPromptOverrides,
   liveSessionHost,
   refreshTaskData,
@@ -75,11 +71,6 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     invalidateSessionStopQueries,
     refreshTaskData,
-  });
-
-  const startAgentSession = createStartAgentSession({
-    repo: { workspaceRepoPath, workspaceId },
-    runtime: { launchWorkflow },
   });
 
   const stopAgentSession = createStopAgentSession({
@@ -118,7 +109,6 @@ export const createAgentSessionActions = ({
 
   return {
     sendAgentMessage,
-    startAgentSession,
     stopAgentSession,
     continueInterruptedTurn,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,

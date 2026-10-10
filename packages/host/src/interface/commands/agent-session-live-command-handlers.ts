@@ -1,8 +1,4 @@
-import {
-  workflowLaunchRequestSchema,
-  workflowLaunchRefSchema,
-  workflowLaunchReadSchema,
-} from "@openducktor/contracts";
+import { workflowLaunchRequestSchema } from "@openducktor/contracts";
 import type { WorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
 import {
   type AgentRepositorySessionStartInput,
@@ -165,19 +161,5 @@ export const createWorkflowLaunchCommandHandlers = (workflowLaunchService: Workf
     agent_session_workflow_launch: (args) =>
       parseCommandInput(workflowLaunchRequestSchema, args, "agent_session_workflow_launch").pipe(
         Effect.flatMap(workflowLaunchService.launch),
-      ),
-    agent_session_workflow_launch_read: (args) =>
-      parseCommandInput(workflowLaunchReadSchema, args, "agent_session_workflow_launch_read").pipe(
-        Effect.flatMap(workflowLaunchService.read),
-      ),
-    agent_session_workflow_launch_recover: (args) =>
-      parseCommandInput(
-        workflowLaunchRefSchema,
-        args,
-        "agent_session_workflow_launch_recover",
-      ).pipe(Effect.flatMap(workflowLaunchService.recover)),
-    agent_session_workflow_launch_cancel: (args) =>
-      parseCommandInput(workflowLaunchRefSchema, args, "agent_session_workflow_launch_cancel").pipe(
-        Effect.flatMap(workflowLaunchService.cancel),
       ),
   }) satisfies HostCommandHandlerDefinitions;

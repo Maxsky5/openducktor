@@ -1,351 +1,283 @@
-import type { AgentSessionLiveRef, SessionLaunchState } from "@openducktor/contracts";
-import { Deferred, Effect, Fiber } from "effect";
-import { agentSessionRefKey } from "@openducktor/core";
-import { HostValidationError, type HostError } from "../../effect/host-errors";
+import type {
+  AgentSessionControlSummary,
+  AgentSessionLiveRef,
+  AgentSessionUserMessagePart,
+  SessionLaunchResult,
+} from "@openducktor/contracts";
+import { sessionLaunchFailureMessage } from "@openducktor/core";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { createSerialGate } from "../../effect/serial-gate";
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
 } from "../../ports/agent-session-send-error";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
-import type { SessionLaunchAttempt } from "./session-launch-worker";
-import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
-import { createSessionLaunchSettlement } from "./session-launch-settlement";
-import type {
-  SessionLaunchContext,
-  SessionLaunchInitial,
-  SessionLaunchRef,
-  SessionLaunchService,
-} from "./session-launch-types";
+import type { SessionLaunchContext, SessionLaunchService } from "./session-launch-types";
+import { toControlSessionRef } from "./task-workflow-session-storage";
 
-/** The host owns workers. Interrupting a caller only stops its wait for the result. */
-export const createSessionLaunchService = <
-  Request extends SessionLaunchRef,
-  State extends SessionLaunchState,
-  Ref extends SessionLaunchRef,
-  Read,
->(deps: {
-  runtime: SessionLaunchRuntimePort;
-  publish: (state: State) => Effect.Effect<void, HostError>;
-  initial: (request: Request) => SessionLaunchInitial<State>;
-  key: (owner: Request | Ref | Read) => string;
-  queue: (request: Request) => boolean;
-  matches: (request: Request, ref: Ref) => boolean;
-  includes: (request: Request, read: Read) => boolean;
-  validateRead: (read: Read) => Effect.Effect<void, HostError>;
-  run: (context: SessionLaunchContext<Request, State>) => Effect.Effect<unknown, unknown>;
-  recover: (context: SessionLaunchContext<Request, State>) => Effect.Effect<unknown, unknown>;
-}): SessionLaunchService<Request, State, Ref, Read> => {
-  const attempts = new Map<string, SessionLaunchAttempt<Request, State>>();
-  const owners = new Map<string, Set<SessionLaunchAttempt<Request, State>>>();
-  const queues = new Map<string, { lane: SerialLane; users: number }>();
-  let closing = false;
-  const canRecover = (attempt: SessionLaunchAttempt<Request, State>, settled = false) =>
-    !closing &&
-    (settled || !attempt.active) &&
-    !attempt.canceled &&
-    attempt.snapshot.phase === "failed" &&
-    attempt.snapshot.failure?.stage !== "publication" &&
-    attempt.snapshot.ownershipSaved &&
-    !!attempt.sendInput &&
-    ["rejected", "not_submitted"].includes(attempt.snapshot.acceptance);
-  const snapshot = (attempt: SessionLaunchAttempt<Request, State>, settled = false): State => ({
-    ...structuredClone(attempt.snapshot),
-    recoveryAllowed: canRecover(attempt, settled),
-  });
-  const attemptsFor = (ref: AgentSessionLiveRef) =>
-    [...attempts.values()].filter((attempt) => {
-      const session = attempt.snapshot.session ?? attempt.target;
-      return (
-        session &&
-        attempt.snapshot.repoPath === ref.repoPath &&
-        session.runtimeKind === ref.runtimeKind &&
-        session.workingDirectory === ref.workingDirectory &&
-        session.externalSessionId === ref.externalSessionId
-      );
-    });
-  const cancelRecovery = (attempt: SessionLaunchAttempt<Request, State>) => {
-    attempt.canceled = true;
-    attempt.snapshot.phase = "canceled";
-    delete attempt.sendInput;
+type Attempt<Request, Result extends SessionLaunchResult> = {
+  request: Request;
+  result: Result;
+  target?: AgentSessionLiveRef;
+  session?: {
+    ref: AgentSessionLiveRef;
+    summary: AgentSessionControlSummary;
+    /** Cancellation stops a session that this launch created, not a reused session. */
+    created: boolean;
   };
-  const checkCanceled = (attempt: SessionLaunchAttempt<Request, State>) =>
+  ownershipSaved: boolean;
+  /** This launch holds its session as running, so settlement must release it. */
+  held: boolean;
+  /**
+   * A failed first send. `unsent` keeps the instruction when the runtime did not get it or
+   * rejected it. `uncertain` means that the runtime can have accepted it, for example before a
+   * timeout.
+   */
+  sendFailure?:
+    | { kind: "unsent"; instruction: AgentSessionUserMessagePart[] }
+    | { kind: "uncertain" };
+  canceled: boolean;
+  /**
+   * Stop or launch cleanup already asked the runtime to stop the session, so settlement does not.
+   */
+  stopped: boolean;
+  done: Deferred.Deferred<Result>;
+  worker?: Fiber.Fiber<void>;
+};
+
+/**
+ * Runs each launch in a host worker, one at a time for each owner key. Interrupting a caller only
+ * stops its wait for the result. Shutdown interrupts the workers and waits for their cleanup. The
+ * host keeps no launch after it settles.
+ */
+export const createSessionLaunchService = <Request, Result extends SessionLaunchResult>(deps: {
+  runtime: Pick<
+    SessionLaunchRuntimePort,
+    "sendUserMessage" | "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
+  >;
+  initial: (request: Request) => Result;
+  key: (request: Request) => string;
+  target?: (request: Request) => AgentSessionLiveRef | undefined;
+  run: (context: SessionLaunchContext<Request, Result>) => Effect.Effect<unknown, unknown>;
+}): SessionLaunchService<Request, Result> => {
+  const active = new Set<Attempt<Request, Result>>();
+  const owners = createSerialGate();
+  let closing = false;
+  const checkCanceled = (attempt: Attempt<Request, Result>) =>
     Effect.suspend(() =>
       attempt.canceled ? Effect.fail(invalid("Session launch was canceled.")) : Effect.void,
     );
-  const { settleSession, settle } = createSessionLaunchSettlement(deps, snapshot);
   const contextFor = (
-    attempt: SessionLaunchAttempt<Request, State>,
-  ): SessionLaunchContext<Request, State> => ({
-    get request() {
-      return structuredClone(attempt.request);
-    },
-    get snapshot() {
-      const view = { ...attempt.snapshot };
-      delete view.liveSession;
-      delete view.acceptedMessage;
-      return structuredClone(view);
-    },
-    get sendInput() {
-      return attempt.sendInput ? structuredClone(attempt.sendInput) : undefined;
-    },
-    updateOwner: (state) => {
-      Object.assign(attempt.snapshot, structuredClone(state));
-    },
-    retainSession: (session) => {
-      attempt.snapshot.session = structuredClone(session);
-    },
-    retainInstruction: (input) => {
-      attempt.sendInput = structuredClone(input);
-    },
+    attempt: Attempt<Request, Result>,
+  ): SessionLaunchContext<Request, Result> => ({
+    request: attempt.request,
     targetSession: (ref) => {
-      attempt.target = structuredClone(ref);
-      if (attempt.stoppedSources?.has(agentSessionRefKey(ref))) {
-        attempt.canceled = true;
-        attempt.stopOwnedBySessionCommand = true;
-      }
-      delete attempt.stoppedSources;
+      attempt.target = ref;
+    },
+    createdSession: (repoPath, summary, { hold }) =>
+      Effect.suspend(() => {
+        const ref = toControlSessionRef(repoPath, summary);
+        attempt.session = { ref, summary, created: true };
+        if (!hold) return Effect.void;
+        // Settlement also releases a hold that failed after it was taken.
+        attempt.held = true;
+        return deps.runtime.holdWorkflowLaunch(ref, true);
+      }),
+    reusedSession: (repoPath, summary) => {
+      attempt.session = { ref: toControlSessionRef(repoPath, summary), summary, created: false };
+      attempt.ownershipSaved = true;
     },
     ownershipSaved: () => {
-      attempt.snapshot.ownershipSaved = true;
+      attempt.ownershipSaved = true;
     },
-    stopSession: (ref) =>
-      Effect.suspend(() => {
-        attempt.runtimeStopAttempted = true;
-        return deps.runtime.stopSession(ref);
-      }),
-    stage: (stage) => {
-      attempt.stage = stage;
+    setResultFields: (fields) => {
+      Object.assign(attempt.result, fields);
     },
-    prepare: () =>
-      Effect.suspend(() => {
-        attempt.snapshot.phase = "preparing";
-        return deps.publish(snapshot(attempt));
-      }),
     skip: (reason) => {
-      attempt.snapshot.phase = "skipped";
-      attempt.snapshot.skipReason = reason;
+      attempt.result.status = "skipped";
+      attempt.result.skipReason = reason;
     },
     checkCanceled: () => checkCanceled(attempt),
-    withSession: (work) =>
-      settleSession(
-        attempt,
-        work.pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              if (attempt.snapshot.phase !== "skipped") attempt.snapshot.phase = "completed";
-            }),
-          ),
-        ),
-      ),
-    send: (submit) =>
+    stopSession: (ref) =>
+      Effect.suspend(() => {
+        attempt.stopped = true;
+        return deps.runtime.stopSession(ref);
+      }),
+    send: (input, instruction) =>
       Effect.gen(function* () {
-        const input = attempt.sendInput;
-        if (!input) return yield* invalid("This launch has no retained first instruction.");
         yield* checkCanceled(attempt);
-        attempt.stage = "send";
-        attempt.snapshot.phase = "sending";
-        // A local message receipt does not prove native acceptance.
-        yield* deps.publish(snapshot(attempt));
-        yield* checkCanceled(attempt);
-        attempt.snapshot.acceptance = "unknown";
-        const sent = yield* Effect.result(submit(input).pipe(Effect.uninterruptible));
-        if (sent._tag === "Success") {
-          attempt.snapshot.acceptance = "accepted";
-          attempt.snapshot.acceptedMessage = sent.success;
-        } else if (sent.failure instanceof AgentSessionMessageAcceptedError) {
-          attempt.snapshot.acceptance = "accepted";
-          attempt.snapshot.acceptedMessage = sent.failure.failure.acceptedMessage;
-          return yield* Effect.fail(sent.failure);
-        } else {
-          attempt.snapshot.acceptance =
-            sent.failure instanceof AgentSessionMessageRejectedError ? "rejected" : "unknown";
-          return yield* Effect.fail(sent.failure);
+        let sent = false;
+        // The send stays interruptible, so shutdown does not wait for a slow runtime.
+        const reply = yield* Effect.result(
+          deps.runtime.sendUserMessage(input, {
+            requireNativeAdmission: true,
+            onSent: () => {
+              sent = true;
+            },
+          }),
+        );
+        if (reply._tag === "Success") {
+          attempt.result.acceptedMessage = reply.success;
+          return;
         }
+        if (reply.failure instanceof AgentSessionMessageAcceptedError)
+          attempt.result.acceptedMessage = reply.failure.failure.acceptedMessage;
+        else
+          attempt.sendFailure =
+            !sent || reply.failure instanceof AgentSessionMessageRejectedError
+              ? { kind: "unsent", instruction }
+              : { kind: "uncertain" };
+        return yield* Effect.fail(reply.failure);
       }),
   });
-  const requireAttempt = (ref: Ref) =>
-    Effect.suspend(() => {
-      const attempt = attempts.get(ref.launchAttemptId);
-      return attempt && deps.matches(attempt.request, ref)
-        ? Effect.succeed(attempt)
-        : Effect.fail(
-            invalid(
-              `Unknown session launch '${ref.launchAttemptId}' for this owner. Inspect the saved session; do not replay the launch.`,
+  const settle = (attempt: Attempt<Request, Result>, work: Effect.Effect<unknown, unknown>) =>
+    // An interruption stops only the work. Cleanup and the result still complete.
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const result = attempt.result;
+        const outcome = yield* Effect.exit(restore(work));
+        const cleanupErrors: string[] = [];
+        if (attempt.session) {
+          if (attempt.held) {
+            const released = yield* Effect.result(
+              deps.runtime.holdWorkflowLaunch(attempt.session.ref, false),
+            );
+            if (released._tag === "Failure") cleanupErrors.push(released.failure.message);
+          }
+          // A Stop can reach the runtime before the accepted first instruction starts its turn.
+          const stopAfterCancel =
+            result.acceptedMessage !== undefined || (attempt.session.created && !attempt.stopped);
+          if (attempt.canceled && stopAfterCancel) {
+            const stopped = yield* Effect.result(deps.runtime.stopSession(attempt.session.ref));
+            if (stopped._tag === "Failure") cleanupErrors.push(stopped.failure.message);
+          }
+        }
+        if (outcome._tag === "Failure") {
+          result.status = attempt.canceled ? "canceled" : "failed";
+          const message = errorMessage(Cause.squash(outcome.cause));
+          result.failure = {
+            message:
+              attempt.sendFailure?.kind === "uncertain"
+                ? `${sentence(message)} ${UNCERTAIN_SEND_GUIDANCE}`
+                : message,
+            cleanupErrors,
+          };
+        } else if (result.status !== "skipped") {
+          if (attempt.canceled) result.status = "canceled";
+          else if (cleanupErrors.length > 0) result.status = "failed";
+          else result.status = "completed";
+          // A failed stop can leave a created session running, so a canceled launch reports it too.
+          if (cleanupErrors.length > 0)
+            result.failure = { message: "Session launch cleanup failed.", cleanupErrors };
+        }
+        if (attempt.session && attempt.ownershipSaved) result.session = attempt.session.summary;
+        if (result.status === "failed" && result.session && attempt.sendFailure?.kind === "unsent")
+          result.unsentInstruction = attempt.sendFailure.instruction;
+        // The caller can leave before settlement, so the saved session must show the failure.
+        if (attempt.session && result.session && result.status === "failed" && result.failure) {
+          const reported = yield* Effect.result(
+            deps.runtime.reportLaunchFailure(
+              attempt.session.ref,
+              launchFailureNotice(result, result.failure),
             ),
           );
-    });
-  const startWorker = (
-    attempt: SessionLaunchAttempt<Request, State>,
-    work: Effect.Effect<unknown, unknown>,
-  ) =>
-    Effect.gen(function* () {
-      const done = attempt.done;
-      const worker = yield* Effect.forkDetach(settle(attempt, done, work));
-      attempt.worker = worker;
-      worker.addObserver(() => {
-        if (attempt.worker === worker) delete attempt.worker;
-      });
-      return done;
-    });
-  const service: SessionLaunchService<Request, State, Ref, Read> = {
+          if (reported._tag === "Failure")
+            result.failure.cleanupErrors.push(reported.failure.message);
+          else if (reported.success !== null) result.failure.noticeId = reported.success;
+        }
+        yield* Deferred.succeed(attempt.done, structuredClone(result));
+      }),
+    );
+  return {
     launch: (request) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const existing = attempts.get(request.launchAttemptId);
-          if (existing) {
-            if (JSON.stringify(existing.request) !== JSON.stringify(request))
-              return yield* invalid("Launch attempt ID is already used by another request.");
-            return yield* restore(Deferred.await(existing.done));
-          }
           if (closing)
-            return yield* invalid("The host is shutting down. Session launch admission is closed.");
-          const attempt: SessionLaunchAttempt<Request, State> = {
-            request: structuredClone(request),
-            ...deps.initial(request),
-            done: Deferred.makeUnsafe<State>(),
-            active: true,
-            recovering: false,
-            canceled: false,
-            runtimeStopAttempted: false,
-            stopOwnedBySessionCommand: false,
-            stage: "queued",
-          };
-          attempts.set(request.launchAttemptId, attempt);
-          const key = deps.key(request);
-          const owned = owners.get(key) ?? new Set<SessionLaunchAttempt<Request, State>>();
-          owned.add(attempt);
-          owners.set(key, owned);
-          let queue = queues.get(key);
-          if (!queue) {
-            queue = { lane: createSerialLane(), users: 0 };
-            queues.set(key, queue);
-          }
-          queue.users += 1;
-          const entry = queue;
-          const run = deps.run(contextFor(attempt));
-          const work =
-            deps.queue(request) || entry.users === 1
-              ? entry.lane.run(run)
-              : Effect.fail(
-                  invalid(
-                    "Another session launch is in progress for this owner. Wait for it to finish.",
-                  ),
-                );
-          const done = yield* startWorker(
-            attempt,
-            work.pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  entry.users -= 1;
-                  if (entry.users === 0 && queues.get(key) === entry) queues.delete(key);
-                }),
-              ),
-            ),
-          );
-          return yield* restore(Deferred.await(done));
-        }),
-      ),
-    read: (input) =>
-      Effect.gen(function* () {
-        yield* deps.validateRead(input);
-        return [...(owners.get(deps.key(input)) ?? [])]
-          .filter((attempt) => deps.includes(attempt.request, input))
-          .map((attempt) => snapshot(attempt));
-      }),
-    recover: (input) =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const attempt = yield* requireAttempt(input);
-          while (attempt.active) {
-            const joined = attempt.done;
-            const recovering = attempt.recovering;
-            const completed = yield* restore(Deferred.await(joined));
-            if (recovering || completed.phase !== "failed") return completed;
-            if (attempt.done !== joined) return yield* restore(Deferred.await(attempt.done));
-          }
-          if (attempt.snapshot.acceptance === "accepted") return snapshot(attempt);
-          if (!canRecover(attempt))
             return yield* invalid(
-              "First instruction recovery is unavailable. Inspect the saved session and its runtime acceptance before sending another message.",
+              "The host is shutting down. It does not accept new session launches.",
             );
-          attempt.done = Deferred.makeUnsafe<State>();
-          attempt.active = true;
-          attempt.recovering = true;
-          attempt.snapshot.phase = "sending";
-          delete attempt.snapshot.failure;
-          const done = yield* startWorker(attempt, deps.recover(contextFor(attempt)));
-          return yield* restore(Deferred.await(done));
-        }),
-      ),
-    cancel: (input) => requireAttempt(input).pipe(Effect.flatMap(cancel)),
-    cancelSessionBeforeStop: (ref) =>
-      Effect.suspend(() => {
-        // A queued launch can choose its reuse source after Stop finishes.
-        for (const attempt of attempts.values()) {
-          if (attempt.active && !attempt.target && !attempt.snapshot.session) {
-            attempt.stoppedSources ??= new Set();
-            attempt.stoppedSources.add(agentSessionRefKey(ref));
-          }
-        }
-        const matching = attemptsFor(ref).filter(
-          (attempt) => attempt.active || canRecover(attempt),
-        );
-        const workers = matching.filter((attempt) => attempt.active);
-        const settled = matching.filter((attempt) => !attempt.active);
-        // Joining one worker can open its queue. Cancel every target before waiting.
-        matching.forEach((attempt) => {
-          attempt.canceled = true;
-          attempt.stopOwnedBySessionCommand = true;
-        });
-        settled.forEach(cancelRecovery);
-        return Effect.forEach(workers, (attempt) =>
-          attempt.worker ? Fiber.join(attempt.worker) : Effect.void,
-        ).pipe(
-          Effect.andThen(Effect.forEach(settled, (attempt) => deps.publish(snapshot(attempt)))),
-          Effect.asVoid,
-        );
-      }),
-    cancelRecoveryBeforeSend: (ref) =>
-      Effect.suspend(() => {
-        const matching = attemptsFor(ref);
-        if (matching.some((attempt) => attempt.active))
-          return Effect.fail(
-            invalid(
-              "A session launch is in progress. Wait for it to finish before sending a message.",
+          const attempt: Attempt<Request, Result> = {
+            request,
+            result: deps.initial(request),
+            ownershipSaved: false,
+            held: false,
+            canceled: false,
+            stopped: false,
+            done: Deferred.makeUnsafe<Result>(),
+          };
+          const target = deps.target?.(request);
+          if (target) attempt.target = target;
+          active.add(attempt);
+          attempt.worker = yield* Effect.forkDetach(
+            owners.run(deps.key(request), settle(attempt, deps.run(contextFor(attempt)))).pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => active.delete(attempt)).pipe(
+                  // Settlement completes the result. This reports a worker that shutdown
+                  // interrupted while it waited in the queue.
+                  Effect.andThen(
+                    Exit.isFailure(exit)
+                      ? Deferred.failCause(attempt.done, exit.cause)
+                      : Effect.void,
+                  ),
+                ),
+              ),
+              Effect.asVoid,
             ),
           );
-        const recoverable = matching.filter((attempt) => canRecover(attempt));
-        // Claim every retained instruction before publication can yield to a retry request.
-        recoverable.forEach(cancelRecovery);
-        return Effect.forEach(recoverable, (attempt) => deps.publish(snapshot(attempt))).pipe(
-          Effect.asVoid,
-        );
-      }),
+          return yield* restore(Deferred.await(attempt.done));
+        }),
+      ),
+    cancelSessionLaunches: (ref) => {
+      for (const attempt of active) {
+        const target = attempt.session?.ref ?? attempt.target;
+        if (
+          target?.runtimeKind === ref.runtimeKind &&
+          target.workingDirectory === ref.workingDirectory &&
+          target.externalSessionId === ref.externalSessionId
+        ) {
+          attempt.canceled = true;
+          // The Stop command stops the native session.
+          attempt.stopped = true;
+        }
+      }
+    },
     shutdown: () =>
       Effect.gen(function* () {
         closing = true;
-        const workers = [...attempts.values()].filter((attempt) => attempt.active);
-        workers.forEach((attempt) => {
-          attempt.canceled = true;
-        });
-        yield* Effect.forEach(workers, (attempt) =>
-          attempt.worker ? Fiber.join(attempt.worker) : Effect.void,
+        const running = [...active];
+        for (const attempt of running) attempt.canceled = true;
+        // Workers can still need runtimes and the task store, which later shutdown steps stop.
+        yield* Effect.forEach(
+          running,
+          (attempt) =>
+            (attempt.worker ? Fiber.interrupt(attempt.worker) : Effect.void).pipe(
+              // A worker that shutdown interrupts before it starts never runs its exit handler.
+              Effect.andThen(Effect.sync(() => active.delete(attempt))),
+              Effect.andThen(Deferred.interrupt(attempt.done)),
+            ),
+          { discard: true },
         );
-        for (const attempt of attempts.values()) delete attempt.sendInput;
       }),
   };
-  const cancel = (attempt: SessionLaunchAttempt<Request, State>) =>
-    Effect.gen(function* () {
-      if (canRecover(attempt)) {
-        cancelRecovery(attempt);
-        yield* deps.publish(snapshot(attempt));
-        return snapshot(attempt);
-      }
-      attempt.canceled = true;
-      if (attempt.worker) yield* Fiber.join(attempt.worker);
-      return snapshot(attempt);
-    });
-  return service;
 };
 
+const UNCERTAIN_SEND_GUIDANCE =
+  "The runtime can have received the first instruction. Inspect the session before you send it again.";
+
+// Runtime messages, such as a Codex request timeout, can end without a period.
+const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
+
 const invalid = (message: string) => new HostValidationError({ field: "sessionLaunch", message });
+
+const launchFailureNotice = (
+  result: SessionLaunchResult,
+  failure: NonNullable<SessionLaunchResult["failure"]>,
+): string => {
+  const cause = sessionLaunchFailureMessage(failure);
+  if (result.acceptedMessage)
+    return `The session received its first instruction, but its launch failed: ${cause}`;
+  if (result.unsentInstruction)
+    return `The runtime did not accept the first instruction: ${sentence(cause)} Start the launch again or send a new message in this session.`;
+  return `The session launch failed: ${cause}`;
+};

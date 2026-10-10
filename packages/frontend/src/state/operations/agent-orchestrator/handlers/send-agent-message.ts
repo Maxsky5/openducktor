@@ -89,19 +89,7 @@ export const settleStartingSession = (
   updateSession: UpdateSession,
 ): void => {
   const session = readSessionSnapshot(identity);
-  if (!session) {
-    return;
-  }
-
-  settleLoadedStartingSession(session, status, updateSession);
-};
-
-export const settleLoadedStartingSession = (
-  session: AgentSessionState,
-  status: Extract<AgentSessionState["status"], "idle" | "error">,
-  updateSession: UpdateSession,
-): void => {
-  if (session.status !== "starting") {
+  if (session?.status !== "starting") {
     return;
   }
   updateSession(session, (current) =>
@@ -243,20 +231,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
       options?.sessionScope,
     );
-    const heldStart = options?.ownsStart?.(currentSession) ? currentSession : null;
-    const assertCanSubmit = (session: AgentSessionState): void => {
-      try {
-        options?.assertCanSubmit?.(session, options?.ownsStart?.(session) ?? false);
-      } catch (cause) {
-        if (heldStart) {
-          const current = dependencies.readSessionSnapshot(heldStart);
-          if (current && options?.ownsStart?.(current))
-            settleLoadedStartingSession(current, "idle", dependencies.updateSession);
-        }
-        throw cause;
-      }
-    };
-    assertCanSubmit(currentSession);
+    options?.assertCanSubmit?.(currentSession);
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
       const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
@@ -321,7 +296,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
     }
     const readySession = withSendScope(loadedReadySession, options?.sessionScope);
-    assertCanSubmit(readySession);
+    options?.assertCanSubmit?.(readySession);
 
     const isBusyQueuedSend = readySession.status === "running";
     const sendAttempt = isBusyQueuedSend

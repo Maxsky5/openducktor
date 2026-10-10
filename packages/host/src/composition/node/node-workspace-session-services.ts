@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
-import { toHostOperationError } from "../../effect/host-errors";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
@@ -26,18 +25,6 @@ export const createNodeWorkspaceSessionServices = ({
   const workspaceSessionLaunchService = createWorkspaceSessionLaunchService({
     ...dependencies,
     commands,
-    publish: (snapshot) =>
-      Effect.try({
-        try: () =>
-          eventBus?.publish({
-            channel: "openducktor://run-event",
-            payload: {
-              type: "workspace_session_launch_updated",
-              snapshot: JSON.stringify(snapshot),
-            },
-          }),
-        catch: (cause) => toHostOperationError(cause, "workspace-session-launch.publish"),
-      }),
   });
   const unsubscribeImportCatalogs = eventBus?.subscribe(
     "openducktor://runtime-changed",

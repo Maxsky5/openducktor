@@ -1,3 +1,4 @@
+import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
@@ -197,6 +198,7 @@ export function useAgentStudioSessionStartFlow({
             request,
             decision,
             task: request.taskId === taskId ? selectedTask : null,
+            onPostStartMessageFailure: showSessionStartMessageRecovery,
           };
 
           const workflow = await runSessionStartWorkflow(workflowInput);

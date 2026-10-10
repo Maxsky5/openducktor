@@ -1,7 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
-import { projectWorkflowLaunch } from "./session-read-model/workflow-launch-projection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import {
@@ -9,7 +8,6 @@ import {
   sessionHistoryQueryOptions,
 } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
-import { withWorktreeRefresh } from "@/features/session-start/with-worktree-refresh";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
@@ -72,7 +70,7 @@ export function useAgentOrchestratorOperations({
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
   );
-  const { queryClient, hostPort, runtimeHostPort, liveSessionHostPort } = resolvedDependencies;
+  const { queryClient, hostPort, liveSessionHostPort } = resolvedDependencies;
   const { sessionStore, taskRef, currentWorkspaceRepoPathRef, repoEpochRef, sessionTurnState } =
     useOrchestratorSessionState({
       workspaceRepoPath,
@@ -183,7 +181,7 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
-    applyLivePolicyNotices: sessionStore.applyLivePolicyNotices,
+    applyLiveNotices: sessionStore.applyLiveNotices,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
     recoverTranscriptGap,
@@ -203,15 +201,6 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         closeBackgroundQuestions,
-        launchWorkflow: withWorktreeRefresh(queryClient, async (input) => {
-          const outcome = await runtimeHostPort.agentSessionWorkflowLaunch(input);
-          try {
-            projectWorkflowLaunch(sessionStore, queryClient, outcome);
-          } catch (cause) {
-            console.error("Cannot project the prepared workflow session.", cause);
-          }
-          return outcome;
-        }),
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         liveSessionHost: liveSessionHostPort,
         refreshTaskData,
@@ -223,10 +212,8 @@ export function useAgentOrchestratorOperations({
       closeBackgroundQuestions,
       invalidateSessionStopQueries,
       queryBackedPromptOverrides,
-      queryClient,
       repoEpochRef,
       refreshTaskData,
-      runtimeHostPort,
       liveSessionHostPort,
       sessionStore,
       sessionTurnState,

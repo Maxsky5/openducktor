@@ -12,6 +12,7 @@ import type { NotificationCopy } from "./notification-copy";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 
 type SonnerNotificationOptions = {
+  id: string;
   description: string;
   duration: number;
   closeButton: boolean;
@@ -30,13 +31,19 @@ type ShowToast = (title: string, options: SonnerNotificationOptions) => string |
 
 export const createSonnerNotificationAdapter = ({
   showToast = (title, options) => toast(title, options),
+  dismissToast = (id) => toast.dismiss(id),
   navigate,
 }: {
   showToast?: ShowToast;
+  dismissToast?: (id: string) => void;
   navigate(target: NotificationNavigationTarget): Promise<void>;
 }) => ({
+  dismiss(occurrenceId: string): void {
+    dismissToast(occurrenceId);
+  },
   async deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void> {
     showToast(copy.title, {
+      id: occurrence.occurrenceId,
       description: copy.body,
       duration: 10_000,
       closeButton: true,

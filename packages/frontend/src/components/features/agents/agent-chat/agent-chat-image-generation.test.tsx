@@ -180,9 +180,6 @@ const operations = (
   readSessionHistory: async () => [],
   loadAgentSessionHistory: async () => null,
   loadAgentSessionContext: async () => {},
-  startAgentSession: async () => {
-    throw new Error("unexpected start");
-  },
   sendAgentMessage: async () => null,
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,

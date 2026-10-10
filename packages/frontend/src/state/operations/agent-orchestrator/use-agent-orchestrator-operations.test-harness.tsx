@@ -105,7 +105,6 @@ export const createLiveSessionStreamFixture = (
 
 export const createTestDependencies = (
   hostOverrides: Partial<OrchestratorDependencies["hostPort"]> = {},
-  runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
   liveSessionHostOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {},
 ): OrchestratorDependencies => {
   return {
@@ -122,11 +121,6 @@ export const createTestDependencies = (
       taskMetadataGet: (...args) => host.taskMetadataGet(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
-    },
-    runtimeHostPort: {
-      gitCanonicalizePath: async (path) => path,
-      agentSessionWorkflowLaunch: (...args) => host.agentSessionWorkflowLaunch(...args),
-      ...runtimeHostOverrides,
     },
     liveSessionHostPort: {
       observeAgentSessionLive: async ({ repoPath }, listener) => {
@@ -217,15 +211,12 @@ export const createHookHarness = (args: {
   let latest: OrchestratorHookState | null = null;
   const dependencies =
     args.dependencies ??
-    createTestDependencies(
-      {
-        agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
-        agentSessionsListForTasks: (repoPath, taskIds) =>
-          host.agentSessionsListForTasks(repoPath, taskIds),
-        taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
-      },
-      {},
-    );
+    createTestDependencies({
+      agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
+      agentSessionsListForTasks: (repoPath, taskIds) =>
+        host.agentSessionsListForTasks(repoPath, taskIds),
+      taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
+    });
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),

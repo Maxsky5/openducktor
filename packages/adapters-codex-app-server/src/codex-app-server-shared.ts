@@ -86,16 +86,6 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 
-const codexRpcErrorSchema = z.object({
-  cause: z.object({ code: z.number(), message: z.string() }),
-  details: z.object({ method: z.string() }),
-});
-
-export const isCodexRpcError = (cause: unknown, method: string): boolean => {
-  const parsed = codexRpcErrorSchema.safeParse(cause);
-  return parsed.success && parsed.data.details.method === method;
-};
-
 export const isCodexThreadNotLoadedError = (cause: unknown): boolean => {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message.includes("thread not loaded:");

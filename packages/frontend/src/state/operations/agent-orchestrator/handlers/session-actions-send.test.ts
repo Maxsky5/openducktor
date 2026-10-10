@@ -3,7 +3,6 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentMessageStartOwner } from "@/lib/agent-message-send-policy";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
   findSessionMessageForTest,
@@ -75,15 +74,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     ).rejects.toThrow("finish starting");
     expect(getSession(sessionsRef).status).toBe("starting");
   });
-  test.each([
-    ["idle", "after preparation", "same"],
-    ["starting", "before preparation", "same"],
-    ["starting", "after preparation", "same"],
-    ["starting", "after preparation", "first live"],
-    ["starting", "after preparation", "newer"],
-  ] as const)(
-    "rejects a stale request for a %s session %s with the %s episode",
-    async (status, phase, episode) => {
+  test.each(["before preparation", "after preparation"] as const)(
+    "rejects a stale request %s without changing the session",
+    async (phase) => {
       const prepared = Promise.withResolvers<void>();
       const preparing = Promise.withResolvers<void>();
       let submissions = 0;
@@ -93,9 +86,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         submissions += 1;
         return acceptedUserMessage(input);
       };
-      const session = buildSession({ status });
-      if (episode === "newer") session.executionEpisodeId = "first";
-      const sessionsRef = createSessionsRef([session]);
+      const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
       const actions = createSessionActions({
         adapter,
         sessionsRef,
@@ -109,7 +100,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         getSession(sessionsRef),
         [{ kind: "text", text: "Resolve conflict" }],
         {
-          ownsStart: createAgentMessageStartOwner(getSession(sessionsRef)),
           assertCanSubmit: () => {
             if (!current) throw new Error("Selection changed");
           },
@@ -118,17 +108,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       if (phase === "after preparation") {
         await preparing.promise;
         current = false;
-        if (episode === "newer" || episode === "first live") {
-          sessionsRef.current = replaceAgentSession(sessionsRef.current, {
-            ...getSession(sessionsRef),
-            executionEpisodeId: episode === "newer" ? "newer-start" : "first",
-          });
-        }
       }
       prepared.resolve();
       await expect(send).rejects.toThrow("Selection changed");
       expect(submissions).toBe(0);
-      expect(getSession(sessionsRef).status).toBe(episode === "newer" ? "starting" : "idle");
+      expect(getSession(sessionsRef).status).toBe("idle");
       current = true;
       await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Retry" }]);
       expect(submissions).toBe(1);

@@ -1,11 +1,7 @@
 import {
   workspaceSessionLaunchRequestSchema,
-  workspaceSessionLaunchReadSchema,
-  workspaceSessionLaunchRefSchema,
-  workspaceSessionLaunchSnapshotSchema,
+  workspaceSessionLaunchResultSchema,
   type WorkspaceSessionLaunchRequest,
-  type WorkspaceSessionLaunchRef,
-  type WorkspaceSessionLaunchRead,
   workspaceSessionExternalListResultSchema,
   workspaceSessionImportResultSchema,
   type WorkspaceSessionExternalListInput,
@@ -35,31 +31,7 @@ export class HostWorkspaceSessionClient {
     return this.invoke(
       "workspace_session_launch",
       workspaceSessionLaunchRequestSchema.parse(input),
-      workspaceSessionLaunchSnapshotSchema,
-    );
-  }
-
-  workspaceSessionLaunchRead(input: WorkspaceSessionLaunchRead) {
-    return this.invoke(
-      "workspace_session_launch_read",
-      workspaceSessionLaunchReadSchema.parse(input),
-      arrayResultSchema(workspaceSessionLaunchSnapshotSchema, "workspace_session_launch_read"),
-    );
-  }
-
-  workspaceSessionLaunchRecover(input: WorkspaceSessionLaunchRef) {
-    return this.invoke(
-      "workspace_session_launch_recover",
-      workspaceSessionLaunchRefSchema.parse(input),
-      workspaceSessionLaunchSnapshotSchema,
-    );
-  }
-
-  workspaceSessionLaunchCancel(input: WorkspaceSessionLaunchRef) {
-    return this.invoke(
-      "workspace_session_launch_cancel",
-      workspaceSessionLaunchRefSchema.parse(input),
-      workspaceSessionLaunchSnapshotSchema,
+      workspaceSessionLaunchResultSchema,
     );
   }
 

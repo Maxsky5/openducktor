@@ -1,17 +1,8 @@
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
-import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
-import {
-  WorkflowLaunchFailure,
-  WorkflowLaunchObservationError,
-} from "@/features/session-start/session-start-workflow";
-import {
-  agentStudioChatDraftScopeKey,
-  createAgentStudioChatDraftPersistence,
-} from "../agent-studio-chat-draft";
-import type {
-  AgentChatSendRecovery,
-  AgentChatSendResult,
-} from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
+import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
+import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ReusablePrompt } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
@@ -117,7 +108,7 @@ export function useAgentStudioSendAction({
 
       if (!taskId) return false;
       const activity = beginSendingActivity(activeComposerContextKey);
-      let createdSession: AgentSessionIdentity | null = null;
+      let started: SessionStartWorkflowResult | undefined;
       try {
         const messagePartsResult = resolveAgentStudioSendDraftParts({
           draft,
@@ -145,16 +136,13 @@ export function useAgentStudioSendAction({
         }
         // A needed model change waits for this send, so viewing a session never resumes it.
         if (!(await prepareSelectedSessionModelForSend())) return false;
-        const started = selectedSessionIdentity
-          ? null
-          : await startSession(normalizeAgentUserMessageParts(messageParts));
+        if (!selectedSessionIdentity)
+          started = await startSession(normalizeAgentUserMessageParts(messageParts));
         const targetSession =
           selectedSessionIdentity ?? (started ? toAgentSessionIdentity(started) : null);
         if (!targetSession) {
           return false;
         }
-
-        if (!selectedSessionIdentity) createdSession = targetSession;
 
         const targetComposerContextKey = buildAgentStudioSessionActivityKey({
           workspaceId,
@@ -167,35 +155,20 @@ export function useAgentStudioSendAction({
         if (selectedSessionIdentity) await sendAgentMessage(targetSession, messageParts);
         return true;
       } catch (cause) {
-        const failure = cause instanceof SessionStartWorkflowError ? cause.originalCause : cause;
-        // The host can keep sending after the response is lost. Do not restore that draft.
-        if (
-          failure instanceof WorkflowLaunchObservationError ||
-          (failure instanceof WorkflowLaunchFailure &&
-            ["accepted", "unknown"].includes(failure.outcome.acceptance))
-        )
-          return true;
-        if (createdSession) {
-          const recovery: AgentChatSendRecovery = {
+        // The runtime accepted the first message, so the composer must not restore it.
+        if (started?.postStartMessageReceipt) return true;
+        if (started) {
+          return {
             kind: "recover_draft",
             originKey: agentStudioChatDraftScopeKey(workspaceId, { taskId, role, session: null }),
             recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
               taskId,
               role,
-              session: createdSession,
+              session: toAgentSessionIdentity(started),
             }),
             error: cause instanceof Error ? cause : new Error(String(cause)),
+            inAppFeedbackHandled: isSessionStartFailureFeedbackHandled(cause),
           };
-          if (failure instanceof WorkflowLaunchFailure && failure.outcome.recoveryAllowed) {
-            recovery.launchAttemptId = failure.outcome.launchAttemptId;
-            recovery.inAppFeedbackHandled = true;
-            recovery.persistence = createAgentStudioChatDraftPersistence({
-              workspaceId,
-              taskId,
-              session: createdSession,
-            });
-          }
-          return recovery;
         }
         throw cause;
       } finally {

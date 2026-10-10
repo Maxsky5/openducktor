@@ -2,7 +2,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkspaceSession,
   WorkspaceSessionLaunchRequest,
-  WorkspaceSessionLaunchSnapshot,
+  WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
@@ -19,7 +19,6 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import type { AgentMessageSendReceipt, AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -218,9 +217,6 @@ const createOperations = (
   loadAgentSessionContext: async () => {
     throw new Error("Unexpected context read");
   },
-  startAgentSession: async () => {
-    throw new Error("Unexpected workflow start");
-  },
   stopAgentSession: async () => {},
   updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
@@ -251,7 +247,7 @@ test.each([
     start,
     createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
   );
-  let result!: Promise<AgentChatSendResult>;
+  let result!: Promise<boolean>;
   try {
     act(() => {
       result = view.actions.sendDraft(
@@ -311,7 +307,7 @@ test.each([
     start,
     createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
   );
-  let result!: Promise<AgentChatSendResult>;
+  let result!: Promise<boolean>;
   try {
     await act(async () => {
       result = view.actions.sendDraft(
@@ -331,7 +327,7 @@ test.each([
       else pending.reject(new Error("Request failed. Reopen the chat to retry."));
       await result;
     });
-    expect(await result).toBe(phase === "start" || outcome === "accepted");
+    expect(await result).toBe(outcome === "accepted");
     expect(send).toHaveBeenCalledTimes(phase === "send" ? 1 : 0);
     if (phase === "start" && outcome === "accepted") {
       expect(
@@ -345,10 +341,7 @@ test.each([
     }
     if (outcome === "rejected") {
       expect(failure).toHaveBeenCalledWith('Could not send to "Test chat"', {
-        description:
-          phase === "start"
-            ? expect.stringContaining("Inspect launch")
-            : "Request failed. Reopen the chat to retry.",
+        description: "Request failed. Reopen the chat to retry.",
       });
     } else expect(failure).not.toHaveBeenCalled();
   } finally {
@@ -483,7 +476,7 @@ test.each([
         },
       }),
     );
-    let sendResult: Promise<AgentChatSendResult> | undefined;
+    let sendResult: Promise<boolean> | undefined;
     let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
     const Probe = () => {
       actions = useWorkspaceSessionChatActions(workspace, record, () => true);
@@ -530,14 +523,8 @@ test.each([
       expect(actions.isSending).toBe(false);
       expect(actions.isStarting).toBe(false);
       expect(actions.isSavingModel).toBe(false);
-      expect(actions.error).toEqual(
-        outcome === "rejected"
-          ? action === "model"
-            ? "Request failed"
-            : expect.stringContaining("Inspect launch")
-          : null,
-      );
-      if (action !== "model") expect(await sendResult).toBe(true);
+      expect(actions.error).toBe(outcome === "rejected" ? "Request failed" : null);
+      if (action !== "model") expect(await sendResult).toBe(outcome === "accepted");
       if (workspaceChanged) expect(store.listSessionSnapshots()).toEqual([]);
     } finally {
       rendered.unmount();
@@ -603,116 +590,174 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
   }
 });
 
-test.each(["accepted", "rejected", "unknown", "unreadable", "pending"] as const)(
-  "keeps the host first-send outcome: %s",
-  async (acceptance) => {
-    const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
-    const record = createWorkspaceSessionRecord();
-    const bound = { ...record, externalSessionId: "native" };
-    const store = createAgentSessionsStore("/repo");
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const browserSend = mock(async () => null);
-    const launch = mock(async (request: WorkspaceSessionLaunchRequest) => {
-      if (acceptance === "unreadable" || acceptance === "pending") throw new Error("Disconnected");
-      const snapshot = launchOutcome(request, bound);
-      if (acceptance !== "accepted")
-        return {
-          ...snapshot,
-          phase: "failed" as const,
-          acceptance,
-          recoveryAllowed: acceptance === "rejected",
-          acceptedMessage: undefined,
-          failure: { message: "Send failed", stage: "send", cleanupErrors: [] },
-        };
-      return snapshot;
-    });
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionLaunch: launch,
-          workspaceSessionLaunchRead: async (ref) => {
-            if (acceptance === "unreadable") throw new Error("Read failed");
-            return [
-              {
-                ...launchOutcome(
-                  { ...ref, launchAttemptId: ref.launchAttemptId!, parts: [] },
-                  bound,
-                ),
-                phase: "sending",
-                acceptance: "unknown",
-                acceptedMessage: undefined,
-              },
-            ];
-          },
-        },
-      }),
-    );
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
-        <AgentSessionsContext value={store}>
-          <AgentOperationsContext
-            value={createOperations({
-              sendAgentMessage: browserSend,
-              continueInterruptedTurn: async () => {},
-            })}
-          >
-            {children}
-          </AgentOperationsContext>
-        </AgentSessionsContext>
-      </QueryClientProvider>
-    );
-    const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
-      wrapper,
-    });
-    try {
-      await act(async () => {
-        const result = await view.result.current.sendDraft(
-          { segments: [createTextSegment("Hello")] },
-          {
-            canSend: true,
-            reusablePrompts: [],
-            selectedModelDescriptor: null,
-            supportsAttachments: false,
-          },
-        );
-        if (acceptance === "rejected")
-          expect(result).toMatchObject({
-            kind: "recover_draft",
-            launchAttemptId: launch.mock.calls[0]?.[0].launchAttemptId,
-          });
-        else expect(result).toBe(true);
-      });
-      expect(launch).toHaveBeenCalledTimes(1);
-      expect(launch.mock.calls[0]?.[0]).toMatchObject({
-        workspaceId: "workspace",
-        repoPath: "/repo",
-        sessionId: "draft",
-        parts: [{ kind: "text", text: "Hello" }],
-      });
-      expect(browserSend).not.toHaveBeenCalled();
-      const unresolved = acceptance === "unreadable" || acceptance === "pending";
-      expect(store.listSessionSnapshots()).toHaveLength(unresolved ? 0 : 1);
-      const session = store.listSessionSnapshots()[0];
-      const messages = session ? sessionMessagesToArray(session) : [];
-      expect(messages.filter((message) => message.role === "user")).toHaveLength(
-        acceptance === "accepted" ? 1 : 0,
-      );
-      expect(view.result.current.error).toEqual(
-        acceptance === "accepted"
-          ? null
-          : acceptance === "unknown"
-            ? "Send failed Inspect the saved session before sending another instruction."
-            : unresolved
-              ? expect.stringContaining("Inspect launch")
-              : "Send failed",
-      );
-    } finally {
-      view.unmount();
-      queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
-    }
+const firstSendCases: Array<{
+  name: string;
+  launch: (
+    request: WorkspaceSessionLaunchRequest,
+    bound: WorkspaceSession,
+  ) => WorkspaceSessionLaunchResult;
+  sent: boolean;
+  error: string | null;
+  sessions: number;
+  userMessages: number;
+}> = [
+  {
+    name: "an accepted launch keeps the draft cleared",
+    launch: launchOutcome,
+    sent: true,
+    error: null,
+    sessions: 1,
+    userMessages: 1,
   },
-);
+  {
+    name: "a rejected first message restores the draft and shows the error",
+    launch: (request, bound) => {
+      const { acceptedMessage: _accepted, ...result } = launchOutcome(request, bound);
+      return {
+        ...result,
+        status: "failed",
+        unsentInstruction: request.parts,
+        failure: { message: "Send failed", cleanupErrors: [] },
+      };
+    },
+    sent: false,
+    error: "Send failed",
+    sessions: 1,
+    userMessages: 0,
+  },
+  {
+    name: "an accepted message with a later failure keeps the draft cleared and shows the error",
+    launch: (request, bound) => ({
+      ...launchOutcome(request, bound),
+      status: "failed",
+      failure: { message: "Stream closed after acceptance", cleanupErrors: [] },
+    }),
+    sent: true,
+    error: "Stream closed after acceptance",
+    sessions: 1,
+    userMessages: 1,
+  },
+  {
+    name: "an accepted message with failed cleanup keeps the draft cleared and names the cleanup step",
+    launch: (request, bound) => ({
+      ...launchOutcome(request, bound),
+      status: "failed",
+      failure: {
+        message: "Session launch cleanup failed.",
+        cleanupErrors: ["Failed to release session hold; restart the runtime."],
+      },
+    }),
+    sent: true,
+    error:
+      "Session launch cleanup failed. Cleanup failed: Failed to release session hold; restart the runtime.",
+    sessions: 1,
+    userMessages: 1,
+  },
+  {
+    name: "a rejected first message with failed cleanup restores the draft and names the cleanup step",
+    launch: (request, bound) => {
+      const { acceptedMessage: _accepted, ...result } = launchOutcome(request, bound);
+      return {
+        ...result,
+        status: "failed",
+        unsentInstruction: request.parts,
+        failure: { message: "Send failed", cleanupErrors: ["Stop failed; stop the session."] },
+      };
+    },
+    sent: false,
+    error: "Send failed Cleanup failed: Stop failed; stop the session.",
+    sessions: 1,
+    userMessages: 0,
+  },
+  {
+    name: "a launch without a saved session restores the draft and shows the error",
+    launch: (request) => ({
+      workspaceId: request.workspaceId,
+      repoPath: request.repoPath,
+      sessionId: request.sessionId,
+      status: "failed",
+      unsentInstruction: request.parts,
+      failure: { message: "Runtime is offline", cleanupErrors: [] },
+    }),
+    sent: false,
+    error: "Runtime is offline",
+    sessions: 0,
+    userMessages: 0,
+  },
+  {
+    name: "a transport error restores the draft and shows the error",
+    launch: () => {
+      throw new Error("Disconnected");
+    },
+    sent: false,
+    error: "Disconnected",
+    sessions: 0,
+    userMessages: 0,
+  },
+];
+
+test.each(firstSendCases)("first draft send: $name", async (testCase) => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const record = createWorkspaceSessionRecord();
+  const bound = { ...record, externalSessionId: "native" };
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const browserSend = mock(async () => null);
+  const launch = mock(async (request: WorkspaceSessionLaunchRequest) =>
+    testCase.launch(request, bound),
+  );
+  configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionLaunch: launch } }));
+  const operations = createOperations({
+    sendAgentMessage: browserSend,
+    continueInterruptedTurn: async () => {},
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
+    wrapper,
+  });
+  try {
+    let sent: boolean | undefined;
+    await act(async () => {
+      sent = await view.result.current.sendDraft(
+        { segments: [createTextSegment("Hello")] },
+        {
+          canSend: true,
+          reusablePrompts: [],
+          selectedModelDescriptor: null,
+          supportsAttachments: false,
+        },
+      );
+    });
+    expect(sent).toBe(testCase.sent);
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(launch.mock.calls[0]?.[0]).toEqual({
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      sessionId: "draft",
+      parts: [{ kind: "text", text: "Hello" }],
+    });
+    expect(browserSend).not.toHaveBeenCalled();
+    expect(view.result.current.error).toBe(testCase.error);
+    expect(view.result.current.isSending).toBe(false);
+    expect(view.result.current.isStarting).toBe(false);
+    const sessions = store.listSessionSnapshots();
+    expect(sessions).toHaveLength(testCase.sessions);
+    const messages = sessions[0] ? sessionMessagesToArray(sessions[0]) : [];
+    expect(messages.filter((message) => message.role === "user")).toHaveLength(
+      testCase.userMessages,
+    );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
 
 test("blocks a second resume selection before the first one settles", async () => {
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
@@ -1051,7 +1096,7 @@ function renderChatPanes(
 function launchOutcome(
   request: WorkspaceSessionLaunchRequest,
   record: WorkspaceSession,
-): WorkspaceSessionLaunchSnapshot {
+): WorkspaceSessionLaunchResult {
   const session = {
     externalSessionId: record.externalSessionId!,
     runtimeKind: record.runtimeKind,
@@ -1060,19 +1105,16 @@ function launchOutcome(
     status: "idle" as const,
   };
   return {
-    launchAttemptId: request.launchAttemptId,
     workspaceId: request.workspaceId,
     repoPath: request.repoPath,
     sessionId: record.id,
-    phase: "completed",
-    acceptance: "accepted",
-    ownershipSaved: true,
+    status: "completed",
     record,
     session,
     acceptedMessage: {
       type: "user_message",
       externalSessionId: session.externalSessionId,
-      messageId: request.launchAttemptId,
+      messageId: "accepted-1",
       timestamp: session.startedAt,
       message: "Hello",
       parts: [],

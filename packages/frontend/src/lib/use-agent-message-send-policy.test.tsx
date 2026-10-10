@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren } from "react";
-import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
 import {
   AgentSessionReadModelStateContext,
@@ -21,72 +19,29 @@ import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fi
 import { useAgentMessageSendPolicy } from "./use-agent-message-send-policy";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 
-test("conflict reuse cannot pass a first prompt that is still in preparation", async () => {
-  const prepared = Promise.withResolvers<void>();
-  const preparing = Promise.withResolvers<void>();
-  const sent: string[] = [];
-  let preparations = 0;
+test("blocks a send while the session is still starting", async () => {
+  let submissions = 0;
   const adapter = createTestOpencodeSdkAdapter();
   adapter.sendUserMessage = async (input) => {
-    sent.push(input.parts[0]?.kind === "text" ? input.parts[0].text : "");
+    submissions += 1;
     return acceptedUserMessage(input);
   };
   const sessionsRef = createSessionsRef([
-    buildSession({ status: "starting", historyLoadState: "loaded", executionEpisodeId: "first" }),
+    buildSession({ status: "starting", historyLoadState: "loaded" }),
   ]);
-  const actions = createSessionActions({
-    adapter,
-    sessionsRef,
-    loadRepoPromptOverrides: async () => {
-      if (++preparations === 1) {
-        preparing.resolve();
-        await prepared.promise;
-      }
-      return {};
-    },
-  });
+  const actions = createSessionActions({ adapter, sessionsRef });
   const harness = await mountPolicy();
-  const queryClient = new QueryClient();
-  const first = actions.sendAgentMessage(getSession(sessionsRef), [
-    { kind: "text", text: "First prompt" },
-  ]);
   try {
-    await preparing.promise;
     await expect(
-      startSessionWorkflow({
-        workspaceId: "workspace-1",
-        repoPath: "/tmp/repo",
-        launchAttemptId: "conflict",
-        request: {
-          taskId: "task-1",
-          role: "build",
-          launchActionId: "build_rebase_conflict_resolution",
-          postStartAction: "send_message",
-          message: "Resolve conflict",
-          assertCanSubmit: harness.getLatest(),
-        },
-        decision: { startMode: "reuse", sourceSession: getSession(sessionsRef) },
-        readSessionSnapshot: () => getSession(sessionsRef),
-        client: {
-          agentSessionWorkflowLaunch: async () => {
-            throw new Error("Unexpected host launch");
-          },
-          agentSessionWorkflowLaunchRead: async () => [],
-          agentSessionWorkflowLaunchRecover: async () => {
-            throw new Error("Unexpected recovery");
-          },
-        },
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Continue" }], {
+        assertCanSubmit: harness.getLatest(),
       }),
-    ).rejects.toThrow("finish starting");
-    expect(sent).toEqual([]);
+    ).rejects.toThrow("Wait for the session to finish starting.");
+    expect(submissions).toBe(0);
     expect(getSession(sessionsRef).status).toBe("starting");
   } finally {
-    prepared.resolve();
-    await first;
-    queryClient.clear();
     await harness.unmount();
   }
-  expect(sent).toEqual(["First prompt"]);
 });
 
 test.each([

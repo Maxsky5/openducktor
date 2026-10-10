@@ -280,8 +280,6 @@ export const assembleNodeEffectHostCommandRouter = (
     workflowLaunch: {
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
       adapterRegistry: liveSessionAdapterRegistry,
-      withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-      eventBus,
     },
   });
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
@@ -360,7 +358,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
-    workflowLaunchService: launchControls,
+    sessionLaunches: launchControls,
   });
   const handlers = {
     ...setup.handlers,

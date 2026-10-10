@@ -3,7 +3,11 @@ import { host } from "@/state/operations/shared/host";
 import { projectWorkflowLaunch } from "@/state/operations/agent-orchestrator/session-read-model/workflow-launch-projection";
 import { withWorktreeRefresh } from "./with-worktree-refresh";
 import { useMemo } from "react";
-import { useWorkspaceStateContext, useAgentSessionsContext } from "@/state/app-state-contexts";
+import {
+  useAgentOperationsContext,
+  useAgentSessionsContext,
+  useWorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import {
   createSessionStartWorkflowRunner,
@@ -18,6 +22,7 @@ export function useSessionStartWorkflowRunner({
   const store = useAgentSessionsContext();
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspaceStateContext();
+  const { sendAgentMessage } = useAgentOperationsContext();
   const { sessionStartNotifications } = useNotificationContext();
   const repoPath = activeWorkspace?.workspaceId === workspaceId ? activeWorkspace.repoPath : null;
   return useMemo(
@@ -25,22 +30,22 @@ export function useSessionStartWorkflowRunner({
       createSessionStartWorkflowRunner({
         workspaceId,
         repoPath,
-        readSessionSnapshot: (identity) => store.getSessionSnapshot(identity) ?? null,
+        sendAgentMessage,
         notifications: sessionStartNotifications,
         client: {
           agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, async (request) => {
             const outcome = await host.agentSessionWorkflowLaunch(request);
+            // The host already finished the launch, and the live stream also delivers the session.
+            // A local display failure must not report the launch as failed or restore its draft.
             try {
               projectWorkflowLaunch(store, queryClient, outcome);
             } catch (cause) {
-              console.error("Cannot project the prepared workflow session.", cause);
+              console.error("Cannot project the launched workflow session.", cause);
             }
             return outcome;
           }),
-          agentSessionWorkflowLaunchRead: host.agentSessionWorkflowLaunchRead,
-          agentSessionWorkflowLaunchRecover: host.agentSessionWorkflowLaunchRecover,
         },
       }),
-    [workspaceId, repoPath, sessionStartNotifications, store, queryClient],
+    [workspaceId, repoPath, sendAgentMessage, sessionStartNotifications, store, queryClient],
   );
 }

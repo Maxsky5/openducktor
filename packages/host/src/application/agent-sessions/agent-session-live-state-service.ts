@@ -1,4 +1,4 @@
-import { createWorkflowLaunchHold, releaseHoldAfterSendFailure } from "./workflow-launch-hold";
+import { createWorkflowLaunchHold } from "./workflow-launch-hold";
 import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveReadResult,
@@ -10,7 +10,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
@@ -19,10 +19,7 @@ import type {
   AgentSessionLiveAdapterScope,
 } from "../../ports/agent-session-live-adapter-port";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
-import {
-  messageAcceptedFailure,
-  AgentSessionMessageRejectedError,
-} from "../../ports/agent-session-send-error";
+import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import {
   createAgentSessionLiveEnvelopePublisher,
   toAgentSessionLiveEnvelope,
@@ -79,7 +76,12 @@ export const createAgentSessionLiveStateService = ({
   // Transient admission guard that spans the probe and the native continuation for one session.
   const continuationsInFlight = new Set<string>();
   const workflowLaunchHold = createWorkflowLaunchHold();
-  const withLaunchHold = workflowLaunchHold.project;
+  const launchFailures = new Map<string, NonNullable<AgentSessionLiveSnapshot["launchFailure"]>>();
+  const projectSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot => {
+    const projected = workflowLaunchHold.project(snapshot);
+    const launchFailure = launchFailures.get(agentSessionRefKey(snapshot.ref));
+    return launchFailure ? { ...projected, launchFailure } : projected;
+  };
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const engagement = createRuntimeSessionEngagement();
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
@@ -105,7 +107,7 @@ export const createAgentSessionLiveStateService = ({
         if (!projected) continue;
         const envelope = executionEpisodes.accept(
           projected.type === "session_upsert"
-            ? { type: "session_upsert", session: withLaunchHold(projected.snapshot) }
+            ? { type: "session_upsert", session: projectSnapshot(projected.snapshot) }
             : toAgentSessionLiveEnvelope(projected),
         );
         observeNotificationInput?.(envelope, change.provenance ?? "live");
@@ -150,7 +152,7 @@ export const createAgentSessionLiveStateService = ({
         }
         seen.add(key);
       }
-      return executionEpisodes.replaceSnapshots(repoPath, flattened.map(withLaunchHold));
+      return executionEpisodes.replaceSnapshots(repoPath, flattened.map(projectSnapshot));
     });
   const refreshAdapters = (
     repoPath: string,
@@ -214,7 +216,7 @@ export const createAgentSessionLiveStateService = ({
       if (parsed.type === "missing") return parsed;
       return {
         ...parsed,
-        session: executionEpisodes.snapshotWithEpisode(withLaunchHold(parsed.session)),
+        session: executionEpisodes.snapshotWithEpisode(projectSnapshot(parsed.session)),
       };
     });
 
@@ -239,6 +241,23 @@ export const createAgentSessionLiveStateService = ({
     runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
 
   const service: AgentSessionLiveStateService = {
+    reportLaunchFailure: (ref, message) =>
+      coordinator.run(
+        Effect.gen(function* () {
+          // Without a live session nothing shows the failure, so the caller must report it.
+          const observed = yield* readSession(ref);
+          if (observed.type !== "live") return null;
+          const failure = {
+            messageId: `launch-failure:${crypto.randomUUID()}`,
+            message,
+            timestamp: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          };
+          launchFailures.set(agentSessionRefKey(ref), failure);
+          // A launch failure is host state, not a runtime event, so it must not end the turn.
+          yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
+          return failure.messageId;
+        }),
+      ),
     publishTaskSessionRecords: (ref, records) =>
       coordinator.run(
         Effect.gen(function* () {
@@ -400,50 +419,20 @@ export const createAgentSessionLiveStateService = ({
     forkSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.forkSession(input)),
     ),
-    sendUserMessage: (input) =>
-      Effect.suspend(() => {
-        let submitted = false;
-        return withStartAdmission(
-          (input: Parameters<AgentSessionLiveStateService["sendUserMessage"]>[0]) =>
-            Effect.gen(function* () {
-              const adapter = engagement.trackControls(
-                yield* adapterRegistry.resolveControlForScope(input),
-              );
-              yield* lifecycle.requireAttached(adapter.binding).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new AgentSessionMessageRejectedError({
-                      operation: "agent-session.send-message.resolve-adapter",
-                      message: cause.message,
-                      cause,
-                    }),
-                ),
-              );
-              submitted = true;
-              const acceptedMessage = yield* adapter.sendUserMessage(input);
-              yield* lifecycle
-                .requireAttached(adapter.binding)
-                .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage)));
-              yield* service
-                .holdWorkflowLaunch(input, false)
-                .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage)));
-              return acceptedMessage;
-            }),
-        )(input).pipe(
-          Effect.catch((cause) =>
-            releaseHoldAfterSendFailure(
-              service.holdWorkflowLaunch(input, false),
-              submitted
-                ? cause
-                : new AgentSessionMessageRejectedError({
-                    operation: "agent-session.send-message.prepare",
-                    message: cause.message,
-                    cause,
-                  }),
-            ),
-          ),
-        );
-      }),
+    sendUserMessage: (input, options) =>
+      withStartAdmission((input: Parameters<AgentSessionLiveStateService["sendUserMessage"]>[0]) =>
+        Effect.gen(function* () {
+          const adapter = engagement.trackControls(
+            yield* adapterRegistry.resolveControlForScope(input),
+          );
+          const acceptedMessage = yield* adapter.sendUserMessage(input, options);
+          launchFailures.delete(agentSessionRefKey(input));
+          yield* lifecycle
+            .requireAttached(adapter.binding)
+            .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage)));
+          return acceptedMessage;
+        }),
+      )(input),
     updateSessionModel: (input) =>
       runAdmittedControl(input, (adapter) => adapter.updateSessionModel(input)),
     updateSessionTitle: (input) =>

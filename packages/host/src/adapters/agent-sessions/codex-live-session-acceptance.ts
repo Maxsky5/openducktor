@@ -1,49 +1,41 @@
 import {
   CodexMessageAcceptedError,
-  CodexMessageRejectedError,
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage } from "@openducktor/core";
 import { Effect } from "effect";
-import { toHostOperationError, type HostError } from "../../effect/host-errors";
+import type { HostError } from "../../effect/host-errors";
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
+  messageAcceptedFailure,
 } from "../../ports/agent-session-send-error";
-
-export const toCodexMessageSendError = (
-  cause: unknown,
-  sessionRef: AgentSessionLiveRef,
-): HostError => {
-  const accepted = toAcceptedCodexMessageError(cause, sessionRef);
-  if (accepted) return accepted;
-  const operation = "codex-live-session.send-user-message";
-  if (cause instanceof CodexMessageRejectedError)
-    return new AgentSessionMessageRejectedError({ operation, message: cause.message, cause });
-  return toHostOperationError(cause, operation, {
-    externalSessionId: sessionRef.externalSessionId,
-  });
-};
+import { CodexAppServerRpcError } from "../../ports/codex-app-server-port";
 
 type RefreshProjection = (
   transcriptEvents?: CodexLiveSessionMutation["transcriptEvents"],
 ) => Effect.Effect<void, HostError>;
 
-export const toAcceptedCodexMessageError = (
+/**
+ * Maps a Codex send failure that proves the message result: accepted before the owner was
+ * released, or rejected with a JSON-RPC error. It returns null for other failures, such as a
+ * timeout or a lost connection, so the caller keeps its session error.
+ */
+export const toCodexMessageSendError = (
   cause: unknown,
   sessionRef: AgentSessionLiveRef,
-): AgentSessionMessageAcceptedError | null =>
-  cause instanceof CodexMessageAcceptedError
-    ? new AgentSessionMessageAcceptedError(
-        {
-          sessionRef,
-          acceptedMessage: cause.acceptedMessage,
-          stage: "live_update",
-        },
-        cause,
-      )
-    : null;
+): AgentSessionMessageAcceptedError | AgentSessionMessageRejectedError | null => {
+  if (cause instanceof CodexMessageAcceptedError)
+    return messageAcceptedFailure(sessionRef, cause.acceptedMessage)(cause);
+  if (cause instanceof CodexAppServerRpcError)
+    return new AgentSessionMessageRejectedError({
+      operation: "agent-session.send-message",
+      message: cause.message,
+      cause,
+    });
+  return null;
+};
 
 const refreshAcceptedCodexMessage = (
   acceptedMessage: AcceptedAgentUserMessage,

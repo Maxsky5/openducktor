@@ -12,6 +12,7 @@ import {
   createSessionNotificationBuilder,
   toNotificationStatus,
 } from "./session-notification-builder";
+import { createLaunchFailureNotices } from "./launch-failure-notices";
 
 type CreateSessionOccurrenceProjectorOptions = {
   repositoryLabel: string;
@@ -50,8 +51,9 @@ export const createSessionOccurrenceProjector = ({
   resolveAssociation,
   resolveTask,
 }: CreateSessionOccurrenceProjectorOptions) => {
-  const { sessionOccurrence, sessionTarget, projectPendingInput, setRepositoryLabel } =
-    createSessionNotificationBuilder({ repositoryLabel, resolveTask });
+  const builder = createSessionNotificationBuilder({ repositoryLabel, resolveTask });
+  const { sessionOccurrence, sessionTarget, projectPendingInput, setRepositoryLabel } = builder;
+  const projectLaunchFailure = createLaunchFailureNotices(builder);
   const sessions = new Map<string, SessionProjection>();
 
   const observeUnownedInputs = (projection: SessionProjection, live: boolean): void => {
@@ -436,7 +438,10 @@ export const createSessionOccurrenceProjector = ({
         return occurrences;
       }
       if (envelope.type === "session_upsert") {
-        return applyUpsert(envelope.session, provenance === "live");
+        const occurrences = applyUpsert(envelope.session, provenance === "live");
+        if (provenance !== "live") return occurrences;
+        const projection = sessions.get(agentSessionRefKey(envelope.session.ref));
+        return [...occurrences, ...projectLaunchFailure(projection)];
       }
       if (envelope.type === "session_removed") {
         // A runtime can return later. Keep live child questions until their ancestor returns.

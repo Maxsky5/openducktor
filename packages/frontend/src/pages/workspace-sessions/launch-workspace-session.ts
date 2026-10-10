@@ -1,7 +1,7 @@
 import type {
   WorkspaceSession,
   WorkspaceSessionLaunchRequest,
-  WorkspaceSessionLaunchSnapshot,
+  WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
@@ -15,33 +15,14 @@ import {
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { upsertUserSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
 import { toUserChatMessage } from "@/state/operations/agent-orchestrator/support/user-message-event";
-import { errorMessage } from "@/lib/errors";
-import { workspaceSessionLaunchQueryOptions } from "@/state/queries/workspace-session-launches";
 
 export const launchWorkspaceSession = async (
   request: WorkspaceSessionLaunchRequest,
   record: WorkspaceSession,
   store: AgentSessionsStore,
   queryClient: QueryClient,
-): Promise<WorkspaceSessionLaunchSnapshot> => {
-  let outcome: WorkspaceSessionLaunchSnapshot;
-  try {
-    outcome = await host.workspaceSessionLaunch(request);
-  } catch (cause) {
-    const { launchAttemptId, workspaceId, repoPath, sessionId } = request;
-    let retained: WorkspaceSessionLaunchSnapshot | undefined;
-    const guidance = `${errorMessage(cause)}. Inspect launch '${launchAttemptId}' after reconnect before sending another instruction.`;
-    try {
-      [retained] = await queryClient.fetchQuery(
-        workspaceSessionLaunchQueryOptions({ launchAttemptId, workspaceId, repoPath, sessionId }),
-      );
-    } catch (readCause) {
-      throw new Error(`${guidance} Read failed: ${errorMessage(readCause)}`, { cause });
-    }
-    if (!retained || ["queued", "preparing", "sending"].includes(retained.phase))
-      throw new Error(guidance, { cause });
-    outcome = retained;
-  }
+): Promise<WorkspaceSessionLaunchResult> => {
+  const outcome = await host.workspaceSessionLaunch(request);
   if (
     outcome.record &&
     (outcome.record.id !== record.id ||
@@ -57,7 +38,7 @@ export const launchWorkspaceSession = async (
 };
 
 export const projectWorkspaceSessionLaunch = (
-  outcome: WorkspaceSessionLaunchSnapshot,
+  outcome: WorkspaceSessionLaunchResult,
   store: AgentSessionsStore,
   queryClient: QueryClient,
 ) => {
@@ -74,24 +55,25 @@ export const projectWorkspaceSessionLaunch = (
     }
     updateWorkspaceSessionQueries(queryClient, outcome.workspaceId, record);
   }
-  if (
-    !outcome.ownershipSaved ||
-    !record ||
-    store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath
-  )
+  const { session } = outcome;
+  if (!session || !record || store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath)
     return;
+  const boundRecord = record;
   store.setSessionCollection((collection) => {
-    const current = outcome.session ? getAgentSession(collection, outcome.session) : undefined;
-    let next = applyWorkspaceSessionRecords(collection, [record!]);
-    if (outcome.acceptedMessage && outcome.session) {
-      const current = getAgentSession(next, outcome.session);
-      if (current)
+    const current = getAgentSession(collection, session);
+    let next = applyWorkspaceSessionRecords(collection, [boundRecord]);
+    if (outcome.acceptedMessage) {
+      const withRecords = getAgentSession(next, session);
+      if (withRecords)
         next = replaceAgentSession(next, {
-          ...current,
-          messages: upsertUserSessionMessage(current, toUserChatMessage(outcome.acceptedMessage)),
+          ...withRecords,
+          messages: upsertUserSessionMessage(
+            withRecords,
+            toUserChatMessage(outcome.acceptedMessage),
+          ),
         });
     }
-    if (outcome.acceptedMessage && outcome.session && current?.livePresence !== "present")
+    if (outcome.acceptedMessage && current?.livePresence !== "present")
       next = applyAgentSessionLiveDelta({
         current: next,
         envelope: {
@@ -100,17 +82,12 @@ export const projectWorkspaceSessionLaunch = (
             ...outcome.acceptedMessage,
             sessionRef: {
               repoPath: outcome.repoPath,
-              runtimeKind: outcome.session.runtimeKind,
-              externalSessionId: outcome.session.externalSessionId,
-              workingDirectory: outcome.session.workingDirectory,
+              runtimeKind: session.runtimeKind,
+              externalSessionId: session.externalSessionId,
+              workingDirectory: session.workingDirectory,
             },
           },
         },
-      });
-    if (outcome.liveSession && current?.livePresence !== "present")
-      next = applyAgentSessionLiveDelta({
-        current: next,
-        envelope: { type: "session_upsert", session: outcome.liveSession },
       });
     return next;
   });

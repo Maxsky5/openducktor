@@ -1,12 +1,9 @@
-import type { AgentChatDraftPersistence } from "./agent-chat-draft-scope";
-
 export type AgentChatSendRecovery = {
   kind: "recover_draft";
   originKey: string;
   recoveryKey: string;
   error: Error;
-  persistence?: AgentChatDraftPersistence | null;
-  launchAttemptId?: string;
+  /** The app already showed this error, so the composer does not show it again. */
   inAppFeedbackHandled?: boolean;
 };
 

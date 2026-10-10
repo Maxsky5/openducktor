@@ -258,4 +258,36 @@ describe("Claude session I/O model changes", () => {
     ]);
     expect(session.model?.modelId).toBe("claude-sonnet-4-6");
   });
+
+  test("reports the native send only after the message enters the SDK input queue", async () => {
+    const messageInput = {
+      externalSessionId: "session-1",
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo",
+      runtimePolicy: { kind: "claude" as const },
+      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      parts: [{ kind: "text" as const, text: "hello" }],
+    };
+    const send = (queue: AsyncInputQueue<SDKUserMessage>, onSent: () => void) =>
+      sendClaudeUserMessage({
+        session: createClaudeSession({ activity: "idle", queue }),
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => MESSAGE_ID,
+        emit: () => {},
+        messageInput,
+        onSent,
+      });
+    const sent: string[] = [];
+    await send(new AsyncInputQueue<SDKUserMessage>(), () => sent.push("pushed"));
+    expect(sent).toEqual(["pushed"]);
+
+    const closed = new AsyncInputQueue<SDKUserMessage>();
+    closed.push = () => {
+      throw new Error("queue unavailable");
+    };
+    // A failed push leaves the message outside the SDK, so the caller can send it again.
+    await expect(send(closed, () => sent.push("closed"))).rejects.toThrow("queue unavailable");
+    expect(sent).toEqual(["pushed"]);
+  });
 });

@@ -170,9 +170,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
         readSessionHistory: async () => [],
         loadAgentSessionHistory: async () => null,
         loadAgentSessionContext: async () => undefined,
-        startAgentSession: async () => {
-          throw new Error("Not configured");
-        },
         sendAgentMessage: async () => null,
         stopAgentSession: async () => undefined,
         continueInterruptedTurn: async () => undefined,
@@ -330,9 +327,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
       },
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext: async () => undefined,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
@@ -432,9 +426,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext: async () => undefined,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,

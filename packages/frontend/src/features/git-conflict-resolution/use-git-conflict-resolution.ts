@@ -125,11 +125,11 @@ export function useGitConflictResolution({
         initialSourceSession: defaultBuilder ? toAgentSessionIdentity(defaultBuilder) : null,
         targetWorkingDirectory: git.workingDirectory,
         assertBeforeLaunch: () => assertCurrent?.(),
-        assertCanSubmit: (recipient, ownsStart) => {
+        assertCanSubmit: (recipient) => {
           assertCurrent?.();
           if (normalizeWorkingDirectory(recipient.workingDirectory) !== workingDirectory)
             throw new Error("Select a Builder in the conflict directory before sending.");
-          assertCanSubmit?.(recipient, ownsStart);
+          assertCanSubmit?.(recipient);
         },
       });
 

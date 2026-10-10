@@ -17,7 +17,6 @@ import { toOpenCodeRequestError } from "./request-errors";
 import type { QueuedUserMessageSend, SessionRecord } from "./types";
 import { fetchOpenCodeCommand } from "./opencode-command-fetch";
 import { assertTurnPermissionsReady } from "./opencode-session-permissions";
-import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
@@ -147,10 +146,7 @@ export const sendUserMessage = async (
         pendingQueuedUserMessages.splice(queuedEntryIndex, 1);
       }
     }
-    if (
-      error instanceof OpenCodeMessageRejectedError ||
-      (error instanceof Error && error.message.startsWith("OpenCode request failed:"))
-    ) {
+    if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {
       throw error;
     }
     throw toOpenCodeRequestError("prompt session", error);

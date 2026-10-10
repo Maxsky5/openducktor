@@ -146,9 +146,8 @@ export type AgentMessageSendOptions = {
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
   sessionScope?: AgentSessionScope;
-  /** Only the request that starts a held session can claim its first message. */
-  ownsStart?: (session: AgentSessionState) => boolean;
-  assertCanSubmit?: (session: AgentSessionState, ownsStart?: boolean) => void;
+  /** Checks the recipient before preparation and again before transport. */
+  assertCanSubmit?: (session: AgentSessionState) => void;
 };
 
 export type AgentMessageSendReceipt = {

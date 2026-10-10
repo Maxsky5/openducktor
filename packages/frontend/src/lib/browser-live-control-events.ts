@@ -2,7 +2,6 @@ import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "./browser-live/constants";
-import type { HostEventPayload } from "@openducktor/contracts";
 import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "../types";
 
 export function browserLiveControlEvent(
@@ -37,7 +36,3 @@ export function browserLiveControlEvent(
   }
   return event;
 }
-
-export const isBrowserLiveControlEvent = (
-  payload: HostEventPayload<"openducktor://run-event"> | BrowserLiveControlEvent,
-): payload is BrowserLiveControlEvent => "__openducktorBrowserLive" in payload;

@@ -4,7 +4,6 @@ export type {
   OpencodeRuntimeSnapshotSource,
 } from "./live-session-snapshots";
 export { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
-export { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 export { loadOpencodeModelCatalogFromEndpoint } from "./model-catalog-preview";
 export type {
   OpencodeNativeApprovalReply,

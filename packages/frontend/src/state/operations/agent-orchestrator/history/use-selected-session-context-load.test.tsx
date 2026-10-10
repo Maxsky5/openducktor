@@ -56,9 +56,6 @@ describe("useSelectedSessionContextLoad", () => {
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
@@ -113,9 +110,6 @@ describe("useSelectedSessionContextLoad", () => {
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
@@ -167,9 +161,6 @@ describe("useSelectedSessionContextLoad", () => {
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,
@@ -223,9 +214,6 @@ describe("useSelectedSessionContextLoad", () => {
         readSessionHistory: async () => [],
         loadAgentSessionHistory: async () => null,
         loadAgentSessionContext,
-        startAgentSession: async () => {
-          throw new Error("Not configured");
-        },
         sendAgentMessage: async () => null,
         stopAgentSession: async () => undefined,
         continueInterruptedTurn: async () => undefined,
@@ -279,9 +267,6 @@ describe("useSelectedSessionContextLoad", () => {
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
       sendAgentMessage: async () => null,
       stopAgentSession: async () => undefined,
       continueInterruptedTurn: async () => undefined,

@@ -114,7 +114,10 @@ export const createAgentSessionCommandService = ({
           }),
         );
       }),
-    sendUserMessage: (input: Parameters<typeof runtime.sendUserMessage>[0]) =>
+    sendUserMessage: (
+      input: Parameters<typeof runtime.sendUserMessage>[0],
+      options?: Parameters<typeof runtime.sendUserMessage>[1],
+    ) =>
       Effect.gen(function* () {
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
         const ref = { ...input, repoPath };
@@ -123,7 +126,7 @@ export const createAgentSessionCommandService = ({
           ref,
           Effect.gen(function* () {
             const prepared = yield* policy.prepareSend(ref);
-            const accepted = yield* runtime.sendUserMessage(prepared);
+            const accepted = yield* runtime.sendUserMessage(prepared, options);
             yield* policy.recordAcceptedMessage(ref, accepted).pipe(
               Effect.mapError(
                 (cause) =>

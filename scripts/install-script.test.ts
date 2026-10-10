@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -20,22 +20,21 @@ const unixTest = process.platform === "win32" ? test.skip : test;
 const macTest =
   process.platform === "darwin" && !existsSync("/Applications/OpenDucktor.app") ? test : test.skip;
 
+// Each case runs the installer as a child process. On a busy machine one run can take over five
+// seconds, which is the default test timeout.
+setDefaultTimeout(15_000);
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-// Each case runs the installer twice, which can take over five seconds on macOS CI.
-macTest.each(["arm64", "x86_64"])(
-  "macOS %s installs and updates the matching ZIP",
-  (arch) => {
-    const setup = fixture("Darwin", arch);
-    expect(setup.run().status).toBe(0);
-    expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
-    expect(setup.run().status).toBe(0);
-    expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
-  },
-  15_000,
-);
+macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZIP", (arch) => {
+  const setup = fixture("Darwin", arch);
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+});
 
 macTest("a failed Spotlight search stops the macOS install", () => {
   const setup = fixture("Darwin", "arm64");

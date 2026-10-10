@@ -92,7 +92,11 @@ export type OpencodeSessionRuntimeConnection = {
     input: ContinueInterruptedAgentTurnInput,
   ) => Promise<AgentSessionSummary>;
   readonly forkSession: (input: ForkAgentSessionInput) => Promise<AgentSessionSummary>;
-  readonly sendUserMessage: (input: SendAgentUserMessageInput) => Promise<AcceptedAgentUserMessage>;
+  /** `onSent` runs when the native request that carries the message goes to OpenCode. */
+  readonly sendUserMessage: (
+    input: SendAgentUserMessageInput,
+    options?: { onSent?: () => void },
+  ) => Promise<AcceptedAgentUserMessage>;
   readonly updateSessionModel: (input: UpdateAgentSessionModelInput) => Promise<void>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,
@@ -622,7 +626,7 @@ export const createPrepareOpencodeSessionRuntime = (
         });
         return summary;
       },
-      sendUserMessage: (messageInput) => {
+      sendUserMessage: (messageInput, options) => {
         const pending = { ref: messageInput, controller: new AbortController() };
         pendingSends.add(pending);
         const signal = pending.controller.signal;
@@ -647,6 +651,7 @@ export const createPrepareOpencodeSessionRuntime = (
             onSent: () => {
               clearPending();
               markSent();
+              options?.onSent?.();
             },
           });
         });

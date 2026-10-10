@@ -828,6 +828,95 @@ describe("session occurrence projector", () => {
     ]);
   });
 
+  test("notifies a launch failure once without ending the running turn", () => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    const launchFailure = {
+      messageId: "launch-failure:1",
+      message: "The session launch failed: Timed out.",
+      timestamp: "2026-08-31T10:01:00.000Z",
+    };
+    const failed = snapshot({ activity: "running", launchFailure });
+    expect(projector.accept({ type: "session_upsert", session: failed })).toMatchObject([
+      {
+        kind: "agent.session_error",
+        status: "The session launch failed: Timed out.",
+        navigationTarget: { type: "session_error", errorId: "launch-failure:1" },
+      },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: failed })).toEqual([]);
+    // Codex can still run the turn after a lost reply, so its idle notice still arrives.
+    expect(
+      projector.accept({
+        type: "transcript_event",
+        event: transcript({
+          type: "session_idle",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:02:00.000Z",
+        }),
+      }),
+    ).toMatchObject([{ kind: "agent.session_idle" }]);
+  });
+
+  test("does not notify an old launch failure again after its session comes back", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const launchFailure = {
+      messageId: "launch-failure:1",
+      message: "The session launch failed: Timed out.",
+      timestamp: "2026-08-31T10:01:00.000Z",
+    };
+    const failed = snapshot({ launchFailure });
+    expect(projector.accept({ type: "session_upsert", session: failed })).toHaveLength(1);
+    projector.accept({ type: "session_removed", ref });
+    expect(projector.accept({ type: "session_upsert", session: failed })).toEqual([]);
+  });
+
+  test("keeps an unowned launch failure apart from a later idle notice", () => {
+    let owned = false;
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: () =>
+        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+      resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    const launchFailure = {
+      messageId: "launch-failure:1",
+      message: "The session launch failed: Timed out.",
+      timestamp: "2026-08-31T10:01:00.000Z",
+    };
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ activity: "running", launchFailure }),
+      }),
+    ).toEqual([]);
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:02:00.000Z",
+      }),
+    });
+    owned = true;
+    expect(
+      projector
+        .accept({ type: "session_upsert", session: snapshot({ launchFailure }) })
+        .map((occurrence) => occurrence.kind)
+        .sort(),
+    ).toEqual(["agent.session_error", "agent.session_idle"]);
+  });
+
   test("uses the last completed assistant message in the idle occurrence", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });

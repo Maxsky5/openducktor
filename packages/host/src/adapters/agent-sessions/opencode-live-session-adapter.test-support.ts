@@ -169,8 +169,9 @@ export const createRuntimeHarness = (
       controlCalls.push({ operation: "fork", input });
       return controlSummary;
     },
-    sendUserMessage: async (input) => {
+    sendUserMessage: async (input, sendOptions) => {
       controlCalls.push({ operation: "send", input });
+      sendOptions?.onSent?.();
       options.onSendUserMessage?.();
       await options.sendUserMessageBarrier;
       return {

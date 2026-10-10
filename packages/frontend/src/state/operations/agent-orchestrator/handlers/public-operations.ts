@@ -19,11 +19,9 @@ import type {
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { StartAgentSession } from "@/types/agent-session-start";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 
 type SessionActions = {
-  startAgentSession: StartAgentSession;
   sendAgentMessage: (
     session: AgentSessionIdentity,
     parts: AgentUserMessagePart[],
@@ -91,7 +89,6 @@ export const createOrchestratorPublicOperations = ({
   ): Promise<AgentSessionHistoryMessage[]> => agentEngine.loadSessionHistory(session),
   loadAgentSessionHistory,
   loadAgentSessionContext,
-  startAgentSession: sessionActions.startAgentSession,
   sendAgentMessage: (
     session,
     parts: AgentUserMessagePart[],

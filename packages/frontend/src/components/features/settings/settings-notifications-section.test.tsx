@@ -37,6 +37,7 @@ const createNotificationContext = (
   sessionStartNotifications: {
     publishSessionStarted: () => {},
     publishSessionError: async () => true,
+    markInAppFeedbackHandled: () => {},
     reportFailure: () => {},
   },
   ...overrides,

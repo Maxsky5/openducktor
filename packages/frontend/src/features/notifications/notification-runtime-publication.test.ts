@@ -47,7 +47,7 @@ describe("notification publication and coordination", () => {
       selectSettings: async () => createDefaultNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
-      inApp: { deliver: deliverInApp },
+      inApp: { dismiss: () => {}, deliver: deliverInApp },
     });
     const stop = runtime.subscribe();
     expect(await runtime.publishAndWait(occurrence, detail)).toBe(true);
@@ -200,7 +200,7 @@ describe("notification publication and coordination", () => {
       selectSettings: recipientLoadSettings,
       navigate: async () => {},
       onFailure: () => {},
-      inApp: { deliver: recipientInApp },
+      inApp: { dismiss: () => {}, deliver: recipientInApp },
       sound: { play: async () => {} },
     });
     recipient.subscribe();
@@ -420,7 +420,7 @@ describe("notification publication and coordination", () => {
       navigate: async () => {},
       onFailure,
       onCoordinationRecovered,
-      inApp: { deliver: async () => resolveDelivery() },
+      inApp: { dismiss: () => {}, deliver: async () => resolveDelivery() },
       sound: { play: async () => {} },
     });
 
