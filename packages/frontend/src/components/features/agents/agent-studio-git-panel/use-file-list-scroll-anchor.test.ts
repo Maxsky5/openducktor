@@ -85,8 +85,9 @@ describe("useFileListScrollAnchor row heights", () => {
     expect(anchor.rowHeight().getAverageRowHeight()).toBe(41 - HEADER_DIFFERENCE);
     expect(anchor.rowHeight().getRowHeight(1)).toBe(800 - HEADER_DIFFERENCE);
 
+    // The estimate uses the smallest height below a header from all views.
     anchor.measure("file:c.ts", 30);
-    expect(anchor.rowHeight().getAverageRowHeight()).toBe(30);
+    expect(anchor.rowHeight().getAverageRowHeight()).toBe(41 - HEADER_DIFFERENCE);
     expect(anchor.rowHeight().getRowHeight(0)).toBe(41 - HEADER_DIFFERENCE);
     expect(anchor.rowHeight().getRowHeight(1)).toBe(800 - HEADER_DIFFERENCE);
 

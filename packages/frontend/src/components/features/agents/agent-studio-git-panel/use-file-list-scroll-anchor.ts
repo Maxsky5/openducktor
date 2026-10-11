@@ -43,7 +43,8 @@ export function useFileListScrollAnchor({
     const row = getRenderedRow(list, anchor.key);
     if (!row) return;
     anchor.offset = Math.max(0, list.getBoundingClientRect().top - row.getBoundingClientRect().top);
-  }, [listRef]);
+    anchor.viewMode = viewMode;
+  }, [listRef, viewMode]);
 
   // This runs again from the layout effect and from `onRowsRendered` until the anchor row is in place.
   // react-window's `scrollToRow` cannot keep the offset inside the row, so the hook scrolls itself.
@@ -77,10 +78,12 @@ export function useFileListScrollAnchor({
     }
 
     const rowStart = list.scrollTop + rowRect.top - listTop;
-    const offset = isAnchorRow ? Math.min(anchor.offset, Math.max(0, rowRect.height - 1)) : 0;
+    const offset = isAnchorRow
+      ? Math.min(offsetInView(anchor, viewMode), Math.max(0, rowRect.height - 1))
+      : 0;
     list.scrollTop = rowStart + offset;
     pendingAnchorRef.current = null;
-  }, [listRef, rowHeight, rows]);
+  }, [listRef, rowHeight, rows, viewMode]);
 
   useLayoutEffect(() => {
     const previousRows = previousRowsRef.current;
@@ -118,11 +121,11 @@ export function useFileListScrollAnchor({
       if (pendingAnchorRef.current) return;
       const key = rows[startIndex]?.key;
       if (key) {
-        visibleRowRef.current = { key, index: startIndex, offset: 0, rows };
+        visibleRowRef.current = { key, index: startIndex, offset: 0, viewMode, rows };
         captureVisibleOffset();
       }
     },
-    [captureVisibleOffset, restorePendingAnchor, rows],
+    [captureVisibleOffset, restorePendingAnchor, rows, viewMode],
   );
 
   return {
@@ -139,7 +142,8 @@ export function rowKeyAttributes(rowKey: string) {
   return { [ROW_KEY_ATTRIBUTE]: rowKey };
 }
 
-type VisibleRowAnchor = RowAnchor & { offset: number };
+/** `offset` is the scrolled distance into the anchor row, measured in `viewMode`. */
+type VisibleRowAnchor = RowAnchor & { offset: number; viewMode: FileListViewMode };
 
 type PendingAnchor = VisibleRowAnchor & {
   /** The scroll position of the last estimate, set while the anchor row is not rendered. */
@@ -164,6 +168,15 @@ function scrollTowardRow(list: HTMLElement, anchor: PendingAnchor, rowStart: num
   return true;
 }
 
+/** An offset below the row header moves with the diff body when a view switch changes the header height. */
+function offsetInView(anchor: VisibleRowAnchor, viewMode: FileListViewMode): number {
+  const headerHeight = FILE_LIST_ROW_HEIGHT[anchor.viewMode];
+  if (anchor.offset < headerHeight) {
+    return anchor.offset;
+  }
+  return anchor.offset - headerHeight + FILE_LIST_ROW_HEIGHT[viewMode];
+}
+
 function getRenderedRow(list: HTMLElement, rowKey: string): Element | undefined {
   for (const child of list.children) {
     if (child.getAttribute(ROW_KEY_ATTRIBUTE) === rowKey) {
@@ -173,21 +186,20 @@ function getRenderedRow(list: HTMLElement, rowKey: string): Element | undefined 
   return undefined;
 }
 
-type KnownHeight = { height: number; viewMode: FileListViewMode };
-
 type KnownHeights = {
-  heightByKey: ReadonlyMap<string, KnownHeight>;
-  /** The smallest known height in each view. It is usually the height of a closed row. */
-  smallestHeightByView: ReadonlyMap<FileListViewMode, number>;
+  /** The height of each row below its header. A view switch changes only the header height. */
+  belowHeaderByKey: ReadonlyMap<string, number>;
+  /** The smallest known height below a header. It is usually the border of a closed row. */
+  smallestBelowHeader: number | null;
 };
 
 type OwnedHeights = KnownHeights & { measurementKey: string };
 
-const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), smallestHeightByView: new Map() };
+const NO_KNOWN_HEIGHTS: KnownHeights = { belowHeaderByKey: new Map(), smallestBelowHeader: null };
 
 /**
  * Gives react-window the measured row heights by row key. A row keeps its height when rows move,
- * and when a closed directory or a search hides it for a time, or a view switch changes its header.
+ * when a closed directory or a search hides it for a time, and when a view switch changes its header.
  */
 function useRowHeights(
   rows: readonly FileListRow[],
@@ -198,31 +210,31 @@ function useRowHeights(
     measurementKey,
     ...NO_KNOWN_HEIGHTS,
   }));
-  const { heightByKey, smallestHeightByView } =
+  const { belowHeaderByKey, smallestBelowHeader } =
     ownedHeights.measurementKey === measurementKey ? ownedHeights : NO_KNOWN_HEIGHTS;
-  const estimatedHeight = estimatedRowHeight(viewMode, smallestHeightByView);
+  const headerHeight = FILE_LIST_ROW_HEIGHT[viewMode];
+  // Most rows are closed, so a row that is not measured yet gets the height of a closed row.
+  const estimatedHeight = headerHeight + (smallestBelowHeader ?? 0);
 
   const setRowHeightByKey = useCallback(
     (rowKey: string, height: number): void => {
+      const belowHeader = height - headerHeight;
       setOwnedHeights((current) => {
         const known = current.measurementKey === measurementKey ? current : NO_KNOWN_HEIGHTS;
-        const previous = known.heightByKey.get(rowKey);
-        if (previous?.height === height && previous.viewMode === viewMode) {
+        if (known.belowHeaderByKey.get(rowKey) === belowHeader) {
           return current;
         }
-        const heightByKey = new Map(known.heightByKey);
-        heightByKey.set(rowKey, { height, viewMode });
-        const smallestHeightByView = new Map(known.smallestHeightByView);
-        smallestHeightByView.set(
-          viewMode,
-          Math.min(known.smallestHeightByView.get(viewMode) ?? height, height),
-        );
-        return { measurementKey, heightByKey, smallestHeightByView };
+        const next = new Map(known.belowHeaderByKey);
+        next.set(rowKey, belowHeader);
+        return {
+          measurementKey,
+          belowHeaderByKey: next,
+          smallestBelowHeader: Math.min(known.smallestBelowHeader ?? belowHeader, belowHeader),
+        };
       });
     },
-    [measurementKey, viewMode],
+    [headerHeight, measurementKey],
   );
-
   // The observer outlives renders, so it reads the newest setter.
   const latestSetRowHeightRef = useRef(setRowHeightByKey);
   useLayoutEffect(() => {
@@ -251,8 +263,8 @@ function useRowHeights(
       getAverageRowHeight: () => estimatedHeight,
       getRowHeight: (index) => {
         const row = rows[index];
-        const known = row ? heightByKey.get(row.key) : undefined;
-        return known === undefined ? undefined : heightInView(known, viewMode);
+        const belowHeader = row ? belowHeaderByKey.get(row.key) : undefined;
+        return belowHeader === undefined ? undefined : headerHeight + belowHeader;
       },
       setRowHeight: (index, height) => {
         const row = rows[index];
@@ -271,33 +283,8 @@ function useRowHeights(
         };
       },
     }),
-    [estimatedHeight, heightByKey, resizeObserver, rows, setRowHeightByKey, viewMode],
+    [belowHeaderByKey, estimatedHeight, headerHeight, resizeObserver, rows, setRowHeightByKey],
   );
 
   return { rowHeight, setRowHeightByKey };
-}
-
-/**
- * Only the row header changes height in another view. Its height comes from `FILE_LIST_ROW_HEIGHT`,
- * because a measured row can include an expanded diff body.
- */
-function heightInView(known: KnownHeight, viewMode: FileListViewMode): number {
-  return known.height - FILE_LIST_ROW_HEIGHT[known.viewMode] + FILE_LIST_ROW_HEIGHT[viewMode];
-}
-
-/** A row that is not measured yet gets the height of a closed row, because most rows are closed. */
-function estimatedRowHeight(
-  viewMode: FileListViewMode,
-  smallestHeightByView: KnownHeights["smallestHeightByView"],
-): number {
-  const measuredHeight = smallestHeightByView.get(viewMode);
-  if (measuredHeight !== undefined) {
-    return measuredHeight;
-  }
-  // Until a row of the view is measured, use a row of the other view, so a view switch keeps the row positions.
-  const otherViewMode = viewMode === "tree" ? "list" : "tree";
-  const otherHeight = smallestHeightByView.get(otherViewMode);
-  return otherHeight === undefined
-    ? FILE_LIST_ROW_HEIGHT[viewMode]
-    : heightInView({ height: otherHeight, viewMode: otherViewMode }, viewMode);
 }

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffList } from "./file-diff-list";
 import {
+  fakeRowHeight,
   installMeasuredRows,
   OWNER_KEY,
   preloaderMock,
@@ -93,10 +94,10 @@ const PACKAGE_FILES = Array.from(
   { length: 100 },
   (_, index) => `pkg-${String(Math.floor(index / 5)).padStart(2, "0")}/f-${index % 5}.ts`,
 );
-/** Closed row heights of `installMeasuredRows`, and its expanded row height in tree view. */
-const LIST_ROW = 40;
-const TREE_ROW = LIST_ROW - FILE_LIST_ROW_HEIGHT.list + FILE_LIST_ROW_HEIGHT.tree;
-const EXPANDED_TREE_ROW = 800 - LIST_ROW + TREE_ROW;
+/** Row heights of `installMeasuredRows` with its defaults, and an 800px expanded list row. */
+const LIST_ROW = fakeRowHeight(FILE_LIST_ROW_HEIGHT.list);
+const TREE_ROW = fakeRowHeight(FILE_LIST_ROW_HEIGHT.tree);
+const EXPANDED_TREE_ROW = fakeRowHeight(FILE_LIST_ROW_HEIGHT.tree, { expandedRowHeight: 800 });
 const THREE_DIRECTORY_FILES = ["a", "b", "c"].flatMap((directory) => numberedFiles(directory, 30));
 
 const directoryButton = (name: string): HTMLElement => screen.getByRole("button", { name });
@@ -341,6 +342,34 @@ describe("FileDiffList tree view and search", () => {
       fireEvent.scroll(list);
       expect(rowTop(fileToggle("file-030.ts"))).toBe(0);
       expect(list.scrollTop).toBe(30 * LIST_ROW);
+    });
+
+    test("keeps the scrolled place inside an expanded file when the view changes", () => {
+      const files = Array.from(
+        { length: 100 },
+        (_, index) => `src/file-${String(index).padStart(3, "0")}.ts`,
+      );
+      render(
+        <NavigableFileDiffListHarness
+          files={files}
+          initialViewMode="list"
+          initialExpandedFiles={["src/file-005.ts"]}
+        />,
+      );
+      measurements.resize(600, 800);
+      const list = screen.getByRole("list");
+      fireEvent.scroll(list, { target: { scrollTop: 5 * LIST_ROW + 500 } });
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-500);
+
+      // The diff body starts higher in tree view, because the row header is shorter.
+      const headerDifference = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
+      fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
+      fireEvent.scroll(list);
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-(500 - headerDifference));
+
+      fireEvent.click(screen.getByRole("button", { name: "List view" }));
+      fireEvent.scroll(list);
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-500);
     });
 
     test("finishes the scroll restore after a view switch, so a later expand does not jump", () => {
