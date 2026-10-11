@@ -31,6 +31,7 @@ describe("decodeStrictBase64", () => {
       "AA=A",
       "AAAA====",
       "AAAA==AA",
+      "A!==",
     ]) {
       expect(decodeStrictBase64(value, LIMIT)).toEqual({ ok: false, reason: "malformed" });
     }
@@ -42,10 +43,25 @@ describe("decodeStrictBase64", () => {
     }
   });
 
-  test("builds no bytes for rejected input", () => {
+  test("rejects size and padding failures without decoding", () => {
+    const decode = spyOn(globalThis, "atob");
     const from = spyOn(Buffer, "from");
     try {
-      for (const value of ["AA!A", "AA A", "AB==", "A".repeat(Math.ceil(LIMIT / 3) * 4 + 4)]) {
+      for (const value of ["AB==", "AAB=", "A!==", "A".repeat(Math.ceil(LIMIT / 3) * 4 + 4)]) {
+        expect(decodeStrictBase64(value, LIMIT).ok).toBe(false);
+      }
+      expect(decode).not.toHaveBeenCalled();
+      expect(from).not.toHaveBeenCalled();
+    } finally {
+      decode.mockRestore();
+      from.mockRestore();
+    }
+  });
+
+  test("builds no bytes for input that atob rejects or shortens", () => {
+    const from = spyOn(Buffer, "from");
+    try {
+      for (const value of ["AA!A", "AA A", "AAAA==AA"]) {
         expect(decodeStrictBase64(value, LIMIT).ok).toBe(false);
       }
       expect(from).not.toHaveBeenCalled();
