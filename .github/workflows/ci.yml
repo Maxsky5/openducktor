@@ -108,10 +108,8 @@ jobs:
         run: bun run ${{ matrix.testScript }}
 
       - name: Build workspaces
-        env:
-          # The website header reads the latest release from the GitHub API.
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bun run build
+        # The Marketing website workflow builds the site when its inputs change.
+        run: bun run --filter '*' --filter '!@openducktor/marketing-website' build
 
       - name: Install Electron runtime for worker checks
         run: node apps/electron/node_modules/electron/install.js

@@ -5,16 +5,17 @@ name: Marketing website
 on:
   push:
     branches: [main]
-    # The site build reads the product theme and mark, the lockfile, and this workflow.
+    # Include the shared theme, mark, web runner metadata, dependency files, and workflows.
     paths: &marketing-paths
       - 'apps/marketing-website/**'
       - 'packages/frontend/src/styles.css'
       - 'packages/frontend/src/assets/openducktor-mark.svg'
+      - 'packages/openducktor-web/package.json'
+      - '.github/workflows/ci.yml'
       - '.github/workflows/marketing-website.yml'
       - 'package.json'
       - 'bun.lock'
   pull_request:
-    branches: [main]
     paths: *marketing-paths
   # The header shows the latest stable release, so a new stable release publishes the site again.
   release:
@@ -87,10 +88,11 @@ jobs:
 
   deploy:
     needs: build
-    # A fork gets no preview: its workflow cannot receive the Cloudflare token. Production comes
-    # only from main, or from a release, whose build checks out main.
+    # Only internal pull requests to main get previews. Validation covers every PR target branch.
+    # Production comes only from main, or from a release, whose build checks out main.
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main'
+      && github.event.pull_request.head.repo.full_name == github.repository)
       || github.event_name == 'release' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
