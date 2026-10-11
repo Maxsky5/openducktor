@@ -24,7 +24,7 @@ export function useFileListScrollAnchor({
   rows: readonly FileListRow[];
   /** A new owner, such as another task or diff scope, drops the known heights. */
   measurementKey: string;
-  /** Closed rows have another height in each view. A view switch adapts the known heights. */
+  /** Row headers have another height in each view, so a view switch changes the known heights. */
   viewMode: FileListViewMode;
   scrollResetKey: string;
 }) {
@@ -186,31 +186,6 @@ type OwnedHeights = KnownHeights & { measurementKey: string };
 const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), smallestHeightByView: new Map() };
 
 /**
- * Only the row header changes height in another view. Its height comes from `FILE_LIST_ROW_HEIGHT`,
- * because a measured row can include an expanded diff body.
- */
-function heightInView(known: KnownHeight, viewMode: FileListViewMode): number {
-  return known.height - FILE_LIST_ROW_HEIGHT[known.viewMode] + FILE_LIST_ROW_HEIGHT[viewMode];
-}
-
-/** A row that is not measured yet gets the height of a closed row, because most rows are closed. */
-function estimatedRowHeight(
-  viewMode: FileListViewMode,
-  smallestHeightByView: KnownHeights["smallestHeightByView"],
-): number {
-  const measuredHeight = smallestHeightByView.get(viewMode);
-  if (measuredHeight !== undefined) {
-    return measuredHeight;
-  }
-  // Until a row of the view is measured, use a row of the other view, so a view switch keeps the row positions.
-  const otherViewMode = viewMode === "tree" ? "list" : "tree";
-  const otherHeight = smallestHeightByView.get(otherViewMode);
-  return otherHeight === undefined
-    ? FILE_LIST_ROW_HEIGHT[viewMode]
-    : heightInView({ height: otherHeight, viewMode: otherViewMode }, viewMode);
-}
-
-/**
  * Gives react-window the measured row heights by row key. A row keeps its height when rows move,
  * and when a closed directory or a search hides it for a time, or a view switch changes its header.
  */
@@ -300,4 +275,29 @@ function useRowHeights(
   );
 
   return { rowHeight, setRowHeightByKey };
+}
+
+/**
+ * Only the row header changes height in another view. Its height comes from `FILE_LIST_ROW_HEIGHT`,
+ * because a measured row can include an expanded diff body.
+ */
+function heightInView(known: KnownHeight, viewMode: FileListViewMode): number {
+  return known.height - FILE_LIST_ROW_HEIGHT[known.viewMode] + FILE_LIST_ROW_HEIGHT[viewMode];
+}
+
+/** A row that is not measured yet gets the height of a closed row, because most rows are closed. */
+function estimatedRowHeight(
+  viewMode: FileListViewMode,
+  smallestHeightByView: KnownHeights["smallestHeightByView"],
+): number {
+  const measuredHeight = smallestHeightByView.get(viewMode);
+  if (measuredHeight !== undefined) {
+    return measuredHeight;
+  }
+  // Until a row of the view is measured, use a row of the other view, so a view switch keeps the row positions.
+  const otherViewMode = viewMode === "tree" ? "list" : "tree";
+  const otherHeight = smallestHeightByView.get(otherViewMode);
+  return otherHeight === undefined
+    ? FILE_LIST_ROW_HEIGHT[viewMode]
+    : heightInView({ height: otherHeight, viewMode: otherViewMode }, viewMode);
 }

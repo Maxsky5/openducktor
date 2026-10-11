@@ -214,13 +214,14 @@ export function installMeasuredRows({
   );
   let currentWidth = 600;
   let currentExpandedRowHeight = 800;
+  // A row is its button plus this border, such as the 1px row border in the app.
+  const rowBorder = closedRowHeight - FILE_LIST_ROW_HEIGHT.list;
   const rowHeight = (element: Element): number => {
     const rowButton = element.querySelector<HTMLElement>("button");
     if (!rowButton) {
       throw new Error("A file list row has no button.");
     }
-    const closedHeight =
-      closedRowHeight - FILE_LIST_ROW_HEIGHT.list + Number.parseFloat(rowButton.style.minHeight);
+    const closedHeight = Number.parseFloat(rowButton.style.minHeight) + rowBorder;
     const isExpanded =
       element
         .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
