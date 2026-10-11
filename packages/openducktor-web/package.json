@@ -39,7 +39,7 @@
     "@ff-labs/fff-node": "0.10.6",
     "mime-types": "^3.0.2",
     "node-pty": "1.2.0-beta.15",
-    "undici": "^8.10.2",
+    "undici": "^8.11.2",
     "ws": "8.21.3",
     "zod": "^4.6.5"
   },
