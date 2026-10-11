@@ -7,9 +7,9 @@ export type StrictBase64Result =
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /**
- * Validates padded, canonical base64 and builds the bytes only after every check passes.
- * Size and padding bits are checked before decoding. Native atob rejects other characters and misplaced padding.
- * A regex or JavaScript scan of each character blocks the host for about 290 ms for 32 MiB of file data.
+ * Decodes padded, canonical base64 and builds the bytes only after every check passes.
+ * It checks the size and the padding bits first, then lets native atob reject bad characters.
+ * A regex or loop over each character would block the host for about 290 ms per 32 MiB of file data.
  */
 export const decodeStrictBase64 = (value: string, maxBytes: number): StrictBase64Result => {
   if (value.length > Math.ceil(maxBytes / 3) * 4) return { ok: false, reason: "too_large" };
@@ -19,7 +19,7 @@ export const decodeStrictBase64 = (value: string, maxBytes: number): StrictBase6
   else if (value.endsWith("=")) padding = 1;
   const byteLength = (value.length / 4) * 3 - padding;
   if (byteLength > maxBytes) return { ok: false, reason: "too_large" };
-  // atob ignores the unused bits before the padding, so check that they are zero before decoding.
+  // atob ignores the unused bits before the padding, so they must be zero.
   if (padding > 0) {
     const tail = BASE64_ALPHABET.indexOf(value.charAt(value.length - padding - 1));
     if (tail < 0) return { ok: false, reason: "malformed" };

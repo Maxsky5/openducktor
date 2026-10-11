@@ -8,7 +8,7 @@ export const invalidImage = (itemId: string, reason: string) =>
     details: { itemId, operation: "generated-image.read" },
   });
 
-const decodeFailureReasons = {
+const failureReasons = {
   too_large: "output exceeds the 32 MiB preview limit.",
   malformed: "the runtime returned malformed base64 image data.",
   padding: "the runtime returned malformed base64 padding.",
@@ -16,6 +16,6 @@ const decodeFailureReasons = {
 
 export const decodeInlineImage = (base64: string, itemId: string): Buffer => {
   const decoded = decodeStrictBase64(base64, LOCAL_ATTACHMENT_BYTE_LIMIT);
-  if (!decoded.ok) throw invalidImage(itemId, decodeFailureReasons[decoded.reason]);
+  if (!decoded.ok) throw invalidImage(itemId, failureReasons[decoded.reason]);
   return decoded.bytes;
 };
