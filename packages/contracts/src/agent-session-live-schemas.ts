@@ -173,6 +173,8 @@ export const agentSessionLiveSnapshotEnvelopeSchema = z
     /** Every message queue of the repository, including queues of missing sessions. */
     messageQueues: z.array(agentMessageQueueSnapshotSchema),
     isConnectionSnapshot: z.boolean().optional(),
+    /** The transport replaced a baseline after a replay gap or host change. */
+    historyReplayGap: z.boolean().optional(),
     sequence: liveStateSequenceSchema.optional(),
   })
   .strict();

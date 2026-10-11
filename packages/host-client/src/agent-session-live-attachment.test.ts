@@ -6,6 +6,7 @@ const snapshot = {
   type: "snapshot",
   repoPath: "/repo",
   sessions: [],
+  messageQueues: [],
 } as const satisfies AgentSessionLiveEnvelope;
 
 const transcriptEvent = (messageId: string): AgentSessionLiveEnvelope => ({
@@ -107,7 +108,7 @@ describe("agent session live attachment", () => {
 
     expect(received).toEqual([
       { ...snapshot, sequence: 50, isConnectionSnapshot: true },
-      { ...snapshot, sequence: 2, isConnectionSnapshot: true },
+      { ...snapshot, sequence: 2, isConnectionSnapshot: true, historyReplayGap: true },
       transcriptEvent("after-gap"),
       upsert(3),
     ]);

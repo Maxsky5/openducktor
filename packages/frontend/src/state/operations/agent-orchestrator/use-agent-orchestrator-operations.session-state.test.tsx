@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
 import { createHostRuntimeStatusFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
@@ -655,97 +657,199 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("keeps a retained transcript when the workspace returns", async () => {
-    const baselineHistory: AgentSessionHistoryMessage[] = [
-      {
-        messageId: "history-1",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        text: "Retained transcript",
-        parts: [],
-      },
-    ];
-    let historyCalls = 0;
-    const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
-    AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => {
-      historyCalls += 1;
-      return baselineHistory;
-    };
+  const retentionCoverageCases = [
+    "unknown",
+    "covered",
+    "gap",
+    "root-fault",
+    "child-fault",
+    "peer-fault",
+    "read-fault",
+  ] as const;
+  test.each([...retentionCoverageCases])(
+    "returns to retained workspace history with %s coverage",
+    async (continuity) => {
+      const baselineHistory: AgentSessionHistoryMessage[] = [
+        {
+          messageId: "history-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          text: "Retained transcript",
+          parts: [],
+        },
+      ];
+      let historyCalls = 0;
+      const delayedRead = Promise.withResolvers<void>();
+      const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => {
+        historyCalls += 1;
+        if (continuity === "read-fault" && historyCalls === 2) {
+          await delayedRead.promise;
+          return [{ ...baselineHistory[0]!, text: "Obsolete response" }];
+        }
+        return baselineHistory;
+      };
 
-    const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
-
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo-a",
-      tasks: [taskFixtureWithPersistedBuildSession],
-      refreshTaskData: async () => {},
-      dependencies: createTestDependencies(
+      const snapshot = createAgentSessionLiveSnapshotFixture({ ref: { repoPath: "/tmp/repo-a" } });
+      const child = createAgentSessionLiveSnapshotFixture({
+        ref: { ...snapshot.ref, externalSessionId: "child" },
+        parentExternalSessionId: snapshot.ref.externalSessionId,
+      });
+      const peer = createAgentSessionLiveSnapshotFixture({
+        ref: { ...snapshot.ref, externalSessionId: "peer" },
+      });
+      const snapshots = [snapshot, child, peer];
+      const liveStream = createLiveSessionStreamFixture(snapshots);
+      const observe = liveStream.portOverrides.observeAgentSessionLive!;
+      const dependencies = createTestDependencies(
         {
           agentSessionsListForTasks: async (repoPath) =>
             repoPath === "/tmp/repo-a"
               ? [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }]
               : [{ taskId: "task-1", agentSessions: [] }],
         },
-        liveStream.portOverrides,
-      ),
-    });
-
-    try {
-      await harness.mount();
-      const loadedState = await harness.waitFor((state) =>
-        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
-      );
-      const session = listHarnessSessions(loadedState).find(
-        (entry) => entry.externalSessionId === "external-1",
-      );
-      if (!session) {
-        throw new Error("Expected loaded session");
-      }
-
-      await harness.run(async () => {
-        await harness.getLatest().operations.loadAgentSessionHistory({
-          externalSessionId: session.externalSessionId,
-          runtimeKind: session.runtimeKind,
-          workingDirectory: session.workingDirectory,
-        });
-      });
-      await harness.waitFor((state) =>
-        listHarnessSessions(state).some(
-          (entry) =>
-            entry.externalSessionId === "external-1" &&
-            hasLoadedSessionHistory(entry) &&
-            sessionMessagesToArray(entry).some(
-              (message) => message.content === "Retained transcript",
+        {
+          ...liveStream.portOverrides,
+          observeAgentSessionLive: (input, listener) =>
+            observe(input, (envelope) =>
+              listener(
+                envelope.type === "snapshot"
+                  ? { ...envelope, isConnectionSnapshot: true }
+                  : envelope,
+              ),
             ),
-        ),
+        },
       );
-
-      await harness.updateArgs({ activeRepo: "/tmp/repo-b", tasks: [taskFixture] });
-      await harness.updateArgs({
+      const coverage = sessionHistoryCoverage(dependencies.queryClient).observe("/tmp/repo-a");
+      if (continuity !== "unknown")
+        coverage.accept(
+          createLiveSnapshotEnvelope({ repoPath: "/tmp/repo-a", sessions: snapshots }),
+        );
+      const harness = createHookHarness({
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixtureWithPersistedBuildSession],
+        refreshTaskData: async () => {},
+        dependencies,
       });
 
-      const restored = await harness.waitFor((state) =>
-        listHarnessSessions(state).some(
-          (entry) =>
-            entry.externalSessionId === "external-1" &&
-            hasLoadedSessionHistory(entry) &&
-            sessionMessagesToArray(entry).some(
-              (message) => message.content === "Retained transcript",
-            ),
-        ),
-      );
-      const restoredSession = listHarnessSessions(restored).find(
-        (entry) => entry.externalSessionId === "external-1",
-      );
+      try {
+        await harness.mount();
+        const loadedState = await harness.waitFor((state) =>
+          listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
+        );
+        const session = listHarnessSessions(loadedState).find(
+          (entry) => entry.externalSessionId === "external-1",
+        );
+        if (!session) {
+          throw new Error("Expected loaded session");
+        }
 
-      expect(restoredSession?.historyLoadState).toBe("stale");
-      expect(historyCalls).toBe(1);
-    } finally {
-      await harness.unmount();
-      AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
-    }
-  });
+        await harness.run(async () => {
+          await harness.getLatest().operations.loadAgentSessionHistory({
+            externalSessionId: session.externalSessionId,
+            runtimeKind: session.runtimeKind,
+            workingDirectory: session.workingDirectory,
+          });
+        });
+        await harness.waitFor((state) =>
+          listHarnessSessions(state).some(
+            (entry) =>
+              entry.externalSessionId === "external-1" &&
+              hasLoadedSessionHistory(entry) &&
+              sessionMessagesToArray(entry).some(
+                (message) => message.content === "Retained transcript",
+              ),
+          ),
+        );
+
+        if (
+          continuity === "root-fault" ||
+          continuity === "child-fault" ||
+          continuity === "peer-fault" ||
+          continuity === "read-fault"
+        ) {
+          let faultRef = snapshot.ref;
+          if (continuity === "child-fault") faultRef = child.ref;
+          if (continuity === "peer-fault") faultRef = peer.ref;
+          const fault = {
+            type: "fault",
+            repoPath: "/tmp/repo-a",
+            ref: faultRef,
+            message: "The runtime lost this session.",
+          } as const satisfies AgentSessionLiveEnvelope;
+          await harness.run(() => {
+            coverage.accept(fault);
+            liveStream.emit(fault);
+          });
+          if (continuity === "read-fault") {
+            let pendingRead: Promise<unknown> | undefined;
+            await harness.run(() => {
+              pendingRead = harness
+                .getLatest()
+                .operations.loadAgentSessionHistory(persistedSessionFixture);
+            });
+            await harness.waitFor(() => historyCalls === 2);
+            await harness.run(async () => {
+              coverage.accept(fault);
+              liveStream.emit(fault);
+              delayedRead.resolve();
+              await pendingRead;
+            });
+            expect(
+              listHarnessSessions(harness.getLatest()).find(
+                (entry) => entry.externalSessionId === "external-1",
+              )?.historyLoadState,
+            ).toBe("stale");
+          }
+        }
+        await harness.updateArgs({ activeRepo: "/tmp/repo-b", tasks: [taskFixture] });
+        if (continuity === "gap")
+          coverage.accept(
+            createLiveSnapshotEnvelope({
+              repoPath: "/tmp/repo-a",
+              sessions: snapshots,
+              historyReplayGap: true,
+            }),
+          );
+        await harness.updateArgs({
+          activeRepo: "/tmp/repo-a",
+          tasks: [taskFixtureWithPersistedBuildSession],
+        });
+
+        const restored = await harness.waitFor((state) =>
+          listHarnessSessions(state).some(
+            (entry) =>
+              entry.externalSessionId === "external-1" &&
+              hasLoadedSessionHistory(entry) &&
+              sessionMessagesToArray(entry).some(
+                (message) => message.content === "Retained transcript",
+              ),
+          ),
+        );
+        const restoredSession = listHarnessSessions(restored).find(
+          (entry) => entry.externalSessionId === "external-1",
+        );
+
+        expect(restoredSession?.historyLoadState).toBe(
+          continuity === "covered" || continuity === "peer-fault" ? "loaded" : "stale",
+        );
+        const callsBeforeRepair = continuity === "read-fault" ? 2 : 1;
+        expect(historyCalls).toBe(callsBeforeRepair);
+        await harness.run(async () => {
+          await harness.getLatest().operations.loadAgentSessionHistory(persistedSessionFixture);
+        });
+        expect(historyCalls).toBe(
+          continuity === "covered" || continuity === "peer-fault" ? 1 : callsBeforeRepair + 1,
+        );
+      } finally {
+        delayedRead.resolve();
+        coverage.close();
+        dependencies.queryClient.clear();
+        await harness.unmount();
+        AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    },
+  );
 
   test("a reconnect snapshot leaves hidden sessions stale and discards an older read", async () => {
     const secondRecord = {

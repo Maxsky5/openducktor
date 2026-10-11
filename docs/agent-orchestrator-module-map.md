@@ -21,7 +21,7 @@ Rules:
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
 - All reads and writes target the active repository. A session outside the active collection resolves to no session.
-- A repository switch keeps retained transcripts and marks their history stale. The store serves the retained transcript immediately. An open transcript view refreshes it in the background.
+- A repository switch keeps retained transcripts and marks their history stale. The store serves the retained transcript immediately. The selected attachment restores loaded history when its live coverage version still matches. An open transcript view refreshes history that remains stale. See [Session history freshness](session-history-freshness.md#current-history).
 - An unfinished baseline read returns to `not_requested` when its repository becomes inactive. An interrupted refresh returns to `stale` and keeps its visible baseline.
 
 ## Activity state
@@ -65,7 +65,7 @@ Files: `history/session-history-loader.ts`, `history/session-history-load-policy
 
 Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
-A connection snapshot, observation failure, or repository switch marks retained history stale. A connection snapshot comes only from the first attachment or from a replay gap. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+A selected-workspace attachment delivers a connection snapshot, including on a workspace return. The snapshot restores covered retained histories when their observation epoch and session revision still match. A replay gap, unknown coverage, observation failure, or scoped runtime fault keeps affected history stale. See [Session history freshness](session-history-freshness.md#history-that-is-not-current) for invalidation rules. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
 
 TanStack Query owns native history reads and their cancellation. The session store owns the merge with live messages. A late read cannot replace newer live text or tool results, restore removed responses or answered questions, or drop known tool timing. An unchanged merge keeps the message objects and transcript revision. Failed reads keep an actionable error and wait for a retry.
 
@@ -164,6 +164,8 @@ Diagnostics start with an overview of all issues. The host group (agent runtimes
 Files: `history/session-history-loader.ts`, `history/use-selected-session-history-load.ts`, `support/session-history-chat-messages.ts`, `support/session-prompt.ts`, and `support/subagent-messages.ts`.
 
 Owns one selected session history request, its load state, transient prompt context, message projection, merge with live messages, and subagent correlation.
+
+The workspace rail's existing subscriptions also feed `state/queries/agent-session-history-coverage.ts`. It records freshness versions for cached and retained history. See [session history freshness](session-history-freshness.md) for the current-history contract. Workspace switches flush buffered transcript events before retaining the old collection.
 
 Rules:
 

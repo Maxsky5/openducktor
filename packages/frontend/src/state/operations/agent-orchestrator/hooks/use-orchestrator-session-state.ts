@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
+import type { SessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
 type UseOrchestratorSessionStateRefs = {
@@ -14,6 +15,8 @@ type UseOrchestratorSessionStateRefs = {
 type UseOrchestratorSessionStateArgs = {
   workspaceRepoPath: string | null;
   tasks: TaskCard[];
+  historyCoverage: SessionHistoryCoverage;
+  flushTranscriptEvents: () => void;
 };
 
 type UseOrchestratorSessionStateResult = {
@@ -23,11 +26,13 @@ type UseOrchestratorSessionStateResult = {
 export const useOrchestratorSessionState = ({
   workspaceRepoPath,
   tasks,
+  historyCoverage,
+  flushTranscriptEvents,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
   const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
   const sessionStore = useMemo(
-    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current),
-    [],
+    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current, historyCoverage),
+    [historyCoverage],
   );
   const taskRef = useRef(tasks);
   const currentWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
@@ -42,12 +47,14 @@ export const useOrchestratorSessionState = ({
     if (currentWorkspaceRepoPathRef.current === workspaceRepoPath) {
       return;
     }
+    // Commit buffered events to the old workspace before its collection is retained.
+    flushTranscriptEvents();
     repoEpochRef.current += 1;
     currentWorkspaceRepoPathRef.current = workspaceRepoPath;
 
     sessionTurnState.clearAll();
     sessionStore.resetWorkspace(workspaceRepoPath);
-  }, [sessionTurnState, workspaceRepoPath, sessionStore]);
+  }, [flushTranscriptEvents, sessionTurnState, workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
     sessionTurnState.clearAll();

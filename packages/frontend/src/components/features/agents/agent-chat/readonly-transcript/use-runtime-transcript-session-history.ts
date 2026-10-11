@@ -8,7 +8,7 @@ import {
   type RuntimeKind,
   type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
@@ -143,6 +143,7 @@ export function useRuntimeTranscriptSessionHistory({
       runtimeReadinessState,
       runtimeSessionRef,
       readSessionHistory,
+      queryClient,
     }),
   );
   const { refetch: refetchHistory } = historyQuery;
@@ -333,14 +334,16 @@ const getTranscriptHistoryQueryOptions = ({
   runtimeReadinessState,
   runtimeSessionRef,
   readSessionHistory,
+  queryClient,
 }: {
   shouldLoadHistory: boolean;
   runtimeReadinessState: RuntimeReadinessState;
   runtimeSessionRef: PolicyBoundSessionRef | null;
   readSessionHistory: AgentOperationsContextValue["readSessionHistory"];
+  queryClient: QueryClient;
 }): ReturnType<typeof sessionHistoryQueryOptions> | typeof skippedTranscriptHistoryQueryOptions =>
   shouldLoadHistory && runtimeReadinessState === "ready" && runtimeSessionRef !== null
-    ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
+    ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory, queryClient)
     : skippedTranscriptHistoryQueryOptions;
 
 const getTranscriptState = ({

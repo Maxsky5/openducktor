@@ -35,6 +35,10 @@ import {
   buildSessionPolicyNoticeMessage,
 } from "./operations/agent-orchestrator/support/session-notice-messages";
 import { markSessionHistoriesStale } from "./operations/agent-orchestrator/history/session-history-freshness";
+import type {
+  SessionHistoryCoverage,
+  SessionHistoryVersion,
+} from "./queries/agent-session-history-coverage";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -43,7 +47,7 @@ export {
 } from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
-type LiveNoticeEnvelope = Extract<
+type LiveSessionStateEnvelope = Extract<
   AgentSessionLiveEnvelope,
   { type: "snapshot" | "session_upsert" | "session_removed" }
 >;
@@ -61,7 +65,7 @@ export type AgentSessionsStore = {
     identity: AgentSessionIdentity | null,
   ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
-  applyLiveNotices: (envelope: LiveNoticeEnvelope) => void;
+  applyLiveSessionEnvelope: (envelope: LiveSessionStateEnvelope) => void;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -77,10 +81,12 @@ export type AgentSessionsStore = {
 
 export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
+  historyCoverage?: SessionHistoryCoverage,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   const pendingTaskRemovals = new Map<string, Set<string>>();
   const retainedCollections = new Map<string, AgentSessionCollection>();
+  const retainedHistoryVersions = new Map<string, Map<string, SessionHistoryVersion>>();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   if (workspaceRepoPath !== null) {
     retainedCollections.set(workspaceRepoPath, sessionCollection);
@@ -192,6 +198,13 @@ export const createAgentSessionsStore = (
     if (workspaceRepoPath === null) {
       return;
     }
+    const versions = new Map<string, SessionHistoryVersion>();
+    for (const session of listAgentSessions(sessionCollection)) {
+      if (session.historyLoadState !== "loaded" || session.historyLoadFailure) continue;
+      const version = historyCoverage?.read(workspaceRepoPath, session);
+      if (version) versions.set(agentSessionIdentityKey(session), version);
+    }
+    retainedHistoryVersions.set(workspaceRepoPath, versions);
     retainedCollections.set(workspaceRepoPath, markSessionHistoriesStale(sessionCollection));
   };
 
@@ -256,10 +269,32 @@ export const createAgentSessionsStore = (
       return snapshot;
     },
     commitSessionCollection,
-    applyLiveNotices: (envelope) => {
+    applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
         case "snapshot":
           if (envelope.repoPath !== workspaceRepoPath) return;
+          // Recheck when attachment completes: events may arrive after workspace activation.
+          const versions = retainedHistoryVersions.get(envelope.repoPath);
+          retainedHistoryVersions.delete(envelope.repoPath);
+          if (versions && !envelope.historyReplayGap) {
+            setSessionCollection((current) => {
+              let collection = current;
+              for (const session of listAgentSessions(current)) {
+                const version = versions.get(agentSessionIdentityKey(session));
+                if (
+                  session.historyLoadState === "stale" &&
+                  version &&
+                  historyCoverage?.isCurrent(envelope.repoPath, session, version)
+                ) {
+                  collection = replaceAgentSession(collection, {
+                    ...session,
+                    historyLoadState: "loaded",
+                  });
+                }
+              }
+              return collection;
+            });
+          }
           clearLiveNotices();
           for (const snapshot of envelope.sessions) retainLiveNotices(snapshot);
           return;

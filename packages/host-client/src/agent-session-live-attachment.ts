@@ -46,6 +46,7 @@ export const createAgentSessionLiveAttachment = (
   let awaitingSnapshot = true;
   let pending: AgentSessionLiveEnvelope[] = [];
   let coveredSequence = -1;
+  let historyReplayGap = false;
 
   const deliver = (envelope: AgentSessionLiveEnvelope): void => {
     if (
@@ -85,13 +86,20 @@ export const createAgentSessionLiveAttachment = (
       coveredSequence = snapshot.sequence;
       const buffered = pending;
       pending = [];
-      listener({ ...snapshot, isConnectionSnapshot: true });
+      const connected: AgentSessionLiveSnapshotEnvelope = {
+        ...snapshot,
+        isConnectionSnapshot: true,
+      };
+      if (historyReplayGap) connected.historyReplayGap = true;
+      listener(connected);
+      historyReplayGap = false;
       for (const envelope of buffered) deliver(envelope);
     },
     restart: () => {
       // The next snapshot and history reload replace everything received before the restart.
       awaitingSnapshot = true;
       pending = [];
+      historyReplayGap = true;
     },
   };
 };

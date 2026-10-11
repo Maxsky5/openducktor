@@ -174,7 +174,7 @@ const createState = (
     currentWorkspaceRepoPathRef: { current: "/repo" },
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
-    applyLiveNotices: sessionStore.applyLiveNotices,
+    applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
     messageQueues,
     liveSessionPort,
     transcriptEvents,

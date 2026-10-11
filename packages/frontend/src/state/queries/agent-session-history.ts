@@ -5,13 +5,18 @@ import type {
   LoadAgentSessionHistoryInput,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { type QueryKey, queryOptions } from "@tanstack/react-query";
+import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { resolveAgentSessionRuntimePolicy } from "@/state/operations/agent-orchestrator/support/session-runtime-policy";
 import { toRuntimeSessionRefWithPolicy } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  sessionHistoryCoverage,
+  type SessionHistoryVersion,
+} from "./agent-session-history-coverage";
 
-export const SESSION_HISTORY_STALE_TIME_MS = 0;
+export const SESSION_HISTORY_STALE_TIME_MS = Number.POSITIVE_INFINITY;
+const historyVersions = new WeakMap<AgentSessionHistoryMessage[], SessionHistoryVersion | null>();
 
 export const agentSessionHistoryQueryKeys = {
   all: ["agent-session-history"] as const,
@@ -82,10 +87,25 @@ export const sessionHistoryQueryOptions = (
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>,
+  queryClient: QueryClient,
 ) =>
   queryOptions<AgentSessionHistoryMessage[], Error, AgentSessionHistoryMessage[], QueryKey>({
     queryKey: agentSessionHistoryQueryKeys.history(session),
-    queryFn: (): Promise<AgentSessionHistoryMessage[]> => readSessionHistory(session),
-    staleTime: SESSION_HISTORY_STALE_TIME_MS,
+    queryFn: async (): Promise<AgentSessionHistoryMessage[]> => {
+      const version = sessionHistoryCoverage(queryClient).read(session.repoPath, session);
+      const history = await readSessionHistory(session);
+      historyVersions.set(history, version);
+      return history;
+    },
+    // Keep the response identity with its coverage token, including a cold read raced by events.
+    structuralSharing: false,
+    staleTime: (query) =>
+      sessionHistoryCoverage(queryClient).isCurrent(
+        session.repoPath,
+        session,
+        query.state.data ? (historyVersions.get(query.state.data) ?? null) : null,
+      )
+        ? SESSION_HISTORY_STALE_TIME_MS
+        : 0,
     refetchOnWindowFocus: false,
   });
