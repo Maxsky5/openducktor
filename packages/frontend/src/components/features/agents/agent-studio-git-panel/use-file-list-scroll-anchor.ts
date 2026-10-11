@@ -252,7 +252,7 @@ function useRowHeights(
       getRowHeight: (index) => {
         const row = rows[index];
         const known = row ? heightByKey.get(row.key) : undefined;
-        return known && heightInView(known, viewMode);
+        return known === undefined ? undefined : heightInView(known, viewMode);
       },
       setRowHeight: (index, height) => {
         const row = rows[index];

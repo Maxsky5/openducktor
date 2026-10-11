@@ -300,25 +300,23 @@ describe("FileDiffList tree view and search", () => {
       );
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
-      const fileTop = (file: string): number =>
-        fileToggle(file).closest('[role="listitem"]')!.getBoundingClientRect().top;
       // 29 closed rows and the 800px expanded row are above "src/file-030.ts".
       fireEvent.scroll(list, { target: { scrollTop: 29 * LIST_ROW + 800 } });
-      expect(fileTop("src/file-030.ts")).toBe(0);
+      expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
 
       fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
       fireEvent.scroll(list);
-      expect(fileTop("src/file-030.ts")).toBe(0);
+      expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
       // The tree adds the "src" row above the files, and each row header is shorter.
       expect(list.scrollTop).toBe(30 * TREE_ROW + EXPANDED_TREE_ROW);
 
       fireEvent.scroll(list, { target: { scrollTop: 1_000 } });
-      expect(fileTop("src/file-005.ts")).toBe(6 * TREE_ROW - 1_000);
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(6 * TREE_ROW - 1_000);
 
       fireEvent.scroll(list, { target: { scrollTop: 30 * TREE_ROW + EXPANDED_TREE_ROW } });
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
-      expect(fileTop("src/file-030.ts")).toBe(0);
+      expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
       expect(list.scrollTop).toBe(29 * LIST_ROW + 800);
     });
 
