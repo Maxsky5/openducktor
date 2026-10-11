@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
 import { createTaskSyncService, type TaskSyncService } from "./sync/task-sync-service";
@@ -43,9 +44,15 @@ const sync = (
   events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }>,
 ): Pick<
   TaskSyncService,
-  "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
+  | "runStatusMutation"
+  | "publishExternalTaskCreated"
+  | "publishTasksUpdated"
+  | "syncRepoPullRequests"
+  | "runMutation"
 > => ({
   runMutation: (_repoPath, mutation) => mutation,
+  runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
+    collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
   publishExternalTaskCreated: () => Effect.void,
   publishTasksUpdated: (_repoPath, changes) =>
     Effect.sync(() => {
@@ -127,10 +134,12 @@ describe("createEventPublishingTaskService", () => {
       }),
       taskSyncService: {
         ...taskSyncService,
-        runMutation: (_repoPath, mutation) =>
+        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
           Effect.gen(function* () {
             gateActive = true;
-            const result = yield* mutation;
+            const result = yield* collectTaskStatusChanges(mutation).pipe(
+              Effect.flatMap(afterCommit),
+            );
             gateActive = false;
             return result;
           }),
@@ -160,10 +169,12 @@ describe("createEventPublishingTaskService", () => {
       }),
       taskSyncService: {
         ...taskSyncService,
-        runMutation: (_repoPath, mutation) =>
+        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
           Effect.gen(function* () {
             gateActive = true;
-            const result = yield* mutation;
+            const result = yield* collectTaskStatusChanges(mutation).pipe(
+              Effect.flatMap(afterCommit),
+            );
             gateActive = false;
             return result;
           }),
@@ -322,9 +333,13 @@ describe("createEventPublishingTaskService", () => {
     const reports: unknown[] = [];
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
+      | "runStatusMutation"
+      | "publishExternalTaskCreated"
+      | "publishTasksUpdated"
+      | "syncRepoPullRequests"
+      | "runMutation"
     > = {
-      runMutation: (_repoPath, mutation) => mutation,
+      ...sync([]),
       publishExternalTaskCreated: () => Effect.void,
       publishTasksUpdated: () =>
         Effect.sync(() => {
@@ -370,6 +385,8 @@ describe("createEventPublishingTaskService", () => {
       }),
       taskSyncService: {
         runMutation: (_repoPath, mutation) => mutation,
+        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
+          collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
         publishExternalTaskCreated: (_repoPath, taskSnapshot) =>
           Effect.sync(() => {
             publishedTaskIds.push(taskSnapshot.id);

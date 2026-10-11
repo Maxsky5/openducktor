@@ -7,6 +7,7 @@ import {
 } from "../../test-support/task-service-test-double";
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
@@ -528,9 +529,15 @@ describe("createOdtMcpBridgeService", () => {
     });
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
+      | "runStatusMutation"
+      | "publishExternalTaskCreated"
+      | "publishTasksUpdated"
+      | "syncRepoPullRequests"
+      | "runMutation"
     > = {
       runMutation: (_repoPath, mutation) => mutation,
+      runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
+        collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
       publishExternalTaskCreated(_repoPath, taskSnapshot) {
         return Effect.sync(() => {
           events.push({ kind: "created", taskIds: [taskSnapshot.id] });

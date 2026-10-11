@@ -973,7 +973,7 @@ describe("use-repo-settings-operations", () => {
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({ ...snapshot }, undefined);
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
       expect(
-        workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot.alwaysStartQaReviewsFresh,
+        workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot?.alwaysStartQaReviewsFresh,
       ).toBe(true);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);

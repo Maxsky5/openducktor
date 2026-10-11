@@ -505,11 +505,18 @@ export const subscribeLocalHostRunEvents = async (
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, (event) => {
-        if (!isBrowserSseControlEvent(event) && event.channel === RUN_EVENT_CHANNEL) {
-          listener(event.payload);
-        }
-      })).unsubscribe;
+      // Control events report reconnects, so a listener can read the state that it missed.
+      return (yield* subscribeSseChannelEffect(
+        RUN_EVENT_CHANNEL,
+        (event) => {
+          if (isBrowserSseControlEvent(event)) {
+            listener(event);
+          } else if (event.channel === RUN_EVENT_CHANNEL) {
+            listener(event.payload);
+          }
+        },
+        true,
+      )).unsubscribe;
     }),
   );
 };

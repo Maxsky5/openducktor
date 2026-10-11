@@ -79,6 +79,35 @@ Session rules:
 - Register and start the live adapter before the runtime can emit events. Release it when the runtime stops.
 - Read transcript history only for the selected session. A history read does not discover pending input or delay live state.
 
+## Autopilot
+
+The host runs Autopilot for every open workspace while the host runs. Browser presence and workspace selection have no effect. The browser shows outcomes and offers recovery controls.
+
+1. The task store reports each status change and its operation to `AutopilotService` when the change commits. The mutation still holds its repository mutation gate. A later failure or interruption of the mutation keeps the report.
+2. Autopilot classifies the change from its operation and status pair and reads the rules saved at that moment. Each configured action of a qualifying change gets one attempt.
+3. The attempt waits until the reporting mutation and its publication leave the gate. Then it queues in the workflow launch lane of its task with the automatic policy, a start check, and a kickoff instruction.
+4. At its lane turn, a start check skips the attempt if the workspace closed or was removed, the task was deleted, the rule was disabled, or the task had a later status change. The check reads the workspace state again after its task read.
+5. The host keeps the latest outcome of each task and action. It sends each outcome to all clients as an `openducktor://run-event` payload and publishes the session started or session error notification.
+
+Rules:
+
+- Only `set-spec`, `set-plan`, `build-completed`, `qa-rejected`, and `qa-approved` changes can qualify. Only the `qa-rejected` operation proves a QA rejection, not a task status.
+- A change counts when it commits, also when later work in the same operation fails.
+- Task list loads, host start, and workspace add or reopen never start an agent.
+- Duplicate prevention identifies the committed change. Clients cannot create an attempt, so replay and more browsers cannot repeat one.
+- Autopilot never retries an attempt and never cancels a started launch.
+- The public `agent_session_workflow_launch` command accepts only manual launches.
+- The `openducktor://run-event` channel carries only Autopilot events, and each shell parses them with the contract.
+- A settings save applies to changes that commit after the save and to the start checks of waiting attempts. A save during a mutation does not change how a change that committed before it is evaluated.
+- A workspace close skips its waiting attempts. A reopen gives the workspace a new generation, so those attempts never start. A removal discards attempts and outcomes.
+- All Autopilot state stays in host memory. A host restart loses waiting attempts and outcomes. The user starts a lost step from the task actions.
+- `autopilot_state_read` returns the held failed and skipped outcomes of one workspace. A client reads it when it attaches, selects a workspace, or reconnects after missed run events.
+- `autopilot_recovery_claim` lets one client send the unsent first message of a failed launch again. A client claims only while the workspace of the outcome is selected, because the send path needs it. It does nothing while a send runs or after one succeeds.
+- A failed launch that a client can still recover appears again when the user selects its workspace again.
+- A save that changes the rules sends an `autopilot_settings_saved` run event, and each client then reads the saved rules again. A reconnect after missed events has the same effect. An open settings view shows the saved rules unless the user edited Autopilot there. A failed read shows in the section. [The TanStack Query cache strategy](tanstack-query-cache-strategy.md#workflow-data) gives the cache rules for the saved rules.
+- A settings save sends Autopilot rules only when the user edited them. The host keeps the saved rules when the save omits them, so a client with old rules cannot replace a newer save.
+- A failed outcome carries the id of its host error notification. The client that shows the failure marks it handled, so the notification does not show a second in-app toast.
+
 ## Change task workflow state
 
 Human and agent actions meet in the host workflow service. SQLite stores the result.

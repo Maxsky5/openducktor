@@ -5,7 +5,11 @@ import { act } from "react";
 import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 
-const renderSection = (autopilot: AutopilotSettings, disabled = false) => {
+const renderSection = (
+  autopilot: AutopilotSettings,
+  disabled = false,
+  loadError: string | null = null,
+) => {
   let latestAutopilot = autopilot;
   const onUpdateAutopilot = mock(
     (updater: (current: AutopilotSettings) => AutopilotSettings): void => {
@@ -17,6 +21,7 @@ const renderSection = (autopilot: AutopilotSettings, disabled = false) => {
     <SettingsAutopilotSection
       autopilot={autopilot}
       disabled={disabled}
+      loadError={loadError}
       onUpdateAutopilot={onUpdateAutopilot}
     />,
   );
@@ -32,6 +37,34 @@ afterEach(() => {
 });
 
 describe("settings Autopilot section", () => {
+  test("shows why the saved rules could not load and how to retry", () => {
+    renderSection(createDefaultAutopilotSettings(), true, "Host is busy.");
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "The saved Autopilot rules could not load: Host is busy. Close and reopen settings to try again.",
+    );
+  });
+
+  test("explains host Autopilot scope, qualifying steps, and recovery limits", () => {
+    renderSection(createDefaultAutopilotSettings());
+
+    expect(
+      screen.getByText(
+        "Autopilot runs on the OpenDucktor host for every open workspace while the host runs. It works whichever workspace is selected, also when no browser is connected.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Runs for each QA rejection that moves a task back to In Progress. A human change request does not count.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Autopilot reacts only to task changes committed while the host runs. It does not start work for changes from before the host started. Work that has not started when the host stops is lost.",
+      ),
+    ).toBeDefined();
+  });
+
   test("shows the fresh QA setting and its saved state", () => {
     const setting = {
       ...createDefaultAutopilotSettings(),

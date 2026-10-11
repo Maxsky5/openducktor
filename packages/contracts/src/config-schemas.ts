@@ -951,7 +951,11 @@ export const settingsSnapshotSaveInputSchema = z.object({
   chat: chatSettingsSchema,
   reusablePrompts: reusablePromptsSchema.removeDefault(),
   kanban: kanbanSettingsSchema,
-  autopilot: autopilotSettingsSchema,
+  autopilot: autopilotSettingsSchema
+    .optional()
+    .describe(
+      "Replace Autopilot rules only when this section was edited. Omit to keep the saved rules, which another client can have changed.",
+    ),
   notifications: notificationSettingsSchema.removeDefault(),
   agentRuntimes: agentRuntimesSchema.removeDefault(),
   agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,

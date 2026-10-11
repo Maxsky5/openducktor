@@ -14,7 +14,7 @@ import {
 import { Stream, Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import { withNotificationConfigCommit } from "../../adapters/config/notification-settings-config";
+import { withConfigCommit } from "../../adapters/config/config-commit";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import {
@@ -185,7 +185,7 @@ test.each(["close", "shutdown"])(
     const closed = { ...h.config, workspaces: {} };
     await Effect.runPromise(h.port.writeConfig(closed));
     await Effect.runPromise(h.service.initialize());
-    const wrapped = withNotificationConfigCommit(h.port, h.service.configCommitted);
+    const wrapped = withConfigCommit(h.port, h.service.configCommitted);
     await Effect.runPromise(wrapped.writeConfig(h.config));
     await flush();
     expect(h.attachLive).toHaveBeenCalledTimes(2);
@@ -667,14 +667,14 @@ test("settings commit changes future selections, failed saves do not, and duplic
     expect(first.occurrence.repositoryLabel).toBe("Alpha");
     const changed: GlobalConfig = structuredClone(h.config);
     changed.notifications.volumePercent = 0;
-    const wrapped = withNotificationConfigCommit(h.port, h.service.configCommitted);
+    const wrapped = withConfigCommit(h.port, h.service.configCommitted);
     await Effect.runPromise(wrapped.writeConfig(changed));
     expect(await Effect.runPromise(h.service.publishAction(action))).toEqual(first);
     expect(
       (await Effect.runPromise(h.service.publishAction({ ...action, occurrenceId: "second" })))
         .settings.volumePercent,
     ).toBe(0);
-    const failing = withNotificationConfigCommit(
+    const failing = withConfigCommit(
       {
         ...h.port,
         writeConfig: () =>

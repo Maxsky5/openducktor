@@ -194,7 +194,10 @@ export const createNotificationRuntime = ({
     settings: NotificationSettings,
   ): Promise<void> => {
     const target = occurrence.navigationTarget;
-    const errorId = target.type === "session_error" ? target.errorId : null;
+    // An error without a session notice, such as an Autopilot launch failure, uses its own id.
+    let errorId: string | null = null;
+    if (target.type === "session_error") errorId = target.errorId;
+    else if (occurrence.kind === "agent.session_error") errorId = occurrence.occurrenceId;
     const delivered = await dispatch(
       occurrence,
       settings,
@@ -241,7 +244,10 @@ export const createNotificationRuntime = ({
       void publishAndWait(rawOccurrence);
     },
     publishAndWait,
-    /** Another view shows this session error, so its host notification skips the in-app toast. */
+    /**
+     * Another view shows this session error, so its host notification skips the in-app toast.
+     * `errorId` is the session notice id, or the occurrence id of an error without a notice.
+     */
     markInAppFeedbackHandled(errorId: string): void {
       handledErrorIds.add(errorId);
       const occurrenceId = shownErrorToasts.get(errorId);

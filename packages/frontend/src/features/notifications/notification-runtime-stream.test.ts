@@ -166,6 +166,52 @@ test("a session error that another view shows skips or closes its in-app toast",
   }
 });
 
+test("an error without a session notice skips or closes its in-app toast by occurrence id", async () => {
+  const h = harness();
+  const stop = h.runtime.subscribe();
+  h.finishAttachment();
+  await h.attachment;
+  const taskError = (occurrenceId: string, sequence: number): NotificationStreamFrame => ({
+    type: "occurrence",
+    cursor: { epoch, sequence },
+    selected: {
+      occurrence: {
+        occurrenceId,
+        kind: "agent.session_error",
+        repoPath: "/repo",
+        repositoryLabel: "Repo",
+        status: "The runtime is not ready.",
+        navigationTarget: {
+          type: "agent_studio_task",
+          repoPath: "/repo",
+          taskId: "task-1",
+          preferredRole: "qa",
+        },
+      },
+      settings: h.settings,
+      preferenceRevision: 1,
+    },
+  });
+  try {
+    h.emit({ type: "attached", reason: "new", cursor: { epoch, sequence: 1 }, health: [] });
+    h.runtime.markInAppFeedbackHandled("autopilot-early");
+    h.emit(taskError("autopilot-early", 2));
+    await waitFor(() => expect(h.showOsNotification).toHaveBeenCalledTimes(1), { timeout: 500 });
+    expect(h.delivery.deliverInApp).not.toHaveBeenCalled();
+
+    h.emit(taskError("autopilot-late", 3));
+    await waitFor(() => expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1), {
+      timeout: 500,
+    });
+    h.runtime.markInAppFeedbackHandled("autopilot-late");
+    await waitFor(() => expect(h.delivery.dismissInApp).toHaveBeenCalledWith("autopilot-late"), {
+      timeout: 500,
+    });
+  } finally {
+    stop();
+  }
+});
+
 test("recovers stream and publication failures only when both paths are healthy", async () => {
   const h = harness();
   const stop = h.runtime.subscribe();

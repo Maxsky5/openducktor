@@ -1176,7 +1176,7 @@ describe("TypeScript web host backend", () => {
   test("multiplexes non-task host event channels through the shared SSE endpoint", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     const events = [
-      { channel: "openducktor://run-event", payload: { type: "run" } },
+      { channel: "openducktor://run-event", payload: { type: "autopilot_failure", failure: null } },
       {
         channel: "openducktor://agent-session-live-event",
         payload: {
@@ -1252,12 +1252,12 @@ describe("TypeScript web host backend", () => {
     expect(() =>
       eventBus.publish({
         channel: "openducktor://run-event",
-        payload: { type: "run" },
+        payload: { type: "autopilot_failure", failure: null },
       }),
     ).not.toThrow();
     expect(received).toHaveBeenCalledWith({
       channel: "openducktor://run-event",
-      payload: { type: "run" },
+      payload: { type: "autopilot_failure", failure: null },
     });
     expect(reported).toEqual([failure]);
     expect(eventBus.stream().replayAfter(0).events).toHaveLength(1);
@@ -1669,9 +1669,9 @@ describe("TypeScript web host backend", () => {
       await disposeStarted.promise;
       eventBus.publish({
         channel: "openducktor://run-event",
-        payload: { type: "run" },
+        payload: { type: "autopilot_failure", failure: null },
       });
-      await readStreamUntil(reader, '"type":"run"');
+      await readStreamUntil(reader, '"type":"autopilot_failure"');
 
       disposeReleased.resolve();
       await shutdown;

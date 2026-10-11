@@ -5,9 +5,16 @@ import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 
+/**
+ * Custom roles and Autopilot rules go into the save only when the user edited them, so a save
+ * cannot replace values that another client saved.
+ */
 export const prepareSettingsSnapshotForSave = (
   snapshot: SettingsSnapshot,
-  { saveCustomAgentRoles = false }: { saveCustomAgentRoles?: boolean } = {},
+  {
+    saveCustomAgentRoles = false,
+    saveAutopilot = false,
+  }: { saveCustomAgentRoles?: boolean; saveAutopilot?: boolean } = {},
 ): SettingsSnapshotSaveInput => {
   const workspaces = Object.fromEntries(
     Object.entries(snapshot.workspaces).map(([workspaceId, repoConfig]) => [
@@ -24,7 +31,6 @@ export const prepareSettingsSnapshotForSave = (
     chat: snapshot.chat,
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
-    autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
     notifications: snapshot.notifications,
     agentRuntimes: snapshot.agentRuntimes,
     agentModelFavorites: snapshot.agentModelFavorites,
@@ -32,5 +38,6 @@ export const prepareSettingsSnapshotForSave = (
     globalPromptOverrides: preparePromptOverridesForSave(snapshot.globalPromptOverrides),
   };
   if (saveCustomAgentRoles) input.customAgentRoles = snapshot.customAgentRoles;
+  if (saveAutopilot) input.autopilot = prepareAutopilotSettingsForSave(snapshot.autopilot);
   return input;
 };

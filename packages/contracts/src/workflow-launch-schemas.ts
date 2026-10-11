@@ -5,7 +5,6 @@ import { sessionLaunchResultSchema } from "./session-launch-schemas";
 import { agentRoleSchema, agentSessionStartModeSchema } from "./agent-workflow-schemas";
 import { agentSessionControlSendInputSchema } from "./agent-session-control-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
-import { AUTOPILOT_ACTION_IDS } from "./config-schemas";
 
 export const sessionLaunchActionIds = [
   "spec_initial",
@@ -47,21 +46,19 @@ export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
     })
     .strict(),
 ]);
+/** Clients launch only manual decisions. Only the host creates automatic Autopilot launches. */
 export const workflowLaunchRequestSchema = z
   .object({
     workspaceId: z.string().min(1),
     repoPath: z.string().min(1),
     taskId: z.string().min(1),
-    policy: z.discriminatedUnion("kind", [
-      z
-        .object({
-          kind: z.literal("manual"),
-          actionId: z.enum(sessionLaunchActionIds),
-          decision: workflowLaunchDecisionSchema,
-        })
-        .strict(),
-      z.object({ kind: z.literal("automatic"), actionId: z.enum(AUTOPILOT_ACTION_IDS) }).strict(),
-    ]),
+    policy: z
+      .object({
+        kind: z.literal("manual"),
+        actionId: z.enum(sessionLaunchActionIds),
+        decision: workflowLaunchDecisionSchema,
+      })
+      .strict(),
     instruction: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("none") }).strict(),
       z

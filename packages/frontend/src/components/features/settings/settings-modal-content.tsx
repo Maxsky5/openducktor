@@ -82,6 +82,7 @@ export function SettingsModalContent({
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
+    savedAutopilotError,
     updateGlobalPromptOverrides,
   } = controller;
 
@@ -239,7 +240,8 @@ export function SettingsModalContent({
     return (
       <SettingsAutopilotSection
         autopilot={snapshotDraft.autopilot}
-        disabled={isInteractionDisabled}
+        disabled={isInteractionDisabled || savedAutopilotError !== null}
+        loadError={savedAutopilotError}
         onUpdateAutopilot={updateGlobalAutopilotSettings}
       />
     );

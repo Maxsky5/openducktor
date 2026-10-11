@@ -26,31 +26,35 @@ export const AUTOPILOT_EVENT_DEFINITIONS: AutopilotEventDefinition[] = [
   {
     id: "taskProgressedToSpecReady",
     label: "When a task progresses to Spec Ready",
-    description: "Observed when a task first enters `spec_ready` while the app is running.",
+    description:
+      "Runs when a spec save moves a task from Backlog to Spec Ready. A reset implementation does not count.",
     availableActionIds: ["startPlanner"],
   },
   {
     id: "taskProgressedToReadyForDev",
     label: "When a task progresses to Ready for Dev",
-    description: "Observed when a task first enters `ready_for_dev` while the app is running.",
+    description:
+      "Runs when a plan save moves a task from Backlog or Spec Ready to Ready for Dev. A reset implementation does not count.",
     availableActionIds: ["startBuilder"],
   },
   {
     id: "taskProgressedToAiReview",
     label: "When a task progresses to AI Review",
-    description: "Observed when a task first enters `ai_review` while the app is running.",
+    description: "Runs when a build completion moves a task to AI Review.",
     availableActionIds: ["startQa"],
   },
   {
     id: "taskRejectedByQa",
     label: "When a task is rejected by QA",
-    description: "Observed from the canonical QA rejection state while the app is running.",
+    description:
+      "Runs for each QA rejection that moves a task back to In Progress. A human change request does not count.",
     availableActionIds: ["startReviewQaFeedbacks"],
   },
   {
     id: "taskProgressedToHumanReview",
     label: "When a task progresses to Human Review",
-    description: "Observed when a task first enters `human_review` while the app is running.",
+    description:
+      "Runs when a build completion or a QA approval moves a task to Human Review. A direct merge does not count.",
     availableActionIds: ["startGeneratePullRequest"],
   },
 ];

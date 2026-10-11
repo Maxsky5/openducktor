@@ -28,6 +28,8 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_workflow_start",
   "agent_sessions_list",
   "agent_sessions_list_for_tasks",
+  "autopilot_recovery_claim",
+  "autopilot_state_read",
   "azure_area_paths_list",
   "build_blocked",
   "build_completed",

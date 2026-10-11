@@ -3,7 +3,6 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentWorkflowSessionStartInput,
-  WorkflowLaunchRequest,
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import { getSessionLaunchAction } from "@openducktor/core";
@@ -18,7 +17,11 @@ import {
   resolveLaunchWorkspace,
   workflowActionId,
 } from "./workflow-launch-preparation";
-import type { WorkflowLaunchDependencies, WorkflowLaunchService } from "./workflow-launch-types";
+import type {
+  WorkflowLaunchAttemptRequest,
+  WorkflowLaunchDependencies,
+  WorkflowLaunchService,
+} from "./workflow-launch-types";
 
 export type { WorkflowLaunchService } from "./workflow-launch-types";
 
@@ -26,10 +29,17 @@ export type { WorkflowLaunchService } from "./workflow-launch-types";
 export const createWorkflowLaunchService = (
   deps: WorkflowLaunchDependencies,
 ): WorkflowLaunchService => {
-  const run = (attempt: SessionLaunchContext<WorkflowLaunchRequest, WorkflowLaunchResult>) =>
+  const run = (attempt: SessionLaunchContext<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>) =>
     Effect.gen(function* () {
       const request = attempt.request;
       yield* attempt.checkCanceled();
+      if (request.policy.kind === "automatic") {
+        const check = yield* request.policy.startCheck;
+        if (!check.start) {
+          attempt.skip(check.reason);
+          return;
+        }
+      }
       const { config, repoPath } = yield* resolveLaunchWorkspace(deps, request);
       const prepared = yield* prepareWorkflowLaunch(
         deps,
@@ -142,7 +152,7 @@ export const createWorkflowLaunchService = (
         request.instruction.kind === "message" ? request.instruction.parts : parts,
       );
     });
-  return createSessionLaunchService<WorkflowLaunchRequest, WorkflowLaunchResult>({
+  return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
     initial: (request) => ({
       workspaceId: request.workspaceId,

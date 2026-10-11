@@ -12,6 +12,7 @@ import type {
   WorkflowLaunchRequest,
   SessionLaunchActionId,
 } from "@openducktor/contracts";
+import type { WorkflowLaunchAttemptRequest } from "./workflow-launch-types";
 import {
   AUTOPILOT_ACTION_DEFINITIONS,
   buildAgentKickoffPrompt,
@@ -69,7 +70,7 @@ export type WorkflowLaunchPreparationDependencies = {
 
 export const prepareWorkflowLaunch = (
   deps: WorkflowLaunchPreparationDependencies,
-  request: WorkflowLaunchRequest,
+  request: WorkflowLaunchAttemptRequest,
   repoPath: string,
   config: RepoConfig,
   onReuse: (source: AgentSessionLiveRef) => void,
@@ -263,7 +264,7 @@ export const prepareWorkflowLaunch = (
 
 export const launchValidationError = (message: string) =>
   new HostValidationError({ field: "workflowLaunch", message });
-export const workflowActionId = (request: WorkflowLaunchRequest): SessionLaunchActionId =>
+export const workflowActionId = (request: WorkflowLaunchAttemptRequest): SessionLaunchActionId =>
   request.policy.kind === "manual"
     ? request.policy.actionId
     : AUTOPILOT_ACTION_DEFINITIONS[request.policy.actionId].launchActionId;
@@ -294,7 +295,7 @@ const decideAutomaticLaunch = (
     action,
     alwaysStartQaReviewsFresh,
   }: {
-    request: WorkflowLaunchRequest;
+    request: WorkflowLaunchAttemptRequest;
     actionId: AutopilotActionId;
     repoPath: string;
     config: RepoConfig;

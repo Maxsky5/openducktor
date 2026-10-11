@@ -247,7 +247,11 @@ export const useSettingsModalSaveOrchestration = ({
             kanban: { ...snapshotDraft.kanban, taskCardView },
             appearance: { ...snapshotDraft.appearance, sidebarSessionGrouping },
           },
-          { saveCustomAgentRoles: dirtySections.customAgentRoles },
+          {
+            saveCustomAgentRoles: dirtySections.customAgentRoles,
+            // Another client can save Autopilot rules. An unedited section keeps them.
+            saveAutopilot: dirtySections.autopilot,
+          },
         );
         return await saveWithRuntimeReview(saveReadySnapshot, latestSnapshot);
       }

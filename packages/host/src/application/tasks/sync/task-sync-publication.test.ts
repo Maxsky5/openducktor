@@ -36,13 +36,13 @@ describe("task event publication", () => {
         service.publishTasksUpdated(
           "/repo",
           { taskIds: ["task-1"], removedTaskIds: [] },
-          "task-update",
+          "update-task",
           [],
         ),
       ),
     ).resolves.toBeUndefined();
     expect(reports).toEqual([
-      expect.objectContaining({ operation: "task-update", repoPath: "/repo", stage: "acceptance" }),
+      expect.objectContaining({ operation: "update-task", repoPath: "/repo", stage: "acceptance" }),
     ]);
   });
 
@@ -71,7 +71,7 @@ describe("task event publication", () => {
           .publishTasksUpdated(
             "/repo",
             { taskIds: ["task-1"], removedTaskIds: [] },
-            "task-update",
+            "update-task",
             [],
           )
           .pipe(Effect.flip),
@@ -90,7 +90,7 @@ describe("task event publication", () => {
     expect(events).toEqual([]);
     expect(reports).toEqual([
       expect.objectContaining({
-        operation: "task-update",
+        operation: "update-task",
         repoPath: "/repo",
         stage: "snapshot",
         cause: failure,
@@ -129,13 +129,13 @@ describe("task event publication", () => {
       const changes = { taskIds: [...taskIds], removedTaskIds: [...removedTaskIds] };
 
       await expect(
-        Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
+        Effect.runPromise(service.publishTasksUpdated("/repo", changes, "update-task", [])),
       ).resolves.toBeUndefined();
 
       expect(events).toEqual([]);
       expect(reports).toEqual([
         expect.objectContaining({
-          operation: "task-update",
+          operation: "update-task",
           repoPath: "/repo",
           changes,
           stage: "acceptance",

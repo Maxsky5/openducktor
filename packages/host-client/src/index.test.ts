@@ -211,6 +211,40 @@ describe("HostClient", () => {
     expect(calls).toEqual([{ command: "task_ids_list", args: { repoPath: "/repo" } }]);
   });
 
+  test("reads held Autopilot outcomes and claims one first-message recovery", async () => {
+    const outcome = {
+      outcomeId: "outcome-1",
+      workspaceId: "alpha",
+      repoPath: "/repo",
+      task: { id: "task-1", title: "Task" },
+      eventId: "taskProgressedToAiReview",
+      actionId: "startQa",
+      occurredAt: "2026-10-10T00:00:00.000Z",
+      kind: "skipped",
+      reason: "The task moved on.",
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "autopilot_state_read") return { outcomes: [outcome], failure: null };
+      if (command === "autopilot_recovery_claim") return { claimed: true };
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.autopilotStateRead({ workspaceId: "alpha" })).resolves.toEqual({
+      outcomes: [outcome],
+      failure: null,
+    });
+    await expect(
+      client.autopilotRecoveryClaim({ workspaceId: "alpha", outcomeId: "outcome-1" }),
+    ).resolves.toEqual({ claimed: true });
+    expect(calls).toEqual([
+      { command: "autopilot_state_read", args: { workspaceId: "alpha" } },
+      {
+        command: "autopilot_recovery_claim",
+        args: { workspaceId: "alpha", outcomeId: "outcome-1" },
+      },
+    ]);
+  });
+
   test("rejects a task ID list that is not a list of strings", async () => {
     const { client } = createClient(() => [{ id: "task-1" }]);
 

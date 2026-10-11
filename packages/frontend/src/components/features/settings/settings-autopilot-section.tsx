@@ -15,12 +15,14 @@ import {
 type SettingsAutopilotSectionProps = {
   autopilot: AutopilotSettings;
   disabled: boolean;
+  loadError: string | null;
   onUpdateAutopilot: (updater: (current: AutopilotSettings) => AutopilotSettings) => void;
 };
 
 export function SettingsAutopilotSection({
   autopilot,
   disabled,
+  loadError,
   onUpdateAutopilot,
 }: SettingsAutopilotSectionProps): ReactElement {
   return (
@@ -28,10 +30,17 @@ export function SettingsAutopilotSection({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Autopilot</h3>
         <p className="text-xs text-muted-foreground">
-          Automatically start workflow actions when task transitions are observed while the app is
-          running.
+          Autopilot runs on the OpenDucktor host for every open workspace while the host runs. It
+          works whichever workspace is selected, also when no browser is connected.
         </p>
       </div>
+
+      {loadError ? (
+        <p role="alert" className="text-xs text-destructive">
+          The saved Autopilot rules could not load: {loadError} Close and reopen settings to try
+          again.
+        </p>
+      ) : null}
 
       <div className="rounded-md border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-3">
@@ -111,8 +120,9 @@ export function SettingsAutopilotSection({
       </div>
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
-        Autopilot only reacts to transitions observed during this app session and never replays
-        missed events from while the app was closed.
+        Autopilot reacts only to task changes committed while the host runs. It does not start work
+        for changes from before the host started. Work that has not started when the host stops is
+        lost.
       </div>
     </div>
   );

@@ -113,7 +113,9 @@ export const startSessionWorkflow = async ({
   return result;
 };
 
-const toAgentUserMessageParts = (parts: AgentSessionUserMessagePart[]): AgentUserMessagePart[] =>
+export const toAgentUserMessageParts = (
+  parts: AgentSessionUserMessagePart[],
+): AgentUserMessagePart[] =>
   // SAFETY: Parsed host results never hold an explicit undefined field, which is the only
   // difference between the contract parts and the core parts.
   parts as AgentUserMessagePart[];

@@ -1,111 +1,160 @@
-import type { TaskCard } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type PropsWithChildren, type ReactElement, useEffect, useMemo, useRef } from "react";
-import { toast } from "sonner";
-import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
-import { getAutopilotRule } from "@/features/autopilot/autopilot-catalog";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
-  detectAutopilotEvents,
-  shouldAdvanceAutopilotBaseline,
-  toTaskMap,
-} from "@/features/autopilot/autopilot-events";
-import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
-import { useNotificationContext } from "@/state/notifications/notification-context";
+  type PropsWithChildren,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
+import { createAutopilotOutcomePresenter } from "@/features/autopilot/autopilot-outcome-presenter";
+import { toAgentUserMessageParts } from "@/features/session-start/session-start-workflow";
+import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@/lib/browser-live/constants";
 import { errorMessage } from "@/lib/errors";
-import { useTaskSnapshotContext, useWorkspaceStateContext } from "../app-state-contexts";
-import { settingsSnapshotQueryOptions } from "../queries/workspace";
+import { hostBridge } from "@/lib/host-client";
+import { useNotificationContext } from "@/state/notifications/notification-context";
+import { useAgentOperationsContext, useWorkspaceStateContext } from "../app-state-contexts";
 import { host } from "../operations/shared/host";
-import { withWorktreeRefresh } from "@/features/session-start/with-worktree-refresh";
+import { autopilotQueryKeys, autopilotStateQueryOptions } from "../queries/autopilot";
+import { taskWorktreeQueryKeys } from "../queries/build-runtime";
+import { invalidateTerminalList } from "../queries/terminals";
 
+// A settled launch, also a failed one, can create the task worktree and its terminals.
+const refreshLaunchedTaskViews = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> => {
+  await Promise.all([
+    invalidateTerminalList(queryClient, { kind: "task", repoPath, taskId }),
+    queryClient.invalidateQueries({
+      queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+    }),
+  ]);
+};
+
+/**
+ * Shows the outcomes of host Autopilot from every workspace. The host detects task changes and
+ * starts the actions, so this client only presents results and recovery controls.
+ */
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
-  const client = useMemo(
-    () => ({
-      agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, host.agentSessionWorkflowLaunch),
-    }),
+  const { activeWorkspace, workspaces, closedWorkspaces } = useWorkspaceStateContext();
+  const { sendAgentMessage } = useAgentOperationsContext();
+  const { sessionStartNotifications } = useNotificationContext();
+  const sendAgentMessageRef = useRef(sendAgentMessage);
+  const notificationsRef = useRef(sessionStartNotifications);
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  const [subscribed, setSubscribed] = useState(false);
+  useEffect(() => {
+    sendAgentMessageRef.current = sendAgentMessage;
+    notificationsRef.current = sessionStartNotifications;
+    activeWorkspaceIdRef.current = activeWorkspaceId;
+  }, [activeWorkspaceId, sendAgentMessage, sessionStartNotifications]);
+
+  const presenter = useMemo(
+    () =>
+      createAutopilotOutcomePresenter({
+        claimRecovery: (input) => host.autopilotRecoveryClaim(input),
+        sendMessage: async (session, instruction) => {
+          await sendAgentMessageRef.current(session, toAgentUserMessageParts(instruction), {
+            preserveTextWhitespace: true,
+          });
+        },
+        markInAppFeedbackHandled: (errorId) =>
+          notificationsRef.current.markInAppFeedbackHandled(errorId),
+        isWorkspaceSelected: (workspaceId) => activeWorkspaceIdRef.current === workspaceId,
+        refreshTaskViews: (repoPath, taskId) =>
+          refreshLaunchedTaskViews(queryClient, repoPath, taskId),
+      }),
     [queryClient],
   );
-  const { sessionStartNotifications } = useNotificationContext();
-  const { activeWorkspace } = useWorkspaceStateContext();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { tasks } = useTaskSnapshotContext();
-  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
-  const previousRepoRef = useRef<string | null>(null);
-  const previousTasksByIdRef = useRef(new Map<string, TaskCard>());
+
+  // The host keeps failed and skipped outcomes, so a client that attaches or selects a workspace
+  // shows the ones it missed.
+  const readHeldOutcomes = useCallback(
+    (workspaceId: string, { workspaceSelected }: { workspaceSelected: boolean }) => {
+      queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then(
+        (state) => {
+          if (activeWorkspaceIdRef.current !== workspaceId) return;
+          for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
+          presenter.presentFailure(state.failure);
+        },
+        (cause: unknown) =>
+          toast.error("Autopilot outcomes could not load.", {
+            id: "autopilot-read",
+            description: `${errorMessage(cause)} Select the workspace again to retry.`,
+          }),
+      );
+    },
+    [presenter, queryClient],
+  );
 
   useEffect(() => {
-    if (!workspaceRepoPath || !activeWorkspace) {
-      previousRepoRef.current = null;
-      previousTasksByIdRef.current = new Map();
-      return;
-    }
-
-    const nextTasksById = toTaskMap(tasks);
-    if (previousRepoRef.current !== workspaceRepoPath) {
-      previousRepoRef.current = workspaceRepoPath;
-      previousTasksByIdRef.current = nextTasksById;
-      return;
-    }
-
-    const observedEvents = detectAutopilotEvents(previousTasksByIdRef.current, tasks);
-    const autopilotSettings = settingsSnapshotQuery.data?.autopilot;
-    if (
-      shouldAdvanceAutopilotBaseline({
-        observedEvents,
-        hasAutopilotSettings: Boolean(autopilotSettings),
+    let disposed = false;
+    let unsubscribe: (() => void) | null = null;
+    // An open settings modal reads the saved rules again at once, and other readers on next use.
+    // A failed read shows in the Autopilot settings section.
+    const reloadSavedRules = () => {
+      void queryClient.invalidateQueries({ queryKey: autopilotQueryKeys.settings() });
+    };
+    hostBridge
+      .subscribeRunEvents((payload) => {
+        if ("__openducktorBrowserLive" in payload) {
+          const workspaceId = activeWorkspaceIdRef.current;
+          if (payload.kind !== BROWSER_LIVE_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
+          if (workspaceId) readHeldOutcomes(workspaceId, { workspaceSelected: false });
+          // A missed settings event can leave old Autopilot rules in the cache.
+          reloadSavedRules();
+          return;
+        }
+        // Another client can save the rules, so this client reads them again.
+        if (payload.type === "autopilot_settings_saved") {
+          reloadSavedRules();
+          return;
+        }
+        // The shell parsed the payload with the run event contract.
+        if (payload.type === "autopilot_outcome") presenter.present(payload.outcome);
+        else presenter.presentFailure(payload.failure);
       })
-    ) {
-      previousTasksByIdRef.current = nextTasksById;
-    }
-    if (!autopilotSettings) {
-      return;
-    }
+      .then(
+        (stop) => {
+          if (disposed) {
+            stop();
+            return;
+          }
+          unsubscribe = stop;
+          setSubscribed(true);
+        },
+        (cause: unknown) => {
+          if (disposed) return;
+          toast.error("Autopilot updates are unavailable.", {
+            id: "autopilot-subscription",
+            description: `${errorMessage(cause)} Reload the app to reconnect.`,
+            duration: Infinity,
+          });
+        },
+      );
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+      setSubscribed(false);
+    };
+  }, [presenter, queryClient, readHeldOutcomes]);
 
-    void Promise.all(
-      observedEvents.map(async (observedEvent) => {
-        const rule = getAutopilotRule(autopilotSettings, observedEvent.eventId);
-        await Promise.all(
-          rule.actionIds.map(async (actionId) => {
-            try {
-              const outcome = await executeAutopilotAction({
-                activeWorkspace,
-                task: observedEvent.task,
-                actionId,
-                client,
-                notifications: sessionStartNotifications,
-              });
+  useEffect(() => {
+    if (subscribed && activeWorkspaceId)
+      readHeldOutcomes(activeWorkspaceId, { workspaceSelected: true });
+  }, [activeWorkspaceId, readHeldOutcomes, subscribed]);
 
-              if (outcome.kind === "skipped") {
-                toast.info(`Autopilot skipped ${observedEvent.task.id}.`, {
-                  description: outcome.message,
-                });
-              } else if (
-                outcome.postStartActionError &&
-                !isSessionStartFailureFeedbackHandled(outcome.postStartActionError)
-              ) {
-                toast.error(`Autopilot message failed for ${observedEvent.task.id}.`, {
-                  description: outcome.postStartActionError.message,
-                });
-              }
-            } catch (error) {
-              if (!isSessionStartFailureFeedbackHandled(error)) {
-                toast.error(`Autopilot failed for ${observedEvent.task.id}.`, {
-                  description: errorMessage(error),
-                });
-              }
-            }
-          }),
-        );
-      }),
+  useEffect(() => {
+    presenter.keepWorkspaces(
+      new Set([...workspaces, ...closedWorkspaces].map((workspace) => workspace.workspaceId)),
     );
-  }, [
-    client,
-    workspaceRepoPath,
-    activeWorkspace,
-    sessionStartNotifications,
-    settingsSnapshotQuery.data?.autopilot,
-    tasks,
-  ]);
+  }, [closedWorkspaces, presenter, workspaces]);
 
   return <>{children}</>;
 }

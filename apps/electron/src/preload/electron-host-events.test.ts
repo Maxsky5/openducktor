@@ -71,10 +71,10 @@ describe("subscribeElectronHostEvent", () => {
       );
       receive({} satisfies IpcRendererEvent, {
         channel: "openducktor://run-event",
-        payload: { runId: "run-1" },
+        payload: { type: "autopilot_failure", failure: "run-1" },
       });
 
-      expect(listener).toHaveBeenCalledWith({ runId: "run-1" });
+      expect(listener).toHaveBeenCalledWith({ type: "autopilot_failure", failure: "run-1" });
       expect(error).toHaveBeenCalledTimes(1);
       unsubscribe();
       expect(ipcRenderer.off).toHaveBeenCalledWith(
@@ -225,9 +225,15 @@ describe("subscribeElectronHostEvent", () => {
       ipcRenderer.emit(
         channel,
         {},
-        { channel: "openducktor://run-event", payload: { runId: "first" } },
+        {
+          channel: "openducktor://run-event",
+          payload: { type: "autopilot_failure", failure: "first" },
+        },
       );
-      expect(received).toEqual([{ runId: "first" }, { runId: "first" }]);
+      expect(received).toEqual([
+        { type: "autopilot_failure", failure: "first" },
+        { type: "autopilot_failure", failure: "first" },
+      ]);
       ipcRenderer.emit(channel, {}, { channel: "openducktor://run-event", payload: null });
       expect(error).toHaveBeenCalledTimes(1);
       stopFirst();
@@ -236,9 +242,16 @@ describe("subscribeElectronHostEvent", () => {
       ipcRenderer.emit(
         channel,
         {},
-        { channel: "openducktor://run-event", payload: { runId: "second" } },
+        {
+          channel: "openducktor://run-event",
+          payload: { type: "autopilot_failure", failure: "second" },
+        },
       );
-      expect(received).toEqual([{ runId: "first" }, { runId: "first" }, { runId: "second" }]);
+      expect(received).toEqual([
+        { type: "autopilot_failure", failure: "first" },
+        { type: "autopilot_failure", failure: "first" },
+        { type: "autopilot_failure", failure: "second" },
+      ]);
       stopSecond();
       expect(ipcRenderer.listenerCount(channel)).toBe(0);
       const stopThird = subscribeElectronHostEvent(
@@ -284,7 +297,10 @@ describe("subscribeElectronHostEvent", () => {
       replaceSecond = () => {};
     };
     try {
-      const envelope = { channel: "openducktor://run-event", payload: {} };
+      const envelope = {
+        channel: "openducktor://run-event",
+        payload: { type: "autopilot_failure", failure: null },
+      };
       ipcRenderer.emit(channel, {}, envelope);
       expect(calls).toEqual(["first", "second"]);
       ipcRenderer.emit(channel, {}, envelope);

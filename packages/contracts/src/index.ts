@@ -9,6 +9,7 @@ export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./attachment-limits";
+export * from "./autopilot-schemas";
 export * from "./local-attachment-error-schemas";
 export {
   azureDevOpsDeploymentSchema,
