@@ -4,11 +4,12 @@ export type StrictBase64Result =
   | { ok: true; bytes: Buffer }
   | { ok: false; reason: StrictBase64Failure };
 
-const PADDED_BASE64_ALPHABET = /^[A-Za-z0-9+/]*={0,2}$/;
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /**
- * Decodes padded, canonical base64 with native Buffer code.
- * Buffer.from skips invalid characters, so the decoded bytes must encode back to the exact input.
+ * Validates padded, canonical base64 before it builds the bytes.
+ * Native atob rejects characters outside the alphabet and misplaced padding.
+ * A JavaScript or regex loop over each character blocks the host for hundreds of milliseconds at 32 MiB.
  */
 export const decodeStrictBase64 = (value: string, maxBytes: number): StrictBase64Result => {
   if (value.length > Math.ceil(maxBytes / 3) * 4) return { ok: false, reason: "too_large" };
@@ -16,9 +17,20 @@ export const decodeStrictBase64 = (value: string, maxBytes: number): StrictBase6
   let padding = 0;
   if (value.endsWith("==")) padding = 2;
   else if (value.endsWith("=")) padding = 1;
-  if ((value.length / 4) * 3 - padding > maxBytes) return { ok: false, reason: "too_large" };
-  const bytes = Buffer.from(value, "base64");
-  if (bytes.toString("base64") === value) return { ok: true, bytes };
-  // Input from the padded alphabet fails the round trip only when the unused tail bits are not zero.
-  return { ok: false, reason: PADDED_BASE64_ALPHABET.test(value) ? "padding" : "malformed" };
+  const byteLength = (value.length / 4) * 3 - padding;
+  if (byteLength > maxBytes) return { ok: false, reason: "too_large" };
+  let binary: string;
+  try {
+    binary = atob(value);
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  // atob skips ASCII whitespace, so any skipped character shortens the output.
+  if (binary.length !== byteLength) return { ok: false, reason: "malformed" };
+  // atob ignores the unused bits before the padding, so canonical input must keep them zero.
+  const tail = BASE64_ALPHABET.indexOf(value.charAt(value.length - padding - 1));
+  if ((padding === 2 && (tail & 15) !== 0) || (padding === 1 && (tail & 3) !== 0)) {
+    return { ok: false, reason: "padding" };
+  }
+  return { ok: true, bytes: Buffer.from(binary, "latin1") };
 };

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import { decodeStrictBase64 } from "./strict-base64";
 
@@ -23,6 +23,9 @@ describe("decodeStrictBase64", () => {
       "AA-_",
       "AA A",
       "AAAA\n",
+      " AAAAAA",
+      "AAAAAA\t",
+      "AA\u0100A",
       "=AAA",
       "A===",
       "AA=A",
@@ -36,6 +39,18 @@ describe("decodeStrictBase64", () => {
   test("rejects nonzero bits before the padding", () => {
     for (const value of ["AB==", "AAB=", "AAAAAP=="]) {
       expect(decodeStrictBase64(value, LIMIT)).toEqual({ ok: false, reason: "padding" });
+    }
+  });
+
+  test("builds no bytes for rejected input", () => {
+    const from = spyOn(Buffer, "from");
+    try {
+      for (const value of ["AA!A", "AA A", "AB==", "A".repeat(Math.ceil(LIMIT / 3) * 4 + 4)]) {
+        expect(decodeStrictBase64(value, LIMIT).ok).toBe(false);
+      }
+      expect(from).not.toHaveBeenCalled();
+    } finally {
+      from.mockRestore();
     }
   });
 
