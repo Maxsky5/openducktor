@@ -7,6 +7,7 @@ import {
   setInlineCommentDraftScheduleTaskForTests,
   setInlineCommentDraftStorageForTests,
 } from "@/state/use-inline-comment-draft-store";
+import { FILE_LIST_ROW_HEIGHT } from "./constants";
 
 export const OWNER_KEY = toInlineCommentDraftStorageKey({
   workspaceId: "workspace-1",
@@ -189,14 +190,34 @@ export function setupFileDiffListTests(): void {
   });
 }
 
+const DEFAULT_CLOSED_ROW_HEIGHT = 40;
+
 /**
- * Fakes the row layout: a closed row is `closedRowHeight` tall, and an expanded row has the expanded height.
+ * Height of a row in the `installMeasuredRows` layout, from the minimum height of its button.
+ * A closed list view row is `closedRowHeight` tall, so the row border is `closedRowHeight` minus the list button
+ * height: 0px by default, and 1px with 41px, as in the app. An expanded row is `expandedRowHeight` tall in list view.
+ */
+export function fakeRowHeight(
+  buttonHeight: number,
+  {
+    closedRowHeight = DEFAULT_CLOSED_ROW_HEIGHT,
+    expandedRowHeight,
+  }: { closedRowHeight?: number; expandedRowHeight?: number | undefined } = {},
+): number {
+  const closedHeight = buttonHeight + closedRowHeight - FILE_LIST_ROW_HEIGHT.list;
+  return expandedRowHeight === undefined
+    ? closedHeight
+    : closedHeight + expandedRowHeight - closedRowHeight;
+}
+
+/**
+ * Fakes the row layout with `fakeRowHeight`, so tree view rows are shorter, as in the app.
  * `resize` reports new sizes to the ResizeObservers and scrolls the list so it renders again.
  * With `clampScroll`, the list stops scrolling at the end of its rows, as in a browser.
  */
 export function installMeasuredRows({
   clampScroll = false,
-  closedRowHeight = 40,
+  closedRowHeight = DEFAULT_CLOSED_ROW_HEIGHT,
 }: { clampScroll?: boolean; closedRowHeight?: number } = {}) {
   const listHeight = 400;
   const previousResizeObserver = globalThis.ResizeObserver;
@@ -212,12 +233,24 @@ export function installMeasuredRows({
   );
   let currentWidth = 600;
   let currentExpandedRowHeight = 800;
-  const rowHeight = (element: Element): number =>
-    element
-      .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
-      ?.getAttribute("aria-expanded") === "true"
-      ? currentExpandedRowHeight
-      : closedRowHeight;
+  const rowHeight = (element: Element): number => {
+    const rowButton = element.querySelector<HTMLElement>("button");
+    if (!rowButton) {
+      throw new Error("A file list row has no button.");
+    }
+    const buttonHeight = Number.parseFloat(rowButton.style.minHeight);
+    if (Number.isNaN(buttonHeight)) {
+      throw new Error("A file list row button has no minimum height.");
+    }
+    const isExpanded =
+      element
+        .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
+        ?.getAttribute("aria-expanded") === "true";
+    return fakeRowHeight(buttonHeight, {
+      closedRowHeight,
+      expandedRowHeight: isExpanded ? currentExpandedRowHeight : undefined,
+    });
+  };
   if (clampScroll) {
     const elementScrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
     Object.defineProperty(HTMLElement.prototype, "scrollTop", {

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { FILE_LIST_ROW_CLASS_NAME, fileListRowIndentStyle } from "./constants";
+import { FILE_LIST_ROW_CLASS_NAME, fileListRowStyle } from "./constants";
 import type { DirectoryRow } from "./file-list-rows";
 import { HighlightedText } from "./highlighted-text";
 
@@ -20,7 +20,8 @@ export function FileListDirectoryRow({
         FILE_LIST_ROW_CLASS_NAME,
         "text-foreground outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
       )}
-      style={fileListRowIndentStyle(row.depth)}
+      // Directory rows show only in tree view.
+      style={fileListRowStyle("tree", row.depth)}
       aria-label={row.path}
       aria-expanded={row.isOpen}
       title={row.name.text}

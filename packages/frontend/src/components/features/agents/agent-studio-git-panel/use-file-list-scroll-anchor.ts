@@ -3,6 +3,7 @@ import { type DynamicRowHeight, useListRef } from "react-window";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { type FileListRow, findAnchorRow, type RowAnchor } from "./file-list-rows";
+import type { FileListViewMode } from "./file-list-view-preference";
 
 const ROW_KEY_ATTRIBUTE = "data-row-key";
 
@@ -17,18 +18,22 @@ const ROW_KEY_ATTRIBUTE = "data-row-key";
 export function useFileListScrollAnchor({
   rows,
   measurementKey,
+  viewMode,
   scrollResetKey,
 }: {
   rows: readonly FileListRow[];
   /** A new owner, such as another task or diff scope, drops the known heights. */
   measurementKey: string;
+  /** Row headers have another height in each view, so a view switch changes the known heights. */
+  viewMode: FileListViewMode;
   scrollResetKey: string;
 }) {
   const listRef = useListRef(null);
   const visibleRowRef = useRef<VisibleRowAnchor | null>(null);
   const pendingAnchorRef = useRef<PendingAnchor | null>(null);
-  const { rowHeight, setRowHeightByKey } = useRowHeights(rows, measurementKey);
+  const { rowHeight, setRowHeightByKey } = useRowHeights(rows, measurementKey, viewMode);
   const previousRowsRef = useRef(rows);
+  const previousViewModeRef = useRef(viewMode);
   const scrollResetKeyRef = useRef(scrollResetKey);
 
   const captureVisibleOffset = useCallback(() => {
@@ -38,7 +43,8 @@ export function useFileListScrollAnchor({
     const row = getRenderedRow(list, anchor.key);
     if (!row) return;
     anchor.offset = Math.max(0, list.getBoundingClientRect().top - row.getBoundingClientRect().top);
-  }, [listRef]);
+    anchor.viewMode = viewMode;
+  }, [listRef, viewMode]);
 
   // This runs again from the layout effect and from `onRowsRendered` until the anchor row is in place.
   // react-window's `scrollToRow` cannot keep the offset inside the row, so the hook scrolls itself.
@@ -72,14 +78,18 @@ export function useFileListScrollAnchor({
     }
 
     const rowStart = list.scrollTop + rowRect.top - listTop;
-    const offset = isAnchorRow ? Math.min(anchor.offset, Math.max(0, rowRect.height - 1)) : 0;
+    const offset = isAnchorRow
+      ? Math.min(offsetInView(anchor, viewMode), Math.max(0, rowRect.height - 1))
+      : 0;
     list.scrollTop = rowStart + offset;
     pendingAnchorRef.current = null;
-  }, [listRef, rowHeight, rows]);
+  }, [listRef, rowHeight, rows, viewMode]);
 
   useLayoutEffect(() => {
     const previousRows = previousRowsRef.current;
     previousRowsRef.current = rows;
+    const isNewViewMode = previousViewModeRef.current !== viewMode;
+    previousViewModeRef.current = viewMode;
     const isNewScrollResetKey = scrollResetKeyRef.current !== scrollResetKey;
     scrollResetKeyRef.current = scrollResetKey;
     // A new `scrollResetKey` starts at the top. The list unmounts while no row shows,
@@ -91,14 +101,18 @@ export function useFileListScrollAnchor({
       if (list) list.scrollTop = 0;
       return;
     }
-    if (!arraysEqual(previousRows, rows, (previous, row) => previous.key === row.key)) {
+    // A view switch changes the row heights even when the rows stay the same.
+    if (
+      isNewViewMode ||
+      !arraysEqual(previousRows, rows, (previous, row) => previous.key === row.key)
+    ) {
       pendingAnchorRef.current = visibleRowRef.current && {
         ...visibleRowRef.current,
         estimatedScrollTop: null,
       };
     }
     restorePendingAnchor();
-  }, [listRef, restorePendingAnchor, rows, scrollResetKey]);
+  }, [listRef, restorePendingAnchor, rows, scrollResetKey, viewMode]);
 
   const onRowsRendered = useCallback(
     ({ startIndex }: { startIndex: number }) => {
@@ -107,11 +121,11 @@ export function useFileListScrollAnchor({
       if (pendingAnchorRef.current) return;
       const key = rows[startIndex]?.key;
       if (key) {
-        visibleRowRef.current = { key, index: startIndex, offset: 0, rows };
+        visibleRowRef.current = { key, index: startIndex, offset: 0, viewMode, rows };
         captureVisibleOffset();
       }
     },
-    [captureVisibleOffset, restorePendingAnchor, rows],
+    [captureVisibleOffset, restorePendingAnchor, rows, viewMode],
   );
 
   return {
@@ -128,7 +142,8 @@ export function rowKeyAttributes(rowKey: string) {
   return { [ROW_KEY_ATTRIBUTE]: rowKey };
 }
 
-type VisibleRowAnchor = RowAnchor & { offset: number };
+/** `offset` is the scrolled distance into the anchor row, measured in `viewMode`. */
+type VisibleRowAnchor = RowAnchor & { offset: number; viewMode: FileListViewMode };
 
 type PendingAnchor = VisibleRowAnchor & {
   /** The scroll position of the last estimate, set while the anchor row is not rendered. */
@@ -153,6 +168,15 @@ function scrollTowardRow(list: HTMLElement, anchor: PendingAnchor, rowStart: num
   return true;
 }
 
+/** An offset below the row header moves with the diff body when a view switch changes the header height. */
+function offsetInView(anchor: VisibleRowAnchor, viewMode: FileListViewMode): number {
+  const headerHeight = FILE_LIST_ROW_HEIGHT[anchor.viewMode];
+  if (anchor.offset < headerHeight) {
+    return anchor.offset;
+  }
+  return anchor.offset - headerHeight + FILE_LIST_ROW_HEIGHT[viewMode];
+}
+
 function getRenderedRow(list: HTMLElement, rowKey: string): Element | undefined {
   for (const child of list.children) {
     if (child.getAttribute(ROW_KEY_ATTRIBUTE) === rowKey) {
@@ -163,48 +187,54 @@ function getRenderedRow(list: HTMLElement, rowKey: string): Element | undefined 
 }
 
 type KnownHeights = {
-  heightByKey: ReadonlyMap<string, number>;
-  /** The smallest known height. It is the height of a closed row. */
-  smallestHeight: number | null;
+  /** The height of each row below its header. A view switch changes only the header height. */
+  belowHeaderByKey: ReadonlyMap<string, number>;
+  /** The smallest known height below a header. It is usually the border of a closed row. */
+  smallestBelowHeader: number | null;
 };
 
 type OwnedHeights = KnownHeights & { measurementKey: string };
 
-const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), smallestHeight: null };
+const NO_KNOWN_HEIGHTS: KnownHeights = { belowHeaderByKey: new Map(), smallestBelowHeader: null };
 
 /**
  * Gives react-window the measured row heights by row key. A row keeps its height when rows move,
- * and when a closed directory or a search hides it for a time.
+ * when a closed directory or a search hides it for a time, and when a view switch changes its header.
  */
-function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
+function useRowHeights(
+  rows: readonly FileListRow[],
+  measurementKey: string,
+  viewMode: FileListViewMode,
+) {
   const [ownedHeights, setOwnedHeights] = useState<OwnedHeights>(() => ({
     measurementKey,
     ...NO_KNOWN_HEIGHTS,
   }));
-  const { heightByKey, smallestHeight } =
+  const { belowHeaderByKey, smallestBelowHeader } =
     ownedHeights.measurementKey === measurementKey ? ownedHeights : NO_KNOWN_HEIGHTS;
+  const headerHeight = FILE_LIST_ROW_HEIGHT[viewMode];
   // Most rows are closed, so a row that is not measured yet gets the height of a closed row.
-  const estimatedHeight = smallestHeight ?? FILE_LIST_ROW_HEIGHT;
+  const estimatedHeight = headerHeight + (smallestBelowHeader ?? 0);
 
   const setRowHeightByKey = useCallback(
     (rowKey: string, height: number): void => {
+      const belowHeader = height - headerHeight;
       setOwnedHeights((current) => {
         const known = current.measurementKey === measurementKey ? current : NO_KNOWN_HEIGHTS;
-        if (known.heightByKey.get(rowKey) === height) {
+        if (known.belowHeaderByKey.get(rowKey) === belowHeader) {
           return current;
         }
-        const next = new Map(known.heightByKey);
-        next.set(rowKey, height);
+        const next = new Map(known.belowHeaderByKey);
+        next.set(rowKey, belowHeader);
         return {
           measurementKey,
-          heightByKey: next,
-          smallestHeight: Math.min(known.smallestHeight ?? height, height),
+          belowHeaderByKey: next,
+          smallestBelowHeader: Math.min(known.smallestBelowHeader ?? belowHeader, belowHeader),
         };
       });
     },
-    [measurementKey],
+    [headerHeight, measurementKey],
   );
-
   // The observer outlives renders, so it reads the newest setter.
   const latestSetRowHeightRef = useRef(setRowHeightByKey);
   useLayoutEffect(() => {
@@ -233,7 +263,8 @@ function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
       getAverageRowHeight: () => estimatedHeight,
       getRowHeight: (index) => {
         const row = rows[index];
-        return row ? heightByKey.get(row.key) : undefined;
+        const belowHeader = row ? belowHeaderByKey.get(row.key) : undefined;
+        return belowHeader === undefined ? undefined : headerHeight + belowHeader;
       },
       setRowHeight: (index, height) => {
         const row = rows[index];
@@ -252,7 +283,7 @@ function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
         };
       },
     }),
-    [estimatedHeight, heightByKey, resizeObserver, rows, setRowHeightByKey],
+    [belowHeaderByKey, estimatedHeight, headerHeight, resizeObserver, rows, setRowHeightByKey],
   );
 
   return { rowHeight, setRowHeightByKey };

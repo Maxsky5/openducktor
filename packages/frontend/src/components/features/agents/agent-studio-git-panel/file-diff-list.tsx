@@ -75,11 +75,13 @@ export const FileDiffList = memo(function FileDiffList({
   const { listRef, rowHeight, onMeasureRow, onRowsRendered, onScroll } = useFileListScrollAnchor({
     rows,
     measurementKey: scopeKey,
+    viewMode,
     // A new search, and a cleared search, start at the top.
     scrollResetKey: query,
   });
   const rowProps: FileListRowProps = {
     rows,
+    viewMode,
     diffScope,
     ownerKey,
     commentPlaceholder,
@@ -246,6 +248,7 @@ function useFileEditorStates(scopeKey: string, fileDiffs: FileDiff[]): FileEdito
 
 type FileListRowProps = Pick<
   FileDiffListProps,
+  | "viewMode"
   | "diffScope"
   | "ownerKey"
   | "commentPlaceholder"
@@ -274,6 +277,7 @@ function FileListRowView({
   style,
   ariaAttributes,
   rows,
+  viewMode,
   diffScope,
   ownerKey,
   commentPlaceholder,
@@ -329,6 +333,7 @@ function FileListRowView({
     content = (
       <FileDiffEntryWithMemo
         row={row}
+        viewMode={viewMode}
         diffScope={diffScope}
         ownerKey={ownerKey}
         commentPlaceholder={commentPlaceholder}
