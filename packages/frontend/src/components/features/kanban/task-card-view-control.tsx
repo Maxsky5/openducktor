@@ -1,8 +1,8 @@
 import type { KanbanTaskCardView } from "@openducktor/contracts";
-import { Rows2, Rows3 } from "lucide-react";
 import type { ReactElement } from "react";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TASK_CARD_VIEW_OPTIONS } from "./task-card-view-options";
 
 type TaskCardViewControlProps = {
   value: KanbanTaskCardView | null;
@@ -10,11 +10,6 @@ type TaskCardViewControlProps = {
   "aria-labelledby"?: string;
   onValueChange: (value: KanbanTaskCardView) => void;
 };
-
-export const TASK_CARD_VIEW_OPTIONS = [
-  { value: "normal", label: "Normal", icon: Rows2 },
-  { value: "compact", label: "Compact", icon: Rows3 },
-] as const;
 
 export function TaskCardViewControl({
   value,

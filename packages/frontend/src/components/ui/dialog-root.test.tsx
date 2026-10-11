@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 import { Dialog, DialogContent, DialogTitle } from "./dialog";
-import { hasOpenDialog } from "./dialog-root";
+import { hasOpenDialog } from "./open-dialogs";
 import { Sheet, SheetContent, SheetTitle } from "./sheet";
 
 afterEach(cleanup);

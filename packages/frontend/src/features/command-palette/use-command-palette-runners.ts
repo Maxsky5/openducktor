@@ -1,9 +1,7 @@
 import { useSessionMenu } from "@/components/layout/sidebar/session-menu-provider";
-import {
-  useSetSessionUnreadKey,
-  workspaceSessionReadKey,
-} from "@/features/session-navigation/session-read-state";
 import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
+import { workspaceSessionReadKey } from "@/features/session-navigation/session-read-keys";
+import { useSetSessionUnreadKey } from "@/features/session-navigation/session-read-state";
 import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useWorkspaceState } from "@/state/app-state-provider";

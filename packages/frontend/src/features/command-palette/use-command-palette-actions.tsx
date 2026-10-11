@@ -25,10 +25,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
-import { TASK_CARD_VIEW_OPTIONS } from "@/components/features/kanban/task-card-view-control";
+import { TASK_CARD_VIEW_OPTIONS } from "@/components/features/kanban/task-card-view-options";
 import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal-constants";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
-import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-picker";
+import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
 import { useTheme } from "@/components/layout/theme-provider";
 import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";

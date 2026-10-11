@@ -12,7 +12,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { hasOpenDialog } from "@/components/ui/dialog-root";
+import { hasOpenDialog } from "@/components/ui/open-dialogs";
 import { errorMessage } from "@/lib/errors";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { platformQueryOptions } from "@/state/queries/system";

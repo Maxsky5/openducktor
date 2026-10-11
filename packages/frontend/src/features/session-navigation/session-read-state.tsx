@@ -8,24 +8,18 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { WorkspaceSession } from "@openducktor/contracts";
 import { useRequiredContext } from "@/state/app-state-contexts";
 import type {
   SessionNavigationEntry,
   SessionNavigationModel,
 } from "@/state/read-models/session-navigation-read-model";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { sessionEntryReadKey, targetReadKey } from "./session-read-keys";
 import {
   createSessionReadStateStore,
-  sessionReadStateKey,
   type SessionReadStateStore,
 } from "./session-read-state-store";
 import { useVisibleSessionReadKey } from "./visible-session-target";
-import {
-  sessionNavigationTargetKey,
-  type SessionNavigationTarget,
-} from "./session-navigation-target";
 
 const SessionReadStateContext = createContext<SessionReadStateStore | null>(null);
 
@@ -76,14 +70,6 @@ export const useSetSessionUnreadKey = (): ((key: string, unread: boolean) => voi
   return useCallback((key, unread) => store.setUnread(key, unread), [store]);
 };
 
-/** The read key of a chat. Its sidebar row uses the same key. */
-export const workspaceSessionReadKey = (workspaceId: string, session: WorkspaceSession): string => {
-  const identity = workspaceSessionIdentity(session);
-  return identity
-    ? sessionReadStateKey(workspaceId, identity)
-    : sessionNavigationTargetKey({ kind: "workspace_session", workspaceId, sessionId: session.id });
-};
-
 /** Watch task metadata even when the sidebar has no row for the task. */
 export const useWatchSessionBlockers = (model: SessionNavigationModel): void => {
   const store = useRequiredContext(SessionReadStateContext, "useWatchSessionBlockers");
@@ -100,13 +86,3 @@ export const useWatchSessionBlockers = (model: SessionNavigationModel): void => 
     }
   }, [model, store]);
 };
-
-const sessionEntryReadKey = (entry: SessionNavigationEntry): string =>
-  entry.context.kind === "workspace"
-    ? workspaceSessionReadKey(entry.workspace.workspaceId, entry.context.session)
-    : targetReadKey(entry.target);
-
-const targetReadKey = (target: SessionNavigationTarget): string =>
-  target.kind === "task_session"
-    ? sessionReadStateKey(target.workspaceId, target.identity)
-    : sessionNavigationTargetKey(target);

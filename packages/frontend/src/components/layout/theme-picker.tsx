@@ -1,5 +1,6 @@
 import { THEME_PREFERENCE_VALUES, type ThemePreference } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Combobox } from "@/components/ui/combobox";
 
@@ -9,12 +10,6 @@ type ThemePickerProps = {
   triggerAriaDescribedBy?: string;
   triggerClassName?: string;
 };
-
-export const THEME_PREFERENCE_LABELS = {
-  system: "System default",
-  light: "Light",
-  dark: "Dark",
-} satisfies Record<ThemePreference, string>;
 
 const themePreferenceOptions: { value: ThemePreference; label: string }[] =
   THEME_PREFERENCE_VALUES.map((value) => ({ value, label: THEME_PREFERENCE_LABELS[value] }));

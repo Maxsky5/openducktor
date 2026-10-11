@@ -60,7 +60,7 @@ The command palette is in `packages/frontend/src/features/command-palette`. `Wor
 - Open the Rename and Archive dialogs of a chat through `useSessionMenu`. The sidebar and the palette share these dialogs. Chat actions other than Open chat do not make the workspace active.
 - Add an app action to `useCommandPaletteActions`. Give it other words in `keywords`, so that search finds it.
 - Use `useCommandPalettePageCommand` for a command that exists only on one page, such as the panel toggles of a session page.
-- The shortcut does nothing while a `Dialog` or `Sheet` is open. `hasOpenDialog` in `components/ui/dialog-root.tsx` reports this state.
+- The shortcut does nothing while a `Dialog` or `Sheet` is open. `hasOpenDialog` in `components/ui/open-dialogs.ts` reports this state.
 - Keep the Recent list device-local. It is UI state in `localStorage`, not task data.
 - Do not show `close_task` in the palette.
 - Show and hide the palette and its workspace list without motion.
