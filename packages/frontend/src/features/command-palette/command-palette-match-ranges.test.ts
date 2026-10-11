@@ -12,9 +12,21 @@ describe("matchedRanges", () => {
     ]);
   });
 
+  test("marks the scattered letters of a word that the text does not contain whole", () => {
+    // "log" in "logo", then "in": letters that follow each other and word starts come first.
+    expect(matchedRanges("Make the logo bigger in onboarding", "login")).toEqual([
+      { start: 9, end: 12 },
+      { start: 21, end: 23 },
+    ]);
+    expect(matchedRanges("New task", "nt")).toEqual([
+      { start: 0, end: 1 },
+      { start: 4, end: 5 },
+    ]);
+  });
+
   test("joins overlapping words and ignores words that are not in the text", () => {
     expect(matchedRanges("Settings: Kanban", "set settings zzz")).toEqual([{ start: 0, end: 8 }]);
     expect(matchedRanges("New task", "  ")).toEqual([]);
-    expect(matchedRanges("New task", "nt")).toEqual([]);
+    expect(matchedRanges("New task", "tn")).toEqual([]);
   });
 });
