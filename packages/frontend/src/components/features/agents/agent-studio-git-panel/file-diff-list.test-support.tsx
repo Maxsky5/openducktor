@@ -191,13 +191,15 @@ export function setupFileDiffListTests(): void {
 
 /**
  * Fakes the row layout: a closed row is `closedRowHeight` tall, and an expanded row has the expanded height.
+ * In tree view, a closed row is `treeClosedRowHeight` tall, and an expanded row is shorter by the same difference.
  * `resize` reports new sizes to the ResizeObservers and scrolls the list so it renders again.
  * With `clampScroll`, the list stops scrolling at the end of its rows, as in a browser.
  */
 export function installMeasuredRows({
   clampScroll = false,
   closedRowHeight = 40,
-}: { clampScroll?: boolean; closedRowHeight?: number } = {}) {
+  treeClosedRowHeight = closedRowHeight,
+}: { clampScroll?: boolean; closedRowHeight?: number; treeClosedRowHeight?: number } = {}) {
   const listHeight = 400;
   const previousResizeObserver = globalThis.ResizeObserver;
   const observers: Array<{
@@ -212,12 +214,15 @@ export function installMeasuredRows({
   );
   let currentWidth = 600;
   let currentExpandedRowHeight = 800;
-  const rowHeight = (element: Element): number =>
-    element
-      .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
-      ?.getAttribute("aria-expanded") === "true"
-      ? currentExpandedRowHeight
-      : closedRowHeight;
+  const rowHeight = (element: Element): number => {
+    // Tree view rows use the shorter row class.
+    const closedHeight = element.querySelector(".min-h-7") ? treeClosedRowHeight : closedRowHeight;
+    const isExpanded =
+      element
+        .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')
+        ?.getAttribute("aria-expanded") === "true";
+    return isExpanded ? currentExpandedRowHeight - closedRowHeight + closedHeight : closedHeight;
+  };
   if (clampScroll) {
     const elementScrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
     Object.defineProperty(HTMLElement.prototype, "scrollTop", {

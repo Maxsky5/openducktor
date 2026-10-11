@@ -17,13 +17,14 @@ import { arraysEqual } from "@/lib/arrays-equal";
 import { cn } from "@/lib/utils";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 import {
-  FILE_LIST_ROW_CLASS_NAME,
   FILE_STATUS_COLOR,
   FILE_STATUS_ICON,
+  fileListRowClassName,
   fileListRowIndentStyle,
 } from "./constants";
 import type { FileRow, RowLabel } from "./file-list-rows";
 import type { HighlightRange } from "./file-list-search";
+import type { FileListViewMode } from "./file-list-view-preference";
 import { HighlightedText } from "./highlighted-text";
 import {
   type FileDiffAnnotationAction,
@@ -61,6 +62,7 @@ const DIFF_BODY_CONTAINER_STYLE = {
 
 type FileDiffEntryProps = {
   row: FileRow;
+  viewMode: FileListViewMode;
   diffScope: DiffScope;
   ownerKey: string | null;
   commentPlaceholder?: string | undefined;
@@ -116,12 +118,14 @@ function FileDiffEntryLabel({ row }: { row: FileRow }): ReactElement {
 
 function FileDiffEntryHeader({
   row,
+  viewMode,
   resetState,
   status,
   onRequestFileReset,
   onToggle,
 }: {
   row: FileRow;
+  viewMode: FileListViewMode;
   resetState: {
     canReset: boolean;
     isResetDisabled: boolean;
@@ -153,7 +157,7 @@ function FileDiffEntryHeader({
     <div className="relative hover:bg-muted/50">
       <button
         type="button"
-        className={cn(FILE_LIST_ROW_CLASS_NAME, "overflow-hidden", canReset && "pr-12")}
+        className={cn(fileListRowClassName(viewMode), "overflow-hidden", canReset && "pr-12")}
         style={fileListRowIndentStyle(row.depth)}
         aria-label={`Toggle diff for ${diff.file}`}
         aria-expanded={isExpanded}
@@ -319,6 +323,7 @@ function FileDiffEntryBody({
 
 function FileDiffEntry({
   row,
+  viewMode,
   diffScope,
   ownerKey,
   commentPlaceholder,
@@ -361,6 +366,7 @@ function FileDiffEntry({
     <div className="min-w-0 max-w-full">
       <FileDiffEntryHeader
         row={row}
+        viewMode={viewMode}
         resetState={{ canReset, isResetDisabled, resetDisabledReason }}
         status={{
           StatusIcon,
@@ -396,6 +402,7 @@ function FileDiffEntry({
 export const FileDiffEntryWithMemo = memo(
   FileDiffEntry,
   (previous, next) =>
+    previous.viewMode === next.viewMode &&
     previous.viewState.isExpanded === next.viewState.isExpanded &&
     previous.diffScope === next.diffScope &&
     previous.ownerKey === next.ownerKey &&

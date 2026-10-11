@@ -3,6 +3,7 @@ import { type DynamicRowHeight, useListRef } from "react-window";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { type FileListRow, findAnchorRow, type RowAnchor } from "./file-list-rows";
+import type { FileListViewMode } from "./file-list-view-preference";
 
 const ROW_KEY_ATTRIBUTE = "data-row-key";
 
@@ -17,17 +18,20 @@ const ROW_KEY_ATTRIBUTE = "data-row-key";
 export function useFileListScrollAnchor({
   rows,
   measurementKey,
+  viewMode,
   scrollResetKey,
 }: {
   rows: readonly FileListRow[];
   /** A new owner, such as another task or diff scope, drops the known heights. */
   measurementKey: string;
+  /** Closed rows have another height in each view. A view switch adapts the known heights. */
+  viewMode: FileListViewMode;
   scrollResetKey: string;
 }) {
   const listRef = useListRef(null);
   const visibleRowRef = useRef<VisibleRowAnchor | null>(null);
   const pendingAnchorRef = useRef<PendingAnchor | null>(null);
-  const { rowHeight, setRowHeightByKey } = useRowHeights(rows, measurementKey);
+  const { rowHeight, setRowHeightByKey } = useRowHeights(rows, measurementKey, viewMode);
   const previousRowsRef = useRef(rows);
   const scrollResetKeyRef = useRef(scrollResetKey);
 
@@ -162,47 +166,90 @@ function getRenderedRow(list: HTMLElement, rowKey: string): Element | undefined 
   return undefined;
 }
 
+type KnownHeight = { height: number; viewMode: FileListViewMode };
+
 type KnownHeights = {
-  heightByKey: ReadonlyMap<string, number>;
-  /** The smallest known height. It is the height of a closed row. */
-  smallestHeight: number | null;
+  heightByKey: ReadonlyMap<string, KnownHeight>;
+  /** The smallest known height in each view. It is the height of a closed row. */
+  closedHeightByView: ReadonlyMap<FileListViewMode, number>;
 };
 
 type OwnedHeights = KnownHeights & { measurementKey: string };
 
-const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), smallestHeight: null };
+const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), closedHeightByView: new Map() };
+
+/**
+ * The height of a closed row in a view. Until a row of the view is measured, it comes from the
+ * measured closed rows of the other view, so the row positions stay correct at a view switch.
+ */
+function closedRowHeight(
+  viewMode: FileListViewMode,
+  closedHeightByView: KnownHeights["closedHeightByView"],
+): number {
+  const measuredHeight = closedHeightByView.get(viewMode);
+  if (measuredHeight !== undefined) {
+    return measuredHeight;
+  }
+  const otherViewMode = viewMode === "tree" ? "list" : "tree";
+  const otherHeight = closedHeightByView.get(otherViewMode);
+  return otherHeight === undefined
+    ? FILE_LIST_ROW_HEIGHT[viewMode]
+    : otherHeight - FILE_LIST_ROW_HEIGHT[otherViewMode] + FILE_LIST_ROW_HEIGHT[viewMode];
+}
+
+/** Only the row header changes height in another view, by the difference of the closed row heights. */
+function heightInView(
+  known: KnownHeight,
+  viewMode: FileListViewMode,
+  closedHeightByView: KnownHeights["closedHeightByView"],
+): number {
+  if (known.viewMode === viewMode) {
+    return known.height;
+  }
+  return (
+    known.height -
+    closedRowHeight(known.viewMode, closedHeightByView) +
+    closedRowHeight(viewMode, closedHeightByView)
+  );
+}
 
 /**
  * Gives react-window the measured row heights by row key. A row keeps its height when rows move,
- * and when a closed directory or a search hides it for a time.
+ * and when a closed directory or a search hides it for a time, or a view switch changes its header.
  */
-function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
+function useRowHeights(
+  rows: readonly FileListRow[],
+  measurementKey: string,
+  viewMode: FileListViewMode,
+) {
   const [ownedHeights, setOwnedHeights] = useState<OwnedHeights>(() => ({
     measurementKey,
     ...NO_KNOWN_HEIGHTS,
   }));
-  const { heightByKey, smallestHeight } =
+  const { heightByKey, closedHeightByView } =
     ownedHeights.measurementKey === measurementKey ? ownedHeights : NO_KNOWN_HEIGHTS;
   // Most rows are closed, so a row that is not measured yet gets the height of a closed row.
-  const estimatedHeight = smallestHeight ?? FILE_LIST_ROW_HEIGHT;
+  const estimatedHeight = closedRowHeight(viewMode, closedHeightByView);
 
   const setRowHeightByKey = useCallback(
     (rowKey: string, height: number): void => {
       setOwnedHeights((current) => {
         const known = current.measurementKey === measurementKey ? current : NO_KNOWN_HEIGHTS;
-        if (known.heightByKey.get(rowKey) === height) {
+        const previous = known.heightByKey.get(rowKey);
+        if (previous?.height === height && previous.viewMode === viewMode) {
           return current;
         }
-        const next = new Map(known.heightByKey);
-        next.set(rowKey, height);
-        return {
-          measurementKey,
-          heightByKey: next,
-          smallestHeight: Math.min(known.smallestHeight ?? height, height),
-        };
+        const heightByKey = new Map(known.heightByKey);
+        heightByKey.set(rowKey, { height, viewMode });
+        const closedHeightByView = new Map(known.closedHeightByView);
+        closedHeightByView.set(
+          viewMode,
+          Math.min(known.closedHeightByView.get(viewMode) ?? height, height),
+        );
+        return { measurementKey, heightByKey, closedHeightByView };
       });
     },
-    [measurementKey],
+    [measurementKey, viewMode],
   );
 
   // The observer outlives renders, so it reads the newest setter.
@@ -233,7 +280,8 @@ function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
       getAverageRowHeight: () => estimatedHeight,
       getRowHeight: (index) => {
         const row = rows[index];
-        return row ? heightByKey.get(row.key) : undefined;
+        const known = row ? heightByKey.get(row.key) : undefined;
+        return known && heightInView(known, viewMode, closedHeightByView);
       },
       setRowHeight: (index, height) => {
         const row = rows[index];
@@ -252,7 +300,15 @@ function useRowHeights(rows: readonly FileListRow[], measurementKey: string) {
         };
       },
     }),
-    [estimatedHeight, heightByKey, resizeObserver, rows, setRowHeightByKey],
+    [
+      closedHeightByView,
+      estimatedHeight,
+      heightByKey,
+      resizeObserver,
+      rows,
+      setRowHeightByKey,
+      viewMode,
+    ],
   );
 
   return { rowHeight, setRowHeightByKey };

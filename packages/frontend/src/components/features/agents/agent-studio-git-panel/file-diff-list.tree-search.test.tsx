@@ -313,6 +313,40 @@ describe("FileDiffList tree view and search", () => {
       expect(fileTop("src/file-030.ts")).toBe(0);
     });
 
+    test("keeps the top visible file when tree rows are shorter than list rows", () => {
+      measurements.restore();
+      measurements = installMeasuredRows({ closedRowHeight: 41, treeClosedRowHeight: 29 });
+      const files = Array.from(
+        { length: 100 },
+        (_, index) => `src/file-${String(index).padStart(3, "0")}.ts`,
+      );
+      render(
+        <NavigableFileDiffListHarness
+          files={files}
+          initialViewMode="list"
+          initialExpandedFiles={["src/file-005.ts"]}
+        />,
+      );
+      measurements.resize(600, 800);
+      const list = screen.getByRole("list");
+      const fileTop = (file: string): number =>
+        fileToggle(file).closest('[role="listitem"]')!.getBoundingClientRect().top;
+      // 29 closed rows of 41px and the 800px expanded row are above "src/file-030.ts".
+      fireEvent.scroll(list, { target: { scrollTop: 29 * 41 + 800 } });
+      expect(fileTop("src/file-030.ts")).toBe(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
+      fireEvent.scroll(list);
+      expect(fileTop("src/file-030.ts")).toBe(0);
+      // The tree adds the "src" row, and each row header is 12px shorter.
+      expect(list.scrollTop).toBe(30 * 29 + 788);
+
+      fireEvent.click(screen.getByRole("button", { name: "List view" }));
+      fireEvent.scroll(list);
+      expect(fileTop("src/file-030.ts")).toBe(0);
+      expect(list.scrollTop).toBe(29 * 41 + 800);
+    });
+
     test("finishes the scroll restore after a view switch, so a later expand does not jump", () => {
       render(<NavigableFileDiffListHarness files={PACKAGE_FILES} />);
       measurements.resize(600, 800);

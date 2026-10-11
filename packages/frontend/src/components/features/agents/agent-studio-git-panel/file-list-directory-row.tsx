@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { FILE_LIST_ROW_CLASS_NAME, fileListRowIndentStyle } from "./constants";
+import { fileListRowClassName, fileListRowIndentStyle } from "./constants";
 import type { DirectoryRow } from "./file-list-rows";
 import { HighlightedText } from "./highlighted-text";
 
@@ -17,7 +17,8 @@ export function FileListDirectoryRow({
     <button
       type="button"
       className={cn(
-        FILE_LIST_ROW_CLASS_NAME,
+        // Directory rows show only in tree view.
+        fileListRowClassName("tree"),
         "text-foreground outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
       )}
       style={fileListRowIndentStyle(row.depth)}
