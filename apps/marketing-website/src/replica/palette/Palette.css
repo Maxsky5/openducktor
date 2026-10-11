@@ -1,0 +1,169 @@
+@layer replica {
+  /* The overlay: bg-black/20, or bg-black/50 in the dark theme. The dialog sits 12% from the top
+     of the window. */
+  .pal-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    justify-content: center;
+    padding: 12% calc(16 * var(--u)) 0;
+    background: rgb(0 0 0 / 0.2);
+  }
+  :where(:root[data-theme="dark"]) .pal-overlay {
+    background: rgb(0 0 0 / 0.5);
+  }
+  /* The dialog: max-w-3xl rounded-2xl border bg-popover shadow-2xl, without padding. */
+  .pal {
+    display: flex;
+    flex-direction: column;
+    align-self: flex-start;
+    width: min(100%, calc(768 * var(--u)));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 calc(25 * var(--u)) calc(50 * var(--u)) calc(-12 * var(--u)) rgb(0 0 0 / 0.25);
+  }
+  :where(:root[data-theme="dark"]) .pal {
+    border-color: color-mix(in oklch, var(--foreground) 15%, transparent);
+  }
+  /* The input row: a 56 pixel input between the search icon and the workspace filter. */
+  .pal-head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(57 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+  }
+  .pal-search {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--muted-foreground);
+  }
+  .pal-input {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    color: var(--foreground);
+    font-size: calc(16 * var(--u));
+    line-height: calc(24 * var(--u));
+    white-space: nowrap;
+  }
+  .pal-input .typed[data-typing]::after {
+    height: calc(20 * var(--u));
+    background: var(--primary);
+  }
+  .pal-placeholder {
+    position: absolute;
+    left: 0;
+    color: var(--muted-foreground);
+  }
+  .pal-input:has(.typed:not(:empty)) .pal-placeholder {
+    display: none;
+  }
+  /* The workspace filter: h-7 rounded-md border bg-muted/60 text-xs. */
+  .pal-scope {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(28 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: color-mix(in oklch, var(--muted) 60%, transparent);
+    color: var(--foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .pal-scope .lucide {
+    color: var(--muted-foreground);
+  }
+  /* The chip of the task in an action list or a reply. */
+  .pal-chip {
+    display: none;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    max-width: 45%;
+    height: calc(28 * var(--u));
+    padding: 0 calc(8 * var(--u)) 0 calc(4 * var(--u));
+    border-radius: calc(10 * var(--u));
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .pal-back {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .pal-back .lucide {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .pal-chip-tile {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    border-radius: 50%;
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    font-size: calc(7 * var(--u));
+    font-weight: 600;
+  }
+  .pal-chip-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The list: at most 416 pixels high, with 8 pixels of padding. A group heading is 28 pixels. */
+  .pal-list {
+    display: none;
+    max-height: calc(416 * var(--u));
+    padding: calc(8 * var(--u));
+    overflow: hidden;
+  }
+  .pal-group {
+    padding: calc(4 * var(--u));
+  }
+  .pal-group > p {
+    padding: calc(6 * var(--u)) calc(12 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .pal-reply {
+    display: none;
+  }
+  /* The views. Each view shows its list, and the input row shows the parts of the view. */
+  .pal[data-view="home"] [data-pal-list="home"],
+  .pal[data-view="search"] [data-pal-list="search"],
+  .pal[data-view="target"] [data-pal-list="target"],
+  .pal[data-view="waiting"] [data-pal-list="waiting"] {
+    display: block;
+  }
+  .pal[data-view="reply"] .pal-reply {
+    display: block;
+  }
+  .pal:is([data-view="target"], [data-view="waiting"], [data-view="reply"]) .pal-chip {
+    display: inline-flex;
+  }
+  .pal:is([data-view="target"], [data-view="waiting"], [data-view="reply"]) .pal-scope,
+  .pal[data-view="reply"] :is(.pal-search, .pal-input) {
+    display: none;
+  }
+}

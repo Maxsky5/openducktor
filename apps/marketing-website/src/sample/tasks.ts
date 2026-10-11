@@ -17,7 +17,7 @@ export const TASKS = {
   g2s6: { title: "Sync tags across devices", kind: "feature", priority: 1 },
   c7v2: { title: "Import notes from a Markdown folder", kind: "feature", priority: 2 },
   q7d1: { title: "Export a notebook as PDF", kind: "feature", priority: 2 },
-  w5j3: { title: "Add Export to the notebook menu", kind: "feature", priority: 3 },
+  w5j3: { title: "Add Export to the notebook menu", kind: "task", priority: 3 },
   h4t8: { title: "Keep tags when you move a note", kind: "bug", priority: 1 },
 } as const satisfies Record<string, Task>;
 

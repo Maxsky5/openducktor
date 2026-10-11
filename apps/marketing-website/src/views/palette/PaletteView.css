@@ -1,0 +1,25 @@
+@layer views {
+  .palette-window {
+    height: calc(740 * var(--u));
+  }
+  /* A tablet stage keeps the scale of the product, and the window has no sidebar there. */
+  @container stage (481px <= width <= 959px) {
+    .palette-window {
+      --u: clamp(0.8px, calc(100cqw / 760), 1px);
+      height: calc(640 * var(--u));
+    }
+  }
+  /* A phone stage shows the palette at the width of a phone, without the app chrome. */
+  @container stage (width <= 480px) {
+    .palette-window {
+      --design-width: 440;
+      height: calc(760 * var(--u));
+    }
+    .palette-window .pal-overlay {
+      padding-top: calc(48 * var(--u));
+    }
+    .palette-window :is(.pal-id, .pal-status, .pal-scope, .pal-hints.end, [data-hint="edit"]) {
+      display: none;
+    }
+  }
+}

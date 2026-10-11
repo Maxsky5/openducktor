@@ -1,8 +1,8 @@
 ---
-// The header of kanban-page-header.tsx: the title, the task card view control, New task, and
-// Refresh Tasks. A compact header fits a small board window without a sidebar: it is lower, it
+// The header of kanban-page-header.tsx: the title, the task card view control, the New task split
+// button with its import menu, and Refresh Tasks. A compact header fits a small board window without a sidebar: it is lower, it
 // leaves room for the window controls, and it keeps only New task.
-import { Plus, RefreshCw, Rows2, Rows3 } from "@lucide/astro";
+import { ChevronDown, Plus, RefreshCcw, Rows2, Rows3 } from "@lucide/astro";
 import { flag } from "../flag";
 import Button from "../ui/Button.astro";
 import "./BoardHead.css";
@@ -19,9 +19,13 @@ const { compact = false } = Astro.props;
     <span class="view-toggle"
       ><span data-active><Rows2 class="i14" /></span><span><Rows3 class="i14" /></span></span
     >
-    <Button size="sm" class="board-button"><Plus />New task</Button>
-    <Button variant="outline" size="sm" class="board-button board-refresh"
-      ><RefreshCw class="i14" />Refresh Tasks</Button
+    <span class="board-split"
+      ><Button class="board-button board-new"><Plus />New task</Button><Button
+        class="board-button board-new-menu"><ChevronDown /></Button
+      ></span
+    >
+    <Button variant="outline" class="board-button board-refresh"
+      ><RefreshCcw class="i14" />Refresh Tasks</Button
     >
   </div>
 </div>

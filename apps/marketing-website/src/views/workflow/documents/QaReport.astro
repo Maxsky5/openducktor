@@ -1,24 +1,46 @@
 ---
+// The QA report of the first build: the verdict, the table of findings with the explanation of
+// each one, and the table of checks. Source: system.role.qa.base in
+// packages/core/src/services/agent-system-prompts.ts.
 import DocHeading from "../../../replica/studio/DocHeading.astro";
 import Prose from "../../../replica/studio/Prose.astro";
+
+const missing = "if (target.closest(textFields)) return;\nevent.preventDefault();\nopenSearch();";
 ---
 
 <Prose>
   <DocHeading level={1}>QA report</DocHeading>
   <DocHeading level={2}>Verdict</DocHeading>
-  <p>Rejected. One requirement fails.</p>
+  <p>Rejected. The shortcut opens search over another dialog, which the spec forbids.</p>
   <DocHeading level={2}>Findings</DocHeading>
+  <table>
+    <thead>
+      <tr><th>Severity</th><th>Location</th><th>Summary</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>P1</td>
+        <td><code>use-search-shortcut.ts:13</code></td>
+        <td>Opens over an open dialog</td>
+      </tr>
+    </tbody>
+  </table>
   <DocHeading level={3}>The shortcut opens search over another dialog</DocHeading>
   <ul>
-    <li>Spec: “The shortcut does nothing while another dialog is open.”</li>
     <li>With the settings dialog open, <code>Cmd+K</code> opens search on top of it.</li>
-    <li><code>use-search-shortcut.ts</code> checks text fields but not open dialogs.</li>
-    <li>No test covers this case, although the plan lists it.</li>
+    <li>The hook checks text fields, then opens search without a check for open dialogs.</li>
+    <li>Correction: return early while a modal dialog is open, as the plan says.</li>
   </ul>
-  <DocHeading level={2}>Checks</DocHeading>
-  <ul>
-    <li><code>bun test src/search</code>: 5 tests pass.</li>
-    <li><code>settings-dialog.tsx</code> sets <code>aria-modal="true"</code>.</li>
-    <li>Text fields and <code>Shift</code> match the spec.</li>
-  </ul>
+  <pre><code>{missing}</code></pre>
+  <DocHeading level={2}>Verification</DocHeading>
+  <table>
+    <thead>
+      <tr><th>Check</th><th>Result</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>bun test src/search</code></td><td>5 tests pass</td></tr>
+      <tr><td>Settings dialog, then <code>Cmd+K</code></td><td>Search opens over it</td></tr>
+      <tr><td>Text fields and <code>Shift</code></td><td>Match the spec</td></tr>
+    </tbody>
+  </table>
 </Prose>

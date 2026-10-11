@@ -1,0 +1,32 @@
+@layer replica {
+  /* The status pill: a badge with gap-1.5. A check that is done is green with a dot. A check
+     that works or loads is secondary with a spinner. */
+  .diag-pill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border-radius: 999px;
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+    white-space: nowrap;
+  }
+  .diag-pill i {
+    width: calc(6 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 50%;
+    background: var(--success-accent);
+  }
+  .diag-pill[data-health="ok"] {
+    background: var(--success-surface);
+    color: var(--success-surface-foreground);
+  }
+  .diag-pill[data-health="ok"] .lucide,
+  .diag-pill:not([data-health="ok"]) i {
+    display: none;
+  }
+}

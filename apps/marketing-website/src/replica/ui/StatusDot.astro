@@ -1,0 +1,12 @@
+---
+// The 10 pixel status dot of session-navigation-parts.tsx and running-status-dot.tsx. A running
+// session glows and sends out a ring. A scene changes the state with `data-dot`.
+import type { HTMLAttributes } from "astro/types";
+import type { DotState } from "../vocabulary";
+import "./StatusDot.css";
+
+type Props = HTMLAttributes<"i"> & { state: DotState };
+const { state, class: className, ...attributes } = Astro.props;
+---
+
+<i class:list={["status-dot", className]} data-dot={state} {...attributes}></i>

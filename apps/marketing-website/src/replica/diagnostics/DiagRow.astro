@@ -1,14 +1,66 @@
 ---
-// DiagnosticsKeyValueRow of diagnostics-key-value-row.tsx.
-import type { DiagRowData } from "./model";
+// One check of diagnostics-card.tsx or diagnostics-runtime-row.tsx: the icon tile, the title with
+// its value, the details, the status pill, and Restart for a runtime. A runtime that starts shows
+// a progress line under the row. No static frame shows a runtime that starts.
+import {
+  Cable,
+  Database,
+  FolderTree,
+  GitBranch,
+  LoaderCircle,
+  RotateCcw,
+  Terminal,
+  type AstroComponent,
+} from "@lucide/astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import type { DiagCheck, DiagTool } from "./model";
+import DiagStatus from "./DiagStatus.astro";
 import "./DiagRow.css";
 
-type Props = DiagRowData;
-const { label, value, mono, muted, strong, breakAll } = Astro.props;
+type Props = DiagCheck;
+const { id, runtime, tool, title, value, details, status, restart = false } = Astro.props;
+const TOOLS = {
+  path: Terminal,
+  git: GitBranch,
+  "mcp-bridge": Cable,
+  "repository-setup": FolderTree,
+  "task-store": Database,
+} satisfies Record<DiagTool, AstroComponent>;
+const Tool = tool ? TOOLS[tool] : undefined;
 ---
 
-<p class="diag-row">
-  <span class="diag-label">{label}:</span>{" "}<span
-    class:list={[{ mono, muted, strong, "break-all": breakAll }]}>{value}</span
-  >
-</p>
+<div class="diag-row" data-diag={id}>
+  <div class="diag-line">
+    <span class="diag-tile">
+      {runtime ? <RuntimeIcon kind={runtime} /> : Tool && <Tool />}
+    </span>
+    <div class="diag-text">
+      <p class="diag-title"><span>{title}</span>{value && <code>{value}</code>}</p>
+      {
+        details.map((detail) => (
+          <p class="diag-detail">
+            {detail.label && <span>{detail.label}</span>}
+            <span class:list={{ path: detail.path }}>{detail.value}</span>
+          </p>
+        ))
+      }
+    </div>
+    <DiagStatus status={status} />
+    {
+      restart && (
+        <span class="diag-restart">
+          <RotateCcw class="i14" />
+          Restart
+        </span>
+      )
+    }
+  </div>
+  {
+    restart && (
+      <p class="diag-progress" hidden data-diag-progress>
+        <LoaderCircle class="i12 spin" />
+        Starting the runtime…
+      </p>
+    )
+  }
+</div>

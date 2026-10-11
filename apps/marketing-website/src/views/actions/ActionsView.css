@@ -1,0 +1,43 @@
+@layer views {
+  /* Actions: the session page with the repository actions, the terminals, and the Open In menu. */
+  .actions-studio {
+    height: auto;
+    min-height: calc(640 * var(--u));
+  }
+  .actions-studio .st-panel-body {
+    flex: 1 1 0;
+  }
+  /* A narrow stage stacks the branches, so the panel needs more height to show the files. */
+  @container stage (width <= 459px) {
+    .actions-studio {
+      min-height: calc(760 * var(--u));
+    }
+  }
+  /* A wide stage shows the Builder session next to the right panel. */
+  @container stage (width >= 700px) {
+    .actions-studio {
+      min-height: calc(760 * var(--u));
+    }
+  }
+  /* The actions view keeps both branches in one row from 460px. */
+  @container stage (width >= 460px) {
+    .actions-studio .st-branches {
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+    .actions-studio .st-arrow {
+      display: grid;
+    }
+  }
+  /*
+   * A narrow stage keeps the repository actions and the Open In menu, which the scene uses. The
+   * quick action gives them its place, so the task title stays readable.
+   */
+  @container stage (width <= 699px) {
+    .actions-studio .ra {
+      display: flex;
+    }
+    .actions-studio .sh-split {
+      display: none;
+    }
+  }
+}

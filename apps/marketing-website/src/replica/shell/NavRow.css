@@ -1,0 +1,154 @@
+@layer replica {
+  /* A session row of session-navigation-list.tsx: two lines in a rounded surface. The surface
+     takes the color of its group, from session-navigation-styles.ts. */
+  .nav-item {
+    padding: calc(2 * var(--u)) 0;
+    list-style: none;
+  }
+  .nav-row {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: calc(6 * var(--u)) calc(10 * var(--u));
+    border-radius: calc(10 * var(--u));
+    background: var(--sidebar);
+    box-shadow:
+      inset 0 0 0 calc(1 * var(--u)) var(--sidebar-border),
+      var(--shadow-sm);
+    color: var(--sidebar-foreground);
+  }
+  [data-nav-list="needs_you"] .nav-row {
+    background: var(--warning-surface);
+    box-shadow:
+      inset 0 0 0 calc(1 * var(--u)) var(--warning-border),
+      var(--shadow-sm);
+  }
+  [data-nav-list="running"] .nav-row {
+    background: var(--info-surface);
+    box-shadow:
+      inset 0 0 0 calc(1 * var(--u)) var(--info-border),
+      var(--shadow-sm);
+  }
+  .nav-row[data-selected] {
+    background: var(--secondary);
+    box-shadow:
+      inset 0 0 0 calc(3 * var(--u)) var(--sidebar-foreground),
+      var(--shadow-sm);
+  }
+  [data-nav-list="needs_you"] .nav-row[data-selected] {
+    background: var(--warning-surface-selected);
+    box-shadow:
+      inset 0 0 0 calc(3 * var(--u)) var(--warning-accent),
+      var(--shadow-sm);
+  }
+  [data-nav-list="running"] .nav-row[data-selected] {
+    background: var(--info-surface-selected);
+    box-shadow:
+      inset 0 0 0 calc(3 * var(--u)) var(--info-accent),
+      var(--shadow-sm);
+  }
+  .nav-line {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+  }
+  .nav-ws {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--sidebar-foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nav-status {
+    height: calc(16 * var(--u));
+    padding: 0 calc(6 * var(--u));
+    font-size: calc(10 * var(--u));
+  }
+  .nav-time {
+    flex: 0 0 auto;
+    color: var(--sidebar-foreground);
+    font-size: calc(10 * var(--u));
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: calc(16 * var(--u));
+  }
+  .nav-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    color: var(--sidebar-muted-foreground);
+  }
+  /* The tones of agent-workflow-styles.ts. */
+  .nav-icon[data-tone="in_progress"] {
+    color: var(--info-muted);
+  }
+  .nav-icon[data-tone="done"] {
+    color: var(--success-icon);
+  }
+  .nav-icon[data-tone="available"] {
+    color: var(--foreground);
+  }
+  .nav-icon[data-tone="rejected"] {
+    color: var(--rejected-muted);
+  }
+  .nav-icon[data-tone="waiting_input"] {
+    color: var(--warning-muted);
+  }
+  .nav-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--foreground);
+    font-size: calc(13 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* A settled session that you read has a dimmer title. A session that needs you has a warm one. */
+  .nav-row:has([data-dot="read"]) .nav-title {
+    color: var(--sidebar-read-foreground);
+  }
+  [data-nav-list="needs_you"] .nav-title {
+    color: var(--warning-muted);
+  }
+  .nav-commands {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--status-running-foreground);
+  }
+  .nav-row .runtime-logo {
+    flex: 0 0 auto;
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  /* SessionSelectionIndicator: a check badge on the corner of the current session. */
+  .nav-row:not([data-selected]) .nav-check {
+    display: none;
+  }
+  .nav-check {
+    position: absolute;
+    top: calc(-4 * var(--u));
+    right: calc(-4 * var(--u));
+    display: grid;
+    place-items: center;
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+    border-radius: 50%;
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+  .nav-check .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    stroke-width: 3;
+  }
+}

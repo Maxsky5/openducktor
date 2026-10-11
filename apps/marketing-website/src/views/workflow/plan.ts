@@ -1,8 +1,9 @@
 import type { Scene } from "../../motion/scene";
 import { studioWindow } from "../../replica/studio/studio";
 import { DOCUMENTS, FRAMES, PLANNER_SESSION } from "../../sample/studio";
+import { STORY_SESSIONS } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, saveDocument, startSession } from "./session";
+import { endTurn, runSession, saveDocument, settleSession, startSession } from "./session";
 
 /** The templates of PlanStep.astro. */
 export type PlanTemplate = "spec-document" | "planner-dialog";
@@ -36,6 +37,7 @@ export function plan(scene: Scene<PlanTemplate>): void {
     studio.panels.setDocument(DOCUMENTS.plan, false);
     studio.panels.putDocument(planDocument);
   });
+  runSession(studio, started, "planner", "spec_ready", "spec");
 
   studio.rows.show(row("kickoff"), started + 0.3);
   studio.rows.tool(row("read-task"), started + 0.9, 0.3);
@@ -52,11 +54,13 @@ export function plan(scene: Scene<PlanTemplate>): void {
     { tones: ["done", "in_progress", "available", "blocked"], action: "Start Implementation" },
     2.5,
   );
-  endTurn(
+  studio.sessions.update(STORY_SESSIONS.planner.id, saved, { status: "ready_for_dev" });
+  const ended = endTurn(
     studio,
     row("final"),
     saved + 2.7,
     { tones: FRAMES.plan.tones },
     { session: PLANNER_SESSION, from: 2.4, since: started },
   );
+  settleSession(studio, ended, "planner", "done");
 }

@@ -1,0 +1,22 @@
+@layer replica {
+  /* SessionRailIcon of session-navigation-rail.tsx: the row surface of its group in a 36 pixel
+     square, with the status dot on its top left corner. */
+  .sbc-item {
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(6 * var(--u));
+  }
+  .sbc-entry.nav-row {
+    display: grid;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0;
+  }
+  .sbc-dot {
+    position: absolute;
+    top: calc(-2 * var(--u));
+    left: calc(-2 * var(--u));
+  }
+}

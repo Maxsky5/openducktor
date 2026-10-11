@@ -73,5 +73,10 @@
     --yellow-600: oklch(68.1% 0.162 75.834);
     --rose-400: oklch(71.2% 0.194 13.428);
     --gray-300: oklch(87.2% 0.01 258.338);
+    /* The Tailwind names that the speed tokens of the product theme read. */
+    --color-amber-400: oklch(82.8% 0.189 84.429);
+    --color-amber-600: oklch(66.6% 0.179 58.318);
+    --color-violet-400: oklch(70.2% 0.183 293.541);
+    --color-violet-600: oklch(54.1% 0.281 293.009);
   }
 }

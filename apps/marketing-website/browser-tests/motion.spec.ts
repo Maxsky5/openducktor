@@ -17,14 +17,14 @@ test("with reduced motion, the product views show their final state and nothing 
   await expect(page.locator("[data-motion-toggle]")).toBeHidden();
   await expect(page.locator("html")).not.toHaveAttribute("data-motion");
   await expect(page.locator("[data-motion]")).toHaveCount(0);
-  await expect(page.locator('[data-scene="local"] .diag-badge')).toHaveText([
-    "Configured",
+  await expect(page.locator('[data-scene="local"] [data-diag-label]')).toHaveText([
+    "Ready",
+    "Ready",
+    "Ready",
     "Available",
-    "Running",
-    "Connected",
-    "Running",
-    "Connected",
-    "Running",
+    "Available",
+    "Ready",
+    "Configured",
     "Ready",
   ]);
   const animated = await page.evaluate(
@@ -73,16 +73,28 @@ test("when motion is allowed, one control pauses and resumes every product view"
   await expect(parade).toHaveAttribute("data-motion", "paused");
 });
 
-const scenes = ["hero", "runtimes", "autopilot", "chat", "mcp", "prompts", "worktree", "local"];
+const scenes = [
+  "hero",
+  "palette",
+  "runtimes",
+  "autopilot",
+  "chat",
+  "mcp",
+  "prompts",
+  "actions",
+  "local",
+];
 /**
  * The markup of a view holds the frame that visitors without motion see, most often the last
  * frame of the loop. The opening view holds its first frame, so the page does not change under
  * the first paint. The prompt editor holds the placeholder error from the middle of its loop,
- * because that frame shows the check. The runtime defaults hold the last frame with the model
- * picker still open, so they show a model list.
+ * because that frame shows the check. The command palette holds its search results from the
+ * middle of its loop, because the loop ends with the palette closed. The runtime defaults hold
+ * the last frame with the model picker still open, so they show a model list.
  */
 const stillFrames = new Map([
   ["hero", "first"],
+  ["palette", "middle"],
   ["prompts", "middle"],
 ]);
 const stillOnly = new Map([["runtimes", "[data-picker]"]]);
@@ -117,11 +129,29 @@ test("each product view plays one loop, ends on its static frame, and cross fade
     expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("1");
     if (id === "local") {
       // The panel scrolled to its end. The cover keeps that scroll, so the frame does not jump.
-      const scroll = await cover.locator("[data-root]").evaluate((root) => root.scrollTop);
+      const scroll = await cover.locator("[data-diag-scroll]").evaluate((panel) => panel.scrollTop);
       expect(scroll).toBeGreaterThan(0);
     }
     await runUntil(page, async () => (await cover.count()) === 0, 2);
     await expect(cover, id).toHaveCount(0);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("on a phone, each product view plays one loop without a page error", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "phone-light", "One phone project plays the long scenes.");
+  // A narrow stage hides parts of the windows, and a scene must not point at a hidden part.
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await playOnFakeClock(page);
+  for (const id of scenes) {
+    const scene = page.locator(`[data-scene="${id}"]`);
+    await scene.scrollIntoViewIfNeeded();
+    await runUntil(page, async () => (await scene.locator("[data-stage-cover]").count()) > 0, 60);
+    await expect(scene.locator("[data-stage-cover]"), id).toHaveCount(1);
   }
   expect(errors).toEqual([]);
 });
@@ -160,6 +190,14 @@ test("the pause control freezes the views", async ({ page }) => {
   const frame = await stage.innerHTML();
   await page.clock.runFor(3000);
   expect(await stage.innerHTML()).toBe(frame);
+  // CSS pulses the glow and the ring of a running dot. The control pauses them too.
+  const pulses = await stage
+    .locator('[data-dot="running"]')
+    .first()
+    .evaluate((dot) =>
+      ["::before", "::after"].map((part) => getComputedStyle(dot, part).animationPlayState),
+    );
+  expect(pulses).toEqual(["paused", "paused"]);
   await page.getByRole("button", { name: "Play animations" }).click();
   await show("running");
   await page.clock.runFor(1000);
@@ -235,3 +273,51 @@ for (const size of [
     expect(notifications).toBeGreaterThan(0);
   });
 }
+
+test("the chat opens a new task and starts its Builder in the background", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-light", "One project plays the long scenes.");
+  test.setTimeout(120_000);
+  await playOnFakeClock(page);
+  const scene = page.locator('[data-scene="chat"]');
+  await scene.scrollIntoViewIfNeeded();
+  const stage = scene.locator("[data-stage]");
+  // The task details of the new task slide in over the chat.
+  await runUntil(page, async () => (await stage.locator("[data-sheet]").count()) > 0, 40);
+  await expect(stage.locator("[data-sheet-start]")).toHaveText("Start Builder");
+  // The start dialog offers to run the Builder in the background.
+  const background = stage.locator("[data-background]");
+  await runUntil(page, async () => (await background.count()) > 0, 10);
+  await expect(background).toHaveText("Run in background");
+  // The Builder joins Running, and the chat stays on screen and selected.
+  const builder = stage.locator('[data-nav-list="running"] [data-nav-entry="menu-build"]');
+  await runUntil(page, () => builder.isVisible(), 10);
+  await expect(builder).toBeVisible();
+  await expect(stage.locator('[data-nav-entry="plan-chat"] [data-nav-row]')).toHaveAttribute(
+    "data-selected",
+  );
+});
+
+test("the opening view answers a question in the session preview of the sidebar", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-light", "One project plays the long scenes.");
+  test.setTimeout(180_000);
+  await playOnFakeClock(page);
+  const scene = page.locator('[data-scene="hero"]');
+  await scene.scrollIntoViewIfNeeded();
+  const stage = scene.locator("[data-stage]");
+  const waiting = stage.locator('[data-nav-list="needs_you"] [data-nav-entry="empty-build"]');
+  // The Builder asks its question, and the preview of its session opens with it.
+  const preview = stage.locator("[data-preview]");
+  await runUntil(page, async () => (await preview.count()) > 0, 60);
+  await expect(waiting).toBeVisible();
+  await expect(preview.locator("[data-reply]")).toContainText("Reply here");
+  // The answer is sent from the preview, and the session goes back to Running.
+  await runUntil(page, () => preview.locator("[data-reply-sent]").isVisible(), 10);
+  await expect(preview.locator("[data-reply-sent]")).toHaveText("Answer sent.");
+  const running = stage.locator('[data-nav-list="running"] [data-nav-entry="empty-build"]');
+  await runUntil(page, () => running.isVisible(), 5);
+  await expect(running).toBeVisible();
+});

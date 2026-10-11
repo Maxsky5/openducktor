@@ -14,7 +14,7 @@ type Props = HTMLAttributes<"div"> & {
 const { kind, title, icon: Icon, ...attributes } = Astro.props;
 ---
 
-<div class="request" data-kind={kind} {...attributes}>
+<div class="request" data-kind={kind} data-request {...attributes}>
   <div class="request-head">
     <span><Icon />{title}</span>
     <slot name="meta" />

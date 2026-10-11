@@ -1,0 +1,6 @@
+@layer site {
+  /* The heading over the full-width view, with the space of the workflow steps. */
+  .palette-figure {
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+}

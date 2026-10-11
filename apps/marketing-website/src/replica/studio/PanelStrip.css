@@ -1,0 +1,22 @@
+@layer replica {
+  /* The tab strip: h-9 with a border under it, 4 pixels of padding and gap, on the card. */
+  .pstrip {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(4 * var(--u)) 0 calc(6 * var(--u));
+    overflow: hidden;
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .pstrip-add {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    color: var(--muted-foreground);
+  }
+}

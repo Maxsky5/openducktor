@@ -37,7 +37,14 @@ export type Row =
     }
   | { kind: "workflow"; id: string; name: string; duration: string; time: string }
   | { kind: "patch"; id: string; path: string; change: "A" | "M"; add: number; del: number }
-  | { kind: "agent"; id: string; signature: string; paragraphs: readonly string[] };
+  | {
+      kind: "agent";
+      id: string;
+      signature: string;
+      /** The time of the turn, which the separator before its final message shows. */
+      worked?: string;
+      paragraphs: readonly string[];
+    };
 
 type ToolRow = Extract<Row, { kind: "tool" }>;
 
@@ -95,6 +102,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(SPEC_SESSION),
+      worked: "54s",
       paragraphs: [
         "I saved the specification with your answers: `Cmd+K` on macOS, `Ctrl+K` on Windows and Linux, and no shortcut in text fields or in the note editor.",
         "I added one rule: the shortcut does nothing while another dialog is open. `search-dialog.tsx` traps focus, and two open dialogs would compete for it.",
@@ -113,8 +121,9 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(PLANNER_SESSION),
+      worked: "1m08s",
       paragraphs: [
-        "I saved the plan. A new hook, `use-search-shortcut.ts`, opens the existing search dialog, and the app shell mounts it once.",
+        "I saved the plan. A new shortcut hook opens the existing search dialog, and the app shell mounts it once. The diagram shows the flow, and the tables map each requirement to the design.",
         "`src/app/keymap.ts` already binds `Cmd+Shift+K`, so the hook ignores `Shift`.",
       ],
     },
@@ -144,6 +153,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(BUILDER_SESSION),
+      worked: "3m12s",
       paragraphs: [
         "I committed the change on the task branch. `bun test src/search`: 5 tests pass.",
         "The hook opens search with `Cmd+K` on macOS and `Ctrl+K` elsewhere. It does nothing with `Shift`, in text fields, or in the note editor.",
@@ -167,6 +177,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(QA_SESSION),
+      worked: "1m53s",
       paragraphs: [
         "Rejected. The spec says the shortcut does nothing while another dialog is open. With the settings dialog open, `Cmd+K` still opens search on top of it.",
         "The hook checks text fields but not open dialogs, and no test covers the case. The rest matches the spec.",
@@ -196,6 +207,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(BUILDER_SESSION),
+      worked: "1m41s",
       paragraphs: [
         "The finding holds. The hook now returns early while a modal dialog is open, and a new test opens the settings dialog and presses `Cmd+K`.",
         "`bun test src/search`: 6 tests pass.",
@@ -217,6 +229,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(BUILDER_FIX_SESSION),
+      worked: "47s",
       paragraphs: [
         "Done. The hook now returns early when `event.defaultPrevented` is true, and a new test covers it. `bun test src/search`: 7 tests pass.",
       ],
@@ -240,6 +253,7 @@ export const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(BUILDER_PR_SESSION),
+      worked: "2m36s",
       paragraphs: [
         "Pull request #42 is open against `main`: https://github.com/fieldnotes/fieldnotes/pull/42.",
         "Local checks passed: `bun run lint` and `bun test`. Pull request checks passed: lint, typecheck, test, and build.",

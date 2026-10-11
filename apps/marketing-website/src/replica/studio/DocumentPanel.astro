@@ -1,7 +1,8 @@
 ---
-// The Document tab of task-execution-document-panel.tsx. The markup holds the saved document, and a
-// scene shows the empty state with data-document="empty". An empty document has no copy button.
-import { Copy, Expand } from "@lucide/astro";
+// The Document tab of task-execution-document-panel.tsx: the document menu, the save date, and
+// the full screen button over the document. The markup holds the saved document, and a scene
+// shows the empty state with data-document="empty". An empty document has no copy button.
+import { ChevronDown, Copy, Expand } from "@lucide/astro";
 import type { DocumentLabels } from "../../sample/studio";
 import Button from "../ui/Button.astro";
 import "./DocumentPanel.css";
@@ -14,14 +15,11 @@ const { labels } = Astro.props;
 
 <div class="st-document" data-panel="document" data-document="filled">
   <div class="st-doc-head">
-    <div>
-      <div class="st-doc-title" data-doc-title>{labels.title}</div>
-      <Button variant="ghost" size="icon" class="st-doc-button"><Expand class="i14" /></Button>
-    </div>
-    <div>
-      <p data-doc-description>{labels.description}</p>
+    <span class="st-doc-title"><span data-doc-title>{labels.title}</span><ChevronDown /></span>
+    <span class="st-doc-meta">
       <time data-updated>{labels.updated}</time>
-    </div>
+      <span class="st-doc-expand"><Expand class="i14" /></span>
+    </span>
   </div>
   <div class="st-doc-body">
     <p class="st-doc-empty" data-doc-empty>{labels.empty}</p>

@@ -106,7 +106,7 @@ The page shows the product with copies of its UI and fictional data. Read [the d
 
 The page sections are in `src/sections/`. Each animated view has a folder in `src/views/` with its markup and its scene script. The copied product UI is in `src/replica/`, the fictional data is in `src/sample/`, and the shared motion code is in `src/motion/`. The site UI, such as the brand mark and the command blocks, is in `src/ui/`.
 
-The static markup of a view is the last frame of its scene. Visitors without JavaScript or with reduced motion see that frame. Change the markup and the scene together.
+The static markup of a view is the last frame of its scene, except for the views that [the design and asset record](ASSETS.md) names. Visitors without JavaScript or with reduced motion see that frame. Change the markup and the scene together.
 
 Each product view has `role="img"` and a text alternative. Keep `aria-hidden="true"` on the root of the copied UI. Update the text alternative when the scene changes.
 

@@ -1,0 +1,35 @@
+---
+// The footer of command-palette-footer.tsx: the hints of the highlighted row on the left, and the
+// hints of the palette on the right. The Enter hint is the primary hint. A scene changes the
+// labels and the hints of each view.
+import Kbd from "../ui/Kbd.astro";
+import "./PaletteFooter.css";
+
+interface Props {
+  enter: string;
+  next?: string;
+  edit?: string;
+}
+const { enter, next, edit } = Astro.props;
+---
+
+<div class="pal-foot">
+  <span class="pal-hints">
+    <span class="pal-hint primary" data-hint="enter"
+      ><Kbd keys={["↵"]} /><span data-hint-label>{enter}</span></span
+    >
+    <span class="pal-hint" hidden={!next} data-hint="next"
+      ><Kbd keys={["⌘", "↵"]} /><span data-hint-label>{next}</span></span
+    >
+    <span class="pal-hint" hidden={!edit} data-hint="edit"
+      ><Kbd keys={["⌘", "E"]} /><span data-hint-label>{edit}</span></span
+    >
+    <span class="pal-hint" data-hint="tab"><Kbd keys={["Tab"]} />Actions</span>
+  </span>
+  <span class="pal-hints end">
+    <span class="pal-hint" data-hint="workspace"><Kbd keys={["⌥", "↓"]} />Workspace</span>
+    <span class="pal-hint" data-hint="close"
+      ><Kbd keys={["Esc"]} /><span data-hint-label>Close</span></span
+    >
+  </span>
+</div>

@@ -7,14 +7,39 @@
     display: grid;
     gap: calc(8 * var(--u));
     padding-right: calc(36 * var(--u));
-    line-height: calc(24 * var(--u));
+    line-height: 1.625;
   }
+  /* Inline code of markdown-renderer.tsx: rose text without a background. */
   .st-agent code {
     padding: 0 calc(4 * var(--u));
-    border-radius: calc(6 * var(--u));
-    background: var(--secondary);
+    border-radius: calc(10 * var(--u));
+    color: var(--rose-600);
     font-family: var(--mono);
-    font-size: calc(12.5 * var(--u));
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  :where(:root[data-theme="dark"]) .st-agent code {
+    color: var(--rose-400);
+  }
+  /* The separator of a turn: a line on each side of the time of the turn. */
+  .st-worked {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    padding: calc(28 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .st-worked::before,
+  .st-worked::after {
+    content: "";
+    flex: 1;
+    height: calc(1 * var(--u));
+    background: var(--border);
+  }
+  .st-worked span {
+    font-weight: 500;
+    letter-spacing: 0.025em;
   }
   .st-sig {
     display: flex;

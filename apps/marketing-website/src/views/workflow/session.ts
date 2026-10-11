@@ -1,8 +1,43 @@
 // The steps that each chapter of the workflow repeats: you start a session from the quick
-// action, the agent saves its document, and the turn ends.
+// action, the agent saves its document, and the turn ends. The sidebar groups the sessions by
+// task, so the entry of the story task follows its latest session.
+import type { Attention, NavTone } from "../../replica/shell/nav";
 import type { Studio, StudioChange } from "../../replica/studio/studio";
+import type { LaneId, RoleId } from "../../replica/vocabulary";
 import type { Session } from "../../sample/sessions";
+import { STORY_SESSIONS } from "../../sample/studio-nav";
 import type { SessionId } from "../../sample/transcripts";
+
+/**
+ * The sidebar entry of the story task shows the session of `role`, which runs and is selected.
+ * The entry of the session before it leaves the list.
+ */
+export function runSession(
+  studio: Studio,
+  at: number,
+  role: RoleId,
+  status: LaneId,
+  previous?: RoleId,
+): void {
+  if (previous && previous !== role) studio.sessions.hide(STORY_SESSIONS[previous].id, at);
+  studio.sessions.update(STORY_SESSIONS[role].id, at, {
+    status,
+    tone: "in_progress",
+    running: true,
+    attention: undefined,
+    selected: true,
+  });
+}
+
+/** The session of `role` stops for your answer: its entry moves to Needs you. */
+export function waitSession(studio: Studio, at: number, role: RoleId, attention: Attention): void {
+  studio.sessions.update(STORY_SESSIONS[role].id, at, { attention, running: false });
+}
+
+/** The turn of the session of `role` ends: its entry settles in Recent, read, as you watch it. */
+export function settleSession(studio: Studio, at: number, role: RoleId, tone: NavTone): void {
+  studio.sessions.update(STORY_SESSIONS[role].id, at, { tone, running: false, time: "now" });
+}
 
 /**
  * You click the quick action and start a session in the start dialog of template `dialog`. The

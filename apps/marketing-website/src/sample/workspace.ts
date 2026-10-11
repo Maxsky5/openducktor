@@ -1,4 +1,5 @@
-// The fictional workspace of the product views: the Fieldnotes note app of the user sam.
+// The fictional workspaces of the product views. Fieldnotes, the note app of the user sam, is the
+// selected workspace of every view.
 
 export const WORKSPACE = "fieldnotes";
 
@@ -9,12 +10,18 @@ export const REPOSITORY_PATH = `/Users/sam/code/${WORKSPACE}`;
 export const CONFIG_PATH = "/Users/sam/.openducktor";
 
 /**
- * The tiles of the workspace rail: the initials of the open workspaces. Fieldnotes is the first
- * and selected one. The second one can have a running session, which its tile marks.
+ * The open workspaces in the order of the workspace rail. Each tile shows the initials of its
+ * name, as workspace-tile-appearance.ts derives them. Fieldnotes is the first and selected one.
  */
-export const RAIL_TILES = ["FI", "FA", "DS"] as const;
+export const WORKSPACES = [
+  { name: WORKSPACE, tile: "FI" },
+  { name: "fable-api", tile: "FA" },
+  { name: "design-system", tile: "DS" },
+] as const;
+
+export type WorkspaceName = (typeof WORKSPACES)[number]["name"];
 
 /** A task id of the workspace, as the product builds it from the first ten letters of its name. */
-export function taskId(suffix: string): string {
-  return `${WORKSPACE.slice(0, 10)}-${suffix}`;
+export function taskId(suffix: string, workspace: string = WORKSPACE): string {
+  return `${workspace.slice(0, 10)}-${suffix}`;
 }

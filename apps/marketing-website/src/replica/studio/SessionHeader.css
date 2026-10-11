@@ -1,0 +1,127 @@
+@layer replica {
+  /* SessionPageHeader: h-10 px-3 gap-3, border under it, on the card surface. */
+  .sh {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    height: calc(40 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .sh-title {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+  }
+  .sh-name {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    min-width: 0;
+    height: calc(28 * var(--u));
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+  }
+  .sh-name > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sh-name .lucide {
+    flex: 0 0 auto;
+    color: var(--muted-foreground);
+  }
+  /* TaskIdBadge: the mono task ID and its copy button. */
+  .sh-id {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .sh-id code {
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+  }
+  .sh-id span {
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+  }
+  .sh-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  /* A ghost icon button of the bar, such as the session history or a panel toggle. */
+  .sh-icon {
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .sh-icon[aria-pressed="true"] {
+    color: var(--foreground);
+  }
+  /* SessionActionButton and SessionActionMenuTrigger: a 28 pixel split button. */
+  .sh-split {
+    display: flex;
+    height: calc(28 * var(--u));
+    transition: opacity 200ms;
+  }
+  .sh-split[data-disabled] {
+    opacity: 0.5;
+  }
+  .sh-split > span {
+    display: inline-flex;
+    align-items: center;
+    height: calc(28 * var(--u));
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .sh-split-main {
+    gap: calc(6 * var(--u));
+    max-width: calc(176 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+  }
+  .sh-split-main .lucide {
+    flex: 0 0 auto;
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .sh-split-main > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sh-split-menu {
+    padding: 0 calc(6 * var(--u));
+    border-left: calc(1 * var(--u)) solid
+      color-mix(in oklch, var(--primary-foreground) 25%, transparent);
+    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+  }
+  .sh-split-menu .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    opacity: 0.8;
+  }
+  /* A narrow stage keeps the title, the quick action, and the panel toggles. */
+  @container stage (width <= 699px) {
+    .sh-id,
+    .sh-hide-narrow {
+      display: none;
+    }
+  }
+}

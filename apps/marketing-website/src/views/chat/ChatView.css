@@ -1,7 +1,7 @@
 @layer views {
   /*
    * Workspace chat: a new chat with a custom role on Claude Code. The design widths follow the
-   * Agent Studio replica, so both pages show at the same scale.
+   * task session replica, so both pages show at the same scale.
    */
   .chat-window {
     --design-width: 740;
@@ -10,52 +10,6 @@
   .ch-column {
     flex: 1;
     min-height: 0;
-  }
-  .ch-head {
-    flex: 0 0 auto;
-    padding: calc(8 * var(--u)) calc(16 * var(--u));
-    border-bottom: calc(1 * var(--u)) solid var(--border);
-  }
-  .ch-head-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: calc(12 * var(--u));
-  }
-  .ch-title {
-    min-width: 0;
-    overflow: hidden;
-    font-size: calc(14 * var(--u));
-    font-weight: 500;
-    line-height: calc(20 * var(--u));
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ch-more {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: calc(28 * var(--u));
-    height: calc(28 * var(--u));
-    border-radius: calc(10 * var(--u));
-  }
-  .ch-sub {
-    display: flex;
-    align-items: center;
-    gap: calc(4 * var(--u));
-    overflow: hidden;
-    color: var(--muted-foreground);
-    font-size: calc(12 * var(--u));
-    line-height: calc(16 * var(--u));
-    white-space: nowrap;
-  }
-  .ch-sub span:first-of-type {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ch-sub span:last-child {
-    flex-shrink: 0;
   }
   .ch-draft {
     position: relative;
@@ -170,7 +124,7 @@
       min-height: calc(760 * var(--u));
     }
   }
-  /* Narrow stages drop the app chrome and the other chat tab, as the Agent Studio replica does. */
+  /* Narrow stages drop the app chrome and the header tools, as the task session replica does. */
   @container stage (width <= 500px) {
     .chat-window {
       --design-width: 440;
@@ -178,22 +132,16 @@
     }
     .chat-window .rail,
     .chat-window .sb-collapsed,
-    .chat-window .st-tab:not([data-active]),
-    .chat-window .st-tabs-tools > :not(:last-child),
+    .chat-window .ra,
+    .chat-window .oi,
+    .chat-window .sh-icon,
     .chat-window .st-attach,
     .chat-window .st-chip.effort {
       display: none;
     }
     .chat-window .app-body {
       padding-top: calc(34 * var(--u));
-      background: var(--studio-chrome);
-    }
-    .chat-window .st-tab {
-      flex: 1;
-      max-width: none;
-    }
-    .chat-window .st-tab-title {
-      max-width: none;
+      background: var(--card);
     }
     .chat-window .st-track {
       padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));

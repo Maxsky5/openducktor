@@ -1,49 +1,39 @@
 ---
 // The lanes keep the order of the product. Backlog sorts by priority, then puts the newest task
 // first. The other lanes put waiting sessions first, then running sessions, then older activity.
+// The sidebar lists the sessions of all workspaces in the groups of the read model.
 import AppWindow from "../../replica/shell/AppWindow.astro";
 import Board from "../../replica/board/Board.astro";
 import BoardHead from "../../replica/board/BoardHead.astro";
 import CardActions from "../../replica/board/CardActions.astro";
-import { type BoardData, boardActivity } from "../../replica/board/model";
+import type { BoardData } from "../../replica/board/model";
 import Pointer from "../../replica/shell/Pointer.astro";
+import SessionPreview from "../../replica/shell/SessionPreview.astro";
 import PrBadge from "../../replica/board/PrBadge.astro";
 import TaskCard from "../../replica/board/TaskCard.astro";
 import Toast from "../../replica/shell/Toast.astro";
-import { CARD_ACTIONS, type HeroTemplate, TOASTS } from "./templates";
+import { CARDS } from "../../sample/board";
+import { HERO_NAV } from "./sessions";
+import { CARD_ACTIONS, type HeroTemplate, PREVIEW, TOASTS } from "./templates";
 import "./HeroView.css";
 import Scene from "../Scene.astro";
 import ToastStack from "../../replica/shell/ToastStack.astro";
 
 const board: BoardData = {
-  open: [
-    { name: "sync", task: "b8t1", action: "Start Builder" },
-    { name: "export", task: "m2q7", action: "Start Spec" },
-  ],
-  spec_ready: [{ name: "titles", task: "h5w3", action: "Start Planner" }],
-  in_progress: [
-    { name: "empty", task: "p6d4", session: { role: "Builder", status: "Waiting input" } },
-    { name: "shortcut", task: "k3x9", session: { role: "Builder", status: "Running" } },
-  ],
-  ai_review: [{ name: "focus", task: "r9c2", session: { role: "QA", status: "Running" } }],
-  human_review: [{ name: "typing", task: "t4n8", action: "Approve Task", pr: 41 }],
+  open: [CARDS.sync, CARDS.export],
+  spec_ready: [CARDS.titles],
+  in_progress: [CARDS.empty, CARDS.shortcut],
+  ai_review: [CARDS.focus],
+  human_review: [CARDS.typing],
 };
 ---
 
 <Scene
   name="hero"
   class="wrap-wide"
-  alt="The OpenDucktor Kanban board. Agents plan, build, and review tasks in separate lanes. A task in Human Review has a pull request. Another task waits for your answer."
+  alt="The OpenDucktor Kanban board and the session sidebar of all workspaces. Agents plan, build, and review tasks in separate lanes, and each session moves between Running and Recent in the sidebar. A merged pull request closes a task. Then a Builder asks a question, and its session moves to Needs you. The visitor points at the session in the sidebar, and its preview opens with the question. The visitor answers in the preview, and the session goes back to Running."
 >
-  <AppWindow
-    chrome={{
-      sidebar: "full",
-      page: "kanban",
-      activity: boardActivity(board),
-      busyWorkspace: true,
-    }}
-    class="hero-window"
-  >
+  <AppWindow chrome={{ sidebar: "full", nav: HERO_NAV, kanban: true }} class="hero-window">
     <BoardHead />
     <Board board={board} />
     <ToastStack />
@@ -61,6 +51,7 @@ const board: BoardData = {
     <template data-tpl={"new-task" satisfies HeroTemplate}
       ><TaskCard name="pin" task="w1j5" action="Start Spec" /></template
     >
+    <template data-tpl={"preview" satisfies HeroTemplate}><SessionPreview {...PREVIEW} /></template>
     {
       Object.entries(TOASTS).map(([name, toast]) => (
         <template data-tpl={name}>

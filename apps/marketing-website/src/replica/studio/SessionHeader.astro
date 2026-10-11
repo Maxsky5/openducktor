@@ -1,0 +1,11 @@
+---
+// The top bar of a session page in session-page-header.tsx: the title on the left, then the
+// session actions, Open In, and the panel toggles. Every control is 28 pixels tall. A task session
+// and a chat put their own title and actions in the slots.
+import "./SessionHeader.css";
+---
+
+<div class="sh">
+  <div class="sh-title"><slot name="title" /></div>
+  <div class="sh-actions"><slot /></div>
+</div>

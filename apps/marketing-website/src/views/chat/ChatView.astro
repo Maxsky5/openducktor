@@ -1,21 +1,16 @@
 ---
-// A workspace chat: the tabs of workspace-session-tabs.tsx, the header of
-// workspace-session-header.tsx, and the agent chat surface with its composer, slash menu, and
-// task tools. Sources: packages/frontend/src/pages/workspace-sessions and
+// A workspace chat on the session page: the top bar of workspace-session-header.tsx, and the agent
+// chat surface with its composer, slash menu, and task tools. The right panel is hidden. The
+// templates hold the task details of a new task, the start dialog of its Builder, and the
+// notification of the start. Sources: packages/frontend/src/pages/workspace-sessions and
 // packages/frontend/src/components/features/agents/agent-chat.
-import {
-  ChevronRight,
-  EllipsisVertical,
-  GitBranch,
-  Import,
-  PanelRightOpen,
-  RotateCcwClock,
-  SquareTerminal,
-  Terminal,
-} from "@lucide/astro";
+import { Archive, Bot, ChevronDown, ChevronRight, Folder, Terminal } from "@lucide/astro";
 import AppWindow from "../../replica/shell/AppWindow.astro";
 import Pointer from "../../replica/shell/Pointer.astro";
-import SessionTabs from "../../replica/shell/SessionTabs.astro";
+import Toast from "../../replica/shell/Toast.astro";
+import ToastStack from "../../replica/shell/ToastStack.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import TaskSheet from "../../replica/tasks/TaskSheet.astro";
 import AgentText from "../../replica/transcript/AgentText.astro";
 import ToolRow from "../../replica/transcript/ToolRow.astro";
 import UserMessage from "../../replica/transcript/UserMessage.astro";
@@ -23,49 +18,63 @@ import TaskResult from "../../replica/transcript/TaskResult.astro";
 import Thread from "../../replica/transcript/Thread.astro";
 import ChatColumn from "../../replica/studio/ChatColumn.astro";
 import Composer from "../../replica/studio/Composer.astro";
+import OpenInMenu from "../../replica/studio/OpenInMenu.astro";
+import PanelToggles from "../../replica/studio/PanelToggles.astro";
+import RepoActions from "../../replica/studio/RepoActions.astro";
+import SessionHeader from "../../replica/studio/SessionHeader.astro";
 import {
   CHAT,
   CHAT_SESSION,
   COMMANDS,
   CREATED_TASKS,
   EXISTING,
+  MENU_TASK,
   MESSAGE,
   SEARCH,
 } from "../../sample/chat";
+import { NAV_SESSIONS } from "../../sample/nav";
 import { signature } from "../../sample/sessions";
+import { BUILDER_SESSION } from "../../sample/studio";
+import { CHAT_ENTRY, studioNav } from "../../sample/studio-nav";
+import { taskId } from "../../sample/workspace";
+import { OPEN_IN_TERMINAL } from "../../sample/worktree";
 import "./ChatView.css";
 import Scene from "../Scene.astro";
 import { flag } from "../../replica/flag";
+import { type ChatTemplate, STARTED } from "./templates";
 
-const tabs = [
-  { title: CHAT.title, activity: "idle", active: true },
-  { title: "Why do tags drop on sync?", activity: "idle" },
-] as const;
+/**
+ * The last frame: the turn ended, and the chat settled at the top of Recent. The Builder of the
+ * new task runs at the top of Running.
+ */
+const nav = [
+  NAV_SESSIONS["menu-build"],
+  ...studioNav({ ...CHAT_ENTRY, time: "now", selected: true }),
+];
 ---
 
 <Scene
   name="chat"
-  alt="A workspace chat with the Product planner role on Claude Code. The visitor types /tasks- and picks the reusable prompt /tasks-from-request, then adds the request Export notebooks to Markdown and PDF. The agent searches the tasks for export and finds the Markdown export task. Then it creates the two tasks that are missing: a PDF export and an Export item in the notebook menu."
+  alt="A workspace chat with the Product planner role on Claude Code. The visitor types /tasks- and picks the reusable prompt /tasks-from-request, then adds the request Export notebooks to Markdown and PDF. The agent searches the tasks for export and finds the Markdown export task. Then it creates the two tasks that are missing: a PDF export and an Export item in the notebook menu. The visitor opens the menu task from its card, and its details slide in over the chat. The visitor clicks Start Builder and runs the Builder in the background. The chat stays on screen, and the new Builder session shows in the Running group of the sidebar."
 >
   <AppWindow
-    chrome={{ sidebar: "collapsed", page: "chats", busyWorkspace: false }}
+    chrome={{ sidebar: "collapsed", nav: { scope: "current", entries: nav } }}
     class="chat-window"
     data-runtime={CHAT_SESSION.runtime}
   >
-    <SessionTabs
-      tabs={tabs}
-      close="archive"
-      tools={[Import, RotateCcwClock, SquareTerminal, PanelRightOpen]}
-    />
-    <div class="ch-head">
-      <div class="ch-head-row">
-        <div class="ch-title">{CHAT.title}</div>
-        <span class="ch-more"><EllipsisVertical /></span>
-      </div>
-      <p class="ch-sub">
-        <GitBranch class="i12" /><span>{CHAT.directory}</span><span>· {CHAT.role}</span>
-      </p>
-    </div>
+    <SessionHeader>
+      <span class="sh-name" slot="title"><span>{CHAT.title}</span></span>
+      <RepoActions />
+      <span class="sh-icon"><Bot class="i14" /></span>
+      <span class="sh-icon"><Folder /></span>
+      <span class="sh-split"
+        ><span class="sh-split-main"><Archive /><span>Archive</span></span><span
+          class="sh-split-menu"><ChevronDown /></span
+        ></span
+      >
+      <OpenInMenu tool={OPEN_IN_TERMINAL} appIcon />
+      <PanelToggles right={false} />
+    </SessionHeader>
     <ChatColumn class="ch-column">
       <Thread>
         <UserMessage time="10:24:12 AM" row="message">{MESSAGE}</UserMessage>
@@ -97,10 +106,12 @@ const tabs = [
             </ToolRow>
           ))
         }
-        <AgentText signature={signature(CHAT_SESSION)} row="final">
+        <AgentText signature={signature(CHAT_SESSION)} worked="14s" row="final">
           <p>
-            The two new tasks are in Backlog. Do <code>{EXISTING}</code> first, because the PDF export
-            and the menu use it.
+            The two new tasks are in Backlog. The PDF export is a feature, so it starts with a spec.{
+              " "
+            }
+            <code>{taskId(MENU_TASK.id)}</code> is a task, so its Builder can start now.
           </p>
         </AgentText>
       </Thread>
@@ -131,8 +142,22 @@ const tabs = [
         >
       </Composer>
     </ChatColumn>
+    <ToastStack />
     <Pointer slot="overlay" />
   </AppWindow>
+  <Fragment slot="templates">
+    <template data-tpl={"sheet" satisfies ChatTemplate}><TaskSheet task={MENU_TASK} /></template>
+    <template data-tpl={"builder-dialog" satisfies ChatTemplate}
+      ><StartDialog
+        role="Builder"
+        description="Start a fresh session for Start Implementation."
+        session={BUILDER_SESSION}
+        target="origin/main"
+        background
+      /></template
+    >
+    <template data-tpl={"toast-started" satisfies ChatTemplate}><Toast {...STARTED} /></template>
+  </Fragment>
 </Scene>
 <script>
   import { mountChat } from "./scene";

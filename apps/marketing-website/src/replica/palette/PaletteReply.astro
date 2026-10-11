@@ -1,0 +1,9 @@
+---
+// The reply view of command-palette-reply.tsx: the Reply here block of the waiting session under
+// the chip of its task. After the answer, the palette closes.
+import { WAITING_QUESTION } from "../../sample/question";
+import ReplyHere from "../transcript/ReplyHere.astro";
+import "./PaletteReply.css";
+---
+
+<div class="pal-reply" data-pal-list="reply"><ReplyHere question={WAITING_QUESTION} /></div>

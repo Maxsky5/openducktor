@@ -1,0 +1,105 @@
+---
+// The task details sheet of task-details-sheet.tsx, for a Backlog task with no document and no
+// session: the header with the title, the ID, the status, and the badges, the collapsible cards,
+// and the footer with the workflow actions. It slides in from the right over a blurred page. The
+// copy here is the template of a scene, which opens it and closes it.
+import {
+  ChevronDown,
+  CircleQuestionMark,
+  Copy,
+  Ellipsis,
+  Expand,
+  FileCode,
+  Layers,
+  PencilLine,
+  Sparkles,
+  type AstroComponent,
+} from "@lucide/astro";
+import TaskBadges from "../board/TaskBadges.astro";
+import Button from "../ui/Button.astro";
+import LabelChip from "../ui/LabelChip.astro";
+import RoleIcon from "../ui/RoleIcon.astro";
+import StatusPill from "../ui/StatusPill.astro";
+import type { ChatTask } from "../../sample/chat";
+import { taskId } from "../../sample/workspace";
+import "./TaskSheet.css";
+
+interface Props {
+  task: ChatTask;
+}
+const { task } = Astro.props;
+/** The document cards under the description. A Backlog task has no document yet. */
+const DOCUMENTS = [
+  { title: "Specification", Icon: FileCode },
+  { title: "Implementation Plan", Icon: FileCode },
+  { title: "QA Reports", Icon: undefined },
+] as const satisfies readonly { title: string; Icon: AstroComponent | undefined }[];
+---
+
+<div class="ts-layer">
+  <span class="ts-shade" data-sheet-shade></span>
+  <div class="ts-sheet" data-sheet>
+    <div class="ts-head">
+      <div class="ts-row">
+        <div class="ts-name">
+          <span class="ts-title"><Sparkles /><span>{task.title}</span></span>
+          <span class="ts-id"><code>{taskId(task.id)}</code><Copy class="i12" /></span>
+        </div>
+        <StatusPill status="open" badge />
+      </div>
+      <TaskBadges kind={task.kind} priority={task.priority}
+        ><span class="ts-qa">AI QA required</span></TaskBadges
+      >
+      <div class="ts-labels">{task.labels.map((name) => <LabelChip name={name} />)}</div>
+    </div>
+    <div class="ts-body">
+      <div class="ts-card">
+        <span class="ts-card-head">
+          <span class="ts-card-title"><CircleQuestionMark class="i14" />Description</span>
+          <span class="ts-card-tool"><Expand class="i14" /></span>
+          <span class="ts-chevron" data-open><ChevronDown class="i14" /></span>
+        </span>
+        <div class="ts-card-text">
+          <p>{task.description}</p>
+          <span class="ts-copy"><Copy class="i14" /></span>
+        </div>
+      </div>
+      {
+        DOCUMENTS.map(({ title, Icon }) => (
+          <div class="ts-card">
+            <span class="ts-card-head">
+              <span class="ts-card-title">
+                {Icon ? <Icon class="i14" /> : <RoleIcon role="qa" class="i14" />}
+                {title}
+              </span>
+              <span class="ts-missing">No document</span>
+              <span class="ts-chevron">
+                <ChevronDown class="i14" />
+              </span>
+            </span>
+          </div>
+        ))
+      }
+      <div class="ts-card">
+        <span class="ts-card-head">
+          <span class="ts-card-title"><Layers class="i14" />Metadata</span>
+          <span class="ts-chevron"><ChevronDown class="i14" /></span>
+        </span>
+      </div>
+    </div>
+    <div class="ts-foot">
+      <span class="ts-foot-group">
+        <Button variant="outline">Close</Button>
+        <Button variant="outline"><PencilLine />Edit</Button>
+      </span>
+      <span class="ts-foot-group">
+        <Button class="ts-start" data-sheet-start
+          ><RoleIcon role="build" class="i14" />Start Builder</Button
+        >
+        <Button variant="outline" class="ts-more"
+          ><Ellipsis class="i14" />More<ChevronDown class="i14 ts-more-chevron" /></Button
+        >
+      </span>
+    </div>
+  </div>
+</div>

@@ -1,44 +1,40 @@
-// The Agent Studio window of StudioWindow.astro: the workflow rail, the quick action, the composer,
-// the task panel, and the session transcript. A scene applies a frame at build time, then
-// patches the window at the time of each change.
+// The session window of StudioWindow.astro: the workflow rail, the quick action, the composer, the
+// right panel, the session transcript, and the sidebar. A scene applies a frame at build time,
+// then patches the window at the time of each change.
 import { all, data, must } from "../../motion/dom";
 import { fadeIn, pop } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 import { modelName } from "../../sample/models";
 import { contextUse, type Session } from "../../sample/sessions";
-import {
-  type Focus,
-  type RailTones,
-  ROLES,
-  type RoleId,
-  type StudioFrame,
-} from "../../sample/studio";
+import type { Focus, RailTones, StudioFrame } from "../../sample/studio";
 import { type SessionId, type TurnId } from "../../sample/transcripts";
-import { activityMarks, contextMeter } from "../shell/composer";
-import type { Activity } from "../vocabulary";
+import { composerActivity, contextMeter } from "../shell/composer";
+import { type Activity, ROLES, type RoleId } from "../vocabulary";
 import { pointer } from "../shell/pointer";
+import { sessionList } from "../shell/sidebar";
 import { notify } from "../shell/toast";
 import { follow, transcript } from "../transcript/transcript";
 import { studioPanels } from "./panels";
 import { studioRequests } from "./requests";
 
 /** A change of the window at one time. Only the fields that change are present. */
-export type StudioChange = Partial<StudioFrame> & { activity?: Activity };
+export type StudioChange = Partial<Omit<StudioFrame, "nav">> & { activity?: Activity };
 
-/** The controller of the Agent Studio window in the stage of `scene`. */
+/** The controller of the session window in the stage of `scene`. */
 export function studioWindow<Template extends string>(scene: Scene<Template>) {
   const root = must(scene.stage, "[data-studio]");
   const track = must(root, "[data-track]");
   const split = must(root, "[data-split]");
   const actionLabel = must(root, "[data-action]");
   const steps = all(root, "[data-step]");
-  const marks = activityMarks(root);
+  const setComposer = composerActivity(root);
   const setContext = contextMeter(must(root, "[data-meter]"));
   const cursor = pointer(scene, root);
   const rows = transcript(scene, root);
   const resetFollow = follow(scene, track);
   const panels = studioPanels(scene, root);
+  const sessions = sessionList(scene, root);
 
   const setTones = (tones: RailTones): void => {
     steps.forEach((step, index) => {
@@ -55,7 +51,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
       step.setAttribute("aria-pressed", String(ROLES[index] === role)),
     );
   const setActivity = (activity: Activity): void => {
-    marks(activity);
+    setComposer(activity);
     split.toggleAttribute("data-disabled", activity !== "idle");
   };
   const setSession = (session: Session): void => {
@@ -75,12 +71,12 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     split.toggleAttribute("data-disabled", frame.actionDisabled || activity !== "idle");
     setSession(frame.session);
     setContext(contextUse(frame.session));
-    panels.setTab("document", frame.documentTab);
     panels.setTab("ci_checks", frame.checksTab);
     panels.setPanel(frame.panel);
     setFocus(frame.focus);
     if (frame.panelSize) root.dataset.panelSize = frame.panelSize;
     else delete root.dataset.panelSize;
+    sessions.place(frame.nav);
   };
 
   /** Changes the window at `at`. A changed step pops, and a new action or panel fades in. */
@@ -101,7 +97,6 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
       if (change.actionDisabled !== undefined)
         split.toggleAttribute("data-disabled", change.actionDisabled);
       if (change.session) setSession(change.session);
-      if (change.documentTab !== undefined) panels.showTab("document", change.documentTab);
       if (change.checksTab !== undefined) panels.showTab("ci_checks", change.checksTab);
       if (change.panel) {
         panels.setPanel(change.panel);
@@ -140,7 +135,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
   const setSessionShown = (id: SessionId): void => {
     for (const item of all(track, "[data-session]")) item.hidden = data(item, "session") !== id;
   };
-  /** Shows the transcript of another session, as a switch of the session tab does. */
+  /** Shows the transcript of another session, as a click on its sidebar entry does. */
   const switchSession = (id: SessionId, at: number): void =>
     scene.at(at, () => {
       setSessionShown(id);
@@ -166,6 +161,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     cursor,
     quickAction,
     panels,
+    sessions,
     requests: studioRequests(scene, root, cursor),
     notify: (name: Template, at: number, hold: number): void =>
       notify(scene, must(root, "[data-toasts]"), name, at, hold),

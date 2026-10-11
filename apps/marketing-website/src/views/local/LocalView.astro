@@ -1,37 +1,41 @@
 ---
-// The Diagnostics sheet of the repository. The markup holds the last frame: every check passed.
-// The templates hold the states of the sections while the checks load and the runtimes start.
-import DiagBody from "../../replica/diagnostics/DiagBody.astro";
+// The Diagnostics sheet with the fieldnotes workspace selected. The markup holds the last frame:
+// the host runs its three runtimes, and every check passed.
+import { FolderGit2 } from "@lucide/astro";
+import DiagCard from "../../replica/diagnostics/DiagCard.astro";
+import DiagGroup from "../../replica/diagnostics/DiagGroup.astro";
 import DiagnosticsSheet from "../../replica/diagnostics/DiagnosticsSheet.astro";
-import DiagSection from "../../replica/diagnostics/DiagSection.astro";
-import { WORKSPACE } from "../../sample/workspace";
-import { LOADING, SECTIONS } from "./diagnostics";
+import DiagRow from "../../replica/diagnostics/DiagRow.astro";
+import { REPOSITORY_PATH, WORKSPACE } from "../../sample/workspace";
+import { HEALTHY, RUNTIMES, TOOLS, WORKSPACE_CHECKS } from "./diagnostics";
 import Scene from "../Scene.astro";
 import "./LocalView.css";
 ---
 
 <Scene
   name="local"
-  alt="The Diagnostics panel of the fieldnotes repository. The checks find Git, OpenCode, Codex, and Claude Code on the computer. OpenDucktor starts the three runtimes in the repository folder. OpenCode and Codex connect to the OpenDucktor MCP server, which has 14 tools. The task store is ready, and its SQLite database is in the home folder of the user."
+  alt="The Diagnostics panel. The OpenDucktor host starts OpenCode, Codex, and Claude Code, one shared runtime of each kind for all workspaces. The checks find PATH and Git, and the OpenDucktor MCP bridge is ready. The fieldnotes workspace has its worktree folder, and its SQLite task store is ready. Everything is working."
 >
-  <DiagnosticsSheet repository={WORKSPACE}>
-    {
-      SECTIONS.map((section) => (
-        <DiagSection title={section.title} state={section.state} {...section.hooks} />
-      ))
-    }
+  <DiagnosticsSheet overview={HEALTHY}>
+    <DiagGroup title="Host" description="Shared by all workspaces">
+      <DiagCard>
+        <span slot="title">Agent runtimes</span>
+        {RUNTIMES.map((check) => <DiagRow {...check} />)}
+      </DiagCard>
+      <DiagCard>
+        <span slot="title">Tools and services</span>
+        {TOOLS.map((check) => <DiagRow {...check} />)}
+      </DiagCard>
+    </DiagGroup>
+    <DiagGroup title="Workspace" description="Selected workspace only">
+      <DiagCard>
+        <Fragment slot="title"
+          ><FolderGit2 /><span>{WORKSPACE}<small>{REPOSITORY_PATH}</small></span></Fragment
+        >
+        {WORKSPACE_CHECKS.map((check) => <DiagRow {...check} />)}
+      </DiagCard>
+    </DiagGroup>
   </DiagnosticsSheet>
-  <Fragment slot="templates">
-    {
-      Object.entries(LOADING).map(([name, state]) => (
-        <template data-tpl={name}>
-          <div data-badge={state.badge} data-tone={state.tone}>
-            <DiagBody state={state} />
-          </div>
-        </template>
-      ))
-    }
-  </Fragment>
 </Scene>
 <script>
   import { mountLocal } from "./scene";

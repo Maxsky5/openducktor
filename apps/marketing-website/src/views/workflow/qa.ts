@@ -12,8 +12,16 @@ import {
   QA_SESSION,
   TEST_PATH,
 } from "../../sample/studio";
+import { STORY_SESSIONS } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, saveDocument, showPanel, startSession } from "./session";
+import {
+  endTurn,
+  runSession,
+  saveDocument,
+  settleSession,
+  showPanel,
+  startSession,
+} from "./session";
 
 /** The templates of QaStep.astro. */
 export type QaTemplate = "qa-dialog" | "fix-dialog";
@@ -43,11 +51,11 @@ export function qa(scene: Scene<QaTemplate>): void {
       selected: "qa",
       tones: ["done", "done", "done", "in_progress"],
       session: QA_SESSION,
-      documentTab: true,
       panel: "document",
     },
     "qa",
   );
+  runSession(studio, reviewing, "qa", "ai_review", "build");
   studio.rows.show(row("kickoff"), reviewing + 0.3);
   studio.rows.tool(row("read-task"), reviewing + 0.9, 0.3);
   studio.rows.tool(row("read-hook"), reviewing + 1.4, 0.25);
@@ -61,6 +69,8 @@ export function qa(scene: Scene<QaTemplate>): void {
     { tones: ["done", "done", "done", "rejected"], action: "Address QA Feedbacks" },
     2.2,
   );
+  // The rejection moves the task back to In Progress.
+  studio.sessions.update(STORY_SESSIONS.qa.id, rejected, { status: "in_progress" });
   const reported = endTurn(
     studio,
     row("final"),
@@ -68,6 +78,7 @@ export function qa(scene: Scene<QaTemplate>): void {
     {},
     { session: QA_SESSION, from: 2.9, since: reviewing },
   );
+  settleSession(studio, reported, "qa", "rejected");
 
   // You send the report back to the Builder, which reuses its session.
   const started = startSession(
@@ -78,11 +89,11 @@ export function qa(scene: Scene<QaTemplate>): void {
       selected: "build",
       tones: ["done", "done", "in_progress", "rejected"],
       session: BUILDER_SESSION,
-      documentTab: false,
-      panel: "git",
+      panel: "diffs",
     },
     "build",
   );
+  runSession(studio, started, "build", "in_progress", "qa");
   studio.rows.show(fix("kickoff"), started + 0.3);
   studio.rows.tool(fix("read-task"), started + 0.9, 0.3);
   const hookAt = started + 1.5;
@@ -103,11 +114,13 @@ export function qa(scene: Scene<QaTemplate>): void {
   studio.panels.ahead(2, committed);
   const completed = studio.rows.workflow(fix("completed"), committed + 0.4, 0.5);
   studio.patch(completed, { action: "Request QA Review" });
-  endTurn(
+  studio.sessions.update(STORY_SESSIONS.build.id, completed, { status: "ai_review" });
+  const ended = endTurn(
     studio,
     fix("final"),
     completed + 0.4,
     { tones: FRAMES.qa.tones },
     { session: BUILDER_FIX_SESSION, from: BUILDER_SESSION.used, since: started },
   );
+  settleSession(studio, ended, "build", "done");
 }

@@ -1,0 +1,211 @@
+@layer replica {
+  /* The sheet and its overlay cover the window: bg-black/45 with backdrop-blur-sm. */
+  .ts-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 24;
+    overflow: hidden;
+  }
+  .ts-shade {
+    position: absolute;
+    inset: 0;
+    background: rgb(0 0 0 / 0.45);
+    backdrop-filter: blur(calc(4 * var(--u)));
+  }
+  /* w-full sm:max-w-[680px], with border-l and shadow-xl. */
+  .ts-sheet {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: calc(680 * var(--u));
+    border-left: calc(1 * var(--u)) solid var(--border);
+    background: var(--popover);
+    box-shadow:
+      0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u)) rgb(0 0 0 / 0.1),
+      0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / 0.1);
+  }
+  /* The header: px-5 py-4 with a bottom border. */
+  .ts-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(12 * var(--u));
+    padding: calc(16 * var(--u)) calc(20 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .ts-row {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(12 * var(--u));
+  }
+  .ts-name {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+  }
+  .ts-title {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    color: var(--foreground);
+    font-size: calc(20 * var(--u));
+    font-weight: 600;
+    line-height: calc(28 * var(--u));
+  }
+  .ts-title .lucide {
+    flex: none;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    color: var(--primary);
+  }
+  .ts-title span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ts-id {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    color: var(--muted-foreground);
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+  }
+  /* The QA policy badge: AI QA required in the success colors. */
+  .ts-qa {
+    display: inline-flex;
+    align-items: center;
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--success-border);
+    border-radius: 999px;
+    background: var(--success-surface);
+    color: var(--success-muted);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    line-height: calc(16 * var(--u));
+  }
+  .ts-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(6 * var(--u));
+  }
+  /* The cards: space-y-3 px-5 py-4. */
+  .ts-body {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: calc(12 * var(--u));
+    min-height: 0;
+    overflow: hidden;
+    padding: calc(16 * var(--u)) calc(20 * var(--u));
+  }
+  /* A collapsible card: rounded-xl border-border/90 bg-card shadow-sm. */
+  .ts-card {
+    border: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 90%, transparent);
+    border-radius: calc(16 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+  }
+  .ts-card-head {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    padding: calc(16 * var(--u));
+  }
+  .ts-card-title {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+  .ts-card-head svg {
+    flex: none;
+  }
+  .ts-missing {
+    padding: calc(4 * var(--u)) calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: calc(11 * var(--u));
+    line-height: calc(14 * var(--u));
+  }
+  .ts-card-tool,
+  .ts-chevron {
+    display: grid;
+    place-items: center;
+    color: var(--muted-foreground);
+  }
+  .ts-card-tool {
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+  }
+  .ts-chevron {
+    padding: calc(4 * var(--u));
+  }
+  .ts-chevron[data-open] svg {
+    rotate: 180deg;
+  }
+  /* The description: the document text with its copy button. */
+  .ts-card-text {
+    position: relative;
+    padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+  }
+  .ts-card-text p {
+    padding-right: calc(40 * var(--u));
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    line-height: 1.625;
+  }
+  .ts-copy {
+    position: absolute;
+    top: calc(8 * var(--u));
+    right: calc(16 * var(--u));
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    color: var(--muted-foreground);
+  }
+  /* The footer: px-5 py-3 with a top border, the edit actions left and the workflow right. */
+  .ts-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--u));
+    padding: calc(12 * var(--u)) calc(20 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .ts-foot-group {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .ts-start {
+    font-weight: 600;
+  }
+  .ts-more {
+    padding: 0 calc(12 * var(--u));
+  }
+  .ts-more-chevron {
+    opacity: 0.8;
+  }
+}

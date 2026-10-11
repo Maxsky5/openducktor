@@ -67,7 +67,7 @@ const parts = (text: string): string[] => text.split("`");
                 );
               case "agent":
                 return (
-                  <AgentText signature={row.signature} row={row.id}>
+                  <AgentText signature={row.signature} worked={row.worked} row={row.id}>
                     {row.paragraphs.map((paragraph) => (
                       <p>
                         {parts(paragraph).map((part, index) =>

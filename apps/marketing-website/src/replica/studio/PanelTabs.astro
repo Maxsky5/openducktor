@@ -1,0 +1,31 @@
+---
+// The tabs of the right panel of a task session, from panel-tab-kinds.ts: Document, Diffs, Files,
+// and CI Checks, which shows only with a linked pull request. A dot on the CI Checks icon shows
+// the state of the checks.
+import { FileDiff, FileText, FolderTree, ListChecks } from "@lucide/astro";
+import type { StudioFrame } from "../../sample/studio";
+import PanelStrip from "./PanelStrip.astro";
+import PanelTab from "./PanelTab.astro";
+import "./PanelTabs.css";
+
+interface Props {
+  frame: StudioFrame;
+}
+const { frame } = Astro.props;
+---
+
+<PanelStrip panel="right">
+  <PanelTab id="document" label="Document" active={frame.panel === "document"}
+    ><FileText /></PanelTab
+  >
+  <PanelTab id="diffs" label="Diffs" active={frame.panel === "diffs"}><FileDiff /></PanelTab>
+  <PanelTab id="files" label="Files"><FolderTree /></PanelTab>
+  <PanelTab
+    id="ci_checks"
+    label="CI Checks"
+    active={frame.panel === "ci_checks"}
+    hidden={!frame.checksTab}
+  >
+    <ListChecks /><i class="ci-dot" data-checks="passing" data-ci></i>
+  </PanelTab>
+</PanelStrip>

@@ -1,0 +1,6 @@
+@layer replica {
+  /* The reply body: px-4 py-3 under the chip of the waiting task. Palette.css shows it in its view. */
+  .pal-reply {
+    padding: calc(12 * var(--u)) calc(16 * var(--u));
+  }
+}

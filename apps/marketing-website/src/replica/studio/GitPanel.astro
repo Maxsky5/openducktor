@@ -1,5 +1,5 @@
 ---
-// The Git tab of agent-studio-git-panel: branch context, sync actions, diff scope, and files.
+// The Diffs tab of agent-studio-git-panel: branch context, sync actions, diff scope, and files.
 // The Branch changes scope has no reset button: the product resets only uncommitted files.
 // Without files it shows empty-diff-state.tsx. A scene flips data-git when the first file lands.
 import {
@@ -35,7 +35,7 @@ const totalAdd = files.reduce((sum, file) => sum + file.add, 0);
 const totalDel = files.reduce((sum, file) => sum + file.del, 0);
 ---
 
-<div class="st-git" data-panel="git" data-git={files.length > 0 ? "filled" : "empty"}>
+<div class="st-git" data-panel="diffs" data-git={files.length > 0 ? "filled" : "empty"}>
   <div class="st-branches">
     <div class="st-branch">
       <small>Current branch</small>

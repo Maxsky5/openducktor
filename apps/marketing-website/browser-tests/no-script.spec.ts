@@ -23,7 +23,7 @@ test.describe("without JavaScript", () => {
       ).toHaveText(command);
     }
     await expect(page.locator("[data-install] .t-log")).toHaveCount(7);
-    await expect(page.locator('[data-scene="local"] .diag-badge').last()).toHaveText("Ready");
+    await expect(page.locator('[data-scene="local"] [data-diag-label]').last()).toHaveText("Ready");
     const question = page.locator(".faq-answers details").first();
     await question.locator("summary").click();
     await expect(question.locator("p")).toBeVisible();

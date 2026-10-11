@@ -1,0 +1,20 @@
+---
+// The Reply here block of session-preview-content.tsx, which the session preview of the sidebar
+// and the reply view of the command palette show: the question of a waiting session in the card
+// of the chat. After the answer, a note replaces the card.
+import { MessagesSquare } from "@lucide/astro";
+import type { WaitingQuestion } from "../../sample/question";
+import QuestionCard from "./QuestionCard.astro";
+import "./ReplyHere.css";
+
+interface Props {
+  question: WaitingQuestion;
+}
+const { question } = Astro.props;
+---
+
+<div class="reply-here" data-reply>
+  <p class="reply-head"><MessagesSquare class="i14" />Reply here</p>
+  <div data-reply-question><QuestionCard questions={[question]} /></div>
+  <p class="reply-sent" hidden data-reply-sent>Answer sent.</p>
+</div>

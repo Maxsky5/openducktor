@@ -14,12 +14,12 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: calc(4 * var(--u));
+    gap: calc(6 * var(--u));
     padding: calc(14 * var(--u));
   }
   .card-title {
     display: -webkit-box;
-    margin-bottom: calc(4 * var(--u));
+    margin-bottom: calc(2 * var(--u));
     overflow: hidden;
     font-size: calc(14 * var(--u));
     font-weight: 600;
@@ -27,25 +27,75 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
-  .card-id {
+  /* The kind and the priority on the left, and the task ID with its copy button on the right. */
+  .card-meta {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: calc(4 * var(--u));
-    font-size: calc(11 * var(--u));
-    color: var(--muted-foreground);
+    gap: calc(8 * var(--u));
+    min-width: 0;
   }
-  .card-id > span {
+  .card-id {
     display: inline-flex;
     align-items: center;
     gap: calc(4 * var(--u));
+    min-width: 0;
+    color: var(--muted-foreground);
   }
   .card-id code {
+    overflow: hidden;
     font-family: var(--mono);
-    font-size: calc(12 * var(--u));
+    font-size: calc(11 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .card-open {
-    padding: calc(2 * var(--u)) calc(6 * var(--u));
+  .card-id .lucide {
+    flex: 0 0 auto;
+  }
+  /* TaskStatus: the QA verdict and the pull request. The row is absent without them. */
+  .card-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(6 * var(--u));
+  }
+  .card-status:not(:has(*)) {
+    display: none;
+  }
+  .card-footer {
+    display: flex;
+    flex-direction: column;
+    gap: calc(4 * var(--u));
+    margin-top: calc(2 * var(--u));
+    padding-top: calc(10 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  .card-footer[data-links] {
+    padding-top: 0;
+  }
+  .card-footer:not(:has([data-card-action], .card-links)) {
+    display: none;
+  }
+  /* The links to the saved sessions of the task: ghost buttons with an underlined role. */
+  .card-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .card-links span {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(28 * var(--u));
+    padding: 0 calc(4 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .card-links u {
+    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+    text-underline-offset: calc(4 * var(--u));
   }
   /* Active sessions: border ray and waiting glow, as in the desktop styles. */
   .card[data-activity="working"] {

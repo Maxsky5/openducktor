@@ -2,7 +2,7 @@
   /* Composer */
   .st-composer {
     flex: 0 0 auto;
-    padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+    padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
   }
   .st-stack:not(:empty) + .st-composer {
     padding-top: calc(12 * var(--u));
@@ -48,9 +48,13 @@
   .st-box[data-activity="waiting"] .st-editor .when-waiting {
     display: inline;
   }
+  /* The editor is disabled while a request waits, so its placeholder fades. */
+  .st-box[data-activity="waiting"] .st-editor {
+    opacity: 0.6;
+  }
   .st-controls {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
     gap: calc(8 * var(--u));
     padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
@@ -88,8 +92,24 @@
     width: calc(16 * var(--u));
     height: calc(16 * var(--u));
   }
+  /* The label keeps 8 pixels on its right, so it sits 16 pixels from ChevronsUpDown. */
+  .st-chip > span {
+    padding-right: calc(8 * var(--u));
+  }
   .st-chip > .lucide:last-child {
     color: var(--muted-foreground);
+  }
+  /* SpeedSelect: a 28 pixel ghost icon button. A level above Standard shows its Zap color. */
+  .st-speed {
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--u));
+    height: calc(28 * var(--u));
+    border-radius: calc(12 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .st-speed[data-speed="fast"] {
+    color: var(--speed-fast);
   }
   .st-chip.effort {
     padding-left: calc(28 * var(--u));
@@ -104,8 +124,10 @@
     display: inline-flex;
     align-items: center;
     gap: calc(6 * var(--u));
+    height: calc(28 * var(--u));
     margin-right: calc(6 * var(--u));
-    padding: calc(4 * var(--u));
+    padding: 0 calc(6 * var(--u));
+    border-radius: calc(12 * var(--u));
   }
   .st-ring {
     width: calc(16 * var(--u));
@@ -137,6 +159,7 @@
     height: calc(32 * var(--u));
     border-radius: calc(12 * var(--u));
     background: var(--primary);
+    box-shadow: var(--shadow-sm);
     color: var(--primary-foreground);
     opacity: 0.5;
     transition: opacity 200ms;

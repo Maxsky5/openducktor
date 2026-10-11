@@ -1,0 +1,21 @@
+@layer replica {
+  /* A group: space-y-2.5, with an uppercase label and its scope. */
+  .diag-group {
+    display: grid;
+    gap: calc(10 * var(--u));
+  }
+  .diag-group-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: calc(12 * var(--u));
+    padding: 0 calc(4 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .diag-group-head p {
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+}

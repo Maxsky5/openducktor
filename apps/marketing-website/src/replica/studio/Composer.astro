@@ -1,8 +1,16 @@
 ---
-// The composer of agent-chat-composer.tsx: the draft, the runtime and model, the effort, the
-// context meter, and the send and stop buttons. The running ray circles the box while an agent
+// The composer of agent-chat-composer.tsx: the draft, the runtime and model, the effort, the speed
+// of a model that offers more than Standard, the context meter, and the send and stop buttons. The running ray circles the box while an agent
 // works. The slot holds more draft content, and the menu slot opens above the draft.
-import { BrainCog, ChevronDown, Paperclip, SendHorizontal, Square } from "@lucide/astro";
+import {
+  BrainCog,
+  ChevronsUpDown,
+  Paperclip,
+  SendHorizontal,
+  Square,
+  Zap,
+  ZapOff,
+} from "@lucide/astro";
 import RuntimeIcon from "../ui/RuntimeIcon.astro";
 import { compactTokens } from "../format";
 import Ray from "../ui/Ray.astro";
@@ -34,13 +42,18 @@ const context = contextUse(session);
         <span class="st-attach"><Paperclip class="i14" /></span>
         <span class="st-chip">
           <RuntimeIcon kind={session.runtime} /><span data-model>{modelName(session)}</span
-          ><ChevronDown class="i14" />
+          ><ChevronsUpDown />
         </span>
         <span class="st-chip effort">
-          <BrainCog class="i14" /><span data-effort>{session.effort}</span><ChevronDown
-            class="i14"
-          />
+          <BrainCog class="i14" /><span data-effort>{session.effort}</span><ChevronsUpDown />
         </span>
+        {
+          session.speed && (
+            <span class="st-speed" data-speed={session.speed}>
+              {session.speed === "fast" ? <Zap /> : <ZapOff />}
+            </span>
+          )
+        }
       </span>
       <span>
         <span class="st-context" style={`--used: ${context.percent}`} data-meter>

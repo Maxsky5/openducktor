@@ -18,8 +18,9 @@ import {
   REVIEWED_FILES,
   TEST_PATH,
 } from "../../sample/studio";
+import { settled, STORY_SESSIONS, studioNav } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, showPanel, startSession } from "./session";
+import { endTurn, runSession, settleSession, showPanel, startSession } from "./session";
 
 /** The templates of ReviewStep.astro. */
 export type ReviewTemplate =
@@ -54,8 +55,9 @@ export function review(scene: Scene<ReviewTemplate>): void {
     action: "Generate Pull Request",
     actionDisabled: false,
     session: BUILDER_FIX_SESSION,
-    panel: "git",
+    panel: "diffs",
     checksTab: false,
+    nav: studioNav(settled("build", "human_review", "4m")),
   });
   pr.removeAttribute("data-merged");
   pr.hidden = true;
@@ -112,6 +114,7 @@ export function review(scene: Scene<ReviewTemplate>): void {
   });
   studio.rows.show(row("comment"), sent + 0.2);
   studio.patch(sent + 0.2, { activity: "working", tones: ["done", "done", "in_progress", "done"] });
+  runSession(studio, sent + 0.2, "build", "human_review");
   studio.cursor.hide(sent + 0.4);
 
   const fixing = sent + 0.9;
@@ -134,11 +137,13 @@ export function review(scene: Scene<ReviewTemplate>): void {
     { tones: ["done", "done", "done", "done"] },
     { session: BUILDER_REVIEW_SESSION, from: BUILDER_FIX_SESSION.used, since: sent + 0.2 },
   );
+  settleSession(studio, fixed, "build", "done");
 
   // The same session publishes the pull request and waits for its checks.
   const started = startSession(studio, fixed + 0.6, "pr-dialog", {
     tones: ["done", "done", "in_progress", "done"],
   });
+  runSession(studio, started, "build", "human_review");
   studio.rows.show(prRow("kickoff"), started + 0.3);
   studio.rows.tool(prRow("fetch"), started + 0.9, 0.4);
   studio.rows.tool(prRow("checks"), started + 1.5, 1.2);
@@ -174,8 +179,10 @@ export function review(scene: Scene<ReviewTemplate>): void {
     { tones: FRAMES.review.tones },
     { session: BUILDER_PR_SESSION, from: BUILDER_REVIEW_SESSION.used, since: started },
   );
+  settleSession(studio, reported, "build", "done");
 
-  // The pull request merges on GitHub, and OpenDucktor closes the task.
+  // The pull request merges on GitHub, and OpenDucktor closes the task. A closed task leaves the
+  // sidebar.
   const merged = reported + 1;
   studio.patch(merged - 0.2, { focus: "panel" });
   scene.at(merged, () => {
@@ -183,5 +190,6 @@ export function review(scene: Scene<ReviewTemplate>): void {
     scene.run(pop(pr, 1.12));
   });
   studio.patch(merged + 0.3, { action: FRAMES.review.action, actionDisabled: true });
+  studio.sessions.hide(STORY_SESSIONS.build.id, merged + 0.3);
   studio.notify("toast-closed", merged + 0.4, 4);
 }

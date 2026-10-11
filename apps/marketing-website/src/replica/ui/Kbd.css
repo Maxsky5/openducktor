@@ -1,0 +1,24 @@
+@layer product {
+  /* KbdGroup and Kbd of components/ui/kbd.tsx: h-5 min-w-5 rounded-sm border bg-muted px-1. */
+  .ui-kbd {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(2 * var(--u));
+  }
+  .ui-kbd kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    padding: 0 calc(4 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(8 * var(--u));
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+    line-height: 1;
+  }
+}

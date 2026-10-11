@@ -1,12 +1,13 @@
-// Requests of a session in the Agent Studio: a question or an approval docks above the composer,
+// Requests of a task session: a question or an approval docks above the composer,
 // and the session start dialog opens over the window.
 import { must } from "../../motion/dom";
-import { designPixel, fadeIn, growIn, shrinkOut } from "../../motion/effects";
+import { growIn, shrinkOut } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 import type { Pointer } from "../shell/pointer";
 import { type Request, WAITING } from "../vocabulary";
+import { startDialog } from "./start-dialog";
 
 /** The requests of the window `root`. The dialogs and the request cards are templates of the view. */
 export function studioRequests<Template extends string>(
@@ -52,34 +53,9 @@ export function studioRequests<Template extends string>(
     return at + 0.35;
   };
 
-  /** Opens a session start dialog, clicks Start session, and closes it. Returns the close time. */
-  const startSession = (name: Template, at: number): number => {
-    const overlay = scene.template(name);
-    const box = must(overlay, "[data-dialog-box]");
-    scene.at(at, () => {
-      root.append(overlay);
-      scene.run(fadeIn(overlay, 0.25));
-      scene.run(
-        gsap.fromTo(
-          box,
-          { autoAlpha: 0, scale: 0.96, y: 8 * designPixel(root) },
-          { autoAlpha: 1, scale: 1, y: 0, duration: 0.35, ease: EASE.arrive },
-        ),
-      );
-    });
-    const started = cursor.click(() => must(overlay, "[data-start]"), at + 1.1, 1);
-    scene.at(started + 0.25, () =>
-      scene.run(
-        gsap.to(overlay, {
-          autoAlpha: 0,
-          duration: 0.25,
-          ease: EASE.dismiss,
-          onComplete: () => overlay.remove(),
-        }),
-      ),
-    );
-    return started + 0.5;
-  };
+  /** Opens the session start dialog of template `name`, and starts the session. */
+  const startSession = (name: Template, at: number): number =>
+    startDialog(scene, root, cursor, scene.template(name), at);
 
   return { dock, undock, startSession };
 }

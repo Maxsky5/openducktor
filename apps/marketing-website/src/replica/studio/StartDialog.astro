@@ -2,8 +2,10 @@
 // The session start modal of session-start-modal.tsx. Session Mode shows only when the launch
 // action allows more than one mode. Reuse and fork are disabled when no session exists yet.
 // Reuse mode keeps the model of the existing session. The target branch shows for the
-// implementation start and the pull request launch actions.
-import { X } from "@lucide/astro";
+// implementation start and the pull request launch actions. A start from the task actions of
+// the board or the command palette can also run in the background. A model with more than one
+// speed shows Speed next to Effort, and a fresh session starts at Standard.
+import { X, ZapOff } from "@lucide/astro";
 import RuntimeIcon from "../ui/RuntimeIcon.astro";
 import { modelName } from "../../sample/models";
 import type { Session } from "../../sample/sessions";
@@ -25,8 +27,19 @@ interface Props {
   mode?: Mode;
   existing?: string;
   target?: string;
+  /** The dialog offers Run in background next to Start session. */
+  background?: boolean;
 }
-const { role, description, session, modes = [], mode = "fresh", existing, target } = Astro.props;
+const {
+  role,
+  description,
+  session,
+  modes = [],
+  mode = "fresh",
+  existing,
+  target,
+  background = false,
+} = Astro.props;
 const modeLabels = { fresh: "Start fresh", reuse: "Reuse existing", fork: "Fork existing" };
 const readOnly = mode === "reuse";
 ---
@@ -85,11 +98,24 @@ const readOnly = mode === "reuse";
             <RuntimeIcon kind={session.runtime} /><span>{modelName(session)}</span>
           </Combobox>
         </div>
-        <div class="st-field">
-          <b>Effort</b>
-          <Combobox data-disabled={flag(readOnly)}>
-            <span>{session.effort}</span>
-          </Combobox>
+        <div class="st-field-pair">
+          <div class="st-field">
+            <b>Effort</b>
+            <Combobox data-disabled={flag(readOnly)}>
+              <span>{session.effort}</span>
+            </Combobox>
+          </div>
+          {
+            session.speed && (
+              <div class="st-field st-speed-field">
+                <b>Speed</b>
+                <Combobox data-disabled={flag(readOnly)}>
+                  <ZapOff class="i14" />
+                  <span>Standard</span>
+                </Combobox>
+              </div>
+            )
+          }
         </div>
       </div>
       <div class="st-switch-row">
@@ -98,7 +124,16 @@ const readOnly = mode === "reuse";
     </div>
     <div class="st-dialog-foot">
       <Button variant="outline">Cancel</Button>
-      <Button data-start>Start session</Button>
+      <span class="st-dialog-actions">
+        {
+          background && (
+            <Button variant="secondary" data-background>
+              Run in background
+            </Button>
+          )
+        }
+        <Button data-start>Start session</Button>
+      </span>
     </div>
   </div>
 </div>

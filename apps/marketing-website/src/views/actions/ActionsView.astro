@@ -1,0 +1,39 @@
+---
+// The session page of the Builder after its turn: the Builder transcript, the Diffs tab, the
+// repository actions in the top bar, and the bottom panel with one terminal for each action that
+// runs. The scene runs the default action, runs another action from the menu, and opens the
+// worktree in another app.
+import BottomPanel from "../../replica/studio/BottomPanel.astro";
+import GitPanel from "../../replica/studio/GitPanel.astro";
+import OpenInMenu from "../../replica/studio/OpenInMenu.astro";
+import StudioWindow from "../../replica/studio/StudioWindow.astro";
+import Transcript from "../../replica/transcript/Transcript.astro";
+import { BUILD_FILES, FRAMES } from "../../sample/studio";
+import { settled, studioNav } from "../../sample/studio-nav";
+import { OPEN_IN_CHOICE, OPEN_IN_DEFAULT } from "../../sample/worktree";
+import Scene from "../Scene.astro";
+import "./ActionsView.css";
+
+/** The last frame: the Builder is done, and two terminals run in its worktree. */
+const frame = {
+  ...FRAMES.build,
+  focus: "panel",
+  nav: studioNav(settled("build", "ai_review", "1m")),
+} as const;
+---
+
+<Scene
+  name="actions"
+  alt={`The session page of a task after its Builder session, with the four changed files of the task branch in the Diffs tab. The visitor runs Web, the default repository action of the top bar. The bottom panel opens with a Web terminal that starts the dev server in the task worktree. Then the visitor runs API from the actions menu, and a second terminal tab streams its log. At the end, the visitor opens the worktree in ${OPEN_IN_CHOICE}.`}
+>
+  <StudioWindow class="actions-studio" frame={frame} bottom>
+    <Transcript sessions={[{ id: "build", turns: 1 }]} shown="build" />
+    <GitPanel slot="panel" files={BUILD_FILES} ahead={1} />
+    <OpenInMenu slot="openin" tool={OPEN_IN_DEFAULT} appIcon menu />
+    <BottomPanel slot="bottom" terminals={["web", "api"]} active="api" />
+  </StudioWindow>
+</Scene>
+<script>
+  import { mountActions } from "./scene";
+  mountActions();
+</script>

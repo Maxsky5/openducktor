@@ -1,0 +1,181 @@
+@layer replica {
+  /* The workflow rail above the chat column: border-b bg-card px-4 py-2, with the steps in the
+     center. */
+  .wr {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    padding: calc(8 * var(--u)) calc(16 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--border);
+    background: var(--card);
+  }
+  .wr-steps {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+  }
+  .wr-item {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
+  .st-step {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(36 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(12 * var(--u));
+    background: var(--card);
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    white-space: nowrap;
+    --ring: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  }
+  .st-step[data-tone="in_progress"] {
+    border-color: var(--info-border);
+    background: var(--info-surface);
+    color: var(--info-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--info-ring);
+  }
+  .st-step[data-tone="done"] {
+    border-color: var(--success-border);
+    background: var(--success-surface);
+    color: var(--success-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--success-ring);
+  }
+  .st-step[data-tone="waiting_input"] {
+    border-color: var(--warning-border);
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--warning-ring);
+  }
+  .st-step[data-tone="rejected"] {
+    border-color: var(--rejected-border);
+    background: var(--rejected-surface);
+    color: var(--rejected-muted);
+    box-shadow: var(--shadow-sm);
+    --ring: var(--rejected-ring);
+  }
+  .st-step[data-tone="optional"] {
+    border-style: dashed;
+  }
+  .st-step[data-tone="blocked"] {
+    border-color: var(--border);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    --ring: var(--warning-ring);
+  }
+  .st-step[aria-pressed="true"] {
+    box-shadow:
+      0 0 0 calc(2 * var(--u)) var(--card),
+      0 0 0 calc(4 * var(--u)) var(--ring);
+  }
+  .st-step-state {
+    display: grid;
+    place-items: center;
+  }
+  .st-step-state > * {
+    display: none;
+  }
+  .st-step[data-tone="done"] .st-step-state .done,
+  .st-step[data-tone="in_progress"] .st-step-state .working,
+  .st-step[data-tone="waiting_input"] .st-step-state .waiting,
+  .st-step[data-tone="optional"] .st-step-state .waiting,
+  .st-step[data-tone="rejected"] .st-step-state .alert,
+  .st-step[data-tone="available"] .st-step-state .available {
+    display: block;
+  }
+  .st-step-state .done {
+    color: var(--success-accent);
+  }
+  .st-link {
+    color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  }
+  .st-link[data-tone="done"] {
+    color: var(--success-ring);
+  }
+  .st-link[data-tone="in_progress"] {
+    color: var(--info-ring);
+  }
+  .st-link[data-tone="waiting_input"] {
+    color: var(--warning-ring);
+  }
+  .st-link[data-tone="rejected"] {
+    color: var(--rejected-ring);
+  }
+  .st-link[data-tone="blocked"] {
+    color: color-mix(in oklch, var(--muted-foreground) 20%, transparent);
+  }
+  .st-step-icon {
+    width: calc(16 * var(--u));
+    height: calc(16 * var(--u));
+  }
+  /*
+   * The compact rail of the session preview: py-1 gap-1, and each step h-7 px-1.5 text-[11px]
+   * rounded-md with 12 pixel icons. The selected step has ring-2 with ring-offset-1.
+   */
+  .wr[data-size="compact"] {
+    padding: calc(4 * var(--u)) 0;
+    border: 0;
+    background: none;
+  }
+  .wr[data-size="compact"] .wr-steps,
+  .wr[data-size="compact"] .wr-item {
+    flex: 1;
+    min-width: 0;
+    gap: calc(4 * var(--u));
+  }
+  .wr[data-size="compact"] .st-step {
+    flex: 1;
+    justify-content: center;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+    height: calc(28 * var(--u));
+    padding: 0 calc(6 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-size: calc(11 * var(--u));
+  }
+  .wr[data-size="compact"] .st-step svg,
+  .wr[data-size="compact"] .st-link {
+    flex: none;
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+  }
+  .wr[data-size="compact"] .st-step[aria-pressed="true"] {
+    box-shadow:
+      0 0 0 calc(1 * var(--u)) var(--popover),
+      0 0 0 calc(3 * var(--u)) var(--ring);
+  }
+  /* A narrow stage makes the steps smaller. */
+  @container stage (width <= 699px) {
+    .wr {
+      justify-content: flex-start;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+    }
+    .st-step-icon {
+      display: none;
+    }
+    .wr-steps {
+      gap: calc(2 * var(--u));
+    }
+    .wr-item {
+      gap: calc(2 * var(--u));
+    }
+    .st-step {
+      gap: calc(4 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(13 * var(--u));
+    }
+    .st-link {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+  }
+}

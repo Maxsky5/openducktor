@@ -1,4 +1,4 @@
-// The session transcript of the Agent Studio and the workspace chat: rows that come in one by
+// The session transcript of a task session and of a chat: rows that come in one by
 // one, tool rows that run, and streamed assistant messages.
 import { must } from "../../motion/dom";
 import { designPixel, riseIn } from "../../motion/effects";

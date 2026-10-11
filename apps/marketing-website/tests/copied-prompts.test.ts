@@ -32,7 +32,7 @@ function builtin(id: string): string {
 }
 
 describe("prompts copied from the product", () => {
-  test("the Agent Studio kickoff messages are the built-in kickoff prompts", () => {
+  test("the session kickoff messages are the built-in kickoff prompts", () => {
     expect(KICKOFF.spec).toBe(builtin("kickoff.spec_initial"));
     expect(KICKOFF.planner).toBe(builtin("kickoff.planner_initial"));
     expect(KICKOFF.build).toBe(builtin("kickoff.build_implementation_start"));

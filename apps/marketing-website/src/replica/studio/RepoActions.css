@@ -1,0 +1,72 @@
+@layer replica {
+  /* RepoActionsSplitButton: a 28 pixel outline square with the icon of the default action, and
+     the chevron of the menu without a left border. */
+  .ra {
+    position: relative;
+    display: flex;
+    height: calc(28 * var(--u));
+    color: var(--foreground);
+  }
+  .ra-run,
+  .ra-more {
+    display: grid;
+    place-items: center;
+    height: calc(28 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    background: var(--card);
+  }
+  .ra-run {
+    width: calc(28 * var(--u));
+    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+  }
+  .ra-run .lucide {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .ra-more {
+    padding: 0 calc(6 * var(--u));
+    border-left: 0;
+    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+  }
+  .ra-more .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    opacity: 0.8;
+  }
+  /* The menu: a 224 pixel popover under the button, aligned on its right edge. */
+  .ra-menu {
+    position: absolute;
+    top: calc(34 * var(--u));
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: calc(224 * var(--u));
+    padding: calc(6 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: var(--popover);
+    box-shadow: var(--shadow-lg);
+    transform-origin: top right;
+  }
+  .ra-item {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(32 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  .ra-item[data-active] {
+    background: var(--accent);
+  }
+  .ra-menu hr {
+    height: calc(1 * var(--u));
+    margin: calc(6 * var(--u)) calc(-6 * var(--u));
+    border: 0;
+    background: var(--border);
+  }
+}

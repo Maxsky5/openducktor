@@ -1,14 +1,22 @@
-// Shared values of the Agent Studio replica. The model names are fictional.
+// Shared values of the session window replica. The model names are fictional.
+import type { NavEntry } from "../replica/shell/nav";
+import type { RoleId } from "../replica/vocabulary";
 import type { Session } from "./sessions";
+import { settled, studioNav } from "./studio-nav";
 import { taskId } from "./workspace";
 
-type StepTone = "available" | "blocked" | "in_progress" | "done" | "waiting_input" | "rejected";
-/** The roles of the workflow rail, in the order of agent-studio-header-workflow-rail.tsx. */
-export const ROLES = ["spec", "planner", "build", "qa"] as const;
-export type RoleId = (typeof ROLES)[number];
+type StepTone =
+  | "available"
+  | "optional"
+  | "blocked"
+  | "in_progress"
+  | "done"
+  | "waiting_input"
+  | "rejected";
 /** One tone for each role of the rail, in rail order. */
 export type RailTones = readonly [StepTone, StepTone, StepTone, StepTone];
-export type PanelId = "document" | "git" | "ci_checks";
+/** The panels that the views show. The Files tab stays in the strip, and no view opens it. */
+export type PanelId = "document" | "diffs" | "ci_checks";
 export type Focus = "chat" | "panel";
 export type GitFile = {
   path: string;
@@ -20,7 +28,12 @@ export type GitFile = {
 };
 
 /** Every session of the task uses the same Codex model, with a window of 400K tokens. */
-const ASTRA = { runtime: "codex", model: "gpt-6-astra", window: 400_000 } as const;
+const ASTRA = {
+  runtime: "codex",
+  model: "gpt-6-astra",
+  window: 400_000,
+  speed: "standard",
+} as const;
 
 export const SPEC_SESSION = { ...ASTRA, effort: "high", used: 9.4 } satisfies Session;
 export const PLANNER_SESSION = { ...ASTRA, effort: "high", used: 14.2 } satisfies Session;
@@ -35,28 +48,24 @@ export const QA_SESSION = { ...ASTRA, effort: "high", used: 17.9 } satisfies Ses
 
 export type DocumentLabels = {
   title: string;
-  description: string;
   empty: string;
   updated: string;
 };
 
-/** Document panel copy of task-execution-document-panel.tsx, and the sample save times. */
+/** The documents of the Document tab, from use-agent-studio-page-model-builders.ts, and the sample save times. */
 export const DOCUMENTS = {
   spec: {
     title: "Specification",
-    description: "Current spec document for this task.",
     empty: "No spec document yet.",
     updated: "Sep 27, 09:42 AM",
   },
   plan: {
     title: "Implementation Plan",
-    description: "Current implementation plan for this task.",
     empty: "No implementation plan yet.",
     updated: "Sep 27, 09:45 AM",
   },
   qa: {
     title: "QA Report",
-    description: "Latest QA report for this task.",
     empty: "No QA report yet.",
     updated: "Sep 27, 09:52 AM",
   },
@@ -222,8 +231,8 @@ export const CI_CHECKS = ["lint", "typecheck", "test", "build"];
 export const PR_TITLE = "feat(search): open search from anywhere with Cmd+K";
 
 /**
- * The window of the Agent Studio in a frame: the tones of the workflow rail and its selected
- * role, the quick action, the session in the composer, and the task panel.
+ * The session window in a frame: the tones of the workflow rail and its selected role, the quick
+ * action, the session in the composer, the right panel, and the sessions of the sidebar.
  */
 export type StudioFrame = {
   tones: RailTones;
@@ -232,11 +241,12 @@ export type StudioFrame = {
   actionDisabled: boolean;
   session: Session;
   panel: PanelId;
-  documentTab: boolean;
+  /** The CI Checks tab shows only with a linked pull request. */
   checksTab: boolean;
   focus: Focus;
   /** The review step gives the diff more room. */
   panelSize?: "wide";
+  nav: readonly NavEntry[];
 };
 
 /** The last frame of each workflow step. The next step starts from it. */
@@ -248,9 +258,9 @@ export const FRAMES = {
     actionDisabled: false,
     session: SPEC_SESSION,
     panel: "document",
-    documentTab: true,
     checksTab: false,
     focus: "chat",
+    nav: studioNav(settled("spec", "spec_ready")),
   },
   plan: {
     tones: ["done", "done", "available", "blocked"],
@@ -259,9 +269,9 @@ export const FRAMES = {
     actionDisabled: false,
     session: PLANNER_SESSION,
     panel: "document",
-    documentTab: true,
     checksTab: false,
     focus: "chat",
+    nav: studioNav(settled("planner", "ready_for_dev")),
   },
   build: {
     tones: ["done", "done", "done", "available"],
@@ -269,10 +279,10 @@ export const FRAMES = {
     action: "Request QA Review",
     actionDisabled: false,
     session: BUILDER_SESSION,
-    panel: "git",
-    documentTab: false,
+    panel: "diffs",
     checksTab: false,
     focus: "chat",
+    nav: studioNav(settled("build", "ai_review")),
   },
   qa: {
     tones: ["done", "done", "done", "rejected"],
@@ -280,10 +290,10 @@ export const FRAMES = {
     action: "Request QA Review",
     actionDisabled: false,
     session: BUILDER_FIX_SESSION,
-    panel: "git",
-    documentTab: false,
+    panel: "diffs",
     checksTab: false,
     focus: "chat",
+    nav: studioNav(settled("build", "ai_review")),
   },
   review: {
     tones: ["done", "done", "done", "done"],
@@ -292,9 +302,9 @@ export const FRAMES = {
     actionDisabled: true,
     session: BUILDER_PR_SESSION,
     panel: "ci_checks",
-    documentTab: false,
     checksTab: true,
     focus: "panel",
     panelSize: "wide",
+    nav: studioNav(),
   },
 } as const satisfies Record<string, StudioFrame>;

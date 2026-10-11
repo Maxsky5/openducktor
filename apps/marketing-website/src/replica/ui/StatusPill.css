@@ -1,0 +1,66 @@
+@layer product {
+  /* The sidebar and the command palette set the size of the pill. */
+  .status-pill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--foreground);
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  /* Badge: px-2.5 py-0.5 text-xs. */
+  .status-pill[data-size="badge"] {
+    padding: calc(2 * var(--u)) calc(10 * var(--u));
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .status-pill[data-status="spec_ready"] {
+    border-color: var(--pending-border);
+    background: var(--pending-surface);
+    color: var(--pending-muted);
+  }
+  .status-pill[data-status="ready_for_dev"] {
+    border-color: var(--info-border);
+    background: var(--info-surface);
+    color: var(--info-muted);
+  }
+  .status-pill[data-status="in_progress"] {
+    border-color: var(--warning-border);
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+  }
+  .status-pill[data-status="blocked"] {
+    border-color: var(--destructive-border);
+    background: var(--destructive-surface);
+    color: var(--destructive-muted);
+  }
+  .status-pill[data-status="ai_review"] {
+    border-color: var(--indigo-200);
+    background: var(--indigo-50);
+    color: var(--indigo-700);
+  }
+  :where(:root[data-theme="dark"]) .status-pill[data-status="ai_review"] {
+    border-color: var(--indigo-800);
+    background: color-mix(in oklch, var(--indigo-950) 50%, transparent);
+    color: var(--indigo-300);
+  }
+  .status-pill[data-status="human_review"] {
+    border-color: var(--cyan-200);
+    background: var(--cyan-50);
+    color: var(--cyan-700);
+  }
+  :where(:root[data-theme="dark"]) .status-pill[data-status="human_review"] {
+    border-color: var(--cyan-800);
+    background: color-mix(in oklch, var(--cyan-950) 50%, transparent);
+    color: var(--cyan-300);
+  }
+  .status-pill[data-status="closed"] {
+    border-color: var(--success-border);
+    background: var(--success-surface);
+    color: var(--success-muted);
+  }
+}

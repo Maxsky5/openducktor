@@ -1,81 +1,90 @@
 ---
-// The app sidebar of components/layout/sidebar: the brand, the workspace and its branch, the
-// diagnostics, the pages, the create actions, and the agent activity.
+// The open sidebar of workspace-sidebar.tsx in the macOS window: the hide button in the title bar,
+// the brand with the command palette button, the Kanban link, the New task split button, the scope
+// and grouping controls, the session list, and the footer with Settings and Diagnostics.
 import {
   Activity,
-  ArrowUpRight,
-  ChevronRight,
+  ChevronDown,
   CircleAlert,
-  MessageCirclePlus,
+  Clock,
+  Columns3,
+  ListTree,
   PanelLeftClose,
   Plus,
+  Search,
   Settings,
   ShieldCheck,
 } from "@lucide/astro";
-import type { ActivityCounts } from "../board/model";
-import { APP_PAGES } from "./pages";
 import { release } from "../../content/release";
 import { WORKSPACE } from "../../sample/workspace";
 import { flag } from "../flag";
-import Combobox from "../ui/Combobox.astro";
-import type { AppPage } from "../vocabulary";
+import Kbd from "../ui/Kbd.astro";
+import { type NavData, navGroupViews } from "./nav";
+import NavRow from "./NavRow.astro";
+import "./NavGroups.css";
 import "./Sidebar.css";
 
 interface Props {
-  page: AppPage;
-  activity: ActivityCounts;
+  nav: NavData;
+  /** The Kanban link is the only page link. It is current on the Kanban page. */
+  kanban?: boolean;
 }
-const { page, activity } = Astro.props;
-const { sessions, waiting } = activity;
+const { nav, kanban = false } = Astro.props;
+const groups = navGroupViews(nav.entries);
+const ICONS = { needs_you: CircleAlert, running: Activity, recent: Clock };
 ---
 
 <div class="sidebar">
-  <div class="sb-main">
-    <div class="sb-brand">
-      <span class="mark"></span>
-      <div><strong>OpenDucktor</strong><small>{release.version}</small></div>
-      <PanelLeftClose class="sb-collapse" />
-    </div>
-    <div class="sb-block">
-      <span class="sb-label">Workspace</span>
-      <span class="sb-workspace">{WORKSPACE}</span>
-    </div>
-    <div class="sb-block">
-      <span class="sb-label">Branch</span>
-      <Combobox branch class="sb-branch"><span>main</span></Combobox>
-    </div>
-    <div class="sb-diagnostics">
-      <div>
-        <strong><ShieldCheck class="i14" />Diagnostics</strong><small>Healthy</small>
-      </div>
-      <span><ArrowUpRight class="i14" /></span>
-    </div>
-    <div class="sb-nav">
-      {
-        APP_PAGES.map(({ id, label, Icon }) => (
-          <span aria-current={id === page ? "true" : undefined}>
-            <Icon />
-            {label}
-          </span>
-        ))
-      }
-    </div>
-    <div class="sb-create">
-      <span><Plus />New task</span><span><MessageCirclePlus />New chat</span>
-    </div>
-    <div class="sb-activity">
-      <span class="sb-label"><Activity class="i14" />Agent Activity</span>
-      <div class="sb-row" data-active={flag(sessions > 0)} data-activity-row="sessions">
-        <Activity class="i14" /><span>Active sessions</span><b data-count="sessions">{sessions}</b
-        ><ChevronRight class="i14 sb-chevron" />
-      </div>
-      <div class="sb-row alert" data-active={flag(waiting > 0)} data-activity-row="waiting">
-        <CircleAlert class="i14" /><span>Needs your input</span><b data-count="waiting">{waiting}</b
-        ><ChevronRight class="i14 sb-chevron" />
+  <div class="sb-head">
+    <div class="sb-heading">
+      <span class="sb-hide"><PanelLeftClose /></span>
+      <div class="sb-brand">
+        <span class="mark"></span>
+        <div><strong>OpenDucktor</strong><small>{release.version}</small></div>
+        <span class="sb-search"><Search class="i14" /><Kbd keys={["⌘", "K"]} /></span>
       </div>
     </div>
+    <div class="sb-actions">
+      <span class="sb-kanban" aria-current={kanban ? "true" : undefined}><Columns3 />Kanban</span>
+      <span class="sb-create">
+        <span class="sb-create-main"><Plus />New task</span>
+        <span class="sb-create-menu"><ChevronDown /></span>
+      </span>
+    </div>
+  </div>
+  <div class="sb-controls">
+    <span class="sb-scope">
+      <span data-checked={flag(nav.scope === "current")}>{WORKSPACE}</span>
+      <span data-checked={flag(nav.scope === "all")}>All workspaces</span>
+    </span>
+    <span class="sb-grouping"><ListTree /></span>
+  </div>
+  <div class="sb-sessions">
+    {
+      groups.map(({ group, label, entries, count, hidden }) => {
+        const Icon = ICONS[group];
+        return (
+          <div class="sb-group" hidden={hidden} data-nav-group={group}>
+            <span class="sb-group-head">
+              <Icon class="sb-group-icon" />
+              <span>{label}</span>
+              <b class="nav-count" data-nav-count={group}>
+                {count}
+              </b>
+              <ChevronDown class="sb-group-chevron" />
+            </span>
+            <ul class="sb-list" data-nav-list={group}>
+              {entries.map((entry) => (
+                <NavRow entry={entry} />
+              ))}
+            </ul>
+          </div>
+        );
+      })
+    }
   </div>
   <div class="sb-footer">
     <span class="sb-settings"><Settings />Settings</span>
+    <span class="sb-diagnostics"><ShieldCheck /></span>
   </div>
 </div>

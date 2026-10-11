@@ -1,0 +1,78 @@
+@layer product {
+  /* The status dot of a session. Sources: SessionEntryStatusDot in session-navigation-parts.tsx,
+     and .running-status-dot in styles.css. */
+  .status-dot {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: calc(10 * var(--u));
+    height: calc(10 * var(--u));
+    border-radius: 50%;
+    background: var(--status-read);
+    isolation: isolate;
+  }
+  .status-dot[data-dot="unread"] {
+    background: var(--status-unread);
+  }
+  .status-dot[data-dot="input"] {
+    background: var(--status-input-unread);
+  }
+  .status-dot[data-dot="input-read"] {
+    background: var(--status-input-read);
+  }
+  .status-dot[data-dot="running"] {
+    background: var(--status-running);
+  }
+  .status-dot[data-dot="running"]::before,
+  .status-dot[data-dot="running"]::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .status-dot[data-dot="running"]::before {
+    z-index: -1;
+    inset: calc(-3 * var(--u));
+    background: radial-gradient(
+      circle,
+      color-mix(in oklch, var(--status-running) 28%, transparent) 0 44%,
+      color-mix(in oklch, var(--status-running) 14%, transparent) 45% 66%,
+      transparent 74%
+    );
+    box-shadow:
+      0 0 calc(5 * var(--u)) color-mix(in oklch, var(--status-running) 32%, transparent),
+      0 0 calc(10 * var(--u)) color-mix(in oklch, var(--status-running) 20%, transparent);
+    animation: status-glow 1350ms ease-in-out infinite;
+  }
+  .status-dot[data-dot="running"]::after {
+    inset: calc(-2 * var(--u));
+    border: calc(1 * var(--u)) solid color-mix(in oklch, var(--status-running) 48%, transparent);
+    animation: status-ring 1350ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes status-glow {
+    0%,
+    100% {
+      opacity: 0.08;
+      transform: scale(0.94);
+    }
+    45% {
+      opacity: 0.58;
+      transform: scale(1.12);
+    }
+    72% {
+      opacity: 0.18;
+      transform: scale(1.18);
+    }
+  }
+  @keyframes status-ring {
+    0% {
+      opacity: 0.56;
+      transform: scale(0.92);
+    }
+    72%,
+    100% {
+      opacity: 0;
+      transform: scale(1.28);
+    }
+  }
+}

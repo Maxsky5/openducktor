@@ -1,5 +1,5 @@
-// The task panel of the Agent Studio: the Document, Git, and CI Checks tabs of
-// task-execution-panel.tsx, with DocumentPanel.astro, GitPanel.astro, and ChecksPanel.astro.
+// The right panel of a task session: the Document, Diffs, and CI Checks tabs of panel-tab-kinds.ts,
+// with DocumentPanel.astro, GitPanel.astro, and ChecksPanel.astro.
 import { all, data, must } from "../../motion/dom";
 import { designPixel, growIn, pop, riseIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
@@ -17,25 +17,26 @@ function lineTotals(files: readonly GitFile[]): { add: number; del: number } {
   });
 }
 
-/** The controller of the task panel of the window `root`. */
+/** The controller of the right panel of the window `root`. */
 export function studioPanels(scene: Scene, root: HTMLElement) {
   const body = must(root, "[data-panel-body]");
   const panel = (id: PanelId): HTMLElement => must(body, `:scope > [data-panel="${id}"]`);
-  const tabItem = (id: PanelId): HTMLElement => must(root, `[data-ptab-item="${id}"]`);
+  const strip = must(root, '[data-strip="right"]');
+  const tab = (id: PanelId): HTMLElement => must(strip, `[data-ptab="${id}"]`);
 
   const setPanel = (id: PanelId): void => {
-    for (const tab of all(root, "[data-ptab]"))
-      tab.toggleAttribute("data-active", data(tab, "ptab") === id);
+    for (const item of all(strip, "[data-ptab]"))
+      item.toggleAttribute("data-active", data(item, "ptab") === id);
     body.dataset.activePanel = id;
   };
-  /** The Document and CI Checks tabs show only when the role or the task has them. */
+  /** The CI Checks tab shows only when the task has a pull request. */
   const setTab = (id: PanelId, shown: boolean): void => {
-    tabItem(id).hidden = !shown;
+    tab(id).hidden = !shown;
   };
   /** Shows or hides a tab at the playhead. A new tab pops. */
   const showTab = (id: PanelId, shown: boolean): void => {
     setTab(id, shown);
-    if (shown) scene.run(pop(must(tabItem(id), "[data-ptab]"), 1.12));
+    if (shown) scene.run(pop(tab(id), 1.12));
   };
 
   // Document tab.
@@ -44,7 +45,6 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     const element = view();
     element.dataset.document = filled ? "filled" : "empty";
     must(element, "[data-doc-title]").textContent = labels.title;
-    must(element, "[data-doc-description]").textContent = labels.description;
     must(element, "[data-doc-empty]").textContent = labels.empty;
     must(element, "[data-updated]").textContent = filled ? labels.updated : "Not set";
   };
@@ -68,8 +68,8 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
       );
     });
 
-  // Git tab.
-  const git = (): HTMLElement => panel("git");
+  // Diffs tab.
+  const git = (): HTMLElement => panel("diffs");
   const fileItem = (path: string): HTMLElement => must(git(), `[data-file="${path}"]`);
   /** Removed lines and commit counts hide at zero, as the product hides them. */
   const setCount = (element: HTMLElement, prefix: string, value: number): void => {
@@ -96,7 +96,7 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
   /** Counts the added lines of a file from its current value. */
   const fileLines = (path: string, to: number, at: number): void =>
     countTo(scene, must(fileItem(path), "[data-add]"), to, at, { prefix: "+" });
-  /** Counts the totals of the Git tab from their current values. */
+  /** Counts the totals of the Diffs tab from their current values. */
   const totals = (files: readonly GitFile[], at: number): void => {
     const { add, del } = lineTotals(files);
     countTo(scene, must(git(), "[data-total-add]"), add, at, { prefix: "+" });
@@ -107,7 +107,7 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
       scene.run(pop(removed));
     });
   };
-  /** Build time: the Git tab shows the empty state until the first file lands. */
+  /** Build time: the Diffs tab shows the empty state until the first file lands. */
   const clearFiles = (): void => {
     const element = git();
     element.dataset.git = "empty";
@@ -115,7 +115,7 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     must(element, "[data-file-count]").textContent = filesLabel(0);
     setTotals([]);
   };
-  /** A file appears in the Git tab in path order. */
+  /** A file appears in the Diffs tab in path order. */
   const landFile = (path: string, at: number): void =>
     scene.at(at, () => {
       const element = git();

@@ -26,7 +26,7 @@ test("the workflow steps are tabs with arrows, Home, End, and one tab stop", asy
     await expect(page.locator(`#workflow-panel-${id}`)).toBeVisible();
     await expect(page.locator(`#workflow-panel-${id} [data-stage]`)).toHaveAttribute(
       "aria-label",
-      /^Agent Studio\./,
+      /^The session page of a task\./,
     );
     await expect(panels.filter({ visible: true })).toHaveCount(1);
   }
@@ -117,4 +117,24 @@ test("each workflow step ends on its static frame, and the next step starts ther
       await expect(stage.locator('[data-mode="reuse"]')).toHaveAttribute("data-disabled");
     }
   }
+});
+
+test("while the Spec agent waits for your answer, the sidebar and the workspace tile show it", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-light", "One project plays the long scenes.");
+  test.setTimeout(120_000);
+  await playOnFakeClock(page);
+  await page.locator(".chapters").scrollIntoViewIfNeeded();
+  const stage = page.locator("#workflow-panel-spec [data-stage]");
+  const input = stage.locator('[data-rail-tile="fieldnotes"] [data-rail-badge="input"]');
+  const waiting = stage.locator('[data-nav-count="needs_you"]');
+  // The question moves the session to Needs you, and the tile of its workspace shows a badge.
+  await runUntil(page, () => input.isVisible(), 30);
+  await expect(input).toBeVisible();
+  await expect(waiting).toHaveText("1");
+  // The answers send the session back to work.
+  await runUntil(page, async () => !(await input.isVisible()), 30);
+  await expect(input).toBeHidden();
+  await expect(waiting).toHaveText("0");
 });
