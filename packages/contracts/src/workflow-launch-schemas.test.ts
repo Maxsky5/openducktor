@@ -51,6 +51,16 @@ describe("workflow launch contracts", () => {
     ).toBe(false);
   });
 
+  test("rejects an automatic policy, because only the host starts Autopilot launches", () => {
+    const request = conflictLaunch({ startMode: "reuse", sourceSession });
+    expect(
+      workflowLaunchRequestSchema.safeParse({
+        ...request,
+        policy: { kind: "automatic", actionId: "startBuilder" },
+      }).success,
+    ).toBe(false);
+  });
+
   test("rejects unknown request fields", () => {
     const request = conflictLaunch({ startMode: "reuse", sourceSession });
     for (const extra of [{ launchAttemptId: "attempt" }, { queueIfBusy: true }])

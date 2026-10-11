@@ -88,7 +88,7 @@ export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
   cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
 
 /** Publishes a start error once. It returns true when the app already showed the error. */
-export const publishSessionStartError = async (
+const publishSessionStartError = async (
   notifications: SessionStartNotificationPublisher | undefined,
   input: SessionStartNotificationInput,
   error: Error,

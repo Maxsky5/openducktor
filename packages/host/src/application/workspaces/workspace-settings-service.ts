@@ -455,7 +455,6 @@ const prepareSettingsSnapshot = (
       chat: snapshot.chat,
       reusablePrompts: snapshot.reusablePrompts,
       kanban: snapshot.kanban,
-      autopilot: snapshot.autopilot,
       notifications: snapshot.notifications,
       agentRuntimes: snapshot.agentRuntimes,
       agentModelFavorites: config.agentModelFavorites,
@@ -464,6 +463,7 @@ const prepareSettingsSnapshot = (
     };
     if (snapshot.customAgentRoles !== undefined)
       payload.customAgentRoles = snapshot.customAgentRoles;
+    if (snapshot.autopilot !== undefined) payload.autopilot = snapshot.autopilot;
     const next = yield* parseConfig(globalConfigSchema, payload);
     return { current: config, next };
   });

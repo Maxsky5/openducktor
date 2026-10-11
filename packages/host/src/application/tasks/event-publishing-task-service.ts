@@ -1,8 +1,8 @@
 import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
-import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import type { TaskSyncService } from "./sync/task-sync-service";
+import type { TaskMutationOperation } from "./task-mutation-operation";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
@@ -17,7 +17,11 @@ export type CreateEventPublishingTaskServiceInput = {
   taskService: TaskServiceWithMutationProgress;
   taskSyncService: Pick<
     TaskSyncService,
-    "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
+    | "runStatusMutation"
+    | "publishExternalTaskCreated"
+    | "publishTasksUpdated"
+    | "syncRepoPullRequests"
+    | "runMutation"
   >;
 };
 
@@ -53,86 +57,87 @@ export const createEventPublishingTaskService = ({
 }: CreateEventPublishingTaskServiceInput): EventPublishingTaskService => {
   const agentSessionUpdateModelDeferredPublication: EventPublishingTaskService["agentSessionUpdateModelDeferredPublication"] =
     (input) =>
-      taskSyncService.runMutation(
+      taskSyncService.runStatusMutation(
         input.repoPath,
-        Effect.gen(function* () {
-          const { result, statusChanges } = yield* collectTaskStatusChanges(
-            taskService.agentSessionUpdateModel(input),
-          );
-          if (result._tag === "Failure") return yield* Effect.fail(result.failure);
-          return {
-            updated: result.success,
-            publish: taskSyncService.runMutation(
-              input.repoPath,
-              taskSyncService.publishTasksUpdated(
-                input.repoPath,
-                changeForTask(input.taskId),
-                "agent-session-update-model",
-                statusChanges,
-              ),
-            ),
-          };
-        }),
+        "agent-session-update-model",
+        taskService.agentSessionUpdateModel(input),
+        ({ result, statusChanges }) =>
+          result._tag === "Failure"
+            ? Effect.fail(result.failure)
+            : Effect.succeed({
+                updated: result.success,
+                publish: taskSyncService.runMutation(
+                  input.repoPath,
+                  taskSyncService.publishTasksUpdated(
+                    input.repoPath,
+                    changeForTask(input.taskId),
+                    "agent-session-update-model",
+                    statusChanges,
+                  ),
+                ),
+              }),
       );
   const publishAfterMutation = <A>(
-    operation: string,
+    operation: TaskMutationOperation,
     repoPath: string,
     changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     successChanges: (result: A) => TaskChangeSet = () => changes,
   ): Effect.Effect<A, TaskServiceError> =>
-    Effect.gen(function* () {
-      const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
-      if (result._tag === "Failure") {
-        if (result.failure instanceof TaskMutationProgressFailure) {
-          yield* taskSyncService.publishTasksUpdated(
-            repoPath,
-            result.failure.changes,
-            operation,
-            statusChanges,
-            result.failure.failure,
-          );
-          return yield* Effect.fail(result.failure.failure);
+    taskSyncService.runStatusMutation(repoPath, operation, mutation, ({ result, statusChanges }) =>
+      Effect.gen(function* () {
+        if (result._tag === "Failure") {
+          if (result.failure instanceof TaskMutationProgressFailure) {
+            yield* taskSyncService.publishTasksUpdated(
+              repoPath,
+              result.failure.changes,
+              operation,
+              statusChanges,
+              result.failure.failure,
+            );
+            return yield* Effect.fail(result.failure.failure);
+          }
+          return yield* Effect.fail(result.failure);
         }
-        return yield* Effect.fail(result.failure);
-      }
-      yield* taskSyncService.publishTasksUpdated(
-        repoPath,
-        successChanges(result.success),
-        operation,
-        statusChanges,
-      );
-      return result.success;
-    }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
+        yield* taskSyncService.publishTasksUpdated(
+          repoPath,
+          successChanges(result.success),
+          operation,
+          statusChanges,
+        );
+        return result.success;
+      }),
+    );
 
   const publishAfterConditionalMutation = <A>(
-    operation: string,
+    operation: TaskMutationOperation,
     repoPath: string,
     changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     mutated: (result: A) => boolean,
   ): Effect.Effect<A, TaskServiceError> =>
-    Effect.gen(function* () {
-      const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
-      if (result._tag === "Failure") {
-        if (result.failure instanceof TaskMutationProgressFailure) {
-          yield* taskSyncService.publishTasksUpdated(
-            repoPath,
-            result.failure.changes,
-            operation,
-            statusChanges,
-            result.failure.failure,
-          );
-          return yield* Effect.fail(result.failure.failure);
+    taskSyncService.runStatusMutation(repoPath, operation, mutation, ({ result, statusChanges }) =>
+      Effect.gen(function* () {
+        if (result._tag === "Failure") {
+          if (result.failure instanceof TaskMutationProgressFailure) {
+            yield* taskSyncService.publishTasksUpdated(
+              repoPath,
+              result.failure.changes,
+              operation,
+              statusChanges,
+              result.failure.failure,
+            );
+            return yield* Effect.fail(result.failure.failure);
+          }
+          return yield* Effect.fail(result.failure);
         }
-        return yield* Effect.fail(result.failure);
-      }
-      if (!mutated(result.success)) {
+        if (!mutated(result.success)) {
+          return result.success;
+        }
+        yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
         return result.success;
-      }
-      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
-      return result.success;
-    }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
+      }),
+    );
 
   return {
     listTasks: (input) => taskService.listTasks(input),
@@ -143,26 +148,25 @@ export const createEventPublishingTaskService = ({
     agentSessionsList: (input) => taskService.agentSessionsList(input),
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),
     transitionTaskDeferredPublication: (input) =>
-      taskSyncService.runMutation(
+      taskSyncService.runStatusMutation(
         input.repoPath,
-        Effect.gen(function* () {
-          const { result, statusChanges } = yield* collectTaskStatusChanges(
-            taskService.transitionTask(input),
-          );
-          if (result._tag === "Failure") return yield* Effect.fail(result.failure);
-          return {
-            task: result.success,
-            publish: taskSyncService.runMutation(
-              input.repoPath,
-              taskSyncService.publishTasksUpdated(
-                input.repoPath,
-                changeForTask(input.taskId),
-                "transition-task",
-                statusChanges,
-              ),
-            ),
-          };
-        }),
+        "transition-task",
+        taskService.transitionTask(input),
+        ({ result, statusChanges }) =>
+          result._tag === "Failure"
+            ? Effect.fail(result.failure)
+            : Effect.succeed({
+                task: result.success,
+                publish: taskSyncService.runMutation(
+                  input.repoPath,
+                  taskSyncService.publishTasksUpdated(
+                    input.repoPath,
+                    changeForTask(input.taskId),
+                    "transition-task",
+                    statusChanges,
+                  ),
+                ),
+              }),
       ),
     agentSessionUpsertDeferredPublication: (input) =>
       taskSyncService.runMutation(

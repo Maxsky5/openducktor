@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import type { WorkflowLaunchRequest } from "@openducktor/contracts";
-import { createLaunchHarness, requestFor, modelFor } from "./test-support/workflow-launch-harness";
+import {
+  type AutomaticLaunchInput,
+  createLaunchHarness,
+  requestFor,
+  modelFor,
+} from "./test-support/workflow-launch-harness";
 
 test("invalid workspace, repository, and task fail before native session creation", async () => {
   for (const patch of [{ workspaceId: "unknown" }, { repoPath: "/other" }, { taskId: "missing" }]) {
@@ -66,7 +71,7 @@ test("automatic launch fails when no role or repository default model is set", a
   const h = await createLaunchHarness();
   h.setModelDefault(undefined);
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startBuilder" },
     }),
@@ -81,7 +86,7 @@ test("automatic Builder continuation skips when the task has no worktree", async
   h.setWorktreeExists(false);
   h.setTaskStatus("in_progress");
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
     }),
@@ -96,7 +101,7 @@ test("automatic fresh launch fills an unset default variant from the runtime cat
   const h = await createLaunchHarness();
   h.setModelDefault({ runtimeKind: "codex", providerId: "provider", modelId: "model" });
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startBuilder" },
     }),
@@ -116,7 +121,7 @@ test.each([
     const h = await createLaunchHarness();
     h.setModelDefault({ ...modelFor("codex"), ...patch });
     const result = await Effect.runPromise(
-      h.service.launch({
+      h.launchAutomatic({
         ...requestFor("codex"),
         policy: { kind: "automatic", actionId: "startBuilder" },
       }),
@@ -177,7 +182,7 @@ test("fresh QA requests remain distinct and revalidate after waiting", async () 
   h.setTaskStatus("ai_review");
   h.settings.autopilot.alwaysStartQaReviewsFresh = true;
   h.addTaskSession("old-qa", { role: "qa" });
-  const request: WorkflowLaunchRequest = {
+  const request: AutomaticLaunchInput = {
     ...requestFor("codex"),
     policy: { kind: "automatic", actionId: "startQa" },
   };
@@ -185,9 +190,9 @@ test("fresh QA requests remain distinct and revalidate after waiting", async () 
     Effect.gen(function* () {
       const gate = yield* Deferred.make<void>();
       h.setSendGate(Deferred.await(gate));
-      const first = yield* Effect.forkChild(h.service.launch(request));
+      const first = yield* Effect.forkChild(h.launchAutomatic(request));
       yield* Deferred.await(h.sendEntered);
-      const second = yield* Effect.forkChild(h.service.launch(request));
+      const second = yield* Effect.forkChild(h.launchAutomatic(request));
       yield* Effect.yieldNow;
       expect(h.starts).toHaveLength(1);
       yield* Deferred.succeed(gate, undefined);
@@ -220,7 +225,7 @@ test("automatic model and prompt selection uses role and repository overrides on
     enabled: true,
   };
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startBuilder" },
       instruction: { kind: "kickoff" },
@@ -235,16 +240,16 @@ test("automatic model and prompt selection uses role and repository overrides on
 test("automatic Pull Request launch skips missing prerequisites and forks the latest Builder model", async () => {
   const h = await createLaunchHarness();
   h.setTaskStatus("human_review");
-  const request: WorkflowLaunchRequest = {
+  const request: AutomaticLaunchInput = {
     ...requestFor("codex"),
     policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
     instruction: { kind: "kickoff" },
   };
-  const providerMissing = await Effect.runPromise(h.service.launch(request));
+  const providerMissing = await Effect.runPromise(h.launchAutomatic(request));
   expect(providerMissing.status).toBe("skipped");
   expect(providerMissing.skipReason).toContain("does not support Pull Requests");
   h.enablePullRequests();
-  const sourceMissing = await Effect.runPromise(h.service.launch(request));
+  const sourceMissing = await Effect.runPromise(h.launchAutomatic(request));
   expect(sourceMissing.status).toBe("skipped");
   expect(sourceMissing.skipReason).toContain("No build session");
   expect(h.starts).toHaveLength(0);
@@ -252,7 +257,7 @@ test("automatic Pull Request launch skips missing prerequisites and forks the la
 
   const builderModel = { ...modelFor("codex"), modelId: "retired-builder-model" };
   h.addTaskSession("builder", { selectedModel: builderModel });
-  const forked = await Effect.runPromise(h.service.launch(request));
+  const forked = await Effect.runPromise(h.launchAutomatic(request));
   expect(forked).toMatchObject({
     status: "completed",
     startMode: "fork",
@@ -269,7 +274,7 @@ test("automatic Pull Request launch skips when the Git provider is not enabled",
   h.addTaskSession("builder");
   h.enablePullRequests(false);
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
       instruction: { kind: "kickoff" },
@@ -288,7 +293,7 @@ test("automatic Pull Request launch skips when the Git provider cannot be read",
   h.addTaskSession("builder");
   h.setProviderFailure();
   const result = await Effect.runPromise(
-    h.service.launch({
+    h.launchAutomatic({
       ...requestFor("codex"),
       policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
       instruction: { kind: "kickoff" },

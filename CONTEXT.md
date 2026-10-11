@@ -73,7 +73,7 @@ An operation currently allowed for a **Task**, such as setting a **Spec Document
 _Avoid_: task action, button, command, transition
 
 **Autopilot**:
-OpenDucktor behavior that starts the next **Workflow Action** automatically when **Task Status** and workflow conditions match configured rules. A **Workflow Action** may start an **Agent Session**, call an API, run a command, or perform another workflow step. For example, Autopilot can start **Pull Request** generation when a **Task** enters `human_review`.
+Host behavior that starts the next **Workflow Action** automatically when a committed **Task** change matches a configured rule. It covers every open workspace while the host runs, with or without a connected browser. A **Workflow Action** may start an **Agent Session**, call an API, run a command, or perform another workflow step. For example, Autopilot can start **Pull Request** generation when a build completion or a QA approval moves a **Task** to `human_review`.
 _Avoid_: scheduler, automation engine
 
 **Agent Role**:
@@ -285,7 +285,7 @@ The history of **Agent Sessions** that belong to a specific **Task**, used to in
 _Avoid_: Transcript, runtime history, browser history
 
 **Task Session Records Query**:
-The frontend read boundary for **Task Session History**. The **Sessions Page**, the **Session List**, Kanban, task details, and autopilot should use this query instead of reading session history from task-card summaries.
+The frontend read boundary for **Task Session History**. The **Sessions Page**, the **Session List**, Kanban, and task details should use this query instead of reading session history from task-card summaries.
 _Avoid_: TaskCard session source, duplicated session history state
 
 **Repo Session Read Model**:

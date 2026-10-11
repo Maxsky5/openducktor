@@ -8,10 +8,7 @@ import {
   useRef,
 } from "react";
 import { toast } from "sonner";
-import {
-  buildSessionStartedOccurrence,
-  buildSessionStartErrorOccurrence,
-} from "@/features/notifications/session-start-occurrences";
+import { buildSessionStartedOccurrence, buildSessionStartErrorOccurrence } from "@openducktor/core";
 import {
   createCuelumeNotificationSoundAdapter,
   createSonnerNotificationAdapter,

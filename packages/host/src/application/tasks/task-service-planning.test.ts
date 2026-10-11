@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
@@ -562,6 +563,8 @@ describe("createTaskService planning", () => {
       taskService: createTaskServiceWithMutationProgress({ taskStore }),
       taskSyncService: {
         runMutation: (_repoPath, mutation) => mutation,
+        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
+          collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
         publishExternalTaskCreated: () => Effect.void,
         publishTasksUpdated: (_repoPath, changes) =>
           Effect.sync(() => {

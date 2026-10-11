@@ -345,14 +345,14 @@ test("automatic actions for one task wait for the prior launch to finish", async
   await Effect.runPromise(
     Effect.gen(function* () {
       const planner = yield* Effect.forkChild(
-        h.service.launch({
+        h.launchAutomatic({
           ...requestFor("codex"),
           policy: { kind: "automatic", actionId: "startPlanner" },
         }),
       );
       yield* Deferred.await(h.sendEntered);
       const builder = yield* Effect.forkChild(
-        h.service.launch({
+        h.launchAutomatic({
           ...requestFor("codex"),
           policy: { kind: "automatic", actionId: "startBuilder" },
         }),
@@ -367,6 +367,61 @@ test("automatic actions for one task wait for the prior launch to finish", async
   expect(h.records.map((record) => record.role)).toEqual(["planner", "build"]);
   expect(h.sends.map((input) => input.externalSessionId)).toEqual(["session-1", "session-2"]);
   expect(h.getTask().status).toBe("in_progress");
+});
+
+test("an automatic launch runs its start check at its turn, before any launch work", async () => {
+  const h = await createLaunchHarness();
+  const send = await pausePoint();
+  h.setSendGate(Deferred.await(send.release));
+  const startsAtCheck: number[] = [];
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const manual = yield* Effect.forkChild(h.service.launch(requestFor("codex")));
+      yield* Deferred.await(h.sendEntered);
+      const automatic = yield* Effect.forkChild(
+        h.service.launch({
+          ...requestFor("codex"),
+          policy: {
+            kind: "automatic",
+            actionId: "startBuilder",
+            startCheck: Effect.sync(() => {
+              startsAtCheck.push(h.starts.length);
+              return { start: false as const, reason: "The task moved on." };
+            }),
+          },
+        }),
+      );
+      yield* yieldToFibers;
+      expect(startsAtCheck).toEqual([]);
+      yield* send.open;
+      expect((yield* Fiber.join(manual)).status).toBe("completed");
+      expect(yield* Fiber.join(automatic)).toMatchObject({
+        status: "skipped",
+        skipReason: "The task moved on.",
+        role: "build",
+      });
+    }).pipe(Effect.ensuring(send.open)),
+  );
+  expect(startsAtCheck).toEqual([1]);
+  expect(h.starts).toEqual(["session-1"]);
+  expect(h.catalogLoads()).toBe(0);
+});
+
+test("a failed start check fails the automatic launch before any launch work", async () => {
+  const h = await createLaunchHarness();
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "automatic",
+        actionId: "startBuilder",
+        startCheck: Effect.fail(failure("Task read failed")),
+      },
+    }),
+  );
+  expect(result).toMatchObject({ status: "failed", failure: { message: "Task read failed" } });
+  expect(h.starts).toHaveLength(0);
+  expect(h.catalogLoads()).toBe(0);
 });
 
 test.each(["before its first native send", "after native acceptance"] as const)(

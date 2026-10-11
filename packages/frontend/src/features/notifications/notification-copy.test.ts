@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { NotificationKind, NotificationOccurrence } from "@openducktor/contracts";
 import { buildNotificationCopy } from "./notification-copy";
-import { buildSessionStartErrorOccurrence } from "./session-start-occurrences";
+import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 
 const EVENT_CASES = [
   ["agent.permission_requested", "Builder", "Needs your attention."],
@@ -47,7 +47,6 @@ describe("notification copy", () => {
         taskId: "task-1",
         taskTitle: "Build notifications",
         role: "build",
-        workspaceId: "workspace-1",
         launchAttemptId: "launch-1",
       },
       message,

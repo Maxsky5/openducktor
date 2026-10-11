@@ -64,7 +64,10 @@ test("one response carries host and notification frames with independent resume 
   expect(initial.hostEventId).toBe(0);
   expect(initial.notificationCursor?.sequence).toBe(0);
   if (!initial.notificationCursor) throw new Error("Expected an attached notification cursor");
-  host.emit({ channel: "openducktor://run-event", payload: { type: "run" } }, failures);
+  host.emit(
+    { channel: "openducktor://run-event", payload: { type: "autopilot_failure", failure: null } },
+    failures,
+  );
   const hostFrame = decode((await reader.read()).value);
   expect(hostFrame).toContain("event: message");
   expect(readCursor(hostFrame)).toEqual({ ...initial, hostEventId: 1 });
@@ -90,7 +93,7 @@ test("one response carries host and notification frames with independent resume 
   );
   const replay = resumed.body!.getReader();
   await replay.read();
-  expect(decode((await replay.read()).value)).toContain('"type":"run"');
+  expect(decode((await replay.read()).value)).toContain('"type":"autopilot_failure"');
   expect(decode((await replay.read()).value)).toContain(replayComplete(false, []));
   expect(decode((await replay.read()).value)).toContain('"reason":"replay"');
   expect(decode((await replay.read()).value)).toContain('"sequence":1');
@@ -109,7 +112,13 @@ test("one response carries host and notification frames with independent resume 
   await queryReplay.cancel();
   expect(hostStop).toHaveBeenCalledTimes(3);
   expect(failures).not.toHaveBeenCalled();
-  host.emit({ channel: "openducktor://run-event", payload: { type: "after_cancel" } }, failures);
+  host.emit(
+    {
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: "after cancel" },
+    },
+    failures,
+  );
   notifications.publishHealth({ scope: "/repo", source: "session", message: null });
   expect(failures).not.toHaveBeenCalled();
 });
@@ -127,7 +136,13 @@ test("a reconnect queues both full replay buffers and reports the evicted channe
   );
   if (initial._tag === "None") throw new Error("Expected an initial notification attachment");
   for (let index = 0; index < 257; index++)
-    host.emit({ channel: "openducktor://run-event", payload: { index } }, failures);
+    host.emit(
+      {
+        channel: "openducktor://run-event",
+        payload: { type: "autopilot_failure", failure: `failure ${index}` },
+      },
+      failures,
+    );
   for (let index = 0; index < 256; index++)
     notifications.publishHealth({ scope: "/repo", source: "session", message: null });
 
@@ -251,7 +266,13 @@ test("a stalled combined response fails once and releases both live subscription
   try {
     await Effect.runPromise(Deferred.await(attached).pipe(Effect.timeout("500 millis")));
     for (let index = 0; index < 600; index++)
-      host.emit({ channel: "openducktor://run-event", payload: { index } }, failures);
+      host.emit(
+        {
+          channel: "openducktor://run-event",
+          payload: { type: "autopilot_failure", failure: `failure ${index}` },
+        },
+        failures,
+      );
     expect(failures).toHaveBeenCalledTimes(1);
     await expect(reader.read()).rejects.toThrow("cannot keep up");
     await Effect.runPromise(Deferred.await(released).pipe(Effect.timeout("500 millis")));

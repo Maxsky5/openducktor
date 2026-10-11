@@ -6,7 +6,7 @@ import {
   type TaskEventTaskSnapshot,
   type TaskEventStatusChange,
 } from "@openducktor/contracts";
-import { type Cause, Deferred, Effect, Exit, Ref } from "effect";
+import { type Cause, Deferred, Effect, Exit, Ref, type Result } from "effect";
 import { createSerialGate } from "../../../effect/serial-gate";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
@@ -16,6 +16,10 @@ import type {
 } from "../../workspaces/workspace-settings-service";
 import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import type {
+  CommittedTaskStatusChangeObserver,
+  TaskMutationOperation,
+} from "../task-mutation-operation";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 
 const DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
@@ -31,6 +35,20 @@ export type TaskSyncLoopHandle = {
 };
 export type TaskSyncService = {
   runMutation<A, E, R>(repoPath: string, mutation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+  /**
+   * Runs a task mutation in the repository mutation gate. It reports each status change when it
+   * commits, so a later failure or interruption keeps the report. `afterCommit` runs next in the
+   * same gate turn.
+   */
+  runStatusMutation<A, E, R, B, E2, R2>(
+    repoPath: string,
+    operation: TaskMutationOperation,
+    mutation: Effect.Effect<A, E, R>,
+    afterCommit: (committed: {
+      result: Result.Result<A, E>;
+      statusChanges: TaskEventStatusChange[];
+    }) => Effect.Effect<B, E2, R2>,
+  ): Effect.Effect<B, E2, R | R2>;
   publishExternalTaskCreated(
     repoPath: string,
     taskSnapshot: TaskEventTaskSnapshot,
@@ -38,7 +56,7 @@ export type TaskSyncService = {
   publishTasksUpdated(
     repoPath: string,
     changes: TaskChangeSet,
-    operation: string,
+    operation: TaskMutationOperation,
     statusChanges: readonly TaskEventStatusChange[],
     mutationFailure?: TaskServiceError,
   ): Effect.Effect<void, HostOperationErrorAggregate>;
@@ -67,6 +85,7 @@ export type TaskEventPublicationReporter = {
 export type CreateTaskSyncServiceInput = {
   eventIdFactory?: () => string;
   acceptNotificationInput?: ((event: ExternalTaskSyncEvent) => void) | undefined;
+  observeStatusChanges?: CommittedTaskStatusChangeObserver | undefined;
   intervalMs?: number;
   logger?: TaskSyncLifecycleLogger;
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
@@ -133,6 +152,7 @@ const taskSnapshotsForChanges = (
 export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   acceptNotificationInput,
+  observeStatusChanges,
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
   logger = defaultTaskSyncLifecycleLogger,
   onBackgroundFailure,
@@ -145,6 +165,18 @@ export const createTaskSyncService = ({
   const mutationGate = createSerialGate();
   const runMutation: TaskSyncService["runMutation"] = (repoPath, mutation) =>
     mutationGate.run(repoPath, mutation);
+  const runStatusMutation: TaskSyncService["runStatusMutation"] = (
+    repoPath,
+    operation,
+    mutation,
+    afterCommit,
+  ) =>
+    runMutation(
+      repoPath,
+      collectTaskStatusChanges(mutation, (statusChange) =>
+        observeStatusChanges?.({ repoPath, operation, statusChange }),
+      ).pipe(Effect.flatMap(afterCommit)),
+    );
   const publish = (
     event: ExternalTaskSyncEvent,
     operation: string,
@@ -193,7 +225,7 @@ export const createTaskSyncService = ({
   const publishTasksUpdated = (
     repoPath: string,
     changes: TaskChangeSet,
-    operation: string,
+    operation: TaskMutationOperation,
     statusChanges: readonly TaskEventStatusChange[],
     mutationFailure?: TaskServiceError,
   ): Effect.Effect<void, HostOperationErrorAggregate> =>
@@ -236,29 +268,37 @@ export const createTaskSyncService = ({
   const syncRepoPullRequests = (
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>
-    Effect.gen(function* () {
-      const { result: syncResult, statusChanges } = yield* collectTaskStatusChanges(
-        taskService.repoPullRequestSyncDetailed({ repoPath }),
-      );
-      if (syncResult._tag === "Success") {
-        const changes = { taskIds: syncResult.success.changedTaskIds, removedTaskIds: [] };
-        if (changes.taskIds.length > 0) {
-          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync", statusChanges);
-        }
-        return syncResult.success;
-      }
-      if (syncResult.failure instanceof TaskMutationProgressFailure) {
-        yield* publishTasksUpdated(
-          repoPath,
-          syncResult.failure.changes,
-          syncResult.failure.operation,
-          statusChanges,
-          syncResult.failure.failure,
-        );
-        return yield* Effect.fail(syncResult.failure.failure);
-      }
-      return yield* Effect.fail(syncResult.failure);
-    }).pipe((mutation) => runMutation(repoPath, mutation));
+    runStatusMutation(
+      repoPath,
+      "repo-pull-request-sync",
+      taskService.repoPullRequestSyncDetailed({ repoPath }),
+      ({ result: syncResult, statusChanges }) =>
+        Effect.gen(function* () {
+          if (syncResult._tag === "Success") {
+            const changes = { taskIds: syncResult.success.changedTaskIds, removedTaskIds: [] };
+            if (changes.taskIds.length > 0) {
+              yield* publishTasksUpdated(
+                repoPath,
+                changes,
+                "repo-pull-request-sync",
+                statusChanges,
+              );
+            }
+            return syncResult.success;
+          }
+          if (syncResult.failure instanceof TaskMutationProgressFailure) {
+            yield* publishTasksUpdated(
+              repoPath,
+              syncResult.failure.changes,
+              syncResult.failure.operation,
+              statusChanges,
+              syncResult.failure.failure,
+            );
+            return yield* Effect.fail(syncResult.failure.failure);
+          }
+          return yield* Effect.fail(syncResult.failure);
+        }),
+    );
   const syncActiveWorkspacePullRequests = (): Effect.Effect<void, TaskSyncError> =>
     Effect.gen(function* () {
       const activeWorkspace = (yield* workspaceSettingsService.listWorkspaces()).find(
@@ -326,6 +366,7 @@ export const createTaskSyncService = ({
     );
   return {
     runMutation,
+    runStatusMutation,
     publishExternalTaskCreated,
     publishTasksUpdated,
     syncRepoPullRequests,

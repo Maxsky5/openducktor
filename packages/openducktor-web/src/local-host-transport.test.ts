@@ -6,7 +6,10 @@ import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "./effect/web-errors";
 import { createFetchFixture } from "./test-support";
-import type { RuntimeChangeListener } from "@openducktor/frontend/lib/shell-bridge";
+import type {
+  RunEventListener,
+  RuntimeChangeListener,
+} from "@openducktor/frontend/lib/shell-bridge";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -524,7 +527,7 @@ describe("local host SSE subscriptions", () => {
         JSON.stringify({ channel, payload }),
       );
     };
-    emitHostEvent("openducktor://run-event", { type: "run" });
+    emitHostEvent("openducktor://run-event", { type: "autopilot_failure", failure: null });
     const workspaceSessionUpdate = {
       workspaceId: "workspace-A",
       session: {
@@ -560,7 +563,7 @@ describe("local host SSE subscriptions", () => {
       sequence: 1,
     });
 
-    expect(runListener).toHaveBeenCalledWith({ type: "run" });
+    expect(runListener).toHaveBeenCalledWith({ type: "autopilot_failure", failure: null });
     expect(liveSessionListener).toHaveBeenCalledTimes(2);
     expect(liveSessionListener).toHaveBeenNthCalledWith(1, {
       type: "snapshot",
@@ -605,7 +608,10 @@ describe("local host SSE subscriptions", () => {
     unsubscribeLater = await subscribeLocalHostRunEvents(later);
     const eventSource = await waitForEventSourceInstance();
     eventSource.connect();
-    const data = JSON.stringify({ channel: "openducktor://run-event", payload: { type: "run" } });
+    const data = JSON.stringify({
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: null },
+    });
 
     let thrown: unknown;
     try {
@@ -616,7 +622,7 @@ describe("local host SSE subscriptions", () => {
     expect(thrown).toBe(failure);
     expect(first).toHaveBeenCalledTimes(1);
     expect(later).toHaveBeenCalledTimes(1);
-    expect(later).toHaveBeenCalledWith({ type: "run" });
+    expect(later).toHaveBeenCalledWith({ type: "autopilot_failure", failure: null });
 
     expect(() => eventSource.emit("message", data)).toThrow("run listener failed");
     expect(later).toHaveBeenCalledTimes(1);
@@ -755,6 +761,30 @@ describe("local host SSE subscriptions", () => {
       kind: "reconnected",
       missedEvents: false,
     });
+    unsubscribe();
+  });
+
+  test("delivers run events and reconnects that missed run events", async () => {
+    const { subscribeLocalHostRunEvents } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const received: Array<Parameters<RunEventListener>[0]> = [];
+    const listener: RunEventListener = (payload) => {
+      received.push(payload);
+    };
+    const unsubscribe = await subscribeLocalHostRunEvents(listener);
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.connect();
+    const payload = { type: "autopilot_failure" as const, failure: null };
+
+    eventSource.emit("message", JSON.stringify({ channel: "openducktor://run-event", payload }));
+    eventSource.connect({ hostChanged: false, gaps: ["message"] });
+
+    expect(received).toEqual([
+      payload,
+      { __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true },
+    ]);
     unsubscribe();
   });
 

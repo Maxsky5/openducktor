@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
+import { autopilotRunEventSchema } from "./autopilot-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { hostRuntimeEventSchema } from "./host-runtime-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
-
-const runEventPayloadSchema = z.record(z.string(), z.json());
 
 export const HOST_EVENT_CHANNELS = [
   "openducktor://run-event",
@@ -51,7 +50,7 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z
     .object({
       channel: z.literal("openducktor://run-event"),
-      payload: runEventPayloadSchema,
+      payload: autopilotRunEventSchema,
     })
     .strict(),
   z

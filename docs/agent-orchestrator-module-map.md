@@ -385,7 +385,7 @@ Rules:
 - Runtime events cannot attach an unrelated root session.
 - The runner presents the host result. If the runtime did not get or rejected the first instruction, the runner offers Retry. Retry sends the returned instruction through the shared send handler. Other send failures show the host error without Retry.
 - Kanban and the task content of the Sessions page supply the Retry toast before notification delivery. The runner then marks the `failure.noticeId` as handled, so the host notification skips its in-app toast. A composer start restores the draft in the new session instead.
-- Manual starts and Autopilot use the same host launch service.
+- Manual starts use the public launch command. Host Autopilot sends automatic requests with a start check to the same host launch service. The frontend only presents Autopilot outcomes through `state/providers/autopilot-provider.tsx`.
 - Sessionless send uses the same start-availability rule as an explicit start.
 - The start modal reads runtime definitions from runtime availability context.
 - Action state owns busy, waiting, queued, and send-block rules. It does not copy identity or runtime-data loading.
@@ -400,7 +400,7 @@ Owns read-only history, preference for an existing live session, live pending in
 
 Files: `state/queries/agent-sessions.ts`, `session-read-model/task-session-records.ts`, `session-read-model/use-task-session-records.ts`, `hooks/use-repo-session-read-model.ts`, and `session-read-model/agent-session-workflow-records.ts`.
 
-Owns per-task durable record queries and task session history for the Sessions page, the session list, Kanban, task details, and Autopilot.
+Owns per-task durable record queries and task session history for the Sessions page, the session list, Kanban, and task details.
 
 Rules:
 

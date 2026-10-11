@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  type AutopilotActionId,
   CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
   DEFAULT_AGENT_RUNTIMES,
@@ -24,6 +25,7 @@ import {
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
+import { autopilotQueryKeys } from "@/state/queries/autopilot";
 import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -281,6 +283,57 @@ describe("useSettingsModalController", () => {
     runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
     settingsSnapshotFactory = createSettingsSnapshot;
     loadSettingsSnapshot.mockClear();
+  });
+
+  test("an open modal shows Autopilot rules that another client saved, unless it edited them", async () => {
+    saveSettingsSnapshot = mock(async () => savedSettingsResult());
+    const harness = createHookHarness(true);
+    const rules = (actionIds: AutopilotActionId[], alwaysStartQaReviewsFresh = false) => ({
+      alwaysStartQaReviewsFresh,
+      rules: [{ eventId: "taskProgressedToAiReview" as const, actionIds }],
+    });
+    // The saved-rules event reloads the Autopilot settings query.
+    const saveInOtherClient = (autopilot: SettingsSnapshot["autopilot"]) =>
+      harness.run(() => {
+        harness.queryClient.setQueryData(autopilotQueryKeys.settings(), autopilot);
+      });
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await saveInOtherClient(rules(["startQa"]));
+      await harness.waitFor(
+        (state) => state.snapshotDraft?.autopilot.rules[0]?.actionIds[0] === "startQa",
+      );
+
+      await harness.run((state) => {
+        state.updateGlobalAutopilotSettings(() => rules([]));
+      });
+      await saveInOtherClient(rules(["startQa"], true));
+
+      expect(harness.getLatest().snapshotDraft?.autopilot).toEqual(rules([]));
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("an opened modal shows the saved Autopilot rules, not older rules in the settings snapshot", async () => {
+    const harness = createHookHarness(true);
+    // An earlier open read these rules. The settings snapshot cache still holds older rules.
+    const saved = {
+      alwaysStartQaReviewsFresh: true,
+      rules: [{ eventId: "taskProgressedToAiReview" as const, actionIds: ["startQa" as const] }],
+    };
+    harness.queryClient.setQueryData(autopilotQueryKeys.settings(), saved);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      await harness.run(() => {});
+
+      expect(harness.getLatest().snapshotDraft?.autopilot).toEqual(saved);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not refresh diagnostics when the modal opens", async () => {
@@ -1330,7 +1383,13 @@ describe("useSettingsModalController", () => {
     });
 
     const expectedSnapshot = createSettingsSnapshot();
-    const { theme: expectedTheme, customAgentRoles, ...expectedSnapshotUpdate } = expectedSnapshot;
+    // A chat-only save leaves out the unedited custom roles and Autopilot rules.
+    const {
+      theme: expectedTheme,
+      customAgentRoles,
+      autopilot: _autopilot,
+      ...expectedSnapshotUpdate
+    } = expectedSnapshot;
     expect(customAgentRoles).toEqual([]);
     expect(didSave).toBe(true);
     expect(expectedTheme).toBe("light");

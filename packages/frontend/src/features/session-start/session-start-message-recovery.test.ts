@@ -7,7 +7,7 @@ import { toast, type Action } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { createSonnerNotificationAdapter } from "@/features/notifications/notification-delivery";
 import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
-import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
+import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";

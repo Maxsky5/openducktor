@@ -1,98 +1,56 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { TaskCard, TaskWorktreeSummary, WorkflowLaunchResult } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type {
+  AutopilotActionId,
+  AutopilotOutcome,
+  AutopilotState,
+  SettingsSnapshot,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
-import * as autopilotActions from "@/features/autopilot/autopilot-actions";
-import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
-import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
-import {
-  AgentOperationsContext,
-  RuntimeDefinitionsContext,
-  TaskSnapshotContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
-import {
-  NotificationContext,
-  type NotificationContextValue,
-} from "@/state/notifications/notification-context";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
-import {
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
-import type { AgentOperationsContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
-import { AutopilotProvider } from "./autopilot-provider";
 import {
   configureShellBridge,
   createUnavailableShellBridge,
   getShellBridge,
+  type RunEventListener,
+  type ShellBridge,
 } from "@/lib/shell-bridge";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { AgentOperationsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import {
+  NotificationContext,
+  type NotificationContextValue,
+} from "@/state/notifications/notification-context";
+import {
+  createSettingsSnapshotFixture,
+  createWorkspaceRecordFixture,
+  createWorkspaceStateFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
+import { taskWorktreeQueryKeys } from "../queries/build-runtime";
+import { autopilotSettingsQueryOptions } from "../queries/autopilot";
+import { AutopilotProvider } from "./autopilot-provider";
 
-const createWorkspaceState = (): WorkspaceStateContextValue => ({
-  isSwitchingWorkspace: false,
-  closedWorkspaces: [],
-  incompleteRemovals: [],
-  closeWorkspace: async () => {},
-  removeWorkspace: async () => {},
-  reopenWorkspace: async () => {},
-  resolveWorkspacePath: async () => ({ kind: "new" }),
-  isLoadingBranches: false,
-  isSwitchingBranch: false,
-  branchSyncDegraded: false,
-  workspaces: [],
-  activeWorkspace: {
-    workspaceId: "workspace-a",
-    workspaceName: "Workspace A",
-    abbreviation: null,
-    tileColor: null,
-    repoPath: "/repo",
-    isActive: true,
-    hasConfig: true,
-    configuredWorktreeBasePath: "/worktrees/repo",
-    defaultWorktreeBasePath: "/worktrees/repo",
-    effectiveWorktreeBasePath: "/worktrees/repo",
-  },
-  branches: [],
-  activeBranch: null,
-  commitWorkspaceProviderSetup: async () => {
-    throw new Error("Not used");
-  },
-  addWorkspace: async () => {
-    throw new Error("Not used");
-  },
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
-  selectWorkspace: async () => {},
-  reorderWorkspaces: async () => {},
-  refreshBranches: async () => {},
-  switchBranch: async () => {},
-  loadRepoSettings: async () => {
-    throw new Error("Not used by this test.");
-  },
-  saveRepoSettings: async () => {},
-  loadSettingsSnapshot: async () => {
-    throw new Error("Not used by this test.");
-  },
-  detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
-  previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-  saveSettingsSnapshot: async () => ({
-    type: "saved" as const,
-    workspaces: [],
-    runtimeApplications: [],
-    refreshError: null,
-  }),
-  saveAgentModelFavorites: async () => {
-    throw new Error("Not used by this test.");
-  },
+const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
+const beta = createWorkspaceRecordFixture({
+  workspaceId: "beta",
+  repoPath: "/repos/beta",
+  isActive: false,
 });
 
-const createNotificationContext = (
-  overrides: Partial<NotificationContextValue> = {},
-): NotificationContextValue => ({
+const skipped = (outcomeId: string, workspace: WorkspaceRecord): AutopilotOutcome => ({
+  outcomeId,
+  workspaceId: workspace.workspaceId,
+  repoPath: workspace.repoPath,
+  task: { id: `${workspace.workspaceId}-task`, title: "Task" },
+  eventId: "taskProgressedToAiReview",
+  actionId: "startQa",
+  occurredAt: "2026-10-10T00:00:00.000Z",
+  kind: "skipped",
+  reason: "The task moved on.",
+});
+
+const notifications: NotificationContextValue = {
   deliveryFailure: null,
   getCapability: async () => ({
     platform: "browser",
@@ -115,8 +73,7 @@ const createNotificationContext = (
     markInAppFeedbackHandled: () => {},
     reportFailure: () => {},
   },
-  ...overrides,
-});
+};
 
 const agentOperations: AgentOperationsContextValue = {
   readSessionTodos: async () => [],
@@ -143,164 +100,246 @@ const agentOperations: AgentOperationsContextValue = {
   answerAgentQuestion: async () => {},
 };
 
-describe("AutopilotProvider", () => {
-  test.each(["completed", "failed"] as const)(
-    "automatic launch refreshes the requested worktree after creation: %s",
-    async (phase) => {
-      const originalBridge = getShellBridge();
-      const bridge = createUnavailableShellBridge();
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      let worktree: TaskWorktreeSummary | null = null;
-      bridge.client.taskWorktreeGet = mock(async () => worktree);
-      bridge.client.agentSessionWorkflowLaunch = mock(
-        async (request): Promise<WorkflowLaunchResult> => {
-          worktree = { workingDirectory: "/worktrees/task-1" };
-          const base: WorkflowLaunchResult = {
-            workspaceId: request.workspaceId,
-            repoPath: request.repoPath,
-            taskId: request.taskId,
-            role: "build",
-            status: phase,
-            startMode: "fresh",
-          };
-          if (phase === "failed")
-            return {
-              ...base,
-              failure: { message: "Start failed after worktree creation", cleanupErrors: [] },
-            };
-          return {
-            ...base,
-            session: {
-              externalSessionId: "native",
-              runtimeKind: "codex",
-              workingDirectory: "/worktrees/task-1",
-              startedAt: "2026-10-08T00:00:00Z",
-              status: "idle",
-            },
-          };
-        },
-      );
-      const reads = [null, "old-version"].map((taskVersion) =>
-        taskWorktreeQueryOptions({
-          repoPath: "/repo",
-          taskId: "task-1",
-          taskVersion,
-          hostClient: bridge.client,
-        }),
-      );
-      const otherReads = [
-        { repoPath: "/repo", taskId: "other-task" },
-        { repoPath: "/other-repo", taskId: "task-1" },
-      ].map((input) => taskWorktreeQueryOptions({ ...input, hostClient: bridge.client }));
-      queryClient.setQueryData(
-        workspaceQueryKeys.settingsSnapshot(),
-        createSettingsSnapshotFixture({
-          autopilot: {
-            alwaysStartQaReviewsFresh: false,
-            rules: [{ eventId: "taskProgressedToReadyForDev", actionIds: ["startBuilder"] }],
-          },
-        }),
-      );
-      const workspace = createWorkspaceState();
-      const notifications = createNotificationContext();
-      const view = (task: TaskCard) => (
-        <QueryClientProvider client={queryClient}>
-          <WorkspaceStateContext value={workspace}>
-            <TaskSnapshotContext value={{ tasks: [task], isLoadingTasks: false }}>
-              <NotificationContext value={notifications}>
-                <AutopilotProvider />
-              </NotificationContext>
-            </TaskSnapshotContext>
-          </WorkspaceStateContext>
-        </QueryClientProvider>
-      );
-      configureShellBridge(bridge);
-      let unmount: (() => void) | undefined;
-      try {
-        for (const read of [...reads, ...otherReads])
-          expect(await queryClient.fetchQuery(read)).toBeNull();
-        const rendered = render(
-          view(createTaskCardFixture({ id: "task-1", status: "spec_ready" })),
-        );
-        unmount = rendered.unmount;
-        await act(async () => {
-          rendered.rerender(view(createTaskCardFixture({ id: "task-1", status: "ready_for_dev" })));
-        });
-        await waitFor(() =>
-          expect(queryClient.getQueryState(reads[0]!.queryKey)?.isInvalidated).toBe(true),
-        );
-        expect(bridge.client.agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
-        for (const read of reads)
-          expect(await queryClient.fetchQuery(read)).toEqual({
-            workingDirectory: "/worktrees/task-1",
-          });
-        for (const read of otherReads) expect(await queryClient.fetchQuery(read)).toBeNull();
-      } finally {
-        unmount?.();
-        queryClient.clear();
-        configureShellBridge(originalBridge);
-      }
-    },
-  );
+let originalBridge: ShellBridge;
+let info: ReturnType<typeof spyOn<typeof toast, "info">>;
+let dismiss: ReturnType<typeof spyOn<typeof toast, "dismiss">>;
+beforeEach(() => {
+  originalBridge = getShellBridge();
+  info = spyOn(toast, "info").mockReturnValue("info");
+  dismiss = spyOn(toast, "dismiss").mockReturnValue("dismiss");
+});
+afterEach(() => {
+  configureShellBridge(originalBridge);
+  info.mockRestore();
+  dismiss.mockRestore();
+});
 
-  test.each([false, true])(
-    "shows kickoff failure only when in-app feedback was not handled (%s)",
-    async (feedbackHandled) => {
-      const action = spyOn(autopilotActions, "executeAutopilotAction").mockResolvedValue({
-        kind: "started",
-        message: "Started",
-        postStartActionError: new SessionStartWorkflowError(
-          new Error("Kickoff failed"),
-          feedbackHandled,
-        ),
-      });
-      const errorToast = spyOn(toast, "error").mockReturnValue("error-toast");
-      const queryClient = new QueryClient();
-      queryClient.setQueryData(
-        workspaceQueryKeys.settingsSnapshot(),
-        createSettingsSnapshotFixture({
-          autopilot: {
-            alwaysStartQaReviewsFresh: false,
-            rules: [{ eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] }],
-          },
-        }),
-      );
-      const workspace = createWorkspaceState();
-      const runtimeDefinitions = createRuntimeDefinitionsContextValue();
-      const notifications = createNotificationContext();
-      const view = (task: TaskCard) => (
-        <QueryClientProvider client={queryClient}>
-          <WorkspaceStateContext.Provider value={workspace}>
-            <TaskSnapshotContext.Provider value={{ tasks: [task], isLoadingTasks: false }}>
-              <RuntimeDefinitionsContext.Provider value={runtimeDefinitions}>
-                <AgentOperationsContext.Provider value={agentOperations}>
-                  <NotificationContext.Provider value={notifications}>
-                    <AutopilotProvider />
-                  </NotificationContext.Provider>
-                </AgentOperationsContext.Provider>
-              </RuntimeDefinitionsContext.Provider>
-            </TaskSnapshotContext.Provider>
-          </WorkspaceStateContext.Provider>
-        </QueryClientProvider>
-      );
-      const rendered = render(view(createTaskCardFixture({ id: "task-1", status: "open" })));
-      try {
-        await act(async () => {
-          rendered.rerender(view(createTaskCardFixture({ id: "task-1", status: "spec_ready" })));
-        });
-        expect(action).toHaveBeenCalledTimes(1);
-        expect(errorToast).toHaveBeenCalledTimes(feedbackHandled ? 0 : 1);
-        if (!feedbackHandled) {
-          expect(errorToast).toHaveBeenCalledWith("Autopilot message failed for task-1.", {
-            description: "Kickoff failed",
-          });
-        }
-      } finally {
-        rendered.unmount();
-        queryClient.clear();
-        action.mockRestore();
-        errorToast.mockRestore();
-      }
-    },
+const renderProvider = (
+  held: Record<string, AutopilotState>,
+  readSettings: () => Promise<SettingsSnapshot> = async () => {
+    throw new Error("Unexpected settings read.");
+  },
+) => {
+  const calls: string[] = [];
+  const listeners: RunEventListener[] = [];
+  const bridge = createUnavailableShellBridge();
+  bridge.subscribeRunEvents = async (listener) => {
+    calls.push("subscribe");
+    listeners.push(listener);
+    return () => {
+      listeners.splice(listeners.indexOf(listener), 1);
+    };
+  };
+  bridge.client.autopilotStateRead = mock(async ({ workspaceId }) => {
+    calls.push(`read:${workspaceId}`);
+    return held[workspaceId] ?? { outcomes: [], failure: null };
+  });
+  bridge.client.workspaceGetSettingsSnapshot = mock(readSettings);
+  configureShellBridge(bridge);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = (activeWorkspace: WorkspaceRecord, workspaces: WorkspaceRecord[]) => (
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceStateContext value={createWorkspaceStateFixture({ activeWorkspace, workspaces })}>
+        <AgentOperationsContext value={agentOperations}>
+          <NotificationContext value={notifications}>
+            <AutopilotProvider />
+          </NotificationContext>
+        </AgentOperationsContext>
+      </WorkspaceStateContext>
+    </QueryClientProvider>
   );
+  const rendered = render(view(alpha, [alpha, beta]));
+  const emit: RunEventListener = (payload) => {
+    for (const listener of listeners) listener(payload);
+  };
+  return {
+    calls,
+    emit,
+    queryClient,
+    rerender: (activeWorkspace: WorkspaceRecord, workspaces: WorkspaceRecord[]) =>
+      act(async () => {
+        rendered.rerender(view(activeWorkspace, workspaces));
+      }),
+    unmount: () => {
+      rendered.unmount();
+      queryClient.clear();
+    },
+  };
+};
+
+const shownToastIds = () => info.mock.calls.map((call) => call[1]?.id);
+
+describe("AutopilotProvider", () => {
+  test("subscribes before it reads held outcomes, and reads again when a workspace is selected", async () => {
+    const provider = renderProvider({
+      alpha: { outcomes: [skipped("alpha-held", alpha)], failure: null },
+      beta: { outcomes: [skipped("beta-held", beta)], failure: null },
+    });
+    try {
+      await waitFor(() => expect(shownToastIds()).toEqual(["autopilot:alpha-held"]));
+      await provider.rerender(beta, [alpha, beta]);
+      await waitFor(() =>
+        expect(shownToastIds()).toEqual(["autopilot:alpha-held", "autopilot:beta-held"]),
+      );
+      await provider.rerender(alpha, [alpha, beta]);
+      await waitFor(() => expect(provider.calls).toHaveLength(4));
+
+      expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta", "read:alpha"]);
+      expect(info).toHaveBeenCalledTimes(2);
+    } finally {
+      provider.unmount();
+    }
+  });
+
+  test("shows live outcomes from any workspace once and reads again after missed events", async () => {
+    const provider = renderProvider({});
+    try {
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      const event = { type: "autopilot_outcome" as const, outcome: skipped("beta-live", beta) };
+      provider.emit(event);
+      provider.emit(event);
+      provider.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: false });
+      provider.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
+      await waitFor(() => expect(provider.calls).toHaveLength(3));
+
+      expect(shownToastIds()).toEqual(["autopilot:beta-live"]);
+      expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:alpha"]);
+    } finally {
+      provider.unmount();
+    }
+  });
+
+  test("a started outcome refreshes the task worktree view without a toast", async () => {
+    const provider = renderProvider({});
+    try {
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      const worktreeKey = taskWorktreeQueryKeys.taskWorktree({
+        repoPath: "/repos/beta",
+        taskId: "beta-task",
+      });
+      provider.queryClient.setQueryData(worktreeKey, null);
+      provider.emit({
+        type: "autopilot_outcome",
+        outcome: {
+          outcomeId: "beta-started",
+          workspaceId: "beta",
+          repoPath: "/repos/beta",
+          task: { id: "beta-task", title: "Task" },
+          eventId: "taskProgressedToAiReview",
+          actionId: "startQa",
+          occurredAt: "2026-10-10T00:00:00.000Z",
+          kind: "started",
+          launch: {
+            workspaceId: "beta",
+            repoPath: "/repos/beta",
+            taskId: "beta-task",
+            role: "qa",
+            status: "completed",
+          },
+        },
+      });
+
+      await waitFor(() =>
+        expect(provider.queryClient.getQueryState(worktreeKey)?.isInvalidated).toBe(true),
+      );
+      expect(info).not.toHaveBeenCalled();
+    } finally {
+      provider.unmount();
+    }
+  });
+
+  test("shows a recoverable failure again when its workspace is selected again", async () => {
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const recoverable: AutopilotOutcome = {
+      outcomeId: "alpha-recoverable",
+      workspaceId: "alpha",
+      repoPath: "/repos/alpha",
+      task: { id: "alpha-task", title: "Task" },
+      eventId: "taskRejectedByQa",
+      actionId: "startReviewQaFeedbacks",
+      occurredAt: "2026-10-10T00:00:00.000Z",
+      kind: "failed",
+      message: "The runtime rejected the message.",
+      launch: {
+        workspaceId: "alpha",
+        repoPath: "/repos/alpha",
+        taskId: "alpha-task",
+        role: "build",
+        status: "failed",
+        session: {
+          externalSessionId: "session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/worktrees/alpha-task",
+          startedAt: "2026-10-10T00:00:00.000Z",
+          status: "idle",
+        },
+        unsentInstruction: [{ kind: "text", text: "Kickoff" }],
+      },
+    };
+    const provider = renderProvider({ alpha: { outcomes: [recoverable], failure: null } });
+    try {
+      await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
+      // The user dismisses the toast, leaves the workspace, and selects it again.
+      await provider.rerender(beta, [alpha, beta]);
+      await provider.rerender(alpha, [alpha, beta]);
+      await waitFor(() => expect(error).toHaveBeenCalledTimes(2));
+
+      expect(error.mock.calls.map((call) => call[1]?.id)).toEqual([
+        "autopilot:alpha-recoverable",
+        "autopilot:alpha-recoverable",
+      ]);
+    } finally {
+      provider.unmount();
+      error.mockRestore();
+    }
+  });
+
+  test.each([
+    { name: "a saved-rules event", payload: { type: "autopilot_settings_saved" as const } },
+    {
+      name: "a reconnect after missed events",
+      payload: {
+        __openducktorBrowserLive: true as const,
+        kind: "reconnected" as const,
+        missedEvents: true,
+      },
+    },
+  ])("$name reloads the saved Autopilot rules for an open settings modal", async ({ payload }) => {
+    let savedQaActions: AutopilotActionId[] = [];
+    const provider = renderProvider({}, async () => ({
+      ...createSettingsSnapshotFixture(),
+      autopilot: {
+        alwaysStartQaReviewsFresh: false,
+        rules: [{ eventId: "taskProgressedToAiReview", actionIds: savedQaActions }],
+      },
+    }));
+    // An open settings modal watches the saved rules.
+    const observer = new QueryObserver(provider.queryClient, autopilotSettingsQueryOptions());
+    const stopObserving = observer.subscribe(() => {});
+    const qaActions = () => observer.getCurrentResult().data?.rules[0]?.actionIds;
+    try {
+      await waitFor(() => expect(qaActions()).toEqual([]));
+      savedQaActions = ["startQa"];
+
+      provider.emit(payload);
+
+      await waitFor(() => expect(qaActions()).toEqual(["startQa"]));
+    } finally {
+      stopObserving();
+      provider.unmount();
+    }
+  });
+
+  test("dismisses the outcomes of a workspace that leaves the workspace list", async () => {
+    const provider = renderProvider({});
+    try {
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      provider.emit({ type: "autopilot_outcome", outcome: skipped("beta-live", beta) });
+      await provider.rerender(alpha, [alpha]);
+
+      expect(dismiss).toHaveBeenCalledWith("autopilot:beta-live");
+    } finally {
+      provider.unmount();
+    }
+  });
 });

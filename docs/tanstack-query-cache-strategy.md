@@ -53,6 +53,7 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
 | Host runtime and MCP bridge status | Infinite, updated by events |
+| Saved Autopilot rules | Infinite, invalidated by events |
 
 Agent session lists stay fresh until a task event invalidates them or an explicit refresh requests current records. Session-list queries do not retry on mount after a failure. A failed list stays active in its view, so a later task event reads it again.
 
@@ -66,7 +67,9 @@ The task stream starts the session-list work of each consecutive event when it r
 
 When a replacement snapshot arrives, the stream cancels all session-list reads and advances the batch epoch. Work that started before the snapshot does not store records, start a live refresh, or report success. A read whose response returned before the snapshot cannot be cancelled. If it has no older list to keep, its query goes back to its first state. A stopped stream starts no live refresh for the events or the snapshot that it started.
 
-Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, and `host-runtime-status.ts`.
+Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, `host-runtime-status.ts`, and `autopilot.ts`.
+
+The saved Autopilot rules have their own entry, apart from the settings snapshot, so no settings mutation writes or cancels them. The `autopilot_settings_saved` run event and a reconnect after missed events invalidate the entry.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 

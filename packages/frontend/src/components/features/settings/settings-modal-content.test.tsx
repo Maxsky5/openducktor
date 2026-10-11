@@ -135,6 +135,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},
+  savedAutopilotError: null,
   updateGlobalPromptOverrides: () => {},
   updateRepoPromptOverrides: () => {},
   updateSelectedRepoAgentDefault: () => {},

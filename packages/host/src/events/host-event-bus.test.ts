@@ -12,10 +12,16 @@ describe("createHostEventBus", () => {
       envelopes.push(envelope);
     });
 
-    bus.publish({ channel: "openducktor://run-event", payload: { taskId: "task-1" } });
+    bus.publish({
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: "task-1" },
+    });
 
     expect(envelopes).toEqual([
-      { channel: "openducktor://run-event", payload: { taskId: "task-1" } },
+      {
+        channel: "openducktor://run-event",
+        payload: { type: "autopilot_failure", failure: "task-1" },
+      },
     ]);
   });
 
@@ -27,7 +33,10 @@ describe("createHostEventBus", () => {
     });
 
     unsubscribe();
-    bus.publish({ channel: "openducktor://run-event", payload: { sessionId: "session-1" } });
+    bus.publish({
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: "session-1" },
+    });
 
     expect(envelopes).toEqual([]);
   });
@@ -55,10 +64,16 @@ describe("createHostEventBus", () => {
     });
     bus.subscribe("openducktor://run-event", (envelope) => received.push(envelope));
 
-    bus.publish({ channel: "openducktor://run-event", payload: { taskId: "task-1" } });
+    bus.publish({
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: "task-1" },
+    });
 
     expect(received).toEqual([
-      { channel: "openducktor://run-event", payload: { taskId: "task-1" } },
+      {
+        channel: "openducktor://run-event",
+        payload: { type: "autopilot_failure", failure: "task-1" },
+      },
     ]);
     expect(failures).toHaveLength(1);
   });
@@ -71,7 +86,10 @@ describe("createHostEventBus", () => {
       unsubscribe();
     });
 
-    bus.publish({ channel: "openducktor://run-event", payload: {} });
+    bus.publish({
+      channel: "openducktor://run-event",
+      payload: { type: "autopilot_failure", failure: null },
+    });
 
     expect(received).toEqual(["second", "first"]);
   });

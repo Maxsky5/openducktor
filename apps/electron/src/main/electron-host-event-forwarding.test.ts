@@ -24,14 +24,14 @@ describe("forwardElectronHostEvent", () => {
           webContents: { isDestroyed: () => false, send: received },
         },
       ],
-      { channel: "openducktor://run-event", payload: { type: "run" } },
+      { channel: "openducktor://run-event", payload: { type: "autopilot_failure", failure: null } },
       report,
     );
 
     expect(report).toHaveBeenCalledWith({ channel: "openducktor://run-event", cause: failure });
     expect(received).toHaveBeenCalledWith(electronHostEventChannel("openducktor://run-event"), {
       channel: "openducktor://run-event",
-      payload: { type: "run" },
+      payload: { type: "autopilot_failure", failure: null },
     });
   });
 });

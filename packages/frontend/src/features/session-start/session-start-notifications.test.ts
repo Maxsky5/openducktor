@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { createNotificationPolicy } from "@/features/notifications/notification-policy";
 import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
-import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
+import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
   isSessionStartFailureFeedbackHandled,

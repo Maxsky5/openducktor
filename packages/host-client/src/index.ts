@@ -1,5 +1,13 @@
 import {
+  autopilotRecoveryClaimInputSchema,
+  autopilotRecoveryClaimResultSchema,
+  autopilotStateReadInputSchema,
+  autopilotStateSchema,
   selectedNotificationSchema,
+  type AutopilotRecoveryClaimInput,
+  type AutopilotRecoveryClaimResult,
+  type AutopilotState,
+  type AutopilotStateReadInput,
   type NotificationOccurrence,
   type SelectedNotification,
 } from "@openducktor/contracts";
@@ -36,6 +44,8 @@ type PublicMethods<Client> = {
 
 type HostClientApi = {
   notificationPublishAction(occurrence: NotificationOccurrence): Promise<SelectedNotification>;
+  autopilotStateRead(input: AutopilotStateReadInput): Promise<AutopilotState>;
+  autopilotRecoveryClaim(input: AutopilotRecoveryClaimInput): Promise<AutopilotRecoveryClaimResult>;
 } & PublicMethods<HostWorkspaceClient> &
   PublicMethods<HostWorkspaceSessionClient> &
   PublicMethods<HostFilesystemClient> &
@@ -65,6 +75,18 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const hostClient = {
     notificationPublishAction: (occurrence: NotificationOccurrence) =>
       invokeFn("notification_publish_action", occurrence, selectedNotificationSchema),
+    autopilotStateRead: (input: AutopilotStateReadInput) =>
+      invokeFn(
+        "autopilot_state_read",
+        autopilotStateReadInputSchema.parse(input),
+        autopilotStateSchema,
+      ),
+    autopilotRecoveryClaim: (input: AutopilotRecoveryClaimInput) =>
+      invokeFn(
+        "autopilot_recovery_claim",
+        autopilotRecoveryClaimInputSchema.parse(input),
+        autopilotRecoveryClaimResultSchema,
+      ),
     workspaceSessionExternalList:
       workspaceSessionClient.workspaceSessionExternalList.bind(workspaceSessionClient),
     workspaceSessionExternalRelease:

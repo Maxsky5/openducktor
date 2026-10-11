@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
-import { withNotificationConfigCommit } from "../../adapters/config/notification-settings-config";
+import { withConfigCommit } from "../../adapters/config/config-commit";
 import {
   createNotificationService,
   type NotificationService,
@@ -13,7 +13,7 @@ export const createNodeNotificationServices = (
   eventBus: HostEventBusPort | undefined,
 ) => {
   let service: NotificationService | undefined;
-  const settingsConfig = withNotificationConfigCommit(baseSettings, (config) =>
+  const settingsConfig = withConfigCommit(baseSettings, (config) =>
     service ? service.configCommitted(config) : Effect.void,
   );
   return {

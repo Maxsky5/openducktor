@@ -182,6 +182,36 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs[1]?.reusablePrompts).toEqual(snapshot.reusablePrompts);
   });
 
+  test("a save without Autopilot rules keeps the rules that another client saved", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    // This client loaded the rules before another client enabled QA.
+    const { autopilot: _staleAutopilot, ...staleSnapshot } = await Effect.runPromise(
+      service.getSettingsSnapshot(),
+    );
+    const otherClient = await Effect.runPromise(service.getSettingsSnapshot());
+    const enabled = {
+      ...otherClient.autopilot,
+      rules: otherClient.autopilot.rules.map((rule) =>
+        rule.eventId === "taskProgressedToAiReview"
+          ? { ...rule, actionIds: ["startQa" as const] }
+          : rule,
+      ),
+    };
+    await Effect.runPromise(saveSettingsSnapshot(service, { ...otherClient, autopilot: enabled }));
+
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, {
+        ...staleSnapshot,
+        chat: { ...staleSnapshot.chat, showThinkingMessages: true },
+      }),
+    );
+
+    const fresh = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(fresh.autopilot).toEqual(enabled);
+    expect(fresh.chat.showThinkingMessages).toBe(true);
+  });
+
   test("rejects invalid role drafts before writing any settings", async () => {
     const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
     const service = createWorkspaceSettingsService(settingsConfig);

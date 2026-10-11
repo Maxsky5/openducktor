@@ -14,8 +14,10 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useIsMutating } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useIsMutating, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { autopilotSettingsQueryOptions } from "@/state/queries/autopilot";
+import { errorMessage } from "@/lib/errors";
 import type { RuntimeImpactReviewState } from "@/components/features/runtimes/runtime-impact-review";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
@@ -151,6 +153,8 @@ export type SettingsModalController = {
   updateGlobalAutopilotSettings: (
     updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"],
   ) => void;
+  /** The saved Autopilot rules could not load, so the shown rules can be old. */
+  savedAutopilotError: string | null;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
@@ -386,6 +390,21 @@ export const useSettingsModalController = ({
     open,
     loadedSnapshot,
   });
+
+  // Another client can save Autopilot rules while this modal is open. Their own query follows
+  // the host, and the draft shows them unless the user edited them here. Each draft load starts
+  // from the cached settings snapshot, which can hold older rules.
+  const savedAutopilotQuery = useQuery({ ...autopilotSettingsQueryOptions(), enabled: open });
+  const savedAutopilot = savedAutopilotQuery.data;
+  const savedAutopilotError = savedAutopilotQuery.error
+    ? errorMessage(savedAutopilotQuery.error)
+    : null;
+  useEffect(() => {
+    if (!savedAutopilot || !loadedSnapshot || dirtySections.autopilot) return;
+    setSnapshotDraft((draft) =>
+      draft && draft.autopilot !== savedAutopilot ? { ...draft, autopilot: savedAutopilot } : draft,
+    );
+  }, [dirtySections.autopilot, loadedSnapshot, savedAutopilot, setSnapshotDraft]);
 
   const selectedRepoDefaultWorktreeBasePath = selectedWorkspace?.defaultWorktreeBasePath ?? null;
   const selectedRepoEffectiveWorktreeBasePath = useMemo(() => {
@@ -629,6 +648,7 @@ export const useSettingsModalController = ({
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
+    savedAutopilotError,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

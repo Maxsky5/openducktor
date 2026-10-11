@@ -9,6 +9,7 @@ import {
   type TaskSyncService,
 } from "../../application/tasks/sync/task-sync-service";
 import type { TaskServiceWithMutationProgress } from "../../application/tasks/task-service";
+import type { CommittedTaskStatusChangeObserver } from "../../application/tasks/task-mutation-operation";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createTaskEventStream, type TaskEventStreamPort } from "../../events/task-event-stream";
@@ -23,6 +24,7 @@ export type NodeTaskEventServices = {
 export const createNodeTaskEventServices = ({
   baseTaskService,
   acceptNotificationInput,
+  observeStatusChanges,
   lifecycleLogger,
   onBackgroundFailure,
   taskEventPublicationReporter,
@@ -32,6 +34,7 @@ export const createNodeTaskEventServices = ({
   acceptNotificationInput?:
     | ((event: import("@openducktor/contracts").ExternalTaskSyncEvent) => void)
     | undefined;
+  observeStatusChanges: CommittedTaskStatusChangeObserver;
   lifecycleLogger: HostLifecycleLogger;
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
@@ -54,6 +57,7 @@ export const createNodeTaskEventServices = ({
   });
   const taskSyncService = createTaskSyncService({
     acceptNotificationInput,
+    observeStatusChanges,
     logger: lifecycleLogger,
     onBackgroundFailure,
     publicationReporter: taskEventPublicationReporter,

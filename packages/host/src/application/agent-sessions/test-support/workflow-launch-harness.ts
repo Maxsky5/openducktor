@@ -19,6 +19,7 @@ import {
   taskCardSchema,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
+import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
   createGitPortTestDouble,
@@ -35,6 +36,12 @@ import { createAgentSessionCommandService } from "../agent-session-command-servi
 import { createAgentSessionLiveStateService } from "../agent-session-live-state-service";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import { createWorkflowLaunchService } from "../workflow-launch-service";
+import type { AutomaticWorkflowLaunchRequest } from "../workflow-launch-types";
+
+/** An automatic request whose start check the harness adds. */
+export type AutomaticLaunchInput = Omit<AutomaticWorkflowLaunchRequest, "policy"> & {
+  policy: Omit<AutomaticWorkflowLaunchRequest["policy"], "startCheck">;
+};
 import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-adapter-port";
 import {
   AgentSessionMessageAcceptedError,
@@ -289,6 +296,8 @@ export const createLaunchHarness = async (
     }),
     taskSyncService: {
       runMutation: (_path, mutation) => mutation,
+      runStatusMutation: (_path, _operation, mutation, afterCommit) =>
+        collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
       publishExternalTaskCreated: () => Effect.void,
       syncRepoPullRequests: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
       publishTasksUpdated: (_repoPath, _changes, operation) =>
@@ -477,6 +486,12 @@ export const createLaunchHarness = async (
   });
   return {
     service,
+    /** Starts an automatic launch whose start check always passes. */
+    launchAutomatic: (request: AutomaticLaunchInput) =>
+      service.launch({
+        ...request,
+        policy: { ...request.policy, startCheck: Effect.succeed({ start: true as const }) },
+      }),
     commands,
     sendEntered,
     lifecycle,

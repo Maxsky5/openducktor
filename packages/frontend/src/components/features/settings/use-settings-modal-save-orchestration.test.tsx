@@ -328,6 +328,41 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
+  test.each([
+    { name: "leaves Autopilot rules out of an unrelated save", dirty: false },
+    { name: "saves an explicit Autopilot edit from this modal", dirty: true },
+  ])("$name", async ({ dirty }) => {
+    // The host keeps omitted rules, so a stale draft cannot replace another client's save.
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.autopilot = {
+      alwaysStartQaReviewsFresh: false,
+      rules: [{ eventId: "taskProgressedToAiReview", actionIds: [] }],
+    };
+    const saveSettingsSnapshot = mock(
+      async (_snapshot: SettingsSnapshotSaveInput, _confirmation?: string) => savedSettingsResult(),
+    );
+    const harness = createHookHarness(
+      createArgs(
+        { snapshotDraft, saveSettingsSnapshot },
+        { ...EMPTY_DIRTY_SECTIONS, appearance: true, autopilot: dirty },
+      ),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    const saved = saveSettingsSnapshot.mock.calls[0]?.[0];
+    if (dirty)
+      expect(
+        saved?.autopilot?.rules.find((rule) => rule.eventId === "taskProgressedToAiReview")
+          ?.actionIds,
+      ).toEqual([]);
+    else expect(saved).not.toHaveProperty("autopilot");
+    await harness.unmount();
+  });
+
   test("keeps an explicit final task card view that matches the loaded value", async () => {
     const loadedSnapshot = createSnapshot();
     const snapshotDraft = createSnapshot();

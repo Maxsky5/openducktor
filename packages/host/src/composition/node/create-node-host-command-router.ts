@@ -2,6 +2,12 @@ import { createEffectHostCommandRouter } from "../../interface/router/host-comma
 import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
 import { createNodeNotificationServices } from "./node-notification-services";
 import { createNotificationCommandHandlers } from "../../interface/commands/notification-command-handlers";
+import { createAutopilotCommandHandlers } from "../../interface/commands/autopilot-command-handlers";
+import {
+  type AutopilotService,
+  createAutopilotService,
+} from "../../application/autopilot/autopilot-service";
+import { withConfigCommit } from "../../adapters/config/config-commit";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
@@ -108,7 +114,14 @@ export const assembleNodeEffectHostCommandRouter = (
     startupEnv,
     worktreeFiles,
   } = defaultPorts;
-  const notificationComposition = createNodeNotificationServices(baseSettingsConfig, eventBus);
+  // Autopilot needs services that this function creates later, so the hooks bind it late.
+  let autopilot: AutopilotService | undefined;
+  const notificationComposition = createNodeNotificationServices(
+    withConfigCommit(baseSettingsConfig, (config) =>
+      autopilot ? autopilot.configCommitted(config) : Effect.void,
+    ),
+    eventBus,
+  );
   const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup({ ...defaultPorts, settingsConfig }, input);
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
@@ -269,6 +282,7 @@ export const assembleNodeEffectHostCommandRouter = (
     },
     eventServiceInput: {
       acceptNotificationInput: notificationComposition.acceptTask,
+      observeStatusChanges: (change) => autopilot?.observe(change),
       lifecycleLogger,
       onBackgroundFailure,
       taskEventPublicationReporter,
@@ -289,6 +303,16 @@ export const assembleNodeEffectHostCommandRouter = (
     live: agentSessionLiveStateService,
     workspaceSessions: assets.workspaceSessionStore,
   });
+  const autopilotService = createAutopilotService({
+    settingsConfig,
+    tasks: taskService,
+    mutations: taskSyncService,
+    workflowLaunch: taskSessions.workflowLaunchService,
+    notifications: notificationService,
+    publish: (event) => eventBus?.publish({ channel: "openducktor://run-event", payload: event }),
+    onBackgroundFailure,
+  });
+  autopilot = autopilotService;
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,
     taskService,
@@ -344,6 +368,7 @@ export const assembleNodeEffectHostCommandRouter = (
     shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
     unsubscribeImportCatalogs: workspaceChats.unsubscribeImportCatalogs,
     notifications: notificationService,
+    autopilot: autopilotService,
     assets,
     azureDevOpsConnection,
     workspaceProviderSetup,
@@ -364,6 +389,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...setup.handlers,
     ...workspaceChats.handlers,
     ...createNotificationCommandHandlers(notificationService),
+    ...createAutopilotCommandHandlers(autopilotService),
     ...createAgentSessionLiveCommandHandlers(launchControls.commands, localAttachmentService),
     ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
     ...createAgentRuntimeQueryCommandHandlers(

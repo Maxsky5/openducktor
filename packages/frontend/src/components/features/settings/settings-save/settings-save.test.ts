@@ -94,6 +94,14 @@ describe("settings save transforms", () => {
     ).toEqual([]);
   });
 
+  test("only replaces Autopilot rules when the Autopilot section was edited", () => {
+    const snapshot = createSettingsSnapshotFixture();
+    expect(prepareSettingsSnapshotForSave(snapshot)).not.toHaveProperty("autopilot");
+    expect(prepareSettingsSnapshotForSave(snapshot, { saveAutopilot: true }).autopilot).toEqual(
+      prepareAutopilotSettingsForSave(snapshot.autopilot),
+    );
+  });
+
   test("prepares prompt overrides for save", () => {
     const saveReady = preparePromptOverridesForSave({
       "kickoff.spec_initial": {
