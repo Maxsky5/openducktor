@@ -810,6 +810,19 @@ const runtimeWorkflowToolAliasesByCanonicalSchema = z
     }
   });
 
+export const runtimeCapabilityLimitSchema = z.strictObject({
+  scope: z.enum(["runtime", "workflow"]),
+  surface: z.enum([
+    "native_commands",
+    "subagents",
+    "todos",
+    "interrupted_turn_resume",
+    "current_context_usage",
+  ]),
+  reason: z.string().min(1),
+});
+export type RuntimeCapabilityLimit = z.infer<typeof runtimeCapabilityLimitSchema>;
+
 export const runtimeDescriptorSchema = z
   .object({
     kind: runtimeKindSchema,
@@ -818,6 +831,7 @@ export const runtimeDescriptorSchema = z
     readOnlyRoleBlockedTools: runtimeReadOnlyRoleBlockedToolsSchema,
     workflowToolAliasesByCanonical: runtimeWorkflowToolAliasesByCanonicalSchema,
     capabilities: runtimeCapabilitiesSchema,
+    capabilityLimits: z.array(runtimeCapabilityLimitSchema).default([]),
   })
   .strict();
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;

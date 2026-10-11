@@ -798,6 +798,25 @@ describe("PierreDiffViewer", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  test("updates file content between full height and the compact scroll area", () => {
+    const { PierreFileViewer } = pierreViewerModule;
+    const content = Array.from({ length: 60 }, (_, index) => `Line ${index + 1}`).join("\n");
+    const { rerender } = render(<PierreFileViewer filePath="notes.txt" content={content} />);
+    const getScrollArea = (): Element | null =>
+      screen.getByTestId("pierre-file").closest(".overflow-auto");
+
+    expect(getScrollArea()?.className).toContain("max-h-[min(50vh,32rem)]");
+
+    rerender(<PierreFileViewer filePath="notes.txt" content={content} heightMode="full" />);
+
+    expect(getScrollArea()).toBeNull();
+    expect(screen.getByTestId("pierre-file").getAttribute("data-file-contents")).toBe(content);
+
+    rerender(<PierreFileViewer filePath="notes.txt" content={content} heightMode="scroll" />);
+
+    expect(getScrollArea()?.className).toContain("max-h-[min(50vh,32rem)]");
+  });
+
   test("shows an actionable error when the highlight worker pool is unavailable", () => {
     const { PierreFileViewer } = pierreViewerModule;
     const subscribeToStatChanges = mock(() => () => undefined);

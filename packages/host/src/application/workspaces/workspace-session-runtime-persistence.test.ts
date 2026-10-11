@@ -2,6 +2,8 @@ import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-s
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
 import { repoConfigSchema } from "@openducktor/contracts";
+import { hostInvokeFailureSchema } from "@openducktor/contracts";
+import { OpenCodeOperationError } from "@openducktor/adapters-opencode-sdk";
 import { Deferred, Effect } from "effect";
 import {
   createSqliteTaskStoreHarness,
@@ -17,6 +19,8 @@ import {
   waitFor,
 } from "./test-support/workspace-session-runtime-persistence-harness";
 import { createWorkspaceSessionService } from "./workspace-session-service";
+import { toHostOperationError } from "../../effect/host-errors";
+import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -95,6 +99,39 @@ describe("Workspace Session persistence through the shared command module", () =
     await h.send("Name this chat");
     expect(h.titleAttempts).toEqual(["First accepted prompt"]);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
+  test("preserves the accepted receipt when the first native title update fails", async () => {
+    const h = await setup();
+    h.state.beforeTitle = Effect.fail(
+      toHostOperationError(
+        new OpenCodeOperationError({
+          ...h.ref,
+          operation: "rename the conversation",
+          code: "request_failed",
+          summary: "OpenCode could not rename the conversation.",
+          nativeReason: "Native title update transport failed.",
+          nextAction: "Check the native connection and retry the title update.",
+        }),
+        "opencode-live-session.update-session-title",
+      ),
+    );
+    let failure: unknown;
+    try {
+      await h.send("Name this chat");
+    } catch (cause) {
+      failure = cause;
+    }
+    expect(hostInvokeFailureSchema.parse(hostInvokeFailureFromError(failure))).toMatchObject({
+      kind: "agent_session_message_accepted",
+      sessionRef: h.ref,
+      acceptedMessage: { messageId: "user-1", message: "First accepted prompt" },
+      stage: "record_message",
+    });
+    expect(h.inputs).toHaveLength(1);
+    expect((await h.get()).generatedTitle).toBeNull();
+    expect((await h.get()).updatedAt).toBe(Date.parse(h.accepted().timestamp));
+    expect(h.state.nativeTitle).toBeNull();
   });
 
   test("records an accepted message that the runtime publishes during the send", async () => {

@@ -149,6 +149,9 @@ export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
 };
 
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
+export type AcceptedAgentInput =
+  | AcceptedAgentUserMessage
+  | Extract<import("@openducktor/contracts").AcceptedAgentInput, { type: "command_accepted" }>;
 
 export type UpdateAgentSessionModelInput = SessionRef & {
   model: AgentSessionModelSettings | null;
@@ -193,6 +196,7 @@ export type LoadAgentSessionDiffInput =
 export type LoadAgentFileStatusInput = RuntimeWorkingDirectoryRef;
 
 export const AGENT_SESSION_SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+export const AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX = "Instructions update:\n\n";
 
 export type AgentSessionHistoryMessage = ContractsAgentSessionHistoryMessage;
 
@@ -283,7 +287,7 @@ export interface AgentSessionControlPort {
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
   updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
-  sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
+  sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentInput>;
   stopSession(input: SessionRef): Promise<void>;
 }
 
@@ -295,7 +299,7 @@ export interface AgentRuntimeSessionControlPort {
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
-  sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage>;
+  sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentInput>;
   stopSession(input: SessionRef): Promise<void>;
 }
 

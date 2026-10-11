@@ -27,7 +27,6 @@ const buildModel = () => ({
     },
     isStarting: false,
     isSending: false,
-    sessionAgentColors: {},
     canSubmitQuestionAnswers: true,
     isSubmittingQuestionByRequestId: {},
     canReplyToApprovals: true,

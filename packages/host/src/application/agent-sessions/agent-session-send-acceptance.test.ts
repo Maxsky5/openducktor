@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { hostInvokeFailureSchema, type AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
+import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
 import {
   createRuntimeHarness,
   ref,

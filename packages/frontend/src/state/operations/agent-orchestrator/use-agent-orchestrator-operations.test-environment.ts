@@ -1,4 +1,4 @@
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
 import { spyOn } from "bun:test";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -40,8 +40,8 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     }),
   );
   const spies = [
-    spyOn(OpencodeSdkAdapter.prototype, "loadSessionHistory").mockResolvedValue([]),
-    spyOn(OpencodeSdkAdapter.prototype, "loadSessionTodos").mockResolvedValue([]),
+    spyOn(AgentRuntimeTestAdapter.prototype, "loadSessionHistory").mockResolvedValue([]),
+    spyOn(AgentRuntimeTestAdapter.prototype, "loadSessionTodos").mockResolvedValue([]),
   ];
 
   return () => {

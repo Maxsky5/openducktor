@@ -5,6 +5,7 @@ import type {
   ReplyApprovalInput,
   SessionRef,
 } from "@openducktor/core";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
@@ -35,6 +36,10 @@ export type UpdateSessionTodos = (
 ) => void;
 
 export type SessionEvent = AgentEvent;
+export type SessionTranscriptEventProvenance = Extract<
+  AgentSessionLiveEnvelope,
+  { type: "transcript_event" }
+>["provenance"];
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
 export type SessionPart = SessionPartEvent["part"];
 

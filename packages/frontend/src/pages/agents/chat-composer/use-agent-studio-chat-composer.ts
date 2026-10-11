@@ -115,7 +115,6 @@ type AgentStudioChatComposerState = {
   agentProfileOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
   variantOptions: ComboboxOption[];
-  agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectVariant: (variant: string) => void;
@@ -142,13 +141,9 @@ const useAgentStudioSpeed = ({
   });
 
 const canSelectProfile = (
-  hasSessionTarget: boolean,
   runtimeKind: RuntimeDescriptor["kind"] | null | undefined,
   runtimeDefinitions: RuntimeDescriptor[],
 ): boolean => {
-  if (hasSessionTarget) {
-    return false;
-  }
   if (!runtimeKind) {
     return true;
   }
@@ -284,13 +279,8 @@ export function useAgentStudioChatComposer({
     [promptInputRuntimeKind, selectedTargetRuntimeDefinitions],
   );
   const supportsProfiles = useMemo(
-    () =>
-      canSelectProfile(
-        hasSessionTarget,
-        selectedTargetRuntimeKind,
-        selectedTargetRuntimeDefinitions,
-      ),
-    [hasSessionTarget, selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind],
+    () => canSelectProfile(selectedTargetRuntimeKind, selectedTargetRuntimeDefinitions),
+    [selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind],
   );
 
   const modelPickerRuntimeDefinitions = useMemo(
@@ -500,16 +490,15 @@ export function useAgentStudioChatComposer({
     ? isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
 
-  const { selectedModelEntry, agentProfileOptions, variantOptions, agentAccentColorsByProfileId } =
-    useMemo(
-      () =>
-        resolveModelSelectionOptions({
-          liveSession: hasSessionTarget,
-          selectionCatalog,
-          selectedModelSelection,
-        }),
-      [hasSessionTarget, selectedModelSelection, selectionCatalog],
-    );
+  const { selectedModelEntry, agentProfileOptions, variantOptions } = useMemo(
+    () =>
+      resolveModelSelectionOptions({
+        liveSession: hasSessionTarget,
+        selectionCatalog,
+        selectedModelSelection,
+      }),
+    [hasSessionTarget, selectedModelSelection, selectionCatalog],
+  );
 
   const selectedSessionContextUsage = useSelectedSessionContextUsage({
     selectedSession: loadedSession,
@@ -619,7 +608,6 @@ export function useAgentStudioChatComposer({
     agentProfileOptions,
     modelPicker,
     variantOptions,
-    agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectVariant,

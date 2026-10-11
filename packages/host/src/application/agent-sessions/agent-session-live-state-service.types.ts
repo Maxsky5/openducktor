@@ -1,5 +1,5 @@
 import type {
-  AcceptedAgentUserMessage,
+  AcceptedAgentInput,
   AgentSessionContextUsage,
   AgentSessionControlForkInput,
   AgentSessionControlReleaseInput,
@@ -111,7 +111,7 @@ export type AgentSessionLiveStateService = {
   readonly sendUserMessage: (
     input: AgentSessionControlSendInput,
     options?: AgentSessionSendOptions,
-  ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
+  ) => Effect.Effect<AcceptedAgentInput, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,
   ) => Effect.Effect<void, HostError>;

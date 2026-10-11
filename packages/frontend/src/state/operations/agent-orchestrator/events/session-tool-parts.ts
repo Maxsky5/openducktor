@@ -87,6 +87,7 @@ const composeToolMessageMeta = (
     toolType: part.toolType,
     status,
   };
+  if (part.inputStreaming !== undefined) meta.inputStreaming = part.inputStreaming;
   if (part.preview) {
     meta.preview = part.preview;
   }
@@ -105,6 +106,7 @@ const composeToolMessageMeta = (
   if (error) {
     meta.error = error;
   }
+  if (part.resultContent) meta.resultContent = part.resultContent;
   if (part.fileDiffs) {
     meta.fileDiffs = part.fileDiffs;
   }

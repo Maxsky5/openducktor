@@ -4,6 +4,10 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./workflow-plugin": "./src/workflow-plugin/server.ts"
+  },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
@@ -11,11 +15,13 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.31",
+    "@opencode/client": "2.0.24",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "undici": "^8.10.2",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.0.24"
   }
 }

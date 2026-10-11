@@ -218,6 +218,11 @@ describe("agent-chat-message-card-model", () => {
     });
 
     test("derives lifecycle phases from status, payload and errors", () => {
+      expect(
+        getToolLifecyclePhase(
+          createToolMeta({ status: "pending", inputStreaming: false, input: { code: "return 1" } }),
+        ),
+      ).toBe("queued");
       expect(getToolLifecyclePhase(createToolMeta({ status: "pending", input: {} }))).toBe(
         "queued",
       );
@@ -385,6 +390,24 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("tool summary builder", () => {
+    test.each(["pending", "running", "completed"] as const)(
+      "previews execute input code instead of output while %s",
+      (status) => {
+        expect(
+          buildToolSummary(
+            createToolMeta({
+              tool: "execute",
+              toolType: "generic",
+              status,
+              inputStreaming: false,
+              input: { code: "const answer = 42;\nreturn answer;" },
+              output: "null Logs: unrelated tool output",
+            }),
+            "Tool execute completed",
+          ),
+        ).toBe("const answer = 42; return answer;");
+      },
+    );
     test("builds todo summaries from output and input data", () => {
       expect(
         buildToolSummary(
@@ -1073,12 +1096,14 @@ describe("agent-chat-message-card-model", () => {
           kind: "diff",
           filePath: "src/app.ts",
           diff: "@@ -1 +1,3 @@\n-old\n+new\n+line\n",
+          changeType: "modified",
           additions: 4,
           deletions: 2,
         },
         {
           kind: "path",
           filePath: "src/empty.ts",
+          changeType: "modified",
           additions: 0,
           deletions: 0,
         },

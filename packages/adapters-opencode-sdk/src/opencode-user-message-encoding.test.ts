@@ -3,7 +3,6 @@ import {
   buildOpenCodePromptText,
   buildOpenCodeVisibleText,
 } from "./opencode-user-message-encoding";
-import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 const FIRST_FILE = {
   id: "file-a",
@@ -43,34 +42,7 @@ describe("opencode-user-message-encoding", () => {
     ]);
     expect(encoded.text).toBe(`${text}@src/a.ts`);
     expect(encoded.fileReferences[0]?.sourceText.start).toBe(text.length);
-    const signature = JSON.parse(
-      buildQueuedRequestSignature([
-        { kind: "text", text },
-        { kind: "file_reference", file: FIRST_FILE },
-      ]),
-    );
-    expect(signature.visible).toBe(encoded.text);
-    expect(signature.nonTextParts[0].sourceText.start).toBe(text.length);
   });
-  test.each(["  hello", "hello  ", "\nhello\n"])(
-    "keeps boundary whitespace distinct in queued signatures: %j",
-    (text) => {
-      expect(buildQueuedRequestSignature([{ kind: "text", text }])).not.toBe(
-        buildQueuedRequestSignature([{ kind: "text", text: "hello" }]),
-      );
-    },
-  );
-  test("rejects skill references explicitly", () => {
-    expect(() =>
-      buildOpenCodeVisibleText([
-        {
-          kind: "skill_mention",
-          skill: { id: "/skills/review/SKILL.md", name: "review", path: "/skills/review/SKILL.md" },
-        },
-      ]),
-    ).toThrow("OpenCode does not support skill reference user message parts.");
-  });
-
   test("does not leave doubled synthetic spaces when skipped attachments sit between file references", () => {
     const parts = [
       { kind: "file_reference" as const, file: FIRST_FILE },
@@ -100,6 +72,7 @@ describe("opencode-user-message-encoding", () => {
         },
       ],
       subagentReferences: [],
+      skillReferences: [],
     });
   });
 
@@ -113,6 +86,7 @@ describe("opencode-user-message-encoding", () => {
     expect(buildOpenCodePromptText(parts)).toEqual({
       text: "ask @reviewer about this",
       fileReferences: [],
+      skillReferences: [],
       subagentReferences: [
         {
           subagent: SUBAGENT,
@@ -123,62 +97,6 @@ describe("opencode-user-message-encoding", () => {
           },
         },
       ],
-    });
-  });
-
-  test("queued request signatures reuse the same visible text as prompt encoding", () => {
-    const parts = [
-      { kind: "file_reference" as const, file: FIRST_FILE },
-      { kind: "attachment" as const, attachment: ATTACHMENT },
-      { kind: "file_reference" as const, file: SECOND_FILE },
-      { kind: "subagent_reference" as const, subagent: SUBAGENT },
-    ];
-
-    expect(JSON.parse(buildQueuedRequestSignature(parts))).toEqual({
-      visible: "@src/a.ts @src/b.ts @reviewer",
-      nonTextParts: [
-        {
-          kind: "file_reference",
-          path: "src/a.ts",
-          name: "a.ts",
-          sourceText: {
-            value: "@src/a.ts",
-            start: 0,
-            end: 9,
-          },
-        },
-        {
-          kind: "file_reference",
-          path: "src/b.ts",
-          name: "b.ts",
-          sourceText: {
-            value: "@src/b.ts",
-            start: 10,
-            end: 19,
-          },
-        },
-        {
-          kind: "subagent_reference",
-          id: "reviewer",
-          name: "reviewer",
-          sourceText: {
-            value: "@reviewer",
-            start: 20,
-            end: 29,
-          },
-        },
-        {
-          kind: "attachment",
-          path: "/tmp/diagram.png",
-          name: "diagram.png",
-          attachmentKind: "image",
-          mime: "image/png",
-        },
-      ],
-      providerId: null,
-      modelId: null,
-      variant: null,
-      profileId: null,
     });
   });
 });

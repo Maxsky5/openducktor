@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import type {
-  AcceptedAgentUserMessage,
+  AcceptedAgentInput,
   AgentSessionControlSendInput,
   AgentSessionLiveRef,
   SessionLaunchResult,
 } from "@openducktor/contracts";
 import { HostOperationError } from "../../effect/host-errors";
-import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionCommandAcceptedError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 import { createSessionLaunchService } from "./session-launch-service";
@@ -28,7 +31,7 @@ const refFor = (sessionId: string): AgentSessionLiveRef => ({
 });
 const parts: AgentSessionControlSendInput["parts"] = [{ kind: "text", text: "First message" }];
 
-const fixture = () => {
+const fixture = (accepted?: AcceptedAgentInput) => {
   const sends: string[] = [];
   const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
   // The fake issues the native request before its gate unless a test fails the send earlier.
@@ -62,15 +65,17 @@ const fixture = () => {
         if (issueSend) options?.onSent?.();
         return sendGate;
       }).pipe(
-        Effect.as<AcceptedAgentUserMessage>({
-          type: "user_message",
-          externalSessionId: input.externalSessionId,
-          messageId: "message-1",
-          message: "First message",
-          parts: [{ kind: "text", text: "First message" }],
-          timestamp: "2026-10-09T00:00:00Z",
-          state: "read",
-        }),
+        Effect.as<AcceptedAgentInput>(
+          accepted ?? {
+            type: "user_message",
+            externalSessionId: input.externalSessionId,
+            messageId: "message-1",
+            message: "First message",
+            parts: [{ kind: "text", text: "First message" }],
+            timestamp: "2026-10-09T00:00:00Z",
+            state: "read",
+          },
+        ),
       ),
     holdWorkflowLaunch: (ref, held) =>
       holdFailure && !held
@@ -145,6 +150,28 @@ const fixture = () => {
 const yieldToFibers = Effect.gen(function* () {
   for (let index = 0; index < 20; index += 1) yield* Effect.yieldNow;
 });
+
+test.each([false, true])(
+  "keeps command acceptance after update failure: %s",
+  async (failUpdate) => {
+    const accepted = { type: "command_accepted", commandName: "review" } as const;
+    const h = fixture(accepted);
+    if (failUpdate)
+      h.setSendGate(
+        Effect.fail(
+          new AgentSessionCommandAcceptedError(
+            { sessionRef: refFor("a-1"), acceptedCommand: accepted },
+            new Error("Session update failed"),
+          ),
+        ),
+      );
+    const result = await Effect.runPromise(h.service.launch({ key: "a", sessionId: "a-1" }));
+    expect(result.status).toBe(failUpdate ? "failed" : "completed");
+    expect(result.acceptedMessage).toEqual(accepted);
+    expect(result.unsentInstruction).toBeUndefined();
+    expect(h.sends).toEqual(["a-1"]);
+  },
+);
 
 test("launches with one key run in arrival order while another key runs at once", async () => {
   const h = fixture();

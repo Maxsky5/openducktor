@@ -1,4 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
+import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type {
   AgentAttachmentReference,
@@ -783,6 +784,28 @@ const ToolMessageBody = ({
   );
 };
 
+const renderInstructionsMessage = (
+  message: AgentChatMessage,
+  systemPromptBody: string,
+): ReactElement | null => {
+  if (message.role !== "system") return null;
+  const isInstructionUpdate = message.content.startsWith(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX);
+  if (!isInstructionUpdate && !message.content.startsWith(SYSTEM_PROMPT_PREFIX)) return null;
+  const instructions = isInstructionUpdate
+    ? message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length)
+    : systemPromptBody;
+  return (
+    <details className="rounded border border-border">
+      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
+        {isInstructionUpdate ? "Show instruction update" : "Show system prompt"}
+      </summary>
+      <div className="border-t border-border p-2">
+        <AgentChatMarkdownRenderer markdown={instructions} variant="compact" />
+      </div>
+    </details>
+  );
+};
+
 export const MessageBody = ({
   message,
   modelCatalog,
@@ -847,18 +870,8 @@ export const MessageBody = ({
     return <SessionNoticeMessage message={message} timeLabel={timeLabel} />;
   }
 
-  if (message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
-    return (
-      <details className="rounded border border-border bg-muted/70">
-        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
-          Show system prompt
-        </summary>
-        <div className="border-t border-border p-2">
-          <AgentChatMarkdownRenderer markdown={systemPromptBody} variant="compact" />
-        </div>
-      </details>
-    );
-  }
+  const instructionsMessage = renderInstructionsMessage(message, systemPromptBody);
+  if (instructionsMessage) return instructionsMessage;
 
   if (message.role === "user") {
     return <UserMessage message={message} timeLabel={timeLabel} />;

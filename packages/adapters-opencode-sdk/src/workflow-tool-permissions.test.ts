@@ -112,7 +112,7 @@ describe("workflow-tool-permissions", () => {
       });
     }
     expect(rules.some((rule) => rule.permission === "task")).toBe(false);
-    expect(rules).toContainEqual({ permission: "subtask", pattern: "*", action: "deny" });
+    expect(rules).not.toContainEqual({ permission: "subagent", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "bash", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
@@ -273,6 +273,8 @@ test.each([
     expect(effectiveAction(rules, "other_mcp_tool")).toBe("allow");
     expect(effectiveAction(rules, "bash")).toBe("allow");
     expect(effectiveAction(rules, "task")).toBe("allow");
+    expect(effectiveAction(rules, "subagent")).toBe("allow");
+    expect(effectiveAction(rules, "shell")).toBe("allow");
     expect(effectiveAction(rules, "edit")).toBe(role === "build" ? "allow" : "deny");
   },
 );

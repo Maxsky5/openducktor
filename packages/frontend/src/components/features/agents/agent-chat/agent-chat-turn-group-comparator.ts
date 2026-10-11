@@ -9,7 +9,6 @@ export type AgentChatTurnRowProps = {
   row: AgentChatTranscriptRow;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
   isStreamingAssistantMessage: boolean;
-  sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionTranscriptTarget | null;
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   subagentPendingApprovalCount: number;
@@ -19,28 +18,10 @@ export type AgentChatTurnRowProps = {
 export type AgentChatTurnGroupProps = {
   turn: AgentChatRenderedTurn;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
-  sessionAgentColors: Record<string, string>;
   transcriptTarget: AgentSessionTranscriptTarget | null;
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
-};
-
-export const areAgentColorsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-): boolean => {
-  if (left === right) {
-    return true;
-  }
-
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-
-  return leftKeys.every((key) => left[key] === right[key]);
 };
 
 export const areAgentSessionTranscriptTargetsEqual = (
@@ -205,7 +186,6 @@ export const areAgentChatTurnRowPropsEqual = (
     previousProps.runtimePresentation === nextProps.runtimePresentation &&
     previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
     previousProps.modelCatalog === nextProps.modelCatalog &&
-    areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areChatRowsEquivalent(previousProps.row, nextProps.row)
   );
 };
@@ -222,7 +202,6 @@ export const areAgentChatTurnGroupPropsEqual = (
     previousProps.turn.activeStreamingAssistantMessageId ===
       nextProps.turn.activeStreamingAssistantMessageId &&
     previousProps.modelCatalog === nextProps.modelCatalog &&
-    areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areAgentSessionTranscriptTargetsEqual(
       previousProps.transcriptTarget,
       nextProps.transcriptTarget,

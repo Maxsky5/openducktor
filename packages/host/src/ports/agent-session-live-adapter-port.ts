@@ -6,7 +6,8 @@ import type {
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
   AgentGeneratedImageDescribeResult,
-  AcceptedAgentUserMessage,
+  RuntimeOperationFailure,
+  AcceptedAgentInput,
   AgentSessionContextUsage,
   AgentSessionControlForkInput,
   AgentSessionControlReleaseInput,
@@ -37,9 +38,8 @@ import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 /** Host options for one user message. */
 export type AgentSessionSendOptions = {
   /**
-   * The send returns only after the runtime accepts the message. Only Codex supports it: it waits
-   * for the `turn/start` or `turn/steer` answer. OpenCode reports a failed async prompt without its
-   * message ID, and Claude names the message only in a later reply, so they ignore it.
+   * Codex waits for the `turn/start` or `turn/steer` answer. OpenCode returns its native queue or
+   * command receipt, and Claude returns its normal send receipt.
    */
   readonly requireNativeAdmission?: boolean;
   /**
@@ -77,7 +77,14 @@ export type AgentSessionLiveAdapterChange = { readonly provenance?: "baseline" |
       readonly catalog: SlashCommandCatalog;
     }
   | {
+      readonly type: "runtime_notice";
+      readonly repoPath: string;
+      readonly runtimeKind: RuntimeKind;
+      readonly message: string;
+    }
+  | {
       readonly type: "fault";
+      readonly runtimeOperationFailure?: RuntimeOperationFailure;
       readonly repoPath: string;
       readonly message: string;
       readonly operation?: string;
@@ -194,7 +201,7 @@ export type AgentSessionControlAdapterPort = {
   readonly sendUserMessage: (
     input: AgentSessionControlSendInput,
     options?: AgentSessionSendOptions,
-  ) => Effect.Effect<AcceptedAgentUserMessage, HostError>;
+  ) => Effect.Effect<AcceptedAgentInput, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput,
   ) => Effect.Effect<void, HostError>;

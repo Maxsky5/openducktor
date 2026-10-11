@@ -188,7 +188,6 @@ export const buildBaseModel = () => ({
   },
   isStarting: false,
   isSending: false,
-  sessionAgentColors: {},
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
   canReplyToApprovals: true,

@@ -311,6 +311,32 @@ describe("AgentChatThread", () => {
     expect(model.transcript.displayedSessionKey).toBeNull();
   });
 
+  test("shows a startup failure before a native session exists and clears it on success", () => {
+    const error =
+      "OpenCode could not install the OpenDucktor MCP bridge. Rename the conflicting native server, then retry.";
+    const model = {
+      ...buildBaseModel(),
+      transcript: buildEmptyTranscript(),
+      sessionAuxiliaryError: error,
+    };
+    const view = render(createElement(AgentChatThread, { model }));
+    try {
+      expect(view.getByRole("alert").textContent).toBe(error);
+      view.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...model,
+            transcript: buildSessionTranscript(buildSession()),
+            sessionAuxiliaryError: null,
+          },
+        }),
+      );
+      expect(view.queryByText(error)).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("renders empty state when no session is active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

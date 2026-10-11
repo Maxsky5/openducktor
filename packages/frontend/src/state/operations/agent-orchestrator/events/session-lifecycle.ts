@@ -13,6 +13,8 @@ import {
   appendSessionMessage,
   createSessionMessagesState,
   findLastSessionMessageByRole,
+  getSessionMessageAt,
+  getSessionMessageCount,
   replaceSessionMessageById,
   sessionMessageBelongsToSourceMessage,
   someSessionMessage,
@@ -23,6 +25,7 @@ import {
   buildSessionCompactedNoticeMessage,
   buildSessionCompactionStartedNoticeMessage,
   buildSessionErrorNoticeMessage,
+  buildSessionInterruptedNoticeMessage,
   buildUserStoppedNoticeMessage,
   removeRunningSessionCompactionNotices,
   USER_STOPPED_NOTICE,
@@ -33,7 +36,11 @@ import {
   normalizeRetryStatusMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
-import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
+import type {
+  SessionEvent,
+  SessionLifecycleEventContext,
+  SessionTranscriptEventProvenance,
+} from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
 const clearTurnTracking = (
@@ -391,7 +398,28 @@ export const handleTurnError = (
 export const handleSessionIdle = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_idle" }>,
+  provenance?: SessionTranscriptEventProvenance,
 ): void => {
+  if (event.interruption) {
+    const { messageId, message } = event.interruption;
+    context.store.updateSession(context.session.identity, (current) => {
+      const lastMessage = getSessionMessageAt(current, getSessionMessageCount(current) - 1);
+      const notice = buildSessionInterruptedNoticeMessage(event.timestamp, message, messageId);
+      const replacesLocalStop =
+        provenance !== "baseline" &&
+        lastMessage?.meta?.kind === "session_notice" &&
+        lastMessage.meta.reason === "user_stopped";
+      const next = {
+        ...current,
+        messages: replacesLocalStop
+          ? replaceSessionMessageById(current, lastMessage.id, notice)
+          : upsertSessionMessage(current, notice),
+      };
+      if (provenance !== "baseline") next.stopRequestedAt = null;
+      return next;
+    });
+  }
+  if (provenance === "baseline") return;
   if (settleSessionToIdle(context, event.timestamp)) {
     context.turn.clearTurnDuration(context.session.key, event.timestamp);
     clearTurnTracking(context);
@@ -433,7 +461,12 @@ export const handleSessionPolicyNotice = (
     ...current,
     messages: upsertSessionMessage(
       current,
-      buildSessionPolicyNoticeMessage(event.timestamp, event.message, event.messageId),
+      buildSessionPolicyNoticeMessage(
+        event.timestamp,
+        event.message,
+        event.messageId,
+        current.runtimeKind,
+      ),
     ),
   }));
 };

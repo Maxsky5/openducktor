@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope, AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-live-projection";
@@ -47,12 +47,17 @@ const createConsumerHarness = (
   return {
     consumer: {
       ...consumer,
-      handle: (event: AgentSessionTranscriptEvent) => {
+      handle: (event: AgentSessionTranscriptEvent, provenance?: "baseline" | "live") => {
+        const envelope: Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }> = {
+          type: "transcript_event",
+          event,
+        };
+        if (provenance) envelope.provenance = provenance;
         sessionsRef.current = applyAgentSessionLiveDelta({
           current: sessionsRef.current,
-          envelope: { type: "transcript_event", event },
+          envelope,
         });
-        consumer.handle(event);
+        consumer.handle(event, provenance);
       },
     },
     sessionsRef,
@@ -60,6 +65,130 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  test("restores a past interruption without clearing a current stop request", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+    const stopRequestedAt = "2026-10-10T08:00:10.000Z";
+    const { consumer, sessionsRef } = createConsumerHarness(
+      0,
+      buildSession({
+        runtimeKind: "opencode",
+        status: "running",
+        stopRequestedAt,
+        pendingQuestions: [{ requestId: "current-question", questions: [] }],
+      }),
+    );
+    try {
+      consumer.handle(
+        {
+          type: "session_idle",
+          sessionRef: liveRef,
+          externalSessionId: liveRef.externalSessionId,
+          timestamp: "2026-10-10T07:00:10.000Z",
+          interruption: { messageId: "previous-stop", message: "Turn interrupted." },
+        },
+        "baseline",
+      );
+      expect(getSession(sessionsRef)).toMatchObject({
+        status: "running",
+        stopRequestedAt,
+        pendingQuestions: [{ requestId: "current-question", questions: [] }],
+      });
+      expect(getSessionMessages(sessionsRef)).toContainEqual({
+        id: "previous-stop",
+        role: "system",
+        timestamp: "2026-10-10T07:00:10.000Z",
+        content: "Turn interrupted.",
+        meta: {
+          kind: "session_notice",
+          tone: "cancelled",
+          reason: "session_interrupted",
+          title: "Interrupted",
+        },
+      });
+    } finally {
+      consumer.close();
+    }
+  });
+
+  test("orders a consumed OpenCode inbox message after native profile reminders", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+    const { consumer, sessionsRef } = createConsumerHarness(
+      60_000,
+      buildSession({ runtimeKind: "opencode" }),
+    );
+    const queued: Extract<AgentSessionTranscriptEvent, { type: "user_message" }> = {
+      type: "user_message",
+      externalSessionId: liveRef.externalSessionId,
+      sessionRef: liveRef,
+      messageId: "user-queued",
+      timestamp: "2026-10-09T06:04:17.225Z",
+      message: "Read-only verification",
+      parts: [{ kind: "text", text: "Read-only verification" }],
+      state: "queued",
+    };
+    try {
+      consumer.handle(queued);
+      for (const reminder of [
+        {
+          messageId: "plan-enter",
+          timestamp: "2026-10-09T06:04:17.241Z",
+          message: "Enter Plan mode.",
+        },
+        {
+          messageId: "plan-leave",
+          timestamp: "2026-10-09T06:04:17.243Z",
+          message: "Leave Plan mode.",
+        },
+      ]) {
+        consumer.handle({
+          type: "session_policy_notice",
+          externalSessionId: liveRef.externalSessionId,
+          sessionRef: liveRef,
+          ...reminder,
+        });
+      }
+      consumer.handle({ ...queued, state: "read", timestamp: "2026-10-09T06:04:17.244Z" });
+      expect(getSessionMessages(sessionsRef).map((message) => message.id)).toEqual([
+        "plan-enter",
+        "plan-leave",
+        "user-queued",
+      ]);
+      expect(getSessionMessages(sessionsRef).at(-1)).toMatchObject({
+        timestamp: "2026-10-09T06:04:17.244Z",
+        meta: { kind: "user", state: "read" },
+      });
+    } finally {
+      consumer.close();
+    }
+  });
+
+  test("keeps OpenCode agent selection notices as ordinary system messages", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+    const { consumer, sessionsRef } = createConsumerHarness(
+      60_000,
+      buildSession({ runtimeKind: "opencode" }),
+    );
+    const before = getSession(sessionsRef).status;
+    try {
+      consumer.handle({
+        type: "session_policy_notice",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-08T10:00:00Z",
+        messageId: "agent-selected",
+        message: "Agent selected: build",
+      });
+      const notice = getSessionMessages(sessionsRef).find(
+        (message) => message.id === "agent-selected",
+      );
+      expect(notice).toMatchObject({ role: "system", content: "Agent selected: build" });
+      expect(notice?.meta).toBeUndefined();
+      expect(getSession(sessionsRef).status).toBe(before);
+    } finally {
+      consumer.close();
+    }
+  });
+
   test("updates Claude permission mismatch warnings in place without changing session activity", () => {
     const liveRef = { ...sessionRef, runtimeKind: "claude" as const };
     const { consumer, sessionsRef } = createConsumerHarness(

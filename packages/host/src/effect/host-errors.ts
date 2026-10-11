@@ -1,3 +1,4 @@
+import { runtimeOperationFailureSchema } from "@openducktor/contracts";
 import { Cause, Data, Option } from "effect";
 import { z } from "zod";
 
@@ -236,4 +237,26 @@ export const causeToHostBoundaryError = <Failure>(
     message: Cause.pretty(cause),
     details: { defect: true },
   });
+};
+
+export const readRuntimeOperationFailure = (
+  cause: unknown,
+):
+  | {
+      kind: "runtime_operation";
+      runtimeOperationFailure: import("@openducktor/contracts").RuntimeOperationFailure;
+    }
+  | undefined => {
+  const parsed = z
+    .object({
+      failure: z.object({
+        kind: z.literal("runtime_operation"),
+        runtimeOperationFailure: runtimeOperationFailureSchema,
+      }),
+    })
+    .safeParse(cause);
+  if (parsed.success) return parsed.data.failure;
+  if (cause instanceof HostOperationError && cause.cause !== cause)
+    return readRuntimeOperationFailure(cause.cause);
+  return undefined;
 };

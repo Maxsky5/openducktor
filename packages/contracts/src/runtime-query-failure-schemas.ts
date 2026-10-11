@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
+import { runtimeOperationFailureSchema } from "./runtime-operation-failure-schemas";
 
 export const runtimeQueryFailureSchema = z
   .object({
@@ -20,6 +21,7 @@ export const runtimeQueryFailureSchema = z
     summary: z.string().min(1),
     detail: z.string().min(1),
     sessionHistoryFailure: sessionHistoryFailureSchema.optional(),
+    runtimeOperationFailure: runtimeOperationFailureSchema.optional(),
   })
   .strict();
 export type RuntimeQueryFailure = z.infer<typeof runtimeQueryFailureSchema>;

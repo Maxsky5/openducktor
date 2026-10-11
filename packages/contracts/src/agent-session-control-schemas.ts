@@ -216,3 +216,13 @@ export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSumma
 
 export const acceptedAgentUserMessageSchema = agentUserMessageEventSchema;
 export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;
+export const acceptedAgentCommandSchema = z.strictObject({
+  type: z.literal("command_accepted"),
+  commandName: nonEmptyStringSchema,
+  inputId: nonEmptyStringSchema.optional(),
+});
+export const acceptedAgentInputSchema = z.discriminatedUnion("type", [
+  acceptedAgentUserMessageSchema,
+  acceptedAgentCommandSchema,
+]);
+export type AcceptedAgentInput = z.infer<typeof acceptedAgentInputSchema>;

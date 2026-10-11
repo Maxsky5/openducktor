@@ -13,7 +13,7 @@ const parseFiniteTimestamp = (timestamp: string): number | null => {
 
 export const getToolDuration = (meta: ToolMeta, messageTimestamp: string): number | null => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  if (lifecyclePhase === "queued" || lifecyclePhase === "executing") {
+  if (meta.status === "pending" || lifecyclePhase === "executing") {
     return null;
   }
 

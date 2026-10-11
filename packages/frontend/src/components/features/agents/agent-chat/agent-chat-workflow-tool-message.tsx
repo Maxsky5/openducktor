@@ -1,3 +1,4 @@
+import { AgentToolResultContentView } from "./agent-tool-result-content";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +14,11 @@ import { ToolJsonDetails } from "./agent-chat-tool-json-details";
 import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
 
 const WORKFLOW_TOOL_APPEARANCE = {
+  preparing: {
+    label: "PREPARING",
+    statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
+    foregroundClassName: "text-info-surface-foreground",
+  },
   queued: {
     label: "QUEUED",
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
@@ -66,11 +72,11 @@ export const WorkflowToolMessage = ({
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
-  const hasOutput = hasNonEmptyText(meta.output);
+  const hasOutput = Boolean(meta.resultContent?.length) || hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const isFailure = lifecyclePhase === "failed";
-  const isExecuting = lifecyclePhase === "executing";
+  const isActive = lifecyclePhase === "preparing" || lifecyclePhase === "executing";
   const {
     label: statusLabel,
     statusClassName,
@@ -93,7 +99,7 @@ export const WorkflowToolMessage = ({
           </span>
         ) : null}
         <ToolMessageTiming
-          showSpinner={isExecuting}
+          showSpinner={isActive}
           durationMs={durationMs}
           timeLabel={timeLabel}
           className="text-current/75 font-normal normal-case"
@@ -109,7 +115,16 @@ export const WorkflowToolMessage = ({
               textClassName="text-current"
             />
           ) : null}
-          {hasOutput && meta.output ? (
+          {meta.resultContent ? (
+            <details className="rounded border border-current/20 bg-card">
+              <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+                Output
+              </summary>
+              <div className="space-y-2 px-2 pb-2">
+                <AgentToolResultContentView content={meta.resultContent} />
+              </div>
+            </details>
+          ) : hasOutput && meta.output ? (
             <ToolJsonDetails
               label="Output"
               value={meta.output}

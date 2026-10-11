@@ -27,7 +27,6 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       emptyState: null,
       isStarting: false,
       isSending: false,
-      sessionAgentColors: {},
       pendingApprovalRequests: [],
       pendingQuestionRequests: [],
       todos: [],

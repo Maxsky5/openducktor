@@ -1,11 +1,18 @@
 import {
+  type AgentSkillReference,
   type AgentUserMessagePart,
   type AgentUserMessagePromptFileReference,
   type AgentUserMessagePromptSubagentReference,
+  type AgentUserMessageSourceText,
   normalizeAgentUserMessageParts,
 } from "@openducktor/core";
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
+
+type OpenCodePromptSkillReference = {
+  skill: AgentSkillReference;
+  sourceText: AgentUserMessageSourceText;
+};
 
 const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => {
   if (part.kind === "text") {
@@ -18,7 +25,7 @@ const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => 
     return `@${part.file.path}`;
   }
   if (part.kind === "skill_mention") {
-    throw new Error("OpenCode does not support skill reference user message parts.");
+    return `$${part.skill.name}`;
   }
   if (part.kind === "subagent_reference") {
     return `@${part.subagent.name}`;
@@ -61,6 +68,7 @@ const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
   const subagentReferences: AgentUserMessagePromptSubagentReference[] = [];
+  const skillReferences: OpenCodePromptSkillReference[] = [];
   let previousPart: AgentUserMessagePart | null = null;
   let skippedStructuredPart = false;
 
@@ -114,15 +122,28 @@ const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
       continue;
     }
 
+    if (part.kind === "skill_mention") {
+      const start = text.length;
+      text += encodedPart;
+      skillReferences.push({
+        skill: part.skill,
+        sourceText: { value: encodedPart, start, end: text.length },
+      });
+      previousPart = part;
+      skippedStructuredPart = false;
+      continue;
+    }
+
     text += encodedPart;
     previousPart = part;
     skippedStructuredPart = false;
   }
 
-  return { text, fileReferences, subagentReferences } satisfies {
+  return { text, fileReferences, subagentReferences, skillReferences } satisfies {
     text: string;
     fileReferences: AgentUserMessagePromptFileReference[];
     subagentReferences: AgentUserMessagePromptSubagentReference[];
+    skillReferences: OpenCodePromptSkillReference[];
   };
 };
 
@@ -136,6 +157,7 @@ export const buildOpenCodePromptText = (
   text: string;
   fileReferences: AgentUserMessagePromptFileReference[];
   subagentReferences: AgentUserMessagePromptSubagentReference[];
+  skillReferences: OpenCodePromptSkillReference[];
 } => {
   return buildOpenCodeMessageEncoding(parts);
 };

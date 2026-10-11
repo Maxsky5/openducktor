@@ -1,6 +1,9 @@
 import type { AgentSessionResumeFailure, HostInvokeFailure } from "@openducktor/contracts";
 import { RuntimeQueryError } from "../../ports/runtime-query-error";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionMessageAcceptedError,
+  AgentSessionCommandAcceptedError,
+} from "../../ports/agent-session-send-error";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import {
@@ -9,9 +12,10 @@ import {
 } from "../../application/terminals/terminal-service";
 import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset-error";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, readRuntimeOperationFailure } from "../../effect/host-errors";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
+  if (cause instanceof AgentSessionCommandAcceptedError) return cause.failure;
   if (cause instanceof RuntimeQueryError) {
     return { kind: "runtime_query", runtimeQueryFailure: cause.failure };
   }
@@ -64,5 +68,5 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
       sessionHistoryFailure: cause.failure,
     };
   }
-  return undefined;
+  return readRuntimeOperationFailure(cause);
 };

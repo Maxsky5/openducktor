@@ -193,10 +193,6 @@ const handleReasoningPart = (
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
     const prepared = prepareCurrent(current);
-    if (!part.completed) {
-      return prepared;
-    }
-
     const messageId = toReasoningMessageId(part.messageId, part.partId);
     const existingMessage = findSessionMessageById(prepared, messageId);
     const nextContent = part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
@@ -210,7 +206,7 @@ const handleReasoningPart = (
         id: messageId,
         role: "thinking",
         content: nextContent,
-        timestamp: event.timestamp,
+        timestamp: existingMessage?.timestamp ?? event.timestamp,
         meta: {
           kind: "reasoning",
           partId: part.partId,

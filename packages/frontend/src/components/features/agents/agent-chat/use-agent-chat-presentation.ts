@@ -27,9 +27,7 @@ type UseAgentChatPresentationArgs = {
   pendingApprovals: readonly AgentApprovalRequest[];
   pendingQuestions: readonly AgentQuestionRequest[];
   skills: readonly AgentSkillReference[];
-  profileId: string | undefined;
   runtimeKind: RuntimeKind | null;
-  sessionAgentColors: Record<string, string>;
   runtimeReadiness: Pick<RuntimeReadiness, "isLoadingChecks" | "refreshChecks">;
 };
 
@@ -47,9 +45,7 @@ export function useAgentChatPresentation({
   pendingApprovals,
   pendingQuestions,
   skills,
-  profileId,
   runtimeKind,
-  sessionAgentColors,
   runtimeReadiness: { isLoadingChecks, refreshChecks },
 }: UseAgentChatPresentationArgs): ChatPresentation {
   const { pendingInputSessions: sessions } = useAgentActivitySnapshot();
@@ -59,8 +55,6 @@ export function useAgentChatPresentation({
     [session, skills],
   );
   const sessionAccentColor = resolveAgentSessionAccentColor({
-    agentName: profileId,
-    agentColors: sessionAgentColors,
     runtimeKind,
   });
   const runtimeBlockedAction = useMemo(

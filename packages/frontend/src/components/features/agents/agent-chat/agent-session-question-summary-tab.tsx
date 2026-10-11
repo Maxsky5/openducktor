@@ -19,7 +19,10 @@ const answerPreviewForQuestion = (
   question: AgentQuestionRequest["questions"][number],
   entry: AgentQuestionDraftEntry | undefined,
 ): string => {
-  const selection = entry?.selectedOptionLabels ?? [];
+  const selection = (entry?.selectedOptionValues ?? []).map(
+    (value) =>
+      question.options.find((option) => (option.value ?? option.label) === value)?.label ?? value,
+  );
   const freeText = entry?.useFreeText ? (entry.freeText ?? "").trim() : "";
   if (!question.multiple) {
     if (freeText.length > 0) {

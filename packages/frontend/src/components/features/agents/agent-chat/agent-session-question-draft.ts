@@ -1,38 +1,22 @@
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 export type AgentQuestionDraftEntry = {
-  selectedOptionLabels: string[];
+  selectedOptionValues: string[];
   freeText: string;
   useFreeText: boolean;
 };
 
-const uniqueNonEmpty = (values: string[]): string[] => {
-  const deduped = new Set<string>();
-  for (const value of values) {
-    const normalized = value.trim();
-    if (!normalized) {
-      continue;
-    }
-    deduped.add(normalized);
-  }
-  return [...deduped];
-};
+const uniqueValues = (values: string[]): string[] => [...new Set(values)];
 
-const availableOptionLabels = (question: AgentQuestionRequest["questions"][number]): Set<string> =>
-  question.options.reduce<Set<string>>((labels, option) => {
-    const label = option.label.trim();
-    if (label.length > 0) {
-      labels.add(label);
-    }
-    return labels;
-  }, new Set());
+const availableOptionValues = (question: AgentQuestionRequest["questions"][number]): Set<string> =>
+  new Set(question.options.map((option) => option.value ?? option.label.trim()));
 
 const normalizeSelectionForQuestion = (
   question: AgentQuestionRequest["questions"][number],
   selection: string[],
 ): string[] => {
-  const allowed = availableOptionLabels(question);
-  const filtered = uniqueNonEmpty(selection).filter((label) => allowed.has(label));
+  const allowed = availableOptionValues(question);
+  const filtered = uniqueValues(selection).filter((value) => allowed.has(value));
   return question.multiple ? filtered : filtered.slice(0, 1);
 };
 
@@ -40,7 +24,7 @@ export const createAgentQuestionDraft = (
   request: AgentQuestionRequest,
 ): AgentQuestionDraftEntry[] => {
   return request.questions.map((question) => ({
-    selectedOptionLabels: [],
+    selectedOptionValues: [],
     freeText: "",
     useFreeText: question.options.length === 0,
   }));
@@ -53,12 +37,14 @@ export const normalizeAgentQuestionDraft = (
   return request.questions.map((question, index) => {
     const current = draft?.[index];
     return {
-      selectedOptionLabels: normalizeSelectionForQuestion(
+      selectedOptionValues: normalizeSelectionForQuestion(
         question,
-        current?.selectedOptionLabels ?? [],
+        current?.selectedOptionValues ?? [],
       ),
       freeText: current?.freeText ?? "",
-      useFreeText: Boolean(current?.useFreeText) || question.options.length === 0,
+      useFreeText:
+        question.options.length === 0 ||
+        (question.custom !== false && Boolean(current?.useFreeText)),
     };
   });
 };
@@ -66,27 +52,26 @@ export const normalizeAgentQuestionDraft = (
 export const toggleAgentQuestionOption = (
   question: AgentQuestionRequest["questions"][number],
   entry: AgentQuestionDraftEntry,
-  optionLabel: string,
+  optionValue: string,
 ): AgentQuestionDraftEntry => {
-  const normalizedLabel = optionLabel.trim();
-  if (!normalizedLabel) {
+  if (!availableOptionValues(question).has(optionValue)) {
     return entry;
   }
 
   if (question.multiple) {
-    const nextSelection = entry.selectedOptionLabels.includes(normalizedLabel)
-      ? entry.selectedOptionLabels.filter((value) => value !== normalizedLabel)
-      : [...entry.selectedOptionLabels, normalizedLabel];
+    const nextSelection = entry.selectedOptionValues.includes(optionValue)
+      ? entry.selectedOptionValues.filter((value) => value !== optionValue)
+      : [...entry.selectedOptionValues, optionValue];
     return {
       ...entry,
-      selectedOptionLabels: normalizeSelectionForQuestion(question, nextSelection),
+      selectedOptionValues: normalizeSelectionForQuestion(question, nextSelection),
     };
   }
 
-  const isSelected = entry.selectedOptionLabels.includes(normalizedLabel);
+  const isSelected = entry.selectedOptionValues.includes(optionValue);
   return {
     ...entry,
-    selectedOptionLabels: isSelected ? [] : [normalizedLabel],
+    selectedOptionValues: isSelected ? [] : [optionValue],
   };
 };
 
@@ -96,8 +81,8 @@ export const buildAgentQuestionAnswers = (
 ): string[][] => {
   return request.questions.map((question, index) => {
     const entry = draft[index];
-    const selected = normalizeSelectionForQuestion(question, entry?.selectedOptionLabels ?? []);
-    const freeText = entry?.useFreeText ? (entry.freeText ?? "").trim() : "";
+    const selected = normalizeSelectionForQuestion(question, entry?.selectedOptionValues ?? []);
+    const freeText = entry?.useFreeText ? (entry.freeText ?? "") : "";
 
     if (!question.multiple) {
       if (freeText.length > 0) {
@@ -109,7 +94,7 @@ export const buildAgentQuestionAnswers = (
     if (freeText.length === 0) {
       return selected;
     }
-    return uniqueNonEmpty([...selected, freeText]);
+    return uniqueValues([...selected, freeText]);
   });
 };
 
@@ -117,9 +102,12 @@ export const isAgentQuestionAnswered = (
   question: AgentQuestionRequest["questions"][number],
   entry: AgentQuestionDraftEntry | undefined,
 ): boolean => {
-  const selected = normalizeSelectionForQuestion(question, entry?.selectedOptionLabels ?? []);
-  const freeText = entry?.useFreeText ? (entry.freeText ?? "").trim() : "";
-  return selected.length > 0 || freeText.length > 0;
+  const selected = normalizeSelectionForQuestion(question, entry?.selectedOptionValues ?? []);
+  const freeText = entry?.useFreeText ? (entry.freeText ?? "") : "";
+  const hasSelection = question.multiple
+    ? selected.length > 0
+    : selected.some((value) => value.length > 0);
+  return question.required === false || hasSelection || freeText.length > 0;
 };
 
 export const isAgentQuestionRequestComplete = (
@@ -127,6 +115,7 @@ export const isAgentQuestionRequestComplete = (
   draft: AgentQuestionDraftEntry[],
 ): boolean => {
   return (
+    !request.unsupportedReason &&
     request.questions.length === draft.length &&
     request.questions.every((question, index) => isAgentQuestionAnswered(question, draft[index]))
   );

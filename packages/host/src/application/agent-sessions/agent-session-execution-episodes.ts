@@ -36,7 +36,7 @@ export const createAgentSessionExecutionEpisodes = () => {
       if (envelope.type === "session_removed") {
         episodes.delete(agentSessionRefKey(envelope.ref));
       }
-      if (envelope.type === "transcript_event") {
+      if (envelope.type === "transcript_event" && envelope.provenance !== "baseline") {
         const event = envelope.event;
         const ended =
           event.type === "session_idle" ||

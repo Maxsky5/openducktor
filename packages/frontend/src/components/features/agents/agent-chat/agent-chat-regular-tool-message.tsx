@@ -1,3 +1,4 @@
+import { AgentToolResultContentView } from "./agent-tool-result-content";
 import { type ReactElement, useState } from "react";
 import {
   extractAllFileEditData,
@@ -49,9 +50,13 @@ export const RegularToolMessage = ({
 }: RegularToolMessageProps): ReactElement => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const hasInput = hasNonEmptyInput(meta.input);
-  const hasOutput = hasNonEmptyText(meta.output);
+  const hasOutput = Boolean(meta.resultContent?.length) || hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
   const hasExpandableDetails = hasInput || hasOutput || hasError;
+  const fileEditData =
+    meta.toolType === "file_edit" ? extractAllFileEditData(meta, sessionWorkingDirectory) : [];
+  const fileDiffUnavailable =
+    meta.status === "completed" && fileEditData.some((data) => data.kind === "path");
   const questionDetails = questionToolDetails(meta);
   const questionDetailRenderEntries = buildQuestionDetailRenderEntries(
     meta.callId,
@@ -90,14 +95,14 @@ export const RegularToolMessage = ({
                 visible={detailsOpen}
               />
             ) : null}
-            {hasOutput && meta.output ? (
+            {hasOutput ? (
               <details className="rounded border border-border bg-card">
                 <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
                   Output
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-foreground">
-                  {formatRawJsonLikeText(meta.output)}
-                </pre>
+                <div className="space-y-2 px-2 pb-2 text-[11px] text-foreground">
+                  <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
+                </div>
               </details>
             ) : null}
             {hasError && meta.error ? (
@@ -140,15 +145,14 @@ export const RegularToolMessage = ({
         </details>
       ) : null}
 
-      {meta.toolType === "file_edit" &&
-        (() => {
-          const allFileEditData = extractAllFileEditData(meta, sessionWorkingDirectory);
-          return allFileEditData.length > 0
-            ? allFileEditData.map((data) => (
-                <AgentChatFileEditCard key={data.filePath} data={data} />
-              ))
-            : null;
-        })()}
+      {fileEditData.map((data) => (
+        <AgentChatFileEditCard key={data.filePath} data={data} />
+      ))}
+      {fileDiffUnavailable ? (
+        <p className="text-xs text-muted-foreground">
+          File diff unavailable. The runtime did not return the applied changes.
+        </p>
+      ) : null}
     </div>
   );
 };

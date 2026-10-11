@@ -6,6 +6,7 @@ import {
   isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { isSessionSystemPromptMessage } from "@/state/operations/agent-orchestrator/support/session-prompt";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
@@ -139,12 +140,26 @@ const appendMessageRows = (
   return rowKey;
 };
 
+const placeInitialSystemPrompt = (rows: AgentChatTranscriptRow[]): AgentChatTranscriptRow[] => {
+  const initialPrompt = rows.find(
+    (row) => row.kind === "message" && isSessionSystemPromptMessage(row.message),
+  );
+  if (!initialPrompt) return rows;
+  const visible = rows.filter(
+    (row) => row.kind !== "message" || !isSessionSystemPromptMessage(row.message),
+  );
+  const firstUser = visible.findIndex(
+    (row) => row.kind === "message" && row.message.role === "user",
+  );
+  visible.splice(firstUser < 0 ? 0 : firstUser, 0, initialPrompt);
+  return visible;
+};
+
 export function createAgentChatTranscriptModelBuilder(
   session: AgentChatTranscriptSession,
   { showThinkingMessages }: BuildAgentChatTranscriptModelOptions,
 ): AgentChatTranscriptModelBuilder {
   const rows: AgentChatTranscriptRow[] = [];
-  const turnRowStartIndexes: number[] = [];
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   const metadata: AgentChatTranscriptMetadata = {
@@ -162,13 +177,6 @@ export function createAgentChatTranscriptModelBuilder(
 
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
-    }
-
-    const nextRowStart = rows.length;
-    const isForkBoundary =
-      message.meta?.kind === "session_notice" && message.meta.reason === "session_forked";
-    if (nextRowStart === 0 || message.role === "user" || isForkBoundary) {
-      turnRowStartIndexes.push(nextRowStart);
     }
 
     const rowKey = appendMessageRows(rows, sessionKey, message, occurrence, showThinkingMessages);
@@ -198,13 +206,10 @@ export function createAgentChatTranscriptModelBuilder(
         this.step();
       }
 
+      const visibleRows = placeInitialSystemPrompt(rows);
       return {
-        rows,
-        turnAnchors: turnRowStartIndexes.map((startRow, index) => ({
-          key: rows[startRow]?.key ?? `turn-${index}`,
-          startRow,
-          endRowExclusive: turnRowStartIndexes[index + 1] ?? rows.length,
-        })),
+        rows: visibleRows,
+        turnAnchors: buildAgentChatTurnAnchors(visibleRows),
         ...metadata,
       };
     },
@@ -314,9 +319,10 @@ export function updateAgentChatTranscriptModelFromPrefix({
     }
   });
 
+  const visibleRows = placeInitialSystemPrompt(rows);
   return {
-    rows,
-    turnAnchors: buildAgentChatTurnAnchors(rows),
+    rows: visibleRows,
+    turnAnchors: buildAgentChatTurnAnchors(visibleRows),
     ...metadata,
   };
 }

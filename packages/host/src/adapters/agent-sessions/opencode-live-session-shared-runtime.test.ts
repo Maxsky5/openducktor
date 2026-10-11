@@ -7,6 +7,7 @@ import {
   createLifecycle,
   createRuntimeHarness,
   runtime,
+  runtimeConnection,
 } from "./opencode-live-session-adapter.test-support";
 
 const repoA = "/repo-a";
@@ -43,10 +44,14 @@ const prepareAdapter = (
     createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle: createLifecycle(options.changes ?? []),
       prepareRuntime: harness.prepareRuntime,
-    })(runtime, {
-      onObservationLost: (message) => options.lostObservations?.push(message),
-      onCleanupFailed: () => undefined,
-    }),
+    })(
+      runtime,
+      {
+        onObservationLost: (message) => options.lostObservations?.push(message),
+        onCleanupFailed: () => undefined,
+      },
+      runtimeConnection,
+    ),
   );
 
 describe("OpenCode live sessions on one shared runtime", () => {

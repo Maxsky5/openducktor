@@ -60,10 +60,18 @@ export const isToolMessageCancelled = (meta: ToolMeta): boolean => {
   );
 };
 
-type ToolLifecyclePhase = "queued" | "executing" | "completed" | "cancelled" | "failed";
+type ToolLifecyclePhase =
+  | "preparing"
+  | "queued"
+  | "executing"
+  | "completed"
+  | "cancelled"
+  | "failed";
 
 export const getToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
   if (meta.status === "pending") {
+    if (meta.inputStreaming) return "preparing";
+    if (meta.inputStreaming === false) return "queued";
     return hasNonEmptyInput(meta.input) ? "executing" : "queued";
   }
   if (meta.status === "running") {

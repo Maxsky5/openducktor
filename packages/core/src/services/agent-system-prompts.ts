@@ -250,10 +250,11 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 9,
+    builtinVersion: 10,
     template: joinPromptBlocks(
-      "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
-      lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
+      "OpenDucktor workflow tools are native MCP tools.\nUse the invocation method advertised by the runtime. Do not emit XML wrappers or pseudo-tool payloads.",
+      lineSection("Allowed OpenDucktor workflow tools for this role", ["{{role.allowedTools}}"]),
+      "Native research tools, shell commands, and subagents use the runtime's tool catalog and configured permissions.",
       bulletSection("Session task lock", [
         "Use this exact taskId literal in every task-bound odt_* call: {{task.id}}.",
         "Never derive taskId from title/slug or rewrite it.",

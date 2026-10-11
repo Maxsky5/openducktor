@@ -66,6 +66,84 @@ const sessionErrorEvent = (externalSessionId: string): AgentSessionLiveEnvelope 
 });
 
 describe("shared snapshot activity policy", () => {
+  test.each(["idle", "starting", "running"] as const)(
+    "keeps %s stable while completed OpenCode history is replayed",
+    (status) => {
+      const incoming = snapshot("opencode", {
+        ref: { repoPath, workingDirectory, runtimeKind: "opencode", externalSessionId: "opencode" },
+        repositoryScope: { kind: "repository" },
+      });
+      const pendingUserMessageStartedAt = status === "running" ? 42 : undefined;
+      const current = createAgentSessionFixture({
+        externalSessionId: incoming.ref.externalSessionId,
+        runtimeKind: incoming.ref.runtimeKind,
+        workingDirectory,
+        sessionAssociation: { kind: "repository" },
+        status,
+        pendingUserMessageStartedAt,
+      });
+      const identityKey = agentSessionIdentityKey(current);
+      let studio = replaceAgentSession(emptyAgentSessionCollection(), current);
+      let rail = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([incoming]));
+      rail = {
+        ...rail,
+        sessions: new Map([
+          [
+            identityKey,
+            { ...rail.sessions.get(identityKey)!, status, pendingUserMessageStartedAt },
+          ],
+        ]),
+      };
+      const history: Extract<
+        AgentSessionLiveEnvelope,
+        { type: "transcript_event" | "session_upsert" }
+      >[] = [
+        {
+          type: "transcript_event",
+          provenance: "baseline",
+          event: {
+            type: "assistant_part",
+            externalSessionId: current.externalSessionId,
+            sessionRef: incoming.ref,
+            timestamp: "2026-09-15T08:01:00.000Z",
+            part: {
+              kind: "text",
+              messageId: "completed-message",
+              partId: "text-1",
+              text: "Previous reply",
+              completed: true,
+            },
+          },
+        },
+        {
+          type: "transcript_event",
+          provenance: "baseline",
+          event: {
+            type: "assistant_message",
+            externalSessionId: current.externalSessionId,
+            sessionRef: incoming.ref,
+            timestamp: "2026-09-15T08:01:01.000Z",
+            messageId: "completed-message",
+            message: "Previous reply",
+          },
+        },
+        { type: "session_upsert", session: incoming },
+      ];
+      for (const envelope of history) {
+        studio = applyAgentSessionLiveDelta({ current: studio, envelope });
+        rail = apply(rail, envelope);
+        expect(getAgentSession(studio, current)).toMatchObject({
+          status,
+          pendingUserMessageStartedAt,
+        });
+        expect(rail.sessions.get(identityKey)).toMatchObject({
+          status,
+          pendingUserMessageStartedAt,
+        });
+      }
+    },
+  );
+
   const cases = [
     { name: "stale idle", overrides: {}, terminalPreserved: true },
     {

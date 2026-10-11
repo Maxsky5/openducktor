@@ -1,60 +1,44 @@
-import { type AgentSessionTranscriptEventType } from "@openducktor/contracts";
+import type {
+  AgentSessionTranscriptEventType,
+  RuntimeOperationFailure,
+} from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
-import { readMessageModelSelection, toTokenTotal } from "./message-normalizers";
-import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
+import type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
 
 export type OpencodeSessionContextUsage = {
   readonly totalTokens: number;
   readonly model?: AgentModelSelection;
 };
-
 export type OpencodeSessionTranscriptEvent = Extract<
   AgentEvent,
   { type: AgentSessionTranscriptEventType }
 >;
-
 export type OpencodeSessionRuntimeSignal =
   | {
       readonly type: "session_event";
       readonly externalSessionId: string;
       readonly event: AgentEvent;
+      readonly provenance?: "baseline" | "live";
     }
   | {
       readonly type: "context_updated";
       readonly externalSessionId: string;
-      readonly contextUsage: OpencodeSessionContextUsage;
+      readonly contextUsage: OpencodeSessionContextUsage | null;
     }
+  | { readonly type: "session_source"; readonly source: OpencodeRuntimeSnapshotSource }
   | { readonly type: "session_removed"; readonly externalSessionId: string }
-  | { readonly type: "fault"; readonly message: string };
-
-export const readMessageUpdatedContextSignal = (
-  event: Event,
-): Extract<OpencodeSessionRuntimeSignal, { type: "context_updated" }> | null => {
-  if (event.type !== "message.updated") {
-    return null;
-  }
-  const { info, sessionID: externalSessionId } = event.properties;
-  if (info.role !== "assistant") {
-    return null;
-  }
-  const totalTokens = toTokenTotal(info.tokens);
-  if (totalTokens === undefined) {
-    return null;
-  }
-  const model = readMessageModelSelection(info);
-  const contextUsage: OpencodeSessionContextUsage = model
-    ? { totalTokens, model }
-    : { totalTokens };
-  return {
-    type: "context_updated",
-    externalSessionId,
-    contextUsage,
-  };
-};
-
-export const toOpencodeObservationFailureMessage = (error: Error): string => {
-  const detail = error.message.trim();
-  return detail.startsWith("OpenCode live event observation")
-    ? detail
-    : `OpenCode live event observation failed: ${detail || "unknown failure"}`;
-};
+  | { readonly type: "observation_reset" }
+  | { readonly type: "catalog_invalidated"; readonly workingDirectory?: string }
+  | { readonly type: "runtime_notice"; readonly message: string }
+  | {
+      readonly type: "session_fault";
+      readonly externalSessionId: string;
+      readonly message: string;
+      readonly runtimeOperationFailure?: RuntimeOperationFailure;
+      readonly statusUnavailable?: true;
+    }
+  | {
+      readonly type: "fault";
+      readonly message: string;
+      readonly runtimeOperationFailure?: RuntimeOperationFailure;
+    };
