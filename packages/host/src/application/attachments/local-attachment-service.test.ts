@@ -206,6 +206,33 @@ describe("createLocalAttachmentService", () => {
         }),
       ),
     ).rejects.toThrow("Attachment payload exceeds the 32 MiB staging limit.");
+    await expect(
+      Effect.runPromise(
+        service.stage({
+          name: "brief.pdf",
+          base64Data: "A".repeat(LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT),
+        }),
+      ),
+    ).rejects.toThrow("Attachment payload exceeds the 32 MiB staging limit.");
+    expect(files.size).toBe(0);
+  });
+  test("stages exact binary bytes", async () => {
+    const { files, port } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+    const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+    const staged = await Effect.runPromise(
+      service.stage({ name: "bytes.bin", base64Data: Buffer.from(bytes).toString("base64") }),
+    );
+    expect(files.get(staged.path)?.bytes).toEqual(bytes);
+  });
+  test("rejects malformed base64 and nonzero padding bits without writing", async () => {
+    const { files, port } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+    for (const base64Data of ["YnJpZWY", "YnJ!ZWY=", "YnJp-WY=", "=nJpZWY", "YnJpZWZ="]) {
+      await expect(
+        Effect.runPromise(service.stage({ name: "brief.pdf", base64Data })),
+      ).rejects.toThrow("Failed to decode attachment payload: invalid base64 data");
+    }
     expect(files.size).toBe(0);
   });
   test("resolves relative filename tokens to the newest staged attachment", async () => {

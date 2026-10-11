@@ -1,26 +1,15 @@
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { hostClient } from "@/lib/host-client";
+import { readFileAsBase64 } from "./read-file-as-base64";
 import { getShellBridge } from "./shell-bridge";
-
-const bufferToBase64 = (buffer: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-};
 
 export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
   if (file.size > LOCAL_ATTACHMENT_BYTE_LIMIT) {
     throw new Error("Attachments must total 32 MiB or less.");
   }
-  const buffer = await file.arrayBuffer();
   const input: Parameters<typeof hostClient.workspaceStageLocalAttachment>[0] = {
     name: file.name,
-    base64Data: bufferToBase64(buffer),
+    base64Data: await readFileAsBase64(file),
   };
   if (file.type.trim().length > 0) {
     input.mime = file.type;

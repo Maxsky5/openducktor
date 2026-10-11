@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useMemo } from "react";
-import { z } from "zod";
+import { readFileAsBase64 } from "@/lib/read-file-as-base64";
 import { host } from "../shared/host";
 
 type TaskDescriptionAssetHostPort = Pick<HostClient, "taskAssetStage" | "taskAssetDiscardStaged">;
@@ -14,30 +14,6 @@ export type TaskDescriptionAssetOperations = {
   stageImage(workspaceId: string, file: File): Promise<TaskAssetStageResult>;
   discardStaged(workspaceId: string, assetIds: string[]): Promise<void>;
 };
-
-const fileReaderTextSchema = z.string();
-const isFileReaderText = (value: FileReader["result"]): value is string =>
-  fileReaderTextSchema.safeParse(value).success;
-
-const fileToBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read the image."));
-    reader.onload = () => {
-      const result = reader.result;
-      if (!isFileReaderText(result)) {
-        reject(new Error("Could not read the image."));
-        return;
-      }
-      const comma = result.indexOf(",");
-      if (comma < 0) {
-        reject(new Error("Could not encode the image."));
-        return;
-      }
-      resolve(result.slice(comma + 1));
-    };
-    reader.readAsDataURL(file);
-  });
 
 export const createTaskDescriptionAssetOperations = (
   hostPort: TaskDescriptionAssetHostPort,
@@ -55,7 +31,7 @@ export const createTaskDescriptionAssetOperations = (
       scope: "description",
       originalName: file.name || "image",
       declaredMediaType: mediaType.data,
-      bytesBase64: await fileToBase64(file),
+      bytesBase64: await readFileAsBase64(file),
     });
   },
   async discardStaged(workspaceId, assetIds) {
