@@ -214,9 +214,10 @@ export function WorkspaceSessionChat({
   });
   const isWaitingInput = isAgentSessionBlockedOnInput(chatState);
   const { sendTarget } = actions;
+  const { prepareModelForSend } = picker;
   const target = useMemo(
-    () => sendTarget({ canSend: canInteract, assertCanSubmit }),
-    [assertCanSubmit, canInteract, sendTarget],
+    () => sendTarget({ canSend: canInteract, assertCanSubmit, prepareModelForSend }),
+    [assertCanSubmit, canInteract, sendTarget, prepareModelForSend],
   );
   const messageDelivery = useAgentChatSend({
     identity,
@@ -303,7 +304,7 @@ export function WorkspaceSessionChat({
       isStarting,
       isSavingModel,
       contextUsage,
-      selectedModelSelection: chatState.selectedModel,
+      selectedModelSelection: picker.selection,
       speed: picker.speed,
       selectedModelDescriptor: picker.selectedModelEntry,
       isSelectionCatalogLoading: picker.isLoading,

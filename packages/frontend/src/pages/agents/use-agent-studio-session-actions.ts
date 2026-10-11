@@ -60,7 +60,7 @@ type UseAgentStudioSessionActionsArgs = {
   supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  prepareSelectedSessionModelForSend: () => Promise<boolean>;
+  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;

@@ -49,7 +49,11 @@ const useWorkspaceChat = (
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
   const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const delivery = useAgentChatSendForTarget(
-    actions.sendTarget({ canSend: true, assertCanSubmit: () => {} }),
+    actions.sendTarget({
+      canSend: true,
+      assertCanSubmit: () => {},
+      prepareModelForSend: async () => () => {},
+    }),
     {
       identity,
       repoPath: workspace.repoPath,

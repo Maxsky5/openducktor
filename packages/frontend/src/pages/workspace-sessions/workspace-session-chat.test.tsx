@@ -1,3 +1,4 @@
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
@@ -1183,3 +1184,338 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
     configureShellBridge(createUnavailableShellBridge());
   }
 }, 5000);
+
+const savedModel: AgentModelSelection = {
+  runtimeKind: "opencode",
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "high",
+  profileId: "build",
+  speed: "priority",
+};
+const preparationCatalog = (): AgentModelCatalog => ({
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT 5",
+      variants: ["low", "high"],
+      speedLevels: [{ id: "priority", label: "Fast" }],
+    },
+  ],
+  defaultModelsByProvider: { openai: "gpt-5" },
+  profiles: [
+    { name: "build", mode: "primary" },
+    { name: "review", mode: "primary" },
+  ],
+});
+
+function createPreparationScenario(selection: AgentModelSelection = savedModel) {
+  const h = createPresentationScenario();
+  h.entry.selectedModel = { ...selection, runtimeKind: "opencode" };
+  h.session.selectedModel = { ...selection };
+  h.store.replaceSession(h.session);
+  h.definitions.loadRepoRuntimeCatalog = async () => ({
+    models: { status: "available", catalog: preparationCatalog() },
+  });
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  return h;
+}
+
+// Each theme renders the full chat and waits for catalog reads and model writes.
+test.each(["light", "dark"] as const)(
+  "workspace saved-choice preparation in the %s theme",
+  async (theme) => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    const h = createPreparationScenario({
+      ...savedModel,
+      modelId: "removed",
+      variant: "removed",
+      profileId: "removed",
+    });
+    const repair = Promise.withResolvers<void>();
+    const update = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
+      async (identity, selection) => {
+        await repair.promise;
+        h.store.replaceSession({ ...h.session, selectedModel: selection });
+        expect(identity).toMatchObject({
+          externalSessionId: h.session.externalSessionId,
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        });
+      },
+    );
+    h.operations.updateAgentSessionModel = update;
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(
+      async (identity, _parts, options) => {
+        options?.assertCanSubmit?.(h.store.getSessionSnapshot(identity)!);
+        return createAgentMessageSendReceipt(identity);
+      },
+    );
+    h.operations.sendAgentMessage = send;
+    const ownerKey = toInlineCommentDraftStorageKey({
+      workspaceId: h.workspace.workspaceId,
+      workspaceSessionId: h.entry.id,
+    });
+    useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+      filePath: "file.ts",
+      diffScope: "uncommitted",
+      side: "new",
+      startLine: 1,
+      endLine: 1,
+      text: "Review this line",
+      codeContext: [],
+      language: "ts",
+    });
+    const view = render(<h.Harness />);
+    try {
+      await view.findByRole("button", { name: "Select model, OpenCode, GPT 5" });
+      expect(view.getByRole("button", { name: "low" })).toBeTruthy();
+      expect(view.getByRole("button", { name: "build" })).toBeTruthy();
+      expect(update).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          false,
+        ),
+      );
+      fireEvent.click(view.getByRole("button", { name: "Send message" }));
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      expect(update.mock.calls[0]?.[1]).toEqual({ ...savedModel, variant: "low" });
+      expect(send).not.toHaveBeenCalled();
+      await act(async () => repair.resolve());
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send.mock.calls[0]?.[0]).toMatchObject({
+        externalSessionId: h.session.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      });
+      expect(send.mock.calls[0]?.[1]).toEqual([
+        { kind: "text", text: expect.stringContaining("Review this line") },
+      ]);
+      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+    } finally {
+      repair.resolve();
+      view.unmount();
+      for (const draft of useInlineCommentDraftStore.getState().draftsByOwner[ownerKey] ?? [])
+        useInlineCommentDraftStore.getState().removeDraft(ownerKey, draft.id);
+      useInlineCommentDraftStore.getState().flush();
+      createWorkspaceSessionChatDraftPersistence(h.workspace.workspaceId, h.entry.id).clear();
+      document.documentElement.classList.remove("dark");
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5000,
+);
+
+// Full chat renders and catalog reads need more than the suite's one-second timeout.
+test.each([
+  "valid",
+  "profile",
+  "profile locked",
+  "no visible profile",
+  "empty profiles",
+  "model",
+  "variant",
+  "failed",
+  "empty",
+  "newer edit",
+] as const)(
+  "workspace model preparation: %s",
+  async (scenario) => {
+    const cannotRepair =
+      scenario === "empty" ||
+      scenario === "profile locked" ||
+      scenario === "no visible profile" ||
+      scenario === "empty profiles";
+    const repairFails = scenario === "failed" || scenario === "newer edit";
+    let selection = { ...savedModel };
+    if (
+      scenario === "profile" ||
+      scenario === "profile locked" ||
+      scenario === "no visible profile" ||
+      scenario === "empty profiles"
+    )
+      selection.profileId = "removed";
+    else if (scenario === "model")
+      selection = { ...selection, modelId: "removed", profileId: "review" };
+    else if (scenario !== "valid") selection.variant = "removed";
+    const h = createPreparationScenario(selection);
+    if (cannotRepair) {
+      const catalog = preparationCatalog();
+      if (scenario === "empty") catalog.models = [];
+      if (scenario === "empty profiles") catalog.profiles = [];
+      if (scenario === "profile locked")
+        catalog.models = catalog.models.map((model) => ({
+          ...model,
+          liveSessionUpdates: { profile: false },
+        }));
+      if (scenario === "no visible profile")
+        catalog.profiles = [{ name: "hidden", mode: "subagent", hidden: true }];
+      h.definitions.loadRepoRuntimeCatalog = async () => ({
+        models: { status: "available", catalog },
+      });
+    }
+    const repair = Promise.withResolvers<void>();
+    const update = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
+      async () => repair.promise,
+    );
+    h.operations.updateAgentSessionModel = update;
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(
+      async (identity, _parts, options) => {
+        options?.assertCanSubmit?.(h.session);
+        return createAgentMessageSendReceipt(identity);
+      },
+    );
+    h.operations.sendAgentMessage = send;
+    const view = render(<h.Harness />);
+    try {
+      await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      expect(update).not.toHaveBeenCalled();
+      typeIntoComposer(view.container, "Submitted draft");
+      fireEvent.click(view.getByRole("button", { name: "Send message" }));
+      if (!cannotRepair && scenario !== "valid") {
+        await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+        expect(send).not.toHaveBeenCalled();
+        if (scenario === "newer edit") typeIntoComposer(view.container, "Newer draft");
+        await act(async () => {
+          if (repairFails)
+            repair.reject(new Error("Model update failed. Reopen the catalog and try again."));
+          else repair.resolve();
+        });
+      }
+      if (repairFails || cannotRepair) {
+        let message = /saved Runtime Profile is unavailable or cannot change/;
+        if (scenario === "empty") message = /No valid model is available/;
+        if (repairFails) message = /Model update failed/;
+        await view.findByText(message);
+        expect(send).not.toHaveBeenCalled();
+        if (cannotRepair) expect(update).not.toHaveBeenCalled();
+        expect(view.getByLabelText("Message composer").textContent).toContain(
+          scenario === "newer edit" ? "Newer draft" : "Submitted draft",
+        );
+        if (scenario === "newer edit")
+          expect(view.getByLabelText("Message composer").textContent).not.toContain(
+            "Submitted draft",
+          );
+      } else {
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+        if (scenario === "valid") expect(update).not.toHaveBeenCalled();
+        else {
+          let expected = savedModel;
+          if (scenario === "variant") expected = { ...savedModel, variant: "low" };
+          if (scenario === "model")
+            expected = { ...savedModel, variant: "low", profileId: "review" };
+          expect(update.mock.calls[0]?.[1]).toEqual(expected);
+        }
+      }
+    } finally {
+      repair.resolve();
+      view.unmount();
+      createWorkspaceSessionChatDraftPersistence(h.workspace.workspaceId, h.entry.id).clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5000,
+);
+
+// External session IDs can repeat across directories. Keep Send bound to the full target.
+test.each(["session", "workspace", "catalog target", "before acceptance"] as const)(
+  "workspace preparation cancels after a %s change",
+  async (change) => {
+    const h = createPreparationScenario({ ...savedModel, variant: "removed" });
+    const repair = Promise.withResolvers<void>();
+    const acceptance = Promise.withResolvers<void>();
+    const update = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
+      async () => repair.promise,
+    );
+    h.operations.updateAgentSessionModel = update;
+    const accepted = mock(() => {});
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(
+      async (identity, _parts, options) => {
+        await acceptance.promise;
+        options?.assertCanSubmit?.(h.session);
+        accepted();
+        return createAgentMessageSendReceipt(identity);
+      },
+    );
+    h.operations.sendAgentMessage = send;
+    let record = h.entry;
+    let workspace = h.workspace;
+    function Chat() {
+      return (
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={record}
+          chatSettings={DEFAULT_CHAT_SETTINGS}
+          reusablePrompts={[]}
+          onToolRefresh={() => {}}
+          isMounted={() => true}
+        />
+      );
+    }
+    const view = render(
+      <h.Harness>
+        <Chat />
+      </h.Harness>,
+    );
+    const persistence = createWorkspaceSessionChatDraftPersistence(
+      h.workspace.workspaceId,
+      h.entry.id,
+    );
+    try {
+      await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      expect(update).not.toHaveBeenCalled();
+      typeIntoComposer(view.container, "Original draft");
+      fireEvent.click(view.getByRole("button", { name: "Send message" }));
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      if (change === "before acceptance") {
+        await act(async () => repair.resolve());
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      }
+      if (change === "session")
+        record = { ...record, id: "other-record", externalSessionId: "other-native" };
+      else if (change === "catalog target")
+        record = {
+          ...record,
+          executionTarget: { kind: "local_repo_root", workingDirectory: "/repo/other" },
+        };
+      else workspace = { ...workspace, workspaceId: "other-workspace", repoPath: "/other" };
+      view.rerender(
+        <h.Harness>
+          <Chat />
+        </h.Harness>,
+      );
+      await act(async () => {
+        repair.resolve();
+        acceptance.resolve();
+      });
+      await view.findByText(/Reopen .*draft/);
+      expect(accepted).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledTimes(change === "before acceptance" ? 1 : 0);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0]?.[0]).toMatchObject({
+        externalSessionId: h.session.externalSessionId,
+        workingDirectory: "/repo",
+      });
+      expect(persistence.hydrate().segments?.[0]).toMatchObject({
+        kind: "text",
+        text: "Original draft",
+      });
+    } finally {
+      repair.resolve();
+      acceptance.resolve();
+      view.unmount();
+      persistence.clear();
+      createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id).clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5000,
+);

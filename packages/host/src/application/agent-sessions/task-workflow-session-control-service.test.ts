@@ -1229,92 +1229,101 @@ describe("createAgentSessionCommandService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
-  test("updates a stored model only after the runtime accepts the workflow change", async () => {
-    const calls: string[] = [];
-    const runtimeInputs: unknown[] = [];
-    const storedModels: unknown[] = [];
-    const taskLifecycle = createTaskSessionLifecycleCoordinator();
-    const service = createAgentSessionCommandService({
-      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-      taskReader,
-      runtime: {
-        startSession: () => Effect.die(new Error("unexpected start")),
-        resumeSession: () => Effect.die(new Error("unexpected resume")),
-        continueInterruptedTurn: () =>
-          Effect.die(new Error("unexpected continue interrupted turn")),
-        forkSession: () => Effect.die(new Error("unexpected fork")),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: (input) =>
-          Effect.sync(() => {
-            calls.push("runtime");
-            runtimeInputs.push(input);
-          }),
-        stopSession: () => Effect.die(new Error("unexpected stop")),
-        releaseSession: () => Effect.die(new Error("unexpected release")),
-      },
-      tasks: {
-        agentSessionsList: () =>
-          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
-        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
-        agentSessionUpdateModel: (input) =>
-          Effect.sync(() => {
-            calls.push("store");
-            storedModels.push(input);
-            return true;
-          }),
-      },
-      taskLifecycle,
-    });
-
-    await Effect.runPromise(
-      service.updateSessionModel({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "session-1",
-        sessionScope: workflowStart.sessionScope,
-        model: {
-          providerId: "openai",
-          modelId: "gpt-5.1",
-          variant: "high",
+  test.each([undefined, "plan"])(
+    "updates a stored model after runtime acceptance, replacement profile=%s",
+    async (profileId) => {
+      const previousModel = { ...storedModel };
+      if (profileId) previousModel.profileId = "removed";
+      const model: NonNullable<AgentSessionControlUpdateModelInput["model"]> = {
+        providerId: "openai",
+        modelId: "gpt-5.1",
+        variant: "high",
+      };
+      if (profileId) model.profileId = profileId;
+      const calls: string[] = [];
+      const runtimeInputs: unknown[] = [];
+      const storedModels: unknown[] = [];
+      const taskLifecycle = createTaskSessionLifecycleCoordinator();
+      const service = createAgentSessionCommandService({
+        canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+        taskReader,
+        runtime: {
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () =>
+            Effect.die(new Error("unexpected continue interrupted turn")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: (input) =>
+            Effect.sync(() => {
+              calls.push("runtime");
+              runtimeInputs.push(input);
+            }),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
         },
-      }),
-    );
-
-    expect(calls).toEqual(["runtime", "store"]);
-    expect(runtimeInputs).toEqual([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "session-1",
-        sessionScope: workflowStart.sessionScope,
-        model: {
-          providerId: "openai",
-          modelId: "gpt-5.1",
-          variant: "high",
+        tasks: {
+          agentSessionsList: () =>
+            Effect.succeed([
+              {
+                ...summary,
+                role: "build",
+                selectedModel: previousModel,
+              },
+            ]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+          agentSessionUpdateModel: (input) =>
+            Effect.sync(() => {
+              calls.push("store");
+              storedModels.push(input);
+              return true;
+            }),
         },
-      },
-    ]);
-    expect(storedModels).toEqual([
-      {
-        repoPath: "/repo",
-        taskId: "task-1",
-        identity: {
-          externalSessionId: "session-1",
+        taskLifecycle,
+      });
+
+      await Effect.runPromise(
+        service.updateSessionModel({
+          repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
-        },
-        selectedModel: {
+          externalSessionId: "session-1",
+          sessionScope: workflowStart.sessionScope,
+          model,
+        }),
+      );
+
+      expect(calls).toEqual(["runtime", "store"]);
+      expect(runtimeInputs).toEqual([
+        {
+          repoPath: "/repo",
           runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5.1",
-          variant: "high",
-          profileId: "build",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: workflowStart.sessionScope,
+          model,
         },
-      },
-    ]);
-  });
+      ]);
+      expect(storedModels).toEqual([
+        {
+          repoPath: "/repo",
+          taskId: "task-1",
+          identity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5.1",
+            variant: "high",
+            profileId: profileId ?? "build",
+          },
+        },
+      ]);
+    },
+  );
 
   test("stores a model switch without an undefined profile key when no profile is stored", async () => {
     const storedModels: unknown[] = [];

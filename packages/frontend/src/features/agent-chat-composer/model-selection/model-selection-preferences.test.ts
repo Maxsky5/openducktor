@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { resolvePreferredModelSelection } from "@/features/model-selection/model-selection-state";
 import {
   resolveChatComposerModelSelections,
@@ -297,12 +297,64 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
-      sessionModelRepairCommand: {
+      repair: {
         session: sessionIdentity,
         selection: defaultSelection,
       },
-      isSelectedSessionModelSendable: false,
+      sendBlockReason: null,
     });
+  });
+
+  test.each([
+    { savedSpeed: undefined, expectedSpeed: undefined },
+    { savedSpeed: "unsupported", expectedSpeed: undefined },
+    { savedSpeed: "priority", expectedSpeed: "priority" },
+  ])("repairs a model without inheriting default speed: %j", ({ savedSpeed, expectedSpeed }) => {
+    const catalog: AgentModelCatalog = {
+      ...CATALOG,
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      profiles: [],
+      models: CATALOG.models.map((model) => ({
+        ...model,
+        speedLevels: [{ id: "priority", label: "Fast" }],
+      })),
+    };
+    const selectedSessionModel: AgentModelSelection = {
+      runtimeKind: "codex",
+      providerId: "missing",
+      modelId: "removed",
+    };
+    if (savedSpeed) selectedSessionModel.speed = savedSpeed;
+    const result = resolveChatComposerModelSelections({
+      source: {
+        kind: "session",
+        sessionIdentity: {
+          externalSessionId: "session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+        },
+        sessionRuntimeKind: "codex",
+        modelCatalog: catalog,
+        selectedSessionModel,
+        draftSelection: null,
+      },
+      defaultSelection: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        speed: "priority",
+      },
+    });
+    const expected: AgentModelSelection = {
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+    if (expectedSpeed) expected.speed = expectedSpeed;
+    expect(result.selectedModelSelection).toEqual(expected);
+    expect(result.repair?.selection).toEqual(expected);
   });
 
   test("uses a live-compatible variant when repairing a loaded-session model", () => {
@@ -347,7 +399,7 @@ describe("model-selection-preferences", () => {
         modelId: "gpt-5",
         variant: "default",
       },
-      sessionModelRepairCommand: {
+      repair: {
         session: sessionIdentity,
         selection: {
           runtimeKind: "opencode",
@@ -356,7 +408,7 @@ describe("model-selection-preferences", () => {
           variant: "default",
         },
       },
-      isSelectedSessionModelSendable: false,
+      sendBlockReason: null,
     });
   });
 
@@ -388,8 +440,8 @@ describe("model-selection-preferences", () => {
       selectionCatalog: LIVE_UPDATE_CATALOG,
       selectedModelSelection: selectedSessionModel,
       selectionForNewSession: selectedSessionModel,
-      sessionModelRepairCommand: null,
-      isSelectedSessionModelSendable: true,
+      repair: null,
+      sendBlockReason: null,
     });
   });
 
@@ -426,8 +478,8 @@ describe("model-selection-preferences", () => {
         variant: "default",
         profileId: "spec-agent",
       },
-      sessionModelRepairCommand: null,
-      isSelectedSessionModelSendable: true,
+      repair: null,
+      sendBlockReason: null,
     });
   });
 
@@ -513,8 +565,8 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
-      sessionModelRepairCommand: null,
-      isSelectedSessionModelSendable: true,
+      repair: null,
+      sendBlockReason: null,
     });
 
     expect(
@@ -530,8 +582,8 @@ describe("model-selection-preferences", () => {
       selectionCatalog: null,
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
-      sessionModelRepairCommand: null,
-      isSelectedSessionModelSendable: true,
+      repair: null,
+      sendBlockReason: null,
     });
   });
 
