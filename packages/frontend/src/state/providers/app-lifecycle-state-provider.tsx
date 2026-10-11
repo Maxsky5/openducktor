@@ -4,6 +4,7 @@ import { useRuntimeCatalogBootstrap } from "@/state/lifecycle/use-runtime-catalo
 import { createAgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   useAgentSessionsContext,
   useChecksOperationsContext,
@@ -18,7 +19,7 @@ import { type TaskStreamControllerFactory, useAppLifecycle } from "../lifecycle/
 
 const createProductionTaskStreamController =
   (
-    removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
+    sessionStore: Pick<AgentSessionsStore, "listSessionTaskIds" | "removeTaskSessions">,
   ): TaskStreamControllerFactory =>
   ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotFinished, onSnapshotStarted }) =>
     createTaskStreamController({
@@ -27,7 +28,8 @@ const createProductionTaskStreamController =
       agentSessionViewSync: createAgentSessionViewSync({
         queryClient,
         readPort: hostClient,
-        removeTaskSessions,
+        listSessionTaskIds: sessionStore.listSessionTaskIds,
+        removeTaskSessions: sessionStore.removeTaskSessions,
         refreshLiveSessions: (repoPath) => hostClient.agentSessionLiveRefresh({ repoPath }),
       }),
       getActiveRepoPath,
@@ -48,21 +50,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const { loadWorkspaceTasks } = useTaskControlContext();
   const sessionStore = useAgentSessionsContext();
   const taskStreamControllerFactory = useMemo(
-    () =>
-      createProductionTaskStreamController((repoPath, taskIds) => {
-        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
-          return;
-        }
-        const taskIdSet = new Set(taskIds);
-        for (const session of sessionStore.listSessionSnapshots()) {
-          if (
-            session.sessionAssociation.kind === "workflow" &&
-            taskIdSet.has(session.sessionAssociation.taskId)
-          ) {
-            sessionStore.removeSession(session);
-          }
-        }
-      }),
+    () => createProductionTaskStreamController(sessionStore),
     [sessionStore],
   );
 

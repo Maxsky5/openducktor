@@ -9,11 +9,11 @@ import type { UseTaskOperationsResult } from "./task-operations-types";
 import { useTaskResetOperations } from "./use-task-reset-operations";
 
 const createHarness = ({
-  agentSessionsList,
+  agentSessionsListForTasks,
   refreshTaskData,
   taskResetImplementationError,
 }: {
-  agentSessionsList: AgentSessionReadPort["agentSessionsList"];
+  agentSessionsListForTasks: AgentSessionReadPort["agentSessionsListForTasks"];
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   taskResetImplementationError?: Error;
 }) => {
@@ -31,7 +31,7 @@ const createHarness = ({
       const queryClient = useQueryClient();
       const operations = useTaskResetOperations({
         activeRepoPath: "/repo",
-        agentSessionReadPort: { agentSessionsList },
+        agentSessionReadPort: { agentSessionsListForTasks },
         refreshTaskData,
         hostPort: { taskReset, taskResetImplementation },
         notificationPort: { error, success },
@@ -54,7 +54,7 @@ describe("useTaskResetOperations", () => {
   test("reports a session refresh failure without rejecting a successful reset", async () => {
     const metadataError = new Error("metadata unavailable");
     const setup = createHarness({
-      agentSessionsList: async () => {
+      agentSessionsListForTasks: async () => {
         throw metadataError;
       },
       refreshTaskData: async () => undefined,
@@ -76,7 +76,7 @@ describe("useTaskResetOperations", () => {
 
   test("reports both refresh failures without rejecting a successful task reset", async () => {
     const setup = createHarness({
-      agentSessionsList: async () => {
+      agentSessionsListForTasks: async () => {
         throw new Error("metadata unavailable");
       },
       refreshTaskData: async () => {
@@ -100,7 +100,7 @@ describe("useTaskResetOperations", () => {
 
   test("invalidates stop impact after a failed reset attempt", async () => {
     const setup = createHarness({
-      agentSessionsList: async () => [],
+      agentSessionsListForTasks: async () => [],
       refreshTaskData: async () => undefined,
       taskResetImplementationError: new Error("reset failed"),
     });
