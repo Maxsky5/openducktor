@@ -7,6 +7,7 @@ import {
   setInlineCommentDraftScheduleTaskForTests,
   setInlineCommentDraftStorageForTests,
 } from "@/state/use-inline-comment-draft-store";
+import { FILE_LIST_ROW_HEIGHT } from "./constants";
 
 export const OWNER_KEY = toInlineCommentDraftStorageKey({
   workspaceId: "workspace-1",
@@ -191,15 +192,16 @@ export function setupFileDiffListTests(): void {
 
 /**
  * Fakes the row layout: a closed row is `closedRowHeight` tall, and an expanded row has the expanded height.
- * In tree view, a closed row is `treeClosedRowHeight` tall, and an expanded row is shorter by the same difference.
+ * Tree view row headers are shorter by the difference of the row height classes, as in the app.
  * `resize` reports new sizes to the ResizeObservers and scrolls the list so it renders again.
  * With `clampScroll`, the list stops scrolling at the end of its rows, as in a browser.
  */
 export function installMeasuredRows({
   clampScroll = false,
   closedRowHeight = 40,
-  treeClosedRowHeight = closedRowHeight,
-}: { clampScroll?: boolean; closedRowHeight?: number; treeClosedRowHeight?: number } = {}) {
+}: { clampScroll?: boolean; closedRowHeight?: number } = {}) {
+  const treeClosedRowHeight =
+    closedRowHeight - FILE_LIST_ROW_HEIGHT.list + FILE_LIST_ROW_HEIGHT.tree;
   const listHeight = 400;
   const previousResizeObserver = globalThis.ResizeObserver;
   const observers: Array<{

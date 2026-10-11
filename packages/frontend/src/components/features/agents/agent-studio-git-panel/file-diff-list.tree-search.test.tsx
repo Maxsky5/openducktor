@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffList } from "./file-diff-list";
 import {
   installMeasuredRows,
@@ -92,6 +93,10 @@ const PACKAGE_FILES = Array.from(
   { length: 100 },
   (_, index) => `pkg-${String(Math.floor(index / 5)).padStart(2, "0")}/f-${index % 5}.ts`,
 );
+/** Closed row heights of `installMeasuredRows`, and its expanded row height in tree view. */
+const LIST_ROW = 40;
+const TREE_ROW = LIST_ROW - FILE_LIST_ROW_HEIGHT.list + FILE_LIST_ROW_HEIGHT.tree;
+const EXPANDED_TREE_ROW = 800 - LIST_ROW + TREE_ROW;
 const THREE_DIRECTORY_FILES = ["a", "b", "c"].flatMap((directory) => numberedFiles(directory, 30));
 
 const directoryButton = (name: string): HTMLElement => screen.getByRole("button", { name });
@@ -295,56 +300,47 @@ describe("FileDiffList tree view and search", () => {
       const list = screen.getByRole("list");
       const fileTop = (file: string): number =>
         fileToggle(file).closest('[role="listitem"]')!.getBoundingClientRect().top;
-      fireEvent.scroll(list, { target: { scrollTop: 1_960 } });
+      // 29 closed rows and the 800px expanded row are above "src/file-030.ts".
+      fireEvent.scroll(list, { target: { scrollTop: 29 * LIST_ROW + 800 } });
       expect(fileTop("src/file-030.ts")).toBe(0);
 
       fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
       fireEvent.scroll(list);
       expect(fileTop("src/file-030.ts")).toBe(0);
-      // The tree adds the 40px "src" row above the files.
-      expect(list.scrollTop).toBe(2_000);
+      // The tree adds the "src" row above the files, and each row header is shorter.
+      expect(list.scrollTop).toBe(30 * TREE_ROW + EXPANDED_TREE_ROW);
 
       fireEvent.scroll(list, { target: { scrollTop: 1_000 } });
-      expect(fileTop("src/file-005.ts")).toBe(-760);
+      expect(fileTop("src/file-005.ts")).toBe(6 * TREE_ROW - 1_000);
 
-      fireEvent.scroll(list, { target: { scrollTop: 2_000 } });
+      fireEvent.scroll(list, { target: { scrollTop: 30 * TREE_ROW + EXPANDED_TREE_ROW } });
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
       expect(fileTop("src/file-030.ts")).toBe(0);
+      expect(list.scrollTop).toBe(29 * LIST_ROW + 800);
     });
 
-    test("keeps the top visible file when tree rows are shorter than list rows", () => {
-      measurements.restore();
-      measurements = installMeasuredRows({ closedRowHeight: 41, treeClosedRowHeight: 29 });
+    test("keeps the top visible file when a view switch changes only the row heights", () => {
       const files = Array.from(
         { length: 100 },
-        (_, index) => `src/file-${String(index).padStart(3, "0")}.ts`,
+        (_, index) => `file-${String(index).padStart(3, "0")}.ts`,
       );
-      render(
-        <NavigableFileDiffListHarness
-          files={files}
-          initialViewMode="list"
-          initialExpandedFiles={["src/file-005.ts"]}
-        />,
-      );
+      render(<NavigableFileDiffListHarness files={files} initialViewMode="list" />);
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
-      const fileTop = (file: string): number =>
-        fileToggle(file).closest('[role="listitem"]')!.getBoundingClientRect().top;
-      // 29 closed rows of 41px and the 800px expanded row are above "src/file-030.ts".
-      fireEvent.scroll(list, { target: { scrollTop: 29 * 41 + 800 } });
-      expect(fileTop("src/file-030.ts")).toBe(0);
+      fireEvent.scroll(list, { target: { scrollTop: 30 * LIST_ROW } });
+      expect(rowTop(fileToggle("file-030.ts"))).toBe(0);
 
+      // Root files have the same rows in both views.
       fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
       fireEvent.scroll(list);
-      expect(fileTop("src/file-030.ts")).toBe(0);
-      // The tree adds the "src" row, and each row header is 12px shorter.
-      expect(list.scrollTop).toBe(30 * 29 + 788);
+      expect(rowTop(fileToggle("file-030.ts"))).toBe(0);
+      expect(list.scrollTop).toBe(30 * TREE_ROW);
 
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
-      expect(fileTop("src/file-030.ts")).toBe(0);
-      expect(list.scrollTop).toBe(29 * 41 + 800);
+      expect(rowTop(fileToggle("file-030.ts"))).toBe(0);
+      expect(list.scrollTop).toBe(30 * LIST_ROW);
     });
 
     test("finishes the scroll restore after a view switch, so a later expand does not jump", () => {
@@ -353,22 +349,22 @@ describe("FileDiffList tree view and search", () => {
       const list = screen.getByRole("list");
       // Measure the files that list view shows near the anchor. Then no new row height runs the
       // restore again after the switch, and the restore must finish when those rows render.
-      fireEvent.scroll(list, { target: { scrollTop: 86 * 40 } });
-      fireEvent.scroll(list, { target: { scrollTop: 100 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 86 * TREE_ROW } });
+      fireEvent.scroll(list, { target: { scrollTop: 100 * TREE_ROW } });
       // Each package has a directory row and 5 files, so "pkg-15/f-0.ts" is row 91.
-      fireEvent.scroll(list, { target: { scrollTop: 91 * 40 + 20 } });
+      fireEvent.scroll(list, { target: { scrollTop: 91 * TREE_ROW + 20 } });
       expect(rowTop(fileToggle("pkg-15/f-0.ts"))).toBe(-20);
 
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
-      expect(list.scrollTop).toBe(75 * 40 + 20);
+      expect(list.scrollTop).toBe(75 * LIST_ROW + 20);
       expect(rowTop(fileToggle("pkg-15/f-0.ts"))).toBe(-20);
 
       fireEvent.scroll(list, { target: { scrollTop: 400 } });
       fireEvent.click(fileToggle("pkg-02/f-1.ts"));
 
       expect(list.scrollTop).toBe(400);
-      expect(rowTop(fileToggle("pkg-02/f-1.ts"))).toBe(40);
+      expect(rowTop(fileToggle("pkg-02/f-1.ts"))).toBe(11 * LIST_ROW - 400);
     });
 
     test("keeps the top file when resize reports still wait at a view switch", () => {
@@ -404,9 +400,9 @@ describe("FileDiffList tree view and search", () => {
       const list = screen.getByRole("list");
       // Measure the files that list view shows at this scroll position. Then no new row height
       // renders the rows at the restore estimate before the user scrolls.
-      fireEvent.scroll(list, { target: { scrollTop: 109 * 40 } });
-      fireEvent.scroll(list, { target: { scrollTop: 120 * 40 } });
-      fireEvent.scroll(list, { target: { scrollTop: 91 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 109 * TREE_ROW } });
+      fireEvent.scroll(list, { target: { scrollTop: 120 * TREE_ROW } });
+      fireEvent.scroll(list, { target: { scrollTop: 91 * TREE_ROW } });
 
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list, { target: { scrollTop: 400 } });
@@ -425,15 +421,15 @@ describe("FileDiffList tree view and search", () => {
       );
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
-      // Rows: "a", 30 files, "b", 29 files, the expanded "b/file-29.ts" at 61 x 40px, then "c".
+      // Rows: "a", 30 files, "b", 29 files, the expanded "b/file-29.ts" at row 61, then "c".
       const scrollToDirectoryC = (): void => {
-        fireEvent.scroll(list, { target: { scrollTop: 61 * 40 + 800 } });
+        fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW + EXPANDED_TREE_ROW } });
       };
-      fireEvent.scroll(list, { target: { scrollTop: 61 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW } });
       scrollToDirectoryC();
       expect(rowTop(directoryButton("c"))).toBe(0);
 
-      fireEvent.scroll(list, { target: { scrollTop: 31 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 31 * TREE_ROW } });
       fireEvent.click(directoryButton("b"));
       fireEvent.click(directoryButton("b"));
       scrollToDirectoryC();
@@ -451,8 +447,8 @@ describe("FileDiffList tree view and search", () => {
         render(<NavigableFileDiffListHarness files={THREE_DIRECTORY_FILES} />);
         measurements.resize(600, 800);
         const list = screen.getByRole("list");
-        // Rows: "a", 30 files, then "b" at 31 x 40px.
-        fireEvent.scroll(list, { target: { scrollTop: 1_240 } });
+        // Rows: "a", 30 files, then "b" at row 31.
+        fireEvent.scroll(list, { target: { scrollTop: 31 * TREE_ROW } });
         if (state === "closed") fireEvent.click(directoryButton("b"));
         expect(rowTop(directoryButton("b"))).toBe(0);
 
@@ -467,11 +463,11 @@ describe("FileDiffList tree view and search", () => {
       render(<NavigableFileDiffListHarness files={THREE_DIRECTORY_FILES} />);
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
-      fireEvent.scroll(list, { target: { scrollTop: 1_240 } });
+      fireEvent.scroll(list, { target: { scrollTop: 31 * TREE_ROW } });
       fireEvent.click(directoryButton("b"));
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
-      // List rows: 30 "a" files, then "b/file-05.ts" at 35 x 40px.
-      fireEvent.scroll(list, { target: { scrollTop: 1_400 } });
+      // List rows: 30 "a" files, then "b/file-05.ts" at row 35.
+      fireEvent.scroll(list, { target: { scrollTop: 35 * LIST_ROW } });
       expect(rowTop(fileToggle("b/file-05.ts"))).toBe(0);
 
       fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
@@ -484,7 +480,7 @@ describe("FileDiffList tree view and search", () => {
       const { rerender } = render(<NavigableFileDiffListHarness files={PACKAGE_FILES} />);
       measurements.resize(600, 800);
       typeSearch("pkg");
-      fireEvent.scroll(screen.getByRole("list"), { target: { scrollTop: 91 * 40 } });
+      fireEvent.scroll(screen.getByRole("list"), { target: { scrollTop: 91 * TREE_ROW } });
       expect(rowTop(fileToggle("pkg-15/f-0.ts"))).toBe(0);
 
       // A refresh removes every match, and a later refresh brings the files back.
@@ -502,9 +498,9 @@ describe("FileDiffList tree view and search", () => {
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
       // Measure the files that list view shows at this scroll position, so the restore stays pending.
-      fireEvent.scroll(list, { target: { scrollTop: 109 * 40 } });
-      fireEvent.scroll(list, { target: { scrollTop: 120 * 40 } });
-      fireEvent.scroll(list, { target: { scrollTop: 91 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 109 * TREE_ROW } });
+      fireEvent.scroll(list, { target: { scrollTop: 120 * TREE_ROW } });
+      fireEvent.scroll(list, { target: { scrollTop: 91 * TREE_ROW } });
 
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
@@ -523,7 +519,7 @@ describe("FileDiffList tree view and search", () => {
       );
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
-      fireEvent.scroll(list, { target: { scrollTop: 30 * 40 } });
+      fireEvent.scroll(list, { target: { scrollTop: 30 * LIST_ROW } });
       expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
 
       const remainingFiles = files.filter((_, index) => index >= 5 && index !== 30);

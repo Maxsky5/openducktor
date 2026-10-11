@@ -73,26 +73,37 @@ describe("useFileListScrollAnchor row heights", () => {
     expect(anchor.rowHeight().getAverageRowHeight()).toBe(41);
   });
 
-  test("changes the known heights by the closed row height difference after a view switch", () => {
+  test("changes the known heights by the row class height difference after a view switch", () => {
     const anchor = renderScrollAnchor(listRows("a.ts", "b.ts", "c.ts"));
+    const headerDifference = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
     anchor.measure("file:a.ts", 41);
     anchor.measure("file:b.ts", 800);
 
-    // Until a tree row is measured, the row classes give the height difference.
+    // Until a tree row is measured, the estimate comes from the measured list rows.
     anchor.rerender({ viewMode: "tree" });
-    const treeClosedHeight = 41 - FILE_LIST_ROW_HEIGHT.list + FILE_LIST_ROW_HEIGHT.tree;
-    expect(anchor.rowHeight().getAverageRowHeight()).toBe(treeClosedHeight);
-    expect(anchor.rowHeight().getRowHeight(1)).toBe(800 - 41 + treeClosedHeight);
+    expect(anchor.rowHeight().getAverageRowHeight()).toBe(41 - headerDifference);
+    expect(anchor.rowHeight().getRowHeight(1)).toBe(800 - headerDifference);
 
     anchor.measure("file:c.ts", 30);
     expect(anchor.rowHeight().getAverageRowHeight()).toBe(30);
-    expect(anchor.rowHeight().getRowHeight(0)).toBe(30);
-    expect(anchor.rowHeight().getRowHeight(1)).toBe(789);
+    expect(anchor.rowHeight().getRowHeight(0)).toBe(41 - headerDifference);
+    expect(anchor.rowHeight().getRowHeight(1)).toBe(800 - headerDifference);
 
     anchor.rerender({ viewMode: "list" });
     expect(anchor.rowHeight().getAverageRowHeight()).toBe(41);
     expect(anchor.rowHeight().getRowHeight(1)).toBe(800);
-    expect(anchor.rowHeight().getRowHeight(2)).toBe(41);
+    expect(anchor.rowHeight().getRowHeight(2)).toBe(30 + headerDifference);
+  });
+
+  test("keeps an expanded height after a view switch when only expanded rows were measured", () => {
+    const anchor = renderScrollAnchor(listRows("a.ts", "b.ts"));
+    anchor.measure("file:a.ts", 800);
+
+    anchor.rerender({ viewMode: "tree" });
+    anchor.measure("file:b.ts", 29);
+
+    const headerDifference = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
+    expect(anchor.rowHeight().getRowHeight(0)).toBe(800 - headerDifference);
   });
 
   test("drops the known heights for a new measurement key", () => {
