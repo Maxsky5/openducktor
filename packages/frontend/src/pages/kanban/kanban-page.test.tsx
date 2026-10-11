@@ -609,13 +609,6 @@ const renderPage = async (
     for (const task of renderState.tasks) {
       queryClient.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
     }
-    queryClient.setQueryData(
-      agentSessionQueryKeys.hydration(
-        "/repo",
-        renderState.tasks.map((task) => task.id),
-      ),
-      true,
-    );
   }
   const LocationProbe = (): ReactElement | null => {
     const location = useLocation();

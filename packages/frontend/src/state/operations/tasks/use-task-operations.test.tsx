@@ -11,10 +11,8 @@ import { useTaskResetOperations } from "./use-task-reset-operations";
 
 describe("useTaskOperations", () => {
   test("composes reset commands with workspace guards before reading session metadata", async () => {
-    const agentSessionsList = mock(async () => []);
     const agentSessionsListForTasks = mock(async () => []);
     const agentSessionReadPort: AgentSessionReadPort = {
-      agentSessionsList,
       agentSessionsListForTasks,
     };
     const harness = createHookHarness(
@@ -33,7 +31,6 @@ describe("useTaskOperations", () => {
         "Select a workspace first.",
       );
 
-      expect(agentSessionsList).not.toHaveBeenCalled();
       expect(agentSessionsListForTasks).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -48,8 +45,9 @@ describe("useTaskOperations", () => {
     const success = mock(() => "success-toast");
     const refreshTaskData = mock(async () => undefined);
     const agentSessionReadPort: AgentSessionReadPort = {
-      agentSessionsList: mock(async () => []),
-      agentSessionsListForTasks: mock(async () => []),
+      agentSessionsListForTasks: mock(async (_repo: string, ids: string[]) =>
+        ids.map((taskId) => ({ taskId, agentSessions: [] })),
+      ),
     };
     const harness = createHookHarness(
       () =>
@@ -88,7 +86,7 @@ describe("useTaskOperations", () => {
       () =>
         useTaskResetOperations({
           activeRepoPath: "/repo",
-          agentSessionReadPort: { agentSessionsList: mock(async () => []) },
+          agentSessionReadPort: { agentSessionsListForTasks: mock(async () => []) },
           refreshTaskData,
           hostPort: {
             taskReset: mock(async () => {
@@ -133,7 +131,6 @@ describe("useTaskOperations", () => {
       selectedModel: null,
     };
     const agentSessionReadPort: AgentSessionReadPort = {
-      agentSessionsList: mock(async () => []),
       agentSessionsListForTasks: mock(async () => [{ taskId: "task-1", agentSessions: [session] }]),
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

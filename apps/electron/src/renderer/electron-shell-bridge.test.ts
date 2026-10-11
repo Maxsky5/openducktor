@@ -274,7 +274,10 @@ describe("electron shell bridge", () => {
     });
     const snapshotTaskIds = ["task-1"];
     const reconcileStreamSnapshot = mock(async () => snapshotTaskIds);
-    const reconcileAgentSessionExternalEvent = mock(async () => {});
+    const admitAgentSessionExternalEvent = mock(async (event: ExternalTaskSyncEvent) => ({
+      repoPath: event.repoPath,
+      changedTaskIds: [],
+    }));
     const reconcileAgentSessionStreamSnapshot = mock(async () => {});
     const controller = createTaskStreamController({
       transport: {
@@ -298,7 +301,11 @@ describe("electron shell bridge", () => {
         reconcileStreamSnapshot,
       },
       agentSessionViewSync: {
-        reconcileExternalEvent: reconcileAgentSessionExternalEvent,
+        admitExternalEvent: admitAgentSessionExternalEvent,
+        completeExternalEvents: async (changes) => {
+          await Promise.all(changes);
+        },
+        cancelReads: () => {},
         reconcileStreamSnapshot: reconcileAgentSessionStreamSnapshot,
       },
       getActiveRepoPath: () => "/repo",
@@ -321,9 +328,13 @@ describe("electron shell bridge", () => {
     await flushTaskStream();
 
     expect(reconcileExternalEvent).toHaveBeenCalledTimes(1);
-    expect(reconcileAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
+    expect(admitAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
     expect(reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
-    expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith("/repo", snapshotTaskIds);
+    expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith(
+      "/repo",
+      snapshotTaskIds,
+      expect.any(Function),
+    );
     expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
     expect(failures).toEqual([]);
 

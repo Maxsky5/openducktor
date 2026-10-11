@@ -48,9 +48,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       tasks: [taskFixture],
       refreshTaskData: async () => {},
       dependencies: createTestDependencies({
-        agentSessionsList: async () => {
-          throw new Error("session store unavailable");
-        },
         agentSessionsListForTasks: async () => {
           throw new Error("session store unavailable");
         },
@@ -296,7 +293,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       tasks: [taskFixture],
       refreshTaskData: async () => {},
       dependencies: createTestDependencies({
-        agentSessionsList: async () => [persistedSessionFixture],
         agentSessionsListForTasks: async () => [
           { taskId: "task-1", agentSessions: [persistedSessionFixture] },
         ],
@@ -366,7 +362,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       refreshTaskData: async () => {},
       dependencies: createTestDependencies(
         {
-          agentSessionsList: async () => [storedSession],
           agentSessionsListForTasks: async () => [
             { taskId: "task-1", agentSessions: [storedSession] },
           ],
@@ -423,10 +418,6 @@ describe("use-agent-orchestrator-operations session state", () => {
         role: "spec",
       },
     ]);
-    dependencies.queryClient.setQueryData(
-      agentSessionQueryKeys.hydration("/tmp/repo", ["task-1"]),
-      true,
-    );
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
@@ -688,7 +679,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       refreshTaskData: async () => {},
       dependencies: createTestDependencies(
         {
-          agentSessionsList: async () => [persistedSessionFixture],
           agentSessionsListForTasks: async (repoPath) =>
             repoPath === "/tmp/repo-a"
               ? [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }]
@@ -792,7 +782,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       refreshTaskData: async () => {},
       dependencies: createTestDependencies(
         {
-          agentSessionsList: async () => [persistedSessionFixture, secondRecord],
           agentSessionsListForTasks: async () => [
             { taskId: "task-1", agentSessions: [persistedSessionFixture, secondRecord] },
           ],
