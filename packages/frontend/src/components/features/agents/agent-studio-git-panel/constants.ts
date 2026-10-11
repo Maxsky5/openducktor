@@ -37,27 +37,21 @@ export const INLINE_CODE_CLASS_NAME =
   "rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
 
 /**
- * Height in pixels of the button in a closed file list row in each view. It matches the row height class.
- * It estimates rows before a measurement, and it gives the height difference at a view switch.
+ * Minimum height in pixels of the button in a file list row in each view. The row border adds 1px.
+ * List view rows have a directory line under the file name. Tree view rows show only the name, so they are shorter.
+ * The row height cache also uses it to change known row heights at a view switch.
  */
 export const FILE_LIST_ROW_HEIGHT = {
   list: 40,
   tree: 28,
 } as const satisfies Record<FileListViewMode, number>;
 
-const FILE_LIST_ROW_HEIGHT_CLASS_NAME = {
-  list: "min-h-10",
-  tree: "min-h-7",
-} as const satisfies Record<FileListViewMode, string>;
+/** Layout of the button in a file list row. `fileListRowStyle` gives its height and indent. */
+export const FILE_LIST_ROW_CLASS_NAME =
+  "flex w-full min-w-0 cursor-pointer items-center gap-2 py-1 pr-3 text-left text-xs";
 
-/**
- * Layout of the button in a file list row. Its minimum height gives `FILE_LIST_ROW_HEIGHT`, and the row border adds 1px.
- * List view rows have a directory line under the file name. Tree view rows show only the name, so they are shorter.
- */
-export const fileListRowClassName = (viewMode: FileListViewMode): string =>
-  `flex ${FILE_LIST_ROW_HEIGHT_CLASS_NAME[viewMode]} w-full min-w-0 cursor-pointer items-center gap-2 py-1 pr-3 text-left text-xs`;
-
-/** Left padding of a file list row: 0.75rem plus 1rem for each directory level. */
-export const fileListRowIndentStyle = (depth: number) => ({
+/** Height of a file list row button, and its left padding: 0.75rem plus 1rem for each directory level. */
+export const fileListRowStyle = (viewMode: FileListViewMode, depth: number) => ({
+  minHeight: `${FILE_LIST_ROW_HEIGHT[viewMode]}px`,
   paddingLeft: `${0.75 + depth}rem`,
 });

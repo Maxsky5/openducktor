@@ -4,6 +4,7 @@ import { act, type ReactElement, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
+import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffList } from "./file-diff-list";
 import {
   installMeasuredRows,
@@ -557,7 +558,7 @@ describe("FileDiffList", () => {
       );
       const toggle = screen.getByRole("button", { name: "Toggle diff for root.ts" });
 
-      expect(toggle.className).toContain("min-h-10");
+      expect(toggle.style.minHeight).toBe(`${FILE_LIST_ROW_HEIGHT.list}px`);
       expect(toggle.className).toContain("w-full");
       expect(toggle.getAttribute("aria-expanded")).toBe("false");
       fireEvent.click(screen.getByTestId("agent-studio-git-file-stats"));

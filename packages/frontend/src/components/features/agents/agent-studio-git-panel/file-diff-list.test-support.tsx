@@ -191,8 +191,8 @@ export function setupFileDiffListTests(): void {
 }
 
 /**
- * Fakes the row layout: a closed row is `closedRowHeight` tall, and an expanded row has the expanded height.
- * Tree view row headers are shorter by the difference of the row height classes, as in the app.
+ * Fakes the row layout: a closed list view row is `closedRowHeight` tall, and an expanded one has the expanded height.
+ * A row header follows the minimum height of its button, so tree view rows are shorter, as in the app.
  * `resize` reports new sizes to the ResizeObservers and scrolls the list so it renders again.
  * With `clampScroll`, the list stops scrolling at the end of its rows, as in a browser.
  */
@@ -200,8 +200,6 @@ export function installMeasuredRows({
   clampScroll = false,
   closedRowHeight = 40,
 }: { clampScroll?: boolean; closedRowHeight?: number } = {}) {
-  const treeClosedRowHeight =
-    closedRowHeight - FILE_LIST_ROW_HEIGHT.list + FILE_LIST_ROW_HEIGHT.tree;
   const listHeight = 400;
   const previousResizeObserver = globalThis.ResizeObserver;
   const observers: Array<{
@@ -217,8 +215,12 @@ export function installMeasuredRows({
   let currentWidth = 600;
   let currentExpandedRowHeight = 800;
   const rowHeight = (element: Element): number => {
-    // Tree view rows use the shorter row class.
-    const closedHeight = element.querySelector(".min-h-7") ? treeClosedRowHeight : closedRowHeight;
+    const rowButton = element.querySelector<HTMLElement>("button");
+    if (!rowButton) {
+      throw new Error("A file list row has no button.");
+    }
+    const closedHeight =
+      closedRowHeight - FILE_LIST_ROW_HEIGHT.list + Number.parseFloat(rowButton.style.minHeight);
     const isExpanded =
       element
         .querySelector('[data-testid="agent-studio-git-file-toggle-button"]')

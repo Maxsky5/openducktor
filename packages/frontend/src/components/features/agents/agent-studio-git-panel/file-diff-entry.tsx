@@ -17,10 +17,10 @@ import { arraysEqual } from "@/lib/arrays-equal";
 import { cn } from "@/lib/utils";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 import {
+  FILE_LIST_ROW_CLASS_NAME,
   FILE_STATUS_COLOR,
   FILE_STATUS_ICON,
-  fileListRowClassName,
-  fileListRowIndentStyle,
+  fileListRowStyle,
 } from "./constants";
 import type { FileRow, RowLabel } from "./file-list-rows";
 import type { HighlightRange } from "./file-list-search";
@@ -157,8 +157,8 @@ function FileDiffEntryHeader({
     <div className="relative hover:bg-muted/50">
       <button
         type="button"
-        className={cn(fileListRowClassName(viewMode), "overflow-hidden", canReset && "pr-12")}
-        style={fileListRowIndentStyle(row.depth)}
+        className={cn(FILE_LIST_ROW_CLASS_NAME, "overflow-hidden", canReset && "pr-12")}
+        style={fileListRowStyle(viewMode, row.depth)}
         aria-label={`Toggle diff for ${diff.file}`}
         aria-expanded={isExpanded}
         data-testid="agent-studio-git-file-toggle-button"

@@ -125,10 +125,12 @@ describe("FileDiffList tree view and search", () => {
     expect(rows).toEqual(["src", "lib", "a.ts+1-1", "main.ts+2-1", "README.md+3-1"]);
     expect(directoryButton("src").getAttribute("aria-expanded")).toBe("true");
     expect(directoryButton("src/lib").style.paddingLeft).toBe("1.75rem");
+    expect(directoryButton("src/lib").style.minHeight).toBe(`${FILE_LIST_ROW_HEIGHT.tree}px`);
     expect(directoryButton("src/lib").getAttribute("title")).toBe("lib");
 
     const nestedFile = fileToggle("src/lib/a.ts");
     expect(nestedFile.style.paddingLeft).toBe("2.75rem");
+    expect(nestedFile.style.minHeight).toBe(`${FILE_LIST_ROW_HEIGHT.tree}px`);
     const label = within(nestedFile).getByTestId("agent-studio-git-file-path");
     expect(label.textContent).toBe("a.ts");
     expect(label.getAttribute("title")).toBe("src/lib/a.ts");

@@ -186,8 +186,8 @@ type OwnedHeights = KnownHeights & { measurementKey: string };
 const NO_KNOWN_HEIGHTS: KnownHeights = { heightByKey: new Map(), smallestHeightByView: new Map() };
 
 /**
- * Only the row header changes height in another view. Its height comes from the row class, because a measured
- * row can include an expanded diff body.
+ * Only the row header changes height in another view. Its height comes from `FILE_LIST_ROW_HEIGHT`,
+ * because a measured row can include an expanded diff body.
  */
 function heightInView(known: KnownHeight, viewMode: FileListViewMode): number {
   return known.height - FILE_LIST_ROW_HEIGHT[known.viewMode] + FILE_LIST_ROW_HEIGHT[viewMode];
