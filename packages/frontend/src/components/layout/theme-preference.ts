@@ -1,5 +1,11 @@
 import type { Theme, ThemePreference } from "@openducktor/contracts";
 
+export const THEME_PREFERENCE_LABELS = {
+  system: "System default",
+  light: "Light",
+  dark: "Dark",
+} satisfies Record<ThemePreference, string>;
+
 const DARK_APPEARANCE_QUERY = "(prefers-color-scheme: dark)";
 
 const systemAppearanceQuery = (): MediaQueryList | null => {

@@ -1,6 +1,7 @@
 import { type PropsWithChildren, type ReactElement, useCallback } from "react";
 import { AgentSessionTranscriptDialogHost } from "@/components/features/agents/agent-chat/use-agent-session-transcript-dialog";
 import { AppUpdatePrompt } from "@/components/features/app-updates/app-update-prompt";
+import { DiagnosticsPanelProvider } from "@/components/features/diagnostics";
 import {
   SettingsModalProvider,
   useSettingsModal,
@@ -34,15 +35,17 @@ function NotificationFailurePromptHost(): ReactElement {
 export function ApplicationOverlays({ children }: PropsWithChildren): ReactElement {
   return (
     <SettingsModalProvider>
-      <NotificationFailurePromptHost />
-      <TaskWorkflowActionsProvider>
-        <AgentSessionTranscriptDialogHost>
-          <NotificationNavigationRegistrar />
-          <NotificationAttentionFocus />
-          {children}
-          <AppUpdatePrompt />
-        </AgentSessionTranscriptDialogHost>
-      </TaskWorkflowActionsProvider>
+      <DiagnosticsPanelProvider>
+        <NotificationFailurePromptHost />
+        <TaskWorkflowActionsProvider>
+          <AgentSessionTranscriptDialogHost>
+            <NotificationNavigationRegistrar />
+            <NotificationAttentionFocus />
+            {children}
+            <AppUpdatePrompt />
+          </AgentSessionTranscriptDialogHost>
+        </TaskWorkflowActionsProvider>
+      </DiagnosticsPanelProvider>
     </SettingsModalProvider>
   );
 }

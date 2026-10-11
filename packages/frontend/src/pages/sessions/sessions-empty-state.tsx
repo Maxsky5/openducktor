@@ -28,7 +28,7 @@ export function SessionsEmptyState({
         {workspace.workspaceName}.
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        <Button type="button" onClick={onCreateTask}>
+        <Button type="button" onClick={() => onCreateTask()}>
           <Plus data-icon="inline-start" aria-hidden="true" />
           New task
         </Button>

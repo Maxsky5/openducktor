@@ -34,6 +34,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Use `warning-surface-hover` and `warning-surface-selected` for interactive warning surfaces. Use the matching `info-surface-hover` and `info-surface-selected` tokens for information surfaces. These tokens keep the base state color across hover and selection in both themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.
+- Give `motion="instant"` to `DialogContent` and `useDialogPresence(open, "instant")` for a dialog that users open from a key many times a day. The dialog then shows, hides, and resizes at once.
 
 | Purpose                  | Use                                                              |
 | ------------------------ | ---------------------------------------------------------------- |
@@ -49,6 +50,20 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 | Chat transcript          | `bg-chat-background`                                             |
 | Chat input, user message | `bg-chat-surface`, `shadow-chat`                                 |
 | Sidebar                  | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
+
+## Command palette
+
+The command palette is in `packages/frontend/src/features/command-palette`. `WorkspaceAppShell` mounts it. Mod+K opens it: Cmd on macOS, and Ctrl on Windows and Linux.
+
+- Run each palette action through its existing handler, dialog, or confirmation. Do not add a second version of an action.
+- Run an action of a task, chat, or workspace through `useWorkspaceIntentRunner`. It makes the workspace active before the action runs.
+- Open the Rename and Archive dialogs of a chat through `useSessionMenu`. The sidebar and the palette share these dialogs. Chat actions other than Open chat do not make the workspace active.
+- Add an app action to `useCommandPaletteActions`. Give it other words in `keywords`, so that search finds it.
+- Use `useCommandPalettePageCommand` for a command that exists only on one page, such as the panel toggles of a session page.
+- The shortcut does nothing while a `Dialog` or `Sheet` is open. `hasOpenDialog` in `components/ui/open-dialogs.ts` reports this state.
+- Keep the Recent list device-local. It is UI state in `localStorage`, not task data.
+- Do not show `close_task` in the palette.
+- Show and hide the palette and its workspace list without motion.
 
 ## Hardcoded color exceptions
 

@@ -14,6 +14,7 @@ export type WorkspaceTileSource = Pick<
 >;
 
 const TILE_SIZES = {
+  xs: { face: "size-5 rounded-md", image: "size-3", label: "text-[0.5625rem]" },
   sm: { face: "size-8", image: "size-4" },
   md: { face: "size-9", image: "size-5" },
   lg: { face: "size-10", image: "size-6" },
@@ -23,9 +24,11 @@ const TILE_SIZES = {
 export function WorkspaceTileContent({
   workspace,
   imageClassName,
+  labelClassName,
 }: {
   workspace: WorkspaceTileSource;
   imageClassName: string;
+  labelClassName?: string | undefined;
 }): ReactElement {
   const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
     (_current: string | null, next: string) => next,
@@ -50,7 +53,9 @@ export function WorkspaceTileContent({
   const label = workspace.abbreviation ?? deriveWorkspaceInitials(workspace.workspaceName);
 
   return (
-    <span className={cn("font-semibold leading-none", tileLabelSizeClass(label))}>{label}</span>
+    <span className={cn("font-semibold leading-none", labelClassName ?? tileLabelSizeClass(label))}>
+      {label}
+    </span>
   );
 }
 
@@ -66,7 +71,7 @@ export function WorkspaceTile({
   active?: boolean;
   className?: string;
 }): ReactElement {
-  const dimensions = TILE_SIZES[size];
+  const dimensions: { face: string; image: string; label?: string } = TILE_SIZES[size];
   return (
     <span
       aria-hidden="true"
@@ -81,6 +86,7 @@ export function WorkspaceTile({
       <WorkspaceTileContent
         workspace={workspace}
         imageClassName={cn(dimensions.image, "rounded-md object-cover")}
+        labelClassName={dimensions.label}
       />
     </span>
   );

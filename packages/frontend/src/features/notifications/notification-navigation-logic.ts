@@ -11,6 +11,7 @@ import {
 } from "@/features/session-navigation/session-navigation-target";
 import { findWorkspaceSessionByIdentity } from "@/state/queries/agent-session-association";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { buildKanbanTaskHref } from "@/pages/kanban/kanban-task-link";
 
 export const ATTENTION_KIND_QUERY_KEY = "attention";
 export const ATTENTION_ID_QUERY_KEY = "attentionId";
@@ -129,7 +130,7 @@ export const navigateToNotificationTarget = async (
   }
 
   if (target.type === "kanban_task") {
-    await open(`/kanban?task=${encodeURIComponent(target.taskId)}`);
+    await open(buildKanbanTaskHref(target.taskId));
     return;
   }
 

@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import { SessionPanel, type ToolTabKind } from "@/features/session-panels";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
@@ -232,7 +233,9 @@ const renderCiPerformanceHarness = ({
     <QueryProvider useIsolatedClient>
       <ThemeProvider defaultTheme="light">
         <SeedCiPerformanceContext context={createLoadedCiContext(comments)}>
-          <CiPerformanceHarness initiallyOpen={initiallyOpen} initialTabId={initialTabId} />
+          <CommandPaletteTestContext>
+            <CiPerformanceHarness initiallyOpen={initiallyOpen} initialTabId={initialTabId} />
+          </CommandPaletteTestContext>
         </SeedCiPerformanceContext>
       </ThemeProvider>
     </QueryProvider>,

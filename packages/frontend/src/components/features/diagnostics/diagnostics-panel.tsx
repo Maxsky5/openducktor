@@ -1,5 +1,14 @@
-import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { RefreshCcw, ShieldCheck } from "lucide-react";
+import {
+  createContext,
+  type PropsWithChildren,
+  type ReactElement,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -9,18 +18,24 @@ import {
   useRuntimeAvailabilityContext,
 } from "@/state/app-state-contexts";
 import { useDiagnosticsAutoOpenOwner } from "@/state/providers/diagnostics-auto-open-provider";
-import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
+import { buildDiagnosticsPanelModel, type DiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
-type DiagnosticsPanelProps = {
-  triggerClassName?: string;
-  triggerVariant?: "summary" | "icon";
+type DiagnosticsPanelContextValue = {
+  model: DiagnosticsPanelModel;
+  openDiagnostics: () => void;
 };
 
-export function DiagnosticsPanel({
-  triggerClassName,
-  triggerVariant = "summary",
-}: DiagnosticsPanelProps): ReactElement {
+const DiagnosticsPanelContext = createContext<DiagnosticsPanelContextValue | null>(null);
+
+export function useDiagnosticsPanel(): DiagnosticsPanelContextValue {
+  const value = use(DiagnosticsPanelContext);
+  if (!value) throw new Error("useDiagnosticsPanel must be used inside DiagnosticsPanelProvider.");
+  return value;
+}
+
+/** Owns the one diagnostics sheet and its automatic opening. Triggers and commands open it. */
+export function DiagnosticsPanelProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
   const {
     allRuntimeDefinitions: runtimeDefinitions,
@@ -63,68 +78,12 @@ export function DiagnosticsPanel({
     }
   }, [autoOpenOwner, hasHostBlockingFailure, hasWorkspaceBlockingFailure, workspaceId]);
 
-  const iconTriggerLabel = `Open diagnostics: ${model.summaryState.label}`;
-  const summaryIcon = model.isSummaryChecking ? (
-    <RefreshCcw className={cn("size-3.5 animate-spin", model.summaryState.iconClass)} />
-  ) : (
-    <ShieldCheck className={cn("size-3.5", model.summaryState.iconClass)} />
-  );
-
-  const trigger =
-    triggerVariant === "icon" ? (
-      <Button
-        type="button"
-        size="icon"
-        variant="outline"
-        className={cn("size-8", triggerClassName)}
-        onClick={() => setOpen(true)}
-        aria-label={iconTriggerLabel}
-        title={iconTriggerLabel}
-      >
-        {model.isSummaryChecking ? (
-          <RefreshCcw className={cn("size-4 animate-spin", model.summaryState.iconClass)} />
-        ) : (
-          <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
-        )}
-      </Button>
-    ) : (
-      <div className={cn("space-y-1.5", triggerClassName)}>
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              {summaryIcon}
-              Diagnostics
-            </p>
-            <p className={cn("truncate text-xs font-medium", model.summaryState.toneClass)}>
-              {model.summaryState.label}
-            </p>
-          </div>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="size-8 border-input bg-card text-foreground shadow-sm hover:border-input hover:bg-muted"
-            onClick={() => setOpen(true)}
-            aria-label="Open diagnostics"
-            title="Open diagnostics"
-          >
-            <ArrowUpRight className="size-4" />
-          </Button>
-        </div>
-        {model.criticalReasons.length > 0 ? (
-          <p
-            className="truncate px-0.5 text-[11px] text-destructive-muted"
-            title={model.criticalReasons[0]}
-          >
-            {model.criticalReasons[0]}
-          </p>
-        ) : null}
-      </div>
-    );
+  const openDiagnostics = useCallback(() => setOpen(true), []);
+  const value = useMemo(() => ({ model, openDiagnostics }), [model, openDiagnostics]);
 
   return (
-    <>
-      {trigger}
+    <DiagnosticsPanelContext value={value}>
+      {children}
       <Sheet open={isOpen} onOpenChange={setOpen}>
         <SheetContent side="right" className="gap-0 p-0 sm:max-w-xl" aria-describedby={undefined}>
           <SheetHeader className="border-b border-border px-6 pb-4 pt-5">
@@ -152,6 +111,29 @@ export function DiagnosticsPanel({
           </div>
         </SheetContent>
       </Sheet>
-    </>
+    </DiagnosticsPanelContext>
+  );
+}
+
+/** Opens the diagnostics sheet. Its icon shows the state of the checks. */
+export function DiagnosticsTrigger({ className }: { className?: string }): ReactElement {
+  const { model, openDiagnostics } = useDiagnosticsPanel();
+  const label = `Open diagnostics: ${model.summaryState.label}`;
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="outline"
+      className={cn("size-8", className)}
+      onClick={openDiagnostics}
+      aria-label={label}
+      title={label}
+    >
+      {model.isSummaryChecking ? (
+        <RefreshCcw className={cn("size-4 animate-spin", model.summaryState.iconClass)} />
+      ) : (
+        <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+      )}
+    </Button>
   );
 }

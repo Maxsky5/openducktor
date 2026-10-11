@@ -24,9 +24,14 @@ import {
 import { useWorkspaceCreation, type WorkspaceCreationController } from "./use-workspace-creation";
 import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
 
+/** `add` starts the new workspace flow. `reopen` starts on the closed workspace choices. */
+export type OpenRepositoryModalView = "add" | "reopen";
+
 type OpenRepositoryModalProps = {
   open: boolean;
   canClose: boolean;
+  /** The first screen. Without it, the modal shows the choices when a closed workspace exists. */
+  initialView?: OpenRepositoryModalView | undefined;
   onOpenChange: (open: boolean) => void;
   requestTransition: (
     apply: () => Promise<boolean>,
@@ -164,6 +169,7 @@ function OpenRepositoryModalFooter({
 function OpenRepositoryModalSession({
   open,
   canClose,
+  initialView,
   onOpenChange,
   requestTransition,
 }: OpenRepositoryModalProps): ReactElement {
@@ -180,7 +186,10 @@ function OpenRepositoryModalSession({
   const hasClosedWorkspaces = closedWorkspaces.length > 0;
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const { isChangingWorkspace, runWorkspaceChange } = useGuardedWorkspaceChange(requestTransition);
-  const [showCreationFlow, setShowCreationFlow] = useState(() => !hasClosedWorkspaces);
+  const [startsWithCreationFlow] = useState(() =>
+    initialView === undefined ? !hasClosedWorkspaces : initialView === "add",
+  );
+  const [showCreationFlow, setShowCreationFlow] = useState(startsWithCreationFlow);
   const initialPickerRequested = useRef(false);
   const configuredWorkspaces = [
     ...workspaces,
@@ -202,10 +211,10 @@ function OpenRepositoryModalSession({
     onSuccess: () => onOpenChange(false),
   });
   useLayoutEffect(() => {
-    if (initialPickerRequested.current || hasClosedWorkspaces) return;
+    if (initialPickerRequested.current || !startsWithCreationFlow) return;
     initialPickerRequested.current = true;
     creation.openPicker();
-  }, [creation, hasClosedWorkspaces]);
+  }, [creation, startsWithCreationFlow]);
   const models = useWorkspaceCreationModels({
     repoPath: creation.repoPath,
     active: open && showCreationFlow && creation.stage === "models",

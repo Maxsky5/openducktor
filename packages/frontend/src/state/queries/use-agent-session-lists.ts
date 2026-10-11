@@ -123,7 +123,10 @@ export const agentSessionListTargetKey = ({ repoPath, taskId }: AgentSessionList
 const toTargetsKey = (targets: readonly AgentSessionListTarget[]): string => {
   const taskIdsByRepo = new Map<string, string[]>();
   for (const { repoPath, taskId } of targets) {
-    taskIdsByRepo.set(repoPath, [...(taskIdsByRepo.get(repoPath) ?? []), taskId]);
+    // Add in place: a copy for each target would cost O(n²) with thousands of tasks.
+    const taskIds = taskIdsByRepo.get(repoPath);
+    if (taskIds) taskIds.push(taskId);
+    else taskIdsByRepo.set(repoPath, [taskId]);
   }
   return [...taskIdsByRepo.entries()]
     .flatMap(([repoPath, taskIds]) =>

@@ -13,6 +13,7 @@ import {
   TaskWorkflowActionsContext,
   type TaskWorkflowActions,
 } from "@/features/task-workflow/task-workflow-actions-context";
+import { useRecentItemsStore } from "@/features/command-palette/recent-items";
 import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
@@ -381,6 +382,79 @@ describe("TaskDetailsSheetController", () => {
     await act(async () => {
       rendered.unmount();
     });
+  });
+
+  test("passes a requested confirmation to the sheet once and records the task as recent", async () => {
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
+    const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
+    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
+    useRecentItemsStore.setState({ items: [] });
+    const rendered = render(
+      createElement(TaskDetailsSheetController, {
+        ref: controllerRef,
+        activeWorkspace,
+        allTasks: [task],
+      }),
+    );
+
+    try {
+      await act(async () => {
+        controllerRef.current?.openTask(task.id, "reset_task");
+      });
+
+      const props = taskDetailsSheetRenderMock.mock.lastCall?.[0];
+      expect(props).toMatchObject({ task, open: true, requestedConfirm: "reset_task" });
+      expect(useRecentItemsStore.getState().items[0]).toMatchObject({
+        kind: "task",
+        workspaceId: activeWorkspace.workspaceId,
+        taskId: task.id,
+      });
+
+      await act(async () => {
+        props?.onRequestedConfirmHandled?.();
+      });
+      expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ task, requestedConfirm: null }),
+      );
+    } finally {
+      useRecentItemsStore.setState({ items: [] });
+      await act(async () => {
+        rendered.unmount();
+      });
+    }
+  });
+
+  test("keeps a requested confirmation until the sheet shows its own task", async () => {
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
+    const shown = createTaskCardFixture({ id: "task-1", title: "Task 1" });
+    const requested = createTaskCardFixture({ id: "task-2", title: "Task 2" });
+    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
+    const renderController = (allTasks: (typeof shown)[]) =>
+      createElement(TaskDetailsSheetController, { ref: controllerRef, activeWorkspace, allTasks });
+    const rendered = render(renderController([shown]));
+
+    try {
+      await act(async () => {
+        controllerRef.current?.openTask(shown.id);
+      });
+      await act(async () => {
+        controllerRef.current?.openTask(requested.id, "delete");
+      });
+      expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({
+        requestedConfirm: null,
+      });
+
+      rendered.rerender(renderController([shown, requested]));
+
+      expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({
+        task: requested,
+        requestedConfirm: "delete",
+      });
+    } finally {
+      await act(async () => {
+        rendered.unmount();
+      });
+    }
   });
 
   test("closes the sheet when the selected task disappears from the task list", async () => {

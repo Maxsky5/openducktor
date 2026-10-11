@@ -60,7 +60,7 @@ export function useSessionNavigationModel(
 
   const workspaceSessionReads = useQueries({
     queries: workspaces.map((workspace) => workspaceSessionListQueryOptions(workspace.workspaceId)),
-    combine: toReads<WorkspaceSession[]>,
+    combine: toSessionNavigationReads<WorkspaceSession[]>,
   });
 
   const listTargets = useMemo(
@@ -178,19 +178,21 @@ const toRead = <Data>(result: ReadResult<Data>): SessionNavigationRead<Data> => 
   return { status: "loading" };
 };
 
-const toReads = <Data>(results: ReadResult<Data>[]): SessionNavigationRead<Data>[] =>
-  results.map(toRead);
+/** Query results as reads that keep their last data beside a failed refresh. */
+export const toSessionNavigationReads = <Data>(
+  results: ReadResult<Data>[],
+): SessionNavigationRead<Data>[] => results.map(toRead);
 
 const combineTaskReads = (
   results: ReadResult<{ tasks: TaskCard[] }>[],
 ): SessionNavigationRead<TaskCard[]>[] =>
-  toReads(results).map((read) =>
+  toSessionNavigationReads(results).map((read) =>
     read.status === "ready"
       ? { ...read, data: read.data.tasks.filter((task) => task.status !== "closed") }
       : read,
   );
 
-const combineTaskSessionReads = (
+export const combineTaskSessionReads = (
   reads: AgentSessionListRead[],
   targets: readonly AgentSessionListTarget[],
 ): ReadonlyMap<string, SessionNavigationRead<AgentSessionRecord[]>> =>
@@ -202,7 +204,7 @@ const combineTaskSessionReads = (
   );
 
 /** A broken record stream means the chat list can be out of date. */
-const withRecordStreamError = (
+export const withRecordStreamError = (
   read: SessionNavigationRead<WorkspaceSession[]> | undefined,
   sessionRecordsError: string | null,
 ): SessionNavigationRead<WorkspaceSession[]> => {

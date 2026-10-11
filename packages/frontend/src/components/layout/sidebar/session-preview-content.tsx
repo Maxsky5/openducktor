@@ -264,7 +264,8 @@ function SessionPreviewModelDetails({
   );
 }
 
-function SessionPreviewInput({
+/** The pending questions and permission requests of an entry, with forms to reply in place. */
+export function SessionPreviewInput({
   entry,
   pending,
 }: {

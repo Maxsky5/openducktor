@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { createDialogPreviewHarness } from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
@@ -76,7 +77,9 @@ function MainChatPreview() {
       <button type="button" onClick={() => preview.requestContextTransition(() => setTaskId("b"))}>
         Switch task
       </button>
-      <AgentsPageLayout model={model} />
+      <CommandPaletteTestContext>
+        <AgentsPageLayout model={model} />
+      </CommandPaletteTestContext>
     </>
   );
 }

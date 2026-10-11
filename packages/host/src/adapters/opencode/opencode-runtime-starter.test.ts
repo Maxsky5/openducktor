@@ -262,7 +262,6 @@ const createFakeOpenCode = async (
     childPidPath?: string;
     configCapturePath?: string;
     environmentCapturePath?: string;
-    exitAfterMs?: number;
     silent?: boolean;
   } = {},
 ): Promise<string> => {
@@ -286,7 +285,6 @@ if (Number(args[portFlagIndex + 1]) !== 0 || !args.includes("--stdio")) {
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
 const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
 const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
-const exitAfterMs = ${JSON.stringify(options.exitAfterMs ?? null)};
 if (configCapturePath) {
   writeFileSync(configCapturePath + ".tmp", process.env.OPENCODE_CONFIG_CONTENT ?? "");
   renameSync(configCapturePath + ".tmp", configCapturePath);
@@ -337,9 +335,6 @@ const stop = () => {
 };
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
-if (exitAfterMs !== null) {
-  setTimeout(stop, exitAfterMs);
-}
 `,
   );
   return writeFakeRuntimeCommand(root, "opencode", "opencode.mjs");
@@ -741,7 +736,8 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("reports a lost live observation once and ignores the later process exit", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-observation-lost-"));
     try {
-      const opencodeBinary = await createFakeOpenCode(root, { exitAfterMs: 200 });
+      const opencodeBinary = await createFakeOpenCode(root);
+      const connected = Promise.withResolvers<OpenCodeRuntimeConnection>();
       const releasedRuntimeIds: string[] = [];
       let observer: OpenCodeLiveSessionObserver | null = null;
       const starter = createOpenCodeRuntimeStarter({
@@ -759,6 +755,7 @@ describe("createOpenCodeRuntimeStarter", () => {
               Effect.map(mutation, (result) => result.value),
             ),
         },
+        onConnectionReady: connected.resolve,
         prepareLiveSessionAdapter: (runtime, liveObserver) =>
           Effect.sync(() => {
             observer = liveObserver;
@@ -782,6 +779,7 @@ describe("createOpenCodeRuntimeStarter", () => {
       liveObserver.onObservationLost("OpenCode live event observation failed: again");
       expect(exits).toEqual(["OpenCode live event observation failed: connection lost"]);
 
+      await crashFakeRuntime(await connected.promise);
       await waitFor(() => releasedRuntimeIds.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       expect(exits).toHaveLength(1);
       await Effect.runPromise(handle.stop());

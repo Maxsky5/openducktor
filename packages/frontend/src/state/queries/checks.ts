@@ -4,6 +4,7 @@ import { errorMessage } from "@/lib/errors";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import type { DiagnosticsFailureKind } from "@/types/diagnostics";
 import { host } from "../operations/host";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export type ChecksQueryDependencies = {
   pathCheck: (force?: boolean) => Promise<PathCheck>;
@@ -39,6 +40,8 @@ export const checksQueryKeys = {
   path: () => [...checksQueryKeys.all, "path"] as const,
   git: () => [...checksQueryKeys.all, "git"] as const,
   taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
+  // A repo path is absolute, so a live key never equals the skipped key.
+  taskStoreSkipped: () => checksQueryKeys.taskStore(SKIPPED_QUERY_KEY_SEGMENT),
 };
 
 export const pathCheckQueryOptions = (
@@ -74,6 +77,14 @@ export const taskStoreCheckQueryOptions = (
       withDiagnosticsQueryTimeout(taskStoreCheck(repoPath), scheduler),
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
   });
+
+export const taskStoreCheckQueryOptionsOrSkip = (repoPath: string | null) =>
+  repoPath === null
+    ? skippedQueryOptions<TaskStoreCheck, ReturnType<typeof checksQueryKeys.taskStore>>({
+        queryKey: checksQueryKeys.taskStoreSkipped(),
+        staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
+      })
+    : taskStoreCheckQueryOptions(repoPath);
 
 /** Refresh PATH before Git, and keep each failure in its own query. */
 export const refreshPathAndGitChecks = async (

@@ -15,7 +15,7 @@ type KanbanPageHeaderProps = {
 export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
   const { taskStoreCheck } = useChecksState();
-  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck.data);
+  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck);
   const importProvider = isCreateTaskDisabled
     ? null
     : issueImportProvider(model.importProviderContext);
@@ -37,7 +37,7 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
             size="default"
             className={importProvider ? "h-10 rounded-r-none" : "h-10"}
             disabled={isCreateTaskDisabled}
-            onClick={model.onCreateTask}
+            onClick={() => model.onCreateTask()}
           >
             <Plus data-icon="inline-start" aria-hidden="true" />
             New task

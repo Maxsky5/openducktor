@@ -3,27 +3,41 @@ import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { decodeGeneratedImage } from "./image-worker-client";
 
 const payload = { mime: "image/png", byteLength: 3, base64: "AQID" };
+// Each of these tests starts a real module worker, which can take over 1 s on a busy Windows runner.
+const REAL_WORKER_TIMEOUT_MS = 5_000;
 
-test("the module worker decodes image bytes", async () => {
-  const signal = new AbortController().signal;
-  expect(new Uint8Array(await decodeGeneratedImage(payload, signal))).toEqual(
-    new Uint8Array([1, 2, 3]),
-  );
-});
+test(
+  "the module worker decodes image bytes",
+  async () => {
+    const signal = new AbortController().signal;
+    expect(new Uint8Array(await decodeGeneratedImage(payload, signal))).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+  },
+  REAL_WORKER_TIMEOUT_MS,
+);
 
-test("the module worker rejects malformed base64", async () => {
-  const signal = new AbortController().signal;
-  await expect(decodeGeneratedImage({ ...payload, base64: "!!!!" }, signal)).rejects.toThrow(
-    "cannot be decoded",
-  );
-});
+test(
+  "the module worker rejects malformed base64",
+  async () => {
+    const signal = new AbortController().signal;
+    await expect(decodeGeneratedImage({ ...payload, base64: "!!!!" }, signal)).rejects.toThrow(
+      "cannot be decoded",
+    );
+  },
+  REAL_WORKER_TIMEOUT_MS,
+);
 
-test("the module worker rejects mismatched byte counts", async () => {
-  const signal = new AbortController().signal;
-  await expect(decodeGeneratedImage({ ...payload, byteLength: 2 }, signal)).rejects.toThrow(
-    "invalid content",
-  );
-});
+test(
+  "the module worker rejects mismatched byte counts",
+  async () => {
+    const signal = new AbortController().signal;
+    await expect(decodeGeneratedImage({ ...payload, byteLength: 2 }, signal)).rejects.toThrow(
+      "invalid content",
+    );
+  },
+  REAL_WORKER_TIMEOUT_MS,
+);
 
 test("payload limits and MIME fail before a worker receives the bytes", async () => {
   const worker = spyOn(globalThis, "Worker");

@@ -10,7 +10,8 @@ import type { SessionTargetOptions } from "@/components/features/kanban/session-
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
-  onCreateTask: () => void;
+  /** Open New task for the active workspace. The title starts with `initialTitle`. */
+  onCreateTask: (options?: { initialTitle?: string }) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;

@@ -1,1 +1,5 @@
-export { DiagnosticsPanel } from "./diagnostics-panel";
+export {
+  DiagnosticsPanelProvider,
+  DiagnosticsTrigger,
+  useDiagnosticsPanel,
+} from "./diagnostics-panel";

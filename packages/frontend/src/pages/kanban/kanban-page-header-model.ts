@@ -1,11 +1,23 @@
 import type { TaskStoreCheck } from "@openducktor/contracts";
-import { isRepoStoreReady } from "@/lib/repo-store-health";
+import { buildRepoStoreUnavailableDescription, isRepoStoreReady } from "@/lib/repo-store-health";
 import type { ActiveWorkspace } from "@/types/state-slices";
+
+/** The last task store check, and the message of a failed check read. */
+export type TaskStoreCheckRead = { data: TaskStoreCheck | null; error: string | null };
+
+/**
+ * Why task creation is blocked, or null. A failed check read and a task store that is not ready
+ * block it. A pending read does not.
+ */
+export const taskCreationBlockedReason = ({ data, error }: TaskStoreCheckRead): string | null => {
+  if (error !== null) return `Could not check the task store. ${error}`;
+  if (data !== null && !isRepoStoreReady(data)) {
+    return buildRepoStoreUnavailableDescription(data.repoStoreHealth);
+  }
+  return null;
+};
 
 export const isKanbanTaskCreationDisabled = (
   activeWorkspace: ActiveWorkspace | null,
-  taskStoreCheck: TaskStoreCheck | null,
-): boolean => {
-  // Opening a composer is local UI. A pending diagnostic must not block it.
-  return !activeWorkspace || (taskStoreCheck !== null && !isRepoStoreReady(taskStoreCheck));
-};
+  taskStoreCheck: TaskStoreCheckRead,
+): boolean => !activeWorkspace || taskCreationBlockedReason(taskStoreCheck) !== null;

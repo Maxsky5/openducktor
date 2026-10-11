@@ -6,6 +6,7 @@ import {
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
 import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { KANBAN_TASK_QUERY_KEYS, parseTaskDetailsConfirm } from "./kanban-task-link";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { IssueImportDialog } from "./issue-import-dialog";
@@ -24,14 +25,18 @@ export function KanbanPage(): ReactElement {
     onImportIssues: () => setImportOpen(true),
     actions,
   });
-  const requestedTaskId = searchParams.get("task");
+  const requestedTaskId = searchParams.get(KANBAN_TASK_QUERY_KEYS.task);
+  const requestedConfirm = parseTaskDetailsConfirm(
+    searchParams.get(KANBAN_TASK_QUERY_KEYS.confirm),
+  );
   useEffect(() => {
     if (!requestedTaskId) return;
-    handleOpenDetails(requestedTaskId);
+    taskDetailsSheetRef.current?.openTask(requestedTaskId, requestedConfirm);
     const next = new URLSearchParams(searchParams);
-    next.delete("task");
+    next.delete(KANBAN_TASK_QUERY_KEYS.task);
+    next.delete(KANBAN_TASK_QUERY_KEYS.confirm);
     setSearchParams(next, { replace: true });
-  }, [handleOpenDetails, requestedTaskId, searchParams, setSearchParams]);
+  }, [requestedConfirm, requestedTaskId, searchParams, setSearchParams]);
 
   return (
     <div className="flex h-full min-h-full min-w-0 flex-col gap-4 py-4 pl-4">

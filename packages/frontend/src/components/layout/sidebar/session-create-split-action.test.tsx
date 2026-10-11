@@ -7,6 +7,7 @@ import {
 import type { HostClient } from "@openducktor/host-client";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as settingsModal from "@/components/features/settings/settings-modal";
+import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
 import { QueryProvider } from "@/lib/query-provider";
@@ -27,6 +28,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { MemoryRouter } from "react-router";
 import { toast } from "sonner";
+import type { ChecksStateContextValue } from "@/types/state-slices";
 import { SessionCreateSplitAction } from "./session-create-split-action";
 
 const workspace = createWorkspaceRecordFixture({
@@ -48,6 +50,7 @@ const renderSplitAction = ({
   listArchived = async () => [],
   client = {},
   refreshTaskData = async () => {},
+  taskStoreCheck = createObservedCheckFixture({ data: createTaskStoreCheckFixture() }),
 }: {
   active?: typeof workspace | null;
   compact?: boolean;
@@ -56,6 +59,7 @@ const renderSplitAction = ({
   listArchived?: (workspaceId: string) => Promise<never[]>;
   client?: Partial<HostClient>;
   refreshTaskData?: (repoPath: string) => Promise<void>;
+  taskStoreCheck?: ChecksStateContextValue["taskStoreCheck"];
 }) => {
   configureShellBridge(
     createShellBridgeFixture({
@@ -78,11 +82,7 @@ const renderSplitAction = ({
         <ActiveWorkspaceContext.Provider
           value={{ activeWorkspace: active, setActiveWorkspace: () => {} }}
         >
-          <ChecksStateContext.Provider
-            value={createChecksStateFixture({
-              taskStoreCheck: createObservedCheckFixture({ data: createTaskStoreCheckFixture() }),
-            })}
-          >
+          <ChecksStateContext.Provider value={createChecksStateFixture({ taskStoreCheck })}>
             <TaskWorkflowActionsContext.Provider
               value={createTaskWorkflowActionsFixture({ onCreateTask })}
             >
@@ -96,7 +96,9 @@ const renderSplitAction = ({
                 }}
               >
                 <WorkspacePreviewTransitionGuardProvider>
-                  <SessionCreateSplitAction compact={compact} />
+                  <WorkspaceDialogsProvider>
+                    <SessionCreateSplitAction compact={compact} />
+                  </WorkspaceDialogsProvider>
                 </WorkspacePreviewTransitionGuardProvider>
               </TaskControlContext.Provider>
             </TaskWorkflowActionsContext.Provider>
@@ -198,6 +200,37 @@ describe("SessionCreateSplitAction", () => {
     }
   });
 
+  test("names a failed provider read and does not open Settings for it", async () => {
+    const openSettings = mock(() => {});
+    const settings = spyOn(settingsModal, "useSettingsModal").mockReturnValue({ openSettings });
+    try {
+      renderSplitAction({
+        provider: issueProvider(),
+        client: {
+          workspaceGetGitProviderContext: async () => {
+            throw new Error("provider context unavailable");
+          },
+        },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
+      const item = await screen.findByRole("button", {
+        name: /Import tasks from the Git provider/,
+      });
+      await waitFor(() =>
+        expect(item.getAttribute("aria-description")).toBe(
+          "Could not read the Git provider. provider context unavailable",
+        ),
+      );
+      expect(item.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(item);
+
+      expect(openSettings).not.toHaveBeenCalled();
+    } finally {
+      settings.mockRestore();
+    }
+  });
+
   test("opens archived chats for the workspace that was active when it opened", async () => {
     const listArchived = mock(async (_workspaceId: string) => []);
     const settings = spyOn(settingsModal, "useSettingsModal").mockReturnValue({
@@ -281,6 +314,30 @@ describe("SessionCreateSplitAction", () => {
     } finally {
       error.mockRestore();
       success.mockRestore();
+      settings.mockRestore();
+    }
+  });
+
+  test("disables New task and Import after a failed task store check read", async () => {
+    const settings = spyOn(settingsModal, "useSettingsModal").mockReturnValue({
+      openSettings: () => {},
+    });
+    try {
+      renderSplitAction({
+        provider: issueProvider(),
+        taskStoreCheck: createObservedCheckFixture({ error: "Host offline", failureKind: "error" }),
+      });
+
+      expect(
+        screen.getByRole("button", { name: "New task in openducktor" }).hasAttribute("disabled"),
+      ).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
+      const menu = await screen.findByRole("dialog");
+      const importTasks = await within(menu).findByRole("button", {
+        name: "Import tasks from GitHub Issues",
+      });
+      expect(importTasks.hasAttribute("disabled")).toBe(true);
+    } finally {
       settings.mockRestore();
     }
   });

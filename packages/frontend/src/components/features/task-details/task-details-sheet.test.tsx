@@ -670,6 +670,49 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
+  test.each([
+    ["reset_task", "Reset Task"],
+    ["delete", "Delete Task"],
+  ] as const)("opens the requested %s confirmation once", async (requestedConfirm, title) => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { TaskWorkflowActionsContext } =
+      await import("@/features/task-workflow/task-workflow-actions-context");
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      availableActions: ["reset_task"],
+    });
+    const onRequestedConfirmHandled = mock(() => {});
+
+    const { unmount } = render(
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(
+          TaskWorkflowActionsContext.Provider,
+          { value: createTaskWorkflowActionsValue() },
+          createElement(TaskDetailsSheet, {
+            task,
+            allTasks: [task],
+            open: true,
+            onOpenChange: () => {},
+            requestedConfirm,
+            onRequestedConfirmHandled,
+          }),
+        ),
+      ),
+    );
+
+    try {
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      expect(screen.getByRole("dialog", { name: title })).toBeTruthy();
+      expect(onRequestedConfirmHandled).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount();
+    }
+  });
+
   test("closes the sheet when focus moves into an unrelated dialog", async () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { Dialog, DialogContent, DialogTitle } = await import("@/components/ui/dialog");

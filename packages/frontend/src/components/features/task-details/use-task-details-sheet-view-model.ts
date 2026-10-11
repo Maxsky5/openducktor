@@ -6,8 +6,8 @@ import type { SessionTargetOptions } from "@/components/features/kanban/session-
 import {
   collectDeleteImpactTaskIds,
   collectSingleTaskCleanupImpactTaskIds,
-  runTaskWorkflowAction,
   shouldLoadDocumentSection,
+  toDocumentSummaryState,
   toSubtasks,
   toTaskLabels,
 } from "@/components/features/task-details/task-details-sheet-model";
@@ -21,6 +21,7 @@ import {
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
 import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
+import { runTaskWorkflowAction } from "@/features/task-workflow/run-task-workflow-action";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -283,9 +284,8 @@ export function useTaskDetailsSheetViewModel({
     [ensureDocumentLoaded],
   );
 
-  const specHasDocument = task?.documentSummary.spec.has;
-  const planHasDocument = task?.documentSummary.plan.has;
-  const qaHasDocument = task?.documentSummary.qaReport.has;
+  const documentSummary = toDocumentSummaryState(task);
+  const { specHasDocument, planHasDocument, qaHasDocument } = documentSummary;
 
   const loadSpecDocumentSection = useCallback((): void => {
     loadDocumentSection("spec", specHasDocument);
@@ -310,9 +310,9 @@ export function useTaskDetailsSheetViewModel({
     hasSpecDocument: Boolean(specHasDocument),
     hasPlanDocument: Boolean(planHasDocument),
     hasQaDocument: Boolean(qaHasDocument),
-    specSummaryUpdatedAt: task?.documentSummary.spec.updatedAt ?? null,
-    planSummaryUpdatedAt: task?.documentSummary.plan.updatedAt ?? null,
-    qaSummaryUpdatedAt: task?.documentSummary.qaReport.updatedAt ?? null,
+    specSummaryUpdatedAt: documentSummary.specUpdatedAt,
+    planSummaryUpdatedAt: documentSummary.planUpdatedAt,
+    qaSummaryUpdatedAt: documentSummary.qaUpdatedAt,
     runWorkflowAction,
     loadSpecDocumentSection,
     loadPlanDocumentSection,
