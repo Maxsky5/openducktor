@@ -1,6 +1,6 @@
 {
   "name": "@openducktor/path-support",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -56,7 +56,7 @@
     },
     "apps/marketing-website": {
       "name": "@openducktor/marketing-website",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "devDependencies": {
         "@astrojs/check": "^0.9.9",
         "@fontsource-variable/space-grotesk": "^5.3.0",
@@ -79,7 +79,7 @@
     },
     "packages/adapters-codex-app-server": {
       "name": "@openducktor/adapters-codex-app-server",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@noble/hashes": "^2.4.0",
         "@openducktor/contracts": "workspace:*",
@@ -93,7 +93,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@opencode/client": "2.0.24",
         "@openducktor/contracts": "workspace:*",
@@ -107,21 +107,21 @@
     },
     "packages/build-tools": {
       "name": "@openducktor/build-tools",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "zod": "^4.6.5",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -130,7 +130,7 @@
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -214,7 +214,7 @@
     },
     "packages/host": {
       "name": "@openducktor/host",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.286",
         "@azure/msal-node": "^6.0.1",
@@ -248,7 +248,7 @@
     },
     "packages/host-client": {
       "name": "@openducktor/host-client",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -257,7 +257,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "bin": {
         "openducktor-mcp": "dist/index.js",
       },
@@ -274,7 +274,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "bin": {
         "openducktor-web": "dist/cli.js",
         "web": "dist/cli.js",
@@ -308,14 +308,14 @@
     },
     "packages/path-support": {
       "name": "@openducktor/path-support",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
     },
     "packages/runtime-orchestration": {
       "name": "@openducktor/runtime-orchestration",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -328,7 +328,7 @@
     },
     "tools/oxlint/anti-slop": {
       "name": "@openducktor/anti-slop-oxlint",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0-beta.2",
       "devDependencies": {
         "@oxlint/plugins": "1.83.0",
       },
