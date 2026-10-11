@@ -1,0 +1,44 @@
+@layer replica {
+  /* The diagram box: my-3 rounded-md border bg-white p-3, also in the dark theme. */
+  .flow {
+    display: flex;
+    justify-content: center;
+    margin: calc(12 * var(--u)) 0;
+    padding: calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(10 * var(--u));
+    background: #fff;
+  }
+  .flow svg {
+    width: min(100%, calc(380 * var(--u)));
+    height: auto;
+    font-family: "trebuchet ms", verdana, arial, sans-serif;
+  }
+  /* The default Mermaid theme: lavender nodes, dark edges, and grey edge labels. */
+  .flow-node {
+    fill: #ececff;
+    stroke: #9370db;
+    stroke-width: 1;
+  }
+  .flow-text {
+    fill: #333;
+    font-size: 14px;
+    text-anchor: middle;
+  }
+  .flow-edge {
+    fill: none;
+    stroke: #333;
+    stroke-width: 1.5;
+  }
+  .flow-head {
+    fill: #333;
+  }
+  .flow-label {
+    fill: rgb(232 232 232 / 0.8);
+  }
+  .flow-label-text {
+    fill: #333;
+    font-size: 12px;
+    text-anchor: middle;
+  }
+}

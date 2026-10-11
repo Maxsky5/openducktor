@@ -1,0 +1,111 @@
+---
+// The command palette of command-palette-dialog.tsx over the window: the input row, the result
+// list, and the footer. It opens and closes at once, without motion, as the product does. A view
+// shows one list: the home list before you type, the search results, the actions of a task, or
+// the reply to a question. The markup holds the search results of the query.
+import { ArrowLeft, ChevronDown, Layers, Plus, Search } from "@lucide/astro";
+import {
+  QUERY,
+  SEARCH_ROWS,
+  SEARCH_TARGET,
+  SUGGESTED,
+  TARGET_ACTIONS,
+  WAITING_ACTIONS,
+  WAITING_TASK,
+} from "../../sample/palette";
+import { matchesQuery } from "./match";
+import PaletteFooter from "./PaletteFooter.astro";
+import PaletteReply from "./PaletteReply.astro";
+import PaletteRow from "./PaletteRow.astro";
+import "./Palette.css";
+
+/** The texts that the search reads in a row: the title, and the ID of a task. */
+const texts = (row: (typeof SEARCH_ROWS)[number]): string[] =>
+  row.kind === "task" ? [row.title, row.taskId] : [row.kind === "chat" ? row.title : row.label];
+const found = SEARCH_ROWS.filter((row) => matchesQuery(texts(row), QUERY));
+const groups = [
+  { label: "Tasks", kind: "task" },
+  { label: "Chats", kind: "chat" },
+  { label: "Actions", kind: "action" },
+] as const;
+const target = SEARCH_ROWS.find((row) => row.id === SEARCH_TARGET);
+if (!target || target.kind !== "task") throw new Error("The palette needs its target task.");
+---
+
+<div class="pal-overlay" data-palette>
+  <div class="pal" data-view="search" data-pal>
+    <div class="pal-head">
+      <span class="pal-search"><Search /></span>
+      <span class="pal-chip" data-pal-chip>
+        <span class="pal-back"><ArrowLeft /></span><span class="pal-chip-tile">FI</span><span
+          class="pal-chip-title"
+          data-pal-chip-title>{target.title}</span
+        >
+      </span>
+      <span class="pal-input">
+        <span class="typed" data-pal-query>{QUERY}</span><span
+          class="pal-placeholder"
+          data-pal-placeholder>Search actions, tasks, and chats…</span
+        >
+      </span>
+      <span class="pal-scope"><Layers class="i14" />All workspaces<ChevronDown class="i14" /></span>
+    </div>
+    <div class="pal-list" data-pal-list="home">
+      <div class="pal-group">
+        <p>Needs you</p>
+        <PaletteRow row={WAITING_TASK} selected />
+      </div>
+      <div class="pal-group">
+        <p>Actions</p>
+        {SUGGESTED.map((row) => <PaletteRow row={row} />)}
+      </div>
+    </div>
+    <div class="pal-list" data-pal-list="search">
+      {
+        groups.map((group) => {
+          const rows = SEARCH_ROWS.filter((row) => row.kind === group.kind);
+          return (
+            <div
+              class="pal-group"
+              hidden={!found.some((row) => row.kind === group.kind)}
+              data-pal-group={group.kind}
+            >
+              <p>{group.label}</p>
+              {rows.map((row) => (
+                <div hidden={!found.includes(row)} data-pal-text={texts(row).join("\n")}>
+                  <PaletteRow row={row} query={QUERY} selected={row.id === SEARCH_TARGET} />
+                </div>
+              ))}
+            </div>
+          );
+        })
+      }
+      <div class="pal-group" data-pal-group="create">
+        <p>Create</p>
+        <div class="pal-row" data-kind="action" data-enter="Run" data-pal-row="create">
+          <span class="pal-icon"><Plus /></span>
+          <span class="pal-title">New task “<span data-pal-create>{QUERY}</span>”</span>
+          <span class="pal-muted">in fieldnotes</span>
+        </div>
+      </div>
+    </div>
+    <div class="pal-list" data-pal-list="target">
+      <div class="pal-group">
+        <p>Task actions</p>
+        {TARGET_ACTIONS.map((row, index) => <PaletteRow row={row} selected={index === 0} />)}
+      </div>
+    </div>
+    <div class="pal-list" data-pal-list="waiting">
+      <div class="pal-group">
+        <p>Task actions</p>
+        {WAITING_ACTIONS.map((row, index) => <PaletteRow row={row} selected={index === 0} />)}
+      </div>
+    </div>
+    <PaletteReply />
+    <PaletteFooter
+      enter={target.hints.enter}
+      {...target.hints.next ? { next: target.hints.next } : {}}
+      {...target.hints.edit ? { edit: target.hints.edit } : {}}
+    />
+  </div>
+</div>

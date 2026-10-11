@@ -1,0 +1,12 @@
+---
+// A task label of task-label-chip.tsx: the tag icon and the name in a muted pill.
+import { Tag } from "@lucide/astro";
+import "./LabelChip.css";
+
+interface Props {
+  name: string;
+}
+const { name } = Astro.props;
+---
+
+<span class="label-chip"><Tag class="i12" />{name}</span>

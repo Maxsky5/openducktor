@@ -1,16 +1,12 @@
-// The composer of agent-chat-composer.tsx and the session status marks of its task tabs. The
-// Agent Studio and the workspace chat share them.
+// The composer of agent-chat-composer.tsx. The task sessions and the chats share it.
 import { must } from "../../motion/dom";
 import { compactTokens, type ContextUse } from "../format";
 import type { Activity } from "../vocabulary";
 
-/** The activity marks of the task tab in `root`: a spinner, a waiting mark, or an idle mark. */
-export function activityMarks(root: HTMLElement) {
-  const status = must(root, "[data-tab-status]");
+/** The activity of the composer in `root`: the running ray, or the waiting ring. */
+export function composerActivity(root: HTMLElement) {
   const composer = must(root, "[data-composer]");
-  /** Shows one activity in the tab and in the composer border. */
   return (activity: Activity): void => {
-    status.dataset.activity = activity;
     composer.dataset.activity = activity;
   };
 }

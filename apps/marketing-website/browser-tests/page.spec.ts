@@ -55,7 +55,7 @@ test("the header links go to their sections below the sticky header", async ({
     .locator(".site-nav a")
     .evaluateAll((items) => items.map((item) => item.getAttribute("href") ?? ""));
   // On the home page, the links stay in the page. The 404 test covers the links of another page.
-  expect(hrefs).toEqual(["#workflow", "#features", "#local", "#install", "#faq"]);
+  expect(hrefs).toEqual(["#workflow", "#palette", "#features", "#local", "#install", "#faq"]);
   for (const href of hrefs) await expect(page.locator(href)).toHaveCount(1);
   test.skip(!testInfo.project.name.startsWith("desktop"), "The phone header has no section links.");
   for (const [name, heading] of [

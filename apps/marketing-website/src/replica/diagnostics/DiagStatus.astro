@@ -1,0 +1,15 @@
+---
+// The status pill of diagnostics-status.tsx: a colored dot, or a spinner while the check works.
+import { LoaderCircle } from "@lucide/astro";
+import type { DiagStatusData } from "./model";
+import "./DiagStatus.css";
+
+interface Props {
+  status: DiagStatusData;
+}
+const { status } = Astro.props;
+---
+
+<span class="diag-pill" data-health={status.health} data-diag-pill
+  ><LoaderCircle class="i12 spin" /><i></i><span data-diag-label>{status.label}</span></span
+>

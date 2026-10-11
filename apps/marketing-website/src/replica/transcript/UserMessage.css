@@ -1,14 +1,12 @@
 @layer replica {
+  /* Every user row has 16 pixels above and under its bubble: flow-root pt-4, and mb-4. */
   .st-user {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    padding-top: calc(16 * var(--u));
     margin-bottom: calc(16 * var(--u));
     font-size: calc(14 * var(--u));
-  }
-  .st-agent + .st-user,
-  .st-turn + .st-turn > .st-user:first-child {
-    margin-top: calc(16 * var(--u));
   }
   .st-user p {
     max-width: 80%;
@@ -19,7 +17,7 @@
     color: var(--foreground);
     line-height: calc(24 * var(--u));
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
   .st-user time {
     margin-top: calc(4 * var(--u));
@@ -27,12 +25,5 @@
     color: var(--muted-foreground);
     font-size: calc(11 * var(--u));
     font-weight: 500;
-  }
-  .st-user code {
-    padding: 0 calc(4 * var(--u));
-    border-radius: calc(6 * var(--u));
-    background: var(--secondary);
-    font-family: var(--mono);
-    font-size: calc(12.5 * var(--u));
   }
 }

@@ -62,4 +62,43 @@
   .doc > :first-child {
     margin-top: 0;
   }
+  /* Tables: prose-table:my-3, with the borders in the input color. */
+  .doc table {
+    width: 100%;
+    margin: calc(12 * var(--u)) 0;
+    border-collapse: collapse;
+    font-size: calc(12.25 * var(--u));
+    line-height: calc(20 * var(--u));
+    table-layout: fixed;
+  }
+  .doc th,
+  .doc td {
+    padding: calc(6 * var(--u)) calc(8 * var(--u));
+    border-bottom: calc(1 * var(--u)) solid var(--input);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+  .doc th {
+    font-weight: 600;
+  }
+  .doc th:first-child,
+  .doc td:first-child {
+    padding-left: 0;
+  }
+  /* A code block: the boundary contract of a plan. */
+  .doc pre {
+    margin: calc(12 * var(--u)) 0;
+    padding: calc(10 * var(--u)) calc(14 * var(--u));
+    border-radius: calc(10 * var(--u));
+    background: var(--muted);
+    font-size: calc(12 * var(--u));
+    line-height: calc(20 * var(--u));
+    white-space: pre-wrap;
+  }
+  .doc pre code {
+    padding: 0;
+    color: var(--foreground);
+    font-weight: 400;
+  }
 }

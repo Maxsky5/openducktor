@@ -20,14 +20,19 @@
   }
   .board-button {
     gap: calc(8 * var(--u));
-    height: calc(36 * var(--u));
-    padding: 0 calc(14 * var(--u));
-    border-radius: calc(8 * var(--u));
-    font-size: calc(13 * var(--u));
-    font-weight: 600;
+    height: calc(40 * var(--u));
   }
-  .board-button[data-variant="default"] {
-    border-color: var(--primary);
+  /* The New task split button: the import menu joins it with a light rule. */
+  .board-split {
+    display: flex;
+  }
+  .board-new {
+    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+  }
+  .board-new-menu {
+    padding: 0 calc(8 * var(--u));
+    border-left-color: color-mix(in oklch, var(--primary-foreground) 30%, transparent);
+    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
   }
   /* The task card view control. The first view is active. */
   .view-toggle {
@@ -69,6 +74,9 @@
     font-size: calc(16 * var(--u));
     line-height: 1.2;
     letter-spacing: -0.025em;
+  }
+  .board-head[data-compact] .board-button {
+    height: calc(32 * var(--u));
   }
   .board-head[data-compact] .view-toggle,
   .board-head[data-compact] .board-refresh {

@@ -1,11 +1,8 @@
 @layer replica {
-  /* The footer of a card: the button of the next step, or the session, and the menu. */
+  /* The action group of a card: the button of the next step, or the session, and the menu. */
   .card-actions {
     display: flex;
     gap: calc(6 * var(--u));
-    margin-top: calc(8 * var(--u));
-    padding-top: calc(10 * var(--u));
-    border-top: calc(1 * var(--u)) solid var(--border);
   }
   .card-action {
     flex: 1;

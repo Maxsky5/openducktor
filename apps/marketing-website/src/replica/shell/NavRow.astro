@@ -1,0 +1,44 @@
+---
+// A session row of session-navigation-list.tsx. The first line shows the status dot, the
+// workspace, the task status, and the attention pill or the time. The second line shows the role
+// icon or the chat icon, the title, a terminal icon while a command runs, and the runtime.
+import { Check, MessagesSquare, SquareTerminal } from "@lucide/astro";
+import { flag } from "../flag";
+import RoleIcon from "../ui/RoleIcon.astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import StatusDot from "../ui/StatusDot.astro";
+import StatusPill from "../ui/StatusPill.astro";
+import { navDot, type NavEntry, navTime, navTone } from "./nav";
+import "../ui/AttentionPill.css";
+import "./NavRow.css";
+
+interface Props {
+  entry: NavEntry;
+}
+const { entry } = Astro.props;
+---
+
+<li class="nav-item" hidden={entry.later} data-nav-entry={entry.id}>
+  <span class="nav-row" data-selected={flag(entry.selected)} data-nav-row>
+    <span class="nav-line">
+      <StatusDot state={navDot(entry)} data-nav-dot />
+      <span class="nav-ws">{entry.workspace}</span>
+      <StatusPill status={entry.status} short class="nav-status" data-nav-status />
+      <span class="attention-pill" hidden={!entry.attention} data-nav-attention
+        >{entry.attention}</span
+      >
+      <span class="nav-time" hidden={!navTime(entry)} data-nav-time>{navTime(entry)}</span>
+    </span>
+    <span class="nav-line">
+      <span class="nav-icon" data-tone={navTone(entry)} data-nav-icon>
+        {entry.role ? <RoleIcon role={entry.role} /> : <MessagesSquare />}
+      </span>
+      <span class="nav-title">{entry.title}</span>
+      <span class="nav-commands" hidden={!entry.commands} data-nav-commands
+        ><SquareTerminal class="i14" /></span
+      >
+      <RuntimeIcon kind={entry.runtime} />
+    </span>
+    <span class="nav-check"><Check /></span>
+  </span>
+</li>

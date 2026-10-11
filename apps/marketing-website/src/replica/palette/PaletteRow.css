@@ -1,0 +1,128 @@
+@layer replica {
+  /* A row: h-10 gap-3 rounded-lg px-3. The highlighted row is bg-accent, and its icon and its
+     chevron show at full strength. */
+  .pal-row {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    height: calc(40 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border-radius: calc(12 * var(--u));
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+  }
+  .pal-row[data-selected] {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+  .pal-row[data-destructive] {
+    color: var(--destructive-muted);
+  }
+  .pal-row[data-destructive][data-selected] {
+    background: color-mix(in oklch, var(--destructive) 10%, transparent);
+  }
+  .pal-dot {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(10 * var(--u));
+  }
+  .pal-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    color: var(--muted-foreground);
+  }
+  .pal-row[data-selected] .pal-icon {
+    color: var(--foreground);
+  }
+  .pal-row[data-destructive] .pal-icon {
+    color: var(--destructive-muted);
+  }
+  /* The kind of a task, in the colors of kanban-task-badge-model.ts. */
+  .pal-issue {
+    flex: 0 0 auto;
+    color: var(--foreground);
+  }
+  .pal-issue[data-issue="bug"] {
+    color: var(--rose-600);
+  }
+  .pal-issue[data-issue="feature"] {
+    color: oklch(58.8% 0.158 241.966);
+  }
+  :where(:root[data-theme="dark"]) .pal-issue[data-issue="bug"] {
+    color: var(--rose-400);
+  }
+  :where(:root[data-theme="dark"]) .pal-issue[data-issue="feature"] {
+    color: oklch(74.6% 0.16 232.661);
+  }
+  .pal-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pal-row[data-kind="action"] .pal-title {
+    flex: 0 1 auto;
+  }
+  .pal-muted {
+    flex: 0 0 auto;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  /* The marks of the query: the primary violet at 15%, or 35% in the dark theme. */
+  .pal-row mark {
+    border-radius: calc(3 * var(--u));
+    background: color-mix(in oklch, var(--primary) 15%, transparent);
+    color: inherit;
+  }
+  :where(:root[data-theme="dark"]) .pal-row mark {
+    background: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+  /* The workspace tile in its xs size: a 20 pixel circle. */
+  .pal-tile {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    border-radius: 50%;
+    background: var(--workspace-rail-tile);
+    box-shadow: var(--shadow-sm);
+    color: var(--foreground);
+    font-size: calc(8 * var(--u));
+    font-weight: 600;
+  }
+  .pal-id {
+    flex: 0 0 auto;
+    max-width: calc(128 * var(--u));
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pal-status {
+    height: calc(20 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    font-size: calc(10 * var(--u));
+  }
+  .pal-more {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+    margin-right: calc(-6 * var(--u));
+    color: var(--muted-foreground);
+    opacity: 0;
+  }
+  .pal-row[data-selected] .pal-more {
+    opacity: 1;
+  }
+}

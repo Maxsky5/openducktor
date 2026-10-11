@@ -1,0 +1,24 @@
+@layer replica {
+  /* space-y-3 under the label: text-xs font-medium text-warning-muted with a 14 pixel icon. */
+  .reply-here {
+    display: grid;
+    gap: calc(12 * var(--u));
+  }
+  .reply-head {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    color: var(--warning-muted);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+  }
+  /* The note that replaces the card: rounded-md border-success-border p-2.5 text-xs. */
+  .reply-sent {
+    padding: calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--success-border);
+    border-radius: calc(10 * var(--u));
+    background: var(--success-surface);
+    color: var(--success-muted);
+    font-size: calc(12 * var(--u));
+  }
+}

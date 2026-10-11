@@ -1,0 +1,12 @@
+---
+// The key caps of components/ui/kbd.tsx: one cap for each key of a shortcut, 2 pixels apart. The
+// copied UI shows the macOS keys.
+import type { HTMLAttributes } from "astro/types";
+import "./Kbd.css";
+
+type Props = HTMLAttributes<"span"> & { keys: readonly string[] };
+const { keys, class: className, ...attributes } = Astro.props;
+---
+
+<span class:list={["ui-kbd", className]} {...attributes}>{keys.map((key) => <kbd>{key}</kbd>)}</span
+>

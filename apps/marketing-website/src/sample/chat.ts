@@ -17,13 +17,15 @@ export const CHAT = {
   role: "Product planner",
 };
 
-/** The chat session after the turn: 18.4K tokens of the 200K window of the sample model. */
+/** The chat session after the turn: 18.4K tokens of the 200K window of the sample model, at the
+ * Fast speed. */
 export const CHAT_SESSION = {
   runtime: "claude",
   model: "claude-lyra-3",
   effort: "high",
   window: 200_000,
   used: 9.2,
+  speed: "fast",
 } satisfies Session;
 
 /** The context use after the task search, in percent of the window. */
@@ -62,6 +64,19 @@ export const SEARCH = {
   done: "1 result · title: export · limit: 10",
 };
 
+/**
+ * The task that the visitor opens from the chat. It is a task, not a feature, so its Builder can
+ * start from Backlog.
+ */
+export const MENU_TASK: ChatTask = {
+  id: "w5j3",
+  ...TASKS.w5j3,
+  description:
+    "Add an Export item to the notebook menu. It saves the notebook as Markdown, and it shows an error when the export fails.",
+  labels: ["export", "ui"],
+  time: "10:24:26 AM",
+};
+
 /** The tasks that the chat creates, in the order of the tool calls. */
 export const CREATED_TASKS: ChatTask[] = [
   {
@@ -71,12 +86,5 @@ export const CREATED_TASKS: ChatTask[] = [
     labels: ["export", "pdf"],
     time: "10:24:21 AM",
   },
-  {
-    id: "w5j3",
-    ...TASKS.w5j3,
-    description:
-      "Add Markdown and PDF items to the notebook menu. Show an error when an export fails.",
-    labels: ["export", "ui"],
-    time: "10:24:26 AM",
-  },
+  MENU_TASK,
 ];

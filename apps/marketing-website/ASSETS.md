@@ -10,7 +10,7 @@ The page shows the product with copies of its real UI in HTML and CSS. It uses n
 
 The copied views use fictional data that shows each feature clearly.
 
-Each product view plays a short scene while it is on screen. The static markup of a view is the last frame of its scene.
+Each product view plays a short scene while it is on screen. The static markup of a view is the last frame of its scene. Three views hold another frame: the opening holds its first frame, and the prompts and the command palette hold a frame from the middle of their scenes.
 
 A view of a page where agents work uses the full width of the page. Smaller tools can share a row.
 
@@ -24,12 +24,13 @@ The site is a static Astro build with no React hydration and no connection to th
 
 | Section | Product view | Scene |
 |---|---|---|
-| Opening | Kanban board | Agents move sample tasks through the lanes. A task in Human Review has a pull request, and another task waits for an answer. |
-| Workflow | Agent Studio in five tabs: Spec, Plan, Build, QA, and Review | Each tab plays one step of the same sample task, from the first question of the Spec agent to the merged pull request. Plan, Build, and QA start where the step before ends, with a click on the action that it shows. The last frame of a step cross fades into the next step. |
+| Opening | Kanban board and the session sidebar of all workspaces | Agents move sample tasks through the lanes. The sidebar moves each session between Needs you, Running, and Recent when its state changes. A merged pull request closes a task, and a Builder stops to ask a question. The visitor points at its session in the sidebar and answers the question in the session preview, and the Builder goes back to Running. A stage without the sidebar ends on the question. |
+| Workflow | The session page of one task in five tabs: Spec, Plan, Build, QA, and Review | Each tab plays one step of the same sample task, from the first question of the Spec agent to the merged pull request. The collapsed sidebar shows the sessions of the task, and the right panel shows the document or the diff of the step. Plan, Build, and QA start where the step before ends, with a click on the action that it shows. The last frame of a step cross fades into the next step. |
+| Command palette | Kanban board with the command palette | The visitor searches across the workspaces, opens the actions of a task with Tab, and starts its Planner in the background. Then the visitor answers the question of a waiting Builder in the palette. A key display under the window shows each key. The palette opens, changes, and closes at once, as in the product. |
 | Runtimes | Settings, with the agent defaults of each role | The visitor opens the model picker of the Spec role. No model is a favorite, so the picker opens on the first runtime. The visitor chooses a model from another runtime. |
 | Autopilot | Kanban board with the empty lanes collapsed | A task goes from Backlog to Human Review, and nobody clicks. Autopilot starts each agent, and a notification shows each new agent session. QA rejects the first build, and the Builder fixes it with the QA report. The task waits for your approval. |
-| Features | Workspace chat, an MCP client, the prompt overrides, and Agent Studio with the worktree tools | The chat creates the missing tasks for a request. An MCP client creates a task. A prompt override gets a placeholder check. The dev servers run in the task worktree. |
-| Local | Diagnostics panel | The checks find the tools on the computer, start the runtimes, and connect the MCP server. |
+| Features | Workspace chat, an MCP client, the prompt overrides, and the session page with the repository actions | The chat creates the missing tasks for a request. The visitor opens one of them from its card and starts its Builder in the background, so the chat stays on screen. An MCP client creates a task. A prompt override gets a placeholder check. Each repository action runs in a new terminal of the bottom panel, in the task worktree. |
+| Local | Diagnostics panel | The checks find the tools on the computer and the workspace files. The host starts one shared runtime of each kind, and the overview says that everything works. |
 | Install | The desktop app and the browser version, side by side. Each install method has a terminal with its command and a copy button. | The desktop terminals do not move. The browser version terminal types its command once and shows the start log of the web runner. Then it keeps its last frame. |
 | Questions and closing | None | The closing shows the duck parade: the OpenDucktor duck leads three ducklings, the coding agents that it runs. They swim in once, then float, and a light scans the visor of the lead duck. |
 
@@ -40,15 +41,21 @@ Builder read the product source for each view and compared the views with the ru
 | Website view | Product source |
 |---|---|
 | Kanban board | `packages/frontend/src/components/features/kanban` and `packages/frontend/src/pages/kanban` |
-| Agent Studio and the worktree tools | `packages/frontend/src/components/features/agents` and `packages/frontend/src/pages/agents` |
+| Session page, panels, and repository actions | `packages/frontend/src/components/features/agents` and `packages/frontend/src/pages/agents` |
+| Sidebar, workspace rail, and session preview | `packages/frontend/src/components/layout/sidebar`. The preview opens 180 ms after the pointer enters a row, to the right of the row, and the Reply here block answers a pending question. |
+| Command palette and fuzzy marks | `packages/frontend/src/features/command-palette` |
 | Workspace chat | `packages/frontend/src/components/features/agents/agent-chat` and `packages/frontend/src/pages/workspace-sessions` |
+| Task details and the start of a session from them | `packages/frontend/src/components/features/task-details` and `packages/frontend/src/pages/kanban/use-kanban-session-start-flow.ts`. The start dialog takes focus, so the sheet closes. Run in background keeps the current page. |
 | Settings and prompt overrides | `packages/frontend/src/components/features/settings` |
 | Autopilot rules and starts | `packages/frontend/src/features/autopilot` and `packages/frontend/src/features/session-start/session-start-orchestration.ts` |
 | Notifications | `packages/frontend/src/features/notifications`. A new or forked session shows "Session started." A resumed session shows no notification. |
 | Lane order in the board | `packages/frontend/src/pages/kanban/use-kanban-board-model.ts`. A task that waits for input shows first in its lane. |
 | Diagnostics | `packages/frontend/src/components/features/diagnostics` |
+| Repository action terminals | `packages/host/src/application/actions` and `packages/host/src/application/terminals/terminal-session-producer.ts`. The host prints each command line in dim text before the shell runs it. |
 | MCP call and result | `packages/openducktor-mcp`. The client window is generic and names no product. |
 | Web runner start log | `packages/openducktor-web/src/launcher.ts` and `packages/openducktor-web/src/logger.ts` |
+
+Two unit tests compare copies with the product source. `tests/copied-prompts.test.ts` checks the kickoff prompts, and `tests/copied-palette-match.test.ts` checks the rows and the marks of the palette search.
 
 The views follow the product layout, labels, status colors, and controls. The tasks, the repository, the code, and the agent output are fictional. The model and provider names are also fictional, so the page claims no support for a specific model.
 
@@ -71,11 +78,11 @@ The views play with GSAP and its ScrollTrigger plugin. The code in `src/motion/`
 | `dom.ts`, `tabs.ts`, `tokens.ts` | Typed queries that fail loudly, the keyboard pattern of the step tabs, and the named eases of the views. `dom.ts` has no GSAP, so the header and the brand links use it on every page. |
 | `offset.ts` | The position of an element in a replica, with the translation that GSAP gives it. |
 
-The product parts that move have a controller next to their component, for example `src/replica/board/board.ts` for the Kanban board and `src/replica/studio/studio.ts` for the Agent Studio window. The `scene.ts` file of each view builds the timeline of that view from these parts. The workflow steps have one file each in `src/views/workflow/`, and they share `session.ts`.
+The product parts that move have a controller next to their component, for example `src/replica/board/board.ts` for the Kanban board and `src/replica/studio/studio.ts` for the session page. The `scene.ts` file of each view builds the timeline of that view from these parts. The workflow steps have one file each in `src/views/workflow/`, and they share `session.ts`.
 
 Each loop restores the static markup and builds a new timeline. DOM changes from one loop cannot stay in the next loop. The last frame of a loop cross fades into the first frame of the next loop. A copy of the last frame covers the view and fades out, so the product window does not go blank. The next loop starts when the cross fade ends.
 
-The Agent Studio window takes one frame record, and `src/sample/studio.ts` holds the last frame of each workflow step. The markup of a step renders its last frame, and the next step applies the same record at its start, so each step starts where the step before it ends. The transcripts are data in `src/sample/transcripts.ts`, with typed row ids for the scenes.
+The session page takes one frame record, and `src/sample/studio.ts` holds the last frame of each workflow step. The markup of a step renders its last frame, and the next step applies the same record at its start, so each step starts where the step before it ends. The transcripts are data in `src/sample/transcripts.ts`, with typed row ids for the scenes.
 
 The scenes follow the GSAP practices of the official GSAP skills:
 

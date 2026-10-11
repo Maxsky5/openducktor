@@ -1,0 +1,16 @@
+---
+// The tab strip of a session panel in session-panel.tsx: the tabs, then the New tab button right
+// after the last tab. A scene shows a hidden tab, or hides one.
+import { Plus } from "@lucide/astro";
+import "./PanelStrip.css";
+
+interface Props {
+  /** The scene hook of the strip, such as right or bottom. */
+  panel: string;
+}
+const { panel } = Astro.props;
+---
+
+<div class="pstrip" data-strip={panel}>
+  <slot /><span class="pstrip-add"><Plus /></span>
+</div>

@@ -1,0 +1,60 @@
+---
+// The command palette over the Kanban board. The markup holds the search results of the query,
+// the frame of the middle of the scene that shows the most. The templates hold the start dialog
+// of the Planner, its notification, and the changes of the board.
+import Board from "../../replica/board/Board.astro";
+import BoardHead from "../../replica/board/BoardHead.astro";
+import CardActions from "../../replica/board/CardActions.astro";
+import Palette from "../../replica/palette/Palette.astro";
+import AppWindow from "../../replica/shell/AppWindow.astro";
+import Pointer from "../../replica/shell/Pointer.astro";
+import Toast from "../../replica/shell/Toast.astro";
+import ToastStack from "../../replica/shell/ToastStack.astro";
+import StartDialog from "../../replica/studio/StartDialog.astro";
+import { PLANNER_SESSION } from "../../sample/studio";
+import Scene from "../Scene.astro";
+import KeyHud from "./KeyHud.astro";
+import {
+  CARD_ACTIONS,
+  PALETTE_BOARD,
+  PALETTE_NAV,
+  type PaletteTemplate,
+  STARTED,
+} from "./templates";
+import "./PaletteView.css";
+---
+
+<Scene
+  name="palette"
+  alt="The command palette over the Kanban board. The visitor presses Command K and types srch. The palette finds tasks and a chat in three workspaces and marks the letters that match. The visitor opens the actions of a task with Tab and starts its Planner in the background. Then the visitor opens the palette again, picks the task that waits for an answer, and answers the question of its Builder in the palette."
+>
+  <AppWindow chrome={{ sidebar: "full", nav: PALETTE_NAV, kanban: true }} class="palette-window">
+    <BoardHead />
+    <Board board={PALETTE_BOARD} />
+    <ToastStack />
+    <Fragment slot="overlay"><Palette /><Pointer /></Fragment>
+  </AppWindow>
+  <KeyHud />
+  <Fragment slot="templates">
+    {
+      Object.entries(CARD_ACTIONS).map(([name, actions]) => (
+        <template data-tpl={name}>
+          <CardActions {...actions} />
+        </template>
+      ))
+    }
+    <template data-tpl={"planner-dialog" satisfies PaletteTemplate}
+      ><StartDialog
+        role="Planner"
+        description="Start a fresh session for Planner."
+        session={PLANNER_SESSION}
+        background
+      /></template
+    >
+    <template data-tpl={"toast-started" satisfies PaletteTemplate}><Toast {...STARTED} /></template>
+  </Fragment>
+</Scene>
+<script>
+  import { mountPalette } from "./scene";
+  mountPalette();
+</script>

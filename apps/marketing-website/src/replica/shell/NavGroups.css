@@ -1,0 +1,11 @@
+@layer replica {
+  /* The count of a group in both sidebars: amber for Needs you, and blue for Running. */
+  [data-nav-group="needs_you"] .nav-count {
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+  }
+  [data-nav-group="running"] .nav-count {
+    background: var(--info-surface);
+    color: var(--info-muted);
+  }
+}

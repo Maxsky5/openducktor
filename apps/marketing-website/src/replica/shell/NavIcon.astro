@@ -1,0 +1,26 @@
+---
+// A session icon of session-navigation-rail.tsx in the collapsed sidebar: the role icon or the
+// chat icon on the surface of its group, with the status dot on its corner.
+import { Check, MessagesSquare } from "@lucide/astro";
+import { flag } from "../flag";
+import RoleIcon from "../ui/RoleIcon.astro";
+import StatusDot from "../ui/StatusDot.astro";
+import { navDot, navTone, type NavEntry } from "./nav";
+import "./NavRow.css";
+import "./NavIcon.css";
+
+interface Props {
+  entry: NavEntry;
+}
+const { entry } = Astro.props;
+---
+
+<li class="sbc-item" hidden={entry.later} data-nav-entry={entry.id}>
+  <span class="nav-row sbc-entry" data-selected={flag(entry.selected)} data-nav-row>
+    <span class="nav-icon" data-tone={navTone(entry)} data-nav-icon>
+      {entry.role ? <RoleIcon role={entry.role} /> : <MessagesSquare />}
+    </span>
+    <StatusDot state={navDot(entry)} class="sbc-dot" data-nav-dot />
+    <span class="nav-check"><Check /></span>
+  </span>
+</li>

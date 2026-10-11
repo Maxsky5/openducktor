@@ -1,0 +1,21 @@
+---
+import ProductFigure from "../ui/ProductFigure.astro";
+import SectionHead from "../ui/SectionHead.astro";
+import PaletteView from "../views/palette/PaletteView.astro";
+import "./Palette.css";
+---
+
+<section id="palette" class="section palette" aria-labelledby="palette-title">
+  <SectionHead eyebrow="Command palette" id="palette-title" class="wrap">
+    <Fragment slot="title">Press ⌘K. Run OpenDucktor from the keyboard.</Fragment>
+    <p>
+      Find any task or chat in all your workspaces. Start its next step, or answer its agent,
+      without a click.
+    </p>
+  </SectionHead>
+  <div class="wrap-wide palette-figure">
+    <ProductFigure caption={["Kanban Board", "Command palette"]}>
+      <PaletteView />
+    </ProductFigure>
+  </div>
+</section>

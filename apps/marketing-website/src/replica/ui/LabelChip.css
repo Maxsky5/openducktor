@@ -1,0 +1,17 @@
+@layer product {
+  .label-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(24 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: 999px;
+    background: var(--muted);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+  .label-chip .lucide {
+    color: var(--muted-foreground);
+  }
+}

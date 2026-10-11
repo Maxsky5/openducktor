@@ -87,6 +87,25 @@
     padding-top: calc(20 * var(--u));
     border-top: calc(1 * var(--u)) solid var(--border);
   }
+  /* Effort and Speed share a cell: flex items-end gap-2, and Speed is w-36. */
+  .st-field-pair {
+    display: flex;
+    align-items: flex-end;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+  }
+  .st-field-pair > .st-field {
+    flex: 1;
+    min-width: 0;
+  }
+  .st-field-pair > .st-speed-field {
+    flex: 0 0 calc(144 * var(--u));
+  }
+  .st-dialog-actions {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+  }
   /* A narrow stage shows a smaller dialog with one field in each row. */
   @container stage (width <= 699px) {
     .st-dialog {

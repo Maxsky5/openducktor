@@ -18,7 +18,7 @@
     padding: 0 calc(8 * var(--u));
     border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
   }
-  /* The group of the Agent Studio task panel: the app icon, regular text, and a shadow. */
+  /* The group of the session top bar: the app icon, regular text, and a shadow. */
   .oi[data-app-icon] > .ui-button {
     box-shadow: var(--shadow-sm);
     font-weight: 400;
@@ -116,7 +116,7 @@
     display: block;
     animation-duration: 0.9s;
   }
-  /* A narrow panel bar keeps the Open In group only when a scene opens its menu. */
+  /* A narrow top bar keeps the Open In group only when a scene opens its menu. */
   @container stage (width <= 699px) {
     .oi:not([data-menu]) {
       display: none;

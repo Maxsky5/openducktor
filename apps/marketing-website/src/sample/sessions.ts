@@ -2,8 +2,11 @@
 import type { ContextUse } from "../replica/format";
 import { modelPath, type ModelRef } from "./models";
 
+/** The speed of a session, for a model that offers more than Standard. */
+export type Speed = "standard" | "fast";
+
 /** A session and the part of its context window in use, in percent. */
-export type Session = ModelRef & { effort: string; window: number; used: number };
+export type Session = ModelRef & { effort: string; window: number; used: number; speed?: Speed };
 
 /** The signature under the last assistant message of a turn: provider/model · effort. */
 export function signature(session: Session): string {

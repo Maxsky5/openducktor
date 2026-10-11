@@ -15,7 +15,7 @@ export function compactTokens(tokens: number): string {
   return `${text.replace(/\.0$/, "")}K`;
 }
 
-/** The file count of the Git tab: git-info-header.tsx. */
+/** The file count of the Diffs tab: git-info-header.tsx. */
 export function filesLabel(count: number): string {
   return `${count} changed file${count === 1 ? "" : "s"}`;
 }

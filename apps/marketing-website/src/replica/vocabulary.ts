@@ -26,6 +26,23 @@ export const LANE_TITLES = {
   closed: "Done",
 } satisfies Record<LaneId, string>;
 
+/** The labels of the task status pill in lib/task-status-presentation.ts. */
+const STATUS_LABELS = {
+  open: "Backlog",
+  spec_ready: "Spec ready",
+  ready_for_dev: "Ready for dev",
+  in_progress: "In progress",
+  blocked: "Blocked needs input",
+  ai_review: "AI review",
+  human_review: "Human review",
+  closed: "Done",
+} satisfies Record<LaneId, string>;
+
+/** The label of the status pill of `status`. The sidebar shortens the blocked label. */
+export function statusPillLabel(status: LaneId, short = false): string {
+  return short && status === "blocked" ? "Blocked" : STATUS_LABELS[status];
+}
+
 /** The kinds of task of the task cards. */
 export type TaskKind = "task" | "feature" | "bug";
 /** The priorities that the scenes show, from P1, the most urgent, to P3. */
@@ -33,11 +50,22 @@ export type Priority = 1 | 2 | 3;
 
 export type Role = "Spec" | "Planner" | "Builder" | "QA";
 
-/** The pages of the app in the sidebar navigation. */
-export type AppPage = "kanban" | "workflows" | "chats";
+/** The roles of the workflow, in the order of agent-studio-header-workflow-rail.tsx. */
+export const ROLES = ["spec", "planner", "build", "qa"] as const;
+export type RoleId = (typeof ROLES)[number];
+
+export const ROLE_LABELS = {
+  spec: "Spec",
+  planner: "Planner",
+  build: "Builder",
+  qa: "QA",
+} as const satisfies Record<RoleId, Role>;
+
 export type SessionStatus = "Running" | "Starting" | "Waiting input";
-/** The activity of the session of a task, as its tab, its composer, and its card show it. */
+/** The activity of the session of a task, as its composer and its card show it. */
 export type Activity = "working" | "waiting" | "idle";
+/** The status dot of a session: running, waiting for input, unread, or read. */
+export type DotState = "running" | "input" | "input-read" | "unread" | "read";
 
 export type CardAction =
   | "Start Spec"

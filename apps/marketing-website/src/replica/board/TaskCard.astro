@@ -1,8 +1,11 @@
 ---
-// A task card of kanban-task-card.tsx: the title, the id, the badges, and the card actions. A card
-// with an active session shows the running ray, and a session that waits for input glows.
-import { Copy, ExternalLink } from "@lucide/astro";
+// A task card of kanban-task-card.tsx: the title, the kind and the priority with the task ID, the
+// QA verdict and the pull request, the links to the saved sessions, and the workflow actions. The
+// whole card opens the task details. A card with an active session shows the running ray, and a
+// session that waits for input glows.
+import { Copy, SquareArrowOutUpRight } from "@lucide/astro";
 import type { ComponentProps } from "astro/types";
+import Badge from "./Badge.astro";
 import CardActions from "./CardActions.astro";
 import type { CardData } from "./model";
 import PrBadge from "./PrBadge.astro";
@@ -13,7 +16,7 @@ import { taskId } from "../../sample/workspace";
 import "./TaskCard.css";
 
 type Props = CardData;
-const { task, name, action, session, pr } = Astro.props;
+const { task, name, action, session, pr, rejected = false, links = [] } = Astro.props;
 const { title, kind, priority } = TASKS[task];
 const running = session && session.status !== "Waiting input";
 const waiting = session?.status === "Waiting input";
@@ -30,12 +33,34 @@ if (session) actionProps.session = session;
   <Ray class="card-ray" />
   <div class="card-content">
     <p class="card-title">{title}</p>
-    <div class="card-id">
-      <span><code data-task-id>{taskId(task)}</code><Copy class="i12" /></span><span
-        class="card-open"><ExternalLink class="i12" />Open</span
-      >
+    <div class="card-meta">
+      <TaskBadges kind={kind} priority={priority} />
+      <span class="card-id"><code data-task-id>{taskId(task)}</code><Copy class="i12" /></span>
     </div>
-    <TaskBadges kind={kind} priority={priority}>{pr && <PrBadge number={pr} />}</TaskBadges>
-    <CardActions {...actionProps} />
+    <div class="card-status" data-badges>
+      {
+        rejected && (
+          <Badge tone="rejected" data-qa-badge>
+            QA Rejected
+          </Badge>
+        )
+      }
+      {pr && <PrBadge number={pr} />}
+    </div>
+    <div class="card-footer" data-links={links.length > 0 ? "" : undefined} data-card-footer>
+      {
+        links.length > 0 && (
+          <div class="card-links">
+            {links.map((role) => (
+              <span>
+                <u>{role}</u>
+                <SquareArrowOutUpRight class="i12" />
+              </span>
+            ))}
+          </div>
+        )
+      }
+      <CardActions {...actionProps} />
+    </div>
   </div>
 </div>

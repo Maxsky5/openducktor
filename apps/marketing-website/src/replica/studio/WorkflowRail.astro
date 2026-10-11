@@ -1,0 +1,55 @@
+---
+// The workflow rail of a task session in agent-studio-header-workflow-rail.tsx: one step for each
+// role, above the chat column. A step shows the role icon, its label, and the icon of its state.
+// The compact rail is WorkflowRailPreview, in the session preview of the sidebar.
+import {
+  Check,
+  ChevronRight,
+  Circle,
+  CircleDashed,
+  LoaderCircle,
+  TriangleAlert,
+} from "@lucide/astro";
+import type { RailTones } from "../../sample/studio";
+import RoleIcon from "../ui/RoleIcon.astro";
+import { ROLE_LABELS, ROLES, type RoleId } from "../vocabulary";
+import "./WorkflowRail.css";
+
+interface Props {
+  tones: RailTones;
+  selected: RoleId;
+  compact?: boolean;
+}
+const { tones, selected, compact = false } = Astro.props;
+---
+
+<div class="wr" data-size={compact ? "compact" : undefined}>
+  <div class="wr-steps">
+    {
+      ROLES.map((role, index) => {
+        const next = ROLES[index + 1];
+        return (
+          <span class="wr-item">
+            <span
+              class="st-step"
+              data-step={role}
+              data-tone={tones[index]}
+              aria-pressed={role === selected ? "true" : "false"}
+            >
+              <RoleIcon role={role} class="st-step-icon" />
+              {ROLE_LABELS[role]}
+              <span class="st-step-state">
+                <Check class="i14 done" />
+                <LoaderCircle class="i14 spin working" />
+                <CircleDashed class="i14 waiting" />
+                <TriangleAlert class="i14 alert" />
+                <Circle class="i12 available" />
+              </span>
+            </span>
+            {next && <ChevronRight class="st-link" data-link={next} data-tone={tones[index + 1]} />}
+          </span>
+        );
+      })
+    }
+  </div>
+</div>

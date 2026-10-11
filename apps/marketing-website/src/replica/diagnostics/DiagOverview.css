@@ -1,0 +1,49 @@
+@layer replica {
+  /* The overview: flex gap-3 rounded-xl border p-4, in the colors of its tone. */
+  .diag-overview {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    padding: calc(16 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: color-mix(in oklch, var(--muted) 40%, transparent);
+    color: var(--foreground);
+  }
+  .diag-overview[data-tone="healthy"] {
+    border-color: color-mix(in oklch, var(--success-border) 60%, transparent);
+    background: var(--success-surface);
+    color: var(--success-surface-foreground);
+  }
+  .diag-overview-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    border-radius: 50%;
+    background: var(--muted);
+    color: var(--muted-foreground);
+  }
+  .diag-overview[data-tone="healthy"] .diag-overview-icon {
+    background: color-mix(in oklch, var(--success-accent) 15%, transparent);
+    color: var(--success-accent);
+  }
+  .diag-overview-icon .lucide {
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+  }
+  .diag-overview[data-tone="healthy"] .spin,
+  .diag-overview[data-tone="checking"] .lucide:not(.spin) {
+    display: none;
+  }
+  .diag-overview p {
+    font-size: calc(14 * var(--u));
+    font-weight: 600;
+  }
+  .diag-overview small {
+    display: block;
+    font-size: calc(12 * var(--u));
+    opacity: 0.8;
+  }
+}

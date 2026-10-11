@@ -1,0 +1,9 @@
+---
+// DiagnosticsCard of diagnostics-card.tsx: the title row in the slot of the title, then the rows.
+import "./DiagCard.css";
+---
+
+<div class="diag-card">
+  <div class="diag-card-title"><slot name="title" /></div>
+  <slot />
+</div>

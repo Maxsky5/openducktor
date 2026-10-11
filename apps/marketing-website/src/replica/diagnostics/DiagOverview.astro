@@ -1,0 +1,18 @@
+---
+// DiagnosticsOverview of diagnostics-overview.tsx: the verdict at the top of the sheet. The checks
+// run with a spinner, then a green card says that everything works.
+import { CircleCheck, LoaderCircle } from "@lucide/astro";
+import type { DiagOverviewData } from "./model";
+import "./DiagOverview.css";
+
+type Props = DiagOverviewData;
+const { tone, title, description } = Astro.props;
+---
+
+<div class="diag-overview" data-tone={tone} data-diag-overview>
+  <span class="diag-overview-icon"><CircleCheck /><LoaderCircle class="spin" /></span>
+  <div>
+    <p data-diag-overview-title>{title}</p>
+    <small data-diag-overview-text>{description}</small>
+  </div>
+</div>

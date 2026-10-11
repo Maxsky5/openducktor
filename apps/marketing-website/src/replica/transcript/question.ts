@@ -18,6 +18,11 @@ export function questionCard(scene: Scene, card: HTMLElement, cursor: Pointer) {
       option().toggleAttribute("data-selected", true);
       part(`[data-q-tab="${index}"]`).toggleAttribute("data-answered", true);
       part("[data-answered-count]").textContent = `${index + 1}/${questions} answered`;
+      // A single question has no summary: its answer enables Confirm Answers at once.
+      if (questions === 1) {
+        part("[data-q-status]").textContent = "All questions answered.";
+        part("[data-q-confirm]").removeAttribute("data-disabled");
+      }
     });
     return clicked;
   };

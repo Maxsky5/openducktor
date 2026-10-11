@@ -2,69 +2,71 @@ import { must } from "../../motion/dom";
 import { gsap } from "../../motion/gsap";
 import { mountLoop } from "../../motion/loop";
 import { EASE } from "../../motion/tokens";
-import { diagnosticsSection, sectionState, setRefreshing } from "../../replica/diagnostics/sheet";
-import type { LocalTemplate } from "./diagnostics";
+import type { DiagStatusData } from "../../replica/diagnostics/model";
+import { diagnosticsSheet } from "../../replica/diagnostics/sheet";
+import {
+  CHECKING,
+  HEALTHY,
+  RUNNING,
+  RUNTIMES,
+  STARTING,
+  TOOLS,
+  WORKSPACE_CHECKS,
+} from "./diagnostics";
+
+/** The last status of each check: the status of the markup. */
+const FINAL = new Map<string, DiagStatusData>(
+  [...RUNTIMES, ...TOOLS, ...WORKSPACE_CHECKS].map((check) => [check.id, check.status]),
+);
 
 /**
- * The Diagnostics panel just after the app opens a repository. The checks of the CLI tools and
- * the task store end first. OpenDucktor starts each runtime in the repository, and each MCP
- * section waits for its runtime. Then the panel scrolls to the last runtime and the task store.
- * The markup holds the last frame.
+ * The Diagnostics panel just after the app starts. The checks of the tools and of the workspace
+ * end first, and the host starts one shared runtime of each kind. When the last runtime is ready,
+ * the overview says that everything works, and the panel scrolls to the workspace checks. The
+ * markup holds the last frame.
  */
 export function mountLocal(): void {
-  mountLoop<LocalTemplate>(must(document, '[data-scene="local"]'), (scene) => {
+  mountLoop(must(document, '[data-scene="local"]'), (scene) => {
     const root = must(scene.stage, "[data-root]");
-    const loaded = (name: LocalTemplate) => sectionState(scene.template(name));
-    const section = (selector: string) => diagnosticsSection(scene, root, selector);
-    const runtime = (kind: string) => ({
-      runtime: section(`[data-section="runtime"][data-runtime="${kind}"]`),
-      mcp: section(`[data-section="mcp"][data-runtime="${kind}"]`),
-    });
-    const cli = section('[data-section="cli"]');
-    const store = section('[data-section="store"]');
-    const opencode = runtime("opencode");
-    const codex = runtime("codex");
-    const claude = section('[data-section="runtime"][data-runtime="claude"]');
+    const sheet = diagnosticsSheet(scene, root);
+    const scroll = must(root, "[data-diag-scroll]");
+    const steps = [
+      { id: "path", at: 0.6 },
+      { id: "git", at: 0.8 },
+      { id: "repository-setup", at: 1 },
+      { id: "task-store", at: 1.2 },
+      { id: "mcp-bridge", at: 1.8 },
+      { id: "opencode", at: 2.6 },
+      { id: "codex", at: 3.2 },
+      { id: "claude", at: 3.8 },
+    ];
 
-    // Start: the checks load, and no runtime has started.
-    cli.apply(loaded("cli-loading"));
-    store.apply(loaded("store-loading"));
-    for (const { runtime: server, mcp } of [opencode, codex]) {
-      server.apply(loaded("runtime-loading"));
-      mcp.apply(loaded("mcp-loading"));
+    // Start: the checks run, and the runtimes and the MCP bridge start.
+    const starts = new Set(["opencode", "codex", "claude", "mcp-bridge"]);
+    for (const { id } of steps) sheet.set(id, starts.has(id) ? STARTING : CHECKING);
+    sheet.setOverview(RUNNING);
+    sheet.setRefreshing(true);
+
+    for (const { id, at } of steps) {
+      const status = FINAL.get(id);
+      if (!status) throw new Error(`The diagnostics have no check ${id}.`);
+      sheet.finish(id, status, at);
     }
-    claude.apply(loaded("runtime-loading"));
-    setRefreshing(root, true);
+    scene.at(1.2, () => sheet.setRefreshing(false));
+    const healthy = 4.2;
+    sheet.overview(HEALTHY, healthy);
 
-    // Refresh Checks waits for the CLI tools and the task store. The runtimes start later.
-    cli.change(cli.final, 0.6);
-    store.change(store.final, 0.9);
-    scene.at(0.9, () => setRefreshing(root, false));
-
-    // Each MCP section waits until its runtime is ready. Then the server answers with its tools.
-    opencode.runtime.change(loaded("runtime-starting"), 1.4);
-    opencode.mcp.change(loaded("mcp-waiting"), 1.5);
-    codex.runtime.change(loaded("runtime-starting"), 1.7);
-    codex.mcp.change(loaded("mcp-waiting"), 1.8);
-    claude.change(loaded("runtime-starting"), 2);
-    opencode.runtime.change(opencode.runtime.final, 3);
-    opencode.mcp.change(opencode.mcp.final, 3.6);
-    codex.runtime.change(codex.runtime.final, 3.9);
-    codex.mcp.change(codex.mcp.final, 4.5);
-
-    // The panel scrolls to the end, and the last runtime is ready.
-    const scrolled = 5.3;
+    // The panel scrolls to the checks of the workspace.
+    const scrolled = healthy + 0.8;
     scene.at(scrolled, () =>
       scene.run(
-        gsap.to(root, {
-          scrollTop: root.scrollHeight - root.clientHeight,
+        gsap.to(scroll, {
+          scrollTop: scroll.scrollHeight - scroll.clientHeight,
           duration: 1.3,
           ease: EASE.move,
         }),
       ),
     );
-    const ready = scrolled + 1.5;
-    claude.change(claude.final, ready);
-    scene.endAt(ready + 3);
+    scene.endAt(scrolled + 4.5);
   });
 }

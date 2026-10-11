@@ -1,66 +1,107 @@
 @layer replica {
-  /* Collapsed sidebar: w-14 p-2, sections split by sidebar borders. */
+  /* The collapsed sidebar of workspace-sidebar.tsx: w-16. On macOS its first row is the 40 pixel
+     title bar, and the show button moves 4 pixels to the right. */
   .sb-collapsed {
     display: flex;
-    flex: 0 0 calc(56 * var(--u));
+    flex: 0 0 calc(64 * var(--u));
     flex-direction: column;
     align-items: center;
     gap: calc(8 * var(--u));
-    width: calc(56 * var(--u));
-    padding: 0 calc(8 * var(--u)) calc(8 * var(--u));
+    width: calc(64 * var(--u));
+    min-height: 0;
+    padding: 0 calc(4 * var(--u)) calc(8 * var(--u));
     border-right: calc(1 * var(--u)) solid var(--sidebar-border);
     background: var(--sidebar);
     color: var(--sidebar-muted-foreground);
   }
   .sbc-title {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    height: calc(40 * var(--u));
-    flex: 0 0 auto;
-  }
-  .sbc-title .sbc-icon {
-    transform: translateX(calc(8 * var(--u)));
-  }
-  .sbc-group {
-    display: grid;
-    justify-items: center;
-    gap: calc(4 * var(--u));
     width: 100%;
-    padding-top: calc(8 * var(--u));
-    border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+    height: calc(40 * var(--u));
   }
-  .sbc-group.create {
-    margin-top: calc(8 * var(--u));
-    padding-top: calc(12 * var(--u));
+  .sbc-title .sbc-button {
+    transform: translateX(calc(4 * var(--u)));
   }
-  .sbc-group.foot {
-    margin-top: auto;
-  }
-  .sbc-icon {
+  .sbc-button {
     display: grid;
+    flex: 0 0 auto;
     place-items: center;
     width: calc(32 * var(--u));
     height: calc(32 * var(--u));
     border-radius: calc(10 * var(--u));
   }
-  .sbc-icon.outline {
-    border: calc(1 * var(--u)) solid var(--input);
-    background: var(--card);
-    box-shadow: var(--shadow-sm);
-    color: var(--success-accent);
-  }
-  .sbc-nav {
-    display: grid;
-    place-items: center;
+  .sbc-button.large {
     width: calc(36 * var(--u));
     height: calc(36 * var(--u));
-    border-radius: calc(12 * var(--u));
-    color: var(--sidebar-foreground);
   }
-  .sbc-nav[aria-current="true"] {
+  .sbc-button[aria-current="true"],
+  .sbc-button[aria-pressed="true"] {
     background: var(--sidebar-accent);
     color: var(--sidebar-accent-foreground);
     box-shadow: var(--shadow-sm);
+  }
+  .sbc-button.primary {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .sbc-button.health {
+    color: var(--success-accent);
+  }
+  .sbc-tools,
+  .sbc-scope,
+  .sbc-footer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    width: 100%;
+  }
+  .sbc-scope,
+  .sbc-footer {
+    gap: calc(4 * var(--u));
+    padding-top: calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+  }
+  .sbc-sessions {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    padding: calc(4 * var(--u)) calc(2 * var(--u)) calc(8 * var(--u));
+    overflow: hidden;
+  }
+  .sbc-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    padding-bottom: calc(16 * var(--u));
+  }
+  .sbc-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: calc(4 * var(--u));
+    color: var(--sidebar-foreground);
+    font-size: calc(10 * var(--u));
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: center;
+  }
+  .sbc-label b {
+    padding: 0 calc(6 * var(--u));
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--sidebar-foreground);
+    font-size: calc(10 * var(--u));
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .sbc-list {
+    width: 100%;
   }
 }

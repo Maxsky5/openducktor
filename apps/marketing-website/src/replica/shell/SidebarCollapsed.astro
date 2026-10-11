@@ -1,32 +1,63 @@
 ---
-// The collapsed app sidebar: page links, create actions, and Settings. Sources:
-// sidebar-navigation.tsx and workspace-create-actions.tsx in packages/frontend/src/components/layout/sidebar.
-import { MessageCirclePlus, PanelLeftOpen, Plus, Settings, ShieldCheck } from "@lucide/astro";
-import { APP_PAGES } from "./pages";
-import type { AppPage } from "../vocabulary";
+// The collapsed sidebar of workspace-sidebar.tsx: the show button in the title bar, the command
+// palette, the Kanban link, the New task button, the scope toggle, one icon for each session in
+// session-navigation-rail.tsx, and Diagnostics and Settings. The icons sit under the label and
+// the count of their group.
+import {
+  Columns3,
+  LayoutGrid,
+  PanelLeftOpen,
+  Plus,
+  Search,
+  Settings,
+  ShieldCheck,
+} from "@lucide/astro";
+import { type NavData, navGroupViews } from "./nav";
+import NavIcon from "./NavIcon.astro";
+import "./NavGroups.css";
 import "./SidebarCollapsed.css";
 
 interface Props {
-  page: AppPage;
+  nav: NavData;
+  kanban?: boolean;
 }
-const { page } = Astro.props;
+const { nav, kanban = false } = Astro.props;
+const groups = navGroupViews(nav.entries);
 ---
 
 <div class="sb-collapsed">
-  <div class="sbc-title"><span class="sbc-icon"><PanelLeftOpen /></span></div>
-  <div class="sbc-group"><span class="sbc-icon outline"><ShieldCheck /></span></div>
-  <div class="sbc-group">
+  <div class="sbc-title"><span class="sbc-button"><PanelLeftOpen /></span></div>
+  <div class="sbc-tools">
+    <span class="sbc-button large"><Search /></span>
+    <span class="sbc-button large" aria-current={kanban ? "true" : undefined}><Columns3 /></span>
+    <span class="sbc-button large primary"><Plus /></span>
+  </div>
+  <div class="sbc-scope">
+    <span class="sbc-button" aria-pressed={nav.scope === "all" ? "true" : "false"}
+      ><LayoutGrid /></span
+    >
+  </div>
+  <div class="sbc-sessions">
     {
-      APP_PAGES.map(({ id, Icon }) => (
-        <span class="sbc-nav" aria-current={id === page ? "true" : undefined}>
-          <Icon />
-        </span>
+      groups.map(({ group, label, entries, count, hidden }) => (
+        <div class="sbc-group" hidden={hidden} data-nav-group={group}>
+          <p class="sbc-label">
+            <span>{label}</span>
+            <b class="nav-count" data-nav-count={group}>
+              {count}
+            </b>
+          </p>
+          <ul class="sbc-list" data-nav-list={group}>
+            {entries.map((entry) => (
+              <NavIcon entry={entry} />
+            ))}
+          </ul>
+        </div>
       ))
     }
   </div>
-  <div class="sbc-group create">
-    <span class="sbc-icon"><Plus /></span>
-    <span class="sbc-icon"><MessageCirclePlus /></span>
+  <div class="sbc-footer">
+    <span class="sbc-button large health"><ShieldCheck /></span>
+    <span class="sbc-button large"><Settings /></span>
   </div>
-  <div class="sbc-group foot"><span class="sbc-icon"><Settings /></span></div>
 </div>

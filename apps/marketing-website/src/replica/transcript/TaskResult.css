@@ -50,17 +50,6 @@
     gap: calc(12 * var(--u));
     padding: calc(16 * var(--u));
   }
-  .ch-status {
-    display: inline-flex;
-    align-items: center;
-    padding: calc(2 * var(--u)) calc(10 * var(--u));
-    border: calc(1 * var(--u)) solid var(--input);
-    border-radius: 999px;
-    background: var(--muted);
-    font-size: calc(12 * var(--u));
-    font-weight: 500;
-    line-height: calc(16 * var(--u));
-  }
   .ch-task-text {
     margin: calc(4 * var(--u)) 0;
     color: var(--muted-foreground);
@@ -81,20 +70,5 @@
     display: flex;
     flex-wrap: wrap;
     gap: calc(6 * var(--u));
-  }
-  .ch-label {
-    display: inline-flex;
-    align-items: center;
-    gap: calc(6 * var(--u));
-    height: calc(24 * var(--u));
-    padding: 0 calc(10 * var(--u));
-    border: calc(1 * var(--u)) solid var(--border);
-    border-radius: 999px;
-    background: var(--muted);
-    font-size: calc(11 * var(--u));
-    font-weight: 500;
-  }
-  .ch-label .lucide {
-    color: var(--muted-foreground);
   }
 }

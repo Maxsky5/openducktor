@@ -1,0 +1,7 @@
+@layer replica {
+  /* A toggle shows the open icon while its panel is hidden, and the close icon while it shows. */
+  .pt-toggle[aria-pressed="true"] .when-closed,
+  .pt-toggle[aria-pressed="false"] .when-open {
+    display: none;
+  }
+}

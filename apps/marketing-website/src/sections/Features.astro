@@ -5,7 +5,7 @@ import SectionHead from "../ui/SectionHead.astro";
 import ChatView from "../views/chat/ChatView.astro";
 import McpView from "../views/mcp/McpView.astro";
 import PromptsView from "../views/prompts/PromptsView.astro";
-import WorktreeView from "../views/worktree/WorktreeView.astro";
+import ActionsView from "../views/actions/ActionsView.astro";
 import "./Features.css";
 ---
 
@@ -13,11 +13,11 @@ import "./Features.css";
   <div class="wrap-wide">
     <SectionHead eyebrow="Features" id="features-title">
       <Fragment slot="title"
-        >Plan in a chat, control every prompt, and test in the worktree.</Fragment
+        >Plan in a chat, control every prompt, and run your commands in the worktree.</Fragment
       >
       <p>
-        These tools use the same local task store as the board. A task that an agent creates in a
-        chat or through MCP shows on the board at once.
+        Chats and the MCP server use the same local task store as the board. A task that an agent
+        creates in a chat or through MCP shows on the board at once.
       </p>
     </SectionHead>
     <div class="features-grid">
@@ -27,8 +27,9 @@ import "./Features.css";
         title="Plan a feature in a chat, and get tasks on the board."
         size="full"
       >
-        A chat works outside a task. Give it a custom role and a reusable prompt. The agent can
-        search your tasks and create new ones.
+        A chat works outside a task. Give it a custom role and a reusable prompt. The agent searches
+        your tasks and creates the missing ones. Open a new task from the chat, and start its
+        Builder without leaving the chat.
         <ChatView slot="view" />
       </FeatureTile>
       <FeatureTile
@@ -54,14 +55,16 @@ import "./Features.css";
         <PromptsView slot="view" />
       </FeatureTile>
       <FeatureTile
-        id="feature-worktree"
-        label="Worktrees"
-        title="Try each change in its own worktree."
+        id="feature-actions"
+        label="Actions"
+        title="Run your project commands in the task worktree."
         size="full"
       >
-        The Builder works in a Git worktree for the task. Start the dev servers of the repository in
-        that worktree, read their logs, and open the worktree in your editor.
-        <WorktreeView slot="view" />
+        An action is a named command of the repository, such as your dev server or your tests. Run
+        it from the top bar of a session: each run opens a new terminal in the worktree of the task,
+        or in the folder of the chat. An action can also run when OpenDucktor creates a worktree,
+        and the agent can wait until it finishes.
+        <ActionsView slot="view" />
       </FeatureTile>
     </div>
   </div>

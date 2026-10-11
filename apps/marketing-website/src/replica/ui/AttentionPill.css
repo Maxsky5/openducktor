@@ -1,0 +1,14 @@
+@layer product {
+  /* Why a session needs you, in session-navigation-parts.tsx: an amber pill. */
+  .attention-pill {
+    flex: 0 0 auto;
+    padding: calc(2 * var(--u)) calc(6 * var(--u));
+    border: calc(1 * var(--u)) solid var(--warning-border);
+    border-radius: calc(10 * var(--u));
+    background: var(--warning-surface);
+    color: var(--warning-muted);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+    line-height: 1;
+  }
+}

@@ -4,8 +4,9 @@ import type { Scene } from "../../motion/scene";
 import { studioWindow } from "../../replica/studio/studio";
 import { questionCard } from "../../replica/transcript/question";
 import { DOCUMENTS, FRAMES, SPEC_SESSION } from "../../sample/studio";
+import { STORY_SESSIONS, studioNav } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, saveDocument } from "./session";
+import { endTurn, runSession, saveDocument, settleSession, waitSession } from "./session";
 
 /** The templates of SpecStep.astro. */
 export type SpecTemplate = "question";
@@ -22,7 +23,7 @@ export function spec(scene: Scene<SpecTemplate>): void {
 
   studio.hideTurns("spec");
   answers.hidden = true;
-  // The session starts with the context of the kickoff prompt.
+  // The session starts with the context of the kickoff prompt. The task is in Backlog.
   const start = { ...SPEC_SESSION, used: 3.2 };
   studio.apply(
     {
@@ -30,6 +31,13 @@ export function spec(scene: Scene<SpecTemplate>): void {
       tones: ["in_progress", "blocked", "blocked", "blocked"],
       action: "Start Spec",
       session: start,
+      nav: studioNav({
+        ...STORY_SESSIONS.spec,
+        status: "open",
+        tone: "in_progress",
+        running: true,
+        selected: true,
+      }),
     },
     "working",
   );
@@ -48,6 +56,7 @@ export function spec(scene: Scene<SpecTemplate>): void {
     activity: "waiting",
     tones: ["waiting_input", "blocked", "blocked", "blocked"],
   });
+  waitSession(studio, asked + 0.3, "spec", "Question");
 
   // You answer both questions and confirm the answers.
   const form = questionCard(scene, card, studio.cursor);
@@ -63,6 +72,7 @@ export function spec(scene: Scene<SpecTemplate>): void {
     activity: "working",
     tones: ["in_progress", "blocked", "blocked", "blocked"],
   });
+  runSession(studio, resumed, "spec", "open");
   answered(resumed);
   scene.at(resumed, () => {
     answers.hidden = false;
@@ -79,11 +89,13 @@ export function spec(scene: Scene<SpecTemplate>): void {
     { tones: ["in_progress", "available", "blocked", "blocked"], action: "Start Planner" },
     2.2,
   );
-  endTurn(
+  studio.sessions.update(STORY_SESSIONS.spec.id, saved, { status: "spec_ready" });
+  const ended = endTurn(
     studio,
     row("final"),
     saved + 2.4,
     { tones: FRAMES.spec.tones },
     { session: SPEC_SESSION, from: start.used, since: 0.3 },
   );
+  settleSession(studio, ended, "spec", "done");
 }

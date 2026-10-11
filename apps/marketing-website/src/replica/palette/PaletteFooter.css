@@ -1,0 +1,39 @@
+@layer replica {
+  /* The footer: h-10, a border over it, bg-muted/40, and 8 pixels of side padding. */
+  .pal-foot {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    height: calc(40 * var(--u));
+    padding: 0 calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    background: color-mix(in oklch, var(--muted) 40%, transparent);
+  }
+  .pal-hints {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: calc(2 * var(--u));
+    min-width: 0;
+    overflow: hidden;
+  }
+  .pal-hints.end {
+    flex: 0 0 auto;
+  }
+  .pal-hint {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    padding: calc(4 * var(--u)) calc(6 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    white-space: nowrap;
+  }
+  .pal-hint.primary {
+    color: var(--foreground);
+    font-weight: 500;
+  }
+}

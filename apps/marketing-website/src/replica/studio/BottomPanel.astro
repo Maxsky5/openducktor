@@ -1,0 +1,48 @@
+---
+// The bottom panel of a session page in session-panel-split.tsx: a terminal tab for each
+// repository action that runs, under the main area. Each run opens a new interactive terminal,
+// and the tab keeps the name of its action. The terminal body is near-black in both themes.
+import { SquareTerminal } from "@lucide/astro";
+import { ACTION_OUTPUT, REPO_ACTIONS } from "../../sample/actions";
+import ResizeHandle from "../ui/ResizeHandle.astro";
+import PanelStrip from "./PanelStrip.astro";
+import PanelTab from "./PanelTab.astro";
+import "./BottomPanel.css";
+
+interface Props {
+  /** The actions whose terminals the panel shows, in tab order. */
+  terminals: readonly (keyof typeof ACTION_OUTPUT)[];
+  active: keyof typeof ACTION_OUTPUT;
+}
+const { terminals, active } = Astro.props;
+---
+
+<div class="bp" data-bottom-panel>
+  <ResizeHandle orientation="horizontal" class="bp-handle" />
+  <div class="bp-content" data-bottom-content>
+    <PanelStrip panel="bottom">
+      {
+        terminals.map((id) => (
+          <PanelTab id={id} label={REPO_ACTIONS[id].name} active={id === active}>
+            <SquareTerminal />
+          </PanelTab>
+        ))
+      }
+    </PanelStrip>
+    {
+      terminals.map((id) => (
+        <div class="bp-term" hidden={id !== active} data-term={id}>
+          <div class="bp-rows">
+            {ACTION_OUTPUT[id].map((line) => (
+              <p class="bp-line" data-term-line>
+                {line.map((part) => (
+                  <span class={part.tone}>{part.text}</span>
+                ))}
+              </p>
+            ))}
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</div>

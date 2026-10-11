@@ -1,0 +1,57 @@
+@layer replica {
+  /* A panel tab: h-7 max-w-48 rounded-md, the label in text-xs, and 28 pixels on the right for
+     the close button. The active tab is bg-muted with an inset ring. */
+  .ptab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    max-width: calc(192 * var(--u));
+    height: calc(28 * var(--u));
+    padding: 0 calc(28 * var(--u)) 0 calc(8 * var(--u));
+    border-radius: calc(10 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ptab[data-active] {
+    background: var(--muted);
+    box-shadow: inset 0 0 0 calc(1 * var(--u)) var(--border);
+    color: var(--foreground);
+  }
+  .ptab-icon {
+    position: relative;
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+  }
+  .ptab-icon .lucide {
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  .ptab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ptab-close {
+    position: absolute;
+    right: calc(4 * var(--u));
+    display: grid;
+    place-items: center;
+    width: calc(20 * var(--u));
+    height: calc(20 * var(--u));
+    border-radius: calc(8 * var(--u));
+    color: var(--muted-foreground);
+    opacity: 0;
+  }
+  .ptab[data-active] .ptab-close {
+    opacity: 1;
+  }
+  .ptab-close .lucide {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+  }
+}

@@ -1,39 +1,40 @@
 ---
-// The footer of a task card in kanban-task-card.tsx: the button of the next step of the task, or
-// its running session, and the menu of the other actions.
+// The workflow action group of a task card in kanban-task-card.tsx: the button of the next step of
+// the task, or its running session, and the menu of the other actions. The icons come from
+// TASK_ACTION_ICON in task-action-ui.tsx.
 import {
   ChevronDown,
   CircleCheckBig,
   CirclePlay,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
   SquareArrowOutUpRight,
   Undo2,
-  Wrench,
   type AstroComponent,
 } from "@lucide/astro";
 import type { CardActionsData } from "./model";
 import { flag } from "../flag";
 import Button from "../ui/Button.astro";
-import { type CardAction, PRIMARY_ACTIONS } from "../vocabulary";
+import RoleIcon from "../ui/RoleIcon.astro";
+import { type CardAction, PRIMARY_ACTIONS, type RoleId } from "../vocabulary";
 import "./CardActions.css";
 
 type Props = CardActionsData;
 const { action, session } = Astro.props;
-const icons = {
-  "Start Spec": Sparkles,
-  "Open Spec": SquareArrowOutUpRight,
-  "Start Planner": ScrollText,
-  "Start Builder": Wrench,
-  "Address QA Feedbacks": Wrench,
-  "Request QA Review": ShieldCheck,
-  "Approve Task": CircleCheckBig,
-  "Request Changes": Undo2,
-  "Open Builder": SquareArrowOutUpRight,
-} as const satisfies Record<CardAction, AstroComponent>;
-/** The button of the next step, when the card has no session. */
-const next = action && { label: action, Icon: icons[action], primary: PRIMARY_ACTIONS.has(action) };
+/** An action that starts a session shows the icon of its role. The others show a lucide icon. */
+type CardIcon = { role: RoleId } | { Icon: AstroComponent };
+const ICONS = {
+  "Start Spec": { role: "spec" },
+  "Open Spec": { Icon: SquareArrowOutUpRight },
+  "Start Planner": { role: "planner" },
+  "Start Builder": { role: "build" },
+  "Address QA Feedbacks": { role: "build" },
+  "Request QA Review": { role: "qa" },
+  "Approve Task": { Icon: CircleCheckBig },
+  "Request Changes": { Icon: Undo2 },
+  "Open Builder": { Icon: SquareArrowOutUpRight },
+} as const satisfies Record<CardAction, CardIcon>;
+const icon: CardIcon | undefined = action ? ICONS[action] : undefined;
+const role = icon && "role" in icon ? icon.role : undefined;
+const Icon = icon && "Icon" in icon ? icon.Icon : undefined;
 ---
 
 <div class="card-actions" data-card-actions>
@@ -51,15 +52,15 @@ const next = action && { label: action, Icon: icons[action], primary: PRIMARY_AC
         <em>{session.status}</em>
       </Button>
     ) : (
-      next && (
+      action && (
         <Button
-          variant={next.primary ? "default" : "outline"}
+          variant={PRIMARY_ACTIONS.has(action) ? "default" : "outline"}
           size="sm"
           class="card-action"
           data-card-action
         >
-          <next.Icon />
-          {next.label}
+          {role ? <RoleIcon role={role} /> : Icon && <Icon />}
+          {action}
         </Button>
       )
     )

@@ -14,8 +14,13 @@
       transition: none;
     }
   }
+  /* animation-play-state does not inherit, so the pseudo-elements, such as the dot rings, need it too. */
   [data-motion="paused"] .replica *,
-  .scene[data-motion="paused"] * {
+  [data-motion="paused"] .replica *::before,
+  [data-motion="paused"] .replica *::after,
+  .scene[data-motion="paused"] *,
+  .scene[data-motion="paused"] *::before,
+  .scene[data-motion="paused"] *::after {
     animation-play-state: paused;
   }
 }

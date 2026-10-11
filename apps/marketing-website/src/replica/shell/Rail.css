@@ -3,9 +3,9 @@
      bar, and the rail starts under it. See app-shell.tsx and the Electron styles in styles.css. */
   .rail {
     display: flex;
+    flex: 0 0 calc(56 * var(--u));
     flex-direction: column;
     width: calc(56 * var(--u));
-    flex: 0 0 calc(56 * var(--u));
     padding-top: calc(40 * var(--u));
     background: linear-gradient(var(--sidebar) calc(40 * var(--u)), var(--workspace-rail) 0);
     color: var(--foreground);
@@ -27,24 +27,30 @@
     border-radius: calc(12 * var(--u));
     background: var(--workspace-rail-tile);
     box-shadow: var(--shadow-sm);
+    color: var(--foreground);
     font-size: calc(12 * var(--u));
     font-weight: 600;
-    color: var(--foreground);
+    line-height: 1;
   }
   .rail .tile[data-selected] {
     background: var(--sidebar-accent);
     color: var(--sidebar-accent-foreground);
   }
-  /* A badge straddles the top edge of the tile: two thirds sit over the tile. */
-  .tile-badge {
+  /* The badges straddle the top edge of the tile: two thirds sit over the tile. */
+  .tile-badges {
     position: absolute;
     top: 0;
     right: 0;
+    display: inline-flex;
+    align-items: flex-start;
+    gap: calc(2 * var(--u));
+    transform: translateY(-33.333%);
+  }
+  .tile-badge.input {
     width: calc(10 * var(--u));
     height: calc(10 * var(--u));
     border-radius: 50%;
-    background: var(--status-running);
-    transform: translateY(-33.333%);
+    background: var(--warning-accent);
   }
   .rail-add {
     display: grid;

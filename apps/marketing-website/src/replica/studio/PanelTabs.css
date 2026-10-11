@@ -1,0 +1,17 @@
+@layer replica {
+  /* The CI Checks indicator of task-execution-ci-tab-indicator.tsx: a 6 pixel dot on the top
+     right of the icon, sky while the checks run and emerald when they pass. */
+  .ci-dot {
+    position: absolute;
+    top: calc(-2 * var(--u));
+    right: calc(-3 * var(--u));
+    width: calc(6 * var(--u));
+    height: calc(6 * var(--u));
+    border-radius: 50%;
+    background: var(--sky-500);
+    box-shadow: 0 0 0 calc(1 * var(--u)) var(--card);
+  }
+  .ci-dot[data-checks="passing"] {
+    background: var(--emerald-500);
+  }
+}

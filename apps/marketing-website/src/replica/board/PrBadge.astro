@@ -1,6 +1,6 @@
 ---
-// The pull request badge of a task card: open, or merged.
-import { GitMerge, GitPullRequest } from "@lucide/astro";
+// The pull request link of a task card in task-pull-request-link.tsx: open, or merged.
+import { ExternalLink, GitMerge, GitPullRequest } from "@lucide/astro";
 import Badge from "./Badge.astro";
 import { flag } from "../flag";
 
@@ -12,5 +12,5 @@ const { number, merged = false } = Astro.props;
 ---
 
 <Badge tone="pr" data-merged={flag(merged)} data-pr-badge
-  >{merged ? <GitMerge /> : <GitPullRequest />}PR #{number}</Badge
+  >{merged ? <GitMerge /> : <GitPullRequest />}PR #{number}<ExternalLink class="i12" /></Badge
 >

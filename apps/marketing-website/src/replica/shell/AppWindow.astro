@@ -3,19 +3,16 @@
 // the page in the slot. The desktop app draws the window controls over the workspace rail. A
 // window without a sidebar shows no workspace rail either, as a cropped window does.
 import type { HTMLAttributes } from "astro/types";
-import type { ActivityCounts } from "../board/model";
 import Replica from "../Replica.astro";
-import type { AppPage } from "../vocabulary";
+import type { NavData } from "./nav";
 import Rail from "./Rail.astro";
 import Sidebar from "./Sidebar.astro";
 import SidebarCollapsed from "./SidebarCollapsed.astro";
 import "./AppWindow.css";
 
-/** The sidebar of the window. The second workspace of the rail can have a running session. */
+/** The sidebar of the window and its session list, which also gives the badges of the rail. */
 type Chrome =
-  | { sidebar: "full"; page: AppPage; activity: ActivityCounts; busyWorkspace: boolean }
-  | { sidebar: "collapsed"; page: AppPage; busyWorkspace: boolean }
-  | { sidebar: "none" };
+  { sidebar: "full" | "collapsed"; nav: NavData; kanban?: boolean } | { sidebar: "none" };
 
 type Props = HTMLAttributes<"div"> & {
   chrome: Chrome;
@@ -29,9 +26,13 @@ const Root = nested ? "div" : Replica;
 <Root class:list={["app-window", className]} data-sidebar={chrome.sidebar} {...attributes}>
   <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
   <div class="app-body">
-    {chrome.sidebar !== "none" && <Rail busy={chrome.busyWorkspace} />}
-    {chrome.sidebar === "full" && <Sidebar page={chrome.page} activity={chrome.activity} />}
-    {chrome.sidebar === "collapsed" && <SidebarCollapsed page={chrome.page} />}
+    {chrome.sidebar !== "none" && <Rail entries={chrome.nav.entries} />}
+    {chrome.sidebar === "full" && <Sidebar nav={chrome.nav} kanban={chrome.kanban ?? false} />}
+    {
+      chrome.sidebar === "collapsed" && (
+        <SidebarCollapsed nav={chrome.nav} kanban={chrome.kanban ?? false} />
+      )
+    }
     <div class="app-main"><slot /></div>
   </div>
   <slot name="overlay" />

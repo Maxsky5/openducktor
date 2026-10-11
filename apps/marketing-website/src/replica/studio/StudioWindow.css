@@ -1,19 +1,33 @@
 @layer replica {
   /*
-   * Agent Studio replica. Values copy the classes in
-   * packages/frontend/src/components/features/agents at 1:1 in design pixels.
+   * The session page replica. Values copy the classes of agents-page-layout.tsx and
+   * features/session-panels at 1:1 in design pixels.
    */
   .studio {
     height: calc(780 * var(--u));
   }
-  /* Body: chat column, resize handle, right panel. */
+  /* The main area over the bottom panel, which shows only when a terminal runs. */
+  .st-area {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* The main column and the right panel: 63% and 37%. */
   .st-body {
     display: flex;
     flex: 1;
     min-height: 0;
   }
-  .st-body > .st-chat {
+  .st-main {
+    display: flex;
     flex: 0 0 63%;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .st-main > .st-chat {
+    flex: 1;
+    min-height: 0;
   }
   .st-handle {
     background: var(--card);
@@ -35,9 +49,9 @@
   .st-stack:empty {
     display: none;
   }
-  /* The panel body shows the panel of the active tab. */
+  /* The panel body shows the panel of the selected tab. */
   .st-panel-body:not([data-active-panel="document"]) > [data-panel="document"],
-  .st-panel-body:not([data-active-panel="git"]) > [data-panel="git"],
+  .st-panel-body:not([data-active-panel="diffs"]) > [data-panel="diffs"],
   .st-panel-body:not([data-active-panel="ci_checks"]) > [data-panel="ci_checks"] {
     display: none;
   }
@@ -52,7 +66,7 @@
     min-height: 0;
   }
   /* A resized split: the review chapter gives the diff more room. */
-  .studio[data-panel-size="wide"] .st-body > .st-chat {
+  .studio[data-panel-size="wide"] .st-main {
     flex-basis: 54%;
   }
   /*
@@ -66,37 +80,27 @@
     }
     .studio .rail,
     .studio .sb-collapsed,
-    .studio .st-tab:not([data-active]),
-    .studio .st-tabs-add,
-    .studio .st-tabs-tools,
-    .studio .st-attach,
-    .studio .st-chip.effort,
-    .studio .st-handle {
+    .studio .st-handle,
+    .studio .ra,
+    .studio .pt-bottom {
       display: none;
     }
     .studio .app-body {
       padding-top: calc(34 * var(--u));
-      background: var(--studio-chrome);
-    }
-    .studio .st-tab {
-      max-width: none;
-      flex: 1;
-    }
-    .studio .st-tab-title {
-      max-width: none;
+      background: var(--card);
     }
     .studio .st-body {
       position: relative;
     }
     /* Opacity only: the scene measures cursor targets, and a CSS transform would move them. */
-    .studio .st-chat,
+    .studio .st-main,
     .studio .st-panel {
       position: absolute;
       inset: 0;
       transition: opacity 250ms ease;
     }
     .studio[data-focus="chat"] .st-panel,
-    .studio[data-focus="panel"] .st-chat {
+    .studio[data-focus="panel"] .st-main {
       opacity: 0;
       pointer-events: none;
     }
@@ -111,9 +115,6 @@
     }
     .studio .st-composer {
       padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
-    }
-    .studio .st-context {
-      margin-right: calc(4 * var(--u));
     }
   }
   /* A small tablet stage shows the one-column layout at the scale of the app. */
@@ -134,7 +135,7 @@
     }
     .studio .app-body {
       padding-top: calc(34 * var(--u));
-      background: var(--studio-chrome);
+      background: var(--card);
     }
   }
 }

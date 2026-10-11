@@ -1,0 +1,57 @@
+---
+// The session preview of session-entry-preview.tsx and session-preview-content.tsx: a card next to
+// a sidebar row, for a task session that waits for an answer. The header shows the task, the body
+// shows the workflow rail, the runtime and the model, and the Reply here block, and the footer
+// opens the session. A scene opens it on hover, and the visitor answers in it.
+import { ArrowUpRight, Copy } from "@lucide/astro";
+import TaskBadges from "../board/TaskBadges.astro";
+import WorkflowRail from "../studio/WorkflowRail.astro";
+import ReplyHere from "../transcript/ReplyHere.astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
+import StatusPill from "../ui/StatusPill.astro";
+import type { LaneId, Priority, RoleId, TaskKind } from "../vocabulary";
+import type { RuntimeKind } from "../../sample/models";
+import type { WaitingQuestion } from "../../sample/question";
+import type { RailTones } from "../../sample/studio";
+import "./SessionPreview.css";
+
+interface Props {
+  title: string;
+  taskId: string;
+  kind: TaskKind;
+  priority: Priority;
+  status: LaneId;
+  tones: RailTones;
+  role: RoleId;
+  runtime: RuntimeKind;
+  /** The model of the session, as provider/model · effort. */
+  model: string;
+  question: WaitingQuestion;
+  /** The last activity, such as Active just now. */
+  activity: string;
+}
+const { title, taskId, kind, priority, status, tones, role, runtime, model, question, activity } =
+  Astro.props;
+---
+
+<div class="sp" data-preview>
+  <div class="sp-head">
+    <div class="sp-row">
+      <div class="sp-name">
+        <span class="sp-title">{title}</span>
+        <span class="sp-id"><code>{taskId}</code><Copy class="i12" /></span>
+      </div>
+      <StatusPill status={status} badge />
+    </div>
+    <TaskBadges kind={kind} priority={priority} />
+  </div>
+  <div class="sp-body">
+    <WorkflowRail tones={tones} selected={role} compact />
+    <span class="sp-model"><RuntimeIcon kind={runtime} /><span>{model}</span></span>
+    <ReplyHere question={question} />
+  </div>
+  <div class="sp-foot">
+    <span>{activity}</span>
+    <span class="sp-open">Open session<ArrowUpRight class="i14" /></span>
+  </div>
+</div>

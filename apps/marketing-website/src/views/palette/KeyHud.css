@@ -1,0 +1,50 @@
+@layer views {
+  /* The keys of a shortcut in a dark pill, centered under the palette. */
+  .key-hud {
+    position: absolute;
+    bottom: 6%;
+    left: 50%;
+    z-index: 40;
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 16px;
+    background: rgb(15 20 33 / 0.86);
+    box-shadow: 0 18px 40px -16px rgb(15 20 33 / 0.55);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .key-hud kbd {
+    display: grid;
+    place-items: center;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: linear-gradient(#fdfdff, #e9ecf4);
+    box-shadow:
+      inset 0 -3px 0 rgb(15 20 33 / 0.18),
+      0 1px 2px rgb(15 20 33 / 0.3);
+    color: #192337;
+    font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  /* A phone stage shows smaller keys. */
+  @container stage (width <= 480px) {
+    .key-hud {
+      gap: 4px;
+      padding: 6px;
+      border-radius: 12px;
+    }
+    .key-hud kbd {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+    }
+  }
+}

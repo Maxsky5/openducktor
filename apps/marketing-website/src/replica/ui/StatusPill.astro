@@ -1,0 +1,23 @@
+---
+// The task status pill of lib/task-status-presentation.ts: an outline badge in the colors of the
+// status. The sidebar shortens the blocked label, and the command palette shows it in full.
+import type { HTMLAttributes } from "astro/types";
+import { type LaneId, statusPillLabel } from "../vocabulary";
+import "./StatusPill.css";
+
+type Props = HTMLAttributes<"span"> & {
+  status: LaneId | undefined;
+  short?: boolean;
+  /** The size of an outline badge, as the task cards of a chat and the task details show it. */
+  badge?: boolean;
+};
+const { status, short = false, badge = false, class: className, ...attributes } = Astro.props;
+---
+
+<span
+  class:list={["status-pill", className]}
+  hidden={!status}
+  data-status={status}
+  data-size={badge ? "badge" : undefined}
+  {...attributes}>{status && statusPillLabel(status, short)}</span
+>

@@ -1,0 +1,98 @@
+@layer replica {
+  /*
+   * The card: w-[420px] rounded-xl border bg-popover shadow-lg. It opens to the right of its row,
+   * 12 pixels away, with the top edges aligned, and it grows from its top-left corner.
+   */
+  .sp {
+    position: absolute;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    width: calc(420 * var(--u));
+    overflow: hidden;
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(16 * var(--u));
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow:
+      0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(0 0 0 / 0.1),
+      0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(0 0 0 / 0.1);
+    transform-origin: top left;
+  }
+  /* The header: space-y-3 p-4 pb-3. */
+  .sp-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(12 * var(--u));
+    padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(12 * var(--u));
+  }
+  .sp-row {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(12 * var(--u));
+  }
+  .sp-name {
+    display: grid;
+    flex: 1;
+    gap: calc(4 * var(--u));
+    min-width: 0;
+  }
+  .sp-title {
+    color: var(--foreground);
+    font-size: calc(16 * var(--u));
+    font-weight: 600;
+    line-height: 1.375;
+  }
+  .sp-id {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    color: var(--muted-foreground);
+    font-family: var(--mono);
+    font-size: calc(11 * var(--u));
+  }
+  /* The body: space-y-3 border-t px-4 py-3. */
+  .sp-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(12 * var(--u));
+    padding: calc(12 * var(--u)) calc(16 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  .sp-model {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+  }
+  .sp-model .runtime-logo {
+    flex: none;
+    width: calc(14 * var(--u));
+    height: calc(14 * var(--u));
+  }
+  /* The footer: border-t bg-muted/30 px-4 py-1.5, with Open session at the end. */
+  .sp-foot {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+    padding: calc(6 * var(--u)) calc(16 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border);
+    background: color-mix(in oklch, var(--muted) 30%, transparent);
+    color: var(--muted-foreground);
+    font-size: calc(10 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .sp-open {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(4 * var(--u));
+    height: calc(24 * var(--u));
+    margin-left: auto;
+    padding: 0 calc(6 * var(--u));
+    color: var(--foreground);
+    font-size: calc(11 * var(--u));
+    font-weight: 500;
+  }
+}

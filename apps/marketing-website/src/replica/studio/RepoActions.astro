@@ -1,0 +1,53 @@
+---
+// The repository actions of repo-actions-split-button.tsx: two joined outline buttons. The first
+// runs the default action and shows only its icon. The chevron opens the menu of the other
+// actions and Manage actions. The menu stays closed in the static frame, and a scene opens it.
+import {
+  Bug,
+  ChevronDown,
+  FlaskConical,
+  Hammer,
+  ListChecks,
+  Play,
+  Settings2,
+  Wrench,
+  type AstroComponent,
+} from "@lucide/astro";
+import { REPO_ACTIONS, type RepoActionIcon } from "../../sample/actions";
+import "./RepoActions.css";
+
+const ICONS = {
+  play: Play,
+  test: FlaskConical,
+  lint: ListChecks,
+  configure: Wrench,
+  build: Hammer,
+  debug: Bug,
+} satisfies Record<RepoActionIcon, AstroComponent>;
+const actions = Object.entries(REPO_ACTIONS).map(([id, action]) => ({ id, ...action }));
+const main = actions.find((action) => "isDefault" in action);
+if (!main) throw new Error("The sample repository needs a default action.");
+const MainIcon = ICONS[main.icon];
+---
+
+<span class="ra">
+  <span class="ra-run" data-repo-run><MainIcon /></span>
+  <span class="ra-more" data-repo-more><ChevronDown /></span>
+  <span class="ra-menu" hidden data-repo-menu>
+    {
+      actions
+        .filter((action) => action !== main)
+        .map((action) => {
+          const Icon = ICONS[action.icon];
+          return (
+            <span class="ra-item" data-repo-item={action.id}>
+              <Icon />
+              {action.name}
+            </span>
+          );
+        })
+    }
+    <hr />
+    <span class="ra-item"><Settings2 />Manage actions</span>
+  </span>
+</span>

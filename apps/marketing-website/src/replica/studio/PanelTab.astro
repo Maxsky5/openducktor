@@ -1,0 +1,22 @@
+---
+// A tab of a session panel in session-panel.tsx: the icon of its kind, its label, and the close
+// button, which shows on the active tab. The slot holds the icon.
+import { X } from "@lucide/astro";
+import { flag } from "../flag";
+import "./PanelTab.css";
+
+interface Props {
+  /** The scene hook of the tab. */
+  id: string;
+  label: string;
+  active?: boolean;
+  hidden?: boolean;
+}
+const { id, label, active = false, hidden = false } = Astro.props;
+---
+
+<span class="ptab" data-active={flag(active)} hidden={hidden} data-ptab={id}>
+  <span class="ptab-icon"><slot /></span>
+  <span class="ptab-label">{label}</span>
+  <span class="ptab-close"><X /></span>
+</span>

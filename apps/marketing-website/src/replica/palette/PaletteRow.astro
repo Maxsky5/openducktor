@@ -1,0 +1,124 @@
+---
+// A row of the command palette in command-palette-rows.tsx: a task, a chat, or an action. A task
+// row shows its status dot, its kind, the title with the marks of the query, the attention, the
+// workspace, the task ID, and the status. The data attributes give the footer hints of the row.
+import {
+  Archive,
+  Bug,
+  ChevronRight,
+  Columns3,
+  Copy,
+  Download,
+  FolderGit2,
+  Import,
+  MessageCirclePlus,
+  MessageSquareText,
+  MessagesSquare,
+  PanelRightOpen,
+  Pencil,
+  Plus,
+  RefreshCcw,
+  Reply,
+  RotateCcw,
+  RotateCcwClock,
+  Settings,
+  Sparkles,
+  SquareCheckBig,
+  Trash,
+  type AstroComponent,
+} from "@lucide/astro";
+import type { PaletteIcon, PaletteRow } from "../../sample/palette";
+import { WORKSPACES } from "../../sample/workspace";
+import { flag } from "../flag";
+import RoleIcon from "../ui/RoleIcon.astro";
+import { segments } from "./match";
+import StatusDot from "../ui/StatusDot.astro";
+import StatusPill from "../ui/StatusPill.astro";
+import "../ui/AttentionPill.css";
+import "./PaletteRow.css";
+
+interface Props {
+  row: PaletteRow;
+  selected?: boolean;
+  /** The query whose marks the title and the task ID show. */
+  query?: string;
+}
+const { row, selected = false, query = "" } = Astro.props;
+const LUCIDE = {
+  plus: Plus,
+  "message-circle-plus": MessageCirclePlus,
+  download: Download,
+  import: Import,
+  "columns-3": Columns3,
+  settings: Settings,
+  "folder-git-2": FolderGit2,
+  "message-square-text": MessageSquareText,
+  archive: Archive,
+  "refresh-ccw": RefreshCcw,
+  history: RotateCcwClock,
+  pencil: Pencil,
+  "panel-right-open": PanelRightOpen,
+  copy: Copy,
+  "rotate-ccw": RotateCcw,
+  "trash-2": Trash,
+  reply: Reply,
+} satisfies Record<PaletteIcon, AstroComponent>;
+const ISSUES = { task: SquareCheckBig, bug: Bug, feature: Sparkles };
+const tile = (name: string): string => WORKSPACES.find((item) => item.name === name)?.tile ?? "";
+const Lucide = row.kind === "action" && row.icon ? LUCIDE[row.icon] : undefined;
+const role = row.kind === "action" ? row.role : undefined;
+const Issue = row.kind === "task" ? ISSUES[row.issue] : null;
+const hints = row.kind === "action" ? { enter: "Run" } : row.hints;
+const title = segments(row.kind === "action" ? row.label : row.title, query);
+const id = row.kind === "task" ? segments(row.taskId, query) : [];
+---
+
+<div
+  class="pal-row"
+  data-kind={row.kind}
+  data-selected={flag(selected)}
+  data-destructive={flag(row.kind === "action" && row.destructive)}
+  data-pal-row={row.id}
+  data-enter={hints.enter}
+  data-next={"next" in hints ? hints.next : undefined}
+  data-edit={"edit" in hints ? hints.edit : undefined}
+  data-tab={flag("tab" in hints && hints.tab)}
+>
+  {
+    row.kind === "action" ? (
+      <span class="pal-icon">{role ? <RoleIcon role={role} /> : Lucide && <Lucide />}</span>
+    ) : (
+      <span class="pal-dot">{row.dot && <StatusDot state={row.dot} />}</span>
+    )
+  }
+  {Issue && <Issue class="pal-issue" data-issue={row.kind === "task" ? row.issue : undefined} />}
+  {
+    row.kind === "chat" && (
+      <span class="pal-icon">
+        <MessagesSquare />
+      </span>
+    )
+  }
+  <span class="pal-title" data-pal-title
+    >{title.map((part) => (part.marked ? <mark>{part.text}</mark> : part.text))}</span
+  >
+  {row.kind === "action" && row.scope && <span class="pal-muted">in {row.scope}</span>}
+  {row.kind === "action" && row.detail && <span class="pal-muted">{row.detail}</span>}
+  {row.kind === "task" && row.attention && <span class="attention-pill">{row.attention}</span>}
+  {row.kind !== "action" && <span class="pal-tile">{tile(row.workspace)}</span>}
+  {
+    row.kind === "task" && (
+      <span class="pal-id" data-pal-id>
+        {id.map((part) => (part.marked ? <mark>{part.text}</mark> : part.text))}
+      </span>
+    )
+  }
+  {row.kind === "task" && <StatusPill status={row.status} class="pal-status" />}
+  {
+    row.kind !== "action" && (
+      <span class="pal-more">
+        <ChevronRight />
+      </span>
+    )
+  }
+</div>

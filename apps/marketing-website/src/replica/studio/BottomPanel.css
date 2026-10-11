@@ -1,0 +1,65 @@
+@layer replica {
+  /* The bottom panel takes 28% of the height under the main area. Its content keeps its open
+     height at the bottom edge, so a panel that opens shows it from the bottom. */
+  .bp {
+    /* The xterm palette. Bold text with a color uses the bright color. */
+    --ansi-green: #4e9a06;
+    --ansi-green-bright: #8ae234;
+    --ansi-cyan: #06989a;
+    --ansi-cyan-bright: #34e2e2;
+    display: flex;
+    flex: 0 0 28%;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .bp-handle {
+    background: var(--card);
+  }
+  .bp-content {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* The xterm body: Menlo 12 pixels, line height 1.35, 8 by 4 pixels of padding. */
+  .bp-term {
+    flex: 1;
+    min-height: 0;
+    padding: calc(4 * var(--u)) calc(8 * var(--u));
+    overflow: hidden;
+    background: var(--terminal-panel);
+    color: var(--terminal-foreground);
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: calc(12 * var(--u));
+    line-height: 1.35;
+    white-space: pre;
+  }
+  .bp-rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .bp-line {
+    min-height: 1.35em;
+  }
+  .bp-line .dim {
+    opacity: 0.5;
+  }
+  .bp-line .bold {
+    font-weight: 700;
+  }
+  .bp-line .green {
+    color: var(--ansi-green);
+  }
+  .bp-line .cyan {
+    color: var(--ansi-cyan);
+  }
+  .bp-line .green.bold {
+    color: var(--ansi-green-bright);
+  }
+  .bp-line .cyan.bold {
+    color: var(--ansi-cyan-bright);
+  }
+}

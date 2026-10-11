@@ -1,18 +1,102 @@
 @layer replica {
-  .diag-row .diag-label {
-    color: var(--muted-foreground);
-    font-weight: 500;
+  /* A check row: px-4 py-3, the icon tile, the text, the status, and the action. */
+  .diag-row {
+    display: grid;
+    gap: calc(10 * var(--u));
+    padding: calc(12 * var(--u)) calc(16 * var(--u));
   }
-  .diag-row .mono {
+  .diag-row + .diag-row {
+    border-top: calc(1 * var(--u)) solid var(--border);
+  }
+  .diag-line {
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--u));
+  }
+  /* DiagnosticsIconTile: size-9 rounded-lg border bg-muted/50. */
+  .diag-tile {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: calc(36 * var(--u));
+    height: calc(36 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border);
+    border-radius: calc(12 * var(--u));
+    background: color-mix(in oklch, var(--muted) 50%, transparent);
+    color: var(--muted-foreground);
+  }
+  .diag-tile .runtime-logo {
+    width: calc(18 * var(--u));
+    height: calc(18 * var(--u));
+  }
+  .diag-text {
+    display: grid;
+    flex: 1;
+    gap: calc(2 * var(--u));
+    min-width: 0;
+  }
+  .diag-title {
+    display: flex;
+    align-items: baseline;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+    color: var(--foreground);
+    font-size: calc(14 * var(--u));
+    font-weight: 500;
+    line-height: calc(20 * var(--u));
+  }
+  .diag-title code {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-family: var(--mono);
+    font-size: calc(12 * var(--u));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-detail {
+    display: flex;
+    align-items: baseline;
+    gap: calc(6 * var(--u));
+    min-width: 0;
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
+    line-height: calc(16 * var(--u));
+  }
+  .diag-detail span {
+    flex: 0 0 auto;
+  }
+  .diag-detail span:last-child {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-detail .path {
+    font-family: var(--mono);
     font-size: calc(11 * var(--u));
   }
-  .diag-row .muted {
-    color: var(--muted-foreground);
-  }
-  .diag-row .strong {
+  /* RuntimeRestartControl: an outline button of size sm. */
+  .diag-restart {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    height: calc(32 * var(--u));
+    padding: 0 calc(12 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    color: var(--foreground);
+    font-size: calc(12 * var(--u));
     font-weight: 500;
   }
-  .diag-row .break-all {
-    word-break: break-all;
+  .diag-progress {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+    padding-left: calc(48 * var(--u));
+    color: var(--muted-foreground);
+    font-size: calc(12 * var(--u));
   }
 }

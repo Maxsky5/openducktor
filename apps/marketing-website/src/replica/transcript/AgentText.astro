@@ -1,14 +1,24 @@
 ---
-// An assistant message. The final message of a turn ends with the runtime, model, and effort.
+// An assistant message. The final message of a turn comes after the separator with the time of the
+// turn, and it ends with the runtime, model, and effort. Sources: agent-chat-message-card.tsx and
+// agent-transcript-separator.tsx.
 import "./AgentText.css";
 interface Props {
-  signature?: string;
+  signature?: string | undefined;
+  worked?: string | undefined;
   row?: string;
 }
-const { signature, row } = Astro.props;
+const { signature, worked, row } = Astro.props;
 ---
 
 <div class="st-agent" data-row={row}>
+  {
+    worked && (
+      <p class="st-worked">
+        <span>Worked for {worked}</span>
+      </p>
+    )
+  }
   <div class="st-agent-body" data-text><slot /></div>
   {
     signature && (
