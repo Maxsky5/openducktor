@@ -1,3 +1,4 @@
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import {
@@ -79,8 +80,8 @@ export function useReviewCommentComposer({
   }, []);
 
   const submitDraft = useCallback(
-    (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> =>
-      sendReviewComments(ownerKey, draft, onSend, useInlineCommentDraftStore.getState),
+    (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode): Promise<AgentChatSendResult> =>
+      sendReviewComments(ownerKey, draft, mode, onSend, useInlineCommentDraftStore.getState),
     [onSend, ownerKey],
   );
 
@@ -97,6 +98,7 @@ export function useReviewCommentComposer({
 export async function sendReviewComments(
   ownerKey: string | null,
   draft: AgentChatComposerDraft,
+  mode: AgentMessageSubmitMode,
   onSend: AgentChatComposerModel["onSend"],
   getStore: () => ReviewCommentStore,
 ): Promise<AgentChatSendResult> {
@@ -106,7 +108,7 @@ export async function sendReviewComments(
       (segment) => segment.kind === "slash_command" && segment.command.source === "system",
     )
   ) {
-    return onSend(draft);
+    return onSend(draft, mode);
   }
 
   const store = getStore();
@@ -118,7 +120,7 @@ export async function sendReviewComments(
 
   let accepted = false;
   try {
-    const result = await onSend(message);
+    const result = await onSend(message, mode);
     if (!submissionId) {
       return result;
     }

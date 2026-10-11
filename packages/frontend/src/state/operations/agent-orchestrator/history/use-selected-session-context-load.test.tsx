@@ -7,6 +7,7 @@ import type { AgentSessionContextLoadTarget, AgentSessionState } from "@/types/a
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { createSessionMessagesState } from "../support/messages";
 import { useSelectedSessionContextLoad } from "./use-selected-session-context-load";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 const session = (externalSessionId: string): AgentSessionState => ({
   externalSessionId,
@@ -39,30 +40,7 @@ describe("useSelectedSessionContextLoad", () => {
     const loadAgentSessionContext = mock(
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected beginGeneratedImageBatch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected releaseGeneratedImageBatch");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected generated image read");
-      },
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => null,
-      loadAgentSessionContext,
-      sendAgentMessage: async () => null,
-      stopAgentSession: async () => undefined,
-      continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: async () => undefined,
-      replyAgentApproval: async () => undefined,
-      answerAgentQuestion: async () => undefined,
-    };
+    const operations = createAgentOperationsFixture({ loadAgentSessionContext });
     const wrapper = createWrapper(operations);
     const first = session("thread-1");
     const second = session("thread-2");
@@ -93,30 +71,7 @@ describe("useSelectedSessionContextLoad", () => {
     const loadAgentSessionContext = mock(
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected beginGeneratedImageBatch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected releaseGeneratedImageBatch");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected generated image read");
-      },
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => null,
-      loadAgentSessionContext,
-      sendAgentMessage: async () => null,
-      stopAgentSession: async () => undefined,
-      continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: async () => undefined,
-      replyAgentApproval: async () => undefined,
-      answerAgentQuestion: async () => undefined,
-    };
+    const operations = createAgentOperationsFixture({ loadAgentSessionContext });
     const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
@@ -144,30 +99,7 @@ describe("useSelectedSessionContextLoad", () => {
     const loadAgentSessionContext = mock(
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected beginGeneratedImageBatch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected releaseGeneratedImageBatch");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected generated image read");
-      },
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => null,
-      loadAgentSessionContext,
-      sendAgentMessage: async () => null,
-      stopAgentSession: async () => undefined,
-      continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: async () => undefined,
-      replyAgentApproval: async () => undefined,
-      answerAgentQuestion: async () => undefined,
-    };
+    const operations = createAgentOperationsFixture({ loadAgentSessionContext });
     const repositorySession: AgentSessionState = {
       ...session("repository-thread"),
       sessionAssociation: { kind: "repository" },
@@ -197,30 +129,7 @@ describe("useSelectedSessionContextLoad", () => {
     "loads missing Codex model with retained usage: model present %s",
     async (hasModel) => {
       const loadAgentSessionContext = mock(async () => undefined);
-      const operations: AgentOperationsContextValue = {
-        describeGeneratedImages: async () => {
-          throw new Error("Unexpected image metadata read");
-        },
-        beginGeneratedImageBatch: async () => {
-          throw new Error("Unexpected beginGeneratedImageBatch");
-        },
-        releaseGeneratedImageBatch: async () => {
-          throw new Error("Unexpected releaseGeneratedImageBatch");
-        },
-        readGeneratedImage: async () => {
-          throw new Error("Unexpected generated image read");
-        },
-        readSessionTodos: async () => [],
-        readSessionHistory: async () => [],
-        loadAgentSessionHistory: async () => null,
-        loadAgentSessionContext,
-        sendAgentMessage: async () => null,
-        stopAgentSession: async () => undefined,
-        continueInterruptedTurn: async () => undefined,
-        updateAgentSessionModel: async () => undefined,
-        replyAgentApproval: async () => undefined,
-        answerAgentQuestion: async () => undefined,
-      };
+      const operations = createAgentOperationsFixture({ loadAgentSessionContext });
       const wrapper = createWrapper(operations);
       const harness = createHookHarness(
         useSelectedSessionContextLoad,
@@ -250,30 +159,7 @@ describe("useSelectedSessionContextLoad", () => {
     const loadAgentSessionContext = mock(async () => {
       throw new Error("thread resume failed");
     });
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected beginGeneratedImageBatch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected releaseGeneratedImageBatch");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected generated image read");
-      },
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => null,
-      loadAgentSessionContext,
-      sendAgentMessage: async () => null,
-      stopAgentSession: async () => undefined,
-      continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: async () => undefined,
-      replyAgentApproval: async () => undefined,
-      answerAgentQuestion: async () => undefined,
-    };
+    const operations = createAgentOperationsFixture({ loadAgentSessionContext });
     const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,

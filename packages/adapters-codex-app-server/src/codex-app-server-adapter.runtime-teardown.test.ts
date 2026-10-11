@@ -1,10 +1,13 @@
-import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 import { describe, expect, test } from "bun:test";
 import type {
   CodexAppServerTurnStartResult,
   CodexAppServerTurnSteerResult,
 } from "@openducktor/contracts";
-import type { AgentEvent } from "@openducktor/core";
+import {
+  type AgentEvent,
+  AgentSessionMessageRefusedError,
+  AgentSessionTurnActiveError,
+} from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
@@ -17,8 +20,15 @@ import {
   flushCodexAdapterWork,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
+import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import type { CodexAppServerClient, CodexLiveSessionMutation } from "./types";
+
+const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
+  promise.then(
+    () => null,
+    (error: Error) => error,
+  );
 
 class RejectableTurnTransport extends RecordingTransport {
   private readonly turnStartFailure = createDeferred<never>();
@@ -109,11 +119,14 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     const { adapter, transports } = createHarness({}, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        parts: [{ kind: "text", text: "Complete after release" }],
-      }),
+    const send = failureOf(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "Complete after release" }],
+        }),
+      ),
     );
+    await flushCodexAdapterWork();
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
 
@@ -124,6 +137,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     transport.turnStartDeferred.resolve({
       turn: codexTurnFixture({ id: "turn-late", items: [], status: "completed" }),
     });
+    await send;
     await flushCodexAdapterWork();
 
     await expect(
@@ -195,16 +209,47 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     }
   });
 
+  test("leaves the session idle when model validation fails before turn/start", async () => {
+    const { adapter, transports } = createHarness();
+    await adapter.startSession(codexStartSessionInput());
+
+    const failure = await failureOf(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "Go" }],
+          model: { providerId: "openai", modelId: "gpt-unknown", variant: "medium" },
+        }),
+      ),
+    );
+
+    expect(failure).toBeInstanceOf(AgentSessionMessageRefusedError);
+    expect(failure?.message).toContain("gpt-unknown");
+    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
+    // No turn runs, so the next send starts one.
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Go" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    expect(
+      transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
+    ).toHaveLength(1);
+  });
+
   test("does not report a released turn failure to a replacement session", async () => {
     const transport = new RejectableTurnTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        parts: [{ kind: "text", text: "Fail after release" }],
-      }),
+    const send = failureOf(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "Fail after release" }],
+        }),
+      ),
     );
+    await flushCodexAdapterWork();
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
 
@@ -215,6 +260,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     );
     try {
       transport.failTurnStart(new Error("old turn failed"));
+      expect(await send).toBeInstanceOf(Error);
       await flushCodexAdapterWork();
 
       expect(replacementEvents).toEqual([]);
@@ -321,75 +367,48 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     }
   });
 
-  test("reports a rejected turn to its current retained session", async () => {
+  test("returns a refused turn to the caller instead of the session stream", async () => {
     const transport = new RejectableTurnTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        parts: [{ kind: "text", text: "Fail while retained" }],
-      }),
-    );
-
     const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
     );
     try {
-      transport.failTurnStart(new Error("current turn failed"));
-      await flushCodexAdapterWork();
-
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: "session_error",
-          externalSessionId: "thread/start-runtime-live",
-          message: "current turn failed",
-        }),
+      const send = failureOf(
+        adapter.sendUserMessage(
+          codexUserMessageInput({
+            parts: [{ kind: "text", text: "Fail while retained" }],
+          }),
+        ),
       );
+      await flushCodexAdapterWork();
+      transport.failTurnStart(
+        new AgentSessionMessageRefusedError(new Error("current turn failed")),
+      );
+
+      expect((await send)?.message).toContain("current turn failed");
       // The rejected start left no native turn, so the session is idle again.
       expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
+      await flushCodexAdapterWork();
+      expect(
+        events.filter((event) => event.type === "user_message" || event.type === "session_error"),
+      ).toEqual([]);
     } finally {
       unsubscribe();
     }
   });
 
-  test("a send that requires native admission fails when Codex rejects the turn", async () => {
-    const transport = new RejectableTurnTransport();
-    const adapter = createAdapterWithTransport(transport);
-
-    await adapter.startSession(codexStartSessionInput());
-    let settled = false;
-    const send = adapter
-      .sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "Kickoff" }] }), {
-        requireNativeAdmission: true,
-      })
-      .finally(() => {
-        settled = true;
-      });
-    await flushCodexAdapterWork();
-    // A local receipt is not native acceptance.
-    expect(settled).toBe(false);
-    transport.failTurnStart(new Error("turn rejected"));
-    let failure: Error | null = null;
-    try {
-      await send;
-    } catch (cause) {
-      if (cause instanceof Error) failure = cause;
-    }
-    expect(failure?.message).toBe("turn rejected");
-    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
-  });
-
-  test("a native-admission send reports acceptance when its owner is released during turn/start", async () => {
+  test("a send reports acceptance when its owner is released during turn/start", async () => {
     const transport = new DeferredSteerTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
     const send = adapter.sendUserMessage(
       codexUserMessageInput({ parts: [{ kind: "text", text: "Kickoff" }] }),
-      { requireNativeAdmission: true },
     );
     await transport.turnStartRequested.promise;
     adapter.releaseRuntime("runtime-live");
@@ -416,16 +435,14 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     }
   });
 
-  test("a native-admission send waits for the Codex answer after its owner is released", async () => {
+  test("a send waits for the Codex answer after its owner is released", async () => {
     const transport = new RejectableTurnTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
     let settled = false;
     const send = adapter
-      .sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "Kickoff" }] }), {
-        requireNativeAdmission: true,
-      })
+      .sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "Kickoff" }] }))
       .finally(() => {
         settled = true;
       });
@@ -434,34 +451,36 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     await flushCodexAdapterWork();
     // A released owner does not turn the pending request into a local receipt.
     expect(settled).toBe(false);
-    transport.failTurnStart(new Error("turn rejected"));
+    transport.failTurnStart(new AgentSessionMessageRefusedError(new Error("turn rejected")));
     let failure: Error | null = null;
     try {
       await send;
     } catch (cause) {
       if (cause instanceof Error) failure = cause;
     }
-    expect(failure?.message).toBe("turn rejected");
+    expect(failure?.message).toContain("turn rejected");
     expect(failure).not.toBeInstanceOf(CodexMessageAcceptedError);
   });
 
-  test("reports acceptance for a known-turn steer whose owner is released", async () => {
+  test("keeps an admitted steer accepted after its retained owner is released", async () => {
     const transport = new DeferredSteerTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
+    const firstSend = adapter.sendUserMessage(
       codexUserMessageInput({
         parts: [{ kind: "text", text: "first" }],
       }),
     );
     await transport.turnStartRequested.promise;
     transport.completeTurnStart();
+    await firstSend;
     await flushCodexAdapterWork();
 
     const oldSend = adapter.sendUserMessage(
       codexUserMessageInput({
         parts: [{ kind: "text", text: "second" }],
+        delivery: "steer",
       }),
     );
     await transport.steerRequested.promise;
@@ -481,7 +500,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       } catch (cause) {
         if (cause instanceof CodexMessageAcceptedError) failure = cause;
       }
-      // Codex accepted the steer, so the caller must not send it again.
+      // Codex admitted the steer, so the caller must not send it again.
       expect(failure?.acceptedMessage.message).toBe("second");
       await flushCodexAdapterWork();
 
@@ -491,20 +510,19 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     }
   });
 
-  test("a native-admission steer calls onSent only when it sends turn/steer", async () => {
+  test("a steer calls onSent only when it sends turn/steer", async () => {
     const transport = new DeferredSteerTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
+    const firstSend = adapter.sendUserMessage(
       codexUserMessageInput({ parts: [{ kind: "text", text: "first" }] }),
     );
     await transport.turnStartRequested.promise;
     let sent = false;
     const send = adapter.sendUserMessage(
-      codexUserMessageInput({ parts: [{ kind: "text", text: "second" }] }),
+      codexUserMessageInput({ parts: [{ kind: "text", text: "second" }], delivery: "steer" }),
       {
-        requireNativeAdmission: true,
         onSent: () => {
           sent = true;
         },
@@ -514,55 +532,64 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     // The steer waits for the first turn, so Codex has not received the message yet.
     expect(sent).toBe(false);
     transport.completeTurnStart();
+    await firstSend;
     await transport.steerRequested.promise;
     expect(sent).toBe(true);
     transport.completeSteer();
     await expect(send).resolves.toMatchObject({ message: "second" });
   });
 
-  test("a native-admission send that waits on a rejected turn does not call onSent", async () => {
+  test("a steer that waits on a rejected turn does not call onSent", async () => {
     const transport = new RejectableTurnTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
-      codexUserMessageInput({ parts: [{ kind: "text", text: "first" }] }),
+    const firstSend = failureOf(
+      adapter.sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "first" }] })),
     );
     let sent = false;
-    const send = adapter
-      .sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "second" }] }), {
-        requireNativeAdmission: true,
-        onSent: () => {
-          sent = true;
+    const send = failureOf(
+      adapter.sendUserMessage(
+        codexUserMessageInput({ parts: [{ kind: "text", text: "second" }], delivery: "steer" }),
+        {
+          onSent: () => {
+            sent = true;
+          },
         },
-      })
-      .then(
-        () => null,
-        (cause: unknown) => cause,
-      );
+      ),
+    );
     await flushCodexAdapterWork();
-    transport.failTurnStart(new Error("first turn rejected"));
+    transport.failTurnStart(new AgentSessionMessageRefusedError(new Error("first turn rejected")));
+    expect(await firstSend).toBeInstanceOf(Error);
     expect(await send).toBeInstanceOf(Error);
     expect(sent).toBe(false);
   });
 
-  test("does not report a late queued-steer failure to a replacement session", async () => {
+  test("waits for turn admission before a steer and reports its late failure only to the caller", async () => {
     const transport = new DeferredSteerTransport();
     const adapter = createAdapterWithTransport(transport);
 
     await adapter.startSession(codexStartSessionInput());
-    await adapter.sendUserMessage(
+    const firstSend = adapter.sendUserMessage(
       codexUserMessageInput({
         parts: [{ kind: "text", text: "first" }],
       }),
     );
     await transport.turnStartRequested.promise;
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        parts: [{ kind: "text", text: "queued" }],
-      }),
-    );
+    const steer = adapter
+      .sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "steer" }],
+          delivery: "steer",
+        }),
+      )
+      .then(
+        () => null,
+        (error: Error) => error,
+      );
+    expect(transport.calls.filter((call) => call.method === "turn/steer")).toEqual([]);
     transport.completeTurnStart();
+    await firstSend;
     await transport.steerRequested.promise;
 
     adapter.releaseRuntime("runtime-live");
@@ -573,13 +600,44 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       (event) => replacementEvents.push(event),
     );
     try {
-      transport.failSteer(new Error("old queued steer failed"));
+      transport.failSteer(new Error("old steer failed"));
+      expect(await steer).toBeInstanceOf(Error);
       await flushCodexAdapterWork();
 
       expect(replacementEvents).toEqual([]);
     } finally {
       unsubscribe();
     }
+  });
+
+  test("refuses a new turn while the current turn runs", async () => {
+    const transport = new DeferredSteerTransport();
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexStartSessionInput());
+    const firstSend = adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "first" }],
+      }),
+    );
+    await transport.turnStartRequested.promise;
+
+    const failure = await adapter
+      .sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "next turn" }],
+        }),
+      )
+      .then(
+        () => null,
+        (error: Error) => error,
+      );
+
+    expect(failure).toBeInstanceOf(AgentSessionTurnActiveError);
+    expect(transport.calls.filter((call) => call.method === "turn/start")).toHaveLength(1);
+    expect(transport.calls.filter((call) => call.method === "turn/steer")).toEqual([]);
+    transport.completeTurnStart();
+    await firstSend;
   });
 
   test("drops queued runtime events from a released runtime generation", async () => {

@@ -3,6 +3,11 @@ import type {
   AgentSessionLiveRef,
   HostInvokeFailure,
 } from "@openducktor/contracts";
+import {
+  AgentSessionMessageAcceptanceUnknownError,
+  AgentSessionMessageRefusedError,
+  AgentSessionTurnActiveError,
+} from "@openducktor/core";
 import { HostOperationError } from "../effect/host-errors";
 
 type AcceptedMessageFailure = Extract<
@@ -47,8 +52,9 @@ export class AgentSessionCommandAcceptedError extends HostOperationError {
 const toAgentSessionAcceptedError = (
   input: AgentSessionLiveRef,
   accepted: AcceptedAgentInput,
+  stage: AcceptedMessageFailure["stage"],
   cause: Error,
-): HostOperationError => {
+): AgentSessionMessageAcceptedError | AgentSessionCommandAcceptedError => {
   const sessionRef = {
     repoPath: input.repoPath,
     runtimeKind: input.runtimeKind,
@@ -57,12 +63,67 @@ const toAgentSessionAcceptedError = (
   };
   return accepted.type === "command_accepted"
     ? new AgentSessionCommandAcceptedError({ sessionRef, acceptedCommand: accepted }, cause)
-    : new AgentSessionMessageAcceptedError(
-        { sessionRef, acceptedMessage: accepted, stage: "live_update" },
-        cause,
-      );
+    : new AgentSessionMessageAcceptedError({ sessionRef, acceptedMessage: accepted, stage }, cause);
 };
 
+/** Keeps the accepted message when a later host stage fails, so the caller never sends it again. */
 export const messageAcceptedFailure =
-  (sessionRef: AgentSessionLiveRef, accepted: AcceptedAgentInput) => (cause: Error) =>
-    toAgentSessionAcceptedError(sessionRef, accepted, cause);
+  (
+    sessionRef: AgentSessionLiveRef,
+    accepted: AcceptedAgentInput,
+    stage: AcceptedMessageFailure["stage"],
+  ) =>
+  (cause: Error) =>
+    toAgentSessionAcceptedError(sessionRef, accepted, stage, cause);
+
+/** The runtime refused a new turn because work still runs, so the message queue keeps it. */
+export class AgentSessionBusyError extends AgentSessionMessageRejectedError {
+  constructor(input: { readonly message: string; readonly cause: unknown }) {
+    super({ operation: "agent-session.send-message", ...input });
+  }
+}
+
+/**
+ * The runtime sent no conclusive answer to a message. A live user message with `messageId`
+ * proves that it arrived.
+ */
+export class AgentSessionAcceptanceUnknownError extends HostOperationError {
+  readonly messageId: string;
+
+  constructor(input: {
+    readonly message: string;
+    readonly messageId: string;
+    readonly cause: unknown;
+  }) {
+    super({ operation: "agent-session.send-message", message: input.message, cause: input.cause });
+    this.messageId = input.messageId;
+  }
+}
+
+/**
+ * Turns the delivery failures that a runtime adapter reports into typed host errors at the
+ * runtime boundary. It returns null for any other failure.
+ */
+export const toAgentSessionSendError = (
+  cause: unknown,
+): AgentSessionMessageRejectedError | AgentSessionAcceptanceUnknownError | null => {
+  if (cause instanceof AgentSessionTurnActiveError) {
+    return new AgentSessionBusyError({ message: cause.message, cause });
+  }
+  if (cause instanceof AgentSessionMessageRefusedError) {
+    // The native cause keeps the runtime failure details for the caller.
+    return new AgentSessionMessageRejectedError({
+      operation: "agent-session.send-message",
+      message: cause.message,
+      cause: cause.cause,
+    });
+  }
+  if (cause instanceof AgentSessionMessageAcceptanceUnknownError) {
+    return new AgentSessionAcceptanceUnknownError({
+      message: cause.message,
+      messageId: cause.messageId,
+      cause,
+    });
+  }
+  return null;
+};

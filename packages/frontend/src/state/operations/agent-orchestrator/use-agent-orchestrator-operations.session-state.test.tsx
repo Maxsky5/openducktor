@@ -21,6 +21,7 @@ import {
   taskFixture,
   taskFixtureWithPersistedBuildSession,
 } from "./use-agent-orchestrator-operations.test-helpers";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 interface ReceivedHistoryInputRefContract {
   current: Parameters<typeof host.agentRuntimeLoadSessionHistory>[0] | null;
@@ -799,12 +800,13 @@ describe("use-agent-orchestrator-operations session state", () => {
       const baselines = listHarnessSessions(harness.getLatest()).map((session) => session.messages);
       // The transport installs a new connection snapshot after missed events.
       const emitGap = () =>
-        liveStream.emit({
-          type: "snapshot",
-          repoPath: "/tmp/repo",
-          sessions: liveSnapshots,
-          isConnectionSnapshot: true,
-        });
+        liveStream.emit(
+          createLiveSnapshotEnvelope({
+            repoPath: "/tmp/repo",
+            sessions: liveSnapshots,
+            isConnectionSnapshot: true,
+          }),
+        );
       await harness.run(emitGap);
       expect(historyReads).toEqual(["external-1", "external-2"]);
       expect(

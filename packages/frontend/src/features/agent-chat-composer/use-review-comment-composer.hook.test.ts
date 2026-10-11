@@ -185,7 +185,7 @@ describe("useReviewCommentComposer", () => {
     for (const outcome of [false, true]) {
       accepted = outcome;
       await act(async () => {
-        expect(await view.result.current.onSend(draft)).toBe(outcome);
+        expect(await view.result.current.onSend(draft, "default")).toBe(outcome);
       });
       expect(sent.at(-1)).toEqual(draft);
       expect(view.result.current.pendingSendItems?.count).toBe(1);
@@ -195,7 +195,10 @@ describe("useReviewCommentComposer", () => {
     }
     await act(async () => {
       expect(
-        await view.result.current.onSend({ segments: [createTextSegment("Review these changes")] }),
+        await view.result.current.onSend(
+          { segments: [createTextSegment("Review these changes")] },
+          "default",
+        ),
       ).toBe(true);
     });
     expect(draftToSerializedText(sent[2]!)).toContain("Review these changes");
@@ -251,9 +254,10 @@ describe("useReviewCommentComposer", () => {
       });
       let result!: Promise<AgentChatSendResult>;
       act(() => {
-        result = view.result.current.onSend({
-          segments: [createTextSegment("User text")],
-        });
+        result = view.result.current.onSend(
+          { segments: [createTextSegment("User text")] },
+          "default",
+        );
       });
       expect(view.result.current.pendingSendItems).toBeNull();
       expect(sentText).toContain("User text");
@@ -311,7 +315,7 @@ describe("useReviewCommentComposer", () => {
     const view = renderHook(() => useReviewCommentComposer({ owner, onSend: async () => true }));
     try {
       await act(async () => {
-        expect(await view.result.current.onSend({ segments: [] })).toBe(true);
+        expect(await view.result.current.onSend({ segments: [] }, "default")).toBe(true);
       });
       expect(useInlineCommentDraftStore.getState().draftsByOwner[ownerKey]).toEqual([]);
       expect(notice).toHaveBeenCalledWith("Message sent, but the comment save failed", {

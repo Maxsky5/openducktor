@@ -9,6 +9,7 @@ import {
   openCodeMigrationObservationSchema,
   type RuntimeOperationFailure,
 } from "@openducktor/contracts";
+import { AgentSessionMessageAcceptanceUnknownError } from "@openducktor/core";
 import { z } from "zod";
 import type { OpenCodeRuntimeConnection } from "./types";
 
@@ -131,7 +132,11 @@ export const nativeRequest = async <A>(
   try {
     return await run();
   } catch (cause) {
-    if (cause instanceof OpenCodeOperationError) throw cause;
+    if (
+      cause instanceof OpenCodeOperationError ||
+      cause instanceof AgentSessionMessageAcceptanceUnknownError
+    )
+      throw cause;
     const code = isSessionNotFoundError(cause)
       ? "session_not_found"
       : cause instanceof z.ZodError ||

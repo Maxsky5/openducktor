@@ -236,7 +236,7 @@ process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
   );
-  return writeFakeRuntimeCommand(root, "codex", "codex.mjs");
+  return writeFakeRuntimeCommand(root, "codex", "codex.mjs", runtimePidPath);
 };
 
 export const stubTools = (paths: Partial<Record<ToolDiscoveryId, string>>): ToolDiscoveryPort => ({

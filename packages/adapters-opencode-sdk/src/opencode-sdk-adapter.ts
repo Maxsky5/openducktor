@@ -1,9 +1,13 @@
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import type { OpenCodeClient, SessionInfo, ModelRef } from "@opencode/client";
+import {
+  ClientError,
+  type OpenCodeClient,
+  type SessionInfo,
+  type ModelRef,
+} from "@opencode/client";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   isManualSessionCompactionSlashCommand,
@@ -11,6 +15,8 @@ import {
   type AgentSessionControlUpdateTitleInput,
 } from "@openducktor/contracts";
 import {
+  AgentSessionMessageAcceptanceUnknownError,
+  AgentSessionMessageRefusedError,
   agentSessionRefsEqual,
   agentSessionScopesEqual,
   assertAgentRuntimePolicyBinding,
@@ -51,6 +57,7 @@ import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { iso, projectInboxUser, projectMessages } from "./opencode-message-projection";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
+import { createOpenCodeMessageId } from "./opencode-message-id";
 import type {
   OpenCodeRuntimeConnection,
   OpencodeSdkAdapterOptions,
@@ -404,7 +411,10 @@ export class OpencodeSdkAdapter {
         if (input.model) await this.updateNativeModel(input, input.model);
         this.assertCurrent(input, generation);
         options?.signal?.throwIfAborted();
-        const sending = this.client.session.compact({ sessionID: input.externalSessionId });
+        const sending = this.client.session.compact({
+          sessionID: input.externalSessionId,
+          delivery: nativeDelivery(input),
+        });
         onSent();
         const item = z
           .object({
@@ -478,6 +488,7 @@ export class OpencodeSdkAdapter {
         const sending = this.client.session.command({
           ...payload,
           name: commands[0].command.trigger,
+          delivery: nativeDelivery(input),
         });
         onSent();
         await sending;
@@ -487,19 +498,44 @@ export class OpencodeSdkAdapter {
         throw new Error("Enter a message or attach a file.");
       this.assertCurrent(input, generation);
       options?.signal?.throwIfAborted();
-      const sending = this.client.session.prompt(payload);
+      // The host names the message, so a later live event can settle a send without an answer.
+      const messageId = createOpenCodeMessageId();
+      const sending = this.client.session.prompt({
+        ...payload,
+        id: messageId,
+        delivery: nativeDelivery(input),
+      });
       onSent();
-      const item = await sending;
-      if (item.sessionID !== input.externalSessionId)
-        throw operationError(
-          input,
-          "accept input",
-          "identity_mismatch",
-          "OpenCode accepted the input for a different conversation.",
-        );
-      return projectInboxUser(item);
+      const unknownResult = (cause: unknown) =>
+        new AgentSessionMessageAcceptanceUnknownError({
+          externalSessionId: input.externalSessionId,
+          messageId,
+          cause,
+        });
+      let item: Awaited<typeof sending>;
+      try {
+        item = await sending;
+      } catch (cause) {
+        if (!isConclusiveAnswer(cause)) throw unknownResult(cause);
+        throw cause;
+      }
+      // OpenCode answered OK, so it took the input. Only the answer can be unreadable.
+      try {
+        if (item.sessionID !== input.externalSessionId)
+          throw operationError(
+            input,
+            "accept input",
+            "identity_mismatch",
+            "OpenCode accepted the input for a different conversation.",
+          );
+        const accepted = projectInboxUser(item);
+        if (input.submissionId) accepted.submissionId = input.submissionId;
+        return accepted;
+      } catch (cause) {
+        throw unknownResult(cause);
+      }
     }).catch((cause: Error) => {
-      if (!submitted) throw new OpenCodeMessageRejectedError(cause);
+      if (!submitted) throw new AgentSessionMessageRefusedError(cause);
       throw cause;
     });
   }
@@ -663,3 +699,17 @@ export class OpencodeSdkAdapter {
     );
   }
 }
+
+/**
+ * A new turn waits in the native queue, so it never joins running work. A steer joins the
+ * running turn at its next step, or starts a turn when the session is idle.
+ */
+const nativeDelivery = (input: SendAgentUserMessageInput): "queue" | "steer" =>
+  input.delivery === "steer" ? "steer" : "queue";
+
+/**
+ * A typed OpenCode error or an HTTP error status proves that OpenCode refused the input. A lost
+ * connection or an unreadable answer does not, because OpenCode can still store the message.
+ */
+const isConclusiveAnswer = (cause: unknown): boolean =>
+  !(cause instanceof ClientError) || cause.reason === "UnexpectedStatus";

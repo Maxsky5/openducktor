@@ -81,6 +81,7 @@ export const codexUserMessageInput = (
   const { model: _defaultModel, ...base } = codexSessionRuntimeRef(input.externalSessionId);
   return {
     ...base,
+    delivery: "new_turn",
     ...input,
   };
 };

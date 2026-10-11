@@ -7,7 +7,7 @@ import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 
 export const acceptedUserMessage = (
   input: Pick<
-    Parameters<AgentEnginePort["sendUserMessage"]>[0],
+    Parameters<AgentEnginePort["submitUserMessage"]>[0],
     "externalSessionId" | "model" | "parts"
   >,
   messageId = "accepted-user-message",
@@ -28,3 +28,15 @@ export const acceptedUserMessage = (
   }
   return event;
 };
+
+/** Wraps an accepted message in the submit result that a started turn returns. */
+export const acceptedSubmitResult = (
+  input: Pick<
+    Parameters<AgentEnginePort["submitUserMessage"]>[0],
+    "externalSessionId" | "model" | "parts"
+  >,
+  messageId?: string,
+): Awaited<ReturnType<AgentEnginePort["submitUserMessage"]>> => ({
+  kind: "accepted",
+  acceptedMessage: acceptedUserMessage(input, messageId),
+});

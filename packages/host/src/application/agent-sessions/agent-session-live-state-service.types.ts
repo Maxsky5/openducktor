@@ -40,6 +40,7 @@ import type {
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
 import type {
+  AgentMessageQueueObserver,
   AgentSessionLiveEnvelopePublisher,
   AgentSessionLiveFaultLogger,
 } from "./agent-session-live-envelope";
@@ -148,4 +149,5 @@ export type CreateAgentSessionLiveStateServiceInput = {
     provenance: "baseline" | "live",
   ) => void;
   readonly coordinator?: LiveStateCoordinator;
+  readonly messageQueues: AgentMessageQueueObserver;
 };

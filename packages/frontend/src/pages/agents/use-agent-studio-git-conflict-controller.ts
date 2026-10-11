@@ -319,7 +319,7 @@ export function useAgentStudioGitConflictController({
       assertCurrent();
       if (!receipt) return;
       clearActionErrors();
-      if (receipt.postAcceptanceFailure) {
+      if (receipt.outcome === "accepted" && receipt.postAcceptanceFailure) {
         setRebaseError(
           `The agent accepted the message, but a later host step failed: ${receipt.postAcceptanceFailure}`,
         );
@@ -328,8 +328,9 @@ export function useAgentStudioGitConflictController({
         });
       } else {
         toast.success(
-          receipt.acceptedMessage.type === "user_message" &&
-            receipt.acceptedMessage.state === "queued"
+          receipt.outcome === "queued" ||
+            (receipt.acceptedMessage.type === "user_message" &&
+              receipt.acceptedMessage.state === "queued")
             ? `Queued git conflict resolution request for ${conflictRecipientLabel}`
             : `Sent git conflict resolution request to ${conflictRecipientLabel}`,
         );

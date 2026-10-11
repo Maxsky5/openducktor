@@ -98,7 +98,7 @@ const bindForkInput = (
 };
 
 const bindMessagePart = (
-  part: Parameters<AgentEnginePort["sendUserMessage"]>[0]["parts"][number],
+  part: Parameters<AgentEnginePort["submitUserMessage"]>[0]["parts"][number],
 ): SendAgentUserMessageInput["parts"][number] => {
   if (part.kind !== "attachment") {
     return part;
@@ -116,8 +116,9 @@ const bindMessagePart = (
   return boundPart;
 };
 
+/** Sends the message straight to the runtime, as the host does for an idle session. */
 const bindSendInput = (
-  input: Parameters<AgentEnginePort["sendUserMessage"]>[0],
+  input: Parameters<AgentEnginePort["submitUserMessage"]>[0],
 ): SendAgentUserMessageInput => {
   requireOpenCodeRuntime(input.runtimeKind);
   const boundInput: SendAgentUserMessageInput = {
@@ -126,8 +127,10 @@ const bindSendInput = (
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,
     parts: input.parts.map(bindMessagePart),
+    delivery: input.mode === "steer" ? "steer" : "new_turn",
     ...openCodeRuntimePolicy,
   };
+
   if (input.model !== undefined) {
     boundInput.model = input.model;
   }
@@ -183,7 +186,13 @@ export const createOpenCodeAgentEngineTestAdapter = (
       externalSessionId: input.externalSessionId,
       model: input.model,
     }),
-  sendUserMessage: (input) => adapter.sendUserMessage(bindSendInput(input)),
+  submitUserMessage: async (input) => ({
+    kind: "accepted",
+    acceptedMessage: await adapter.sendUserMessage(bindSendInput(input)),
+  }),
+  manageMessageQueue: async () => {
+    throw new Error("Unexpected manageMessageQueue");
+  },
   stopSession: (input) => adapter.stopSession(input),
   loadSessionHistory: (input) => adapter.loadSessionHistory(bindPolicyInput(input)),
   loadSessionTodos: (input) => adapter.loadSessionTodos(bindPolicyInput(input)),

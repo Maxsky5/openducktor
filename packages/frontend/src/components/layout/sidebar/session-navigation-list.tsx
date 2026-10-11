@@ -27,7 +27,8 @@ import {
   SessionSelectionIndicator,
   SessionSourceIssues,
 } from "./session-navigation-parts";
-import { SessionPresence, SessionPresenceList } from "./session-navigation-presence";
+import { CssPresenceList } from "@/components/ui/css-presence";
+import { SessionPresence } from "./session-navigation-presence";
 import type { SessionSelection } from "./session-navigation-selection";
 import {
   SESSION_GROUP_COUNT_CLASSES,
@@ -66,7 +67,7 @@ export function SessionNavigationList({
           <p className="px-1 text-xs text-warning-muted">Session list is incomplete.</p>
         ) : null}
         <div className="flex flex-col">
-          <SessionPresenceList isLoading={model.isLoading}>
+          <CssPresenceList isLoading={model.isLoading}>
             {visibleGroups.map((group) => (
               <SessionGroupSection
                 key={group.id}
@@ -77,7 +78,7 @@ export function SessionNavigationList({
                 onOpen={onOpen}
               />
             ))}
-          </SessionPresenceList>
+          </CssPresenceList>
         </div>
         {model.isLoading ? (
           <p
@@ -262,7 +263,7 @@ function SessionGroupSection({
         </button>
         {collapsed ? null : (
           <ul id={listId}>
-            <SessionPresenceList isLoading={isLoading}>
+            <CssPresenceList isLoading={isLoading}>
               {group.entries.map((entry) => (
                 <SessionPresence as="li" key={entry.key}>
                   <div className="py-0.5">
@@ -276,7 +277,7 @@ function SessionGroupSection({
                   </div>
                 </SessionPresence>
               ))}
-            </SessionPresenceList>
+            </CssPresenceList>
           </ul>
         )}
       </div>

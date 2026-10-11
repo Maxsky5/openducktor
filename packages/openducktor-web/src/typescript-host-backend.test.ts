@@ -1181,6 +1181,7 @@ describe("TypeScript web host backend", () => {
         channel: "openducktor://agent-session-live-event",
         payload: {
           type: "snapshot",
+          messageQueues: [],
           repoPath: "/repo",
           sessions: [],
         },
@@ -1224,6 +1225,7 @@ describe("TypeScript web host backend", () => {
         channel: "openducktor://agent-session-live-event",
         payload: {
           type: "snapshot",
+          messageQueues: [],
           repoPath: "/other",
           sessions: [],
         },

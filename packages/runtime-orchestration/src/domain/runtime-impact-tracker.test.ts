@@ -53,11 +53,20 @@ describe("createRuntimeImpactTracker", () => {
     const track = createRuntimeImpactTracker();
     track({ type: "session_upsert", session: snapshot("session-1") });
 
-    expect(track({ type: "snapshot", repoPath: "/repo-b", sessions: [] })).toEqual([]);
     expect(
-      track({ type: "snapshot", repoPath: "/repo-a", sessions: [snapshot("session-1")] }),
+      track({ type: "snapshot", messageQueues: [], repoPath: "/repo-b", sessions: [] }),
     ).toEqual([]);
-    expect(track({ type: "snapshot", repoPath: "/repo-a", sessions: [] })).toEqual(["codex"]);
+    expect(
+      track({
+        type: "snapshot",
+        messageQueues: [],
+        repoPath: "/repo-a",
+        sessions: [snapshot("session-1")],
+      }),
+    ).toEqual([]);
+    expect(
+      track({ type: "snapshot", messageQueues: [], repoPath: "/repo-a", sessions: [] }),
+    ).toEqual(["codex"]);
     expect(track({ type: "session_removed", ref: snapshot("session-1").ref })).toEqual([]);
   });
 
@@ -67,6 +76,7 @@ describe("createRuntimeImpactTracker", () => {
     expect(
       track({
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo-a",
         sessions: [
           snapshot("session-1"),

@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
   AgentSessionControlUpdateTitleInput,
@@ -103,6 +104,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       reportRenameFailure: () => Effect.void,
     });
     const live = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       persistence,
@@ -135,6 +137,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       }),
     );
     const commands = createAgentSessionCommandService({
+      pauseForStop: () => Effect.void,
       runtime: live,
       repositoryPolicy: persistence,
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
@@ -154,6 +157,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     });
     await Effect.runPromise(
       commands.sendUserMessage({
+        delivery: "new_turn",
         ...ref,
         sessionScope: { kind: "repository" },
         parts: [{ kind: "text", text: "Name this chat" }],

@@ -1,15 +1,16 @@
 import type { CodexJsonRpcRequest } from "@openducktor/adapters-codex-app-server";
-import { AgentRuntimeQueryError } from "@openducktor/core";
+import { AgentRuntimeQueryError, AgentSessionMessageRefusedError } from "@openducktor/core";
 import { Effect, Exit } from "effect";
 import {
   causeToHostBoundaryError,
   HostOperationError,
   HostResourceError,
 } from "../../effect/host-errors";
-import type {
-  CodexAppServerPort,
-  CodexAppServerError,
-  CodexAppServerRequestResult,
+import {
+  type CodexAppServerPort,
+  type CodexAppServerError,
+  type CodexAppServerRequestResult,
+  CodexAppServerRpcError,
 } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
@@ -31,6 +32,13 @@ export const createCodexRuntimeTransport = (
     const error = causeToHostBoundaryError(exit.cause);
     if (isTransportLoss(error)) {
       throw new AgentRuntimeQueryError("runtime_unavailable", RUNTIME_UNAVAILABLE_MESSAGE);
+    }
+    // A JSON-RPC error answer proves that Codex did not take the message.
+    if (
+      error instanceof CodexAppServerRpcError &&
+      (request.method === "turn/start" || request.method === "turn/steer")
+    ) {
+      throw new AgentSessionMessageRefusedError(error);
     }
     throw error;
   },

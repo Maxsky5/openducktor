@@ -656,7 +656,7 @@ function createRetryHarness(
             };
             try {
               const receipt = await send(identity, parts);
-              if (receipt) result.acceptedMessage = receipt.acceptedMessage;
+              if (receipt?.outcome === "accepted") result.acceptedMessage = receipt.acceptedMessage;
             } catch (cause) {
               result.status = "failed";
               result.unsentInstruction = parts;

@@ -8,7 +8,6 @@ import {
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
-  agentSessionControlSendInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveAttachInputSchema,
@@ -19,9 +18,12 @@ import {
   agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
+  agentMessageQueueManageInputSchema,
+  agentMessageSubmitInputSchema,
   agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { AgentMessageDeliveryService } from "../../application/agent-sessions/agent-message-delivery-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type { TaskServiceError } from "../../application/tasks/task-service";
 import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
@@ -59,6 +61,7 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
 
 export const createAgentSessionLiveCommandHandlers = (
   service: AgentSessionCommandService,
+  messageDelivery: Pick<AgentMessageDeliveryService, "submit" | "manage">,
   attachmentResolver: LocalAttachmentResolver,
 ) =>
   ({
@@ -80,18 +83,30 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_resume",
       ).pipe(Effect.flatMap(service.resumeSession)),
-    agent_session_control_send: (args) =>
-      parseCommandInput(
-        agentSessionControlSendInputSchema,
-        args,
-        "agent_session_control_send",
-      ).pipe(
+    agent_session_message_submit: (args) =>
+      parseCommandInput(agentMessageSubmitInputSchema, args, "agent_session_message_submit").pipe(
         Effect.flatMap((input) =>
           resolveSessionAttachments(input.parts, attachmentResolver).pipe(
             Effect.map((parts) => ({ ...input, parts })),
           ),
         ),
-        Effect.flatMap(service.sendUserMessage),
+        Effect.flatMap(messageDelivery.submit),
+      ),
+    agent_session_message_queue_manage: (args) =>
+      parseCommandInput(
+        agentMessageQueueManageInputSchema,
+        args,
+        "agent_session_message_queue_manage",
+      ).pipe(
+        Effect.flatMap((input) => {
+          const { action } = input;
+          return action.kind === "save_edit"
+            ? resolveSessionAttachments(action.parts, attachmentResolver).pipe(
+                Effect.map((parts) => ({ ...input, action: { ...action, parts } })),
+              )
+            : Effect.succeed(input);
+        }),
+        Effect.flatMap(messageDelivery.manage),
       ),
     agent_session_control_start: (args) =>
       parseCommandInput(

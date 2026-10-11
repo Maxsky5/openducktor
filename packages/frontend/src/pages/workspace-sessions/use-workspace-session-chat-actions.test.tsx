@@ -1,8 +1,9 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import type {
-  WorkspaceSession,
-  WorkspaceSessionLaunchRequest,
-  WorkspaceSessionLaunchResult,
+import {
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type WorkspaceSession,
+  type WorkspaceSessionLaunchRequest,
+  type WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
@@ -12,13 +13,18 @@ import { toast } from "sonner";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-contexts";
+import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import type { AgentMessageSendReceipt, AgentChatMessage } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
+import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -33,6 +39,53 @@ import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-f
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { requestWorkspaceGitConflictAssistance } from "./workspace-git-conflict-assistance";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+
+/** A workspace chat as the page wires it: its actions with the shared send rules. */
+const useWorkspaceChat = (
+  workspace: ActiveWorkspace,
+  record: WorkspaceSession,
+  isMounted: () => boolean,
+) => {
+  const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
+  const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
+  const delivery = useAgentChatSendForTarget(
+    actions.sendTarget({ canSend: true, assertCanSubmit: () => {} }),
+    {
+      identity,
+      repoPath: workspace.repoPath,
+      runtimeDescriptor: RUNTIME_DESCRIPTORS_BY_KIND[record.runtimeKind],
+      draftRules: { reusablePrompts: [], supportsAttachments: false },
+    },
+  );
+  return { ...actions, send: delivery.onSend };
+};
+
+const WORKSPACE = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+
+/** Renders a hook of a saved chat with the contexts of the workspace page. */
+const renderWorkspaceChat = <Result,>(
+  useChat: () => Result,
+  operations: AgentOperationsContextValue,
+  store = createAgentSessionsStore("/repo"),
+) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentChatSendProviders operations={operations}>{children}</AgentChatSendProviders>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(useChat, { wrapper });
+  return {
+    result: view.result,
+    store,
+    dispose: () => {
+      view.unmount();
+      queryClient.clear();
+    },
+  };
+};
 
 test.each(["local_repo_root", "local_worktree"] as const)(
   "conflict assistance sends to the selected saved %s chat",
@@ -54,7 +107,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       async () => {
         throw new Error("Unexpected draft startup");
       },
-      createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+      createAgentOperationsFixture({ sendAgentMessage: send }),
     );
     const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
     try {
@@ -117,7 +170,7 @@ test.each([false, true])(
         await startup.promise;
         return { session: bound, runtimeSession: null };
       },
-      createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+      createAgentOperationsFixture({ sendAgentMessage: send }),
     );
     let current = true;
     let outcome: unknown;
@@ -190,40 +243,6 @@ const createSessionOneRecord = (): WorkspaceSession => ({
   executionTarget: { kind: "local_repo_root", workingDirectory: "/repo/worktree" },
 });
 
-const createOperations = (
-  overrides: Pick<AgentOperationsContextValue, "sendAgentMessage" | "continueInterruptedTurn">,
-): AgentOperationsContextValue => ({
-  describeGeneratedImages: async () => {
-    throw new Error("Unexpected image metadata read");
-  },
-  beginGeneratedImageBatch: async () => {
-    throw new Error("Unexpected image batch");
-  },
-  releaseGeneratedImageBatch: async () => {
-    throw new Error("Unexpected image batch release");
-  },
-  readGeneratedImage: async () => {
-    throw new Error("Unexpected image read");
-  },
-  readSessionTodos: async () => {
-    throw new Error("Unexpected todos read");
-  },
-  readSessionHistory: async () => {
-    throw new Error("Unexpected history read");
-  },
-  loadAgentSessionHistory: async () => {
-    throw new Error("Unexpected history load");
-  },
-  loadAgentSessionContext: async () => {
-    throw new Error("Unexpected context read");
-  },
-  stopAgentSession: async () => {},
-  updateAgentSessionModel: async () => {},
-  replyAgentApproval: async () => {},
-  answerAgentQuestion: async () => {},
-  ...overrides,
-});
-
 test.each([
   ["hidden", false],
   ["hidden", true],
@@ -245,20 +264,12 @@ test.each([
   const view = renderChatPanes(
     record,
     start,
-    createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+    createAgentOperationsFixture({ sendAgentMessage: send }),
   );
-  let result!: Promise<boolean>;
+  let result!: Promise<AgentChatSendResult>;
   try {
     act(() => {
-      result = view.actions.sendDraft(
-        { segments: [createTextSegment("Hello")] },
-        {
-          canSend: true,
-          reusablePrompts: [],
-          selectedModelDescriptor: null,
-          supportsAttachments: false,
-        },
-      );
+      result = view.actions.send({ segments: [createTextSegment("Hello")] }, "default");
     });
     if (change === "unmounted") view.unmount();
     else if (change === "evicted") {
@@ -305,20 +316,12 @@ test.each([
   const view = renderChatPanes(
     record,
     start,
-    createOperations({ sendAgentMessage: send, continueInterruptedTurn: async () => {} }),
+    createAgentOperationsFixture({ sendAgentMessage: send }),
   );
-  let result!: Promise<boolean>;
+  let result!: Promise<AgentChatSendResult>;
   try {
     await act(async () => {
-      result = view.actions.sendDraft(
-        { segments: [createTextSegment("Hello")] },
-        {
-          canSend: true,
-          reusablePrompts: [],
-          selectedModelDescriptor: null,
-          supportsAttachments: false,
-        },
-      );
+      result = view.actions.send({ segments: [createTextSegment("Hello")] }, "default");
     });
     expect(phase === "start" ? start : send).toHaveBeenCalledTimes(1);
     view.select({ ...record, id: "other" }, ["other"]);
@@ -370,10 +373,7 @@ test.each([
     async () => {
       throw new Error("Unexpected start");
     },
-    createOperations({
-      sendAgentMessage: async () => null,
-      continueInterruptedTurn: resume,
-    }),
+    createAgentOperationsFixture({ continueInterruptedTurn: resume }),
   );
   try {
     act(() =>
@@ -455,12 +455,11 @@ test.each([
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const pending = Promise.withResolvers<void>();
-    const operations = createOperations({
+    const operations = createAgentOperationsFixture({
       sendAgentMessage: async () => {
         if (action !== "start") await pending.promise;
         return null;
       },
-      continueInterruptedTurn: async () => {},
     });
     configureShellBridge(
       createShellBridgeFixture({
@@ -476,20 +475,20 @@ test.each([
         },
       }),
     );
-    let sendResult: Promise<boolean> | undefined;
-    let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
+    let sendResult: Promise<AgentChatSendResult> | undefined;
+    let actions!: ReturnType<typeof useWorkspaceChat>;
     const Probe = () => {
-      actions = useWorkspaceSessionChatActions(workspace, record, () => true);
+      actions = useWorkspaceChat(workspace, record, () => true);
       return null;
     };
     const view = (mode: "visible" | "hidden") => (
       <QueryClientProvider client={queryClient}>
         <AgentSessionsContext value={store}>
-          <AgentOperationsContext value={operations}>
+          <AgentChatSendProviders operations={operations}>
             <Activity mode={mode}>
               <Probe />
             </Activity>
-          </AgentOperationsContext>
+          </AgentChatSendProviders>
         </AgentSessionsContext>
       </QueryClientProvider>
     );
@@ -497,15 +496,7 @@ test.each([
     try {
       await act(async () => {
         if (action !== "model") {
-          sendResult = actions.sendDraft(
-            { segments: [createTextSegment("Hello")] },
-            {
-              canSend: true,
-              reusablePrompts: [],
-              selectedModelDescriptor: null,
-              supportsAttachments: false,
-            },
-          );
+          sendResult = actions.send({ segments: [createTextSegment("Hello")] }, "default");
         } else {
           actions.updateDraftModel({ providerId: "openai", modelId: "gpt-5" });
         }
@@ -535,10 +526,7 @@ test.each([
 );
 
 test.each([false, true])("saves a speed change without the model lock, live=%p", async (live) => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const record = createWorkspaceSessionRecord();
-  const store = createAgentSessionsStore("/repo");
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const pending = Promise.withResolvers<void>();
   const saveDraft = mock(async () => {
     await pending.promise;
@@ -550,23 +538,10 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
   configureShellBridge(
     createShellBridgeFixture({ client: { workspaceSessionSetDraftModel: saveDraft } }),
   );
-  const operations: AgentOperationsContextValue = {
-    ...createOperations({
-      sendAgentMessage: async () => null,
-      continueInterruptedTurn: async () => {},
-    }),
-    updateAgentSessionModel: updateLive,
-  };
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
+  const view = renderWorkspaceChat(
+    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+    createAgentOperationsFixture({ updateAgentSessionModel: updateLive }),
   );
-  const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
-    wrapper,
-  });
   const identity = live
     ? workspaceSessionIdentity({ ...record, externalSessionId: "native" })
     : null;
@@ -584,8 +559,7 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
     expect((live ? updateLive : saveDraft).mock.calls).toHaveLength(1);
     expect((live ? saveDraft : updateLive).mock.calls).toHaveLength(0);
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
     configureShellBridge(createUnavailableShellBridge());
   }
 });
@@ -697,42 +671,21 @@ const firstSendCases: Array<{
 ];
 
 test.each(firstSendCases)("first draft send: $name", async (testCase) => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const record = createWorkspaceSessionRecord();
   const bound = { ...record, externalSessionId: "native" };
-  const store = createAgentSessionsStore("/repo");
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const browserSend = mock(async () => null);
   const launch = mock(async (request: WorkspaceSessionLaunchRequest) =>
     testCase.launch(request, bound),
   );
   configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionLaunch: launch } }));
-  const operations = createOperations({
-    sendAgentMessage: browserSend,
-    continueInterruptedTurn: async () => {},
-  });
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
+  const view = renderWorkspaceChat(
+    () => useWorkspaceChat(WORKSPACE, record, () => true),
+    createAgentOperationsFixture({ sendAgentMessage: browserSend }),
   );
-  const view = renderHook(() => useWorkspaceSessionChatActions(workspace, record, () => true), {
-    wrapper,
-  });
   try {
-    let sent: boolean | undefined;
+    let sent: AgentChatSendResult | undefined;
     await act(async () => {
-      sent = await view.result.current.sendDraft(
-        { segments: [createTextSegment("Hello")] },
-        {
-          canSend: true,
-          reusablePrompts: [],
-          selectedModelDescriptor: null,
-          supportsAttachments: false,
-        },
-      );
+      sent = await view.result.current.send({ segments: [createTextSegment("Hello")] }, "default");
     });
     expect(sent).toBe(testCase.sent);
     expect(launch).toHaveBeenCalledTimes(1);
@@ -746,27 +699,22 @@ test.each(firstSendCases)("first draft send: $name", async (testCase) => {
     expect(view.result.current.error).toBe(testCase.error);
     expect(view.result.current.isSending).toBe(false);
     expect(view.result.current.isStarting).toBe(false);
-    const sessions = store.listSessionSnapshots();
+    const sessions = view.store.listSessionSnapshots();
     expect(sessions).toHaveLength(testCase.sessions);
     const messages = sessions[0] ? sessionMessagesToArray(sessions[0]) : [];
     expect(messages.filter((message) => message.role === "user")).toHaveLength(
       testCase.userMessages,
     );
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
     configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("blocks a second resume selection before the first one settles", async () => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
-  const store = createAgentSessionsStore("/repo");
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let resolveContinuation = (): void => {};
   let continuations = 0;
-  const operations = createOperations({
-    sendAgentMessage: async () => null,
+  const operations = createAgentOperationsFixture({
     continueInterruptedTurn: () => {
       continuations += 1;
       return new Promise<void>((resolve) => {
@@ -774,19 +722,10 @@ test("blocks a second resume selection before the first one settles", async () =
       });
     },
   });
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
-  );
-  const view = renderHook(
-    ({ record }) => useWorkspaceSessionChatActions(workspace, record, () => true),
-    {
-      wrapper,
-      initialProps: { record: createSessionOneRecord() },
-    },
+  const record = createSessionOneRecord();
+  const view = renderWorkspaceChat(
+    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+    operations,
   );
 
   try {
@@ -813,13 +752,11 @@ test("blocks a second resume selection before the first one settles", async () =
     expect(view.result.current.isResumingSession).toBe(false);
     expect(continuations).toBe(1);
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
   }
 });
 
 test("shows the host reason and next action when a continuation is refused", async () => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const failure = new HostInvokeError("Continuation refused", {
     kind: "agent_session_resume",
     agentSessionResumeFailure: {
@@ -835,27 +772,15 @@ test("shows the host reason and next action when a continuation is refused", asy
       nextAction: "Send a new message to start new work.",
     },
   });
-  const store = createAgentSessionsStore("/repo");
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const operations = createOperations({
-    sendAgentMessage: async () => null,
+  const operations = createAgentOperationsFixture({
     continueInterruptedTurn: async () => {
       throw failure;
     },
   });
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
-  );
-  const view = renderHook(
-    ({ record }) => useWorkspaceSessionChatActions(workspace, record, () => true),
-    {
-      wrapper,
-      initialProps: { record: createSessionOneRecord() },
-    },
+  const record = createSessionOneRecord();
+  const view = renderWorkspaceChat(
+    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+    operations,
   );
 
   try {
@@ -873,13 +798,11 @@ test("shows the host reason and next action when a continuation is refused", asy
     expect(view.result.current.persistentResumeError).toBeNull();
     expect(view.result.current.isResumingSession).toBe(false);
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
   }
 });
 
 test("keeps an unconfirmed continuation failure after the Resume action settles", async () => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const failure = new HostInvokeError("Continuation unconfirmed", {
     kind: "agent_session_resume",
     agentSessionResumeFailure: {
@@ -895,27 +818,15 @@ test("keeps an unconfirmed continuation failure after the Resume action settles"
       nextAction: "Inspect the runtime and this session.",
     },
   });
-  const store = createAgentSessionsStore("/repo");
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const operations = createOperations({
-    sendAgentMessage: async () => null,
+  const operations = createAgentOperationsFixture({
     continueInterruptedTurn: async () => {
       throw failure;
     },
   });
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
-  );
-  const view = renderHook(
-    ({ record }) => useWorkspaceSessionChatActions(workspace, record, () => true),
-    {
-      wrapper,
-      initialProps: { record: createSessionOneRecord() },
-    },
+  const record = createSessionOneRecord();
+  const view = renderWorkspaceChat(
+    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+    operations,
   );
 
   try {
@@ -931,13 +842,11 @@ test("keeps an unconfirmed continuation failure after the Resume action settles"
       "The runtime did not confirm the continuation. Inspect the runtime and this session.",
     );
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
   }
 });
 
 test("clears an unconfirmed continuation failure when the transcript settles", async () => {
-  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const failure = new HostInvokeError("Continuation unconfirmed", {
     kind: "agent_session_resume",
     agentSessionResumeFailure: {
@@ -980,26 +889,16 @@ test("clears an unconfirmed continuation failure when the transcript settles", a
       messages: [userMessage],
     }),
   );
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const operations = createOperations({
-    sendAgentMessage: async () => null,
+  const operations = createAgentOperationsFixture({
     continueInterruptedTurn: async () => {
       throw failure;
     },
   });
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
-      </AgentSessionsContext>
-    </QueryClientProvider>
-  );
-  const view = renderHook(
-    ({ record }) => useWorkspaceSessionChatActions(workspace, record, () => true),
-    {
-      wrapper,
-      initialProps: { record: createSessionOneRecord() },
-    },
+  const record = createSessionOneRecord();
+  const view = renderWorkspaceChat(
+    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+    operations,
+    store,
   );
 
   try {
@@ -1021,8 +920,7 @@ test("clears an unconfirmed continuation failure when the transcript settles", a
     expect(view.result.current.resumeSessionError).toBeNull();
     expect(view.result.current.persistentResumeError).toBeNull();
   } finally {
-    view.unmount();
-    queryClient.clear();
+    view.dispose();
   }
 });
 
@@ -1046,9 +944,9 @@ function renderChatPanes(
       },
     }),
   );
-  let actions!: ReturnType<typeof useWorkspaceSessionChatActions>;
+  let actions!: ReturnType<typeof useWorkspaceChat>;
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation((props) => {
-    const current = useWorkspaceSessionChatActions(props.workspace, props.record, props.isMounted);
+    const current = useWorkspaceChat(props.workspace, props.record, props.isMounted);
     if (props.record.id === record.id) actions = current;
     return <></>;
   });
@@ -1058,7 +956,7 @@ function renderChatPanes(
   const content = (current: WorkspaceSession) => (
     <QueryClientProvider client={queryClient}>
       <AgentSessionsContext value={store}>
-        <AgentOperationsContext value={operations}>
+        <AgentChatSendProviders operations={operations}>
           <WorkspaceSessionChatPanes
             workspace={workspace}
             record={current}
@@ -1068,7 +966,7 @@ function renderChatPanes(
             onToolRefresh={refresh}
             onSelectFile={selectFile}
           />
-        </AgentOperationsContext>
+        </AgentChatSendProviders>
       </AgentSessionsContext>
     </QueryClientProvider>
   );

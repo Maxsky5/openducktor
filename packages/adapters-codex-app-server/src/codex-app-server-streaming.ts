@@ -62,6 +62,21 @@ export type CompletedAgentMessage = {
 
 export type CodexUserMessageEcho = {
   readonly text: string;
+  /**
+   * Set when a send got no conclusive answer. The echo then proves acceptance and publishes the
+   * message.
+   */
+  messageToPublish?: AcceptedAgentUserMessage;
+  /** True once Codex echoed the message. */
+  echoed?: true;
+};
+
+export type CodexExpectedEcho = {
+  readonly cancel: () => void;
+  /** Keeps the expected echo, so a later echo publishes the accepted message. */
+  readonly publishWhenEchoed: () => void;
+  /** Tells if Codex already echoed the message while its request was pending. */
+  readonly wasEchoed: () => boolean;
 };
 
 export type CodexStreamingContext = {
@@ -85,8 +100,7 @@ export type CodexStreamingContext = {
   takeStartedItemTimestamp(runtimeId: string, threadId: string, itemId: string): number | undefined;
   markSnapshotChanged(runtimeId: string, threadId: string): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
-  flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   failUnlinkedSubagentSpawns(
     parentThreadId: string,
@@ -211,23 +225,25 @@ const consumeSyntheticUserMessage = (
   context: CodexStreamingContext,
   externalSessionId: string,
   message: string,
-): boolean => {
+): CodexUserMessageEcho | null => {
   const pendingEchoes = context.syntheticUserMessageEchoesByThreadId.get(externalSessionId);
   if (!pendingEchoes || pendingEchoes.length === 0) {
-    return false;
+    return null;
   }
   const normalizedMessage = normalizeSyntheticUserMessageText(message);
   const index = pendingEchoes.findIndex(
     (echo) => normalizeSyntheticUserMessageText(echo.text) === normalizedMessage,
   );
-  if (index === -1) {
-    return false;
+  const echo = pendingEchoes[index];
+  if (!echo) {
+    return null;
   }
+  echo.echoed = true;
   pendingEchoes.splice(index, 1);
   if (pendingEchoes.length === 0) {
     context.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
   }
-  return true;
+  return echo;
 };
 
 const normalizeSyntheticUserMessageText = (text: string): string =>
@@ -315,11 +331,13 @@ export const createCodexAcceptedUserMessage = ({
   parts,
   model,
   resolvedQuestionRequestIds,
+  submissionId,
 }: {
   session: CodexSessionState;
   parts: AgentUserMessagePart[];
   model: AgentModelSelection | undefined;
   resolvedQuestionRequestIds: readonly string[];
+  submissionId?: string | undefined;
 }): AcceptedAgentUserMessage => {
   const event: AcceptedAgentUserMessage = {
     type: "user_message",
@@ -335,6 +353,9 @@ export const createCodexAcceptedUserMessage = ({
   if (model) {
     event.model = model;
   }
+  if (submissionId) {
+    event.submissionId = submissionId;
+  }
 
   return event;
 };
@@ -343,7 +364,7 @@ export const expectCodexUserMessageEcho = (
   context: CodexStreamingContext,
   event: AcceptedAgentUserMessage,
   input: CodexUserInput[],
-): (() => void) => {
+): CodexExpectedEcho => {
   const echo: CodexUserMessageEcho = {
     text: codexUserInputListToText(input),
   };
@@ -354,13 +375,19 @@ export const expectCodexUserMessageEcho = (
     pendingEchoes.splice(0, pendingEchoes.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
   }
   context.syntheticUserMessageEchoesByThreadId.set(event.externalSessionId, pendingEchoes);
-  return () => {
-    const index = pendingEchoes.indexOf(echo);
-    if (index === -1) return;
-    pendingEchoes.splice(index, 1);
-    if (pendingEchoes.length === 0) {
-      context.syntheticUserMessageEchoesByThreadId.delete(event.externalSessionId);
-    }
+  return {
+    cancel: () => {
+      const index = pendingEchoes.indexOf(echo);
+      if (index === -1) return;
+      pendingEchoes.splice(index, 1);
+      if (pendingEchoes.length === 0) {
+        context.syntheticUserMessageEchoesByThreadId.delete(event.externalSessionId);
+      }
+    },
+    publishWhenEchoed: () => {
+      echo.messageToPublish = event;
+    },
+    wasEchoed: () => echo.echoed === true,
   };
 };
 
@@ -427,7 +454,9 @@ const emitCompletedItem = (
   if (codexItemTypeMatches(item, "userMessage")) {
     const input = codexUserInputsFromItem(item);
     const message = codexUserInputListToText(input);
-    if (consumeSyntheticUserMessage(context, session.threadId, message)) {
+    const echo = consumeSyntheticUserMessage(context, session.threadId, message);
+    if (echo) {
+      if (echo.messageToPublish) emitCodexUserMessage(context, echo.messageToPublish);
       return;
     }
     const canonicalEvents = context.eventMapperPipeline.runLive(
@@ -643,35 +672,23 @@ export const handleCodexPendingNotifications = async (
     const timestamp = timestampFromCodexNotification(notification);
     const notificationTurnId = codexNotificationTurnId(notification);
     const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
-    if (
-      notificationTurnId &&
-      activeTurn &&
+    if (notificationTurnId && activeTurn) {
       context.bindActiveTurnId(
         activeTurn,
         notificationTurnId,
         receivedAtMsFromCodexNotification(notification.receivedAt),
-      )
-    ) {
-      context.flushQueuedUserMessagesLater(activeTurn);
+      );
     }
 
     if (notification.method === "turn/started") {
       context.setSessionLiveStatus(session, {
         classification: "running",
       });
-      const turnId = notification.params.turn.id;
-      context.startImageGenerationTurn(session, turnId, notification.receivedAt);
-      if (
-        turnId &&
-        activeTurn &&
-        context.bindActiveTurnId(
-          activeTurn,
-          turnId,
-          receivedAtMsFromCodexNotification(notification.receivedAt),
-        )
-      ) {
-        context.flushQueuedUserMessagesLater(activeTurn);
-      }
+      context.startImageGenerationTurn(
+        session,
+        notification.params.turn.id,
+        notification.receivedAt,
+      );
       continue;
     }
 

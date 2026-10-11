@@ -1,3 +1,4 @@
+import type { AgentTurnOutcome } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingQuestionRequest,
@@ -63,7 +64,7 @@ export type CodexCanonicalSessionErrorEvent = CodexCanonicalEventBase & {
 
 export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
   kind: "session_idle";
-  turnCompleted: true;
+  turnOutcome: AgentTurnOutcome;
 };
 
 export type CodexCanonicalSessionCompactionStartedEvent = CodexCanonicalEventBase & {

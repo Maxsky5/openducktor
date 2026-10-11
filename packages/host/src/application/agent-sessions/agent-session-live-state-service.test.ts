@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
@@ -141,6 +142,7 @@ const createHarness = (withProcessStartAdmission?: WithProcessStartAdmission) =>
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     runtimeAdmission: passThroughAdmission,
     adapterRegistry,
     withProcessStartAdmission,
@@ -166,6 +168,7 @@ test.each(["runtime", "session"] as const)(
     let failPublication = false;
     const adapterRegistry = createLiveSessionAdapterRegistry();
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry,
       publish: () => {
@@ -229,6 +232,7 @@ test.each(["session_idle", "session_status", "session_finished"] as const)(
       });
       let current = liveSnapshot("held");
       const service = createAgentSessionLiveStateService({
+        messageQueues: noMessageQueues,
         runtimeAdmission: passThroughAdmission,
         adapterRegistry: createLiveSessionAdapterRegistry(),
         faultLog: () => Effect.void,
@@ -259,7 +263,7 @@ test.each(["session_idle", "session_status", "session_finished"] as const)(
           ? { ...base, type, status: { type: "idle" } }
           : type === "session_finished"
             ? { ...base, type, message: "Finished" }
-            : { ...base, type, turnCompleted: true };
+            : { ...base, type, turnOutcome: "completed" };
       const idleStatus: AgentSessionTranscriptEvent = {
         ...base,
         type: "session_status",
@@ -336,6 +340,7 @@ test.each(["before", "after"] as const)(
       resolveTask: (id) => ({ id, title: "Task" }),
     });
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
@@ -363,7 +368,7 @@ test.each(["before", "after"] as const)(
     const idle: AgentSessionTranscriptEvent = {
       ...base,
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
     };
     const stopped: AgentSessionTranscriptEvent = {
       ...base,
@@ -467,6 +472,7 @@ test("a launch failure stays in session snapshots and notifies once until an acc
   const service = createAgentSessionLiveStateService({
     runtimeAdmission: passThroughAdmission,
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    messageQueues: noMessageQueues,
     faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),
     observeNotificationInput: (envelope, provenance) => {
@@ -535,6 +541,7 @@ test("a launch failure stays in session snapshots and notifies once until an acc
       ...current.ref,
       sessionScope: { kind: "repository" },
       parts: [{ kind: "text", text: "Continue" }],
+      delivery: "new_turn",
     }),
   );
   const read = await Effect.runPromise(service.read(current.ref));
@@ -547,6 +554,7 @@ test("a launch failure of a session that is not live is left to the caller", asy
   const service = createAgentSessionLiveStateService({
     runtimeAdmission: passThroughAdmission,
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    messageQueues: noMessageQueues,
     faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),
   });
@@ -572,6 +580,7 @@ describe("createAgentSessionLiveStateService", () => {
   test("does not read saved roots when the adapter has no snapshot refresh", async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       readSessionRootRefs: () => Effect.die(new Error("Unexpected saved root read.")),
@@ -601,6 +610,7 @@ describe("createAgentSessionLiveStateService", () => {
       const adapterRegistry = createLiveSessionAdapterRegistry();
       const events: AgentSessionLiveEnvelope[] = [];
       const service = createAgentSessionLiveStateService({
+        messageQueues: noMessageQueues,
         runtimeAdmission: passThroughAdmission,
         adapterRegistry,
         readSessionRootRefs: () =>
@@ -643,6 +653,7 @@ describe("createAgentSessionLiveStateService", () => {
       const service = createAgentSessionLiveStateService({
         runtimeAdmission: passThroughAdmission,
         adapterRegistry: createLiveSessionAdapterRegistry(),
+        messageQueues: noMessageQueues,
         readSessionRootRefs: () =>
           Effect.sleep("1 millis").pipe(
             Effect.andThen(
@@ -681,6 +692,7 @@ describe("createAgentSessionLiveStateService", () => {
         type: "snapshot",
         repoPath: "/repo",
         sessions: [{ ...liveSnapshot("session-1"), executionEpisodeId: expect.any(String) }],
+        messageQueues: [],
         sequence: 1,
       });
       expect(second).toEqual(first);
@@ -798,7 +810,12 @@ describe("createAgentSessionLiveStateService", () => {
       cleanupFinish.resolve();
     }
     expect((await release)._tag).toBe("Failure");
-    expect(events.at(-1)).toMatchObject({ type: "snapshot", repoPath: "/repo", sessions: [next] });
+    expect(events.at(-1)).toMatchObject({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [next],
+    });
     expect(await Effect.runPromise(service.list({ repoPath: "/repo" }))).toMatchObject([next]);
   });
 
@@ -857,6 +874,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events).toEqual([
       {
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [{ ...snapshot, executionEpisodeId: episodeId }],
         sequence: 2,
@@ -889,11 +907,13 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events).toMatchObject([
       {
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("runtime-session", "opencode")],
       },
       {
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("next-runtime-session", "opencode")],
       },
@@ -967,7 +987,7 @@ describe("createAgentSessionLiveStateService", () => {
       liveSnapshot("runtime-session", "opencode"),
     ]);
     expect(events).toMatchObject([
-      { type: "snapshot", repoPath: "/repo", sessions: [] },
+      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] },
       { type: "session_upsert", session: liveSnapshot("runtime-session", "opencode") },
     ]);
     expect(refreshCalls).toEqual(["opencode"]);
@@ -996,8 +1016,113 @@ describe("createAgentSessionLiveStateService", () => {
     });
     expect(events).toMatchObject([
       { type: "session_upsert", session: snapshot },
-      { type: "snapshot", repoPath: "/repo", sessions: [snapshot] },
+      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [snapshot] },
     ]);
+  });
+
+  test("adds message queues to a repository snapshot and gives them each snapshot and batch", async () => {
+    const events: AgentSessionLiveEnvelope[] = [];
+    const observed: AgentSessionLiveEnvelope[][] = [];
+    const queue = {
+      target: { ...sessionRef("session-1"), sessionScope: { kind: "repository" as const } },
+      revision: 3,
+      entries: [],
+      pause: { message: "You stopped the agent." },
+    };
+    const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (event) => events.push(event),
+      messageQueues: {
+        listQueues: (repoPath) => (repoPath === "/repo" ? [queue] : []),
+        observeChanges: (envelopes) => observed.push([...envelopes]),
+      },
+    });
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [liveSnapshot("session-1")] }),
+      ),
+    );
+    events.length = 0;
+    observed.length = 0;
+
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+
+    expect(events[0]).toMatchObject({ type: "snapshot", messageQueues: [queue] });
+    expect(observed).toEqual([
+      [
+        expect.objectContaining({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [expect.objectContaining({ ref: sessionRef("session-1") })],
+        }),
+      ],
+    ]);
+
+    await Effect.runPromise(
+      mutateRegisteredAdapter(
+        service,
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            { type: "session_upsert" as const, snapshot: liveSnapshot("session-2", "opencode") },
+            { type: "session_removed" as const, ref: sessionRef("session-3", "opencode") },
+          ],
+        }),
+      ),
+    );
+
+    expect(observed.at(-1)?.map((envelope) => envelope.type)).toEqual([
+      "session_upsert",
+      "session_removed",
+    ]);
+  });
+
+  test("lets message queues read the changes published before a later publication fails", async () => {
+    const observedBatches: string[][] = [];
+    const publishFailure = new HostOperationError({
+      operation: "test.publish",
+      message: "publication failed",
+    });
+    const service = createAgentSessionLiveStateService({
+      runtimeAdmission: passThroughAdmission,
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (event) => {
+        if (
+          event.type === "session_upsert" &&
+          event.session.ref.externalSessionId === "session-2"
+        ) {
+          throw publishFailure;
+        }
+      },
+      messageQueues: {
+        listQueues: () => [],
+        observeChanges: (envelopes) =>
+          observedBatches.push(envelopes.map((envelope) => envelope.type)),
+      },
+    });
+    await Effect.runPromise(
+      mutateRegisteredAdapter(service, Effect.succeed({ value: undefined, changes: [] })),
+    );
+    observedBatches.length = 0;
+
+    const failure = await expectHostFailure(
+      mutateRegisteredAdapter(
+        service,
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            { type: "session_upsert" as const, snapshot: liveSnapshot("session-1", "opencode") },
+            { type: "session_upsert" as const, snapshot: liveSnapshot("session-2", "opencode") },
+          ],
+        }),
+      ),
+    );
+
+    expect(failure).toBe(publishFailure);
+    expect(observedBatches).toEqual([["session_upsert"]]);
   });
 
   test("publishes exactly one snapshot before a change queued during refresh", async () => {
@@ -1048,6 +1173,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events.map((event) => event.type)).toEqual(["snapshot", "session_upsert"]);
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [expect.objectContaining({ activity: "idle" })],
     });
@@ -1085,6 +1211,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       sessions: [expect.objectContaining({ activity: "running" })],
     });
   });
@@ -1155,6 +1282,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [
@@ -1230,6 +1358,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       sessions: [expect.objectContaining({ contextUsage: { totalTokens: 10 } })],
     });
     expect(events[1]).toMatchObject({
@@ -1381,6 +1510,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault logging failed",
     });
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
@@ -1425,6 +1555,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.fail(logFailure),
@@ -1471,6 +1602,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
@@ -1512,6 +1644,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
@@ -1562,6 +1695,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       runtimeAdmission: passThroughAdmission,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
@@ -1614,7 +1748,9 @@ describe("createAgentSessionLiveStateService", () => {
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 1 }]);
+    expect(events).toEqual([
+      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 1 },
+    ]);
     expect(faultLogs).toEqual([]);
   });
 
@@ -1642,6 +1778,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       sessions: [expect.objectContaining({ ref: snapshot.ref })],
     });
   });
@@ -1683,6 +1820,7 @@ describe("createAgentSessionLiveStateService", () => {
 
     expect(events[0]).toMatchObject({
       type: "snapshot",
+      messageQueues: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [expect.objectContaining({ requestId: "opaque-1" })],
@@ -1798,7 +1936,12 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(releaseCalled).toBe(true);
-    expect(events.at(-1)).toMatchObject({ type: "snapshot", repoPath: "/repo", sessions: [] });
+    expect(events.at(-1)).toMatchObject({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [],
+    });
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
@@ -1865,7 +2008,9 @@ describe("createAgentSessionLiveStateService", () => {
       "live snapshot read failed",
     );
 
-    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 3 }]);
+    expect(events).toEqual([
+      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 3 },
+    ]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
@@ -2087,6 +2232,7 @@ describe("createAgentSessionLiveStateService", () => {
       ...sessionRef("persisted-session"),
       sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       parts: [{ kind: "text" as const, text: "Continue" }],
+      delivery: "new_turn" as const,
     };
 
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
@@ -2189,7 +2335,11 @@ describe("createAgentSessionLiveStateService", () => {
       }),
     );
     await expectMissingRoute(
-      service.sendUserMessage({ ...ref, parts: [{ kind: "text", text: "Continue" }] }),
+      service.sendUserMessage({
+        delivery: "new_turn",
+        ...ref,
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
     );
     await expectMissingRoute(service.loadContext(ref));
   });

@@ -277,6 +277,11 @@ export type AgentOperationsContextValue = {
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
   ) => Promise<AgentMessageSendReceipt | null>;
+  /** Edits, removes, or steers one queued message, or resumes a paused queue. */
+  manageAgentMessageQueue: (
+    session: AgentSessionIdentity,
+    action: import("@openducktor/contracts").AgentMessageQueueAction,
+  ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (

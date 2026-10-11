@@ -67,7 +67,7 @@ const createElectronApi = () => {
         ok: true as const,
         value:
           command === "agent_session_live_attach"
-            ? { type: "snapshot", repoPath: "/repo", sessions: [], sequence: 0 }
+            ? { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 0 }
             : undefined,
       })),
       subscribe: mock(() => unsubscribe),
@@ -382,6 +382,7 @@ describe("electron shell bridge", () => {
     const newerRemoval = { ...coveredRemoval, sequence: 6 };
     const snapshot: AgentSessionLiveSnapshotEnvelope = {
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [],
       sequence: 5,

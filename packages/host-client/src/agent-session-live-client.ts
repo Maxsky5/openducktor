@@ -20,13 +20,21 @@ import {
   agentGeneratedImageReadResultSchema,
 } from "@openducktor/contracts";
 import {
-  type AcceptedAgentInput,
+  type AgentMessageQueueManageInput,
+  type AgentMessageQueueManageResult,
+  type AgentMessageSubmitInput,
+  type AgentMessageSubmitResult,
+  agentMessageQueueManageInputSchema,
+  agentMessageQueueManageResultSchema,
+  agentMessageSubmitInputSchema,
+  agentMessageSubmitResultSchema,
+} from "@openducktor/contracts";
+import {
   type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
   type AgentSessionControlForkInput,
   type AgentSessionControlReleaseInput,
   type AgentSessionControlResumeInput,
-  type AgentSessionControlSendInput,
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
@@ -43,12 +51,10 @@ import {
   type AgentSessionLiveSnapshotEnvelope,
   type AgentWorkflowSessionStartInput,
   type FileDiff,
-  acceptedAgentInputSchema,
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
-  agentSessionControlSendInputSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlSummarySchema,
@@ -144,11 +150,24 @@ export class HostAgentSessionLiveClient {
     );
   }
 
-  async agentSessionControlSend(input: AgentSessionControlSendInput): Promise<AcceptedAgentInput> {
+  /** Sends a message now, or adds it to the queue of its session while the agent works. */
+  async agentSessionMessageSubmit(
+    input: AgentMessageSubmitInput,
+  ): Promise<AgentMessageSubmitResult> {
     return this.invokeFn(
-      "agent_session_control_send",
-      agentSessionControlSendInputSchema.parse(input),
-      acceptedAgentInputSchema,
+      "agent_session_message_submit",
+      agentMessageSubmitInputSchema.parse(input),
+      agentMessageSubmitResultSchema,
+    );
+  }
+
+  async agentSessionMessageQueueManage(
+    input: AgentMessageQueueManageInput,
+  ): Promise<AgentMessageQueueManageResult> {
+    return this.invokeFn(
+      "agent_session_message_queue_manage",
+      agentMessageQueueManageInputSchema.parse(input),
+      agentMessageQueueManageResultSchema,
     );
   }
 

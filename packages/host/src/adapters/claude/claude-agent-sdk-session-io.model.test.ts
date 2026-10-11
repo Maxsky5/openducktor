@@ -26,6 +26,7 @@ describe("Claude session I/O model changes", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
+        delivery: "new_turn",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         systemPrompt: "Replacement prompt",
         parts: [{ kind: "text", text: "hello" }],
@@ -60,6 +61,7 @@ describe("Claude session I/O model changes", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
+        delivery: "new_turn",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         model: {
           providerId: "claude",
@@ -123,6 +125,7 @@ describe("Claude session I/O model changes", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
+        delivery: "new_turn",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         model: {
           providerId: "claude",
@@ -150,12 +153,14 @@ describe("Claude session I/O model changes", () => {
       modelId: "claude-opus-4-6",
       runtimeKind: "claude" as const,
     };
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    queue.push = () => {};
     const session = createClaudeSession({
       activity: "idle",
       model: change.previous ? { ...model, speed: change.previous } : model,
       query: createClaudeQueryFixture({ applyFlagSettings }),
+      queue,
     });
-    session.queue.push = () => {};
 
     await sendClaudeUserMessage({
       session,
@@ -171,6 +176,7 @@ describe("Claude session I/O model changes", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         model: change.next ? { ...model, speed: change.next } : model,
         parts: [{ kind: "text", text: "hello" }],
+        delivery: "new_turn",
       },
     });
 
@@ -206,6 +212,7 @@ describe("Claude session I/O model changes", () => {
           sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
           model: { ...model, speed: "priority" },
           parts: [{ kind: "text", text: "hello" }],
+          delivery: "new_turn",
         },
       }),
     ).rejects.toThrow("does not support speed 'priority'");
@@ -241,6 +248,7 @@ describe("Claude session I/O model changes", () => {
           runtimeKind: "claude",
           workingDirectory: "/repo",
           runtimePolicy: { kind: "claude" },
+          delivery: "new_turn",
           sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
           model: {
             providerId: "claude",
@@ -268,6 +276,7 @@ describe("Claude session I/O model changes", () => {
       runtimePolicy: { kind: "claude" as const },
       sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
       parts: [{ kind: "text" as const, text: "hello" }],
+      delivery: "new_turn" as const,
     };
     const send = (queue: AsyncInputQueue<SDKUserMessage>, onSent: () => void) =>
       sendClaudeUserMessage({

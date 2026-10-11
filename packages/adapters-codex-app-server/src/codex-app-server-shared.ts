@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
-import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
+import type { CodexSessionState, CodexTurnStartResult } from "./types";
 
 export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
@@ -30,7 +30,6 @@ export type ActiveCodexTurn = {
   isTurnSettled: () => boolean;
   markTurnSettled: () => void;
   handledRequestKeys: Set<string>;
-  queuedUserMessages: CodexUserInput[][];
   model: AgentModelSelection;
   turnId?: string;
 };

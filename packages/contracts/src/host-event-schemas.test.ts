@@ -33,12 +33,12 @@ describe("host event contracts", () => {
   test("parses each channel payload through its envelope branch", () => {
     const envelope = parseHostEventEnvelope({
       channel: "openducktor://agent-session-live-event",
-      payload: { type: "snapshot", repoPath: "/repo", sessions: [] },
+      payload: { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] },
     });
 
     expect(envelope).toEqual({
       channel: "openducktor://agent-session-live-event",
-      payload: { type: "snapshot", repoPath: "/repo", sessions: [] },
+      payload: { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] },
     });
     expect(
       hostEventEnvelopeSchema.safeParse({

@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import {
+  type AcceptedAgentInput,
   type AgentEnginePort,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
@@ -13,7 +14,9 @@ import { AgentMessageSendError } from "@/lib/agent-message-send-error";
 import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { getAcceptedMessageAfterSendFailure } from "@/state/agent-runtime-services";
+import type { AgentMessageSubmitInput } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
+import type { AgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import type {
   AgentChatMessage,
   AgentMessageSendOptions,
@@ -67,7 +70,8 @@ export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  adapter: Pick<AgentEnginePort, "sendUserMessage" | "resumeSession">;
+  adapter: Pick<AgentEnginePort, "submitUserMessage" | "resumeSession">;
+  messageQueues: Pick<AgentMessageQueuesStore, "apply">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   prepareSessionSend: (
@@ -199,7 +203,7 @@ export const appendSendFailureNotice = (
 
 export const upsertAcceptedUserMessage = (
   session: AgentSessionIdentity,
-  acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
+  acceptedUserMessage: AcceptedAgentInput,
   resolvedQuestionRequestIds: readonly string[] | undefined,
   updateSession: UpdateSession,
 ): void => {
@@ -211,6 +215,40 @@ export const upsertAcceptedUserMessage = (
     ...closeBackgroundQuestions(current, handledRequestIds),
     messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
   }));
+};
+
+/** Reattaches the same native session before a message or the queue can use it. */
+export const resumeStoppedSession = async (
+  dependencies: Pick<
+    SendAgentMessageDependencies,
+    "currentWorkspaceRepoPathRef" | "repoEpochRef" | "updateSession" | "workspaceRepoPath"
+  > & { adapter: Pick<AgentEnginePort, "resumeSession"> },
+  stoppedSession: AgentSessionState,
+): Promise<void> => {
+  const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
+  const isRepoStale = createRepoStaleGuard({
+    repoPath,
+    repoEpochRef: dependencies.repoEpochRef,
+    currentWorkspaceRepoPathRef: dependencies.currentWorkspaceRepoPathRef,
+  });
+  const staleError = "Workspace changed while resuming the session.";
+  throwIfRepoStale(isRepoStale, staleError);
+  const resumeInput: Parameters<typeof dependencies.adapter.resumeSession>[0] = {
+    ...toBoundRuntimeSessionRef(repoPath, stoppedSession, "resume session"),
+    resumeMode: "reattach",
+  };
+  const resumed = await dependencies.adapter.resumeSession(resumeInput);
+  throwIfRepoStale(isRepoStale, staleError);
+  if (!matchesAgentSessionIdentity(resumed, stoppedSession)) {
+    throw new Error(
+      `The runtime resumed a different session than '${stoppedSession.externalSessionId}'.`,
+    );
+  }
+  dependencies.updateSession(stoppedSession, (current) =>
+    current.status === "stopped" && current.executionEpisodeId === stoppedSession.executionEpisodeId
+      ? { ...current, status: resumed.status, runtimeStatusMessage: null }
+      : current,
+  );
 };
 
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {
@@ -235,30 +273,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     options?.assertCanSubmit?.(currentSession);
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
-      const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
-      const isRepoStale = createRepoStaleGuard({
-        repoPath,
-        repoEpochRef: dependencies.repoEpochRef,
-        currentWorkspaceRepoPathRef: dependencies.currentWorkspaceRepoPathRef,
-      });
-      const staleError = "Workspace changed while resuming the session.";
-      throwIfRepoStale(isRepoStale, staleError);
-      const stoppedSession = currentSession;
-      const resumeInput: Parameters<typeof dependencies.adapter.resumeSession>[0] = {
-        ...toBoundRuntimeSessionRef(repoPath, stoppedSession, "resume session"),
-        resumeMode: "reattach",
-      };
-      const resumed = await dependencies.adapter.resumeSession(resumeInput);
-      throwIfRepoStale(isRepoStale, staleError);
-      if (!matchesAgentSessionIdentity(resumed, stoppedSession)) {
-        throw new Error(`The runtime resumed a different session than '${externalSessionId}'.`);
-      }
-      dependencies.updateSession(stoppedSession, (current) =>
-        current.status === "stopped" &&
-        current.executionEpisodeId === stoppedSession.executionEpisodeId
-          ? { ...current, status: resumed.status, runtimeStatusMessage: null }
-          : current,
-      );
+      await resumeStoppedSession(dependencies, currentSession);
       currentSession = withSendScope(
         requireLoadedSession(dependencies.readSessionSnapshot, identity),
         options?.sessionScope,
@@ -271,6 +286,8 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       rejectSendWhileWaitingForInput(currentSession, dependencies);
     }
 
+    const mode = options?.mode ?? "default";
+    const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
     const sessionWasBusy = currentSession.status === "running";
     const preparedSend = sessionWasBusy
       ? await dependencies.prepareSessionSend(currentSession, { prepareWorkflowContext: false })
@@ -299,8 +316,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const readySession = withSendScope(loadedReadySession, options?.sessionScope);
     options?.assertCanSubmit?.(readySession);
 
-    const isBusyQueuedSend = readySession.status === "running";
-    const sendAttempt = isBusyQueuedSend
+    // The host decides if the message starts a turn or waits in the queue. An idle session shows
+    // the send as running until the host answers; a queued answer restores the previous state.
+    const sessionIsRunning = readySession.status === "running";
+    const sendAttempt = sessionIsRunning
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
     const resolvedQuestionRequestIds = hasLoadedSessionHistory(readySession)
@@ -309,27 +328,55 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           .map((request) => request.requestId)
       : undefined;
 
-    let sentMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>> | null = null;
+    let sentMessage: AcceptedAgentInput | null = null;
+    /** Returns the session to its state before this send marked it running. */
+    const settleOwnAttempt = (): void => {
+      let settledOwnAttempt = false;
+      dependencies.updateSession(readySession, (current) => {
+        if (
+          sessionIsRunning ||
+          current.executionEpisodeId !== readySession.executionEpisodeId ||
+          current.pendingUserMessageStartedAt !== sendAttempt
+        )
+          return current;
+        settledOwnAttempt = true;
+        return {
+          ...current,
+          status: readySession.status === "starting" ? "idle" : readySession.status,
+          runtimeStatusMessage: null,
+          pendingUserMessageStartedAt: undefined,
+        };
+      });
+      if (settledOwnAttempt) {
+        dependencies.clearSessionTurnState(readySession);
+      }
+    };
+
     try {
-      const runtimeSessionRef = toBoundRuntimeSessionRef(
-        requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
-        readySession,
-        "send message",
-      );
-      const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
+      const runtimeSessionRef = toBoundRuntimeSessionRef(repoPath, readySession, "send message");
+      const submitInput: AgentMessageSubmitInput = {
         ...runtimeSessionRef,
+        submissionId: crypto.randomUUID(),
+        mode,
         parts: normalizedParts,
       };
       if (resolvedQuestionRequestIds !== undefined) {
-        sendInput.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
+        submitInput.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
       }
       if (readySession.selectedModel) {
-        sendInput.model = readySession.selectedModel;
+        submitInput.model = readySession.selectedModel;
       }
       if (preparedSend.systemPrompt !== undefined) {
-        sendInput.systemPrompt = preparedSend.systemPrompt;
+        submitInput.systemPrompt = preparedSend.systemPrompt;
       }
-      const acceptedUserMessage = await dependencies.adapter.sendUserMessage(sendInput);
+      const result = await dependencies.adapter.submitUserMessage(submitInput);
+      if (result.kind === "queued") {
+        // The message waits in the queue, so the current turn and transcript stay unchanged.
+        dependencies.messageQueues.apply(result.queue);
+        settleOwnAttempt();
+        return { outcome: "queued", recipient: identity };
+      }
+      const acceptedUserMessage = result.acceptedMessage;
       sentMessage = acceptedUserMessage;
       if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(
@@ -340,6 +387,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         );
       }
       return {
+        outcome: "accepted",
         recipient: identity,
         acceptedMessage: acceptedUserMessage,
         postAcceptanceFailure: null,
@@ -349,7 +397,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         sentMessage ??
         (error instanceof HostInvokeError
           ? getAcceptedMessageAfterSendFailure(error, {
-              repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+              repoPath,
               runtimeKind: readySession.runtimeKind,
               workingDirectory: readySession.workingDirectory,
               externalSessionId,
@@ -378,34 +426,21 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
             description: errorMessage(error),
           });
         }
-        return { recipient: identity, acceptedMessage, postAcceptanceFailure: errorMessage(error) };
-      }
-      let settledOwnAttempt = false;
-      dependencies.updateSession(readySession, (current) => {
-        if (
-          isBusyQueuedSend ||
-          current.executionEpisodeId !== readySession.executionEpisodeId ||
-          current.pendingUserMessageStartedAt !== sendAttempt
-        )
-          return current;
-        settledOwnAttempt = true;
         return {
-          ...current,
-          status: readySession.status === "starting" ? "idle" : readySession.status,
-          runtimeStatusMessage: null,
-          pendingUserMessageStartedAt: undefined,
+          outcome: "accepted",
+          recipient: identity,
+          acceptedMessage,
+          postAcceptanceFailure: errorMessage(error),
         };
-      });
+      }
+      settleOwnAttempt();
       appendSendFailureNotice(
         readySession,
         `Failed to send message: ${errorMessage(error)}`,
         dependencies.updateSession,
-        isManualCompactionSend && !isBusyQueuedSend,
+        isManualCompactionSend && !sessionIsRunning,
         options?.errorAttentionId,
       );
-      if (settledOwnAttempt) {
-        dependencies.clearSessionTurnState(readySession);
-      }
       const errorAttentionId = options?.errorAttentionId;
       const failedSession = dependencies.readSessionSnapshot(readySession);
       if (

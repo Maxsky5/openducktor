@@ -58,8 +58,6 @@ describe("deriveAgentStudioSessionActionState", () => {
     expect(state).toMatchObject({
       isSessionWorking: true,
       isWaitingInput: false,
-      canQueueBusyFollowups: true,
-      busySendBlockedReason: null,
     });
   });
 
@@ -68,10 +66,7 @@ describe("deriveAgentStudioSessionActionState", () => {
       ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
       capabilities: {
         ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
-        sessionLifecycle: {
-          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.sessionLifecycle,
-          supportsQueuedUserMessages: false,
-        },
+        messageDelivery: { minimumSteeringRuntimeVersion: "1.0.0" },
       },
     };
 
@@ -95,8 +90,8 @@ describe("deriveAgentStudioSessionActionState", () => {
       runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
     });
 
-    expect(state.canQueueBusyFollowups).toBe(true);
-    expect(state.busySendBlockedReason).toBeNull();
+    const messageDelivery = state.runtimeDescriptor?.capabilities.messageDelivery;
+    expect(messageDelivery?.minimumSteeringRuntimeVersion).toBe("2.0.24");
   });
 
   test("treats a selected session without activity evidence as not working", () => {
@@ -125,8 +120,6 @@ describe("deriveAgentStudioSessionActionState", () => {
     expect(state).toMatchObject({
       isSessionWorking: false,
       isWaitingInput: true,
-      canQueueBusyFollowups: false,
-      busySendBlockedReason: null,
     });
   });
 
@@ -144,8 +137,6 @@ describe("deriveAgentStudioSessionActionState", () => {
     expect(state).toMatchObject({
       isSessionWorking: false,
       isWaitingInput: false,
-      canQueueBusyFollowups: false,
-      busySendBlockedReason: null,
     });
   });
 

@@ -1,4 +1,3 @@
-import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeLifecycleSession } from "./claude-agent-sdk-lifecycle";
 import type {
@@ -20,7 +19,7 @@ type EventTestSession = Omit<
     activeBackgroundSubagentTaskIds: Set<string>;
     pendingApprovals: Map<string, PendingApproval>;
     pendingQuestions: Map<string, PendingQuestion>;
-    queuedSdkMessages: SDKUserMessage[];
+    unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
   };
 
 export const claudeAcceptedUserMessageFixture = (
@@ -44,7 +43,7 @@ export const createEventTestSession = (
   pendingApprovals: new Map<string, PendingApproval>(),
   pendingQuestions: new Map<string, PendingQuestion>(),
   pendingUserTurnCount: 0,
-  queuedSdkMessages: [],
+  unreadSteeredUserMessages: new Map(),
   streamAssistantMessageOrdinal: 0,
   streamAssistantMessageIdsByBlockIndex: new Map<number, string>(),
   todosById: new Map(),

@@ -7,7 +7,10 @@ import {
   encodeClaudePromptTextWithSourceRanges,
   toClaudeMessageFromParts,
 } from "./claude-agent-sdk-messages";
-import { mutationForTool, toolPartType } from "./claude-agent-sdk-utils";
+import { AgentSessionTurnActiveError } from "@openducktor/core";
+import { Effect } from "effect";
+import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
+import { fromPromise, mutationForTool, toolPartType } from "./claude-agent-sdk-utils";
 
 const slashCommand = {
   id: "review",
@@ -301,5 +304,21 @@ describe("mutationForTool", () => {
     expect(mutationForTool("Skill")).toBe("read_only");
     expect(mutationForTool("Write")).toBe("mutating");
     expect(mutationForTool("TodoWrite")).toBe("mutating");
+  });
+});
+
+describe("fromPromise", () => {
+  test("turns a delivery failure of the Claude runtime into a typed host error", async () => {
+    const result = await Effect.runPromise(
+      Effect.result(
+        fromPromise("claudeRuntime.sendUserMessage", async () => {
+          throw new AgentSessionTurnActiveError("session-1");
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected a busy failure");
+    expect(result.failure).toBeInstanceOf(AgentSessionBusyError);
   });
 });

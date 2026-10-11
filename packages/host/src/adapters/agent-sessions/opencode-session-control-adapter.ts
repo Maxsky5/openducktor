@@ -1,7 +1,4 @@
-import {
-  OpenCodeMessageRejectedError,
-  type OpencodeSessionRuntimeConnection,
-} from "@openducktor/adapters-opencode-sdk";
+import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AcceptedAgentInput,
   type AgentSessionControlSummary,
@@ -22,7 +19,7 @@ import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
-  AgentSessionMessageRejectedError,
+  toAgentSessionSendError,
 } from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
@@ -235,6 +232,7 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
         parts: input.parts.map(toOpenCodeUserMessagePart),
+        delivery: input.delivery,
       };
       if (input.model) {
         request.model = input.model;
@@ -242,21 +240,19 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
+      if (input.submissionId) {
+        request.submissionId = input.submissionId;
+      }
       return sendGate.run(
         refKey(sessionRef),
         Effect.tryPromise({
           try: () => connection.sendUserMessage(request, options),
           catch: (cause) =>
-            cause instanceof OpenCodeMessageRejectedError
-              ? new AgentSessionMessageRejectedError({
-                  operation: "opencode-live-session.send-user-message",
-                  message: cause.message,
-                  cause,
-                })
-              : toHostOperationError(cause, "opencode-live-session.send-user-message", {
-                  runtimeId: runtime.runtimeId,
-                  externalSessionId: input.externalSessionId,
-                }),
+            toAgentSessionSendError(cause) ??
+            toHostOperationError(cause, "opencode-live-session.send-user-message", {
+              runtimeId: runtime.runtimeId,
+              externalSessionId: input.externalSessionId,
+            }),
         }).pipe(
           Effect.flatMap((event) =>
             parseOutput(

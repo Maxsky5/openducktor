@@ -336,6 +336,14 @@ _Avoid_: Composer Draft, Prompt Template, Task Document
 A message sent by the human through the **Chat Composer**. A **User Message** may be queued or read by the **Runtime**, and may include structured message parts.
 _Avoid_: Structured Question, Task Document, comment
 
+**Message Queue**:
+The host-owned list of **User Messages** that wait for the current turn of one **Agent Session** to end. The **Message Queue** shows above the **Chat Composer**. It sends one message after each turn that completes normally. It stops at a pause until the user resumes it. It keeps a message with an unknown delivery result until the **Runtime** shows it. Nobody can send or remove that message meanwhile.
+_Avoid_: runtime queue, outbox, pending messages
+
+**Steering**:
+An explicit send that gives one **User Message** to the running work of an **Agent Session** instead of waiting for the turn to end. **Steering** does not stop the running work or change its settings.
+_Avoid_: interrupt, restart, queue jump
+
 **Assistant Message**:
 A message produced by the **Runtime** during an **Agent Session**. An **Assistant Message** may include text, reasoning, **Tool Calls**, **Subagent** activity, or session notices in the **Transcript**.
 _Avoid_: QA Report, Task Document, Tool Call

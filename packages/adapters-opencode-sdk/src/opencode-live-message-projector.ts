@@ -42,6 +42,22 @@ export class OpenCodeLiveMessageProjector {
   private readonly settledInput = new Set<string>();
   private projectionContext = messageProjectionContext(this.messages.values());
 
+  /**
+   * Returns the user message of an input that the event stream already showed, queued or
+   * delivered, or null when the stream did not show it.
+   */
+  acceptedUserMessage(
+    sessionID: string,
+    id: string,
+  ): Extract<AgentEvent, { type: "user_message" }> | null {
+    const queued = this.inbox.get(id);
+    if (queued?.type === "user") return projectInboxUser(queued);
+    const delivered = this.messages.get(id);
+    if (delivered?.type !== "user") return null;
+    const { id: _id, time, type: _type, ...payload } = delivered;
+    return projectInboxUser({ id, sessionID, time, payload }, "read");
+  }
+
   seed(messages: SessionMessageInfo[]): string[] {
     const previous = new Map(this.messages);
     const settledText = new Set(this.settledText);
@@ -484,13 +500,19 @@ export class OpenCodeLiveMessageProjector {
           time: { created },
         };
         if (event.metadata !== undefined) system.metadata = event.metadata;
-        const idle: Extract<AgentEvent, { type: "session_idle" }> = {
+        const recorded = this.recordMessage(sessionID, system);
+        // The interruption notice is the idle event of an interrupted turn.
+        if (outcome === "interrupted")
+          return recorded.map((recordedEvent) =>
+            recordedEvent.type === "session_idle"
+              ? { ...recordedEvent, turnOutcome: "interrupted" }
+              : recordedEvent,
+          );
+        events.push(...recorded, {
           ...base,
           type: "session_idle",
-        };
-        if (outcome === "succeeded") idle.turnCompleted = true;
-        events.push(...this.recordMessage(sessionID, system));
-        if (outcome !== "interrupted") events.push(idle);
+          turnOutcome: outcome === "succeeded" ? "completed" : "failed",
+        });
         return events;
       }
       case "session.execution.started":

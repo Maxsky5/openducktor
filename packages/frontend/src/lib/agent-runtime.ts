@@ -169,10 +169,10 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes.includes("fresh");
     case "sessionLifecycle.supportsSessionFork":
       return runtimeDescriptor.capabilities.sessionLifecycle.supportsSessionFork;
-    case "sessionLifecycle.supportsQueuedUserMessages":
-      return runtimeDescriptor.capabilities.sessionLifecycle.supportsQueuedUserMessages;
     case "sessionLifecycle.supportsInterruptedTurnResume":
       return runtimeDescriptor.capabilities.sessionLifecycle.supportsInterruptedTurnResume;
+    case "messageDelivery.minimumSteeringRuntimeVersion":
+      return runtimeDescriptor.capabilities.messageDelivery.minimumSteeringRuntimeVersion !== null;
     case "history.fidelity":
       return runtimeDescriptor.capabilities.history.fidelity !== "none";
     case "history.replay":

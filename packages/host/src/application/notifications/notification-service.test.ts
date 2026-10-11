@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { expect, mock, test } from "bun:test";
 import {
   globalConfigSchema,
@@ -141,6 +142,7 @@ const harness = (
       type: "snapshot" as const,
       repoPath,
       sessions: (options.baseline ?? []).filter((entry) => entry.ref.repoPath === repoPath),
+      messageQueues: [],
     }),
   );
   const service = createNotificationService({
@@ -214,6 +216,7 @@ test.each(["before", "after"])(
       ),
     );
     const live = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       readSessionRootRefs: readRoots,

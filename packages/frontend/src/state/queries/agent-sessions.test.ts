@@ -1,9 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  AgentSessionLiveSnapshotEnvelope,
-  AgentSessionRecord,
-  TaskAgentSessions,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   agentSessionListQueryOptions,
@@ -16,6 +12,7 @@ import {
   retryAgentSessionListQueries,
   updateAgentSessionListQuery,
 } from "./agent-sessions";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const sessionFixture: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -399,13 +396,11 @@ describe("agent session list reads", () => {
       ).subscribe(() => {}),
     );
     const syncLists = createAgentSessionListLiveSync(queryClient);
-    const connectionSnapshot: AgentSessionLiveSnapshotEnvelope = {
-      type: "snapshot",
-      repoPath: "/repo",
+    const connectionSnapshot = createLiveSnapshotEnvelope({
       sessions: [],
       sequence: 0,
       isConnectionSnapshot: true,
-    };
+    });
     try {
       await removeAgentSessionListQueries(queryClient, "/repo", ["deleted"]);
       syncLists(connectionSnapshot);
@@ -462,17 +457,15 @@ describe("agent session list reads", () => {
       agentSessionListQueryOptions("/repo", "task-1", readPort),
     ).subscribe(() => {});
     const syncLists = createAgentSessionListLiveSync(queryClient);
-    const connectionSnapshot: AgentSessionLiveSnapshotEnvelope = {
-      type: "snapshot",
-      repoPath: "/repo",
+    const connectionSnapshot = createLiveSnapshotEnvelope({
       sessions: [],
       sequence: 0,
       isConnectionSnapshot: true,
-    };
+    });
     try {
       await waitForCondition(() => queryClient.getQueryData(listKey("task-1")) !== undefined);
       syncLists(connectionSnapshot);
-      syncLists({ type: "snapshot", repoPath: "/repo", sessions: [], sequence: 1 });
+      syncLists(createLiveSnapshotEnvelope({ sessions: [], sequence: 1 }));
       expect(readPort.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
 
       syncLists(connectionSnapshot);

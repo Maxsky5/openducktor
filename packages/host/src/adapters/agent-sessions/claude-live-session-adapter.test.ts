@@ -80,7 +80,8 @@ const session: ClaudeSessionContext = {
   model: undefined,
   pendingApprovals: new Map(),
   pendingQuestions: new Map(),
-  queuedSdkMessages: [],
+  pendingUserMessageAdmissions: new Map(),
+  unreadSteeredUserMessages: new Map(),
   pendingUserTurnCount: 0,
   queue: new AsyncInputQueue(),
   runtimeId: "runtime-1",
@@ -613,6 +614,7 @@ describe("Claude host live-session adapter", () => {
       const result = await Effect.runPromise(
         Effect.result(
           harness.adapter.sendUserMessage({
+            delivery: "new_turn",
             ...startInput,
             externalSessionId: "session-1",
             parts: [{ kind: "text", text: "Hello" }],
@@ -689,6 +691,7 @@ describe("Claude host live-session adapter", () => {
     await Effect.runPromise(
       harness.adapter.sendUserMessage(
         {
+          delivery: "new_turn",
           ...repositoryInput,
           externalSessionId: "session-1",
           parts: [{ kind: "text", text: "Start" }],
@@ -771,6 +774,7 @@ describe("Claude host live-session adapter", () => {
           ...outsideWorkspaceInput,
           externalSessionId: "session-1",
           parts: [{ kind: "text", text: "Start" }],
+          delivery: "new_turn",
         })
         .pipe(Effect.asVoid),
     ];
@@ -919,6 +923,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.sendUserMessage({
+        delivery: "new_turn",
         ...startInput,
         externalSessionId: "session-1",
         parts: [{ kind: "text", text: "Start" }],
@@ -985,6 +990,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.sendUserMessage({
+        delivery: "new_turn",
         ...startInput,
         externalSessionId: "session-1",
         parts: [{ kind: "text", text: "Resume" }],
@@ -1662,6 +1668,7 @@ describe("Claude host live-session adapter", () => {
     );
     await Effect.runPromise(
       harness.adapter.sendUserMessage({
+        delivery: "new_turn",
         ...startInput,
         externalSessionId: "session-1",
         parts: [{ kind: "text", text: "Queued" }],

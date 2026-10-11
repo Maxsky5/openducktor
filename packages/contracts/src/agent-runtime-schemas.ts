@@ -180,13 +180,26 @@ export const runtimeSessionLifecycleCapabilitiesSchema = z
     supportsSessionFork: z.boolean(),
     forkTargets: runtimeForkTargetsSchema,
     supportsListLiveSessions: z.boolean(),
-    supportsQueuedUserMessages: z.boolean(),
     supportsPendingInputSnapshots: z.boolean(),
     supportsInterruptedTurnResume: z.boolean(),
   })
   .strict();
 export type RuntimeSessionLifecycleCapabilities = z.infer<
   typeof runtimeSessionLifecycleCapabilitiesSchema
+>;
+
+const runtimeVersionSchema = z
+  .string()
+  .regex(/^\d+\.\d+\.\d+$/, "Runtime versions must use the major.minor.patch form.");
+
+export const runtimeMessageDeliveryCapabilitiesSchema = z
+  .object({
+    /** The oldest runtime version that can steer running work. `null`: the runtime cannot steer. */
+    minimumSteeringRuntimeVersion: runtimeVersionSchema.nullable(),
+  })
+  .strict();
+export type RuntimeMessageDeliveryCapabilities = z.infer<
+  typeof runtimeMessageDeliveryCapabilitiesSchema
 >;
 
 export const runtimeHistoryCapabilitiesSchema = z
@@ -266,6 +279,7 @@ export const runtimeCapabilitiesSchema = z
     provisioningMode: runtimeProvisioningModeSchema,
     workflow: runtimeWorkflowCapabilitiesSchema,
     sessionLifecycle: runtimeSessionLifecycleCapabilitiesSchema,
+    messageDelivery: runtimeMessageDeliveryCapabilitiesSchema,
     history: runtimeHistoryCapabilitiesSchema,
     approvals: runtimeApprovalCapabilitiesSchema,
     structuredInput: runtimeStructuredInputCapabilitiesSchema,
@@ -543,8 +557,8 @@ export const runtimeCapabilityKeyValues = [
   "workflow.supportedScopes",
   "sessionLifecycle.supportedStartModes",
   "sessionLifecycle.supportsSessionFork",
-  "sessionLifecycle.supportsQueuedUserMessages",
   "sessionLifecycle.supportsInterruptedTurnResume",
+  "messageDelivery.minimumSteeringRuntimeVersion",
   "history.fidelity",
   "history.replay",
   "approvals.supportedRequestTypes",
@@ -579,7 +593,7 @@ export const mandatoryRuntimeCapabilityKeys = [
 
 export const optionalRuntimeCapabilityKeys = [
   "speed.support",
-  "sessionLifecycle.supportsQueuedUserMessages",
+  "messageDelivery.minimumSteeringRuntimeVersion",
   "history.fidelity",
   "history.replay",
   "approvals.supportedRequestTypes",
@@ -636,8 +650,8 @@ export const runtimeCapabilityClasses = {
   "workflow.supportedScopes": "role_scoped",
   "sessionLifecycle.supportedStartModes": "baseline",
   "sessionLifecycle.supportsSessionFork": "launch_scoped",
-  "sessionLifecycle.supportsQueuedUserMessages": "optional_enhancement",
   "sessionLifecycle.supportsInterruptedTurnResume": "launch_scoped",
+  "messageDelivery.minimumSteeringRuntimeVersion": "optional_enhancement",
   "history.fidelity": "launch_scoped",
   "history.replay": "launch_scoped",
   "approvals.supportedRequestTypes": "workflow",
@@ -731,6 +745,9 @@ export const classifyRuntimeDescriptorSchemaIssue = ({
   }
   if (capabilityPath.startsWith("structuredInput.")) {
     return "workflow";
+  }
+  if (capabilityPath.startsWith("messageDelivery.")) {
+    return "optional_enhancement";
   }
 
   return "baseline";

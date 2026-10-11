@@ -1,5 +1,6 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -15,14 +16,12 @@ import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
-  createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -98,35 +97,29 @@ const createHookHarness = (initialProps: HookArgs) => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          HostRuntimeStatusContext.Provider,
-          {
-            value: createHostRuntimeStatusContextValue(),
-          },
+          ChecksStateContext.Provider,
+          { value: checksStateContextValue },
           createElement(
-            ChecksStateContext.Provider,
-            { value: checksStateContextValue },
-            createElement(
-              RuntimeDefinitionsContext.Provider,
-              {
-                value: createRuntimeDefinitionsContextValue({
-                  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                  availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                  loadRepoRuntimeCatalog: async () => ({
-                    models: {
-                      status: "available",
-                      catalog: {
-                        runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                        models: [],
-                        defaultModelsByProvider: {},
-                        profiles: [],
-                      },
+            RuntimeDefinitionsContext.Provider,
+            {
+              value: createRuntimeDefinitionsContextValue({
+                runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                loadRepoRuntimeCatalog: async () => ({
+                  models: {
+                    status: "available",
+                    catalog: {
+                      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                      models: [],
+                      defaultModelsByProvider: {},
+                      profiles: [],
                     },
-                  }),
+                  },
                 }),
-              },
-              children,
-            ),
+              }),
+            },
+            createElement(AgentChatSendProviders, null, children),
           ),
         ),
       ),
@@ -248,7 +241,7 @@ describe("useAgentStudioSessionActions attachments", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
+      await expect(state.messageDelivery.onSend(draft, "default")).resolves.toBe(true);
     });
 
     expect(stageLocalAttachmentFileMock).toHaveBeenCalledWith({
@@ -256,19 +249,23 @@ describe("useAgentStudioSessionActions attachments", () => {
       mime: "application/pdf",
       base64Data: "cGRm",
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "please review" },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "attachment-1",
-          name: "brief.pdf",
-          kind: "pdf",
-          mime: "application/pdf",
-          path: "/tmp/staged-brief.pdf",
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      localSessionIdentity("session-existing"),
+      [
+        { kind: "text", text: "please review" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            name: "brief.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+            path: "/tmp/staged-brief.pdf",
+          },
         },
-      },
-    ]);
+      ],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });
@@ -293,7 +290,7 @@ describe("useAgentStudioSessionActions attachments", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(false);
+      await expect(state.messageDelivery.onSend(draft, "default")).resolves.toBe(false);
     });
 
     expect(stageLocalAttachmentFileMock).not.toHaveBeenCalled();
@@ -326,7 +323,7 @@ describe("useAgentStudioSessionActions attachments", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
+      await expect(state.messageDelivery.onSend(draft, "default")).resolves.toBe(true);
     });
 
     expect(stageLocalAttachmentFileMock).toHaveBeenCalledWith({
@@ -334,19 +331,23 @@ describe("useAgentStudioSessionActions attachments", () => {
       mime: "application/pdf",
       base64Data: "cGRm",
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "please review" },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "attachment-path-file",
-          name: "brief.pdf",
-          kind: "pdf",
-          mime: "application/pdf",
-          path: "/tmp/staged-brief.pdf",
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      localSessionIdentity("session-existing"),
+      [
+        { kind: "text", text: "please review" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-path-file",
+            name: "brief.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+            path: "/tmp/staged-brief.pdf",
+          },
         },
-      },
-    ]);
+      ],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });

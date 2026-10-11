@@ -204,6 +204,7 @@ export const toClaudeSendInput = (
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,
     parts: input.parts.map(toClaudeUserMessagePart),
+    delivery: input.delivery,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
   if (input.model !== undefined) {
@@ -211,6 +212,9 @@ export const toClaudeSendInput = (
   }
   if (input.systemPrompt !== undefined) {
     result.systemPrompt = input.systemPrompt;
+  }
+  if (input.submissionId !== undefined) {
+    result.submissionId = input.submissionId;
   }
   return result;
 };
@@ -229,6 +233,9 @@ export const toClaudeRuntimeUserMessageEvent = (
   };
   if (event.model !== undefined) {
     result.model = event.model;
+  }
+  if (event.submissionId !== undefined) {
+    result.submissionId = event.submissionId;
   }
   return result;
 };

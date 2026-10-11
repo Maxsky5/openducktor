@@ -128,7 +128,7 @@ export function useTaskApprovalGitConflictFlow({
           }));
           return;
         }
-        if (receipt.postAcceptanceFailure)
+        if (receipt.outcome === "accepted" && receipt.postAcceptanceFailure)
           toast.error("Message accepted by Builder; host step failed", {
             description: receipt.postAcceptanceFailure,
           });

@@ -91,6 +91,37 @@ One command module owns session control. Task and workspace policy adapters supp
 
 `agent-session-activity-persistence.ts` saves task and workspace activity from the ordered live stream. It tracks parent links, new input requests, status changes, and the latest final message. It keeps no transcript. Task saves publish the committed session list through `task_session_records_updated`; workspace saves use the existing updated-record event. Neither path reads native metadata or history.
 
+## Message queues
+
+Files: `packages/host/src/application/agent-sessions/agent-message-delivery-service.ts`, `agent-message-send-outcome.ts`, `agent-message-queue-registry.ts`, `agent-message-queue-model.ts`, `agent-message-session-conditions.ts`, `agent-session-live-change-publisher.ts`, `packages/host/src/composition/node/node-message-delivery.ts`, `state/agent-message-queues-store.ts`, `handlers/message-queue-actions.ts`, `features/agent-chat-composer/message-delivery/use-agent-chat-send.ts`, `agent-chat-send-draft.ts`, `agent-chat-message-queue.tsx`, `agent-chat-queued-message-stack.tsx`, `agent-chat-queued-message-editor.tsx`, `agent-chat-queued-message-drafts.ts`, `pages/agents/session-actions/use-agent-studio-send-target.ts`, and `lib/use-async-activity-tracker.ts`.
+
+The host owns each message queue, its order, its pause, and its automatic delivery. The queue lives in host memory for the app lifetime. [Queue and steering](runtime-integration-guide.md#queue-and-steering) states the adapter contract. The renderer store only projects the queue snapshots of the host.
+
+- A send goes to the end of the queue when the queue has messages or the adapter reports active work. Otherwise it starts a new turn.
+- An explicit steer sends one message and does not change the queue. When steering is not available, it tries a new turn. An issued steer never turns into a new turn.
+- Only a `session_idle` event with `turnOutcome: "completed"` delivers the next queued message. Pending blocking input stops steering and automatic delivery until the user answers.
+- An interrupted or failed turn, an agent error, a stop, a failed steer, or a session that left its runtime pauses a queue that has messages. Only the user can resume it.
+- A message with an unknown result stays locked in the `acceptance_unknown` state until a live `user_message` with its message ID or `submissionId` arrives.
+- A new turn from the queue uses the model of the message at submission. The host saves that model as the session model only when it equals the stored selection. It never saves the model of a steer.
+- `agent-message-send-outcome.ts` classifies the result of each send once. Every queue path reads that outcome, and `settle` ends every send.
+- `agent-message-session-conditions.ts` reads running work, blocking input, and runtime loss from each published session, also from a refresh snapshot.
+- `agent-session-live-change-publisher.ts` publishes adapter changes in order. The queues then read each change that the renderer received, also when a later publication fails.
+- `node-message-delivery.ts` runs automatic delivery in a fiber set. Host shutdown interrupts it before the runtimes stop.
+- `AgentMessageQueuesStore.observe` applies the queue part of each live envelope. The read model calls it after the transcript step, so an accepted message and the removal of its queued card change in one render.
+- The renderer does not predict whether the host queues a send. A send to an idle session shows it as running until the host answers. A `queued` answer restores the previous state.
+- `agent-chat-queued-message-stack.tsx` stacks the queued messages on the top edge of the composer, newest in front. Two older cards show behind it. A short hover or keyboard focus fans the stack out over the transcript. The card under the pointer, or with keyboard focus, shows its actions.
+- A closed stack shows the start of the front message on one line. An open stack shows every message in full, with its attachments. A long message scrolls inside its card.
+- `agent-chat-user-message-reference-chip.tsx` owns the reference kinds of a user message and their chips. The transcript and the queue both use it, so a new reference kind needs one display change there. The queue shows the chips at a compact size.
+- An edit lifts its message out of the stack into an edit card below the stack. The edit card uses the composer surface and controls. Enter saves the edit, and Escape cancels it. The composer shows a paused queue at its top, with the Resume button.
+- The unsaved edit of a queued message stays in renderer memory, keyed by session and `editId`. Save, Cancel, and Remove clear it.
+- The composer sends with Enter and steers with Command+Enter on macOS or Control+Enter on Windows and Linux. While a send goes to the queue, the placeholder adds these keys after the reference keys. A blocked steer keeps the draft and shows its reason.
+- `useAgentChatSend` sends the messages of task and workspace chats. It owns the queue panel, the steering availability, the running turn model, the busy-send rule, the sends in progress, the attachment check, and the send mode.
+- Each chat kind gives `useAgentChatSend` one memoized `AgentChatSendTarget`. The target says when the chat can send, finds the session or launches a new one, and can turn a failure into a composer result. A new session gets the message as the first instruction of its host launch, so the chat does not send it again. `useAgentStudioSendTarget` prepares the model and launches a task session. `useWorkspaceSessionChatActions` launches a workspace session and shows a failure in the chat.
+- An existing session takes several sends at once, because the host queues them. A send that launches a session runs alone.
+- `resolveRuntimeSteeringAvailability` in core owns the steering rule. The host enforces it, and the renderer uses the same reason to block a steer early.
+- The host checks steer content with `steeringPartsBlockedReason` before it dispatches a steer, so runtime adapters do not check it again. The composer uses `draftSteerBlockedReason` and the queue card uses `queuedMessageSteerBlockedReason`. Both check the runtime steering limit first, then the content.
+- `findRunningTurnModelEntry` reads the model of the running turn from the latest user message that reports a model.
+
 ## Host runtime lifecycle
 
 Files: `packages/host/src/application/agent-sessions/agent-session-live-state-service.ts`, `agent-session-live-runtime-lifecycle.ts`, and `packages/host/src/ports/agent-session-live-adapter-port.ts`.
@@ -371,7 +402,7 @@ The host owns complete workflow execution.
 
 The shared send handler checks a typed accepted-message failure before ordinary send recovery. It upserts the native message once and adds a scoped failure notice. It completes the send action without restoring the accepted draft or resetting running state and pending input. Both task and workspace actions use this handler. Runtime-service conversion checks the exact session reference and preserves accepted model fields.
 
-The sender returns `AgentMessageSendReceipt` after acceptance, including queued state and any later host failure. Its optional `assertCanSubmit` guard checks the captured recipient and shared session send policy before preparation and immediately before transport. Guards and receipts stay in the frontend. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
+The sender returns `AgentMessageSendReceipt`. Its `outcome` is `accepted` after native acceptance, with any later host failure, or `queued` when the host queue keeps the message until the running turn ends. Its optional `assertCanSubmit` guard checks the captured recipient and shared session send policy before preparation and immediately before transport. Guards and receipts stay in the frontend. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
 
 Before sending to a stopped repository or workflow session, the shared send handler resumes the same native session. It rejects an unbound session because that session has no repository or workflow scope. It checks repository continuity and retains newer live activity and pending input. For a workflow session, the host verifies that the task owns the session before it resumes it. A failed resume sends no message.
 

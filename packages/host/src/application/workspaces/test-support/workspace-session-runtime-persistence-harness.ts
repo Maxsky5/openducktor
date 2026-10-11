@@ -1,5 +1,6 @@
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
 import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
+import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
@@ -234,6 +235,7 @@ export const createPersistenceHarness = async (
     }),
   };
   const live = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
     persistence,
@@ -346,6 +348,7 @@ export const createPersistenceHarness = async (
   );
   events.length = 0;
   const commands = createAgentSessionCommandService({
+    pauseForStop: () => Effect.void,
     runtime: live,
     repositoryPolicy: persistence,
     canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
@@ -368,13 +371,20 @@ export const createPersistenceHarness = async (
       Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
     );
   const emit = (event: AgentSessionTranscriptEvent) => Effect.runPromise(emitEffect(event));
+  // Like the message queue, a send captures the stored session settings before dispatch.
   const send = (text: string) =>
     Effect.runPromise(
-      commands.sendUserMessage({
-        ...ref,
-        sessionScope: { kind: "repository" },
-        parts: [{ kind: "text", text }],
-      }),
+      commands
+        .prepareUserMessage({
+          ...ref,
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text }],
+        })
+        .pipe(
+          Effect.flatMap((content) =>
+            commands.sendUserMessage({ ...content, delivery: "new_turn" }),
+          ),
+        ),
     );
   const get = () => Effect.runPromise(store.get(storeRef));
   const config = repoConfigSchema.parse({

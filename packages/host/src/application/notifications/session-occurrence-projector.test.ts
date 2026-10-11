@@ -62,6 +62,7 @@ describe("session occurrence projector", () => {
     const projector = createProjector();
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -79,7 +80,12 @@ describe("session occurrence projector", () => {
 
   test("uses live question and permission details and keeps request identity", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const next = snapshot({
       pendingApprovals: [
         {
@@ -152,6 +158,7 @@ describe("session occurrence projector", () => {
     };
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ pendingQuestions: [existingQuestion] })],
     });
@@ -201,7 +208,12 @@ describe("session occurrence projector", () => {
 
   test("groups background questions from one Codex message", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
 
     const occurrences = projector.accept({
       type: "session_upsert",
@@ -241,7 +253,12 @@ describe("session occurrence projector", () => {
 
   test("keeps the remaining question count within the status limit", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const question = {
       header: "Scope",
       question: "q".repeat(400),
@@ -267,7 +284,12 @@ describe("session occurrence projector", () => {
     { title: "Allow tool", tool: { name: "read_file" } },
   ])("shows permission details for $title", (details) => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const [occurrence] = projector.accept({
       type: "session_upsert",
       session: snapshot({
@@ -331,12 +353,12 @@ describe("session occurrence projector", () => {
           },
         ],
       });
-      projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
+      projector.accept({ type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] });
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
       owned = true;
       const event =
         type === "snapshot"
-          ? { type, repoPath: "/repo", sessions: [pending] }
+          ? { type, repoPath: "/repo", sessions: [pending], messageQueues: [] }
           : { type, session: pending };
       expect(projector.accept(event)).toMatchObject([
         { role: "build", task: { id: "task-1" }, status: "Allow command: bun install" },
@@ -375,6 +397,7 @@ describe("session occurrence projector", () => {
       if (scenario === "subagent") pending.parentExternalSessionId = "parent";
       projector.accept({
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: scenario === "hydration" ? [pending] : [],
       });
@@ -386,6 +409,7 @@ describe("session occurrence projector", () => {
       expect(
         projector.accept({
           type: "snapshot",
+          messageQueues: [],
           repoPath: "/repo",
           sessions: [pending],
           isConnectionSnapshot: scenario === "reconnect",
@@ -399,6 +423,7 @@ describe("session occurrence projector", () => {
     const second = createProjector();
     const baseline = {
       type: "snapshot" as const,
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     };
@@ -425,7 +450,12 @@ describe("session occurrence projector", () => {
       resolveTask: () => null,
     });
 
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     expect(
       projector.accept({
         type: "session_upsert",
@@ -443,6 +473,7 @@ describe("session occurrence projector", () => {
     const secretTitle = "Customer token sk-secret-title";
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ title: secretTitle })],
     });
@@ -467,6 +498,7 @@ describe("session occurrence projector", () => {
     expect(
       projector.accept({
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [
           snapshot({
@@ -494,7 +526,12 @@ describe("session occurrence projector", () => {
 
   test("emits once for each new direct pending request and ignores subagent requests", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const permissionUpsert: AgentSessionLiveEnvelope = {
       type: "session_upsert",
       session: snapshot({
@@ -544,6 +581,7 @@ describe("session occurrence projector", () => {
     });
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot(), child],
     });
@@ -598,6 +636,7 @@ describe("session occurrence projector", () => {
     });
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot(), child],
     });
@@ -690,6 +729,7 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "session_upsert", session: child })).toEqual([]);
     const restored = {
       type: "snapshot" as const,
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot(), child],
     };
@@ -768,6 +808,7 @@ describe("session occurrence projector", () => {
     const projector = createProjector();
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -832,6 +873,7 @@ describe("session occurrence projector", () => {
     const projector = createProjector();
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -864,7 +906,12 @@ describe("session occurrence projector", () => {
 
   test("does not notify an old launch failure again after its session comes back", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const launchFailure = {
       messageId: "launch-failure:1",
       message: "The session launch failed: Timed out.",
@@ -886,6 +933,7 @@ describe("session occurrence projector", () => {
     });
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -919,7 +967,12 @@ describe("session occurrence projector", () => {
 
   test("uses the last completed assistant message in the idle occurrence", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     projector.accept({
       type: "session_upsert",
       session: snapshot({ activity: "running" }),
@@ -951,7 +1004,12 @@ describe("session occurrence projector", () => {
 
   test("does not use a retracted assistant message in the idle occurrence", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     projector.accept({
       type: "session_upsert",
       session: snapshot({ activity: "running" }),
@@ -992,6 +1050,7 @@ describe("session occurrence projector", () => {
     const projector = createProjector();
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -1042,7 +1101,12 @@ describe("session occurrence projector", () => {
 
   test("emits idle only after observed running and excludes retry, output, and user stop", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
     const events: AgentSessionLiveEnvelope[] = [
       {
         type: "transcript_event",
@@ -1096,6 +1160,7 @@ describe("session occurrence projector", () => {
     const projector = createProjector();
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -1131,7 +1196,7 @@ describe("session occurrence projector", () => {
 
   test("baselines a newly discovered session and excludes child sessions", () => {
     const projector = createProjector();
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
+    projector.accept({ type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] });
     expect(
       projector.accept({
         type: "session_upsert",
@@ -1163,6 +1228,7 @@ test.each(["retrying", "waiting_for_permission", "waiting_for_question"] as cons
       const projector = createProjector();
       projector.accept({
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [snapshot({ activity: "running" })],
       });
@@ -1203,6 +1269,7 @@ test("clears assistant text when an active snapshot moves directly to a new epis
   const projector = createProjector();
   projector.accept({
     type: "snapshot",
+    messageQueues: [],
     repoPath: "/repo",
     sessions: [snapshot({ activity: "running" })],
   });
@@ -1264,7 +1331,7 @@ for (const ownership of ["snapshot", "session_upsert"] as const) {
         owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
       resolveTask: (id) => ({ id, title: "Owned task" }),
     });
-    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
+    projector.accept({ type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] });
     projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
     const terminal = terminalEnvelope(type);
     expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
@@ -1273,7 +1340,7 @@ for (const ownership of ["snapshot", "session_upsert"] as const) {
     owned = true;
     const update: AgentSessionLiveEnvelope =
       ownership === "snapshot"
-        ? { type: ownership, repoPath: "/repo", sessions: [snapshot()] }
+        ? { type: ownership, repoPath: "/repo", sessions: [snapshot()], messageQueues: [] }
         : { type: ownership, session: snapshot() };
     expect(projector.accept(update)).toMatchObject([
       {
@@ -1332,7 +1399,12 @@ test.each(["hydration", "reconnect", "removed", "subagent"] as const)(
     const session = snapshot({ activity: "running" });
     if (scenario === "subagent") session.parentExternalSessionId = "parent";
     if (scenario === "hydration") {
-      projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      projector.accept({
+        type: "snapshot",
+        messageQueues: [],
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
     } else {
       projector.accept({ type: "session_upsert", session });
       projector.accept(terminalEnvelope("session_error"));
@@ -1342,6 +1414,7 @@ test.each(["hydration", "reconnect", "removed", "subagent"] as const)(
     expect(
       projector.accept({
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [scenario === "subagent" ? session : snapshot()],
         isConnectionSnapshot: scenario === "reconnect",
@@ -1382,6 +1455,7 @@ test.each([
   const projector = createProjector();
   projector.accept({
     type: "snapshot",
+    messageQueues: [],
     repoPath: "/repo",
     sessions: [snapshot({ activity: "running" })],
   });
@@ -1403,6 +1477,7 @@ test("does not infer a completion from an idle upsert after reconnect", () => {
   projector.accept({ type: "session_upsert", session: snapshot() });
   projector.accept({
     type: "snapshot",
+    messageQueues: [],
     repoPath: "/repo",
     isConnectionSnapshot: true,
     sessions: [snapshot()],
@@ -1454,7 +1529,12 @@ test.each([false, true])(
     });
     owned = true;
     expect(
-      projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+      projector.accept({
+        type: "snapshot",
+        messageQueues: [],
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      }),
     ).toEqual([]);
     expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
       { kind: "agent.session_idle", status: "The change is complete." },
@@ -1471,6 +1551,7 @@ test.each(["session_idle", "session_error"] as const)(
     expect(projector.accept(terminalEnvelope(type))).toHaveLength(1);
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [snapshot({ activity: "running" })],
     });
@@ -1496,6 +1577,7 @@ test.each(["connection", "new episode"] as const)(
     });
     projector.accept({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       isConnectionSnapshot: reset === "connection",
       sessions: [

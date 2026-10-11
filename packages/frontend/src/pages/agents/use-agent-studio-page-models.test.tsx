@@ -1,5 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
@@ -224,10 +225,9 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     handleQuickAction: () => {},
     openTaskDetails: () => {},
     isStarting: false,
-    isSending: false,
     isSessionWorking: true,
     isWaitingInput: false,
-    busySendBlockedReason: null,
+    messageDelivery: createAgentChatSendFixture(),
     canUseKickoffPrompt: false,
     kickoffLabel: "Start Spec",
     canStopSession: true,
@@ -237,7 +237,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     persistentResumeError: null,
     onResumeSession: () => {},
     startLaunchKickoff: async () => {},
-    onSend: async () => true,
     sendAgentMessage: async () => null,
     stopAgentSession: async () => {},
     loadAgentSessionHistory: async () => null,
@@ -611,7 +610,7 @@ describe("useAgentStudioPageModels", () => {
           refreshChecks: onRefreshChecks,
         },
         sessionActions: {
-          onSend,
+          messageDelivery: createAgentChatSendFixture({ onSend }),
           stopAgentSession: onStopSession,
           startLaunchKickoff: onKickoff,
         },
@@ -631,7 +630,7 @@ describe("useAgentStudioPageModels", () => {
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
-    await state.agentChatModel.composer.onSend(createComposerDraft("message"));
+    await state.agentChatModel.composer.onSend(createComposerDraft("message"), "default");
     state.agentChatModel.composer.onStopSession();
 
     expect(onSend).toHaveBeenCalledTimes(1);
@@ -823,7 +822,7 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(
       createHookArgs({
         sessionActions: {
-          onSend,
+          messageDelivery: createAgentChatSendFixture({ onSend }),
         },
       }),
     );
@@ -834,7 +833,7 @@ describe("useAgentStudioPageModels", () => {
 
     let sendPromise: Promise<AgentChatSendResult> | null = null;
     await act(async () => {
-      sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"));
+      sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"), "steer");
       await Promise.resolve();
     });
 

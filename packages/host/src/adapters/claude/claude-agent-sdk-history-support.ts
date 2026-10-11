@@ -23,7 +23,6 @@ export type ClaudeLiveUserMessage = {
   messageId: string;
   model?: AgentModelSelection;
   parts?: AgentUserMessageDisplayPart[];
-  state?: "queued" | "read";
   text: string;
   timestamp: string;
 };
@@ -45,8 +44,7 @@ export const appendUnmatchedLiveUserMessages = (
 ): void => {
   const projectedMessageIds = new Set(history.map((message) => message.messageId));
   for (const message of liveUserMessages) {
-    const isDeliveredManualCompaction = message.isManualCompaction && message.state !== "queued";
-    if (isDeliveredManualCompaction || projectedMessageIds.has(message.messageId)) {
+    if (message.isManualCompaction || projectedMessageIds.has(message.messageId)) {
       continue;
     }
     const historyMessage: Extract<AgentSessionHistoryMessage, { role: "user" }> = {
@@ -56,7 +54,7 @@ export const appendUnmatchedLiveUserMessages = (
       text: message.text,
       displayParts:
         message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
-      state: message.state ?? "read",
+      state: "read",
       parts: [],
     };
     if (message.model) {

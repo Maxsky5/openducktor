@@ -181,6 +181,7 @@ const operations = (
   loadAgentSessionHistory: async () => null,
   loadAgentSessionContext: async () => {},
   sendAgentMessage: async () => null,
+  manageAgentMessageQueue: async () => {},
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: async () => {},

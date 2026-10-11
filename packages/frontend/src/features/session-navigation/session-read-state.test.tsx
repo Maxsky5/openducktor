@@ -36,6 +36,7 @@ import {
   usePublishVisibleSessionTarget,
   VisibleSessionTargetProvider,
 } from "./visible-session-target";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const observers: ReturnType<typeof createWorkspaceActivityObserver>[] = [];
 const clients: QueryClient[] = [];
@@ -110,7 +111,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
   };
   snapshots.forEach((session) =>
     emit(
-      { type: "snapshot", repoPath: session.ref.repoPath, sessions: [session] },
+      createLiveSnapshotEnvelope({ repoPath: session.ref.repoPath, sessions: [session] }),
       session.ref.repoPath,
     ),
   );

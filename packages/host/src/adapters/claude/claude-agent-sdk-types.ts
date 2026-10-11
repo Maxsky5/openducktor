@@ -81,6 +81,8 @@ export type ClaudeAcceptedUserMessage = {
   parts: AgentUserMessageDisplayPart[];
   text: string;
   timestamp: string;
+  /** The queue submission of the message. Every live event of the message names it. */
+  submissionId?: string;
 };
 
 export type ClaudeSessionInput =
@@ -106,6 +108,11 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "setModel"
   >;
 
+export type ClaudePendingUserMessageAdmission = {
+  readonly admit: () => void;
+  readonly reject: (reason: Error) => void;
+};
+
 export type ClaudeSession = ClaudeBackgroundToolState &
   ErrorState & {
     disabledTools?: ReadonlySet<string>;
@@ -125,13 +132,13 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     lastAssistantTextTurnIndex?: number;
     lastSuccessfulResultTurnIndex?: number;
     model: AgentModelSelection | undefined;
-    modelAfterQueuedTurns?: AgentModelSelection | null;
     parentExternalSessionId?: string;
     pendingApprovals: Map<string, PendingApproval>;
     pendingQuestions: Map<string, PendingQuestion>;
     sdkInitiatedTurnActive?: boolean;
+    /** A successful result waits for the SDK idle state, which then completes its turn. */
+    resultAwaitsSdkIdle?: boolean;
     sdkState?: "idle" | "requires_action" | "running";
-    queuedSdkMessages: SDKUserMessage[];
     pendingUserTurnCount: number;
     query: ClaudeSessionQuery;
     queue: AsyncInputQueue<SDKUserMessage>;
@@ -147,6 +154,10 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     toolEndedAtMsByCallId: Map<string, number>;
     toolStartedAtMsByCallId: Map<string, number>;
     todosById: Map<string, AgentSessionTodoItem>;
+    /** Sent user messages that the CLI has not admitted yet, by message UUID. */
+    pendingUserMessageAdmissions: Map<string, ClaudePendingUserMessageAdmission>;
+    /** Steered messages that no turn has read yet, by message UUID. */
+    unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
   };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;

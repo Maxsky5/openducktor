@@ -26,32 +26,11 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";
-
-const unexpected = (name: string) => async (): Promise<never> => {
-  throw new Error(`Unexpected ${name}`);
-};
-const createOperations = (
-  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"],
-): AgentOperationsContextValue => ({
-  describeGeneratedImages: unexpected("describeGeneratedImages"),
-  beginGeneratedImageBatch: unexpected("beginGeneratedImageBatch"),
-  releaseGeneratedImageBatch: unexpected("releaseGeneratedImageBatch"),
-  readGeneratedImage: unexpected("readGeneratedImage"),
-  readSessionTodos: unexpected("readSessionTodos"),
-  readSessionHistory: unexpected("readSessionHistory"),
-  loadAgentSessionHistory: unexpected("loadAgentSessionHistory"),
-  loadAgentSessionContext: unexpected("loadAgentSessionContext"),
-  sendAgentMessage,
-  stopAgentSession: unexpected("stopAgentSession"),
-  continueInterruptedTurn: unexpected("continueInterruptedTurn"),
-  updateAgentSessionModel: unexpected("updateAgentSessionModel"),
-  replyAgentApproval: unexpected("replyAgentApproval"),
-  answerAgentQuestion: unexpected("answerAgentQuestion"),
-});
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 const createWrapper = (
   queryClient: QueryClient,
-  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"],
+  operations: AgentOperationsContextValue = createAgentOperationsFixture(),
 ) => {
   const workspace = createWorkspaceStateFixture({
     activeWorkspace: createWorkspaceRecordFixture({
@@ -82,7 +61,6 @@ const createWrapper = (
     },
   };
   const store = createAgentSessionsStore("/repo");
-  const operations = createOperations(sendAgentMessage);
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={queryClient}>
       <WorkspaceStateContext value={workspace}>
@@ -134,7 +112,7 @@ test.each(["completed", "failed", "disconnected"] as const)(
         };
       },
     );
-    const wrapper = createWrapper(queryClient, unexpected("sendAgentMessage"));
+    const wrapper = createWrapper(queryClient);
     const reads = [null, "old-version"].map((taskVersion) =>
       taskWorktreeQueryOptions({
         repoPath: "/repo",
@@ -225,7 +203,7 @@ test("retries an unsent first message through the agent operations send path", a
   );
   configureShellBridge(bridge);
   const view = renderHook(() => useSessionStartWorkflowRunner({ workspaceId: "workspace" }), {
-    wrapper: createWrapper(queryClient, sendAgentMessage),
+    wrapper: createWrapper(queryClient, createAgentOperationsFixture({ sendAgentMessage })),
   });
   try {
     let retry: (() => Promise<void>) | undefined;

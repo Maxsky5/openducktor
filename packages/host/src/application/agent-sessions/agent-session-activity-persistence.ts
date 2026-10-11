@@ -172,7 +172,7 @@ export const createAgentSessionActivityPersistence = ({
             return;
           case "session_idle":
             if (
-              event.turnCompleted ||
+              event.turnOutcome !== undefined ||
               current?.untimedStatusChange ||
               (current && current.activity !== undefined && current.activity !== "idle")
             )

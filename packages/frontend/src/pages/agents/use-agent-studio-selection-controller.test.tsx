@@ -49,6 +49,7 @@ import {
   toAgentStudioTaskSelection,
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 interface SessionReadModelLoadStateRefContract {
   current: AgentSessionReadModelLoadState;
@@ -203,30 +204,11 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   const hostRuntimeStatusContextRef = {
     current: createHostRuntimeStatusContextValue(contextOverrides.hostRuntimeStatusContext),
   };
-  const agentOperationsValue = (): AgentOperationsContextValue => ({
-    describeGeneratedImages: async () => {
-      throw new Error("Unexpected image metadata read");
-    },
-    beginGeneratedImageBatch: async () => {
-      throw new Error("Unexpected beginGeneratedImageBatch");
-    },
-    releaseGeneratedImageBatch: async () => {
-      throw new Error("Unexpected releaseGeneratedImageBatch");
-    },
-    readGeneratedImage: async () => {
-      throw new Error("Unexpected generated image read");
-    },
-    readSessionTodos: readSessionTodosRef.current,
-    readSessionHistory: async () => [],
-    loadAgentSessionHistory: async () => null,
-    loadAgentSessionContext: loadAgentSessionContextRef.current,
-    sendAgentMessage: async () => null,
-    stopAgentSession: async () => undefined,
-    continueInterruptedTurn: async () => undefined,
-    updateAgentSessionModel: async () => undefined,
-    replyAgentApproval: async () => undefined,
-    answerAgentQuestion: async () => undefined,
-  });
+  const agentOperationsValue = () =>
+    createAgentOperationsFixture({
+      readSessionTodos: readSessionTodosRef.current,
+      loadAgentSessionContext: loadAgentSessionContextRef.current,
+    });
   const agentSessionHistoryLoadValue = (): AgentSessionHistoryLoadContextValue => ({
     loadAgentSessionHistory: loadAgentSessionHistoryRef.current,
   });

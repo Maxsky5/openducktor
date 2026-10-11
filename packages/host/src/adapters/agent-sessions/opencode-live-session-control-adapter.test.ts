@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import { AgentSessionTurnActiveError, interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
+import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter.test-support";
 import {
@@ -143,6 +144,7 @@ describe("OpenCode live session controls", () => {
       await expect(
         Effect.runPromise(
           prepared.adapter.sendUserMessage({
+            delivery: "new_turn",
             ...ref,
             sessionScope,
             parts: [{ kind: "text", text: "Hello" }],
@@ -160,6 +162,45 @@ describe("OpenCode live session controls", () => {
           externalSessionId: "session-1",
         }),
       });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("reports a send to a busy session as a typed busy error", async () => {
+    const harness = createRuntimeHarness();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: async (input) => {
+          const native = await harness.prepareRuntime(input);
+          return {
+            ...native,
+            connection: {
+              ...native.connection,
+              sendUserMessage: async () => {
+                throw new AgentSessionTurnActiveError("session-1");
+              },
+            },
+          };
+        },
+      })(runtime, ignoreObservationLoss),
+    );
+
+    try {
+      const result = await Effect.runPromise(
+        Effect.result(
+          prepared.adapter.sendUserMessage({
+            delivery: "new_turn",
+            ...ref,
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            parts: [{ kind: "text", text: "Hello" }],
+          }),
+        ),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected a busy failure");
+      expect(result.failure).toBeInstanceOf(AgentSessionBusyError);
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());
     }
@@ -247,6 +288,7 @@ describe("OpenCode live session controls", () => {
     const accepted = await Effect.runPromise(
       adapter.sendUserMessage(
         {
+          delivery: "new_turn",
           ...controlRef,
           sessionScope: startInput.sessionScope,
           parts: [{ kind: "text", text: "Hello" }],
@@ -360,6 +402,7 @@ describe("OpenCode live session controls", () => {
     publishedChanges.length = 0;
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
+        delivery: "new_turn",
         ...ref,
         sessionScope,
         parts: [
@@ -492,6 +535,7 @@ describe("OpenCode live session controls", () => {
     const send = (externalSessionId: string) =>
       Effect.runPromise(
         adapter.sendUserMessage({
+          delivery: "new_turn",
           ...ref,
           externalSessionId,
           sessionScope,
@@ -575,6 +619,7 @@ describe("OpenCode live session controls", () => {
     const send = (externalSessionId: string) =>
       Effect.runPromise(
         adapter.sendUserMessage({
+          delivery: "new_turn",
           ...ref,
           externalSessionId,
           sessionScope,
@@ -650,6 +695,7 @@ describe("OpenCode live session controls", () => {
     );
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
+        delivery: "new_turn",
         ...ref,
         sessionScope,
         parts: [{ kind: "text", text: "Hello" }],

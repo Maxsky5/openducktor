@@ -4,13 +4,14 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
+  createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { resolveAgentStudioSendDraftParts } from "./agent-studio-send-draft";
+import { resolveAgentChatSendDraftParts } from "@/features/agent-chat-composer/message-delivery/agent-chat-send-draft";
 
-const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
+const modelDescriptor: AgentModelCatalog["models"][number] = {
   id: "openai/gpt-5",
   providerId: "openai",
   providerName: "OpenAI",
@@ -39,26 +40,49 @@ const textDraft = (text: string): AgentChatComposerDraft => ({
   attachments: [],
 });
 
-type ResolvePartsInput = Parameters<typeof resolveAgentStudioSendDraftParts>[0];
+type ResolvePartsInput = Parameters<typeof resolveAgentChatSendDraftParts>[0];
 
 const resolveParts = async (
   input: Omit<ResolvePartsInput, "supportsAttachments"> &
     Partial<Pick<ResolvePartsInput, "supportsAttachments">>,
 ) =>
-  resolveAgentStudioSendDraftParts({
+  resolveAgentChatSendDraftParts({
     supportsAttachments: true,
     ...input,
   });
 
-describe("resolveAgentStudioSendDraftParts", () => {
+describe("resolveAgentChatSendDraftParts", () => {
   test("returns text message parts for a normal draft", async () => {
     await expect(
       resolveParts({
         draft: textDraft("hello"),
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
       }),
     ).resolves.toEqual([{ kind: "text", text: "hello" }]);
+  });
+
+  const command = { id: "review", trigger: "review", title: "review", hints: ["review"] };
+  const file = { id: "file-src-main", path: "src/main.ts", name: "main.ts", kind: "code" as const };
+  test.each([
+    {
+      name: "slash command",
+      segment: createSlashCommandSegment(command),
+      part: { kind: "slash_command", command },
+    },
+    {
+      name: "file reference",
+      segment: createFileReferenceSegment(file),
+      part: { kind: "file_reference", file },
+    },
+  ])("returns the part of a draft that has only a $name", async ({ segment, part }) => {
+    const draft = {
+      segments: [createTextSegment(""), segment, createTextSegment("")],
+      attachments: [],
+    };
+    await expect(resolveParts({ draft, reusablePrompts: [], modelDescriptor })).resolves.toEqual([
+      part,
+    ]);
   });
 
   test("returns null for empty drafts", async () => {
@@ -66,7 +90,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
       resolveParts({
         draft: textDraft("   "),
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
       }),
     ).resolves.toBeNull();
   });
@@ -83,7 +107,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
           attachments: [],
         },
         reusablePrompts: [prompt],
-        selectedModelDescriptor,
+        modelDescriptor,
       }),
     ).rejects.toThrow("Reusable prompt slash commands must be the first message item.");
   });
@@ -97,7 +121,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
           attachments: [],
         },
         reusablePrompts: [prompt],
-        selectedModelDescriptor,
+        modelDescriptor,
       }),
     ).resolves.toEqual([{ kind: "text", text: "Review this" }]);
   });
@@ -121,7 +145,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
           ],
         },
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
         stageAttachment,
       }),
     ).resolves.toBeNull();
@@ -150,7 +174,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
           ],
         },
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
         stageAttachment,
       }),
     ).resolves.toBeNull();
@@ -176,12 +200,34 @@ describe("resolveAgentStudioSendDraftParts", () => {
           ],
         },
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
         supportsAttachments: false,
         stageAttachment,
       }),
     ).resolves.toBeNull();
     expect(stageAttachment).not.toHaveBeenCalled();
+  });
+
+  test("sends a path-backed attachment with its own path", async () => {
+    const attachment = {
+      name: "brief.pdf",
+      kind: "pdf" as const,
+      mime: "application/pdf",
+      path: "/tmp/brief.pdf",
+    };
+    await expect(
+      resolveParts({
+        draft: {
+          segments: [createTextSegment("review")],
+          attachments: [createComposerAttachment(attachment, "pdf-1")],
+        },
+        reusablePrompts: [],
+        modelDescriptor,
+      }),
+    ).resolves.toEqual([
+      { kind: "text", text: "review" },
+      { kind: "attachment", attachment: { id: "pdf-1", ...attachment } },
+    ]);
   });
 
   test("stages supported attachments", async () => {
@@ -203,7 +249,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
           ],
         },
         reusablePrompts: [],
-        selectedModelDescriptor,
+        modelDescriptor,
         stageAttachment,
       }),
     ).resolves.toEqual([

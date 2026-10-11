@@ -92,7 +92,12 @@ export const createWorkspaceSessionLaunchService = (
           attempt.reusedSession(scope.repoPath, session);
         }
         yield* deps.publishUpdated(request.workspaceId, record);
-        const input: AgentSessionControlSendInput = { ...ref, sessionScope, parts };
+        const input: AgentSessionControlSendInput = {
+          ...ref,
+          sessionScope,
+          parts,
+          delivery: "new_turn",
+        };
         if (record.selectedModel) input.model = record.selectedModel;
         yield* attempt.send(input, request.parts);
         attempt.setResultFields({ record: (yield* recordFor(request)).session });

@@ -11,6 +11,7 @@ const claudeResultErrorsSchema = z.array(z.unknown()).transform((errors) =>
   }),
 );
 const claudeResultStringSchema = z.string();
+const claudeQueuedTurnCountSchema = z.number().int().positive();
 
 const readClaudeResultErrors = (message: ClaudeResultLike): string[] => {
   const errors = "errors" in message ? message.errors : undefined;
@@ -59,6 +60,21 @@ export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
     terminalReason !== "background_requested",
   );
 };
+
+/**
+ * A steered message stops the reply that the model streams. The CLI ends that turn as
+ * `aborted_streaming` with a queued turn, then starts the next turn with the steered message.
+ * The turn did not fail.
+ */
+export const isClaudeResultStoppedBySteer = (
+  message: ClaudeResultLike,
+  hasUnreadSteer: boolean,
+): boolean =>
+  hasUnreadSteer &&
+  readClaudeResultTerminalReason(message) === "aborted_streaming" &&
+  claudeQueuedTurnCountSchema.safeParse(
+    "queued_turn_count" in message ? message.queued_turn_count : undefined,
+  ).success;
 
 export const successfulClaudeResultText = (message: ClaudeResultLike): string | null => {
   if (isFailedClaudeResult(message)) {

@@ -339,6 +339,7 @@ test("an accepted first message gives a receipt and no retry", async () => {
   });
   const started = await start(launch, { sendAgentMessage });
   expect(started.postStartMessageReceipt).toEqual({
+    outcome: "accepted",
     recipient: {
       externalSessionId: "saved",
       runtimeKind: "codex",
@@ -380,7 +381,7 @@ test("retry sends the unsent kickoff once through the frontend send path", async
           workingDirectory: recipient.workingDirectory,
         }),
       );
-      receipt = { recipient, acceptedMessage, postAcceptanceFailure: null };
+      receipt = { outcome: "accepted", recipient, acceptedMessage, postAcceptanceFailure: null };
       return receipt;
     },
   );
@@ -428,7 +429,12 @@ test("retry keeps a composer message as typed and can run again after a failed s
       attempts += 1;
       if (attempts === 1) throw new Error("Still offline");
       expect(options).toEqual({});
-      return { recipient, acceptedMessage, postAcceptanceFailure: null };
+      return {
+        outcome: "accepted" as const,
+        recipient,
+        acceptedMessage,
+        postAcceptanceFailure: null,
+      };
     },
   );
   const started = await start(launch, {

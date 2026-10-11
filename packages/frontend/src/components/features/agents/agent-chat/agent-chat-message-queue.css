@@ -1,0 +1,224 @@
+/*
+ * Queued messages pile up on the top edge of the composer, newest in front, like a stack of
+ * notifications. Older cards peek behind it. Hover or keyboard focus fans the stack out over
+ * the transcript, and every card grows to show its whole message.
+ *
+ * The cards stay in normal flow. Negative margins pile them up, so a card that grows pushes the
+ * older cards up without any measuring.
+ */
+:root {
+  --queue-card-height: 2.25rem;
+  /* The front card slides this far under the composer. */
+  --queue-card-tuck: 0.375rem;
+  --queue-peek: 0.4375rem;
+  --queue-spread-gap: 0.375rem;
+  /* The stack sits this far inside the composer edges. */
+  --queue-stack-inset: 0.75rem;
+  --queue-depth-scale: 0.05;
+  --queue-open: 350ms;
+  --queue-close: 250ms;
+  --queue-fade: 150ms;
+  --queue-content-delay: 60ms;
+  --queue-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --queue-blur: 2px;
+}
+
+.queued-message-stack {
+  /* `--queue-count` is the number of live cards. Two older cards peek behind the front one. */
+  --queue-peeking: min(calc(var(--queue-count) - 1), 2);
+  position: relative;
+  /*
+   * An open stack covers the transcript and its raised layers, such as approval cards (z-30).
+   * The composer and the edit card sit above it (z-50), so they cover the tucked edge.
+   */
+  z-index: 40;
+  height: calc(
+    var(--queue-card-height) + var(--queue-card-tuck) + var(--queue-peek) * var(--queue-peeking)
+  );
+  margin-bottom: calc(var(--queue-card-tuck) * -1);
+  transition: height var(--queue-open) var(--queue-ease);
+}
+
+.queued-message-stack[data-count="0"] {
+  height: 0;
+  margin-bottom: 0;
+}
+
+/*
+ * A block list, not a flex column: Chrome does not animate `height: auto` on a flex item, so the
+ * cards would jump to their full height. The list is absolute, so card margins stay inside it.
+ */
+.queued-message-stack-list {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+}
+
+/* Later cards paint above earlier ones, so the newest card covers the older ones. */
+.queued-message-card {
+  --queue-shown-depth: min(var(--queue-depth), 3);
+  interpolate-size: allow-keywords;
+  height: var(--queue-card-height);
+  /* An older card overlaps the next one, except for its peek. */
+  margin-bottom: calc((var(--queue-card-height) - var(--queue-peek)) * -1);
+  overflow: clip;
+  overflow-clip-margin: 2px;
+  /* Scale toward the top edge, so the whole peek of an older card stays visible. */
+  transform-origin: 50% 0%;
+  transform: scale(calc(1 - var(--queue-depth-scale) * var(--queue-shown-depth)));
+  opacity: 1;
+  /* Explicit blur(0): blur to none does not interpolate. */
+  filter: blur(0);
+  transition-property: height, margin-bottom, transform, opacity, filter;
+  transition-duration: var(--queue-close);
+  transition-timing-function: var(--queue-ease);
+}
+
+.queued-message-card-surface {
+  min-height: 100%;
+  transition: border-color var(--queue-fade) var(--queue-ease);
+}
+
+/* In an open stack, a stronger outline marks the card that the actions belong to. */
+.queued-message-stack[data-spread="true"]
+  .queued-message-card:is(:hover, :focus-within)
+  .queued-message-card-surface {
+  border-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+
+.queued-message-card[data-depth="0"] {
+  height: calc(var(--queue-card-height) + var(--queue-card-tuck));
+  margin-bottom: 0;
+}
+
+.queued-message-card[data-depth="0"] .queued-message-card-surface {
+  padding-bottom: calc(0.5rem + var(--queue-card-tuck));
+}
+
+/* Cards behind the third one wait out of sight until the stack fans out. */
+.queued-message-card[data-buried="true"] {
+  margin-bottom: calc(var(--queue-card-height) * -1);
+  opacity: 0;
+}
+
+.queued-message-stack[data-spread="true"] .queued-message-card {
+  height: auto;
+  margin-bottom: var(--queue-spread-gap);
+  transform: scale(1);
+  opacity: 1;
+  transition-duration: var(--queue-open);
+}
+
+.queued-message-stack[data-spread="true"] .queued-message-card[data-depth="0"] {
+  margin-bottom: 0;
+}
+
+/* A new message rises out of the composer. */
+@starting-style {
+  .queued-message-card[data-animate-entry="true"] {
+    height: 0;
+    opacity: 0;
+    filter: blur(var(--queue-blur));
+  }
+}
+
+/* A message that leaves the queue fades out, and the cards around it close the gap. */
+.queued-message-stack .queued-message-card[data-presence="exiting"] {
+  height: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  filter: blur(var(--queue-blur));
+  transition-duration: var(--queue-close);
+}
+
+/*
+ * Only the front card shows its content while the stack is closed. Hidden content takes no pointer
+ * events, but it stays in the tab order and the accessibility tree: keyboard focus opens the stack.
+ */
+.queued-message-card-content,
+.queued-message-card-trailing {
+  transition: opacity var(--queue-fade) var(--queue-ease);
+}
+
+.queued-message-card:not([data-depth="0"])
+  :is(.queued-message-card-content, .queued-message-card-trailing) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Older cards show their text once they start to move apart, so no two lines cross. */
+.queued-message-stack[data-spread="true"]
+  .queued-message-card
+  :is(.queued-message-card-content, .queued-message-card-trailing) {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: var(--queue-content-delay);
+}
+
+/*
+ * The count and the actions share one slot: the count while the stack is closed, the actions of
+ * the card under the pointer when it is open. A hidden one takes no pointer events, and it leaves
+ * at once, so the count and the actions never show together. Hidden actions of the front card stay
+ * in the tab order: keyboard focus on them opens the stack.
+ */
+.queued-message-card-trailing {
+  display: grid;
+  align-items: center;
+  justify-items: end;
+}
+
+.queued-message-card-trailing > * {
+  grid-area: 1 / 1;
+  transition: opacity var(--queue-fade) var(--queue-ease);
+}
+
+.queued-message-card-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: 0s;
+}
+
+.queued-message-stack[data-spread="true"]
+  .queued-message-card:is(:hover, :focus-within)
+  .queued-message-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.queued-message-card-count {
+  pointer-events: none;
+}
+
+.queued-message-stack[data-spread="true"] .queued-message-card-count {
+  opacity: 0;
+  transition-duration: 0s;
+}
+
+/* The edit of a queued message opens and closes like an accordion. */
+.queued-message-edit {
+  --presence-enter-dur: var(--queue-open);
+  --presence-exit-dur: var(--queue-close);
+  --presence-ease: var(--queue-ease);
+  /* Let the card shadow show without adding space. */
+  --presence-clip-margin: 4px;
+}
+
+.queued-message-edit[data-open="true"] {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queued-message-stack {
+    transition: none;
+  }
+
+  .queued-message-card {
+    transition-property: opacity;
+    transition-duration: var(--queue-fade);
+  }
+
+  .queued-message-card,
+  .queued-message-stack[data-spread="true"] .queued-message-card {
+    transform: none;
+  }
+}

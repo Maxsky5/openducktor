@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { resolveModelSelectionOptions } from "./model-selection-options";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { findRunningTurnModelEntry, resolveModelSelectionOptions } from "./model-selection-options";
 
 const makeSelectedSessionModel = (): AgentModelSelection => ({
   runtimeKind: "opencode",
@@ -127,5 +128,42 @@ describe("model-selection-options", () => {
       "high",
       "xhigh",
     ]);
+  });
+});
+
+describe("findRunningTurnModelEntry", () => {
+  const catalog = makeCatalogWithProfile();
+  const userMessage = (id: string, modelId?: string): AgentChatMessage => {
+    const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
+      kind: "user",
+      state: "read",
+    };
+    if (modelId) {
+      meta.providerId = "anthropic";
+      meta.modelId = modelId;
+    }
+    return { id, role: "user", content: id, timestamp: "2026-10-09T10:00:00.000Z", meta };
+  };
+
+  test("uses the latest user message that reports a model", () => {
+    const answer: AgentChatMessage = {
+      id: "answer",
+      role: "assistant",
+      content: "answer",
+      timestamp: "2026-10-09T10:00:01.000Z",
+    };
+    const messages = [
+      userMessage("started", "claude-sonnet"),
+      answer,
+      userMessage("steered without a model"),
+    ];
+
+    expect(findRunningTurnModelEntry(catalog, messages)?.id).toBe("anthropic/claude-sonnet");
+  });
+
+  test("returns null when the model of the running turn is unknown", () => {
+    expect(findRunningTurnModelEntry(catalog, [userMessage("no model")])).toBeNull();
+    expect(findRunningTurnModelEntry(catalog, [userMessage("other", "claude-opus")])).toBeNull();
+    expect(findRunningTurnModelEntry(null, [userMessage("started", "claude-sonnet")])).toBeNull();
   });
 });

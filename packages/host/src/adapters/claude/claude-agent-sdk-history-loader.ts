@@ -67,16 +67,7 @@ export const claudeLiveHistoryContext = (
       "parentExternalSessionId" in session.input
         ? "persisted"
         : "fresh",
-    userMessages: isSubagent
-      ? []
-      : session.acceptedUserMessages.map((message) => ({
-          ...message,
-          state: session.queuedSdkMessages.some(
-            (queuedMessage) => queuedMessage.uuid === message.messageId,
-          )
-            ? ("queued" as const)
-            : ("read" as const),
-        })),
+    userMessages: isSubagent ? [] : [...session.acceptedUserMessages],
   };
 };
 

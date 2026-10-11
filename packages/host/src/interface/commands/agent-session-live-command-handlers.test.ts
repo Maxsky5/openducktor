@@ -1,8 +1,11 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentMessageQueueManageInput,
+  AgentMessageSubmitInput,
   AgentRepositorySessionStartInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
@@ -40,6 +43,19 @@ const controlSummary = (
   status: "idle" as const,
 });
 
+const emptyQueue = ({
+  repoPath,
+  runtimeKind,
+  workingDirectory,
+  externalSessionId,
+  sessionScope,
+}: AgentMessageSubmitInput | AgentMessageQueueManageInput) => ({
+  target: { repoPath, runtimeKind, workingDirectory, externalSessionId, sessionScope },
+  revision: 1,
+  entries: [],
+  pause: null,
+});
+
 const createHarness = async (
   resolveAttachment?: LocalAttachmentService["resolve"],
   startWorkflowSession: Parameters<
@@ -52,6 +68,8 @@ const createHarness = async (
   const forks: unknown[] = [];
   const resumes: unknown[] = [];
   const sends: AgentSessionControlSendInput[] = [];
+  const submits: AgentMessageSubmitInput[] = [];
+  const queueActions: AgentMessageQueueManageInput[] = [];
   const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
@@ -146,6 +164,7 @@ const createHarness = async (
   const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open("opencode");
   const service = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission,
     faultLog: () => Effect.void,
@@ -173,11 +192,25 @@ const createHarness = async (
           ...service,
           startWorkflowSession,
         },
+        {
+          submit: (input) =>
+            Effect.sync(() => {
+              submits.push(input);
+              return { kind: "queued" as const, queue: emptyQueue(input) };
+            }),
+          manage: (input) =>
+            Effect.sync(() => {
+              queueActions.push(input);
+              return { queue: emptyQueue(input) };
+            }),
+        },
         attachmentResolver,
       ),
     }),
+    queueActions,
     sends,
     starts,
+    submits,
   };
 };
 
@@ -333,9 +366,11 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     expect(starts).toEqual([]);
   });
 
-  test("resolves attachment paths before invoking an adapter", async () => {
-    const { attachmentResolutions, router, sends } = await createHarness();
+  test("resolves attachment paths before submitting a message", async () => {
+    const { attachmentResolutions, router, submits } = await createHarness();
     const input = {
+      submissionId: "submission-1",
+      mode: "default" as const,
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
@@ -353,12 +388,12 @@ describe("createAgentSessionLiveCommandHandlers", () => {
           },
         },
       ],
-    } satisfies AgentSessionControlSendInput;
+    } satisfies AgentMessageSubmitInput;
 
-    await Effect.runPromise(router.invoke("agent_session_control_send", input));
+    await Effect.runPromise(router.invoke("agent_session_message_submit", input));
 
     expect(attachmentResolutions).toEqual(["brief.pdf"]);
-    expect(sends).toEqual([
+    expect(submits).toEqual([
       {
         ...input,
         parts: [
@@ -377,8 +412,8 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     ]);
   });
 
-  test("does not invoke an adapter when attachment resolution fails", async () => {
-    const { router, sends } = await createHarness(() =>
+  test("does not submit a message when attachment resolution fails", async () => {
+    const { router, submits } = await createHarness(() =>
       Effect.fail(
         new HostValidationError({
           field: "path",
@@ -389,7 +424,9 @@ describe("createAgentSessionLiveCommandHandlers", () => {
 
     await expect(
       Effect.runPromise(
-        router.invoke("agent_session_control_send", {
+        router.invoke("agent_session_message_submit", {
+          submissionId: "submission-1",
+          mode: "default",
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
@@ -409,6 +446,55 @@ describe("createAgentSessionLiveCommandHandlers", () => {
         }),
       ),
     ).rejects.toThrow("Attachment path is not a staged local attachment.");
-    expect(sends).toEqual([]);
+    expect(submits).toEqual([]);
+  });
+
+  test("resolves attachment paths of an edited queued message", async () => {
+    const { attachmentResolutions, router, queueActions } = await createHarness();
+    const target = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" as const },
+    };
+    const attachment = {
+      id: "attachment-1",
+      name: "brief.pdf",
+      kind: "pdf" as const,
+      mime: "application/pdf",
+    };
+
+    await Effect.runPromise(
+      router.invoke("agent_session_message_queue_manage", {
+        ...target,
+        action: {
+          kind: "save_edit",
+          submissionId: "submission-1",
+          editId: "edit-1",
+          parts: [{ kind: "attachment", attachment: { ...attachment, path: "brief.pdf" } }],
+        },
+      }),
+    );
+    await Effect.runPromise(
+      router.invoke("agent_session_message_queue_manage", {
+        ...target,
+        action: { kind: "remove", submissionId: "submission-1" },
+      }),
+    );
+
+    expect(attachmentResolutions).toEqual(["brief.pdf"]);
+    expect(queueActions).toEqual([
+      {
+        ...target,
+        action: {
+          kind: "save_edit",
+          submissionId: "submission-1",
+          editId: "edit-1",
+          parts: [{ kind: "attachment", attachment: { ...attachment, path: "/staged/brief.pdf" } }],
+        },
+      },
+      { ...target, action: { kind: "remove", submissionId: "submission-1" } },
+    ]);
   });
 });

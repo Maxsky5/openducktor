@@ -39,7 +39,7 @@ export const runtimeCatalogQueryKeys = {
     runtimeKind,
     workingDirectory,
   }: RepoRuntimeRef & {
-    workingDirectory?: string;
+    workingDirectory?: string | undefined;
   }) =>
     [
       ...runtimeCatalogQueryKeys.repoCatalogScope(repoPath),

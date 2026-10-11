@@ -1,3 +1,4 @@
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -344,15 +345,8 @@ const shouldRedirectShellClickToComposer = (
   return true;
 };
 
-type AgentChatComposerEditorProps = {
-  draft: AgentChatComposerDraft;
-  onDraftChange: (draft: AgentChatComposerDraft) => void;
-  onAddFiles: (files: File[]) => void;
-  placeholder: string;
-  disabled: boolean;
-  editorRef: React.RefObject<HTMLDivElement | null>;
-  onEditorInput: () => void;
-  onSend: () => void;
+/** The command, reference, and file catalogs that an editor reads. */
+export type AgentChatComposerEditorCatalog = {
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -371,6 +365,18 @@ type AgentChatComposerEditorProps = {
   retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
+};
+
+type AgentChatComposerEditorProps = {
+  draft: AgentChatComposerDraft;
+  onDraftChange: (draft: AgentChatComposerDraft) => void;
+  onAddFiles: (files: File[]) => void;
+  placeholder: string;
+  disabled: boolean;
+  editorRef: React.RefObject<HTMLDivElement | null>;
+  onEditorInput: () => void;
+  onSend: (mode: AgentMessageSubmitMode) => void;
+  catalog: AgentChatComposerEditorCatalog;
 };
 
 const retryWhenErrored = (error: string | null, retry: (() => void) | null): (() => void) | null =>
@@ -440,25 +446,28 @@ export function AgentChatComposerEditor({
   editorRef,
   onEditorInput,
   onSend,
-  supportsSlashCommands,
-  supportsFileSearch,
-  supportsSkillReferences,
-  supportsSubagentReferences,
-  slashCommands,
-  slashCommandsError,
-  isSlashCommandsLoading,
-  skills,
-  skillsError,
-  isSkillsLoading,
-  subagents,
-  subagentsError,
-  isSubagentsLoading,
-  retrySlashCommands,
-  retrySkills,
-  retrySubagents,
-  onCatalogMenuOpen,
-  searchFiles,
+  catalog,
 }: AgentChatComposerEditorProps): ReactElement {
+  const {
+    supportsSlashCommands,
+    supportsFileSearch,
+    supportsSkillReferences,
+    supportsSubagentReferences,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
+    skills,
+    skillsError,
+    isSkillsLoading,
+    subagents,
+    subagentsError,
+    isSubagentsLoading,
+    retrySlashCommands,
+    retrySkills,
+    retrySubagents,
+    onCatalogMenuOpen,
+    searchFiles,
+  } = catalog;
   const referenceListboxId = useId();
   const slashListboxId = useId();
   const skillListboxId = useId();

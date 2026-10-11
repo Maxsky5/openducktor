@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   claudeLiveHistoryContext,
@@ -150,7 +149,6 @@ describe("loadClaudeHistory", () => {
                 messageId: "user-1",
                 text: "Inspect the prompt builder.",
                 timestamp: "2026-07-17T10:01:00.000Z",
-                state: "read",
               },
             ],
           },
@@ -190,7 +188,6 @@ describe("loadClaudeHistory", () => {
               messageId: "user-1",
               text: "Inspect the prompt builder.",
               timestamp: "2026-07-17T10:01:00.000Z",
-              state: "read",
             },
           ],
         },
@@ -218,7 +215,6 @@ describe("loadClaudeHistory", () => {
             messageId: "user-1",
             text: "Inspect the prompt builder.",
             timestamp: "2026-07-17T10:01:00.000Z",
-            state: "read",
           },
         ],
       },
@@ -254,40 +250,29 @@ describe("loadClaudeHistory", () => {
 });
 
 describe("claudeLiveHistoryContext", () => {
-  const queuedMessage: SDKUserMessage = {
-    type: "user",
-    uuid: "00000000-0000-4000-8000-000000000002",
-    session_id: "session-1",
-    timestamp: "2026-06-25T20:00:01.000Z",
-    parent_tool_use_id: null,
-    message: {
-      role: "user",
-      content: [{ type: "text", text: "queued follow-up" }],
-    },
-  };
   const acceptedUserMessage = {
     messageId: "00000000-0000-4000-8000-000000000002",
     parts: [],
-    text: "queued follow-up",
+    text: "follow-up",
     timestamp: "2026-06-25T20:00:01.000Z",
   };
   const acceptedUserMessages = [acceptedUserMessage];
 
-  test("marks a started session as fresh and reports the queued state of accepted turns", () => {
+  test("marks a started session as fresh and lists its accepted turns", () => {
     const context = claudeLiveHistoryContext(
-      createClaudeSession({ acceptedUserMessages, queuedSdkMessages: [queuedMessage] }),
+      createClaudeSession({ acceptedUserMessages, pendingUserTurnCount: 1 }),
     );
 
     expect(context).toEqual({
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "fresh",
-      userMessages: [{ ...acceptedUserMessage, state: "queued" }],
+      userMessages: [acceptedUserMessage],
     });
     expect(context.hasActiveWork()).toBe(true);
   });
 
-  test("marks a resumed session as persisted and reads accepted turns as read", () => {
+  test("marks a resumed session as persisted and lists its accepted turns", () => {
     const context = claudeLiveHistoryContext(
       createClaudeSession({
         acceptedUserMessages,
@@ -306,7 +291,7 @@ describe("claudeLiveHistoryContext", () => {
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "persisted",
-      userMessages: [{ ...acceptedUserMessage, state: "read" }],
+      userMessages: [acceptedUserMessage],
     });
     expect(context.hasActiveWork()).toBe(false);
   });

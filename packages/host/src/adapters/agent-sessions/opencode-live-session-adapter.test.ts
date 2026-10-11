@@ -1,8 +1,11 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
-import { OpenCodeMessageRejectedError } from "@openducktor/adapters-opencode-sdk";
+import { OpenCodeOperationError } from "@openducktor/adapters-opencode-sdk";
+import { AgentSessionMessageRefusedError } from "@openducktor/core";
+import { readRuntimeOperationFailure } from "../../effect/host-errors";
 import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
 import type {
   PrepareOpencodeSessionRuntime,
@@ -114,8 +117,16 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
   test.each(["rejected", "unknown"] as const)(
     "preserves %s acceptance for a failed OpenCode send",
     async (acceptance) => {
-      const cause = new Error("OpenCode send failed");
-      const error = acceptance === "rejected" ? new OpenCodeMessageRejectedError(cause) : cause;
+      const cause = new OpenCodeOperationError({
+        runtimeKind: "opencode",
+        operation: "send a message",
+        repoPath: ref.repoPath,
+        externalSessionId: ref.externalSessionId,
+        code: "request_failed",
+        summary: "OpenCode send failed.",
+        nextAction: "Retry the message.",
+      });
+      const error = acceptance === "rejected" ? new AgentSessionMessageRefusedError(cause) : cause;
       const send = Promise.withResolvers<void>();
       const harness = createRuntimeHarness({
         sendUserMessageBarrier: send.promise,
@@ -134,6 +145,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
               ...ref,
               sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
               parts: [{ kind: "text", text: "Continue implementation" }],
+              delivery: "new_turn",
             }),
           ),
         );
@@ -143,7 +155,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
             acceptance === "rejected",
           );
           expect(result.failure.message).toContain(cause.message);
-          expect(result.failure.cause).toBe(error);
+          expect(result.failure.cause).toBe(cause);
+          // The caller still gets the runtime failure details.
+          expect(readRuntimeOperationFailure(result.failure)).toEqual(cause.failure);
         }
       } finally {
         await Effect.runPromise(prepared.discard());
@@ -1497,6 +1511,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     const envelopes: Array<{ type: string }> = [];
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
@@ -1619,6 +1634,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     };
     const adapterRegistry = createLiveSessionAdapterRegistry();
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry,
       faultLog: () => Effect.void,
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },

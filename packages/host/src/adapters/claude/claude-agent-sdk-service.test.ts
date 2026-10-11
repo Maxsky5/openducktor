@@ -292,6 +292,7 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
+            delivery: "new_turn",
             sessionScope: repositoryScope,
             parts: [{ kind: "text", text: "Hello" }],
           },
@@ -925,6 +926,7 @@ describe("createClaudeAgentSdkService", () => {
             runtimePolicy: { kind: "claude" },
             sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
             parts: [{ kind: "text", text: "Hello" }],
+            delivery: "new_turn",
           },
           "runtime-claude",
         ),
@@ -978,6 +980,49 @@ describe("createClaudeAgentSdkService", () => {
     expect(setModel).not.toHaveBeenCalled();
     expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: "xhigh" });
     expect(session.model?.variant).toBe("xhigh");
+  });
+
+  test("keeps the model of a running turn and leaves a model change for the next turn", async () => {
+    const setModel = mock(async (_model?: string) => {});
+    const applyFlagSettings = mock(async () => {});
+    const runningModel = {
+      runtimeKind: "claude" as const,
+      providerId: "claude",
+      modelId: "claude-sonnet-4-6",
+      variant: "high",
+    };
+    const session = createSession({
+      model: runningModel,
+      sdkState: "running",
+      query: createClaudeQueryFixture({ applyFlagSettings, close: mock(() => {}), setModel }),
+    });
+    const service = createService(session);
+    const update = (model: { providerId: string; modelId: string; variant: string }) =>
+      Effect.runPromise(
+        service.updateSessionModel(
+          {
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            model,
+          },
+          "runtime-1",
+        ),
+      );
+
+    await expect(
+      update({ providerId: "claude", modelId: "claude-opus-4-6", variant: "xhigh" }),
+    ).resolves.toBeUndefined();
+
+    expect(setModel).not.toHaveBeenCalled();
+    expect(applyFlagSettings).not.toHaveBeenCalled();
+    expect(session.model).toEqual(runningModel);
+    // An unsupported change still fails at once.
+    await expect(
+      update({ providerId: "claude", modelId: "claude-opus-4-6", variant: "unsupported" }),
+    ).rejects.toThrow();
   });
 
   test("renames the live Claude session and its repository association", async () => {
@@ -1089,52 +1134,6 @@ describe("createClaudeAgentSdkService", () => {
       variant: "xhigh",
       profileId: "build",
     });
-  });
-
-  test("keeps the latest live selection as the queued-turn restore model", async () => {
-    const session = createSession({
-      model: {
-        runtimeKind: "claude",
-        providerId: "claude",
-        modelId: "claude-opus-4-6",
-        variant: "xhigh",
-      },
-      modelAfterQueuedTurns: {
-        runtimeKind: "claude",
-        providerId: "claude",
-        modelId: "claude-sonnet-4-6",
-        variant: "high",
-      },
-      query: createClaudeQueryFixture({
-        applyFlagSettings: mock(async () => {}),
-        close: mock(() => {}),
-        setModel: mock(async (_model?: string) => {}),
-      }),
-    });
-    const service = createService(session);
-    const latestModel = {
-      runtimeKind: "claude" as const,
-      providerId: "claude",
-      modelId: "claude-haiku-4-5",
-      variant: "low",
-    };
-
-    await Effect.runPromise(
-      service.updateSessionModel(
-        {
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          model: latestModel,
-        },
-        "runtime-1",
-      ),
-    );
-
-    expect(session.model).toEqual(latestModel);
-    expect(session.modelAfterQueuedTurns).toEqual(latestModel);
   });
 
   test.each([
@@ -1777,6 +1776,7 @@ describe("continueInterruptedTurn eligibility", () => {
             {
               ...continuationInput,
               parts: [{ kind: "text", text: "Continue with this message." }],
+              delivery: "new_turn",
             },
             "runtime-1",
           ),

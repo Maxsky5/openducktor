@@ -1201,6 +1201,7 @@ describe("Claude live and hydrated transcript parity", () => {
         repoPath: "/repo",
         runtimeKind: "claude",
         runtimePolicy: { kind: "claude" },
+        delivery: "new_turn",
         workingDirectory: "/repo",
         externalSessionId: "session-1",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },

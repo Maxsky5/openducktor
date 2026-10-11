@@ -5,6 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 import {
@@ -47,10 +48,9 @@ const createBaseArgs = (): BuildArgs => {
     handleQuickAction: () => {},
     openTaskDetails: () => {},
     isStarting: false,
-    isSending: false,
     isSessionWorking: false,
     isWaitingInput: false,
-    busySendBlockedReason: null,
+    messageDelivery: createAgentChatSendFixture(),
     canUseKickoffPrompt: false,
     kickoffLabel: "Kickoff",
     canStopSession: false,
@@ -60,7 +60,6 @@ const createBaseArgs = (): BuildArgs => {
     persistentResumeError: null,
     onResumeSession: () => {},
     startLaunchKickoff: async () => {},
-    onSend: async () => true,
     sendAgentMessage: async () => null,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},

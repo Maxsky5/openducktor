@@ -40,7 +40,7 @@ import {
   refreshAfterAcceptedCodexMessage,
   toCodexMessageSendError,
 } from "./codex-live-session-acceptance";
-import { toCodexUserMessagePart } from "./codex-live-session-inputs";
+import { toCodexSendRequest } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 import {
   parseCodexLiveSessionOutput,
@@ -193,6 +193,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
             runtimeId: runtime.runtimeId,
             externalSessionId,
           });
+      // A failure after Codex admitted the message keeps the message accepted.
+      const messageError = (operation: string, input: AgentSessionLiveRef) => (cause: unknown) =>
+        toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
+        sessionError(operation, input.externalSessionId)(cause);
 
       const queries = createRuntimeQueryAdapter(controller);
       const adapter: AgentSessionRuntimeAdapterPort = {
@@ -313,12 +317,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 Effect.flatMap((boundInput) =>
                   Effect.tryPromise({
                     try: () => controller.replyQuestion(boundInput),
-                    catch: (cause) =>
-                      toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
-                      sessionError(
-                        "codex-live-session.reply-background-question",
-                        input.externalSessionId,
-                      )(cause),
+                    catch: messageError("codex-live-session.reply-background-question", input),
                   }),
                 ),
                 Effect.flatMap((event) =>
@@ -424,29 +423,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
         sendUserMessage: (input, options) =>
           bindControlPolicy(input, "send-user-message").pipe(
             Effect.flatMap((boundInput) => {
-              const { resolvedQuestionRequestIds, model, parts, systemPrompt, ...requiredInput } =
-                boundInput;
-              const request: Parameters<typeof controller.sendUserMessage>[0] = {
-                ...requiredInput,
-                parts: parts.map(toCodexUserMessagePart),
-              };
-              if (resolvedQuestionRequestIds !== undefined) {
-                request.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
-              }
-              if (model !== undefined) {
-                request.model = model;
-              }
-              if (systemPrompt !== undefined) {
-                request.systemPrompt = systemPrompt;
-              }
+              const request = toCodexSendRequest(boundInput);
               return Effect.tryPromise({
                 try: () => controller.sendUserMessage(request, options),
-                catch: (cause) =>
-                  toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
-                  sessionError(
-                    "codex-live-session.send-user-message",
-                    input.externalSessionId,
-                  )(cause),
+                catch: messageError("codex-live-session.send-user-message", input),
               });
             }),
             Effect.flatMap((value) =>

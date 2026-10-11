@@ -1,9 +1,15 @@
-import type { AgentSessionWorkflowScope } from "@openducktor/contracts";
+import type {
+  AgentSessionControlSendInput,
+  AgentSessionLiveRef,
+  AgentSessionWorkflowScope,
+} from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
+import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import type {
   AgentSessionOperationPolicy,
+  AgentSessionSendContent,
   PreparedSessionModelUpdate,
 } from "./agent-session-operation-policy";
 import { createTaskWorkflowSessionPolicy } from "./task-workflow-session-policy";
@@ -17,9 +23,11 @@ type ObservedSessionCommands = Pick<
 
 export const createAgentSessionCommandService = ({
   repositoryPolicy,
+  pauseForStop,
   ...dependencies
 }: Parameters<typeof createTaskWorkflowSessionPolicy>[0] & {
   repositoryPolicy: AgentSessionOperationPolicy;
+  pauseForStop: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   runtime: Parameters<typeof createTaskWorkflowSessionPolicy>[0]["runtime"] &
     ObservedSessionCommands;
 }) => {
@@ -88,7 +96,11 @@ export const createAgentSessionCommandService = ({
         repositoryPolicy.validateRef(input).pipe(Effect.andThen(runtime.replyQuestion(input))),
       ),
     stopSession: (input: Parameters<typeof runtime.stopSession>[0]) =>
-      repositoryPolicy.run(input, "stop session", runtime.stopSession(input)),
+      repositoryPolicy.run(
+        input,
+        "stop session",
+        pauseForStop(input).pipe(Effect.andThen(runtime.stopSession(input))),
+      ),
     releaseSession: (input: Parameters<typeof runtime.releaseSession>[0]) =>
       repositoryPolicy.run(input, "release session", runtime.releaseSession(input)),
     resumeSession: (input: Parameters<typeof runtime.resumeSession>[0]) =>
@@ -114,6 +126,13 @@ export const createAgentSessionCommandService = ({
           }),
         );
       }),
+    prepareUserMessage: (input: AgentSessionSendContent) =>
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        const ref = { ...input, repoPath };
+        const policy = policyFor(input.sessionScope);
+        return yield* policy.run(ref, "prepare session message", policy.prepareSend(ref));
+      }),
     sendUserMessage: (
       input: Parameters<typeof runtime.sendUserMessage>[0],
       options?: Parameters<typeof runtime.sendUserMessage>[1],
@@ -126,26 +145,15 @@ export const createAgentSessionCommandService = ({
           ref,
           Effect.gen(function* () {
             const prepared = yield* policy.prepareSend(ref);
-            const accepted = yield* runtime.sendUserMessage(prepared, options);
+            const request = withModel({ ...prepared, delivery: input.delivery }, input.model);
+            const accepted = yield* runtime.sendUserMessage(request, options);
             if (accepted.type === "command_accepted") return accepted;
-            yield* policy.recordAcceptedMessage(ref, accepted).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AgentSessionMessageAcceptedError(
-                    {
-                      sessionRef: {
-                        repoPath,
-                        runtimeKind: ref.runtimeKind,
-                        workingDirectory: ref.workingDirectory,
-                        externalSessionId: ref.externalSessionId,
-                      },
-                      acceptedMessage: accepted,
-                      stage: "record_message",
-                    },
-                    cause,
-                  ),
-              ),
-            );
+            // A steer keeps the settings of the running turn, so it never changes the selection.
+            const saveModel =
+              input.delivery === "new_turn" && sameModel(request.model, prepared.model);
+            yield* policy
+              .recordAcceptedMessage(ref, accepted, { saveModel })
+              .pipe(Effect.mapError(messageAcceptedFailure(ref, accepted, "record_message")));
             return accepted;
           }),
         );
@@ -162,4 +170,19 @@ export const createAgentSessionCommandService = ({
         );
       }),
   };
+};
+
+const sameModel = (left?: AgentModelSelection, right?: AgentModelSelection): boolean =>
+  left?.runtimeKind === right?.runtimeKind &&
+  left?.providerId === right?.providerId &&
+  left?.modelId === right?.modelId &&
+  left?.variant === right?.variant &&
+  left?.profileId === right?.profileId;
+
+const withModel = (
+  input: AgentSessionControlSendInput,
+  model: AgentModelSelection | undefined,
+): AgentSessionControlSendInput => {
+  const { model: _currentModel, ...rest } = input;
+  return model === undefined ? rest : { ...rest, model };
 };

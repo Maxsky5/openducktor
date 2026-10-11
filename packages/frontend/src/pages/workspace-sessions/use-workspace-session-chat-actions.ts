@@ -9,12 +9,12 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
+import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
 import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
@@ -34,11 +34,7 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { launchWorkspaceSession } from "./launch-workspace-session";
 
-type DraftSendOptions = Omit<Parameters<typeof resolveAgentStudioSendDraftParts>[0], "draft"> & {
-  canSend: boolean;
-  assertCanSubmit?: AgentMessageSendOptions["assertCanSubmit"];
-};
-
+const CHAT_UNAVAILABLE = "The original chat is no longer available. Reopen it to send your draft.";
 const CONFLICT_MESSAGE_NOT_ACCEPTED =
   "The agent did not accept a conflict message. Reopen the chat and try again.";
 
@@ -51,12 +47,17 @@ export function useWorkspaceSessionChatActions(
   const operations = useAgentOperations();
   const queryClient = useQueryClient();
   const title = workspaceSessionTitle(record);
-  const isCurrentWorkspace = () =>
-    store.getActivitySnapshot().workspaceRepoPath === workspace.repoPath;
-  const sending = useRef(false);
+  const isCurrentWorkspace = useCallback(
+    () => store.getActivitySnapshot().workspaceRepoPath === workspace.repoPath,
+    [store, workspace.repoPath],
+  );
+  // An existing session queues later sends in the host, so several sends can run at once.
+  const activity = useAsyncActivityTracker();
+  const activityKey = record.id;
+  const { hasInFlight } = activity;
+  const isSendInFlight = useCallback(() => hasInFlight(activityKey), [hasInFlight, activityKey]);
   const savingModel = useRef(false);
   const resuming = useRef(false);
-  const [isSending, setSending] = useState(false);
   const [isStarting, setStarting] = useState(false);
   const [isSavingModel, setSavingModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,36 +94,62 @@ export function useWorkspaceSessionChatActions(
     latestRecord.current = record;
   }, [record]);
 
-  const launchFirstMessage = async (parts: AgentUserMessagePart[]) => {
-    setStarting(true);
-    ownedStartup.current = true;
-    const outcome = await launchWorkspaceSession(
-      {
-        workspaceId: workspace.workspaceId,
-        repoPath: workspace.repoPath,
-        sessionId: record.id,
-        parts: normalizeAgentUserMessageParts(parts),
-      },
-      record,
-      store,
-      queryClient,
-    );
-    const failureMessage = outcome.failure ? sessionLaunchFailureMessage(outcome.failure) : null;
-    return { outcome, failureMessage };
-  };
+  /**
+   * Another send can still run, so only the last send ends the startup. Activity stops effects
+   * while hidden, but keeps state for the next visit.
+   */
+  const settleSend = useCallback((): void => {
+    ownedStartup.current = false;
+    if (isSendInFlight()) return;
+    // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
+    setStarting(false);
+  }, [isSendInFlight]);
+
+  const reportSendFailure = useCallback(
+    (cause: unknown): void => {
+      const message = errorMessage(cause);
+      if (isMounted()) setError(message);
+      else
+        toast.error(`Could not send to "${title}"`, {
+          description: message,
+        });
+    },
+    [isMounted, title],
+  );
+
+  /** Starts the saved chat with a first message. The host sends that message. */
+  const launchWithMessage = useCallback(
+    async (parts: AgentUserMessagePart[]) => {
+      setStarting(true);
+      ownedStartup.current = true;
+      const outcome = await launchWorkspaceSession(
+        {
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
+          sessionId: record.id,
+          parts: normalizeAgentUserMessageParts(parts),
+        },
+        record,
+        store,
+        queryClient,
+      );
+      const failureMessage = outcome.failure ? sessionLaunchFailureMessage(outcome.failure) : null;
+      return { outcome, failureMessage };
+    },
+    [queryClient, record, store, workspace.repoPath, workspace.workspaceId],
+  );
 
   const sendStandaloneMessage = async (
     parts: AgentUserMessagePart[],
     options: AgentMessageSendOptions & { assertCurrent: () => void },
   ): Promise<AgentMessageSendReceipt> => {
-    if (sending.current || savingModel.current || resuming.current)
+    if (isSendInFlight() || savingModel.current || resuming.current)
       throw new Error("Wait for the current send or model change to finish.");
     if (!isMounted() || record.archivedAt !== null)
       throw new Error("Select or restore the saved workspace chat before asking for assistance.");
     options.assertCurrent();
     const version = recipientVersion.current;
-    sending.current = true;
-    setSending(true);
+    const send = activity.begin(activityKey);
     try {
       const identity = workspaceSessionIdentity(record);
       const assertCurrent = () => {
@@ -138,10 +165,11 @@ export function useWorkspaceSessionChatActions(
       };
       assertCurrent();
       if (!identity) {
-        const { outcome, failureMessage } = await launchFirstMessage(parts);
+        const { outcome, failureMessage } = await launchWithMessage(parts);
         if (!outcome.session || !outcome.acceptedMessage)
           throw new Error(failureMessage ?? CONFLICT_MESSAGE_NOT_ACCEPTED);
         return {
+          outcome: "accepted",
           recipient: toAgentSessionIdentity(outcome.session),
           acceptedMessage: outcome.acceptedMessage,
           postAcceptanceFailure: failureMessage,
@@ -160,10 +188,8 @@ export function useWorkspaceSessionChatActions(
       if (!receipt) throw new Error(CONFLICT_MESSAGE_NOT_ACCEPTED);
       return receipt;
     } finally {
-      ownedStartup.current = false;
-      sending.current = false;
-      setSending(false);
-      setStarting(false);
+      send.finish();
+      settleSend();
     }
   };
 
@@ -181,7 +207,7 @@ export function useWorkspaceSessionChatActions(
 
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
-      if (savingModel.current || sending.current || resuming.current) return;
+      if (savingModel.current || isSendInFlight() || resuming.current) return;
       if (!selection) {
         setError("Select a model before saving the draft model.");
         return;
@@ -198,14 +224,14 @@ export function useWorkspaceSessionChatActions(
           setSavingModel(false);
         });
     },
-    [saveDraftModel],
+    [saveDraftModel, isSendInFlight],
   );
 
   const { updateAgentSessionModel } = operations;
   // The speed control shows its own progress and failure, so it skips the model lock state.
   const updateSpeed = useCallback(
     async (identity: AgentSessionIdentity | null, selection: AgentModelSelection) => {
-      if (savingModel.current || sending.current || resuming.current)
+      if (savingModel.current || isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before changing the speed.");
       savingModel.current = true;
       try {
@@ -214,11 +240,11 @@ export function useWorkspaceSessionChatActions(
         savingModel.current = false;
       }
     },
-    [saveDraftModel, updateAgentSessionModel],
+    [saveDraftModel, updateAgentSessionModel, isSendInFlight],
   );
   const updateSessionModel = useCallback(
     async (identity: AgentSessionIdentity, selection: AgentModelSelection | null) => {
-      if (savingModel.current || sending.current || resuming.current)
+      if (savingModel.current || isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before changing the model.");
       savingModel.current = true;
       setSavingModel(true);
@@ -229,68 +255,69 @@ export function useWorkspaceSessionChatActions(
         setSavingModel(false);
       }
     },
-    [updateAgentSessionModel],
+    [updateAgentSessionModel, isSendInFlight],
   );
 
-  const sendDraft = async (
-    draft: AgentChatComposerDraft,
-    options: DraftSendOptions,
-  ): Promise<boolean> => {
-    if (
-      sending.current ||
-      savingModel.current ||
-      resuming.current ||
-      !options.canSend ||
-      !isMounted()
-    )
-      return false;
-    sending.current = true;
-    setSending(true);
-    setError(null);
-    const reportError = (message: string) => {
-      if (isMounted()) setError(message);
-      else toast.error(`Could not send to "${title}"`, { description: message });
-    };
-    try {
-      const parts = await resolveAgentStudioSendDraftParts({ ...options, draft });
-      if (!parts) return false;
-      if (!isMounted() || !isCurrentWorkspace())
-        throw new Error("The original chat is no longer available. Reopen it to send your draft.");
-      const identity = workspaceSessionIdentity(record);
-      if (!identity) {
-        const { outcome, failureMessage } = await launchFirstMessage(parts);
-        if (!outcome.acceptedMessage)
-          throw new Error(failureMessage ?? "The agent did not accept the message.");
-        // The runtime accepted the message, so the draft must stay cleared.
-        if (failureMessage) reportError(failureMessage);
-        return true;
-      }
-      if (!isMounted() || !isCurrentWorkspace())
-        throw new Error("The original chat is no longer available. Reopen it to send your draft.");
-      if (options.assertCanSubmit) {
-        const sendOptions: AgentMessageSendOptions = {
-          assertCanSubmit: options.assertCanSubmit,
-        };
-        await operations.sendAgentMessage(identity, parts, sendOptions);
-      } else await operations.sendAgentMessage(identity, parts);
+  /**
+   * Launches the saved chat with the draft. A launch that did not deliver the message fails, so
+   * the composer keeps the draft.
+   */
+  const launchWithDraft = useCallback(
+    async (parts: AgentUserMessagePart[]): Promise<true> => {
+      const { outcome, failureMessage } = await launchWithMessage(parts);
+      if (!outcome.acceptedMessage)
+        throw new Error(failureMessage ?? "The agent did not accept the message.");
+      // The runtime accepted the message, so the draft must stay cleared.
+      if (failureMessage) reportSendFailure(failureMessage);
       return true;
-    } catch (cause) {
-      reportError(errorMessage(cause));
-      return false;
-    } finally {
-      ownedStartup.current = false;
-      sending.current = false;
-      // Activity stops effects while hidden, but keeps state for the next visit.
-      // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
-      setSending(false);
-      setStarting(false);
-    }
-  };
+    },
+    [launchWithMessage, reportSendFailure],
+  );
+
+  /**
+   * Sends to this chat's session, or launches the session with the first message. The target
+   * stays the same while its inputs stay the same.
+   */
+  const sendTarget = useCallback(
+    ({
+      canSend,
+      assertCanSubmit,
+    }: {
+      canSend: boolean;
+      assertCanSubmit: NonNullable<AgentMessageSendOptions["assertCanSubmit"]>;
+    }): AgentChatSendTarget => ({
+      activity,
+      activityKey,
+      canSend: () => canSend && !savingModel.current && !resuming.current && isMounted(),
+      resolve: async (parts) => {
+        setError(null);
+        if (!isMounted() || !isCurrentWorkspace()) throw new Error(CHAT_UNAVAILABLE);
+        const identity = workspaceSessionIdentity(record);
+        if (!identity) return { kind: "launched", result: await launchWithDraft(parts) };
+        return { kind: "session", identity, sendOptions: { assertCanSubmit } };
+      },
+      onFailure: (cause) => {
+        reportSendFailure(cause);
+        return false;
+      },
+      onSettled: settleSend,
+    }),
+    [
+      activity,
+      activityKey,
+      isCurrentWorkspace,
+      isMounted,
+      launchWithDraft,
+      record,
+      reportSendFailure,
+      settleSend,
+    ],
+  );
 
   const { continueInterruptedTurn } = operations;
   const resumeTurn = useCallback(
     async (identity: AgentSessionIdentity): Promise<void> => {
-      if (sending.current || savingModel.current || resuming.current)
+      if (isSendInFlight() || savingModel.current || resuming.current)
         throw new Error("Wait for the current send or session change before resuming.");
       resuming.current = true;
       try {
@@ -308,7 +335,7 @@ export function useWorkspaceSessionChatActions(
         resuming.current = false;
       }
     },
-    [continueInterruptedTurn, isMounted, title],
+    [continueInterruptedTurn, isMounted, title, isSendInFlight],
   );
 
   const recordIdentity = workspaceSessionIdentity(record);
@@ -330,14 +357,14 @@ export function useWorkspaceSessionChatActions(
     recordSessionKey === null ? null : persistentResumeErrorForSession(recordSessionKey);
 
   return {
-    isSending,
+    isSending: activity.isActive(activityKey),
     isStarting,
     isSavingModel,
     error,
     updateDraftModel,
     updateSessionModel,
     updateSpeed,
-    sendDraft,
+    sendTarget,
     sendStandaloneMessage,
     isResumingSession,
     resumeSessionError,

@@ -104,7 +104,12 @@ describe("subscribeElectronHostEvent", () => {
       second,
       "/repo:a/b",
     );
-    const payload = { type: "snapshot", repoPath: "/repo:a", sessions: [] } as const;
+    const payload = {
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo:a",
+      sessions: [],
+    } as const;
     try {
       const envelope: HostEventEnvelope = {
         channel: "openducktor://agent-session-live-event",

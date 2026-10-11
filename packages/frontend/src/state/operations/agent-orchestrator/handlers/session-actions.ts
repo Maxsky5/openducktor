@@ -1,5 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import type { SessionTurnState } from "../support/session-turn-state";
@@ -7,6 +8,7 @@ import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
 import { createContinueInterruptedTurn } from "./continue-interrupted-turn";
 import { createPrepareSessionSend } from "./prepare-session-send";
+import { createManageAgentMessageQueue } from "./message-queue-actions";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStopAgentSession } from "./stop-session";
@@ -16,6 +18,7 @@ type SessionActionsDependencies = {
   workspaceRepoPath: string | null;
   workspaceId: string | null;
   adapter: AgentEnginePort;
+  messageQueues: AgentMessageQueuesStore;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
@@ -33,6 +36,7 @@ export const createAgentSessionActions = ({
   workspaceRepoPath,
   workspaceId,
   adapter,
+  messageQueues,
   readSessionSnapshot,
   taskRef,
   repoEpochRef,
@@ -59,12 +63,23 @@ export const createAgentSessionActions = ({
     repoEpochRef,
     currentWorkspaceRepoPathRef,
     adapter,
+    messageQueues,
     readSessionSnapshot,
     updateSession,
     prepareSessionSend,
     turnMetadata: sessionTurnState.metadata,
     clearSessionTurnState: sessionTurnState.clearSession,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
+  });
+
+  const manageAgentMessageQueue = createManageAgentMessageQueue({
+    workspaceRepoPath,
+    repoEpochRef,
+    currentWorkspaceRepoPathRef,
+    adapter,
+    messageQueues,
+    readSessionSnapshot,
+    updateSession,
   });
 
   const refreshStoppedWorkflowSession = createRefreshStoppedWorkflowSession({
@@ -109,6 +124,7 @@ export const createAgentSessionActions = ({
 
   return {
     sendAgentMessage,
+    manageAgentMessageQueue,
     stopAgentSession,
     continueInterruptedTurn,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,

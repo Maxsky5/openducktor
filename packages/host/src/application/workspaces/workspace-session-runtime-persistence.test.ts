@@ -45,13 +45,18 @@ describe("Workspace Session persistence through the shared command module", () =
         model: { providerId: "other", modelId: "other-model" },
       }),
     );
+    // Like the message queue, a send captures the stored settings before dispatch.
     await Effect.runPromise(
-      h.live.sendUserMessage({
-        ...h.ref,
-        sessionScope: scope,
-        systemPrompt: "Client override",
-        parts: [{ kind: "text", text: "Prompt" }],
-      }),
+      h.live
+        .prepareUserMessage({
+          ...h.ref,
+          sessionScope: scope,
+          systemPrompt: "Client override",
+          parts: [{ kind: "text", text: "Prompt" }],
+        })
+        .pipe(
+          Effect.flatMap((content) => h.live.sendUserMessage({ ...content, delivery: "new_turn" })),
+        ),
     );
     expect(h.inputs).toHaveLength(2);
     for (const input of h.inputs)
@@ -434,10 +439,14 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     await expect(
       Effect.runPromise(
-        h.persistence.recordAcceptedMessage(h.ref, {
-          ...h.accepted(),
-          model: { runtimeKind: "codex", providerId: "provider", modelId: "wrong-runtime" },
-        }),
+        h.persistence.recordAcceptedMessage(
+          h.ref,
+          {
+            ...h.accepted(),
+            model: { runtimeKind: "codex", providerId: "provider", modelId: "wrong-runtime" },
+          },
+          { saveModel: true },
+        ),
       ),
     ).rejects.toThrow("Accepted message model does not match its Runtime");
     expect(await h.get()).toEqual(h.record);
@@ -467,12 +476,26 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.updates).toEqual([]);
   });
 
+  test("keeps the saved model when a queued message ran with an older model", async () => {
+    const h = await setup();
+    const model = { runtimeKind: "opencode" as const, providerId: "provider", modelId: "older" };
+
+    await Effect.runPromise(
+      h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model }, { saveModel: false }),
+    );
+
+    expect((await h.get()).selectedModel).toEqual(h.record.selectedModel);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+  });
+
   test("keeps the complete accepted-message update after publication fails", async () => {
     const h = await setup();
     h.state.failPublish = true;
     const model = { runtimeKind: "opencode" as const, providerId: "provider", modelId: "chosen" };
     await expect(
-      Effect.runPromise(h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model })),
+      Effect.runPromise(
+        h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model }, { saveModel: true }),
+      ),
     ).rejects.toThrow("publication failed");
     expect(await h.get()).toEqual({
       ...h.record,
@@ -645,6 +668,7 @@ describe("Workspace Session persistence through the shared command module", () =
       operation === "send"
         ? h.live
             .sendUserMessage({
+              delivery: "new_turn",
               ...h.ref,
               sessionScope: { kind: "repository" },
               parts: [{ kind: "text", text: "Continue" }],

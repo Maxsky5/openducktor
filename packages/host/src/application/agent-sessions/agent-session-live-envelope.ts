@@ -1,4 +1,8 @@
-import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentMessageQueueSnapshot,
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveRef,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostError,
@@ -12,6 +16,28 @@ import type { AgentSessionPersistencePort } from "../../ports/agent-session-pers
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 export type AgentSessionLiveFaultLogger = (message: string) => Effect.Effect<void, HostError>;
+
+/** Message queues read published changes in order and join each repository snapshot. */
+export type AgentMessageQueueObserver = {
+  readonly listQueues: (repoPath: string) => AgentMessageQueueSnapshot[];
+  readonly observeChanges: (envelopes: ReadonlyArray<AgentSessionLiveEnvelope>) => void;
+};
+
+type AgentSessionSnapshotEnvelope = Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>;
+
+/** An envelope before publication. A snapshot gets the queues of its repository when published. */
+export type AgentSessionLiveEnvelopeDraft =
+  | Exclude<AgentSessionLiveEnvelope, { type: "snapshot" }>
+  | Omit<AgentSessionSnapshotEnvelope, "messageQueues">;
+
+/** A snapshot resets the renderer projection, so it also carries every queue of its repository. */
+export const withMessageQueues = (
+  observer: AgentMessageQueueObserver,
+  envelope: AgentSessionLiveEnvelopeDraft,
+): AgentSessionLiveEnvelope =>
+  envelope.type === "snapshot"
+    ? { ...envelope, messageQueues: observer.listQueues(envelope.repoPath) }
+    : envelope;
 
 export const createAgentSessionLiveEnvelopePublisher = (
   publish: AgentSessionLiveEnvelopePublisher,

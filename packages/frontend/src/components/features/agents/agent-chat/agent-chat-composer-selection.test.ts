@@ -150,4 +150,31 @@ describe("agent-chat-composer-selection", () => {
     expect(range?.endContainer).toBe(afterChip);
     expect(range?.endOffset).toBe(0);
   });
+
+  test("puts the caret at the end of the last editable segment, or focuses an editor without one", () => {
+    const editor = document.createElement("div");
+    editor.tabIndex = -1;
+    editor.setAttribute("contenteditable", "true");
+    const text = document.createElement("span");
+    text.dataset.segmentId = "text-1";
+    text.textContent = "first";
+    const chip = document.createElement("span");
+    chip.dataset.segmentId = "chip-1";
+    chip.setAttribute("contenteditable", "false");
+    editor.append(text, chip);
+    document.body.append(editor);
+
+    selectionModule.focusEditorEnd(editor);
+
+    const selection = globalThis.getSelection?.();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    expect(range?.endContainer.parentNode).toBe(text);
+    expect(range?.endOffset).toBe("first".length);
+
+    editor.blur();
+    editor.setAttribute("contenteditable", "false");
+    selectionModule.focusEditorEnd(editor);
+
+    expect(document.activeElement).toBe(editor);
+  });
 });

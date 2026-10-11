@@ -97,6 +97,7 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
       ...sessionRef("/repo-a", "detached-a"),
       systemPrompt: "Use the repo rules.",
       parts: [{ kind: "text", text: "Continue" }],
+      delivery: "new_turn",
     });
     await adapter.loadSessionContextUsage(sessionRef("/repo-b", "thread-idle"));
 

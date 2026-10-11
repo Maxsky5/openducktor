@@ -104,6 +104,7 @@ test.each([false, true])(
     expect(
       projector.accept({
         type: "snapshot",
+        messageQueues: [],
         repoPath: ref.repoPath,
         sessions: [root, child],
         isConnectionSnapshot,

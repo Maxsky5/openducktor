@@ -16,6 +16,7 @@ import {
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionReadStateStore, sessionReadStateKey } from "./session-read-state-store";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const identity: AgentSessionIdentity = {
   externalSessionId: "shared-id",
@@ -100,12 +101,13 @@ describe("Session read state", () => {
         if (source === "child") inputs.parentExternalSessionId = identity.externalSessionId;
         return liveSession(inputs);
       };
-      let projection = applyWorkspaceActivityEnvelope(emptyWorkspaceActivityProjection(), {
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions:
-          source === "child" ? [liveSession({}), inputSession(["a"])] : [inputSession(["a"])],
-      });
+      let projection = applyWorkspaceActivityEnvelope(
+        emptyWorkspaceActivityProjection(),
+        createLiveSnapshotEnvelope({
+          sessions:
+            source === "child" ? [liveSession({}), inputSession(["a"])] : [inputSession(["a"])],
+        }),
+      );
       const observe = () =>
         store.observeLiveSnapshot(
           snapshot({

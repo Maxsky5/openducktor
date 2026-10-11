@@ -1,10 +1,16 @@
-import { agentSessionRefsEqual } from "@openducktor/core";
+import {
+  AgentSessionMessageAcceptanceUnknownError,
+  AgentSessionMessageRefusedError,
+  AgentSessionTurnActiveError,
+  agentSessionRefsEqual,
+} from "@openducktor/core";
 import type { SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
 import {
   isManualSessionCompactionSlashCommand,
   type AgentSessionAuthorizedRoot,
 } from "@openducktor/contracts";
 import type {
+  SendAgentUserMessageInput,
   ManagedMcpServerResolver,
   AgentCatalogPort,
   AgentSessionHistoryPort,
@@ -21,7 +27,6 @@ import {
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import { OpencodeSdkAdapter, type OpenCodeSessionBinding } from "./opencode-sdk-adapter";
-import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 import { installOpenCodePolicy, readWorkflowInstructions } from "./opencode-permissions";
 import {
   permissionDecision,
@@ -910,6 +915,13 @@ export const createPrepareOpencodeSessionRuntime =
         return summary;
       },
       sendUserMessage: (messageInput, options) => {
+        const working =
+          nativeRunning.has(messageInput.externalSessionId) ||
+          awaitingTurns.has(messageInput.externalSessionId);
+        if (working && messageInput.delivery === "new_turn")
+          return Promise.reject(new AgentSessionTurnActiveError(messageInput.externalSessionId));
+        // A steer joins the running turn, which keeps its model. A model change waits for the next turn.
+        const request = working ? withoutModel(messageInput) : messageInput;
         const binding = controller.bindings.get(messageInput.externalSessionId);
         const turn: AwaitingTurn = {
           ref: messageInput,
@@ -941,7 +953,7 @@ export const createPrepareOpencodeSessionRuntime =
               assertCommandIdle();
             } catch (cause) {
               if (cause instanceof Error)
-                return Promise.reject(new OpenCodeMessageRejectedError(cause));
+                return Promise.reject(new AgentSessionMessageRefusedError(cause));
               return Promise.reject(cause);
             }
           const turns =
@@ -972,7 +984,7 @@ export const createPrepareOpencodeSessionRuntime =
         });
         const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve()).then(() => {
           signal.throwIfAborted();
-          return controller.sendUserMessage(messageInput, {
+          return controller.sendUserMessage(request, {
             signal,
             assertCommandIdle,
             onSent: () => {
@@ -1015,8 +1027,32 @@ export const createPrepareOpencodeSessionRuntime =
             return accepted;
           })
           .catch((cause: unknown) => {
-            settleInput();
-            throw cause;
+            if (!(cause instanceof AgentSessionMessageAcceptanceUnknownError)) {
+              settleInput();
+              throw cause;
+            }
+            // The event stream can show the input before the send fails without an answer.
+            // That event proves that OpenCode took the input, so the send reports it as accepted.
+            const unknownResult = cause;
+            const recovered = processing.then(() => {
+              const shown = projectors
+                .get(messageInput.externalSessionId)
+                ?.acceptedUserMessage(messageInput.externalSessionId, unknownResult.messageId);
+              if (!shown) {
+                settleInput();
+                throw unknownResult;
+              }
+              turn.inboxId = unknownResult.messageId;
+              if (shown.state === "read") settleInput();
+              turn.consumedInboxIds.clear();
+              if (messageInput.submissionId) shown.submissionId = messageInput.submissionId;
+              return shown;
+            });
+            processing = recovered.then(
+              () => undefined,
+              () => undefined,
+            );
+            return recovered;
           })
           .finally(clearPending);
       },
@@ -1203,3 +1239,9 @@ export const createPrepareOpencodeSessionRuntime =
       },
     };
   };
+
+const withoutModel = (input: SendAgentUserMessageInput): SendAgentUserMessageInput => {
+  const request = { ...input };
+  delete request.model;
+  return request;
+};

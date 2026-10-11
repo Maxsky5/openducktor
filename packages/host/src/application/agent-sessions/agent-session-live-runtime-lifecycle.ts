@@ -1,9 +1,9 @@
 import {
-  type AgentSessionLiveEnvelope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelopeDraft } from "./agent-session-live-envelope";
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import {
@@ -39,7 +39,9 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   readonly publishChanges: (
     changes: ReadonlyArray<AgentSessionLiveAdapterChange>,
   ) => Effect.Effect<void, HostError>;
-  readonly publishEnvelope: (envelope: AgentSessionLiveEnvelope) => Effect.Effect<void, HostError>;
+  readonly publishEnvelope: (
+    envelope: AgentSessionLiveEnvelopeDraft,
+  ) => Effect.Effect<void, HostError>;
   readonly listSnapshots: (
     repoPath: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;

@@ -10,6 +10,9 @@ import type {
 import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 
+/** A send input before the host picks its `delivery`. */
+export type AgentSessionSendContent = Omit<AgentSessionControlSendInput, "delivery">;
+
 export type PreparedSessionResume = {
   input: AgentSessionControlResumeInput;
   save(summary: AgentSessionControlSummary): Effect.Effect<void, HostError>;
@@ -37,12 +40,13 @@ export type AgentSessionOperationPolicy = {
   prepareResume(
     input: AgentSessionControlResumeInput,
   ): Effect.Effect<PreparedSessionResume, HostError>;
-  prepareSend(
-    input: AgentSessionControlSendInput,
-  ): Effect.Effect<AgentSessionControlSendInput, HostError>;
+  /** Checks the destination and applies the stored session settings, such as the model. */
+  prepareSend(input: AgentSessionSendContent): Effect.Effect<AgentSessionSendContent, HostError>;
+  /** `saveModel` is true only when a new turn ran with the stored model. */
   recordAcceptedMessage(
     ref: AgentSessionLiveRef,
     accepted: AcceptedAgentUserMessage,
+    options: { readonly saveModel: boolean },
   ): Effect.Effect<void, HostError>;
   prepareModelUpdate(
     input: AgentSessionControlUpdateModelInput,

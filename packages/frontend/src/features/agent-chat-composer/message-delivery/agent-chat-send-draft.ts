@@ -11,21 +11,22 @@ import {
 import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 
-export type StageAgentStudioSendAttachment = (
+export type StageAgentChatSendAttachment = (
   attachment: AgentChatComposerAttachment,
 ) => Promise<string>;
 
-type ResolveAgentStudioSendDraftPartsInput = {
+export type AgentChatSendDraftInput = {
   draft: AgentChatComposerDraft;
   reusablePrompts: ReusablePrompt[];
-  selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
+  /** The model that checks the attachments: the turn model for a steer, else the selected one. */
+  modelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
   supportsAttachments: boolean;
-  stageAttachment?: StageAgentStudioSendAttachment;
+  stageAttachment?: StageAgentChatSendAttachment;
 };
 
-export type AgentStudioSendDraftParts = AgentUserMessagePart[] | Promise<AgentUserMessagePart[]>;
+export type AgentChatSendDraftParts = AgentUserMessagePart[] | Promise<AgentUserMessagePart[]>;
 
-export const stageAgentStudioSendAttachment = async (
+export const stageAgentChatSendAttachment = async (
   attachment: AgentChatComposerAttachment,
 ): Promise<string> => {
   if (attachment.file) {
@@ -37,13 +38,13 @@ export const stageAgentStudioSendAttachment = async (
   throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
 };
 
-export const resolveAgentStudioSendDraftParts = ({
+export const resolveAgentChatSendDraftParts = ({
   draft,
   reusablePrompts,
-  selectedModelDescriptor,
+  modelDescriptor,
   supportsAttachments,
-  stageAttachment = stageAgentStudioSendAttachment,
-}: ResolveAgentStudioSendDraftPartsInput): AgentStudioSendDraftParts | null => {
+  stageAttachment = stageAgentChatSendAttachment,
+}: AgentChatSendDraftInput): AgentChatSendDraftParts | null => {
   const reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
     draft,
     reusablePrompts,
@@ -59,7 +60,7 @@ export const resolveAgentStudioSendDraftParts = ({
 
     const attachmentErrors = validateComposerAttachments(
       draft.attachments ?? [],
-      selectedModelDescriptor?.attachmentSupport,
+      modelDescriptor?.attachmentSupport,
     );
     if (Object.keys(attachmentErrors).length > 0) {
       return null;

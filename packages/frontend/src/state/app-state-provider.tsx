@@ -1,4 +1,5 @@
 import { type PropsWithChildren, type ReactElement, useMemo, useSyncExternalStore } from "react";
+import type { AgentMessageQueueSnapshot, AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -21,6 +22,7 @@ import {
   SpecStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
+  useAgentMessageQueuesContext,
   useAgentOperationsContext,
   useAgentSessionReadModelStateContext,
   useAgentSessionsContext,
@@ -133,6 +135,18 @@ export const useAgentSession = (
     sessionStore.subscribe,
     () => sessionStore.getSessionSnapshot(identity),
     () => sessionStore.getSessionSnapshot(identity),
+  );
+};
+
+/** Reads the host message queue of one session, or null when it has nothing to show. */
+export const useAgentMessageQueue = (
+  ref: AgentSessionLiveRef | null,
+): AgentMessageQueueSnapshot | null => {
+  const queues = useAgentMessageQueuesContext();
+  return useSyncExternalStore(
+    queues.subscribe,
+    () => queues.getQueue(ref),
+    () => queues.getQueue(ref),
   );
 };
 

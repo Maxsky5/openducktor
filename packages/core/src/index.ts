@@ -3,6 +3,8 @@ export * from "./services/agent-image-generation-lifecycle";
 export * from "./ports/agent-engine";
 export * from "./ports/agent-runtime-query-error";
 export * from "./ports/agent-session-resume-error";
+export * from "./ports/agent-message-delivery-errors";
+export * from "./services/agent-message-delivery";
 export * from "./services/agent-runtime-catalog";
 export * from "./services/agent-runtime-query-session";
 export * from "./services/agent-file-references";

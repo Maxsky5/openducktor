@@ -1,28 +1,20 @@
-import type { AgentRole } from "@openducktor/core";
-import { useCallback, useRef, useState } from "react";
-import {
-  type AgentSessionIdentityLike,
-  agentSessionIdentityKey,
-} from "@/lib/agent-session-identity";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 type ActivityCountByKey = Record<string, number>;
 
-type AgentStudioAsyncActivityHandle = {
+export type AsyncActivityHandle = {
   add: (key: string) => void;
   finish: () => void;
 };
 
-export type AgentStudioAsyncActivityTracker = {
+/**
+ * Counts async work for each key. `isActive` reads render state, and `hasInFlight` reads the
+ * work that started before the next render.
+ */
+export type AsyncActivityTracker = {
   isActive: (key: string) => boolean;
   hasInFlight: (key: string) => boolean;
-  begin: (key: string) => AgentStudioAsyncActivityHandle;
-};
-
-export type AgentStudioSessionActivityKeyParams = {
-  workspaceId: string | null;
-  taskId: string;
-  role: AgentRole;
-  session: AgentSessionIdentityLike | null | undefined;
+  begin: (key: string) => AsyncActivityHandle;
 };
 
 const incrementActivityCount = (current: ActivityCountByKey, key: string) =>
@@ -49,17 +41,21 @@ const decrementActivityCount = (current: ActivityCountByKey, key: string) => {
   } satisfies ActivityCountByKey;
 };
 
-export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTracker => {
+export const useAsyncActivityTracker = (): AsyncActivityTracker => {
   const [activeCountByKey, setActiveCountByKey] = useState<ActivityCountByKey>({});
-  const inFlightKeysRef = useRef<Set<string>>(new Set());
+  // Several handles can track one key, so a key stays in flight until its last handle finishes.
+  const inFlightCountByKeyRef = useRef<Map<string, number>>(new Map());
 
   const isActive = useCallback(
     (key: string): boolean => (activeCountByKey[key] ?? 0) > 0,
     [activeCountByKey],
   );
-  const hasInFlight = useCallback((key: string): boolean => inFlightKeysRef.current.has(key), []);
+  const hasInFlight = useCallback(
+    (key: string): boolean => inFlightCountByKeyRef.current.has(key),
+    [],
+  );
 
-  const begin = useCallback((key: string): AgentStudioAsyncActivityHandle => {
+  const begin = useCallback((key: string): AsyncActivityHandle => {
     const trackedKeys = new Set<string>();
     let finished = false;
 
@@ -69,7 +65,8 @@ export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTr
       }
 
       trackedKeys.add(key);
-      inFlightKeysRef.current.add(key);
+      const inFlight = inFlightCountByKeyRef.current;
+      inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
       setActiveCountByKey((current) => incrementActivityCount(current, key));
     };
 
@@ -83,8 +80,11 @@ export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTr
         }
 
         finished = true;
+        const inFlight = inFlightCountByKeyRef.current;
         for (const key of trackedKeys) {
-          inFlightKeysRef.current.delete(key);
+          const count = inFlight.get(key) ?? 0;
+          if (count > 1) inFlight.set(key, count - 1);
+          else inFlight.delete(key);
         }
         setActiveCountByKey((current) => {
           let next = current;
@@ -97,17 +97,5 @@ export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTr
     };
   }, []);
 
-  return {
-    isActive,
-    hasInFlight,
-    begin,
-  };
-};
-
-export const buildAgentStudioSessionActivityKey = (
-  params: AgentStudioSessionActivityKeyParams,
-): string => {
-  const workspaceId = params.workspaceId ?? "__no_workspace__";
-  const sessionKey = params.session ? agentSessionIdentityKey(params.session) : "__draft__";
-  return `${workspaceId}:${params.taskId}:${params.role}:${sessionKey}`;
+  return useMemo(() => ({ isActive, hasInFlight, begin }), [isActive, hasInFlight, begin]);
 };

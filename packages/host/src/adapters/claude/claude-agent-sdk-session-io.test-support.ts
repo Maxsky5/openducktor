@@ -9,6 +9,7 @@ import type {
 import { Effect } from "effect";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import { applyClaudeUserMessageSignal } from "./claude-agent-sdk-user-message-admission";
 import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types";
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationErrorAggregate) => Effect.void;
@@ -37,7 +38,28 @@ export const createClaudeContextUsageResponse = (
   totalTokens,
 });
 
-export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
+/** Admits each pushed user message, like the CLI does with a `command_lifecycle` frame. */
+const admitClaudeInput = (session: ClaudeSession): ClaudeSession => {
+  const push = session.queue.push.bind(session.queue);
+  session.queue.push = (message) => {
+    push(message);
+    if (!message.uuid) return;
+    applyClaudeUserMessageSignal({
+      emit: () => {},
+      session,
+      message: { type: "command_lifecycle", command_uuid: message.uuid, state: "queued" },
+    });
+  };
+  return session;
+};
+
+export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
+  admitClaudeInput(createNonAdmittingClaudeSession(overrides));
+
+/** A session whose CLI never admits input. */
+export const createNonAdmittingClaudeSession = (
+  overrides: Partial<ClaudeSession> = {},
+): ClaudeSession => ({
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
@@ -54,7 +76,8 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
   model: undefined,
   pendingApprovals: new Map(),
   pendingQuestions: new Map(),
-  queuedSdkMessages: [],
+  pendingUserMessageAdmissions: new Map(),
+  unreadSteeredUserMessages: new Map(),
   pendingUserTurnCount: 0,
   query: createClaudeQueryFixture({}),
   queue: new AsyncInputQueue<SDKUserMessage>(),

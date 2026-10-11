@@ -554,7 +554,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       subscribeEvents,
       onLiveSessionMutation: (mutation) => {
         for (const event of mutation.transcriptEvents) {
-          if (event.type === "session_idle") completions.push(event.turnCompleted === true);
+          if (event.type === "session_idle") completions.push(event.turnOutcome !== undefined);
         }
       },
     });

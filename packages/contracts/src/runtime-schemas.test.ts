@@ -188,7 +188,6 @@ describe("runtime schemas", () => {
     const parsed = runtimeDescriptorSchema.parse(CLAUDE_RUNTIME_DESCRIPTOR);
 
     expect(parsed).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
-    expect(parsed.capabilities.sessionLifecycle.supportsQueuedUserMessages).toBe(true);
     expect(parsed.capabilities.promptInput).toMatchObject({
       supportsAttachments: true,
       supportsSlashCommands: true,
@@ -1412,7 +1411,6 @@ describe("runtime schemas", () => {
           supportsSessionFork: true,
           forkTargets: ["session", "message", "item"],
           supportsListLiveSessions: true,
-          supportsQueuedUserMessages: true,
           supportsPendingInputSnapshots: true,
           supportsInterruptedTurnResume: true,
         },

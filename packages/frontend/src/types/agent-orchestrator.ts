@@ -145,6 +145,8 @@ export type AgentChatMessage = {
 };
 
 export type AgentMessageSendOptions = {
+  /** `steer` sends the message to the running turn. The default queues it while the agent works. */
+  mode?: import("@openducktor/contracts").AgentMessageSubmitMode;
   preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
   sessionScope?: AgentSessionScope;
@@ -152,11 +154,22 @@ export type AgentMessageSendOptions = {
   assertCanSubmit?: (session: AgentSessionState) => void;
 };
 
-export type AgentMessageSendReceipt = {
-  recipient: AgentSessionIdentity;
-  acceptedMessage: import("@openducktor/core").AcceptedAgentInput;
-  postAcceptanceFailure: string | null;
-};
+/** `queued` means that the host keeps the message until the running turn ends. */
+export type AgentMessageSendReceipt =
+  | {
+      outcome: "accepted";
+      recipient: AgentSessionIdentity;
+      acceptedMessage: import("@openducktor/core").AcceptedAgentInput;
+      postAcceptanceFailure: string | null;
+    }
+  | {
+      outcome: "queued";
+      recipient: AgentSessionIdentity;
+    };
+export type AcceptedAgentMessageSendReceipt = Extract<
+  AgentMessageSendReceipt,
+  { outcome: "accepted" }
+>;
 
 export type SessionMessagesState = {
   readonly externalSessionId: string;

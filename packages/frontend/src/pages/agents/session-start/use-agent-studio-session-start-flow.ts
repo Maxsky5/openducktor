@@ -45,10 +45,8 @@ import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "../query-sync/agent-studio-navigation";
-import {
-  buildAgentStudioSessionActivityKey,
-  useAgentStudioAsyncActivityTracker,
-} from "../use-agent-studio-async-activity";
+import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
+import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 
 type CanStartRole = (role: AgentRole) => boolean;
@@ -122,7 +120,7 @@ export function useAgentStudioSessionStartFlow({
     useWorkspaceSessionStartGate<AgentStudioSessionStartGateResult>(workspaceId);
 
   const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
-    useAgentStudioAsyncActivityTracker();
+    useAsyncActivityTracker();
   const isStarting = isStartingActivityActive(
     buildAgentStudioSessionActivityKey({
       workspaceId,

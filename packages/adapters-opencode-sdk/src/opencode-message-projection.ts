@@ -177,7 +177,7 @@ const userDisplay = (
 ];
 
 export const projectInboxUser = (
-  item: SessionInboxUser,
+  item: Pick<SessionInboxUser, "id" | "sessionID" | "time" | "payload">,
   state: "queued" | "read" = "queued",
 ): Extract<AgentEvent, { type: "user_message" }> => ({
   type: "user_message",

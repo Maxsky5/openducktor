@@ -17,6 +17,11 @@ import type {
   AgentSubagentCatalog,
   AgentSubagentReference,
 } from "@openducktor/core";
+import type {
+  AgentMessageQueueAction,
+  AgentMessageQueueSnapshot,
+  AgentMessageSubmitMode,
+} from "@openducktor/contracts";
 import type { MutableRefObject, RefObject } from "react";
 import type {
   ModelPickerFavoriteState,
@@ -165,21 +170,40 @@ export type AgentChatModelPicker = {
   onOpenChange: (open: boolean) => void;
 };
 
+/** Queue actions that need no new content. A save carries an edited draft instead. */
+export type AgentChatMessageQueueAction = Exclude<AgentMessageQueueAction, { kind: "save_edit" }>;
+
+export type AgentChatMessageQueueModel = {
+  queue: AgentMessageQueueSnapshot | null;
+  onAction: (action: AgentChatMessageQueueAction) => Promise<void>;
+  /** `editId` names the edit that the host reserved, so a stale Save cannot end a newer edit. */
+  onSaveEdit: (
+    edit: { readonly submissionId: string; readonly editId: string },
+    draft: AgentChatComposerDraft,
+  ) => Promise<void>;
+};
+
 export type AgentChatComposerModel = {
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  busySendBlockedReason: string | null;
   pendingSendItems?: AgentChatPendingSendItems;
   draftScope: AgentChatDraftScope;
-  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
+  onSend: (
+    draft: AgentChatComposerDraft,
+    mode: AgentMessageSubmitMode,
+  ) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
   isSavingModel?: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   waitingInputPlaceholder?: string | null;
+  /** Why the session cannot steer the running turn now, or null when it can. */
+  steerBlockedReason: string | null;
+  runningTurnModel: AgentModelCatalog["models"][number] | null;
+  messageQueue: AgentChatMessageQueueModel | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   speed?: SpeedControlModel | undefined;

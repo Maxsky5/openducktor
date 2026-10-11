@@ -31,6 +31,7 @@ import type {
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import type { AgentMessageQueuesStore } from "./agent-message-queues-store";
 import type { AgentSessionsStore } from "./agent-sessions-store";
 
 export const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
@@ -44,6 +45,7 @@ export const TasksStateContext = createContext<TasksStateContextValue | null>(nu
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
 export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
 export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
+export const AgentMessageQueuesContext = createContext<AgentMessageQueuesStore | null>(null);
 export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
 export const AgentSessionHistoryLoadContext =
   createContext<AgentSessionHistoryLoadContextValue | null>(null);
@@ -171,6 +173,9 @@ export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue
 
 export const useAgentSessionsContext = (): AgentSessionsStore =>
   useRequiredContext(AgentSessionsContext, "useAgentSessions");
+
+export const useAgentMessageQueuesContext = (): AgentMessageQueuesStore =>
+  useRequiredContext(AgentMessageQueuesContext, "useAgentMessageQueue");
 
 export const useAgentOperationsContext = (): AgentOperationsContextValue =>
   useRequiredContext(AgentOperationsContext, "useAgentOperations");

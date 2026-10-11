@@ -29,6 +29,7 @@ type PublicAgentEngine = Parameters<typeof createOrchestratorPublicOperations>[0
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
     sendAgentMessage: async () => null,
+    manageAgentMessageQueue: async () => {},
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => {},

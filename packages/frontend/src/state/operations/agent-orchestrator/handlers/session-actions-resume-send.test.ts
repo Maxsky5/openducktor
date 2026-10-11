@@ -7,7 +7,7 @@ import {
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
-import { acceptedUserMessage } from "./session-actions-send.test-support";
+import { acceptedSubmitResult } from "./session-actions-send.test-support";
 import {
   buildSession,
   createSessionActions,
@@ -44,9 +44,9 @@ test.each(["opencode", "codex", "claude"] as const)(
         });
         return { ...session, status: "idle" };
       };
-      adapter.sendUserMessage = async (input) => {
+      adapter.submitUserMessage = async (input) => {
         calls.push("send");
-        return acceptedUserMessage(input);
+        return acceptedSubmitResult(input);
       };
       const actions = createSessionActions({ adapter, sessionsRef, taskRef: { current: [] } });
       await actions.stopAgentSession(session);
@@ -104,9 +104,9 @@ test.each(["opencode", "codex", "claude"] as const)(
       });
       return { ...session, status: "idle" };
     };
-    adapter.sendUserMessage = async (input) => {
+    adapter.submitUserMessage = async (input) => {
       calls.push("send");
-      return acceptedUserMessage(input);
+      return acceptedSubmitResult(input);
     };
 
     const actions = createSessionActions({ adapter, sessionsRef });
@@ -125,9 +125,9 @@ test("does not send or erase the stopped state when resume fails", async () => {
     throw new Error("Resume failed");
   };
   let sends = 0;
-  adapter.sendUserMessage = async (input) => {
+  adapter.submitUserMessage = async (input) => {
     sends++;
-    return acceptedUserMessage(input);
+    return acceptedSubmitResult(input);
   };
   const actions = createSessionActions({ adapter, sessionsRef });
   await expect(
@@ -155,9 +155,9 @@ test("does not overwrite a newer question that arrives during resume", async () 
     return { ...session, status: "idle" };
   };
   let sends = 0;
-  adapter.sendUserMessage = async (input) => {
+  adapter.submitUserMessage = async (input) => {
     sends++;
-    return acceptedUserMessage(input);
+    return acceptedSubmitResult(input);
   };
   const actions = createSessionActions({ adapter, sessionsRef });
   await expect(
@@ -188,9 +188,9 @@ test.each(["workspace-change", "wrong-session", "still-stopped"] as const)(
       };
     };
     let sends = 0;
-    adapter.sendUserMessage = async (input) => {
+    adapter.submitUserMessage = async (input) => {
       sends++;
-      return acceptedUserMessage(input);
+      return acceptedSubmitResult(input);
     };
     const actions = createSessionActions({ adapter, sessionsRef, repoEpochRef });
     const errors = {

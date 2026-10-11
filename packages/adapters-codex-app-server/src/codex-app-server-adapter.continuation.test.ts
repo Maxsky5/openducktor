@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
+  AgentSessionMessageRefusedError,
   type ContinueInterruptedAgentTurnInput,
   workflowAgentSessionScope,
 } from "@openducktor/core";
@@ -344,13 +345,13 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
   });
 
   test.each(["idle", "systemError"] as const)(
-    "keeps a turn/start failure with thread status %s",
+    "keeps a rejected turn/start with thread status %s",
     async (type) => {
       const message = "Selected model is at capacity. Please try a different model.";
       const { adapter, calls } = createContinuationAdapter({
         threadStatus: { type },
         latestTurnStatus: "failed",
-        turnStartError: new Error(message),
+        turnStartError: new AgentSessionMessageRefusedError(new Error(message)),
       });
 
       await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
@@ -361,6 +362,20 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
     },
   );
+
+  test("keeps the continuation turn running when turn/start fails without a native answer", async () => {
+    const { adapter } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+      turnStartError: new Error("Codex app-server connection closed."),
+    });
+
+    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+      reason: "continuation_failed",
+    });
+    // Codex can still run the turn, so only its native outcome settles it.
+    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).not.toBe("idle");
+  });
 
   test("reports a typed continuation failure when turn/start ends the turn at once", async () => {
     const { adapter } = createContinuationAdapter({

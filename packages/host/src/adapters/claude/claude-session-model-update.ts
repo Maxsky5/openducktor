@@ -6,6 +6,8 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import { getClaudeSessionMetadata } from "./claude-session-metadata";
 import { applyClaudeSessionModel } from "./claude-agent-sdk-session-io";
+import { assertClaudeSessionModelUpdateSupported } from "./claude-agent-sdk-session-model";
+import { canStartUserTurn } from "./claude-agent-sdk-turn-policy";
 import type { ClaudeSessionLaunchInput } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
@@ -61,10 +63,14 @@ export const updateClaudeSessionModel = (
         input.model && session.model?.profileId !== undefined
           ? { ...input.model, profileId: session.model.profileId }
           : input.model;
+      // A running turn keeps its settings. Each message carries its model, so the next turn
+      // applies the new model when it starts.
+      if (!canStartUserTurn(session)) {
+        assertClaudeSessionModelUpdateSupported(session, model ?? undefined);
+        return;
+      }
       // Cold attachment inherits native settings; local model metadata is not yet known.
       await applyClaudeSessionModel(session, model, cold);
-      if (session.modelAfterQueuedTurns !== undefined)
-        session.modelAfterQueuedTurns = model ?? null;
       session.summary = { ...session.summary };
     });
   });

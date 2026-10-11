@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionAuthorizedRoot,
@@ -54,6 +55,7 @@ const createHarness = (
 ) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const service = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission: input.runtimeAdmission ?? passThroughAdmission,
     readSessionRootRefs: input.readSessionRootRefs ?? (() => Effect.succeed([])),
@@ -304,9 +306,9 @@ describe("shared live runtime across repositories", () => {
     ]);
     // Observed repositories and the repositories of released refs all get a fresh snapshot.
     expect(events.filter((event) => event.type === "snapshot")).toEqual([
-      { type: "snapshot", repoPath: "/repo-a", sessions: [], sequence: 7 },
-      { type: "snapshot", repoPath: "/repo-c", sessions: [], sequence: 8 },
-      { type: "snapshot", repoPath: "/repo-b", sessions: [], sequence: 9 },
+      { type: "snapshot", messageQueues: [], repoPath: "/repo-a", sessions: [], sequence: 7 },
+      { type: "snapshot", messageQueues: [], repoPath: "/repo-c", sessions: [], sequence: 8 },
+      { type: "snapshot", messageQueues: [], repoPath: "/repo-b", sessions: [], sequence: 9 },
     ]);
   });
 

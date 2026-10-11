@@ -121,7 +121,6 @@ export const createClaudeAgentSdkSession = async ({
     model: input.model,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
-    queuedSdkMessages: [],
     pendingUserTurnCount: 0,
     queue,
     runtimeId,
@@ -137,6 +136,8 @@ export const createClaudeAgentSdkSession = async ({
     toolNamesByCallId: new Map(),
     toolStartedAtMsByCallId: new Map(),
     todosById: new Map(initialTodos.map((todo) => [todo.id, todo])),
+    pendingUserMessageAdmissions: new Map(),
+    unreadSteeredUserMessages: new Map(),
   };
   if (sessionInput.parentExternalSessionId) {
     sessionContext.parentExternalSessionId = sessionInput.parentExternalSessionId;

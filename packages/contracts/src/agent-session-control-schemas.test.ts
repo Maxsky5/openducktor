@@ -184,10 +184,12 @@ describe("agent session control contracts", () => {
         ...ref,
         parts: [{ kind: "text", text: "hello" }],
         resolvedQuestionRequestIds: ["question-1"],
+        delivery: "new_turn",
       }),
     ).toMatchObject({
       ...ref,
       resolvedQuestionRequestIds: ["question-1"],
+      delivery: "new_turn",
     });
   });
 
@@ -218,6 +220,7 @@ describe("agent session control contracts", () => {
       workingDirectory: "/repo/task",
       externalSessionId: "session-1",
       sessionScope: workflowScope,
+      delivery: "new_turn" as const,
     };
     const slashCommand = {
       kind: "slash_command" as const,
@@ -288,8 +291,9 @@ describe("agent session control contracts", () => {
       agentSessionControlSendInputSchema.parse({
         ...ref,
         parts: [{ kind: "text", text: "hello" }],
+        delivery: "steer",
       }),
-    ).toMatchObject({ sessionScope: repositoryScope });
+    ).toMatchObject({ sessionScope: repositoryScope, delivery: "steer" });
     expect(
       agentSessionControlUpdateModelInputSchema.parse({
         ...ref,

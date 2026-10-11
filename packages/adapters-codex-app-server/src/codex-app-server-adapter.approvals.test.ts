@@ -10,6 +10,7 @@ import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexThreadFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createDeferred,
@@ -102,6 +103,12 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
     return super.request(request);
   }
 }
+
+const requireTransport = (transports: Map<string, RecordingTransport>): RecordingTransport => {
+  const transport = transports.get("runtime-live");
+  if (!transport) throw new Error("Expected the runtime transport.");
+  return transport;
+};
 
 describe("CodexAppServerAdapter approvals", () => {
   test("routes a child approval after reload discovers the subagent thread", async () => {
@@ -568,10 +575,14 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => undefined;
     });
-    const { adapter } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.prepareRuntime("runtime-live");
 
     await adapter.startSession(codexStartSessionInput());
+    // The turn stays in progress, so its server requests stay pending.
+    requireTransport(transports).turnStartDeferred.resolve({
+      turn: codexTurnFixture({ id: "turn-approval-initial", items: [], status: "inProgress" }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
@@ -632,10 +643,14 @@ describe("CodexAppServerAdapter approvals", () => {
       streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
       return () => undefined;
     });
-    const { adapter } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.prepareRuntime("runtime-live");
 
     await adapter.startSession(codexStartSessionInput());
+    // The turn stays in progress, so its server requests stay pending.
+    requireTransport(transports).turnStartDeferred.resolve({
+      turn: codexTurnFixture({ id: "turn-question", items: [], status: "inProgress" }),
+    });
     const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),

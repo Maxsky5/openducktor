@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { getAgentMessageSendBlockedReason } from "./agent-message-send-policy";
 
@@ -12,25 +12,10 @@ const ready = () => ({
   pending: false,
 });
 
-test("busy sends follow the selected runtime queue capability", () => {
+test("lets a busy send through, because the host queues it", () => {
   const input = ready();
   input.session.status = "running";
   expect(getAgentMessageSendBlockedReason(input)).toBeNull();
-  expect(
-    getAgentMessageSendBlockedReason({
-      ...input,
-      runtime: {
-        ...CODEX_RUNTIME_DESCRIPTOR,
-        capabilities: {
-          ...CODEX_RUNTIME_DESCRIPTOR.capabilities,
-          sessionLifecycle: {
-            ...CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-            supportsQueuedUserMessages: false,
-          },
-        },
-      },
-    }),
-  ).toContain("Wait for the current turn to finish");
 });
 
 test.each([

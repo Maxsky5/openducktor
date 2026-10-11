@@ -5,7 +5,10 @@ import { expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { DEFAULT_CODEX_RUNTIME_POLICY, type CodexAppServerThread } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { AgentSessionMessageRejectedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionAcceptanceUnknownError,
+  AgentSessionMessageRejectedError,
+} from "../../ports/agent-session-send-error";
 import { createCodexAppServerTransport } from "../codex/codex-app-server-transport";
 import { createCodexAppServerTransportRegistry } from "../codex/codex-app-server-transport-registry";
 import { toCodexMessageSendError } from "./codex-live-session-acceptance";
@@ -161,6 +164,7 @@ const sendFirstMessage = async (
     const send = {
       ...sessionInput,
       parts: [{ kind: "text" as const, text: "Resolve the conflicts." }],
+      delivery: "new_turn" as const,
     };
     try {
       await controller.sendUserMessage(
@@ -168,7 +172,6 @@ const sendFirstMessage = async (
           ? { ...send, model: { providerId: "openai", modelId: "missing", variant: "medium" } }
           : send,
         {
-          requireNativeAdmission: true,
           onSent: () => {
             sent = true;
           },
@@ -196,13 +199,14 @@ test("a lost reply to the first turn does not prove that Codex rejected the mess
   const { cause, sent } = await sendFirstMessage("lost_reply");
   expect(sent).toBe(true);
   expect(cause).toMatchObject({ message: expect.stringContaining("Timed out") });
-  // Codex can still run the turn, so a lost reply does not prove a rejection.
-  expect(toCodexMessageSendError(cause, ref)).toBeNull();
+  // Codex can still run the turn, so a lost reply leaves the result unknown.
+  expect(toCodexMessageSendError(cause, ref)).toBeInstanceOf(AgentSessionAcceptanceUnknownError);
 });
 
 test("a send that fails before turn/start reports no native request", async () => {
   const { cause, sent } = await sendFirstMessage("unknown_model");
   expect(cause.message).toContain("missing");
-  // Codex never got the message, so onSent did not run.
+  // Codex never got the message, so onSent did not run and the caller can send it again.
   expect(sent).toBe(false);
+  expect(toCodexMessageSendError(cause, ref)).toBeInstanceOf(AgentSessionMessageRejectedError);
 });

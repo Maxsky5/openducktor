@@ -146,7 +146,7 @@ const mountSidebar = (
     if (!listener) throw new Error("Workspace observer is not attached.");
     listener(envelope);
   };
-  emit({ type: "snapshot", repoPath: ref.repoPath, sessions });
+  emit({ type: "snapshot", messageQueues: [], repoPath: ref.repoPath, sessions });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client.setQueryData(runtimeQueryKeys.definitions(), Object.values(RUNTIME_DESCRIPTORS_BY_KIND));
   const onOpen = mock(() => {});

@@ -113,7 +113,12 @@ const fixture = (accepted?: AcceptedAgentInput) => {
         if (entered) yield* Deferred.succeed(entered, undefined);
         if (gate) yield* Deferred.await(gate);
         yield* attempt.send(
-          { ...refFor(sessionId), sessionScope: { kind: "repository" }, parts },
+          {
+            ...refFor(sessionId),
+            sessionScope: { kind: "repository" },
+            parts,
+            delivery: "new_turn",
+          },
           parts,
         );
       }),
@@ -357,7 +362,7 @@ test("the first instruction waits for native admission", async () => {
   const h = fixture();
   const result = await Effect.runPromise(h.service.launch({ key: "a", sessionId: "a-1" }));
   expect(result.status).toBe("completed");
-  expect(h.sendOptions).toEqual([{ requireNativeAdmission: true, onSent: expect.any(Function) }]);
+  expect(h.sendOptions).toEqual([{ onSent: expect.any(Function) }]);
 });
 
 test("a failed launch shows its failure in the saved session for a caller that left", async () => {

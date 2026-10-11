@@ -12,6 +12,7 @@ import type {
   ClaudeSession,
   ClaudeSessionStore,
 } from "./claude-agent-sdk-types";
+import { rejectPendingAdmissions } from "./claude-agent-sdk-user-message-admission";
 import { clearClaudeStreamToolInputTree } from "./claude-agent-sdk-tool-input-stream";
 
 export type CreateClaudeAgentSdkSessionStoreInput = {
@@ -25,7 +26,6 @@ export const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.sdkState === "requires_action" ||
   session.activeSdkUserTurnCount > 0 ||
   session.pendingUserTurnCount > 0 ||
-  session.queuedSdkMessages.length > 0 ||
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
 
@@ -50,21 +50,11 @@ export const createClaudeAgentSdkSessionStore = ({
   const close = (session: ClaudeSession): void => {
     clearClaudeStreamToolInputTree(session);
     rejectPendingApprovals(session, "Claude session was stopped.");
-    const queuedMessageIds = session.queuedSdkMessages.flatMap((message) =>
-      message.uuid ? [message.uuid] : [],
-    );
-    if (queuedMessageIds.length > 0) {
-      emit?.(session, {
-        type: "transcript_retracted",
-        externalSessionId: session.externalSessionId,
-        timestamp: now(),
-        messageIds: queuedMessageIds,
-      });
-    }
     session.activity = "stopped";
     session.activeSdkUserTurnCount = 0;
     session.pendingUserTurnCount = 0;
-    session.queuedSdkMessages = [];
+    rejectPendingAdmissions(session, new Error("Claude session was stopped."));
+    session.unreadSteeredUserMessages.clear();
     session.queue.close();
     session.abortController.abort();
     session.query.close();

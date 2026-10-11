@@ -49,9 +49,11 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportsSessionFork: true,
     forkTargets: ["session"],
     supportsListLiveSessions: true,
-    supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: false,
+  },
+  messageDelivery: {
+    minimumSteeringRuntimeVersion: "2.0.24",
   },
   history: {
     loadable: true,
@@ -131,9 +133,11 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsSessionFork: true,
     forkTargets: ["session"],
     supportsListLiveSessions: true,
-    supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+  },
+  messageDelivery: {
+    minimumSteeringRuntimeVersion: "0.106.0",
   },
   history: {
     loadable: true,
@@ -227,9 +231,11 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
     supportsSessionFork: true,
     forkTargets: ["session"],
     supportsListLiveSessions: true,
-    supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+  },
+  messageDelivery: {
+    minimumSteeringRuntimeVersion: "2.1.286",
   },
   history: {
     loadable: true,

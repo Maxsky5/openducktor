@@ -14,6 +14,7 @@ import {
   type WorkspaceActivityProjection,
 } from "./workspace-activity-projection";
 import { foldWorkspaceActivityBadges } from "./workspace-activity-state";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const repoPath = "/repo";
 const workingDirectory = "/repo";
@@ -48,11 +49,8 @@ const apply = (
 const badges = (projection: WorkspaceActivityProjection) =>
   foldWorkspaceActivityBadges(projection.sessions, new Set());
 
-const sessionSnapshot = (sessions: AgentSessionLiveSnapshot[]): AgentSessionLiveEnvelope => ({
-  type: "snapshot",
-  repoPath,
-  sessions,
-});
+const sessionSnapshot = (sessions: AgentSessionLiveSnapshot[]): AgentSessionLiveEnvelope =>
+  createLiveSnapshotEnvelope({ repoPath, sessions });
 
 const sessionErrorEvent = (externalSessionId: string): AgentSessionLiveEnvelope => ({
   type: "transcript_event",

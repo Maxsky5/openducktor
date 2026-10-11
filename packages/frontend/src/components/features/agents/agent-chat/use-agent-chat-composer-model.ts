@@ -7,6 +7,7 @@ import type {
 import { type MutableRefObject, type RefObject, useMemo } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
@@ -34,7 +35,6 @@ export type AgentChatComposerConfig = {
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   waitingInputPlaceholder: string | null;
-  busySendBlockedReason: string | null;
   canStopSession: boolean;
   stopAgentSession: StopAgentSession;
   isResumingSession: boolean;
@@ -42,7 +42,10 @@ export type AgentChatComposerConfig = {
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
   draftScope: AgentChatDraftScope;
-  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
+  onSend: AgentChatComposerModel["onSend"];
+  steerBlockedReason: string | null;
+  runningTurnModel: AgentChatComposerModel["runningTurnModel"];
+  messageQueue: AgentChatComposerModel["messageQueue"];
   isSending: boolean;
   isStarting: boolean;
   isSavingModel?: boolean;
@@ -127,12 +130,17 @@ export function useAgentChatComposerModel({
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
-      busySendBlockedReason: composer.busySendBlockedReason,
       draftScope: composer.draftScope,
-      onSend: async (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> => {
+      onSend: async (
+        draft: AgentChatComposerDraft,
+        mode: AgentMessageSubmitMode,
+      ): Promise<AgentChatSendResult> => {
         scrollToBottomOnSendRef.current?.();
-        return composer.onSend(draft);
+        return composer.onSend(draft, mode);
       },
+      steerBlockedReason: composer.steerBlockedReason,
+      runningTurnModel: composer.runningTurnModel,
+      messageQueue: composer.messageQueue,
       isSending: composer.isSending,
       isStarting: composer.isStarting,
       isSavingModel: composer.isSavingModel ?? false,

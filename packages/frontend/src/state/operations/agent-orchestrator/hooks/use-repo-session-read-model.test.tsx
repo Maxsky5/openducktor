@@ -13,10 +13,13 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
+import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
+import { createAgentMessageQueueSnapshot } from "@/test-utils/agent-message-send-fixture";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
@@ -96,6 +99,11 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   ...overrides,
 });
 
+const queueTarget = () => ({
+  ...snapshot().ref,
+  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+});
+
 const scopedFault = (ref = snapshot().ref) =>
   ({
     type: "fault",
@@ -120,6 +128,7 @@ const createState = (
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), records);
   const sessionStore = createAgentSessionsStore("/repo");
+  const messageQueues = createAgentMessageQueuesStore();
   if (records.length === 0) {
     sessionStore.replaceSession(
       createAgentSessionFixture({
@@ -166,6 +175,7 @@ const createState = (
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveNotices: sessionStore.applyLiveNotices,
+    messageQueues,
     liveSessionPort,
     transcriptEvents,
     queryClient,
@@ -210,17 +220,18 @@ const createState = (
     },
     queryClient,
     updateSession: sessionStore.updateSession,
+    messageQueues,
   };
 };
 
 const createRepositoryConflictRetryState = (
   agentSessionsListForTasks: AgentSessionReadPort["agentSessionsListForTasks"],
   duringObservation: Parameters<typeof createState>[0] = (emit) => {
-    emit({
-      type: "snapshot",
-      repoPath: "/repo",
-      sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-    });
+    emit(
+      createLiveSnapshotEnvelope({
+        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+      }),
+    );
   },
 ) =>
   createState(duringObservation, [], {
@@ -231,10 +242,7 @@ describe("useRepoSessionReadModel", () => {
   test.each(["codex", "claude", "opencode"] as const)(
     "%s binds a new task session with its running state in one update",
     async (runtimeKind) => {
-      const state = createState(
-        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
-        [],
-      );
+      const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
       const saved = { ...record, runtimeKind, externalSessionId: "new-thread" };
       const ref = { ...snapshot().ref, runtimeKind, externalSessionId: saved.externalSessionId };
       const statuses: string[] = [];
@@ -269,10 +277,7 @@ describe("useRepoSessionReadModel", () => {
   test.each(["codex", "claude", "opencode"] as const)(
     "%s applies new task ownership before the first user event in the same stream batch",
     async (runtimeKind) => {
-      const state = createState(
-        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
-        [],
-      );
+      const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
       const saved = { ...record, runtimeKind, externalSessionId: "new-thread" };
       const ref = { ...snapshot().ref, runtimeKind, externalSessionId: saved.externalSessionId };
       const consumer = createAgentSessionTranscriptEventConsumer({
@@ -327,9 +332,75 @@ describe("useRepoSessionReadModel", () => {
     },
   );
 
+  test("replaces repository message queues from snapshots and applies queue updates", async () => {
+    const queue = (revision: number, texts: string[]) =>
+      createAgentMessageQueueSnapshot({ target: queueTarget(), revision, texts });
+    const state = createState((emit) =>
+      emit(
+        createLiveSnapshotEnvelope({
+          sessions: [snapshot()],
+          messageQueues: [queue(1, ["First"])],
+        }),
+      ),
+    );
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.messageQueues.getQueue(snapshot().ref)?.revision).toBe(1);
+
+      await state.harness.run(() =>
+        state.emit({ type: "message_queue_updated", queue: queue(2, ["First", "Second"]) }),
+      );
+      expect(state.messageQueues.getQueue(snapshot().ref)?.entries).toHaveLength(2);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("removes a pending queue entry in the step that adds its accepted message", async () => {
+    const target = queueTarget();
+    const queue = createAgentMessageQueueSnapshot({ target, revision: 3, texts: ["first"] });
+    const state = createState((emit) =>
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()], messageQueues: [queue] })),
+    );
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const steps: string[] = [];
+      const unsubscribe = state.messageQueues.subscribe(() => steps.push("queue"));
+      const handle = state.transcriptEvents.handle;
+      state.transcriptEvents.handle = (event) => {
+        steps.push("transcript");
+        handle(event);
+      };
+
+      state.emit({
+        type: "transcript_event",
+        event: {
+          type: "user_message",
+          externalSessionId: target.externalSessionId,
+          timestamp: "2026-10-08T10:01:00.000Z",
+          sessionRef: snapshot().ref,
+          messageId: "native-first",
+          message: "First",
+          parts: [{ kind: "text", text: "First" }],
+          state: "read",
+          submissionId: "submission-first",
+        },
+      });
+      unsubscribe();
+
+      // Both stores change in one synchronous step, so React renders them together.
+      expect(steps).toEqual(["transcript", "queue"]);
+      expect(state.messageQueues.getQueue(snapshot().ref)).toBeNull();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("keeps current history through metadata snapshots and marks it stale on reconnect or stream failure", async () => {
     const state = createState((emit) =>
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
     );
     try {
       await state.harness.mount();
@@ -339,20 +410,15 @@ describe("useRepoSessionReadModel", () => {
       });
       const messages = state.getSession()?.messages;
       await state.harness.run(() =>
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ title: "Updated title" })],
-        }),
+        state.emit(
+          createLiveSnapshotEnvelope({ sessions: [snapshot({ title: "Updated title" })] }),
+        ),
       );
       expect(state.getSession()?.historyLoadState).toBe("loaded");
       await state.harness.run(() =>
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          isConnectionSnapshot: true,
-          sessions: [snapshot()],
-        }),
+        state.emit(
+          createLiveSnapshotEnvelope({ sessions: [snapshot()], isConnectionSnapshot: true }),
+        ),
       );
       expect(state.getSession()?.historyLoadState).toBe("stale");
       expect(state.getSession()?.messages).toBe(messages);
@@ -377,7 +443,7 @@ describe("useRepoSessionReadModel", () => {
         title: "Old title",
       });
       const state = createState(
-        (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [initial] }),
+        (emit) => emit(createLiveSnapshotEnvelope({ sessions: [initial] })),
         { ...record, runtimeKind: "claude" },
       );
       const observed: Array<{
@@ -412,7 +478,7 @@ describe("useRepoSessionReadModel", () => {
         };
         state.emit(
           type === "snapshot"
-            ? { type, repoPath: "/repo", sessions: [updated] }
+            ? createLiveSnapshotEnvelope({ sessions: [updated] })
             : { type, session: updated },
         );
         expect(observed).toEqual([
@@ -427,10 +493,7 @@ describe("useRepoSessionReadModel", () => {
   );
 
   test("keeps a mismatch warning through workflow registration and clears it on recovery", async () => {
-    const state = createState(
-      (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [] }),
-      [],
-    );
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
     const ref = { ...snapshot().ref, runtimeKind: "claude" as const };
     const session = createAgentSessionFixture({
       ...ref,
@@ -507,20 +570,16 @@ describe("useRepoSessionReadModel", () => {
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId }),
       ]);
-      state.emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [{ ...liveSession, policyNotice: reported }],
-      });
+      state.emit(
+        createLiveSnapshotEnvelope({ sessions: [{ ...liveSession, policyNotice: reported }] }),
+      );
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId, content: reported.message }),
       ]);
       // A reconnect can receive the cleared snapshot without the recovery event.
-      state.emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot({ ref, activity: "running" })],
-      });
+      state.emit(
+        createLiveSnapshotEnvelope({ sessions: [snapshot({ ref, activity: "running" })] }),
+      );
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
       state.replaceSession(session);
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
@@ -548,11 +607,7 @@ describe("useRepoSessionReadModel", () => {
       );
       const state = createState(
         (emit) =>
-          emit({
-            type: "snapshot",
-            repoPath: "/repo",
-            sessions: [snapshot({ activity: "running" })],
-          }),
+          emit(createLiveSnapshotEnvelope({ sessions: [snapshot({ activity: "running" })] })),
         record,
         {
           agentSessionsListForTasks: async () => [{ taskId: "task-1", agentSessions: [record] }],
@@ -598,7 +653,7 @@ describe("useRepoSessionReadModel", () => {
       pendingQuestions: [{ requestId: "question", questions: [] }],
     });
     const state = createState((emit) =>
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [root, child] }),
+      emit(createLiveSnapshotEnvelope({ sessions: [root, child] })),
     );
     const observed: Array<{ status: string | undefined; questions: number | undefined }> = [];
     state.props.transcriptEvents = {
@@ -661,7 +716,7 @@ describe("useRepoSessionReadModel", () => {
   });
   test("a settling session snapshot applies the queued final assistant message first", async () => {
     const state = createState((emit) =>
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot({ activity: "running" })] }),
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot({ activity: "running" })] })),
     );
     const transcriptEvents = createAgentSessionTranscriptEventConsumer(
       {
@@ -790,7 +845,7 @@ describe("useRepoSessionReadModel", () => {
       }),
     );
     const state = createState(
-      (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions }),
+      (emit) => emit(createLiveSnapshotEnvelope({ sessions })),
       workflowRecords,
     );
     state.props.workspaceId = "workspace-A";
@@ -860,7 +915,7 @@ describe("useRepoSessionReadModel", () => {
       }),
     );
     const state = createState(
-      (emit) => emit({ type: "snapshot", repoPath: "/repo", sessions: [native] }),
+      (emit) => emit(createLiveSnapshotEnvelope({ sessions: [native] })),
       [],
     );
     state.props.workspaceId = "workspace-A";
@@ -878,12 +933,7 @@ describe("useRepoSessionReadModel", () => {
         pendingQuestions: [{ requestId: "answer", questions: [] }],
       });
       await state.harness.run(() =>
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [native],
-          isConnectionSnapshot: true,
-        }),
+        state.emit(createLiveSnapshotEnvelope({ sessions: [native], isConnectionSnapshot: true })),
       );
       expect(state.getSession()?.pendingQuestions).toHaveLength(1);
     } finally {
@@ -915,7 +965,7 @@ describe("useRepoSessionReadModel", () => {
       }),
     );
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [wrong] });
+      emit(createLiveSnapshotEnvelope({ sessions: [wrong] }));
     }, []);
     state.props.workspaceId = "workspace-A";
     try {
@@ -940,11 +990,7 @@ describe("useRepoSessionReadModel", () => {
         "workspace-target",
       );
       await state.harness.run(() =>
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [{ ...correct, activity: "running" }],
-        }),
+        state.emit(createLiveSnapshotEnvelope({ sessions: [{ ...correct, activity: "running" }] })),
       );
       expect(state.harness.getLatest().getSessionFault(correct.ref)).toBeNull();
       expect(state.getStoredSession(correct.ref)?.status).toBe("running");
@@ -957,11 +1003,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("observes the repository and commits snapshot plus ordered creation once", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       emit({
         type: "session_upsert",
         session: snapshot({
@@ -1001,11 +1043,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps a live workflow session across a later task-record refresh", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
 
     try {
@@ -1056,7 +1094,7 @@ describe("useRepoSessionReadModel", () => {
       activity: "running",
     });
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [remoteSnapshot] });
+      emit(createLiveSnapshotEnvelope({ sessions: [remoteSnapshot] }));
     }, []);
 
     try {
@@ -1069,7 +1107,7 @@ describe("useRepoSessionReadModel", () => {
         state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
           remoteRecord,
         ]);
-        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [remoteSnapshot] });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [remoteSnapshot] }));
       });
 
       await state.harness.waitFor(
@@ -1089,11 +1127,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("preserves a fresher selected model across live snapshots", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const selectedModel = {
       runtimeKind: "codex",
@@ -1117,7 +1151,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()?.selectedModel).toEqual(selectedModel);
 
       await state.harness.run(() => {
-        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
 
       expect(state.getSession()?.selectedModel).toEqual(selectedModel);
@@ -1130,20 +1164,12 @@ describe("useRepoSessionReadModel", () => {
     const releaseRestartSnapshot = createDeferred<void>();
     const state = createState((emit, observeIndex) => {
       if (observeIndex === 1) {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
         return;
       }
       // The restarted observer delays its authoritative snapshot.
       void releaseRestartSnapshot.promise.then(() => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
     });
 
@@ -1196,11 +1222,7 @@ describe("useRepoSessionReadModel", () => {
     const historical = { ...record, externalSessionId: "hist-thread", role: "planner" as const };
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [record, historical],
     );
@@ -1238,11 +1260,7 @@ describe("useRepoSessionReadModel", () => {
     const task2Hydration = createDeferred<TaskSessionRecordBatch>();
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [],
       {
@@ -1299,11 +1317,7 @@ describe("useRepoSessionReadModel", () => {
     ]);
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [],
       {
@@ -1363,11 +1377,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps an unresolved repository fault failed across a successful record refresh", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const refreshedIdentity = {
       externalSessionId: "thread-refreshed",
@@ -1419,11 +1429,7 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(() => deferredB.promise);
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [],
       {
@@ -1459,11 +1465,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.update({ ...state.props, taskIds: ["task-3"] });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
       await state.harness.run(() => {
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
 
@@ -1484,11 +1486,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
 
     try {
@@ -1550,7 +1548,7 @@ describe("useRepoSessionReadModel", () => {
 
       // A fresh authoritative snapshot proves the stream is healthy again.
       await state.harness.run(() => {
-        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
@@ -1562,7 +1560,7 @@ describe("useRepoSessionReadModel", () => {
     const deferredRecords = createDeferred<TaskSessionRecordBatch>();
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [],
       {
@@ -1589,7 +1587,7 @@ describe("useRepoSessionReadModel", () => {
       );
 
       await state.harness.run(() => {
-        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
 
@@ -1635,7 +1633,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
 
       await state.harness.run(() => {
-        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
@@ -1648,11 +1646,7 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(() => deferredB.promise);
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [],
       {
@@ -1721,11 +1715,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot()],
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
 
     try {
@@ -1749,11 +1739,11 @@ describe("useRepoSessionReadModel", () => {
 
   test("projects repository association into session state", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-      });
+      emit(
+        createLiveSnapshotEnvelope({
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+        }),
+      );
     }, []);
 
     try {
@@ -1768,11 +1758,11 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps the current collection and reports a task-refresh association conflict", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-      });
+      emit(
+        createLiveSnapshotEnvelope({
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+        }),
+      );
     }, []);
 
     try {
@@ -1795,11 +1785,11 @@ describe("useRepoSessionReadModel", () => {
       });
 
       await state.harness.run(() => {
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-        });
+        state.emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          }),
+        );
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
@@ -1812,11 +1802,11 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-        });
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          }),
+        );
       },
       [],
       {
@@ -1853,11 +1843,11 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-        });
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          }),
+        );
       },
       [],
       {
@@ -1989,19 +1979,20 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(() => retry.promise);
     const state = createRepositoryConflictRetryState(batchList, (emit, observeIndex) => {
       const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
-      emit({
-        type: "snapshot",
-        repoPath,
-        sessions:
-          observeIndex === 1
-            ? [
-                snapshot({
-                  ref: { ...snapshot().ref, repoPath },
-                  repositoryScope: { kind: "repository" },
-                }),
-              ]
-            : [],
-      });
+      emit(
+        createLiveSnapshotEnvelope({
+          repoPath,
+          sessions:
+            observeIndex === 1
+              ? [
+                  snapshot({
+                    ref: { ...snapshot().ref, repoPath },
+                    repositoryScope: { kind: "repository" },
+                  }),
+                ]
+              : [],
+        }),
+      );
     });
 
     try {
@@ -2060,11 +2051,11 @@ describe("useRepoSessionReadModel", () => {
       });
 
       await state.harness.run(() => {
-        state.emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
-        });
+        state.emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          }),
+        );
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2087,7 +2078,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps the current collection and records a later delta association conflict", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const identity = {
       externalSessionId: record.externalSessionId,
@@ -2123,7 +2114,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps observing transcript events while tasks synchronize", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const transcriptEnvelope = {
       type: "transcript_event",
@@ -2165,7 +2156,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("keeps the active observation stable when stream callbacks refresh", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const refreshedTranscriptEvents: AgentSessionTranscriptEventConsumer = {
       handle: mock(() => undefined),
@@ -2212,7 +2203,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("uses the latest observe callback when stream identity changes", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const secondUnsubscribe = mock(() => undefined);
     const secondObserveAgentSessionLive = mock(
@@ -2220,7 +2211,7 @@ describe("useRepoSessionReadModel", () => {
         _input: { repoPath: string },
         listener: (payload: AgentSessionLiveEnvelope) => void,
       ) => {
-        listener({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        listener(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
         return secondUnsubscribe;
       },
     );
@@ -2262,11 +2253,7 @@ describe("useRepoSessionReadModel", () => {
     };
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot()],
-        });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       { ...record, role: "spec" },
     );
@@ -2378,11 +2365,7 @@ describe("useRepoSessionReadModel", () => {
         ],
       });
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: records.map(waitingSnapshot),
-      });
+      emit(createLiveSnapshotEnvelope({ sessions: records.map(waitingSnapshot) }));
     }, records);
 
     try {
@@ -2402,21 +2385,21 @@ describe("useRepoSessionReadModel", () => {
 
   test("does not resurrect a request resolved during observation", async () => {
     const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [
-          snapshot({
-            pendingApprovals: [
-              {
-                requestId: "opaque-1",
-                requestType: "command_execution",
-                title: "Run command",
-              },
-            ],
-          }),
-        ],
-      });
+      emit(
+        createLiveSnapshotEnvelope({
+          sessions: [
+            snapshot({
+              pendingApprovals: [
+                {
+                  requestId: "opaque-1",
+                  requestType: "command_execution",
+                  title: "Run command",
+                },
+              ],
+            }),
+          ],
+        }),
+      );
       emit({
         type: "session_upsert",
         session: snapshot({ pendingApprovals: [] }),
@@ -2434,7 +2417,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("invalidates the combined catalog from the ordered stream", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const invalidateQueries = mock(async () => undefined);
     state.queryClient.invalidateQueries = invalidateQueries;
@@ -2463,7 +2446,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("invalidates the combined catalog for the pushed slash command scope", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const invalidateQueries = mock(async () => undefined);
     state.queryClient.invalidateQueries = invalidateQueries;
@@ -2496,21 +2479,21 @@ describe("useRepoSessionReadModel", () => {
     const secondRecord = { ...record, externalSessionId: "thread-2" };
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [
-            snapshot(),
-            snapshot({
-              ref: {
-                repoPath: "/repo",
-                runtimeKind: secondRecord.runtimeKind,
-                workingDirectory: secondRecord.workingDirectory,
-                externalSessionId: secondRecord.externalSessionId,
-              },
-            }),
-          ],
-        });
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [
+              snapshot(),
+              snapshot({
+                ref: {
+                  repoPath: "/repo",
+                  runtimeKind: secondRecord.runtimeKind,
+                  workingDirectory: secondRecord.workingDirectory,
+                  externalSessionId: secondRecord.externalSessionId,
+                },
+              }),
+            ],
+          }),
+        );
       },
       [record, secondRecord],
     );
@@ -2551,7 +2534,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("shows a Codex title failure without a live-observation prefix", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
     const message = "Could not sync this Workspace Session title to Codex. Reattach this chat.";
 
@@ -2584,7 +2567,7 @@ describe("useRepoSessionReadModel", () => {
   test("records a scoped fault before the initial snapshot without failing the repository", async () => {
     const state = createState((emit) => {
       emit(scopedFault());
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
 
     try {
@@ -2605,7 +2588,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("normalizes repository paths when looking up a scoped fault", async () => {
     const state = createState((emit) => {
-      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
 
     try {
@@ -2631,7 +2614,7 @@ describe("useRepoSessionReadModel", () => {
     const secondRecord = { ...record, externalSessionId: "thread-2" };
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [record, secondRecord],
     );
@@ -2688,7 +2671,7 @@ describe("useRepoSessionReadModel", () => {
     const secondRecord = { ...record, externalSessionId: "thread-2" };
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [record, secondRecord],
     );
@@ -2761,7 +2744,7 @@ describe("useRepoSessionReadModel", () => {
     });
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       [record, secondRecord],
       {
@@ -2824,7 +2807,7 @@ describe("useRepoSessionReadModel", () => {
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [recoveredRecord] }]);
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       record,
       {
@@ -2873,7 +2856,7 @@ describe("useRepoSessionReadModel", () => {
     );
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
       },
       record,
       { agentSessionsListForTasks: batchList },
@@ -2928,15 +2911,15 @@ describe("useRepoSessionReadModel", () => {
     };
     const state = createState(
       (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [
-            snapshot({
-              pendingApprovals: [initialApproval],
-            }),
-          ],
-        });
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [
+              snapshot({
+                pendingApprovals: [initialApproval],
+              }),
+            ],
+          }),
+        );
       },
       { ...record, role: "spec" },
     );
