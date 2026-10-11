@@ -80,6 +80,24 @@ describe("local-attachment-files", () => {
     });
   });
 
+  test("stageLocalAttachmentFile keeps exact bytes when the media type contains a comma", async () => {
+    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/diagram.png" }));
+    configureShellBridge(
+      createTestShellBridge({
+        client: createHostClientFixture({ workspaceStageLocalAttachment }),
+      }),
+    );
+    const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+    const type = 'image/png;foo="a,b"';
+
+    await stageLocalAttachmentFile(new File([bytes], "diagram.png", { type }));
+    expect(workspaceStageLocalAttachment).toHaveBeenCalledWith({
+      name: "diagram.png",
+      base64Data: Buffer.from(bytes).toString("base64"),
+      mime: type,
+    });
+  });
+
   test("resolveLocalAttachmentPreviewSrc rejects blank paths before shell delegation", async () => {
     await expect(resolveLocalAttachmentPreviewSrc("   ")).rejects.toThrow(
       "Attachment preview is unavailable because the local file path is missing.",

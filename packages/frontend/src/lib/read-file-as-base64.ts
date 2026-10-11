@@ -15,7 +15,8 @@ export const readFileAsBase64 = (file: File): Promise<string> =>
         reject(new Error(`Could not read ${file.name}.`));
         return;
       }
-      const comma = result.indexOf(",");
+      // The media type can contain a quoted comma, and base64 never does.
+      const comma = result.lastIndexOf(",");
       if (comma < 0) {
         reject(new Error(`Could not encode ${file.name}.`));
         return;
