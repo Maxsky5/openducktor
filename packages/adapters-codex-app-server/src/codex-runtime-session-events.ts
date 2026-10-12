@@ -29,6 +29,7 @@ import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
   type CodexUserMessageEcho,
+  type CodexExpectedEcho,
   type CompletedAgentMessage,
   emitCodexUserMessage,
   expectCodexUserMessageEcho,
@@ -82,7 +83,6 @@ type CodexRuntimeSessionEventsDepsBase = {
   asyncQuestions: CodexAsyncQuestionState;
   subagents: CodexSubagentLinkState;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
-  flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
 };
 
 type CodexRuntimeSessionEventsStreamingDeps = CodexRuntimeSessionEventsDepsBase & {
@@ -447,9 +447,9 @@ export class CodexRuntimeSessionEvents {
     this.clearTurnScopedMap(this.modelByTurnKey, externalSessionId);
   }
 
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean {
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void {
     if (activeTurn.turnId && activeTurn.turnId !== turnId) {
-      return false;
+      return;
     }
 
     if (startedAtMs !== undefined && !Number.isFinite(startedAtMs)) {
@@ -460,10 +460,10 @@ export class CodexRuntimeSessionEvents {
     if (didBind) {
       const turnStartRequestSentAtMs = activeTurn.turnStartRequestSentAtMs;
       if (turnStartRequestSentAtMs === null) {
-        return false;
+        return;
       }
       if (startedAtMs !== undefined && startedAtMs < turnStartRequestSentAtMs) {
-        return false;
+        return;
       }
     }
 
@@ -474,7 +474,6 @@ export class CodexRuntimeSessionEvents {
       activeTurn.startedAtMs = Date.now();
     }
     this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
-    return didBind;
   }
 
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void {
@@ -506,7 +505,10 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  expectUserMessageEcho(event: AcceptedAgentUserMessage, input: CodexUserInput[]): () => void {
+  expectUserMessageEcho(
+    event: AcceptedAgentUserMessage,
+    input: CodexUserInput[],
+  ): CodexExpectedEcho {
     return expectCodexUserMessageEcho(this.streamingContext(), event, input);
   }
 
@@ -1027,8 +1029,6 @@ export class CodexRuntimeSessionEvents {
       },
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
-      flushQueuedUserMessagesLater: (activeTurn) =>
-        this.deps.flushQueuedUserMessagesLater(activeTurn),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
       failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
         this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
@@ -1118,8 +1118,6 @@ export class CodexRuntimeSessionEvents {
       sessionForThreadId: (threadId) => this.deps.sessions.get(threadId),
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
-      flushQueuedUserMessagesLater: (activeTurn) =>
-        this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
       emitRetainedSessionFailure: (session, message) => {

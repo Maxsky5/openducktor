@@ -1,12 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
-import type {
-  AgentAttachmentReference,
-  AgentModelCatalog,
-  AgentRole,
-  AgentUserMessageDisplayPart,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useCallback } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
@@ -16,8 +11,8 @@ import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
+import { toTranscriptAttachment } from "./agent-chat-attachments";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
-import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {
   getAssistantFooterData,
@@ -27,36 +22,17 @@ import {
 import type { SubagentMeta, ToolMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatTaskTool } from "./agent-chat-task-tool";
-import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
-import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-chip";
+import {
+  isUserMessageReferencePart,
+  renderUserMessageReferenceChip,
+  type UserMessageReferenceKind,
+} from "./agent-chat-user-message-reference-chip";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
-
-type TranscriptAttachmentReference = AgentAttachmentReference & {
-  localPreviewAvailable?: boolean;
-};
-
-const toTranscriptAttachment = (
-  attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"],
-): TranscriptAttachmentReference => {
-  const reference: TranscriptAttachmentReference = {
-    id: attachment.id,
-    path: attachment.path,
-    name: attachment.name,
-    kind: attachment.kind,
-  };
-  if (attachment.mime !== undefined) {
-    reference.mime = attachment.mime;
-  }
-  if (attachment.localPreviewAvailable !== undefined) {
-    reference.localPreviewAvailable = attachment.localPreviewAvailable;
-  }
-  return reference;
-};
 
 type MessageHeaderProps = {
   message: AgentChatMessage;
@@ -208,16 +184,16 @@ const AssistantMessage = ({
   );
 };
 
+type UserMessageDisplayReferencePart = Extract<
+  AgentUserMessageDisplayPart,
+  { kind: UserMessageReferenceKind }
+>;
+
 type UserMessageInlineReferenceRange = {
-  part: Extract<
-    AgentUserMessageDisplayPart,
-    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
-  >;
+  part: UserMessageDisplayReferencePart;
   start: number;
   end: number;
 };
-
-const USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME = "mx-1 max-w-full align-middle";
 
 const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
   let text = "";
@@ -233,15 +209,7 @@ const readRenderableUserMessageText = (
   parts: AgentUserMessageDisplayPart[],
   fallbackText: string,
 ): string => {
-  if (
-    parts.some(
-      (part) =>
-        (part.kind === "file_reference" ||
-          part.kind === "skill_mention" ||
-          part.kind === "subagent_reference") &&
-        part.sourceText,
-    )
-  ) {
+  if (parts.some((part) => isUserMessageReferencePart(part) && part.sourceText)) {
     return fallbackText;
   }
   const visibleText = readVisibleUserMessageText(parts);
@@ -253,10 +221,7 @@ const readRenderableUserMessageText = (
 
 const userMessageTextContainsReferenceMarker = (
   text: string,
-  part: Extract<
-    AgentUserMessageDisplayPart,
-    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
-  >,
+  part: UserMessageDisplayReferencePart,
 ): boolean => {
   if (part.kind === "skill_mention") {
     return text.includes(`$${part.skill.name}`);
@@ -275,11 +240,7 @@ const canRenderOrderedUserMessageParts = (parts: AgentUserMessageDisplayPart[]):
 
   let hasReference = false;
   for (const part of parts) {
-    if (
-      part.kind !== "file_reference" &&
-      part.kind !== "skill_mention" &&
-      part.kind !== "subagent_reference"
-    ) {
+    if (!isUserMessageReferencePart(part)) {
       continue;
     }
     hasReference = true;
@@ -311,11 +272,7 @@ const renderUserMessagePartSequence = (
       continue;
     }
 
-    if (
-      part.kind === "file_reference" ||
-      part.kind === "skill_mention" ||
-      part.kind === "subagent_reference"
-    ) {
+    if (isUserMessageReferencePart(part)) {
       nodes.push(renderUserMessageReferenceChip(part, nextSequenceKey(`reference-${part.kind}`)));
     }
   }
@@ -333,11 +290,7 @@ const readInlineUserReferenceRanges = (
 ): UserMessageInlineReferenceRange[] => {
   const ranges: UserMessageInlineReferenceRange[] = [];
   for (const part of parts) {
-    if (
-      part.kind !== "file_reference" &&
-      part.kind !== "skill_mention" &&
-      part.kind !== "subagent_reference"
-    ) {
+    if (!isUserMessageReferencePart(part)) {
       continue;
     }
     const sourceText = part.sourceText;
@@ -377,43 +330,6 @@ const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string):
   nodes.push(<Fragment key={key}>{text}</Fragment>);
 };
 
-function renderUserMessageReferenceChip(
-  part: Extract<
-    AgentUserMessageDisplayPart,
-    { kind: "file_reference" | "skill_mention" | "subagent_reference" }
-  >,
-  key: string,
-): ReactElement {
-  if (part.kind === "skill_mention") {
-    return (
-      <AgentChatSkillReferenceChip
-        key={key}
-        skill={part.skill}
-        className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
-      />
-    );
-  }
-
-  if (part.kind === "subagent_reference") {
-    return (
-      <AgentChatSubagentReferenceChip
-        key={key}
-        subagent={part.subagent}
-        className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
-      />
-    );
-  }
-
-  return (
-    <AgentChatFileReferenceChip
-      key={key}
-      file={part.file}
-      className="max-w-full align-middle"
-      tooltip
-    />
-  );
-}
-
 const renderUserMessageInlineContent = (
   rawText: string,
   parts: AgentUserMessageDisplayPart[],
@@ -448,9 +364,7 @@ const renderUserMessageInlineContent = (
 
   for (const part of parts) {
     if (
-      (part.kind !== "file_reference" &&
-        part.kind !== "skill_mention" &&
-        part.kind !== "subagent_reference") ||
+      !isUserMessageReferencePart(part) ||
       renderedInlineReferences.has(part) ||
       ((part.kind === "skill_mention" || part.kind === "subagent_reference") &&
         !part.sourceText &&
@@ -646,16 +560,16 @@ const isUserAttachmentPart = (part: AgentUserMessageDisplayPart): part is UserAt
 const UserMessageBubble = ({
   content,
   attachments,
-  isQueued,
+  isUnread,
 }: {
   content: ReactElement | null;
   attachments: UserAttachmentPart[];
-  isQueued: boolean;
+  isUnread: boolean;
 }): ReactElement => (
   <div
     className={cn(
       "max-w-full rounded-xl rounded-br-sm px-3.5 py-2 text-foreground",
-      isQueued
+      isUnread
         ? "border border-dashed border-pending-border bg-pending-surface"
         : "bg-chat-surface shadow-chat",
     )}
@@ -677,16 +591,19 @@ const UserMessageBubble = ({
 );
 
 const UserMessageMeta = ({
-  isQueued,
+  isUnread,
   timeLabel,
 }: {
-  isQueued: boolean;
+  isUnread: boolean;
   timeLabel: string;
 }): ReactElement => (
   <div className="mt-1 flex items-center justify-end gap-2 px-1">
-    {isQueued ? (
-      <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
-        Queued
+    {isUnread ? (
+      <span
+        className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pending-surface-foreground"
+        title="The agent has not read this message yet."
+      >
+        Unread
       </span>
     ) : null}
     {timeLabel ? (
@@ -703,7 +620,7 @@ const UserMessage = ({
   timeLabel: string;
 }): ReactElement => {
   const userMeta = message.meta?.kind === "user" ? message.meta : null;
-  const isQueued = userMeta?.state === "queued";
+  const isUnread = userMeta?.state === "queued";
   const userParts = userMeta?.parts ?? [];
   const attachments = userParts.filter(isUserAttachmentPart);
   const userText = readRenderableUserMessageText(userParts, message.content);
@@ -712,9 +629,9 @@ const UserMessage = ({
   return (
     <>
       {content || attachments.length > 0 ? (
-        <UserMessageBubble content={content} attachments={attachments} isQueued={isQueued} />
+        <UserMessageBubble content={content} attachments={attachments} isUnread={isUnread} />
       ) : null}
-      {isQueued || timeLabel ? <UserMessageMeta isQueued={isQueued} timeLabel={timeLabel} /> : null}
+      {isUnread || timeLabel ? <UserMessageMeta isUnread={isUnread} timeLabel={timeLabel} /> : null}
     </>
   );
 };

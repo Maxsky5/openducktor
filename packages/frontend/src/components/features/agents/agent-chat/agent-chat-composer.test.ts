@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { steerShortcutLabel } from "@/lib/steer-shortcut";
+import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
@@ -17,6 +19,9 @@ const buildModel = () => ({
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
+  steerBlockedReason: null,
+  runningTurnModel: null,
+  messageQueue: null,
   draftScope: {
     key: "draft-1",
     persistence: null,
@@ -116,6 +121,30 @@ const buildModel = () => ({
   onComposerEditorInput: () => {},
   scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
 });
+
+const queuedFollowUp: AgentChatMessageQueueModel = {
+  queue: {
+    target: {
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+    },
+    revision: 1,
+    entries: [
+      {
+        submissionId: "submission-1",
+        parts: [{ kind: "text", text: "Queued follow-up" }],
+        queuedAt: "2026-10-08T10:00:00.000Z",
+        state: "queued",
+      },
+    ],
+    pause: null,
+  },
+  onAction: async () => {},
+  onSaveEdit: async () => {},
+};
 
 const buildCodexModelSelectionWithoutProfile = () => {
   const { profileId: _profileId, ...selection } = buildModelSelection({ runtimeKind: "codex" });
@@ -284,23 +313,35 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Preparing message" disabled');
   });
 
-  test("keeps send enabled while a queueable session is working", () => {
+  // The reference keys stay, so the composer still teaches them while the agent works.
+  test.each<[string, Partial<AgentChatComposerModel>, string]>([
+    [
+      "a working session",
+      // A send waits in the queue, so it does not show the preparing state.
+      { isSessionWorking: true, isSending: true },
+      `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to steer`,
+    ],
+    [
+      "a working session that cannot steer",
+      { isSessionWorking: true, steerBlockedReason: "OpenCode 1.0.0 cannot steer running work." },
+      "@ for files; / for commands; Enter to queue",
+    ],
+    [
+      "an idle session with queued messages",
+      { messageQueue: queuedFollowUp },
+      `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,
+    ],
+    ["an idle session without queued messages", {}, "@ for files; / for commands"],
+  ])("names the queue keys in the placeholder for %s", (_name, overrides, placeholder) => {
     const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          isSending: true,
-          isSessionWorking: true,
-          draftScope: {
-            key: "queued-followup-ready",
-            persistence: null,
-          },
-        },
-      }),
+      createElement(AgentChatComposer, { model: { ...buildModel(), ...overrides } }),
     );
 
-    expect(html).toContain('aria-label="Send message"');
-    expect(html).not.toContain('aria-label="Preparing message"');
+    const card = readComposerCard(html);
+    expect(card.querySelector('[aria-label="Message composer"]')?.textContent).toBe(placeholder);
+    // The send button stays the same. Only the placeholder names the queue keys.
+    expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
+    expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
   });
 
   test("disables send when input is blank", () => {
@@ -527,6 +568,7 @@ describe("AgentChatComposer", () => {
     expect(card.className).not.toContain("bg-chat-surface/60");
     expect(html).toContain("Answer the pending question above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
+    expect(html).not.toContain("Enter to queue");
     expect(html).not.toContain('class="odt-border-ray"');
     expect(html).not.toContain("border-l-4");
     expect(html).not.toContain("border-left-color:#d97706");
@@ -559,46 +601,6 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("Planner is unavailable for this task right now.");
-    expect(html).toContain('aria-label="Send message" disabled');
-  });
-
-  test("keeps the blocked reason visible outside the placeholder when input is non-empty", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          busySendBlockedReason:
-            "Current runtime does not support queued messages while the session is working.",
-          draftScope: {
-            key: "busy-send-visible",
-            persistence: null,
-          },
-          isSessionWorking: true,
-        },
-      }),
-    );
-
-    expect(html).toContain(
-      "Current runtime does not support queued messages while the session is working.",
-    );
-    expect(html).toContain('aria-label="Send message" disabled');
-  });
-
-  test("blocks busy sends when the runtime does not support queued messages", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          isSessionWorking: true,
-          busySendBlockedReason:
-            "Current runtime does not support queued messages while the session is working.",
-        },
-      }),
-    );
-
-    expect(html).toContain(
-      "Current runtime does not support queued messages while the session is working.",
-    );
     expect(html).toContain('aria-label="Send message" disabled');
   });
 });

@@ -447,6 +447,7 @@ test.each(["before its first native send", "after native acceptance"] as const)(
           ...other,
           sessionScope: builderScope,
           parts: [{ kind: "text", text: "Message for another Builder session" }],
+          delivery: "new_turn",
         });
         expect(accepted).toMatchObject({ type: "user_message", externalSessionId: "other" });
         yield* wait.open;
@@ -511,7 +512,7 @@ test("the first send reaches the runtime adapter with its native admission optio
   const h = await createLaunchHarness();
   const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
   expect(result.status).toBe("completed");
-  expect(h.sendOptions).toEqual([{ requireNativeAdmission: true, onSent: expect.any(Function) }]);
+  expect(h.sendOptions).toEqual([{ onSent: expect.any(Function) }]);
 });
 
 test("a browser that attaches after the caller left sees the launch failure in the session", async () => {

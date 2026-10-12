@@ -27,6 +27,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { HostRuntimeStatusMap } from "@/types/diagnostics";
 import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 export type OrchestratorDependencies = NonNullable<
   Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]
@@ -66,11 +67,9 @@ export const createLiveSessionStreamFixture = (
     observeAgentSessionLive: async (input, nextListener) => {
       observeCount += 1;
       listener = nextListener;
-      nextListener({
-        type: "snapshot",
-        repoPath: input.repoPath,
-        sessions: initialSessions,
-      } satisfies AgentSessionLiveEnvelope);
+      nextListener(
+        createLiveSnapshotEnvelope({ repoPath: input.repoPath, sessions: initialSessions }),
+      );
       return () => {
         if (listener === nextListener) {
           listener = null;
@@ -121,11 +120,7 @@ export const createTestDependencies = (
     },
     liveSessionHostPort: {
       observeAgentSessionLive: async ({ repoPath }, listener) => {
-        listener({
-          type: "snapshot",
-          repoPath,
-          sessions: [],
-        });
+        listener(createLiveSnapshotEnvelope({ repoPath, sessions: [] }));
         return () => {};
       },
       agentSessionLiveLoadContext: async () => null,

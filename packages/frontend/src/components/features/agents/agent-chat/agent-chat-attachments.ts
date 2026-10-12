@@ -1,5 +1,11 @@
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
+import type {
+  AgentAttachmentKind,
+  AgentAttachmentReference,
+  AgentModelAttachmentSupport,
+  AgentModelCatalog,
+  AgentUserMessageDisplayPart,
+} from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import {
   type AgentChatComposerAttachment,
@@ -218,16 +224,24 @@ export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean 
   return kind === "image" || kind === "video";
 };
 
+/** The attachment fields that a model support check reads. */
+export type AttachmentToCheck = {
+  readonly kind: AgentAttachmentKind;
+  readonly name: string;
+  readonly mime?: string | undefined;
+};
+
 const readAttachmentValidationError = (
-  attachment: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
+  attachment: AttachmentToCheck,
   support: AgentModelAttachmentSupport | null | undefined,
+  modelLabel = "The selected model",
 ): string | null => {
   if (!support) {
-    return "The selected model does not expose attachment capability data.";
+    return `${modelLabel} does not expose attachment capability data.`;
   }
 
   if (!support[attachment.kind]) {
-    return `The selected model does not support ${attachment.kind} attachments.`;
+    return `${modelLabel} does not support ${attachment.kind} attachments.`;
   }
 
   const supportedMimeTypes = support.mimeTypes?.[attachment.kind];
@@ -246,7 +260,30 @@ const readAttachmentValidationError = (
     return null;
   }
 
-  return `The selected model supports ${attachment.kind} attachments only as ${supportedMimeTypes.join(", ")}.`;
+  return `${modelLabel} supports ${attachment.kind} attachments only as ${supportedMimeTypes.join(", ")}.`;
+};
+
+/**
+ * A steer joins the running turn, so its attachments must suit the model of that turn, not the
+ * model that the composer selects for later messages.
+ */
+export const runningTurnAttachmentBlockedReason = (
+  attachments: readonly AttachmentToCheck[],
+  runningTurnModel: AgentModelCatalog["models"][number] | null,
+): string | null => {
+  if (attachments.length === 0) return null;
+  if (!runningTurnModel) {
+    return "The model of the running turn is unknown, so its attachment support cannot be checked. Queue the message instead.";
+  }
+  for (const attachment of attachments) {
+    const error = readAttachmentValidationError(
+      attachment,
+      runningTurnModel.attachmentSupport,
+      "The model of the running turn",
+    );
+    if (error) return `${attachment.name}: ${error}`;
+  }
+  return null;
 };
 
 export const validateComposerAttachments = (
@@ -266,4 +303,27 @@ export const validateComposerAttachments = (
     }
     return acc;
   }, {});
+};
+
+type TranscriptAttachmentReference = AgentAttachmentReference & {
+  localPreviewAvailable?: boolean;
+};
+
+/** Copies the attachment fields that a transcript chip shows. */
+export const toTranscriptAttachment = (
+  attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"],
+): TranscriptAttachmentReference => {
+  const reference: TranscriptAttachmentReference = {
+    id: attachment.id,
+    path: attachment.path,
+    name: attachment.name,
+    kind: attachment.kind,
+  };
+  if (attachment.mime !== undefined) {
+    reference.mime = attachment.mime;
+  }
+  if (attachment.localPreviewAvailable !== undefined) {
+    reference.localPreviewAvailable = attachment.localPreviewAvailable;
+  }
+  return reference;
 };

@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { pathToFileURL } from "node:url";
 import type { SessionInfo, SessionMessageInfo, SessionInboxUser } from "@opencode/client";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import {
+  AgentSessionMessageAcceptanceUnknownError,
+  AgentSessionMessageRefusedError,
+} from "@openducktor/core";
 import { OpenCodeOperationError } from "./opencode-client";
-import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 import {
   compilePermissionRule,
   compileCreationSettings,
@@ -20,6 +23,7 @@ import {
   location,
   model,
   nativeClient,
+  type NativeRequest,
 } from "./opencode-v2.test-support";
 
 const repository = {
@@ -462,7 +466,9 @@ describe("OpenCode V2 controls and accepted input", () => {
         })
         .catch((cause: unknown) => cause);
       expect(failure).toBeInstanceOf(Error);
-      expect(failure).toMatchObject({
+      // A refusal before the native request keeps the runtime failure as its cause.
+      const evidence = failure instanceof AgentSessionMessageRefusedError ? failure.cause : failure;
+      expect(evidence).toMatchObject({
         failure: {
           kind: "runtime_operation",
           runtimeOperationFailure: {
@@ -471,7 +477,7 @@ describe("OpenCode V2 controls and accepted input", () => {
           },
         },
       });
-      expect(failure instanceof OpenCodeMessageRejectedError).toBe(stage === "policy");
+      expect(failure instanceof AgentSessionMessageRefusedError).toBe(stage === "policy");
       expect(requests.some(({ url }) => /\/(prompt|command)$/.test(url.pathname))).toBe(
         stage !== "policy",
       );
@@ -515,8 +521,10 @@ describe("OpenCode V2 controls and accepted input", () => {
       expect(accepted).toMatchObject({ type: "user_message", messageId: "inbox_native" });
       expect(submitted).toBe(true);
       expect(requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body).toEqual({
+        id: expect.stringMatching(/^msg_/),
         text: "Ask @research",
         agents: [{ name: "research", mention: { text: "@research", start: 4, end: 13 } }],
+        delivery: "queue",
       });
     },
   );
@@ -560,6 +568,7 @@ describe("OpenCode V2 controls and accepted input", () => {
       name: "review",
       text: "--staged @research Keep these arguments",
       agents: [{ name: "research", mention: { text: "@research", start: 9, end: 18 } }],
+      delivery: "queue",
     });
     expect(requests.some(({ url }) => url.pathname.endsWith("/prompt"))).toBe(false);
   });
@@ -1106,9 +1115,103 @@ describe("OpenCode V2 controls and accepted input", () => {
       allowPolicy.resolve();
       const result = await failure;
       expect(requests.some(({ url }) => url.pathname.endsWith(`/${submission}`))).toBe(false);
-      expect(result).toMatchObject({
+      expect(result).toBeInstanceOf(AgentSessionMessageRefusedError);
+      if (!(result instanceof AgentSessionMessageRefusedError)) throw new Error("Expected refusal");
+      expect(result.cause).toMatchObject({
         failure: { runtimeOperationFailure: { code: "runtime_unavailable" } },
       });
     },
   );
+});
+
+describe("OpenCode V2 message delivery", () => {
+  const promptHandler =
+    (prompt: (body: NativeRequest["body"]) => Response) =>
+    ({ url, method, body }: NativeRequest) => {
+      if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
+      if (method === "PATCH" || method === "PUT") return noContent();
+      if (url.pathname.endsWith("/prompt")) return prompt(body);
+      if (url.pathname === "/api/session/ses_saved") return response(current);
+      throw new Error(`Unexpected input request ${method} ${url.pathname}`);
+    };
+
+  test.each([
+    { delivery: "new_turn", native: "queue" },
+    { delivery: "steer", native: "steer" },
+  ] as const)(
+    "sends a $delivery message with native $native delivery",
+    async ({ delivery, native }) => {
+      const { controller, requests } = createController(
+        promptHandler((body) =>
+          response({
+            id: body.id,
+            sessionID: ref.externalSessionId,
+            type: "user",
+            payload: { text: body.text },
+            delivery: native,
+            time: { created: 8 },
+          }),
+        ),
+      );
+      const accepted = await controller.sendUserMessage({
+        ...repository,
+        delivery,
+        submissionId: "submission-1",
+        parts: [{ kind: "text", text: "Next step" }],
+      });
+      const prompt = requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body;
+      expect(prompt).toMatchObject({ delivery: native, id: expect.stringMatching(/^msg_/) });
+      // The accepted message keeps the native ID that the host chose, and names its submission.
+      expect(accepted).toMatchObject({
+        type: "user_message",
+        messageId: prompt?.id,
+        submissionId: "submission-1",
+      });
+    },
+  );
+
+  test.each([
+    [
+      "loses the prompt reply",
+      () => {
+        throw new Error("socket closed");
+      },
+    ],
+    // An OK answer proves that OpenCode took the input, even when its shape is unreadable.
+    ["answers OK with an unreadable prompt", () => Response.json({})],
+  ])("reports an unknown result when OpenCode %s", async (_, answer) => {
+    const { controller, requests } = createController(promptHandler(answer));
+    let sent = false;
+    let failure: unknown;
+    try {
+      await controller.sendUserMessage(
+        { ...repository, delivery: "new_turn", parts: [{ kind: "text", text: "Next step" }] },
+        { onSent: () => (sent = true) },
+      );
+    } catch (cause) {
+      failure = cause;
+    }
+    const prompt = requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body;
+    expect(sent).toBe(true);
+    expect(failure).toBeInstanceOf(AgentSessionMessageAcceptanceUnknownError);
+    expect(failure).toMatchObject({ messageId: prompt?.id });
+  });
+
+  test("keeps an HTTP error answer as a refusal", async () => {
+    const { controller } = createController(
+      promptHandler(() => new Response("Prompt refused", { status: 500 })),
+    );
+    let failure: unknown;
+    try {
+      await controller.sendUserMessage({
+        ...repository,
+        delivery: "new_turn",
+        parts: [{ kind: "text", text: "Next step" }],
+      });
+    } catch (cause) {
+      failure = cause;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(AgentSessionMessageAcceptanceUnknownError);
+  });
 });

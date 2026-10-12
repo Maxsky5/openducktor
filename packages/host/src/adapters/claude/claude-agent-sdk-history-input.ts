@@ -74,7 +74,7 @@ export const createClaudeHistoryInputProjector = (options: {
       timestamp: input.timestamp,
       text: input.text,
       displayParts,
-      state: liveUserMessage?.state ?? "read",
+      state: "read",
       parts: [],
     };
     if (liveUserMessage?.model) {

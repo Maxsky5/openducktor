@@ -1,7 +1,6 @@
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
-  AgentSessionControlSendInput,
   AgentSessionControlUpdateTitleInput,
   AgentSessionLiveRef,
   WorkspaceSession,
@@ -26,7 +25,10 @@ import type {
   WorkspaceSessionStoreRef,
 } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
-import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
+import type {
+  AgentSessionOperationPolicy,
+  AgentSessionSendContent,
+} from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   titleSyncNeedsTurn,
@@ -140,7 +142,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       );
       return known;
     });
-  const prepare = <Input extends AgentSessionControlResumeInput | AgentSessionControlSendInput>(
+  const prepare = <Input extends AgentSessionControlResumeInput | AgentSessionSendContent>(
     input: Input,
   ): Effect.Effect<Input, HostError> =>
     Effect.gen(function* () {
@@ -432,7 +434,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
           ).pipe(Effect.map((saved) => publishUpdated(known.ref.workspaceId, saved))),
         };
       }),
-    recordAcceptedMessage: (ref, message) => recordAcceptedMessage(ref, message, true),
+    recordAcceptedMessage: (ref, message, { saveModel }) =>
+      recordAcceptedMessage(ref, message, saveModel),
     observe: (envelope, provenance) =>
       Effect.gen(function* () {
         if (provenance === "baseline") return;
@@ -447,7 +450,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           yield* recordObservedMessage(event.sessionRef, event);
         } else if (
           event.type === "session_idle" &&
-          event.turnCompleted === true &&
+          event.turnOutcome !== undefined &&
           titleSyncNeedsTurn(event.sessionRef.runtimeKind)
         ) {
           yield* syncTitleAfterTurn(event.sessionRef, {

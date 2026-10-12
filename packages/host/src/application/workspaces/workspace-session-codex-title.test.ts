@@ -46,7 +46,7 @@ describe("Codex Workspace Session title sync", () => {
 
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -56,7 +56,7 @@ describe("Codex Workspace Session title sync", () => {
     expect(h.renameFailures).toEqual([]);
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:02:00Z",
@@ -86,7 +86,7 @@ describe("Codex Workspace Session title sync", () => {
 
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -110,7 +110,7 @@ describe("Codex Workspace Session title sync", () => {
     h.state.beforeControl = h
       .emitEffect({
         type: "session_idle",
-        turnCompleted: true,
+        turnOutcome: "completed",
         sessionRef: h.ref,
         externalSessionId: h.ref.externalSessionId,
         timestamp: "2026-09-07T10:01:00Z",
@@ -156,7 +156,7 @@ describe("Codex Workspace Session title sync", () => {
     await h.emit(titlelessMessage(h.ref));
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -168,7 +168,7 @@ describe("Codex Workspace Session title sync", () => {
     await h.send("Name this chat");
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:02:00Z",
@@ -192,7 +192,7 @@ describe("Codex Workspace Session title sync", () => {
     await Effect.runPromise(Deferred.await(entered));
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -214,7 +214,7 @@ describe("Codex Workspace Session title sync", () => {
 
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:02:00Z",
@@ -239,7 +239,7 @@ describe("Codex Workspace Session title sync", () => {
 
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -276,7 +276,7 @@ describe("Codex Workspace Session title sync", () => {
     await requested;
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -304,7 +304,7 @@ describe("Codex Workspace Session title sync", () => {
     await Effect.runPromise(Deferred.await(entered));
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -328,7 +328,7 @@ describe("Codex Workspace Session title sync", () => {
     await h.send("First prompt");
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -346,7 +346,7 @@ describe("Codex Workspace Session title sync", () => {
     await h.send("First prompt");
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",
@@ -373,7 +373,7 @@ describe("Codex Workspace Session title sync", () => {
     h.persistence.markTitleSyncPending(h.ref);
     await h.emit({
       type: "session_idle",
-      turnCompleted: true,
+      turnOutcome: "completed",
       sessionRef: h.ref,
       externalSessionId: h.ref.externalSessionId,
       timestamp: "2026-09-07T10:01:00Z",

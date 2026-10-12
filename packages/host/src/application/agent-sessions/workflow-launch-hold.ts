@@ -48,13 +48,13 @@ export const createWorkflowLaunchHold = () => {
         (event.type === "session_status" && event.status.type === "idle")
       ) {
         const previous = held.deferredIdle.get(event.type);
-        // Keep completed-turn metadata when a later status repeats the same idle state.
+        // Keep the turn outcome when a later status repeats the same idle state without one.
         if (
           !(
             event.type === "session_idle" &&
-            event.turnCompleted !== true &&
+            event.turnOutcome === undefined &&
             previous?.event.type === "session_idle" &&
-            previous.event.turnCompleted === true
+            previous.event.turnOutcome !== undefined
           )
         )
           held.deferredIdle.set(event.type, change);

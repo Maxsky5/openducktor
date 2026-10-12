@@ -1,4 +1,8 @@
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import {
+  type AgentChatSend,
+  useAgentChatSend,
+} from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type {
   GitBranch,
@@ -10,7 +14,6 @@ import type {
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
@@ -31,7 +34,7 @@ import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-s
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./session-actions/agent-studio-session-action-state";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
-import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
+import { useAgentStudioSendTarget } from "./session-actions/use-agent-studio-send-target";
 import {
   canStartAgentStudioSessionRole,
   canUseAgentStudioKickoffPrompt,
@@ -81,13 +84,12 @@ export type UseAgentStudioSessionActionsResult = {
   startSessionRequest: (
     request: SessionStartLaunchRequest,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
-  busySendBlockedReason: string | null;
+  messageDelivery: AgentChatSend;
   canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -97,7 +99,6 @@ export type UseAgentStudioSessionActionsResult = {
   persistentResumeError: string | null;
   onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
@@ -186,28 +187,36 @@ export function useAgentStudioSessionActions({
     handleQuickAction,
   } = useAgentStudioSessionStartFlow(sessionStartInput);
 
-  const { isSending, onSend } = useAgentStudioSendAction({
+  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const sendTarget = useAgentStudioSendTarget({
     workspaceId: activeWorkspaceId,
     taskId,
     role,
-    selectedSessionIdentity,
+    selectedSessionIdentity: stableSelectedSessionIdentity,
     selectedSessionModel: selectedSession.selectedModel,
-    sessionState,
     isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
     prepareSelectedSessionModelForSend,
     agentStudioReady,
     canStartNewSession,
-    reusablePrompts,
     isStarting,
-    selectedModelDescriptor,
-    supportsAttachments,
-    sendAgentMessage,
     startSession: startSessionForMessage,
+  });
+  const messageDelivery = useAgentChatSend({
+    identity: stableSelectedSessionIdentity,
+    repoPath: workspaceRepoPath,
+    runtimeDescriptor: sessionState.runtimeDescriptor,
+    modelCatalog: selectedSession.runtimeData.modelCatalog,
+    messages: loadedSession?.messages.items,
+    isSessionWorking: sessionState.isSessionWorking,
+    isWaitingInput: sessionState.isWaitingInput,
+    selectedModelDescriptor,
+    draftRules: { reusablePrompts, supportsAttachments },
+    sendAgentMessage,
+    target: sendTarget,
   });
 
   const isSessionWorking = sessionState.isSessionWorking;
-  const isSessionInteractionBusy = isSessionWorking || isSending;
-  const busySendBlockedReason = sessionState.busySendBlockedReason;
+  const isSessionInteractionBusy = isSessionWorking || messageDelivery.isSending;
 
   const canPrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): boolean => {
@@ -282,13 +291,12 @@ export function useAgentStudioSessionActions({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
-    isSending,
     isSubmittingQuestionByRequestId,
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     isSessionWorking,
     isWaitingInput: sessionState.isWaitingInput,
-    busySendBlockedReason,
+    messageDelivery,
     canUseKickoffPrompt,
     kickoffLabel,
     canStopSession,
@@ -298,7 +306,6 @@ export function useAgentStudioSessionActions({
     persistentResumeError,
     onResumeSession,
     startLaunchKickoff,
-    onSend,
     onSubmitQuestionAnswers,
     onReplyApproval,
     handleWorkflowStepSelect,

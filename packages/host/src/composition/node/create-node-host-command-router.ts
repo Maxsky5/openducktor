@@ -70,6 +70,7 @@ import type {
 } from "./node-host-command-router-types";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state";
+import { createNodeMessageDelivery } from "./node-message-delivery";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
@@ -144,6 +145,17 @@ export const assembleNodeEffectHostCommandRouter = (
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
+  const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
+  // The session commands and the runtime registry come later, so delivery reads them at use time.
+  const messageDelivery = createNodeMessageDelivery({
+    eventBus,
+    onBackgroundFailure,
+    canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
+    prepare: (content) => agentSessionCommandService.prepareUserMessage(content),
+    send: (input) => launchControls.commands.sendUserMessage(input),
+    runtimeRegistry: { status: (kind) => runtimeRegistry.status(kind) },
+    runtimeDefinitions: runtimeDefinitionsService,
+  });
   // Services admit runtime work before the orchestrator exists, so the gate comes first.
   const runtimeAdmissionGate = createRuntimeAdmissionGate();
   const runtimeAdmission = createRuntimeAdmissionPort(runtimeAdmissionGate);
@@ -151,6 +163,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeAgentSessionLiveState({
       runtimeAdmission,
       observeNotificationInput: notificationComposition.acceptLive,
+      messageQueues: messageDelivery,
       persistence: workspaceSessions.persistence,
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       store: assets.workspaceSessionStore,
@@ -164,7 +177,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
-  const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
     systemCommands,
     toolDiscovery,
@@ -291,6 +303,7 @@ export const assembleNodeEffectHostCommandRouter = (
     canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
     agentSessionLiveStateService,
     repositoryPolicy: workspaceSessions.persistence,
+    pauseForStop: messageDelivery.pauseForStop,
     workflowLaunch: {
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
       adapterRegistry: liveSessionAdapterRegistry,
@@ -366,6 +379,7 @@ export const assembleNodeEffectHostCommandRouter = (
     initializeAdmission: workspaceAdmissionService.initialize,
     shutdownWorkspaceImports: workspaceChats.workspaceSessionImports.shutdown,
     shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
+    shutdownMessageDeliveries: messageDelivery.shutdown,
     unsubscribeImportCatalogs: workspaceChats.unsubscribeImportCatalogs,
     notifications: notificationService,
     autopilot: autopilotService,
@@ -390,7 +404,11 @@ export const assembleNodeEffectHostCommandRouter = (
     ...workspaceChats.handlers,
     ...createNotificationCommandHandlers(notificationService),
     ...createAutopilotCommandHandlers(autopilotService),
-    ...createAgentSessionLiveCommandHandlers(launchControls.commands, localAttachmentService),
+    ...createAgentSessionLiveCommandHandlers(
+      launchControls.commands,
+      messageDelivery,
+      localAttachmentService,
+    ),
     ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
     ...createAgentRuntimeQueryCommandHandlers(
       taskSessions.agentRuntimeQueries,

@@ -16,11 +16,13 @@ import { buildMessage } from "@/components/features/agents/agent-chat/agent-chat
 import * as modelPickerModel from "@/components/features/agents/model-picker/model-picker-model";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
+  AgentMessageQueuesContext,
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
@@ -51,6 +53,7 @@ import {
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 function QueryStatus() {
   const pending = useIsFetching();
@@ -230,24 +233,11 @@ const createWorkspaceChatHarness = ({
   counters: WorkspaceChatCounters;
   sendAgentMessage?: AgentOperationsContextValue["sendAgentMessage"];
 }) => {
-  const operations: AgentOperationsContextValue = {
-    describeGeneratedImages: async () => {
-      throw new Error("Unexpected image metadata read");
-    },
-    beginGeneratedImageBatch: async () => {
-      throw new Error("Unexpected image batch");
-    },
-    releaseGeneratedImageBatch: async () => {
-      throw new Error("Unexpected image batch release");
-    },
-    readGeneratedImage: async () => {
-      throw new Error("Unexpected image read");
-    },
+  const operations = createAgentOperationsFixture({
     readSessionTodos: async () => {
       counters.runtimeReads += 1;
       return [];
     },
-    readSessionHistory: async () => [],
     loadAgentSessionHistory: async () => {
       counters.runtimeReads += 1;
       return session;
@@ -256,12 +246,7 @@ const createWorkspaceChatHarness = ({
       counters.runtimeReads += 1;
     },
     sendAgentMessage,
-    stopAgentSession: async () => {},
-    continueInterruptedTurn: async () => undefined,
-    updateAgentSessionModel: async () => {},
-    replyAgentApproval: async () => {},
-    answerAgentQuestion: async () => {},
-  };
+  });
   const definitions: RuntimeDefinitionsContextValue = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -281,6 +266,7 @@ const createWorkspaceChatHarness = ({
     }),
     loadRepoRuntimeFileSearch: async () => [],
   };
+  const messageQueues = createAgentMessageQueuesStore();
   let completeObservation = (): void => {};
   let failObservation = (): void => {};
   let observationRetries = 0;
@@ -335,16 +321,18 @@ const createWorkspaceChatHarness = ({
               >
                 <AgentSessionReadModelStateContext value={readModel}>
                   <AgentSessionsContext value={store}>
-                    {children ?? (
-                      <WorkspaceSessionChat
-                        workspace={workspace}
-                        record={entry}
-                        chatSettings={DEFAULT_CHAT_SETTINGS}
-                        reusablePrompts={[]}
-                        onToolRefresh={() => {}}
-                        isMounted={() => true}
-                      />
-                    )}
+                    <AgentMessageQueuesContext value={messageQueues}>
+                      {children ?? (
+                        <WorkspaceSessionChat
+                          workspace={workspace}
+                          record={entry}
+                          chatSettings={DEFAULT_CHAT_SETTINGS}
+                          reusablePrompts={[]}
+                          onToolRefresh={() => {}}
+                          isMounted={() => true}
+                        />
+                      )}
+                    </AgentMessageQueuesContext>
                   </AgentSessionsContext>
                 </AgentSessionReadModelStateContext>
               </AgentSessionHistoryLoadContext>

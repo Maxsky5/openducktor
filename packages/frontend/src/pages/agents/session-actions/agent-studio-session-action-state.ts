@@ -1,5 +1,4 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import { getBusyAgentMessageBlockedReason } from "@/lib/agent-message-send-policy";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
@@ -14,8 +13,8 @@ export type AgentStudioSessionActionState = {
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   canResumeSession: boolean;
-  canQueueBusyFollowups: boolean;
-  busySendBlockedReason: string | null;
+  /** The runtime of the selected session, from the definitions or else from its model catalog. */
+  runtimeDescriptor: RuntimeDescriptor | null;
 };
 
 export function deriveAgentStudioSessionActionState({
@@ -25,19 +24,10 @@ export function deriveAgentStudioSessionActionState({
   const selectedRuntimeKind = selectedSession.identity?.runtimeKind ?? null;
   const currentRuntimeDescriptor =
     runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind) ?? null;
-  const selectedRuntimeDescriptor =
-    currentRuntimeDescriptor ?? selectedSession.runtimeData.modelCatalog?.runtime ?? null;
-  const supportsQueuedUserMessages =
-    selectedRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages ?? false;
   const isSessionWorking = isAgentSessionActivityWorking(selectedSession.activityState);
   const isWaitingInput = selectedSession.loadedSession
     ? isAgentSessionBlockedOnInput(selectedSession.loadedSession)
     : false;
-  const canQueueBusyFollowups = isSessionWorking && supportsQueuedUserMessages;
-  const busySendBlockedReason = getBusyAgentMessageBlockedReason(
-    isSessionWorking,
-    selectedRuntimeDescriptor,
-  );
   const canResumeSession =
     selectedSession.identity !== null &&
     canResumeInterruptedTurn({
@@ -50,7 +40,7 @@ export function deriveAgentStudioSessionActionState({
     isSessionWorking,
     isWaitingInput,
     canResumeSession,
-    canQueueBusyFollowups,
-    busySendBlockedReason,
+    runtimeDescriptor:
+      currentRuntimeDescriptor ?? selectedSession.runtimeData.modelCatalog?.runtime ?? null,
   };
 }

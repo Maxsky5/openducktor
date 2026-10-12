@@ -59,7 +59,6 @@ const createRuntimeEvents = (
     pendingInput: new CodexPendingInputState(),
     subagents: new CodexSubagentLinkState(),
     updateThreadStatus: () => undefined,
-    flushQueuedUserMessagesLater: () => undefined,
     ...rest,
   };
   if (!subscribeEvents) {
@@ -199,7 +198,6 @@ const createActiveTurn = (
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
   handledRequestKeys: new Set(),
-  queuedUserMessages: [],
   model: turnModel,
 });
 
@@ -2214,9 +2212,8 @@ describe("CodexRuntimeSessionEvents", () => {
     const activeTurn = createActiveTurn(session.threadId);
     activeTurn.turnStartRequestSentAtMs = null;
 
-    const didBind = runtimeEvents.bindActiveTurnId(activeTurn, "turn-too-early");
+    runtimeEvents.bindActiveTurnId(activeTurn, "turn-too-early");
 
-    expect(didBind).toBe(false);
     expect(activeTurn.turnId).toBeUndefined();
   });
 

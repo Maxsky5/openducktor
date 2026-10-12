@@ -70,9 +70,7 @@ export const createClaudeHistoryTaskCheck = (
   );
   const replyTime = messages[lastReply]?.timestamp;
   const newerPrompt = liveUserMessages.some(
-    (message) =>
-      message.state !== "queued" &&
-      (!replyTime || Date.parse(message.timestamp) > Date.parse(replyTime)),
+    (message) => !replyTime || Date.parse(message.timestamp) > Date.parse(replyTime),
   );
   return (index: number, state: ClaudeHistoryToolResultState): boolean =>
     hasActiveClaudeBackgroundWork(state) ||

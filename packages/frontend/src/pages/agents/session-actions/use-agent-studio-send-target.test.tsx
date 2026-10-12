@@ -13,14 +13,13 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import { hostClient } from "@/lib/host-client";
+import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
+import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { createDeferred, enableReactActEnvironment } from "../agent-studio-test-utils";
-import { useAgentStudioSendAction } from "./use-agent-studio-send-action";
-
-enableReactActEnvironment();
-
-type HookArgs = Parameters<typeof useAgentStudioSendAction>[0];
+import { useAgentStudioSendTarget } from "./use-agent-studio-send-target";
 
 const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
   id: "openai/gpt-5",
@@ -38,6 +37,25 @@ const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
     pdf: true,
   },
 };
+
+enableReactActEnvironment();
+
+type HookArgs = Parameters<typeof useAgentStudioSendTarget>[0] & {
+  reusablePrompts: ReusablePrompt[];
+  sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+};
+
+/** An Agent Studio chat: its send target with the shared send rules. */
+const useTaskChatSend = ({ reusablePrompts, sendAgentMessage, ...targetArgs }: HookArgs) =>
+  useAgentChatSendForTarget(useAgentStudioSendTarget(targetArgs), {
+    identity: targetArgs.selectedSessionIdentity,
+    selectedModelDescriptor,
+    draftRules: { reusablePrompts, supportsAttachments: true },
+    sendAgentMessage,
+  });
+
+const createTaskHarness = (args: HookArgs) =>
+  createHookHarness(useTaskChatSend, args, { wrapper: AgentChatSendProviders });
 
 const createDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
@@ -93,35 +111,23 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
 const createSelectedSessionIdentity = (externalSessionId: string | null) =>
   externalSessionId ? sessionIdentity(externalSessionId) : null;
 
-const createSessionState = (
-  overrides: Partial<HookArgs["sessionState"]> = {},
-): HookArgs["sessionState"] => ({
-  isWaitingInput: false,
-  canQueueBusyFollowups: false,
-  busySendBlockedReason: null,
-  ...overrides,
-});
-
 const createBaseArgs = (): HookArgs => ({
   workspaceId: "workspace-1",
   taskId: "task-1",
   role: "spec",
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
   selectedSessionModel: null,
-  sessionState: createSessionState(),
   isSessionModelCatalogLoading: false,
   prepareSelectedSessionModelForSend: async () => true,
   agentStudioReady: true,
   canStartNewSession: true,
   reusablePrompts: [],
   isStarting: false,
-  selectedModelDescriptor,
-  supportsAttachments: true,
   sendAgentMessage: async () => null,
   startSession: async () => sessionWorkflowResult("session-new"),
 });
 
-describe("useAgentStudioSendAction", () => {
+describe("useAgentStudioSendTarget", () => {
   const originalWorkspaceStageLocalAttachment = hostClient.workspaceStageLocalAttachment;
 
   beforeEach(() => {
@@ -135,7 +141,7 @@ describe("useAgentStudioSendAction", () => {
   test("guard rejection does not start a session or send a message", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
       agentStudioReady: false,
@@ -145,7 +151,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("hello"))).resolves.toBe(false);
+      await expect(state.onSend(createDraft("hello"), "default")).resolves.toBe(false);
     });
 
     expect(startSession).not.toHaveBeenCalled();
@@ -157,7 +163,7 @@ describe("useAgentStudioSendAction", () => {
   test("rejects stale system compaction before starting a new session", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: null,
       startSession,
@@ -166,7 +172,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createCompactionDraft())).rejects.toThrow(
+      await expect(state.onSend(createCompactionDraft(), "default")).rejects.toThrow(
         "/compact requires an existing selected session",
       );
     });
@@ -183,7 +189,7 @@ describe("useAgentStudioSendAction", () => {
       runtimeKind: "claude" as const,
       workingDirectory: "/repo/worktrees/claude-session",
     };
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: claudeSession,
       sendAgentMessage,
@@ -191,22 +197,26 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createCompactionDraft())).resolves.toBe(true);
+      await expect(state.onSend(createCompactionDraft(), "default")).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith(claudeSession, [
-      {
-        kind: "slash_command",
-        command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-      },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      claudeSession,
+      [
+        {
+          kind: "slash_command",
+          command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+        },
+      ],
+      { mode: "default" },
+    );
     await harness.unmount();
   });
 
   test("reports a reserved custom compact prompt without starting a repository session", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: null,
       reusablePrompts: [compactReusablePrompt],
@@ -216,7 +226,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createCompactReusablePromptDraft())).rejects.toThrow(
+      await expect(state.onSend(createCompactReusablePromptDraft(), "default")).rejects.toThrow(
         "/compact is reserved for manual session compaction.",
       );
     });
@@ -236,11 +246,11 @@ describe("useAgentStudioSendAction", () => {
       startSession,
       sendAgentMessage,
     };
-    const harness = createHookHarness(useAgentStudioSendAction, initialArgs);
+    const harness = createTaskHarness(initialArgs);
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("start"))).resolves.toBe(false);
+      await expect(state.onSend(createDraft("start"), "default")).resolves.toBe(false);
     });
 
     expect(startSession).not.toHaveBeenCalled();
@@ -254,13 +264,15 @@ describe("useAgentStudioSendAction", () => {
       sendAgentMessage,
     });
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("follow up"))).resolves.toBe(true);
+      await expect(state.onSend(createDraft("follow up"), "default")).resolves.toBe(true);
     });
 
     expect(startSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
-      { kind: "text", text: "follow up" },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      sessionIdentity("session-existing"),
+      [{ kind: "text", text: "follow up" }],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });
@@ -268,7 +280,7 @@ describe("useAgentStudioSendAction", () => {
   test("blocks sends while the selected session model is not sendable", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       prepareSelectedSessionModelForSend: async () => false,
       startSession,
@@ -277,7 +289,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("hello"))).resolves.toBe(false);
+      await expect(state.onSend(createDraft("hello"), "default")).resolves.toBe(false);
     });
 
     expect(startSession).not.toHaveBeenCalled();
@@ -296,7 +308,7 @@ describe("useAgentStudioSendAction", () => {
       calls.push("send message");
       return null;
     });
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
       canStartNewSession: false,
@@ -307,7 +319,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.mount();
     expect(prepareSelectedSessionModelForSend).not.toHaveBeenCalled();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("follow up"))).resolves.toBe(true);
+      await expect(state.onSend(createDraft("follow up"), "default")).resolves.toBe(true);
     });
 
     expect(calls).toEqual(["prepare model", "send message"]);
@@ -319,7 +331,7 @@ describe("useAgentStudioSendAction", () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionWorkflowResult>>();
     const startSession = mock(() => startDeferred.promise);
     const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
       startSession,
@@ -329,7 +341,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.mount();
     let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
-      firstSend = state.onSend(createDraft("first"));
+      firstSend = state.onSend(createDraft("first"), "default");
     });
 
     await harness.waitFor((state) => state.isSending);
@@ -346,42 +358,6 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
-  test("blocks concurrent sends in the same context before a render updates state", async () => {
-    const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
-    const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const harness = createHookHarness(useAgentStudioSendAction, {
-      ...createBaseArgs(),
-      startSession,
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    let firstSend: Promise<AgentChatSendResult> | undefined;
-    let secondSend: Promise<AgentChatSendResult> | undefined;
-    await harness.run((state) => {
-      firstSend = state.onSend(createDraft("first"));
-      secondSend = state.onSend(createDraft("second"));
-    });
-
-    await expect(secondSend).resolves.toBe(false);
-    await harness.waitFor((state) => state.isSending);
-
-    await harness.run(async () => {
-      sendDeferred.resolve();
-      await expect(firstSend).resolves.toBe(true);
-    });
-    await harness.waitFor((state) => !state.isSending);
-
-    expect(startSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
-      { kind: "text", text: "first" },
-    ]);
-
-    await harness.unmount();
-  });
-
   test("allows sending in a different active context while another context is unresolved", async () => {
     const firstSendDeferred = createDeferred<void>();
     const sendAgentMessage = mock((session: AgentSessionIdentity) => {
@@ -391,7 +367,7 @@ describe("useAgentStudioSendAction", () => {
       return Promise.resolve(null);
     });
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const harness = createTaskHarness({
       ...createBaseArgs(),
       startSession,
       sendAgentMessage,
@@ -400,7 +376,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.mount();
     let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
-      firstSend = state.onSend(createDraft("first"));
+      firstSend = state.onSend(createDraft("first"), "default");
     });
     await harness.waitFor((state) => state.isSending);
 
@@ -413,56 +389,35 @@ describe("useAgentStudioSendAction", () => {
     await harness.waitFor((state) => !state.isSending);
 
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("second"))).resolves.toBe(true);
+      await expect(state.onSend(createDraft("second"), "default")).resolves.toBe(true);
     });
 
-    await harness.update({
-      ...createBaseArgs(),
-      startSession,
-      sendAgentMessage,
-    });
-    await harness.waitFor((state) => state.isSending);
-    await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("third"))).resolves.toBe(false);
-    });
+    // The first context shows its unresolved send again after a switch back.
+    await harness.update({ ...createBaseArgs(), startSession, sendAgentMessage });
+    expect(harness.getLatest().isSending).toBe(true);
 
     await harness.run(async () => {
       firstSendDeferred.resolve();
       await expect(firstSend).resolves.toBe(true);
     });
+    await harness.waitFor((state) => !state.isSending);
 
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).toHaveBeenCalledTimes(2);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
-      { kind: "text", text: "first" },
-    ]);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-other"), [
-      { kind: "text", text: "second" },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      sessionIdentity("session-existing"),
+      [{ kind: "text", text: "first" }],
+      { mode: "default" },
+    );
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      sessionIdentity("session-other"),
+      [{ kind: "text", text: "second" }],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });
 
-  test("attachment staging failures clear in-flight send state", async () => {
-    const sendAgentMessage = mock(async () => null);
-    hostClient.workspaceStageLocalAttachment = async () => {
-      throw new Error("staging failed");
-    };
-    const harness = createHookHarness(useAgentStudioSendAction, {
-      ...createBaseArgs(),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createAttachmentDraft())).rejects.toThrow("staging failed");
-    });
-
-    expect(harness.getLatest().isSending).toBe(false);
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
   test.each(["workspace", "task", "role"] as const)(
     "cancels staged submission after a %s switch",
     async (context) => {
@@ -478,16 +433,16 @@ describe("useAgentStudioSendAction", () => {
         startSession,
         sendAgentMessage,
       };
-      const harness = createHookHarness(useAgentStudioSendAction, args);
+      const harness = createTaskHarness(args);
       let submitted!: Promise<AgentChatSendResult>;
       try {
         await harness.mount();
         await harness.run((state) => {
-          submitted = state.onSend(createAttachmentDraft());
+          submitted = state.onSend(createAttachmentDraft(), "default");
         });
         await harness.waitFor(() => stage.mock.calls.length === 1);
         await harness.run(async (state) => {
-          expect(await state.onSend(createAttachmentDraft())).toBe(false);
+          expect(await state.onSend(createAttachmentDraft(), "default")).toBe(false);
         });
         const nextArgs: HookArgs = { ...args };
         if (context === "workspace") nextArgs.workspaceId = "workspace-2";

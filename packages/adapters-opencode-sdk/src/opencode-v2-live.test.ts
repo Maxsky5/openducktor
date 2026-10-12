@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInfo, SessionInboxInfo, SessionMessageInfo, V2Event } from "@opencode/client";
 import { z } from "zod";
-import type { AgentSessionHistoryMessage, ManagedMcpServerResolver } from "@openducktor/core";
+import {
+  AgentSessionMessageRefusedError,
+  AgentSessionTurnActiveError,
+  type AgentSessionHistoryMessage,
+  type ManagedMcpServerResolver,
+} from "@openducktor/core";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   hostEventEnvelopeSchema,
@@ -9,7 +14,6 @@ import {
 import { createPrepareOpencodeSessionRuntime } from "./opencode-session-runtime";
 import { OpenCodeOperationError } from "./opencode-client";
 import { createOpenCodeRuntimeProbes } from "./opencode-runtime-probes";
-import { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
 import { projectMessage, projectMessages } from "./opencode-message-projection";
 import type { OpencodeSessionRuntimeSignal } from "./opencode-session-runtime-signals";
@@ -979,7 +983,7 @@ describe("OpenCode V2 live observation", () => {
           { decision: "always" },
           { decision: "reject" },
           { answer: { answer: "Keep this answer" } },
-          {},
+          { delivery: "queue" },
         ]);
         expect(fixture.requests.some(({ url }) => url.pathname === "/api/mcp")).toBe(false);
       } finally {
@@ -1452,13 +1456,18 @@ describe("OpenCode V2 live observation", () => {
           fixture.requests.filter(({ url }) => url.pathname.endsWith("/command")),
         ).toHaveLength(1);
       } else {
-        expect(result).toBeInstanceOf(OpenCodeMessageRejectedError);
-        if (!(result instanceof OpenCodeMessageRejectedError))
-          throw new Error("Expected rejection");
-        expect(result.failure?.runtimeOperationFailure).toMatchObject({
-          ...ref,
-          code: "unsupported_operation",
-          nextAction: expect.stringContaining("idle"),
+        expect(result).toBeInstanceOf(AgentSessionMessageRefusedError);
+        if (!(result instanceof AgentSessionMessageRefusedError))
+          throw new Error("Expected refusal");
+        expect(result.cause).toBeInstanceOf(OpenCodeOperationError);
+        expect(result.cause).toMatchObject({
+          failure: {
+            runtimeOperationFailure: {
+              ...ref,
+              code: "unsupported_operation",
+              nextAction: expect.stringContaining("idle"),
+            },
+          },
         });
         expect(sent).toBe(false);
         expect(fixture.requests.some(({ url }) => url.pathname.endsWith("/command"))).toBe(false);
@@ -1640,6 +1649,61 @@ describe("OpenCode V2 live observation", () => {
       }
     },
   );
+
+  test("reports a prompt as accepted when the event stream showed it before an unreadable answer", async () => {
+    const submitted = Promise.withResolvers<string>();
+    const answer = Promise.withResolvers<Response>();
+    const shown = Promise.withResolvers<void>();
+    const fixture = prepareFixture(({ url, body }) => {
+      if (!url.pathname.endsWith("/prompt")) return undefined;
+      submitted.resolve(z.string().parse(body.id));
+      return answer.promise;
+    });
+    const runtime = await fixture.prepare();
+    const sessionInput = {
+      ...ref,
+      runtimePolicy: { kind: "opencode" as const },
+      sessionScope: { kind: "repository" as const },
+    };
+    try {
+      await runtime.connection.resumeSession(sessionInput);
+      await runtime.startForwarding((signal) => {
+        if (signal.type === "session_event" && signal.event.type === "user_message")
+          shown.resolve();
+      });
+      const sending = runtime.connection.sendUserMessage({
+        ...sessionInput,
+        delivery: "new_turn",
+        submissionId: "submission-early",
+        parts: [{ kind: "text", text: "Early event" }],
+      });
+      const messageId = await submitted.promise;
+      fixture.channel.push({
+        id: "evt_early_enqueued",
+        type: "session.inbox.enqueued",
+        created: 10,
+        durable,
+        data: {
+          sessionID: ref.externalSessionId,
+          inboxID: messageId,
+          item: { type: "user", payload: { text: "Early event" }, delivery: "queue" },
+        },
+      });
+      await shown.promise;
+      // An OK answer that cannot be read gives an unknown result without the earlier event.
+      answer.resolve(Response.json({}));
+
+      expect(await sending).toMatchObject({
+        type: "user_message",
+        messageId,
+        submissionId: "submission-early",
+        state: "queued",
+      });
+    } finally {
+      answer.resolve(Response.json({}));
+      await runtime.release();
+    }
+  });
 
   test.each(
     (["prompt", "compact"] as const).flatMap((submission) =>
@@ -3694,7 +3758,7 @@ describe("OpenCode V2 live observation", () => {
         externalSessionId: ref.externalSessionId,
         timestamp: new Date(40).toISOString(),
       });
-      expect(idle?.turnCompleted).toBe(outcome === "succeeded" ? true : undefined);
+      expect(idle?.turnOutcome).toBe(outcome === "succeeded" ? "completed" : outcome);
       if (outcome === "interrupted")
         expect(idle).toMatchObject({
           interruption: { messageId: "msg_terminal", message: notice },
@@ -4202,5 +4266,62 @@ describe("OpenCode V2 live observation", () => {
       { status: "completed", endedAtMs: 12 },
       { status: "cancelled", endedAtMs: 18 },
     ]);
+  });
+});
+
+describe("OpenCode V2 message delivery while the agent works", () => {
+  test("refuses a new turn while an earlier message waits, and steers without a model change", async () => {
+    const fixture = prepareFixture(({ url, method, body }) => {
+      if (method === "POST" && url.pathname.endsWith("/model")) return noContent();
+      if (!url.pathname.endsWith("/prompt")) return undefined;
+      return response({
+        id: body.id,
+        sessionID: ref.externalSessionId,
+        type: "user",
+        payload: { text: body.text },
+        delivery: body.delivery,
+        time: { created: 20 },
+      });
+    });
+    const runtime = await fixture.prepare();
+    const sessionInput = {
+      ...ref,
+      runtimePolicy: { kind: "opencode" as const },
+      sessionScope: { kind: "repository" as const },
+    };
+    try {
+      await runtime.connection.resumeSession(sessionInput);
+      await runtime.connection.sendUserMessage({
+        ...sessionInput,
+        delivery: "new_turn",
+        parts: [{ kind: "text", text: "First" }],
+      });
+      // OpenCode has not delivered the first message yet, so the session still works.
+      const refused = await runtime.connection
+        .sendUserMessage({
+          ...sessionInput,
+          delivery: "new_turn",
+          parts: [{ kind: "text", text: "Second" }],
+        })
+        .then(
+          () => null,
+          (cause: unknown) => cause,
+        );
+      expect(refused).toBeInstanceOf(AgentSessionTurnActiveError);
+      fixture.requests.length = 0;
+      await runtime.connection.sendUserMessage({
+        ...sessionInput,
+        delivery: "steer",
+        model: { providerId: "openai", modelId: "gpt-5" },
+        parts: [{ kind: "text", text: "Steer" }],
+      });
+      // The running turn keeps its model, so the steer does not switch it.
+      expect(fixture.requests.some(({ url }) => url.pathname.endsWith("/model"))).toBe(false);
+      expect(
+        fixture.requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body,
+      ).toMatchObject({ delivery: "steer", text: "Steer" });
+    } finally {
+      await runtime.release();
+    }
   });
 });

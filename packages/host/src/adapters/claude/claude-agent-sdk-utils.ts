@@ -12,6 +12,7 @@ import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { toAgentSessionSendError } from "../../ports/agent-session-send-error";
 import {
   type ClaudeProtocolObject,
   claudeProtocolObjectSchema,
@@ -47,6 +48,8 @@ export const INIT_TIMEOUT_MS = 60_000;
 export const CONTINUATION_ADMISSION_TIMEOUT_MS = 30_000;
 
 const toClaudeServiceError = (operation: string, cause: unknown): ClaudeAgentSdkServiceError => {
+  const sendError = toAgentSessionSendError(cause);
+  if (sendError) return sendError;
   if (cause instanceof HostValidationError || cause instanceof HostOperationError) {
     return cause;
   }

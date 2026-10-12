@@ -38,11 +38,6 @@ import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 /** Host options for one user message. */
 export type AgentSessionSendOptions = {
   /**
-   * Codex waits for the `turn/start` or `turn/steer` answer. OpenCode returns its native queue or
-   * command receipt, and Claude returns its normal send receipt.
-   */
-  readonly requireNativeAdmission?: boolean;
-  /**
    * The adapter calls it when it sends the native request that carries the message. If the send
    * fails before this call, the runtime did not get the message.
    */

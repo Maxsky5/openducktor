@@ -24,8 +24,10 @@ import { AgentSessionResumeError } from "../../ports/agent-session-resume-error"
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import {
   createAgentSessionLiveEnvelopePublisher,
-  toAgentSessionLiveEnvelope,
+  type AgentSessionLiveEnvelopeDraft,
+  withMessageQueues,
 } from "./agent-session-live-envelope";
+import { createLiveChangePublisher } from "./agent-session-live-change-publisher";
 import { createRuntimeSessionEngagement } from "./agent-session-runtime-engagement";
 import { createLiveStateCoordinator } from "./live-state-coordinator";
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
@@ -60,6 +62,7 @@ export const createAgentSessionLiveStateService = ({
   observeNotificationInput,
   coordinator = createLiveStateCoordinator(),
   persistence,
+  messageQueues,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   // Controls enter the shared runtime only while its current generation is ready.
   const withStartAdmission =
@@ -101,37 +104,28 @@ export const createAgentSessionLiveStateService = ({
     faultLog,
     persistence,
   );
-  const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
-    publishEnvelopeResult(envelope).pipe(
+  const publishEnvelope = (draft: AgentSessionLiveEnvelopeDraft) => {
+    const envelope = withMessageQueues(messageQueues, draft);
+    return publishEnvelopeResult(envelope).pipe(
+      // After a refresh or a runtime release, a snapshot is the only report of each session.
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (envelope.type === "snapshot") messageQueues.observeChanges([envelope]);
+        }),
+      ),
       Effect.flatMap((faultLogFailure) =>
         faultLogFailure ? Effect.fail(faultLogFailure) : Effect.void,
       ),
     );
-  const publishChanges = (changes: ReadonlyArray<AgentSessionLiveAdapterChange>) =>
-    Effect.gen(function* () {
-      let faultLogFailure: HostError | null = null;
-      // Release holds on removal even if an earlier publication fails.
-      for (const change of changes) {
-        if (change.type === "session_removed") workflowLaunchHold.release(change.ref);
-      }
-      for (const change of changes) {
-        const projected = workflowLaunchHold.projectChange(change);
-        if (!projected) continue;
-        const envelope = executionEpisodes.accept(
-          projected.type === "session_upsert"
-            ? { type: "session_upsert", session: projectSnapshot(projected.snapshot) }
-            : toAgentSessionLiveEnvelope(projected),
-        );
-        observeNotificationInput?.(envelope, change.provenance ?? "live");
-        const result = yield* publishEnvelopeResult(envelope, change.provenance);
-        if (faultLogFailure === null && result) {
-          faultLogFailure = result;
-        }
-      }
-      if (faultLogFailure) {
-        return yield* Effect.fail(faultLogFailure);
-      }
-    });
+  };
+  const publishChanges = createLiveChangePublisher({
+    workflowLaunchHold,
+    executionEpisodes,
+    projectSnapshot,
+    publishEnvelopeResult,
+    observeNotificationInput,
+    messageQueues,
+  });
 
   const readAdapterSnapshots = (
     adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
@@ -328,6 +322,7 @@ export const createAgentSessionLiveStateService = ({
               type: "snapshot" as const,
               repoPath: input.repoPath,
               sessions: [...snapshots],
+              messageQueues: messageQueues.listQueues(input.repoPath),
               sequence: liveStateSequence,
             })),
           ),
@@ -469,7 +464,7 @@ export const createAgentSessionLiveStateService = ({
           launchFailures.delete(agentSessionRefKey(input));
           yield* lifecycle
             .requireAttached(adapter.binding)
-            .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage)));
+            .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage, "live_update")));
           return acceptedMessage;
         }),
       )(input),

@@ -59,8 +59,8 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
-  test("appends locally queued live prompts missing from SDK history without duplicating matches", () => {
-    const queuedModel = {
+  test("appends live prompts missing from SDK history without duplicating matches", () => {
+    const liveModel = {
       providerId: "claude",
       modelId: "claude-opus-4-6",
       runtimeKind: "claude" as const,
@@ -98,16 +98,14 @@ describe("claude-agent-sdk-history", () => {
         {
           messageId: "live-user-1",
           parts: [{ kind: "text", text: "First prompt" }],
-          state: "read",
           text: "First prompt",
           timestamp: "2026-06-26T11:03:13.804Z",
         },
         {
           messageId: "live-user-2",
-          model: queuedModel,
-          parts: [{ kind: "text", text: "Queued follow-up" }],
-          state: "queued",
-          text: "Queued follow-up",
+          model: liveModel,
+          parts: [{ kind: "text", text: "Live follow-up" }],
+          text: "Live follow-up",
           timestamp: "2026-06-26T11:03:17.000Z",
         },
       ],
@@ -122,10 +120,10 @@ describe("claude-agent-sdk-history", () => {
       messageId: "live-user-2",
       role: "user",
       timestamp: "2026-06-26T11:03:17.000Z",
-      text: "Queued follow-up",
-      displayParts: [{ kind: "text", text: "Queued follow-up" }],
-      state: "queued",
-      model: queuedModel,
+      text: "Live follow-up",
+      displayParts: [{ kind: "text", text: "Live follow-up" }],
+      state: "read",
+      model: liveModel,
       parts: [],
     });
   });
@@ -352,7 +350,6 @@ describe("claude-agent-sdk-history", () => {
           timestamp: "2026-06-26T11:04:13.804Z",
           model,
           parts,
-          state: "queued",
         },
       ],
     );
@@ -364,7 +361,7 @@ describe("claude-agent-sdk-history", () => {
         timestamp: "2026-06-26T11:04:13.804Z",
         text: "Inspect this file @apps/api/src/app.ts",
         displayParts: parts,
-        state: "queued",
+        state: "read",
         model,
         parts: [],
       },

@@ -1,5 +1,6 @@
 import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import type { AgentEnginePort } from "@openducktor/core";
+import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -96,7 +97,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     workspaceRepoPath: "/tmp/repo",
     workspaceId: "workspace-1",
     adapter,
-
+    messageQueues: createAgentMessageQueuesStore(),
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },

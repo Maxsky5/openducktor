@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentMessageQueueSnapshotSchema } from "./agent-message-delivery-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -169,6 +170,8 @@ export const agentSessionLiveSnapshotEnvelopeSchema = z
     type: z.literal("snapshot"),
     repoPath: nonEmptyStringSchema,
     sessions: z.array(agentSessionLiveSnapshotSchema),
+    /** Every message queue of the repository, including queues of missing sessions. */
+    messageQueues: z.array(agentMessageQueueSnapshotSchema),
     isConnectionSnapshot: z.boolean().optional(),
     sequence: liveStateSequenceSchema.optional(),
   })
@@ -204,6 +207,12 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
       type: z.literal("session_removed"),
       ref: agentSessionLiveRefSchema,
       sequence: liveStateSequenceSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("message_queue_updated"),
+      queue: agentMessageQueueSnapshotSchema,
     })
     .strict(),
   z

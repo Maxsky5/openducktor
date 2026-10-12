@@ -92,7 +92,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       type: "session_idle",
       externalSessionId: event.threadId,
       timestamp,
-      turnCompleted: event.turnCompleted,
+      turnOutcome: event.turnOutcome,
     };
   }
 

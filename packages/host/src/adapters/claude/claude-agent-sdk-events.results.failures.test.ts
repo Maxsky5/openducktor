@@ -1,10 +1,57 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage failed results", () => {
+  test("keeps the turn running when a steered message stops the streamed reply", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.pendingUserTurnCount = 1;
+    session.unreadSteeredUserMessages.set(
+      "steered-1",
+      claudeAcceptedUserMessageFixture({ messageId: "steered-1" }),
+    );
+    const result = (queuedTurnCount: number) =>
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "error_during_execution",
+        uuid: "679c1167-1413-4191-8740-cc3a6abce872",
+        session_id: "session-1",
+        is_error: true,
+        errors: ["[ede_diagnostic] result_type=user"],
+        terminal_reason: "aborted_streaming",
+        queued_turn_count: queuedTurnCount,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      });
+    const handle = (message: ReturnType<typeof result>) =>
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:00.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message,
+      });
+
+    handle(result(1));
+
+    expect(events).toEqual([]);
+    expect(session.activity).toBe("running");
+    expect(session.pendingUserTurnCount).toBe(1);
+
+    handle(result(0));
+
+    expect(events.map((event) => event.type)).toEqual(["turn_error", "session_idle"]);
+  });
+
   test("reports failed Claude results and settles the session idle", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");

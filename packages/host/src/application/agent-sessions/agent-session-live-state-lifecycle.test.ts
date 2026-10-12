@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionScope } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
@@ -27,6 +28,7 @@ describe("live runtime registration lifecycle", () => {
       const runtimeAdmission = createTestRuntimeAdmissionGate();
       runtimeAdmission.open(runtime.kind);
       const service = createAgentSessionLiveStateService({
+        messageQueues: noMessageQueues,
         runtimeAdmission,
         adapterRegistry: {
           ...registry,

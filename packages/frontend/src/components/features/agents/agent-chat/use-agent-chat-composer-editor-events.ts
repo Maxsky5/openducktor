@@ -1,3 +1,4 @@
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -133,7 +134,7 @@ type UseAgentChatComposerEditorEventsArgs = {
   onDraftChange: (draft: AgentChatComposerDraft) => void;
   onEditorInput: () => void;
   onAddFiles: (files: File[]) => void;
-  onSend: () => void;
+  onSend: (mode: AgentMessageSubmitMode) => void;
   latestDraftRef: MutableRefObject<AgentChatComposerDraft>;
   selection: Pick<
     UseAgentChatComposerEditorSelectionResult,

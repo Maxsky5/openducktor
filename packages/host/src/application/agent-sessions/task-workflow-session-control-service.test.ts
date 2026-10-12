@@ -29,7 +29,12 @@ import { createAgentSessionCommandService as createControlService } from "./agen
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
   ControlServiceInput,
-  "taskSessionStart" | "tasks" | "repositoryPolicy" | "persistTaskModel" | "runtime"
+  | "taskSessionStart"
+  | "tasks"
+  | "repositoryPolicy"
+  | "persistTaskModel"
+  | "runtime"
+  | "pauseForStop"
 > & {
   runtime: Omit<
     ControlServiceInput["runtime"],
@@ -38,10 +43,17 @@ type TestControlServiceInput = Omit<
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
+  recordAcceptedMessage?: ControlServiceInput["repositoryPolicy"]["recordAcceptedMessage"];
+  pauseForStop?: ControlServiceInput["pauseForStop"];
 };
 
-const createAgentSessionCommandService = (input: TestControlServiceInput) =>
+const createAgentSessionCommandService = ({
+  recordAcceptedMessage = () => Effect.void,
+  pauseForStop = () => Effect.void,
+  ...input
+}: TestControlServiceInput) =>
   createControlService({
+    pauseForStop,
     taskSessionStart: {
       prepare: () => Effect.die(new Error("unexpected task session preparation")),
       complete: () => Effect.die(new Error("unexpected task session completion")),
@@ -60,7 +72,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       validateRef: () => Effect.void,
       prepareResume: (request) => Effect.succeed({ input: request, save: () => Effect.void }),
       prepareSend: (request) => Effect.succeed(request),
-      recordAcceptedMessage: () => Effect.void,
+      recordAcceptedMessage,
       prepareModelUpdate: (request) =>
         Effect.succeed({ input: request, previousModel: null, save: Effect.succeed(Effect.void) }),
     },
@@ -177,6 +189,7 @@ const workflowSend: AgentSessionControlSendInput = {
   externalSessionId: "session-1",
   sessionScope: workflowStart.sessionScope,
   parts: [{ kind: "text", text: "Continue" }],
+  delivery: "new_turn",
   model: {
     runtimeKind: "opencode",
     providerId: "openai",
@@ -1003,7 +1016,7 @@ describe("createAgentSessionCommandService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
-  test("sends a workflow message through its stored session", async () => {
+  test("sends a workflow message with the stored settings that it captured", async () => {
     const runtimeInputs: AgentSessionControlSendInput[] = [];
     const service = createAgentSessionCommandService({
       canonicalizeRepoPath: () => Effect.succeed("/repo"),
@@ -1032,8 +1045,12 @@ describe("createAgentSessionCommandService", () => {
       taskLifecycle: createTaskSessionLifecycleCoordinator(),
     });
 
+    const { delivery: _delivery, ...content } = workflowSend;
+    const prepared = await Effect.runPromise(
+      service.prepareUserMessage({ ...content, repoPath: "/repo/." }),
+    );
     await expect(
-      Effect.runPromise(service.sendUserMessage({ ...workflowSend, repoPath: "/repo/." })),
+      Effect.runPromise(service.sendUserMessage({ ...prepared, delivery: "new_turn" })),
     ).resolves.toEqual(acceptedUserMessage);
     expect(runtimeInputs).toEqual([
       {
@@ -1042,6 +1059,99 @@ describe("createAgentSessionCommandService", () => {
         model: storedModel,
       },
     ]);
+  });
+
+  test("sends the queued model for a new turn and a steer, but saves only the new-turn model", async () => {
+    const runtimeInputs: AgentSessionControlSendInput[] = [];
+    const saveModels: boolean[] = [];
+    const queuedModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-4.1",
+    };
+    const service = createAgentSessionCommandService({
+      ...createControlDeps(),
+      recordAcceptedMessage: (_ref, _accepted, { saveModel }) =>
+        Effect.sync(() => {
+          saveModels.push(saveModel);
+        }),
+      runtime: {
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
+        sendUserMessage: (input) =>
+          Effect.sync(() => {
+            runtimeInputs.push(input);
+            return acceptedUserMessage;
+          }),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: () => Effect.die(new Error("unexpected stop")),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
+      },
+    });
+    const repositorySend = { ...workflowSend, sessionScope: { kind: "repository" as const } };
+
+    for (const delivery of ["new_turn", "steer"] as const) {
+      // The workflow session stores another model, but the queued model wins.
+      await Effect.runPromise(
+        service.sendUserMessage({ ...workflowSend, model: queuedModel, delivery }),
+      );
+      await Effect.runPromise(service.sendUserMessage({ ...repositorySend, delivery }));
+    }
+
+    expect(
+      runtimeInputs.map((input) => [input.sessionScope.kind, input.delivery, input.model]),
+    ).toEqual([
+      ["workflow", "new_turn", queuedModel],
+      ["repository", "new_turn", workflowSend.model],
+      ["workflow", "steer", queuedModel],
+      ["repository", "steer", workflowSend.model],
+    ]);
+    expect(saveModels).toEqual([true, false]);
+  });
+
+  test("pauses the message queue before it stops the session", async () => {
+    const order: string[] = [];
+    const service = createAgentSessionCommandService({
+      pauseForStop: (ref) => Effect.sync(() => order.push(`pause:${ref.externalSessionId}`)),
+      ...createControlDeps(),
+      runtime: {
+        startSession: () => Effect.die(new Error("unexpected start")),
+        resumeSession: () => Effect.die(new Error("unexpected resume")),
+        continueInterruptedTurn: () =>
+          Effect.die(new Error("unexpected continue interrupted turn")),
+        forkSession: () => Effect.die(new Error("unexpected fork")),
+        sendUserMessage: () => Effect.die(new Error("unexpected send")),
+        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopSession: (input) =>
+          Effect.sync(() => void order.push(`stop:${input.externalSessionId}`)),
+        releaseSession: () => Effect.die(new Error("unexpected release")),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.die(new Error("unexpected session list")),
+        agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
+      },
+    });
+
+    await Effect.runPromise(
+      service.stopSession({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(order).toEqual(["pause:session-1", "stop:session-1"]);
   });
 
   test("rejects a workflow message when the task does not own the session", async () => {

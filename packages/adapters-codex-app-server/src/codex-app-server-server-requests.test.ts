@@ -39,7 +39,6 @@ const createRequestContext = ({
   sessions = new Map<string, CodexSessionState>(),
   activeTurnsBySessionId = new Map(),
   bindActiveTurnId = () => false,
-  flushQueuedUserMessagesLater = () => {},
 }: {
   events: EmittedAgentEvent[];
   pendingInput?: CodexPendingInputState;
@@ -48,7 +47,6 @@ const createRequestContext = ({
   sessions?: Map<string, CodexSessionState>;
   activeTurnsBySessionId?: CodexServerRequestHandlerContext["activeTurnsBySessionId"];
   bindActiveTurnId?: CodexServerRequestHandlerContext["bindActiveTurnId"];
-  flushQueuedUserMessagesLater?: CodexServerRequestHandlerContext["flushQueuedUserMessagesLater"];
 }): CodexServerRequestHandlerContext => ({
   respondServerRequest,
   pendingInput,
@@ -56,7 +54,6 @@ const createRequestContext = ({
   subagents,
   sessionForThreadId: (threadId) => sessions.get(threadId),
   bindActiveTurnId,
-  flushQueuedUserMessagesLater,
   emitSessionEvent: (externalSessionId: string, event: AgentEvent) =>
     events.push({ ...event, emittedExternalSessionId: externalSessionId }),
   emitRetainedSessionFailure: (session, message) =>
@@ -676,11 +673,9 @@ describe("handleCodexServerRequest", () => {
       isTurnSettled: () => false,
       markTurnSettled: () => {},
       handledRequestKeys: new Set(),
-      queuedUserMessages: [],
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     };
     const bindActiveTurnId = mock(() => true);
-    const flushQueuedUserMessagesLater = mock(() => undefined);
 
     await expect(
       handleCodexServerRequest(
@@ -691,7 +686,6 @@ describe("handleCodexServerRequest", () => {
           subagents,
           activeTurnsBySessionId: new Map([[parentSession.threadId, parentActiveTurn]]),
           bindActiveTurnId,
-          flushQueuedUserMessagesLater,
         }),
         parentSession,
         {
@@ -742,7 +736,6 @@ describe("handleCodexServerRequest", () => {
       }),
     );
     expect(bindActiveTurnId).not.toHaveBeenCalled();
-    expect(flushQueuedUserMessagesLater).not.toHaveBeenCalled();
   });
 
   test("scopes synthetic question tool rows to the runtime request instance", async () => {

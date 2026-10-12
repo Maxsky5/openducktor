@@ -1,4 +1,5 @@
 export * from "./agent-image-generation-schemas";
+export * from "./agent-message-delivery-schemas";
 export * from "./agent-engine-schemas";
 export * from "./agent-speed-schemas";
 export * from "./agent-runtime-schemas";

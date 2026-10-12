@@ -36,13 +36,14 @@ describe("Codex safety buffering", () => {
     );
     await flushCodexAdapterWork();
 
-    await adapter.sendUserMessage(
+    const send = adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread/start-runtime-live",
         parts: [{ kind: "text", text: "Start now" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     );
+    await flushCodexAdapterWork();
     emitNotification({
       method: "turn/started",
       params: {
@@ -78,6 +79,7 @@ describe("Codex safety buffering", () => {
     transports.get("runtime-live")?.turnStartDeferred.resolve({
       turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
+    await send;
     unsubscribe();
   });
 });

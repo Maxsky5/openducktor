@@ -7,7 +7,9 @@ export const buildModel = () => ({
   isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
-  busySendBlockedReason: null,
+  steerBlockedReason: null,
+  runningTurnModel: null,
+  messageQueue: null,
   draftScope: {
     key: "draft-1",
     persistence: null,

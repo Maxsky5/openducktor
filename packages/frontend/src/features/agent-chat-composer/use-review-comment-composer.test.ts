@@ -142,6 +142,7 @@ describe("sendReviewComments", () => {
     const didSend = await sendReviewComments(
       OWNER,
       draft,
+      "default",
       async (message) => {
         sentText = draftToSerializedText(message);
         return true;
@@ -158,12 +159,15 @@ describe("sendReviewComments", () => {
   test("formats pending comments and sends them when the typed draft is empty", async () => {
     const store = createStore([buildComment("first-comment", 1, "Keep this branch explicit.")]);
     let sentText = "";
+    let sentMode = "";
 
     const didSend = await sendReviewComments(
       OWNER,
       createEmptyComposerDraft(),
-      async (draft) => {
+      "steer",
+      async (draft, mode) => {
         sentText = draftToSerializedText(draft);
+        sentMode = mode;
         expect(store.getStore().getPendingDrafts(OWNER)).toEqual([]);
         return true;
       },
@@ -171,6 +175,7 @@ describe("sendReviewComments", () => {
     );
 
     expect(didSend).toBe(true);
+    expect(sentMode).toBe("steer");
     expect(sentText).toBe("## Git Diff Comments\n\nInstruction: Keep this branch explicit.");
   });
 
@@ -180,6 +185,7 @@ describe("sendReviewComments", () => {
     const didSend = await sendReviewComments(
       OWNER,
       createEmptyComposerDraft(),
+      "default",
       async () => false,
       store.getStore,
     );
@@ -204,6 +210,7 @@ describe("sendReviewComments", () => {
       sendReviewComments(
         OWNER,
         createEmptyComposerDraft(),
+        "default",
         async () => {
           throw new Error("Runtime send failed");
         },
@@ -242,6 +249,7 @@ describe("sendReviewComments", () => {
     await sendReviewComments(
       OWNER,
       createEmptyComposerDraft(),
+      "default",
       async () => {
         store.addDraft(buildComment("new-comment", 4, "Added during send."));
         store.updateDraft("new-comment", "Edited during send.", 5);
@@ -268,18 +276,22 @@ describe("sendReviewComments", () => {
   test("sends the caller draft unchanged when no comment owner exists", async () => {
     const store = createStore([buildComment("first-comment", 1, "Must not be sent.")]);
     let sentText = "";
+    let sentMode = "";
 
     const didSend = await sendReviewComments(
       null,
       createEmptyComposerDraft(),
-      async (draft) => {
+      "steer",
+      async (draft, mode) => {
         sentText = draftToSerializedText(draft);
+        sentMode = mode;
         return true;
       },
       store.getStore,
     );
 
     expect(didSend).toBe(true);
+    expect(sentMode).toBe("steer");
     expect(sentText).toBe("");
     expect(store.getStore().getPendingDrafts(OWNER)).toHaveLength(1);
   });

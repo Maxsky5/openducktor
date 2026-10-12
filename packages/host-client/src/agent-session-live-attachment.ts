@@ -24,6 +24,8 @@ export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => 
       return envelope.ref.repoPath;
     case "transcript_event":
       return envelope.event.sessionRef.repoPath;
+    case "message_queue_updated":
+      return envelope.queue.target.repoPath;
     case "catalog_invalidated":
     case "runtime_notice":
     case "slash_command_catalog_updated":

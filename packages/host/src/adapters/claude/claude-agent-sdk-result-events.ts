@@ -12,6 +12,7 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
+  isClaudeResultStoppedBySteer,
   isFailedClaudeResult,
   lifecycleOutcomeForClaudeResult,
 } from "./claude-agent-sdk-result-lifecycle";
@@ -48,6 +49,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
     | "toolMessageIdsByCallId"
     | "toolNamesByCallId"
     | "toolStartedAtMsByCallId"
+    | "unreadSteeredUserMessages"
   >;
 
 type ClaudeResultEventInput = {
@@ -96,6 +98,9 @@ export const handleClaudeResultMessage = ({
     if (resultText.length === 0) {
       emitFinalAssistantMarker({ emit, message, session, timestamp });
     }
+  }
+  if (isClaudeResultStoppedBySteer(message, (session.unreadSteeredUserMessages?.size ?? 0) > 0)) {
+    return;
   }
   if (failed) {
     clearClaudeManualCompaction(session);

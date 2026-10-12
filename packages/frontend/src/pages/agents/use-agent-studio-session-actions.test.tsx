@@ -1,13 +1,13 @@
 import { createSessionStartWorkflowRunner as createHostRunner } from "@/features/session-start/session-start-orchestration";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
-  type RuntimeDescriptor,
   type WorkflowLaunchRequest,
   type WorkflowLaunchResult,
 } from "@openducktor/contracts";
@@ -16,7 +16,6 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
-  createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
@@ -27,7 +26,6 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -48,7 +46,6 @@ import {
   createAgentSessionFixture,
   createChecksStateContextValue,
   createDeferred,
-  createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -75,28 +72,12 @@ const createSessionRuntimeData = (
   ...overrides,
 });
 
-const createRuntimeCatalog = (
-  runtime: RuntimeDescriptor,
-): NonNullable<HookArgs["selectedSession"]["runtimeData"]["modelCatalog"]> => ({
-  runtime,
-  models: [],
-  defaultModelsByProvider: {},
-  profiles: [],
-});
-
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
 const createComposerDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
   attachments: [],
 });
-
-const COMMAND = {
-  id: "review",
-  trigger: "review",
-  title: "review",
-  hints: ["review"],
-};
 
 const REUSABLE_PROMPT_COMMAND = {
   id: "reusable-prompt:prompt-1",
@@ -105,13 +86,6 @@ const REUSABLE_PROMPT_COMMAND = {
   description: "Review context",
   source: "custom" as const,
   hints: [],
-};
-
-const FILE_REFERENCE = {
-  id: "file-src-main",
-  path: "src/main.ts",
-  name: "main.ts",
-  kind: "code" as const,
 };
 
 const createAttachmentDraft = (input: {
@@ -196,33 +170,7 @@ const selectedSessionArgs = (overrides = {}) => {
   };
 };
 
-const selectedSessionWithRuntimeData = (
-  sessionOverrides: Parameters<typeof selectedSessionArgs>[0],
-  runtimeDataOverrides: Partial<HookArgs["selectedSession"]["runtimeData"]>,
-) => {
-  const { selectedSession } = selectedSessionArgs(sessionOverrides);
-  return {
-    selectedSession: {
-      ...selectedSession,
-      runtimeData: createSessionRuntimeData(runtimeDataOverrides),
-    },
-  };
-};
-
-const QUEUED_RUNTIME_DESCRIPTOR = {
-  ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "opencode",
-  label: "Queued Runtime",
-  capabilities: {
-    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-    sessionLifecycle: {
-      ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-      supportsQueuedUserMessages: true,
-    },
-  },
-} as const;
-
-const TEST_RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR];
+const TEST_RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR];
 
 const createTestRuntimeDefinitionsContextValue = () =>
   createRuntimeDefinitionsContextValue({
@@ -290,18 +238,12 @@ const createHookWrapper = () => {
         QueryProvider,
         { useIsolatedClient: true },
         createElement(
-          HostRuntimeStatusContext.Provider,
-          {
-            value: createHostRuntimeStatusContextValue(),
-          },
+          ChecksStateContext.Provider,
+          { value: checksStateContextValue },
           createElement(
-            ChecksStateContext.Provider,
-            { value: checksStateContextValue },
-            createElement(
-              RuntimeDefinitionsContext.Provider,
-              { value: createTestRuntimeDefinitionsContextValue() },
-              children,
-            ),
+            RuntimeDefinitionsContext.Provider,
+            { value: createTestRuntimeDefinitionsContextValue() },
+            createElement(AgentChatSendProviders, null, children),
           ),
         ),
       ),
@@ -840,7 +782,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend(draft);
+      sendPromise = state.messageDelivery.onSend(draft, "default");
     });
     expect(harness.getLatest().sessionStartModal).toBeNull();
     await harness.run(async () => {
@@ -884,13 +826,15 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend(draft);
+      await state.messageDelivery.onSend(draft, "default");
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "  hello world  " },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      localSessionIdentity("session-existing"),
+      [{ kind: "text", text: "  hello world  " }],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });
@@ -913,116 +857,15 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
+      await expect(state.messageDelivery.onSend(draft, "default")).resolves.toBe(true);
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith(selectedSessionIdentity, [
-      { kind: "text", text: "  selected-session follow-up  " },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend allows slash-command-only drafts without relying on serialized text", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const draft: AgentChatComposerDraft = {
-      segments: [
-        createTextSegment("", "text-before"),
-        createSlashCommandSegment(COMMAND, "slash-1"),
-        createTextSegment("", "text-after"),
-      ],
-      attachments: [],
-    };
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "slash_command", command: COMMAND },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend expands reusable prompt slash commands to normal text with arguments", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const draft: AgentChatComposerDraft = {
-      segments: [
-        createTextSegment("", "text-before"),
-        createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash-1"),
-        createTextSegment(" src/foo.ts ", "text-after"),
-      ],
-      attachments: [],
-    };
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      reusablePrompts: [
-        {
-          id: "prompt-1",
-          name: "review",
-          description: "Review context",
-          content: "Review this file:\n$ARGUMENTS",
-        },
-      ],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "Review this file:\nsrc/foo.ts" },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend appends reusable prompt arguments when no placeholder is present", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const draft: AgentChatComposerDraft = {
-      segments: [
-        createTextSegment("", "text-before"),
-        createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash-1"),
-        createTextSegment(" src/foo.ts ", "text-after"),
-      ],
-      attachments: [],
-    };
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      reusablePrompts: [
-        {
-          id: "prompt-1",
-          name: "review",
-          description: "Review context",
-          content: "Review this carefully.",
-        },
-      ],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "Review this carefully.\nsrc/foo.ts" },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      selectedSessionIdentity,
+      [{ kind: "text", text: "  selected-session follow-up  " }],
+      { mode: "default" },
+    );
 
     await harness.unmount();
   });
@@ -1047,308 +890,9 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).rejects.toThrow(
+      await expect(state.messageDelivery.onSend(draft, "default")).rejects.toThrow(
         'Reusable prompt "review" is no longer available.',
       );
-    });
-
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("onSend allows file-reference-only drafts without relying on serialized text", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const draft: AgentChatComposerDraft = {
-      segments: [
-        createTextSegment("", "text-before"),
-        createFileReferenceSegment(FILE_REFERENCE, "file-1"),
-        createTextSegment("", "text-after"),
-      ],
-      attachments: [],
-    };
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "file_reference", file: FILE_REFERENCE },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend allows busy follow-ups when the runtime supports queued user messages", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionWithRuntimeData(
-        {
-          externalSessionId: "session-existing",
-          status: "running",
-        },
-        {
-          modelCatalog: createRuntimeCatalog({
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: true,
-              },
-            },
-          }),
-        },
-      ),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
-    expect(harness.getLatest().busySendBlockedReason).toBeNull();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "hello world" },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend allows queued follow-ups while a starting loaded session is being prepared", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionWithRuntimeData(
-        {
-          externalSessionId: "session-existing",
-          status: "starting",
-        },
-        {
-          modelCatalog: createRuntimeCatalog({
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: true,
-              },
-            },
-          }),
-        },
-      ),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toBeNull();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello while starting"))).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "hello while starting" },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend blocks busy follow-ups when the runtime does not support queued user messages", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionWithRuntimeData(
-        {
-          externalSessionId: "session-existing",
-          status: "running",
-        },
-        {
-          modelCatalog: createRuntimeCatalog({
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          }),
-        },
-      ),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toContain(
-      "does not support queued messages while the session is working",
-    );
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
-    });
-
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("onSend does not block busy follow-ups when runtime support must be resolved from definitions", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-        runtimeKind: "opencode",
-      }),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
-    expect(harness.getLatest().busySendBlockedReason).toBeNull();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "hello world" },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend blocks busy follow-ups when runtime support cannot be resolved", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-        runtimeKind: "opencode",
-      }),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toContain(
-      "does not support queued messages while the session is working",
-    );
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
-    });
-
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("onSend re-enables busy follow-ups when queued-message support becomes available", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionWithRuntimeData(
-        {
-          externalSessionId: "session-existing",
-          status: "running",
-        },
-        {
-          modelCatalog: createRuntimeCatalog({
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          }),
-        },
-      ),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toContain(
-      "does not support queued messages while the session is working",
-    );
-
-    await harness.update({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({
-        externalSessionId: "session-existing",
-        status: "running",
-        runtimeKind: "opencode",
-      }),
-      sendAgentMessage,
-    });
-
-    expect(harness.getLatest().busySendBlockedReason).toBeNull();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "hello world" },
-    ]);
-
-    await harness.unmount();
-  });
-
-  test("onSend uses loaded session runtime support for busy follow-ups", async () => {
-    const sendAgentMessage = mock(async () => null);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionWithRuntimeData(
-        {
-          externalSessionId: "session-existing",
-          status: "running",
-          runtimeKind: "opencode",
-        },
-        {
-          modelCatalog: createRuntimeCatalog({
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          }),
-        },
-      ),
-      runtimeDefinitions: [],
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toContain(
-      "does not support queued messages while the session is working",
-    );
-    await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -1389,7 +933,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(false);
+      await expect(state.messageDelivery.onSend(draft, "default")).resolves.toBe(false);
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -1413,101 +957,20 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
     await harness.run(async (state) => {
-      sendPromise = state.onSend(draft);
+      sendPromise = state.messageDelivery.onSend(draft, "default");
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1, 1_000);
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "  hello world  " },
-    ]);
-    expect(harness.getLatest().isSending).toBe(true);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      localSessionIdentity("session-existing"),
+      [{ kind: "text", text: "  hello world  " }],
+      { mode: "default" },
+    );
+    expect(harness.getLatest().messageDelivery.isSending).toBe(true);
 
     await harness.run(async () => {
       sendDeferred.resolve();
       await sendPromise;
     });
-    await harness.unmount();
-  });
-
-  test("onSend clears sending state when send fails", async () => {
-    const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
-    const draft = createComposerDraft("  hello world  ");
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
-    await harness.run(async (state) => {
-      sendPromise = state.onSend(draft).catch(() => undefined);
-    });
-    expect(harness.getLatest().isSending).toBe(true);
-
-    await harness.run(async () => {
-      sendDeferred.reject(new Error("send failed"));
-      await sendPromise;
-    });
-
-    expect(harness.getLatest().isSending).toBe(false);
-    await harness.unmount();
-  });
-
-  test("onSend allows path-backed attachments when the selected model descriptor supports them", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      ...selectedSessionArgs({ externalSessionId: "session-existing" }),
-      selectedModelDescriptor: {
-        id: "openai/gpt-5",
-        providerId: "openai",
-        providerName: "OpenAI",
-        modelId: "gpt-5",
-        modelName: "GPT-5",
-        variants: ["default"],
-        contextWindow: 200_000,
-        outputLimit: 8_192,
-        attachmentSupport: {
-          image: false,
-          audio: false,
-          video: false,
-          pdf: true,
-        },
-      },
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(
-        state.onSend(
-          createAttachmentDraft({
-            id: "pdf-attachment",
-            name: "brief.pdf",
-            kind: "pdf",
-            mime: "application/pdf",
-            path: "/tmp/brief.pdf",
-          }),
-        ),
-      ).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "please review" },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "pdf-attachment",
-          name: "brief.pdf",
-          kind: "pdf",
-          mime: "application/pdf",
-          path: "/tmp/brief.pdf",
-        },
-      },
-    ]);
-
     await harness.unmount();
   });
 
@@ -1538,7 +1001,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     await harness.run(async (state) => {
       await expect(
-        state.onSend(
+        state.messageDelivery.onSend(
           createAttachmentDraft({
             id: "image-attachment",
             name: "preview.png",
@@ -1546,182 +1009,13 @@ describe("useAgentStudioSessionActions", () => {
             mime: "image/png",
             path: "/tmp/preview.png",
           }),
+          "default",
         ),
       ).resolves.toBe(false);
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();
 
-    await harness.unmount();
-  });
-
-  test("resets transient sending state when switching task context", async () => {
-    const sendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
-    const taskOneDraft = createComposerDraft("  hello world  ");
-    const taskOneSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-      externalSessionId: "session-task-1",
-      status: "stopped",
-    });
-    const taskTwoSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
-      externalSessionId: "session-task-2",
-      status: "stopped",
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(taskOneSession),
-      sessionsForTask: summarizeSessions([taskOneSession]),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-
-    let sendPromise: Promise<AgentChatSendResult> | undefined;
-    await harness.run((state) => {
-      sendPromise = state.onSend(taskOneDraft);
-    });
-
-    await harness.waitFor((state) => state.isSending);
-    expect(harness.getLatest().isSessionWorking).toBe(false);
-
-    await harness.update({
-      ...createBaseArgs(),
-      taskId: "task-2",
-      selectedSession: selectedSessionFromSession(taskTwoSession),
-      sessionsForTask: summarizeSessions([taskTwoSession]),
-      sendAgentMessage,
-    });
-
-    const nextState = harness.getLatest();
-    expect(nextState.isSending).toBe(false);
-    expect(nextState.isSessionWorking).toBe(false);
-
-    await harness.run(async () => {
-      sendDeferred.resolve();
-      await sendPromise;
-    });
-    await harness.unmount();
-  });
-
-  test("restores the in-flight send state after switching away and back", async () => {
-    const firstSendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => firstSendDeferred.promise.then(() => null));
-    const firstDraft = createComposerDraft("  hello world  ");
-    const taskOneSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-      externalSessionId: "session-task-1",
-      status: "stopped",
-    });
-    const taskTwoSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
-      externalSessionId: "session-task-2",
-      status: "stopped",
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(taskOneSession),
-      sessionsForTask: summarizeSessions([taskOneSession]),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-
-    let firstSendPromise: Promise<AgentChatSendResult> | undefined;
-    await harness.run((state) => {
-      firstSendPromise = state.onSend(firstDraft);
-    });
-    await harness.waitFor((state) => state.isSending);
-
-    await harness.update({
-      ...createBaseArgs(),
-      taskId: "task-2",
-      selectedSession: selectedSessionFromSession(taskTwoSession),
-      sessionsForTask: summarizeSessions([taskTwoSession]),
-      sendAgentMessage,
-    });
-    expect(harness.getLatest().isSending).toBe(false);
-
-    await harness.update({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(taskOneSession),
-      sessionsForTask: summarizeSessions([taskOneSession]),
-      sendAgentMessage,
-    });
-
-    await harness.waitFor((state) => state.isSending);
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-
-    await harness.run(async () => {
-      firstSendDeferred.resolve();
-      await firstSendPromise;
-    });
-    await harness.waitFor((state) => !state.isSending);
-    await harness.unmount();
-  });
-
-  test("blocks overlapping sends after returning to an in-flight session", async () => {
-    const firstSendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock(() => firstSendDeferred.promise.then(() => null));
-    const firstDraft = createComposerDraft("  hello world  ");
-    const secondDraft = createComposerDraft("second send");
-    const taskOneSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-      externalSessionId: "session-task-1",
-      status: "stopped",
-    });
-    const taskTwoSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
-      externalSessionId: "session-task-2",
-      status: "stopped",
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(taskOneSession),
-      sessionsForTask: summarizeSessions([taskOneSession]),
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-
-    let firstSendPromise: Promise<AgentChatSendResult> | undefined;
-    await harness.run((state) => {
-      firstSendPromise = state.onSend(firstDraft);
-    });
-    await harness.waitFor((state) => state.isSending);
-
-    await harness.update({
-      ...createBaseArgs(),
-      taskId: "task-2",
-      selectedSession: selectedSessionFromSession(taskTwoSession),
-      sessionsForTask: summarizeSessions([taskTwoSession]),
-      sendAgentMessage,
-    });
-    expect(harness.getLatest().isSending).toBe(false);
-
-    await harness.update({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(taskOneSession),
-      sessionsForTask: summarizeSessions([taskOneSession]),
-      sendAgentMessage,
-    });
-    await harness.waitFor((state) => state.isSending);
-
-    await harness.run(async (state) => {
-      await state.onSend(secondDraft);
-    });
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().isSending).toBe(true);
-
-    await harness.run(async () => {
-      firstSendDeferred.resolve();
-      await firstSendPromise;
-    });
-    await harness.waitFor((state) => !state.isSending);
     await harness.unmount();
   });
 
@@ -1747,9 +1041,9 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend(createComposerDraft("hello world"));
+      sendPromise = state.messageDelivery.onSend(createComposerDraft("hello world"), "default");
     });
-    await harness.waitFor((state) => state.isSending);
+    await harness.waitFor((state) => state.messageDelivery.isSending);
     expect(harness.getLatest().isSessionWorking).toBe(false);
     expect(harness.getLatest().canStopSession).toBe(false);
 
@@ -1798,11 +1092,11 @@ describe("useAgentStudioSessionActions", () => {
 
     let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend(draft);
+      sendPromise = state.messageDelivery.onSend(draft, "default");
     });
     expect(harness.getLatest().sessionStartModal).toBeNull();
 
-    await harness.waitFor((state) => state.isSending);
+    await harness.waitFor((state) => state.messageDelivery.isSending);
 
     await harness.update({
       ...createBaseArgs(),
@@ -1815,45 +1109,15 @@ describe("useAgentStudioSessionActions", () => {
       sendAgentMessage,
     });
 
-    expect(harness.getLatest().isSending || harness.getLatest().isStarting).toBe(true);
+    expect(harness.getLatest().messageDelivery.isSending || harness.getLatest().isStarting).toBe(
+      true,
+    );
 
     await harness.run(async () => {
       sendDeferred.resolve();
       await sendPromise;
     });
-    await harness.waitFor((state) => !state.isSending);
-    await harness.unmount();
-  });
-
-  test("onSend reuses loaded session when available", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const updateCalls: Array<Record<string, string | undefined>> = [];
-    const draft = createComposerDraft("  hello world  ");
-    const existingSpecSession = createSession({
-      runtimeKind: "opencode",
-      externalSessionId: "session-existing",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      selectedSession: selectedSessionFromSession(existingSpecSession),
-      sessionsForTask: summarizeSessions([existingSpecSession]),
-      sendAgentMessage,
-      scheduleQueryUpdate: (updates) => {
-        updateCalls.push(updates);
-      },
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
-      { kind: "text", text: "  hello world  " },
-    ]);
-
+    await harness.waitFor((state) => !state.messageDelivery.isSending);
     await harness.unmount();
   });
 
@@ -2192,7 +1456,9 @@ describe("direct prepared submission", () => {
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        expect(await state.onSend(createComposerDraft("draft"))).toBe(true);
+        expect(await state.messageDelivery.onSend(createComposerDraft("draft"), "default")).toBe(
+          true,
+        );
       });
       expect(start).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
@@ -2230,7 +1496,9 @@ describe("direct prepared submission", () => {
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        expect(await state.onSend(createComposerDraft("draft"))).toBe(true);
+        expect(await state.messageDelivery.onSend(createComposerDraft("draft"), "default")).toBe(
+          true,
+        );
       });
       expect(start).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
@@ -2257,9 +1525,9 @@ describe("direct prepared submission", () => {
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
-          "Invalid task target branch",
-        );
+        await expect(
+          state.messageDelivery.onSend(createComposerDraft("draft"), "default"),
+        ).rejects.toThrow("Invalid task target branch");
       });
       expect(start).not.toHaveBeenCalled();
       expect(send).not.toHaveBeenCalled();
@@ -2286,9 +1554,9 @@ describe("direct prepared submission", () => {
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
-          "Repository settings are unavailable",
-        );
+        await expect(
+          state.messageDelivery.onSend(createComposerDraft("draft"), "default"),
+        ).rejects.toThrow("Repository settings are unavailable");
       });
       expect(start).not.toHaveBeenCalled();
       expect(send).not.toHaveBeenCalled();
@@ -2328,7 +1596,9 @@ describe("direct prepared submission", () => {
       const harness = createHookHarness(args);
       await harness.mount();
       await harness.run(async (state) => {
-        expect(await state.onSend(createComposerDraft("exact draft"))).toBe(true);
+        expect(
+          await state.messageDelivery.onSend(createComposerDraft("exact draft"), "default"),
+        ).toBe(true);
       });
       expect(harness.getLatest().sessionStartModal).toBeNull();
       expect(start).toHaveBeenCalledTimes(1);
@@ -2355,9 +1625,9 @@ describe("direct prepared submission", () => {
     });
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
-        "Select an available runtime and model",
-      );
+      await expect(
+        state.messageDelivery.onSend(createComposerDraft("draft"), "default"),
+      ).rejects.toThrow("Select an available runtime and model");
     });
     expect(start).not.toHaveBeenCalled();
     expect(harness.getLatest().sessionStartModal).toBeNull();
@@ -2380,7 +1650,9 @@ describe("direct prepared submission", () => {
     const harness = createHookHarness(args);
     await harness.mount();
     await harness.run(async (state) => {
-      expect(await state.onSend(createComposerDraft("recover me"))).toEqual(
+      expect(
+        await state.messageDelivery.onSend(createComposerDraft("recover me"), "default"),
+      ).toEqual(
         expect.objectContaining({
           kind: "recover_draft",
           error: expect.objectContaining({ message: "send failed" }),
@@ -2394,7 +1666,9 @@ describe("direct prepared submission", () => {
       continueInterruptedTurn: async () => undefined,
     });
     await harness.run(async (state) => {
-      expect(await state.onSend(createComposerDraft("recover me"))).toBe(true);
+      expect(await state.messageDelivery.onSend(createComposerDraft("recover me"), "default")).toBe(
+        true,
+      );
     });
     expect(start).toHaveBeenCalledTimes(1);
     await harness.unmount();
@@ -2482,7 +1756,9 @@ describe("prepared composer catalog refresh", () => {
               catalog.models[0]?.variants[0],
         );
         await harness.run(async ({ actions }) => {
-          await expect(actions.onSend(createComposerDraft("draft"))).rejects.toThrow("unavailable");
+          await expect(
+            actions.messageDelivery.onSend(createComposerDraft("draft"), "default"),
+          ).rejects.toThrow("unavailable");
         });
         expect(harness.getLatest().composer.selectionForNewSession).toEqual(selected);
         expect(harness.getLatest().actions.sessionStartModal).toBeNull();
@@ -2516,7 +1792,7 @@ describe("direct submission context isolation", () => {
       await harness.mount();
       let submitted!: Promise<AgentChatSendResult>;
       await harness.run((state) => {
-        submitted = state.onSend(createComposerDraft("original"));
+        submitted = state.messageDelivery.onSend(createComposerDraft("original"), "default");
       });
       await harness.waitFor(() => start.mock.calls.length === 1);
       await harness.update({
@@ -2560,11 +1836,13 @@ describe("direct submission context isolation", () => {
       try {
         await harness.mount();
         await harness.run((state) => {
-          submitted = state.onSend(createComposerDraft("original"));
+          submitted = state.messageDelivery.onSend(createComposerDraft("original"), "default");
         });
         await harness.waitFor(() => start.mock.calls.length === 1);
         await harness.run(async (state) => {
-          expect(await state.onSend(createComposerDraft("duplicate"))).toBe(false);
+          expect(
+            await state.messageDelivery.onSend(createComposerDraft("duplicate"), "default"),
+          ).toBe(false);
         });
         const nextArgs: HookArgs = { ...args };
         if (context === "workspace") {
@@ -2580,7 +1858,7 @@ describe("direct submission context isolation", () => {
           nextArgs.launchActionId = "planner_initial";
         }
         await harness.update(nextArgs);
-        expect(harness.getLatest().isSending).toBe(false);
+        expect(harness.getLatest().messageDelivery.isSending).toBe(false);
         expect(harness.getLatest().isStarting).toBe(false);
         await harness.run(() => {
           creation.resolve(sessionIdentity("original"));
@@ -2590,7 +1868,7 @@ describe("direct submission context isolation", () => {
           { kind: "text", text: "original" },
         ]);
         expect(navigation).not.toHaveBeenCalled();
-        expect(harness.getLatest().isSending).toBe(false);
+        expect(harness.getLatest().messageDelivery.isSending).toBe(false);
         await harness.run(async () => {
           sending.resolve();
           expect(await submitted).toBe(true);
@@ -2663,7 +1941,10 @@ describe("first task draft send", () => {
       try {
         let result: AgentChatSendResult | undefined;
         await harness.run(async (state) => {
-          result = await state.onSend(createComposerDraft("First instruction"));
+          result = await state.messageDelivery.onSend(
+            createComposerDraft("First instruction"),
+            "default",
+          );
         });
         expect(result).toEqual({
           kind: "recover_draft",
@@ -2713,7 +1994,10 @@ describe("first task draft send", () => {
     try {
       let result: AgentChatSendResult | undefined;
       await harness.run(async (state) => {
-        result = await state.onSend(createComposerDraft("First instruction"));
+        result = await state.messageDelivery.onSend(
+          createComposerDraft("First instruction"),
+          "default",
+        );
       });
       expect(result).toBe(true);
       expect(launch).toHaveBeenCalledTimes(1);
@@ -2747,9 +2031,9 @@ describe("first task draft send", () => {
     await harness.mount();
     try {
       await harness.run(async (state) => {
-        await expect(state.onSend(createComposerDraft("First instruction"))).rejects.toThrow(
-          message,
-        );
+        await expect(
+          state.messageDelivery.onSend(createComposerDraft("First instruction"), "default"),
+        ).rejects.toThrow(message);
       });
       expect(launch).toHaveBeenCalledTimes(1);
       expect(send).not.toHaveBeenCalled();

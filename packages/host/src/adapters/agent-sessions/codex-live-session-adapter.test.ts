@@ -1,5 +1,9 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
-import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
+import {
+  AgentSessionLiveRegistration,
+  type AgentSessionSendOptions,
+} from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import { CodexMessageAcceptedError } from "@openducktor/adapters-codex-app-server";
 import type {
@@ -26,9 +30,17 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import {
+  AgentSessionMessageAcceptanceUnknownError,
+  AgentSessionTurnActiveError,
+  interruptedTurnResumeError,
+} from "@openducktor/core";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import {
+  AgentSessionAcceptanceUnknownError,
+  AgentSessionBusyError,
+  AgentSessionMessageAcceptedError,
+} from "../../ports/agent-session-send-error";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
@@ -199,7 +211,7 @@ const createControllerHarness = ({
   const liveContextLoads: unknown[] = [];
   const policyBoundContextLoads: unknown[] = [];
   const sessionDiffLoads: unknown[] = [];
-  const sendOptions: Array<{ requireNativeAdmission?: boolean } | undefined> = [];
+  const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
   const controlInputs: AgentControlInputs = {
     starts: [],
     resumes: [],
@@ -348,7 +360,7 @@ const createControllerHarness = ({
         },
         sendUserMessage: async (
           input: SendAgentUserMessageInput,
-          options?: { requireNativeAdmission?: boolean },
+          options?: AgentSessionSendOptions,
         ) => {
           controlInputs.sends.push(input);
           sendOptions.push(options);
@@ -766,6 +778,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const result = await Effect.runPromise(
       Effect.result(
         prepared.adapter.sendUserMessage({
+          delivery: "new_turn",
           ...ref,
           sessionScope: { kind: "repository" },
           parts: [{ kind: "text", text: "Hello" }],
@@ -887,6 +900,77 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
   });
 
+  const admittedMessage = {
+    type: "user_message" as const,
+    externalSessionId: "thread-1",
+    timestamp: "2026-07-16T10:02:00.000Z",
+    messageId: "message-1",
+    message: "Hello",
+    parts: [{ kind: "text" as const, text: "Hello" }],
+    state: "read" as const,
+  };
+
+  test.each([
+    ["busy", () => new AgentSessionTurnActiveError("thread-1"), AgentSessionBusyError, {}],
+    [
+      "unknown",
+      () =>
+        new AgentSessionMessageAcceptanceUnknownError({
+          externalSessionId: "thread-1",
+          messageId: "message-1",
+          cause: new Error("Connection closed."),
+        }),
+      AgentSessionAcceptanceUnknownError,
+      { messageId: "message-1" },
+    ],
+    [
+      // Codex admitted the message before a later failure, so it stays accepted.
+      "accepted",
+      () => new CodexMessageAcceptedError(admittedMessage, new Error("Owner released")),
+      AgentSessionMessageAcceptedError,
+      { failure: { sessionRef: ref, stage: "live_update", acceptedMessage: admittedMessage } },
+    ],
+  ] as const)(
+    "reports a %s delivery as a typed host error",
+    async (_label, error, expected, fields) => {
+      const harness = createControllerHarness();
+      const prepared = await Effect.runPromise(
+        createCodexLiveSessionAdapterPreparer({
+          resolveMcpServerConfig,
+          prepareImageGenerations: async () => {
+            throw new Error("Unexpected image preparation");
+          },
+          liveSessionLifecycle: createLifecycle([]),
+          codexAppServer,
+          onBackgroundFailure: noBackgroundFailure,
+          resolveRuntimePolicy,
+          createController: (options) => ({
+            ...harness.createController(options),
+            sendUserMessage: async () => {
+              throw error();
+            },
+          }),
+        })(runtime),
+      );
+
+      const result = await Effect.runPromise(
+        Effect.result(
+          prepared.adapter.sendUserMessage({
+            delivery: "new_turn",
+            ...ref,
+            sessionScope: { kind: "repository" },
+            parts: [{ kind: "text", text: "Hello" }],
+          }),
+        ),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected a delivery failure");
+      expect(result.failure).toBeInstanceOf(expected);
+      expect(result.failure).toMatchObject(fields);
+    },
+  );
+
   test("resolves and injects Codex policy behind the normalized control boundary", async () => {
     const policyScopes: AgentSessionScope[] = [];
     const harness = createControllerHarness();
@@ -933,6 +1017,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(
       prepared.adapter.sendUserMessage({
+        delivery: "new_turn",
         ...ref,
         sessionScope,
         parts: [{ kind: "text", text: "Hello" }],
@@ -971,12 +1056,16 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    const send = { ...ref, sessionScope, parts: [{ kind: "text" as const, text: "Hello" }] };
+    const send = {
+      ...ref,
+      sessionScope,
+      parts: [{ kind: "text" as const, text: "Hello" }],
+      delivery: "new_turn" as const,
+    };
+    const onSent = () => undefined;
     await Effect.runPromise(prepared.adapter.sendUserMessage(send));
-    await Effect.runPromise(
-      prepared.adapter.sendUserMessage(send, { requireNativeAdmission: true }),
-    );
-    expect(harness.sendOptions).toEqual([undefined, { requireNativeAdmission: true }]);
+    await Effect.runPromise(prepared.adapter.sendUserMessage(send, { onSent }));
+    expect(harness.sendOptions).toEqual([undefined, { onSent }]);
   });
 
   test("requires scope and accepts repository scope for direct Codex controls", async () => {
@@ -1010,6 +1099,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     ).rejects.toThrow("Codex live-session control 'send-user-message' requires session scope.");
     await Effect.runPromise(
       prepared.adapter.sendUserMessage({
+        delivery: "new_turn",
         ...ref,
         sessionScope: { kind: "repository" },
         parts: [{ kind: "text", text: "Hello" }],
@@ -1066,6 +1156,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   test("releases through the host lifecycle without re-entering its coordinator", async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,
@@ -1206,6 +1297,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,
@@ -1738,6 +1830,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
   test(`publishes settled image output before ${action} removes the session`, async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
       faultLog: () => Effect.void,

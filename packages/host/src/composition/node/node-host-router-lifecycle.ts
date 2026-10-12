@@ -39,6 +39,7 @@ export const createNodeHostRouterLifecycle = ({
   initializeAdmission,
   shutdownWorkspaceImports,
   shutdownWorkspaceSessionPersistence,
+  shutdownMessageDeliveries,
   unsubscribeImportCatalogs,
   notifications,
   autopilot,
@@ -59,6 +60,7 @@ export const createNodeHostRouterLifecycle = ({
   initializeAdmission: () => Effect.Effect<void, WorkspaceSettingsError>;
   shutdownWorkspaceImports: () => Effect.Effect<void, HostOperationErrorAggregate>;
   shutdownWorkspaceSessionPersistence: () => Effect.Effect<void>;
+  shutdownMessageDeliveries: () => Effect.Effect<void>;
   unsubscribeImportCatalogs: (() => void) | undefined;
   notifications: Pick<NotificationService, "initialize" | "dispose">;
   autopilot: Pick<AutopilotService, "initialize" | "dispose">;
@@ -146,6 +148,7 @@ export const createNodeHostRouterLifecycle = ({
               { label: "Autopilot", run: autopilot.dispose },
               { label: "notifications", run: notifications.dispose },
               { label: "workspace session imports", run: shutdownWorkspaceImports },
+              { label: "queued message deliveries", run: shutdownMessageDeliveries },
               { label: "session launches", run: () => sessionLaunches.shutdown() },
               { label: "workspace session renames", run: shutdownWorkspaceSessionPersistence },
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },

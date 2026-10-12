@@ -55,6 +55,7 @@ import {
   createAgentChatModelFixture,
   createAgentStudioHeaderModelFixture,
 } from "./use-agents-page-shell-model.test-support";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 type RepoSettingsStateContract = ReturnType<typeof repoSettingsModule.useAgentStudioRepoSettings>;
 
@@ -245,19 +246,7 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
-let agentOperations: AgentOperationsContextValue = {
-  describeGeneratedImages: async () => {
-    throw new Error("Unexpected image metadata read");
-  },
-  beginGeneratedImageBatch: async () => {
-    throw new Error("Unexpected beginGeneratedImageBatch");
-  },
-  releaseGeneratedImageBatch: async () => {
-    throw new Error("Unexpected releaseGeneratedImageBatch");
-  },
-  readGeneratedImage: async () => {
-    throw new Error("Unexpected generated image read");
-  },
+let agentOperations: AgentOperationsContextValue = createAgentOperationsFixture({
   readSessionTodos: mock(async () => []),
   readSessionHistory: mock(async () => []),
   loadAgentSessionHistory: mock(async () => null),
@@ -268,7 +257,7 @@ let agentOperations: AgentOperationsContextValue = {
   updateAgentSessionModel: mock(async () => undefined),
   replyAgentApproval: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
-};
+});
 let querySyncState: QuerySyncState = {
   taskIdParam: "task-1",
   sessionExternalIdParam: selectedSessionKey(),
@@ -711,19 +700,7 @@ beforeEach(async () => {
     },
     isLoadingRepoSettings: false,
   };
-  agentOperations = {
-    describeGeneratedImages: async () => {
-      throw new Error("Unexpected image metadata read");
-    },
-    beginGeneratedImageBatch: async () => {
-      throw new Error("Unexpected beginGeneratedImageBatch");
-    },
-    releaseGeneratedImageBatch: async () => {
-      throw new Error("Unexpected releaseGeneratedImageBatch");
-    },
-    readGeneratedImage: async () => {
-      throw new Error("Unexpected generated image read");
-    },
+  agentOperations = createAgentOperationsFixture({
     readSessionTodos: mock(async () => []),
     readSessionHistory: mock(async () => []),
     loadAgentSessionHistory: mock(async () => null),
@@ -734,7 +711,7 @@ beforeEach(async () => {
     updateAgentSessionModel: mock(async () => undefined),
     replyAgentApproval: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),
-  };
+  });
   querySyncState = {
     taskIdParam: "task-1",
     sessionExternalIdParam: selectedSessionKey(),

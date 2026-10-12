@@ -9,12 +9,16 @@ import type {
   AgentSessionAssociation,
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
-  AgentSessionControlSendInput,
+  AgentMessageQueueManageInput,
+  AgentMessageQueueManageResult,
+  AgentMessageSubmitInput,
+  AgentMessageSubmitResult,
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
   AgentSessionModelSettings,
   AgentSessionScope,
   AgentSessionWorkflowScope,
+  AgentUserMessageDelivery,
   AgentSessionHistoryMessage as ContractsAgentSessionHistoryMessage,
   FileDiff,
   FileStatus,
@@ -144,8 +148,15 @@ export type ForkAgentSessionInput = StartAgentSessionInput & {
 
 export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
   parts: AgentUserMessagePart[];
+  /**
+   * The host steers only parts that `steeringPartsBlockedReason` allows, so adapters do not check
+   * them again.
+   */
+  delivery: AgentUserMessageDelivery;
   resolvedQuestionRequestIds?: string[];
   model?: AgentModelSelection;
+  /** The adapter copies it to the accepted user message, so readers can correlate both. */
+  submissionId?: string;
 };
 
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
@@ -287,7 +298,9 @@ export interface AgentSessionControlPort {
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
   updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
-  sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentInput>;
+  /** Sends a message now, or adds it to the session queue while the agent works. */
+  submitUserMessage(input: AgentMessageSubmitInput): Promise<AgentMessageSubmitResult>;
+  manageMessageQueue(input: AgentMessageQueueManageInput): Promise<AgentMessageQueueManageResult>;
   stopSession(input: SessionRef): Promise<void>;
 }
 

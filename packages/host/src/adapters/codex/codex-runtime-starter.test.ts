@@ -49,8 +49,8 @@ describe("createCodexRuntimeStarter", () => {
           codexAppServer,
           toolDiscovery: stubTools({ codex: codexBinary }),
           runtimeId: () => "runtime-startup-failure",
-          // The fake app-server must start and write its pid before the initialize timeout,
-          // also while the full suite runs in parallel.
+          // The fake wrapper writes its pid before the app-server starts, so a slow start
+          // still leaves a process to check.
           requestTimeoutMs: stage === "initialize" ? 3_000 : 4_000,
           liveSessionLifecycle: {
             registerRuntimeAdapter: () =>

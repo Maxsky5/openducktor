@@ -1,3 +1,4 @@
+import type { AgentSessionUserMessagePart } from "@openducktor/contracts";
 import type {
   AgentAttachmentKind,
   AgentFileReference,
@@ -697,6 +698,34 @@ export const resolveDraftToUserMessageParts = async (
   );
 
   return [...parts, ...attachmentParts];
+};
+
+/** Builds an editable draft from message parts. Attachments keep their staged paths. */
+export const userMessagePartsToComposerDraft = (
+  parts: readonly AgentSessionUserMessagePart[],
+): AgentChatComposerDraft => {
+  const segments = parts.flatMap((part): AgentChatComposerSegment[] => {
+    switch (part.kind) {
+      case "text":
+        return [createTextSegment(part.text)];
+      case "slash_command":
+        return [{ id: createSegmentId(), kind: "slash_command", command: part.command }];
+      case "file_reference":
+        return [createFileReferenceSegment(part.file)];
+      case "skill_mention":
+        return [createSkillReferenceSegment(part.skill)];
+      case "subagent_reference":
+        return [createSubagentReferenceSegment(part.subagent)];
+      case "attachment":
+        return [];
+    }
+  });
+  const attachments = parts.flatMap((part): AgentChatComposerAttachment[] => {
+    if (part.kind !== "attachment") return [];
+    const { id, path, name, kind, mime } = part.attachment;
+    return [mime === undefined ? { id, path, name, kind } : { id, path, name, kind, mime }];
+  });
+  return normalizeComposerDraft({ segments, attachments });
 };
 
 export const draftToSerializedText = (draft: AgentChatComposerDraft): string => {

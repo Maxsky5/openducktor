@@ -1,6 +1,7 @@
 import { appQueryClient } from "@/lib/query-client";
 import { generatedImageMetadataSessionKey } from "@/state/queries/agent-generated-image-metadata";
 import type {
+  AcceptedAgentInput as ContractsAcceptedAgentInput,
   AgentRepositorySessionStartInput,
   AgentSessionLiveRef,
   AgentSessionResumeFailureReason,
@@ -125,17 +126,25 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     },
     loadSessionTodos: (input) => hostClient.agentRuntimeLoadSessionTodos(input),
     updateSessionModel: (input) => hostClient.agentSessionControlUpdateModel(input),
-    sendUserMessage: (input) =>
-      hostClient.agentSessionControlSend(input).then(toAcceptedAgentUserMessage),
+    submitUserMessage: async (input) => {
+      const result = await hostClient.agentSessionMessageSubmit(input);
+      return result.kind === "accepted"
+        ? { kind: "accepted", acceptedMessage: toAcceptedAgentUserMessage(result.acceptedMessage) }
+        : result;
+    },
+    manageMessageQueue: async (input) => {
+      const { queue, acceptedMessage } = await hostClient.agentSessionMessageQueueManage(input);
+      return acceptedMessage
+        ? { queue, acceptedMessage: toAcceptedAgentUserMessage(acceptedMessage) }
+        : { queue };
+    },
     stopSession: (input) => hostClient.agentSessionControlStop(input),
     loadSessionDiff: (input) => hostClient.agentRuntimeLoadSessionDiff(input),
     loadFileStatus: (input) => hostClient.agentRuntimeFileStatus(input),
   };
 };
 
-const toAcceptedAgentUserMessage = (
-  event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
-): AcceptedAgentInput => {
+const toAcceptedAgentUserMessage = (event: ContractsAcceptedAgentInput): AcceptedAgentInput => {
   if (event.type === "command_accepted") return event;
   const { model, sessionRef, ...message } = event;
   const acceptedMessage: AcceptedAgentUserMessage = { ...message };

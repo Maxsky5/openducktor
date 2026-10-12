@@ -121,6 +121,19 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   selection.addRange(range);
 };
 
+/** Puts the caret at the end of the last editable segment. Without one, the editor gets focus. */
+export const focusEditorEnd = (editor: HTMLElement): void => {
+  const segments = editor.querySelectorAll<HTMLElement>("[data-segment-id]");
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    if (segment?.isContentEditable) {
+      setCaretOffsetWithinElement(segment, readEditableTextContent(segment).length);
+      return;
+    }
+  }
+  editor.focus();
+};
+
 export const insertTextAtCaretWithinElement = (
   element: HTMLElement,
   text: string,

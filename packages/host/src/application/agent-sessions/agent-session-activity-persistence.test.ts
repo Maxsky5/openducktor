@@ -27,7 +27,12 @@ afterEach(async () => {
 test("restore, metadata reads, and idle connection cleanup keep the saved date", async () => {
   const h = await setup();
   const existing = h.snapshot({ pendingQuestions: [{ requestId: "old", questions: [] }] });
-  await h.observe({ type: "snapshot", repoPath: h.ref.repoPath, sessions: [existing] });
+  await h.observe({
+    type: "snapshot",
+    messageQueues: [],
+    repoPath: h.ref.repoPath,
+    sessions: [existing],
+  });
   await h.observe(
     {
       type: "session_upsert",
@@ -54,7 +59,12 @@ test("restore, metadata reads, and idle connection cleanup keep the saved date",
 
 test("saves turn boundaries without writes for streamed text and keeps the date after restart", async () => {
   const h = await setup();
-  await h.observe({ type: "snapshot", repoPath: h.ref.repoPath, sessions: [h.snapshot()] });
+  await h.observe({
+    type: "snapshot",
+    messageQueues: [],
+    repoPath: h.ref.repoPath,
+    sessions: [h.snapshot()],
+  });
   await h.transcript(
     { type: "user_message", messageId: "user", message: "Continue", parts: [], state: "read" },
     3_000,
@@ -67,14 +77,19 @@ test("saves turn boundaries without writes for streamed text and keeps the date 
   expect(h.writes).toEqual([3_000]);
   await h.transcript({ type: "assistant_message", messageId: "answer", message: "Done" }, 6_000);
   await h.observe({ type: "session_upsert", session: h.snapshot() });
-  await h.transcript({ type: "session_idle", turnCompleted: true }, 7_000);
+  await h.transcript({ type: "session_idle", turnOutcome: "completed" }, 7_000);
   await h.transcript({ type: "session_status", status: { type: "idle" } }, 9_000);
   await h.transcript({ type: "session_finished", message: "Connection stopped" }, 10_000);
   expect(h.writes).toEqual([3_000, 6_000, 7_000]);
   expect(h.updates.at(-1)?.agentSessions[0]?.lastActivityAt).toBe(7_000);
   const restarted = h.restart();
   await Effect.runPromise(
-    restarted.observe({ type: "snapshot", repoPath: h.ref.repoPath, sessions: [h.snapshot()] }),
+    restarted.observe({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: h.ref.repoPath,
+      sessions: [h.snapshot()],
+    }),
   );
   await Effect.runPromise(
     restarted.observe({ type: "session_upsert", session: h.snapshot() }, "baseline"),
@@ -89,7 +104,12 @@ test("new input requests on subagents save the root date, but repeated requests 
     parentExternalSessionId: h.ref.externalSessionId,
     activity: "running",
   });
-  await h.observe({ type: "snapshot", repoPath: h.ref.repoPath, sessions: [h.snapshot(), child] });
+  await h.observe({
+    type: "snapshot",
+    messageQueues: [],
+    repoPath: h.ref.repoPath,
+    sessions: [h.snapshot(), child],
+  });
   const permission = {
     ...child,
     activity: "waiting_for_permission" as const,

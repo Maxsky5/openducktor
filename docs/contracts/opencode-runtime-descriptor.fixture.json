@@ -48,9 +48,11 @@
       "supportsSessionFork": true,
       "forkTargets": ["session"],
       "supportsListLiveSessions": true,
-      "supportsQueuedUserMessages": true,
       "supportsPendingInputSnapshots": true,
       "supportsInterruptedTurnResume": false
+    },
+    "messageDelivery": {
+      "minimumSteeringRuntimeVersion": "2.0.24"
     },
     "history": {
       "loadable": true,

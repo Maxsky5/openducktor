@@ -1,6 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  type AgentMessageQueuesStore,
+  createAgentMessageQueuesStore,
+} from "@/state/agent-message-queues-store";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-history";
@@ -46,6 +50,7 @@ type UseAgentOrchestratorOperationsArgs = {
 
 type UseAgentOrchestratorOperationsResult = {
   sessionStore: AgentSessionsStore;
+  messageQueues: AgentMessageQueuesStore;
   operations: AgentOperationsContextValue;
   historyLoadActions: AgentSessionHistoryLoadContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
@@ -67,6 +72,8 @@ export function useAgentOrchestratorOperations({
     [dependencies],
   );
   const { queryClient, hostPort, liveSessionHostPort } = resolvedDependencies;
+  // The host owns every queue for the app lifetime. This store only mirrors them.
+  const [messageQueues] = useState(createAgentMessageQueuesStore);
   const { sessionStore, taskRef, currentWorkspaceRepoPathRef, repoEpochRef, sessionTurnState } =
     useOrchestratorSessionState({
       workspaceRepoPath,
@@ -167,6 +174,7 @@ export function useAgentOrchestratorOperations({
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveNotices: sessionStore.applyLiveNotices,
+    messageQueues,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
     queryClient,
@@ -178,6 +186,7 @@ export function useAgentOrchestratorOperations({
         workspaceRepoPath,
         workspaceId,
         adapter: agentEngine,
+        messageQueues,
         readSessionSnapshot: sessionStore.getSessionSnapshot,
         taskRef,
         repoEpochRef,
@@ -194,6 +203,7 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       currentWorkspaceRepoPathRef,
       closeBackgroundQuestions,
+      messageQueues,
       invalidateSessionStopQueries,
       queryBackedPromptOverrides,
       repoEpochRef,
@@ -265,10 +275,11 @@ export function useAgentOrchestratorOperations({
   return useMemo<UseAgentOrchestratorOperationsResult>(
     () => ({
       sessionStore,
+      messageQueues,
       operations,
       historyLoadActions,
       readModelState,
     }),
-    [historyLoadActions, operations, readModelState, sessionStore],
+    [historyLoadActions, messageQueues, operations, readModelState, sessionStore],
   );
 }

@@ -242,24 +242,26 @@ const EditorHarness = ({
         editorRef={editorRef}
         onEditorInput={resizeComposerEditor}
         onSend={onSend ?? (() => {})}
-        supportsSlashCommands={true}
-        supportsFileSearch={supportsFileSearch}
-        supportsSubagentReferences={supportsSubagentReferences}
-        slashCommands={slashCommands}
-        slashCommandsError={slashCommandsError}
-        isSlashCommandsLoading={false}
-        searchFiles={searchFiles}
-        supportsSkillReferences={supportsSkillReferences}
-        skills={skills}
-        skillsError={skillsError}
-        isSkillsLoading={isSkillsLoading}
-        subagents={subagents}
-        subagentsError={subagentsError}
-        isSubagentsLoading={isSubagentsLoading}
-        retrySlashCommands={null}
-        retrySkills={null}
-        retrySubagents={null}
-        onCatalogMenuOpen={onCatalogMenuOpen}
+        catalog={{
+          supportsSlashCommands: true,
+          supportsFileSearch,
+          supportsSubagentReferences,
+          slashCommands,
+          slashCommandsError,
+          isSlashCommandsLoading: false,
+          searchFiles,
+          supportsSkillReferences,
+          skills,
+          skillsError,
+          isSkillsLoading,
+          subagents,
+          subagentsError,
+          isSubagentsLoading,
+          retrySlashCommands: null,
+          retrySkills: null,
+          retrySubagents: null,
+          onCatalogMenuOpen,
+        }}
         onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>

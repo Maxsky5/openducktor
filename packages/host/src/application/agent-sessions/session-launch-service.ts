@@ -112,7 +112,6 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
         const reply = yield* Effect.result(
           deps.runtime.sendUserMessage(input, {
-            requireNativeAdmission: true,
             onSent: () => {
               sent = true;
             },

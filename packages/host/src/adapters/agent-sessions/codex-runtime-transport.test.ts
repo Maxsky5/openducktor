@@ -2,11 +2,13 @@ import { expect, mock, test } from "bun:test";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
+  type CodexJsonRpcRequest,
 } from "@openducktor/adapters-codex-app-server";
 import { DEFAULT_CODEX_RUNTIME_POLICY, type CodexAppServerThread } from "@openducktor/contracts";
-import { AgentRuntimeQueryError } from "@openducktor/core";
+import { AgentRuntimeQueryError, AgentSessionMessageRefusedError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { CodexAppServerRpcError } from "../../ports/codex-app-server-port";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter, toRuntimeQueryError } from "./runtime-query-adapter";
@@ -143,6 +145,33 @@ test("keeps a Codex RPC error isolated to the calling surface", async () => {
 
   await expect(transport.request({ method: "model/list", params: {} })).rejects.toBe(rpcError);
 });
+
+const turnRequests: Array<[string, CodexJsonRpcRequest]> = [
+  ["turn/start", { method: "turn/start", params: { threadId: "thread-1", input: [] } }],
+  [
+    "turn/steer",
+    { method: "turn/steer", params: { threadId: "thread-1", input: [], expectedTurnId: "turn-1" } },
+  ],
+];
+
+test.each(turnRequests)(
+  "reports a JSON-RPC error answer to %s as a refused message",
+  async (_label, request) => {
+    const { method } = request;
+    const rpcError = new CodexAppServerRpcError({
+      operation: `codexAppServerTransport.request.${method}`,
+      message: `Codex app-server request ${method} failed for runtime private-runtime: Unknown model`,
+      cause: { code: -32602, message: "Unknown model" },
+      details: { runtimeId: "private-runtime", method },
+    });
+    const transport = createTransportWithRequest(() => Effect.fail(rpcError));
+
+    const error = await transport.request(request).catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(AgentSessionMessageRefusedError);
+    expect(error).toMatchObject({ cause: rpcError });
+  },
+);
 
 const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns/list") => {
   const runtimeId = "runtime-live";
@@ -295,7 +324,7 @@ const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns
     onLiveSessionMutation: (mutation) => {
       if (
         mutation.transcriptEvents.some(
-          (event) => event.type === "session_idle" && event.turnCompleted,
+          (event) => event.type === "session_idle" && event.turnOutcome === "completed",
         )
       ) {
         firstTurnCompleted.resolve();

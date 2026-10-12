@@ -53,6 +53,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     subagentAgentIdsByToolUseId?: Map<string, string>;
     subagentTaskIdsByToolUseId: Map<string, string>;
     subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
+    unreadSteeredUserMessages?: Map<string, ClaudeAcceptedUserMessage>;
   };
 
 export type ClaudeBackgroundWorkSession = {

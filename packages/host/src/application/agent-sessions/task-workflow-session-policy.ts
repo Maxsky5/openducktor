@@ -1,5 +1,4 @@
 import type {
-  AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
   AgentSessionModelSelection,
@@ -21,7 +20,10 @@ import {
   type TaskLifecycle,
 } from "./task-session-operations";
 import { readStoredWorkflowSession, storeWorkflowSession } from "./task-workflow-session-storage";
-import type { AgentSessionOperationPolicy } from "./agent-session-operation-policy";
+import type {
+  AgentSessionOperationPolicy,
+  AgentSessionSendContent,
+} from "./agent-session-operation-policy";
 
 export type TaskSessions = Pick<
   TaskService,
@@ -139,7 +141,7 @@ export const createTaskWorkflowSessionPolicy = ({
               { ...input, sessionScope: scope },
               "send",
             );
-            const prepared: AgentSessionControlSendInput = {
+            const prepared: AgentSessionSendContent = {
               ...input,
               runtimeKind: stored.runtimeKind,
               workingDirectory: stored.workingDirectory,

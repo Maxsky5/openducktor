@@ -23,6 +23,7 @@ describe("Claude live-session service inputs", () => {
       model: undefined,
     });
     const sendInput = toClaudeSendInput({
+      delivery: "new_turn",
       repoPath: "/repo",
       runtimeKind: "claude",
       workingDirectory: "/repo/worktree",
@@ -56,6 +57,7 @@ describe("Claude live-session service inputs", () => {
       repoPath: "/repo",
       runtimeKind: "claude",
       runtimePolicy: { kind: "claude" },
+      delivery: "new_turn",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },

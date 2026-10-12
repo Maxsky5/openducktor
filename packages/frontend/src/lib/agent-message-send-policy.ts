@@ -5,13 +5,9 @@ import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
 import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
 import { deriveLoadedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
-export const getBusyAgentMessageBlockedReason = (
-  isWorking: boolean,
-  runtime: RuntimeDescriptor | null,
-): string | null =>
-  isWorking && !runtime?.capabilities.sessionLifecycle.supportsQueuedUserMessages
-    ? `${runtime?.label ?? "The selected runtime"} does not support queued messages while the session is working. Wait for the current turn to finish.`
-    : null;
+/** A chat whose runtime definition is missing cannot send or steer. */
+export const MISSING_RUNTIME_REASON =
+  "The selected runtime is unavailable. Recheck runtime settings.";
 
 /** Shared submission rules. Scope adapters validate saved recipients separately. */
 export const getAgentMessageSendBlockedReason = (input: {
@@ -32,7 +28,7 @@ export const getAgentMessageSendBlockedReason = (input: {
       input.readiness.message ?? "The selected runtime is unavailable. Select Recheck in the chat."
     );
   if (input.readOnlyReason) return input.readOnlyReason;
-  if (!input.runtime) return "The selected runtime is unavailable. Recheck runtime settings.";
+  if (!input.runtime) return MISSING_RUNTIME_REASON;
   if (!input.session)
     return input.isDraft
       ? null
@@ -49,5 +45,6 @@ export const getAgentMessageSendBlockedReason = (input: {
   if (isAgentSessionBlockedOnInput(input.session))
     return "Answer or reject the blocking approval or question before sending a message.";
   if (input.session.status === "starting") return "Wait for the session to finish starting.";
-  return getBusyAgentMessageBlockedReason(input.session.status === "running", input.runtime);
+  // The host queues a send while the agent works.
+  return null;
 };

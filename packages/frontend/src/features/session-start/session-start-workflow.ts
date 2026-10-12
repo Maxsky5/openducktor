@@ -7,7 +7,7 @@ import type {
 import { sessionLaunchFailureMessage, type AgentUserMessagePart } from "@openducktor/core";
 import type {
   AgentMessageSendOptions,
-  AgentMessageSendReceipt,
+  AcceptedAgentMessageSendReceipt,
   AgentSessionIdentity,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -25,7 +25,7 @@ export type SessionStartWorkflowResult = AgentSessionIdentity & {
    * succeeds.
    */
   retryPostStartMessage?: () => Promise<void>;
-  postStartMessageReceipt?: AgentMessageSendReceipt;
+  postStartMessageReceipt?: AcceptedAgentMessageSendReceipt;
 };
 
 export type WorkflowLaunchClient = Pick<typeof host, "agentSessionWorkflowLaunch">;
@@ -82,6 +82,7 @@ export const startSessionWorkflow = async ({
   };
   if (outcome.acceptedMessage)
     result.postStartMessageReceipt = {
+      outcome: "accepted",
       recipient: session,
       acceptedMessage: outcome.acceptedMessage,
       postAcceptanceFailure: result.postStartActionError?.message ?? null,

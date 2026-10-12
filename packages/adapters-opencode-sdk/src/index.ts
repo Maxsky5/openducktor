@@ -1,5 +1,4 @@
 export { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
-export { OpenCodeMessageRejectedError } from "./opencode-message-rejected-error";
 export { createPrepareOpencodeSessionRuntime } from "./opencode-session-runtime";
 export type {
   OpencodeNativeApprovalReply,

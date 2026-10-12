@@ -198,6 +198,9 @@ export const buildClaudeAgentSdkOptions = async ({
       askUserQuestion: { previewFormat: "markdown" },
     },
     agentProgressSummaries: true,
+    // The CLI echoes each user message when its turn reads it. That echo admits input on a CLI
+    // that has no `command_lifecycle` frames, and it marks a steered message read.
+    extraArgs: { "replay-user-messages": null },
   };
   if (
     preserveNativeSettings ||

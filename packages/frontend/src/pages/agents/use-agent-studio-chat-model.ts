@@ -1,4 +1,4 @@
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import type { AgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
@@ -6,7 +6,6 @@ import type {
   AgentChatInterruptedTurnResumeModel,
   AgentChatModel,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { useFailedTranscriptAction } from "@/components/features/agents/agent-chat/use-failed-transcript-action";
 import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
@@ -37,10 +36,9 @@ import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-rev
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
-  isSending: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
-  busySendBlockedReason: string | null;
+  messageDelivery: AgentChatSend;
   canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -50,7 +48,6 @@ export type AgentStudioChatSessionActionsContext = {
   persistentResumeError: string | null;
   onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
@@ -299,8 +296,9 @@ export function useAgentStudioChatModel({
     owner: composer.workspaceId
       ? { kind: "task", workspaceId: composer.workspaceId, taskId: selectedSession.taskId }
       : null,
-    onSend: sessionActions.onSend,
+    onSend: sessionActions.messageDelivery.onSend,
   });
+  const { messageDelivery } = sessionActions;
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
     () =>
       sessionActions.canResumeSession
@@ -323,6 +321,7 @@ export function useAgentStudioChatModel({
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {
+      ...messageDelivery,
       displayedSessionKey: selectedSessionKey,
       selectedSession: selectedSessionIdentity
         ? {
@@ -334,7 +333,6 @@ export function useAgentStudioChatModel({
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
       waitingInputPlaceholder: selectedSession.pendingInput.waitingInputPlaceholder,
-      busySendBlockedReason: sessionActions.busySendBlockedReason,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
@@ -342,7 +340,6 @@ export function useAgentStudioChatModel({
       readOnlyReason: surfaceState.composerReadOnlyReason,
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
-      isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
       contextUsage: chatContextUsage,
       selectedModelSelection: modelSelection.selectedModelSelection,
@@ -422,6 +419,7 @@ export function useAgentStudioChatModel({
     modelSelection.supportsSubagentReferences,
     modelSelection.variantOptions,
     reviewCommentComposer.onSend,
+    messageDelivery,
     pendingSendItems,
     selectedSession.pendingInput.waitingInputPlaceholder,
     selectedSessionIdentity,
@@ -430,10 +428,8 @@ export function useAgentStudioChatModel({
     selectedSessionRuntimeData.isLoadingModelCatalog,
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
-    sessionActions.busySendBlockedReason,
     sessionActions.canStopSession,
     sessionActions.isResumingSession,
-    sessionActions.isSending,
     sessionActions.isSessionWorking,
     sessionActions.isStarting,
     sessionActions.isWaitingInput,

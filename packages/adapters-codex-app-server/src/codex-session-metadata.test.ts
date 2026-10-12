@@ -212,6 +212,7 @@ describe("external Codex sessions", () => {
       sessionScope: { kind: "repository" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       parts: [{ kind: "text", text: "Hello" }],
+      delivery: "new_turn",
     });
     const turn = transport.calls.find((call) => call.method === "turn/start");
     expect(turn?.params).not.toHaveProperty("sandboxPolicy");
@@ -248,6 +249,7 @@ describe("external Codex sessions", () => {
       await adapter.sendUserMessage({
         ...binding,
         parts: [{ kind: "text", text: "Continue" }],
+        delivery: "new_turn",
       });
       const turn = transport.calls.find((call) => call.method === "turn/start");
       expect(turn?.params).not.toHaveProperty("sandboxPolicy");

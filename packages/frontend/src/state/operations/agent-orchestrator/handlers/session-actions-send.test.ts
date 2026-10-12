@@ -1,10 +1,12 @@
+import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import { toast } from "sonner";
 import { describe, expect, spyOn, test } from "bun:test";
-import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import { createAgentMessageQueueSnapshot } from "@/test-utils/agent-message-send-fixture";
 import {
   findSessionMessageForTest,
   sessionMessagesToArray,
@@ -24,7 +26,14 @@ import {
   getSession,
 } from "./session-actions.test-helpers";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
-import { acceptedUserMessage } from "./session-actions-send.test-support";
+import { acceptedSubmitResult, acceptedUserMessage } from "./session-actions-send.test-support";
+
+const SESSION_REF = {
+  repoPath: "/tmp/repo",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/tmp/repo/worktree",
+  externalSessionId: "session-1",
+};
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("rejects when the exact session disappears during send preparation", async () => {
@@ -32,9 +41,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const finishPreparation = Promise.withResolvers<void>();
     let sends = 0;
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    adapter.sendUserMessage = async (input) => {
+    adapter.submitUserMessage = async (input) => {
       sends += 1;
-      return acceptedUserMessage(input);
+      return { kind: "accepted", acceptedMessage: acceptedUserMessage(input) };
     };
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const actions = createSessionActions({
@@ -117,11 +126,84 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(getSession(sessionsRef).status).toBe("running");
     },
   );
+  test("keeps the transcript and returns the turn state when the host queues a send", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+    const queued = createAgentMessageQueueSnapshot({
+      target: {
+        ...SESSION_REF,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      },
+      revision: 3,
+      texts: ["Queued follow-up"],
+    });
+    const inputs: Parameters<typeof adapter.submitUserMessage>[0][] = [];
+    adapter.submitUserMessage = async (input) => {
+      inputs.push(input);
+      return { kind: "queued", queue: queued };
+    };
+    const messageQueues = createAgentMessageQueuesStore();
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const messagesBeforeSend = getSession(sessionsRef).messages;
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const sessionTurnState = createSessionTurnStateFixture();
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      messageQueues,
+      sessionTurnState: sessionTurnState.sessionTurnState,
+    });
+
+    // The frontend does not predict the queue. The host answer decides the outcome.
+    const receipt = await actions.sendAgentMessage(getSession(sessionsRef), [
+      { kind: "text", text: "Queued follow-up" },
+    ]);
+
+    expect(receipt?.outcome).toBe("queued");
+    expect(inputs).toEqual([
+      expect.objectContaining({
+        ...SESSION_REF,
+        submissionId: expect.any(String),
+        mode: "default",
+        parts: [{ kind: "text", text: "Queued follow-up" }],
+      }),
+    ]);
+    expect(messageQueues.getQueue(SESSION_REF)).toEqual(queued);
+    expect(getSession(sessionsRef)).toMatchObject({
+      status: "idle",
+      pendingUserMessageStartedAt: undefined,
+    });
+    expect(getSession(sessionsRef).messages).toBe(messagesBeforeSend);
+    expect(
+      sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
+    ).toBeUndefined();
+  });
+
+  test("starts a steer on an idle session", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+    const inputs: Parameters<typeof adapter.submitUserMessage>[0][] = [];
+    adapter.submitUserMessage = async (input) => {
+      inputs.push(input);
+      return acceptedSubmitResult(input);
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Now" }], {
+      mode: "steer",
+    });
+
+    expect(inputs).toEqual([expect.objectContaining({ mode: "steer" })]);
+    expect(getSession(sessionsRef).status).toBe("running");
+    expect(
+      sessionMessagesToArray(getSession(sessionsRef)).filter((message) => message.role === "user"),
+    ).toEqual([expect.objectContaining({ content: "Now" })]);
+  });
+
   test("an old send failure does not change a newer execution episode or its pending input", async () => {
     const entered = Promise.withResolvers<void>();
     const rejected = Promise.withResolvers<never>();
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    adapter.sendUserMessage = () => {
+    adapter.submitUserMessage = () => {
       entered.resolve();
       return rejected.promise;
     };
@@ -156,10 +238,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     let accepted = false;
     let sends = 0;
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    adapter.sendUserMessage = async (input) => {
+    adapter.submitUserMessage = async (input) => {
       sends += 1;
       accepted = true;
-      return acceptedUserMessage(input);
+      return { kind: "accepted", acceptedMessage: acceptedUserMessage(input) };
     };
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const actions = createSessionActions({
@@ -193,10 +275,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   test("delivers confirmed kickoff whitespace through the real sender to the adapter", async () => {
     const text = "\n\n  Custom instruction\n{{task.title}}\n ";
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    const sent: Array<Parameters<typeof adapter.sendUserMessage>[0]["parts"]> = [];
-    adapter.sendUserMessage = async (input) => {
+    const sent: Array<Parameters<typeof adapter.submitUserMessage>[0]["parts"]> = [];
+    adapter.submitUserMessage = async (input) => {
       sent.push(input.parts);
-      return acceptedUserMessage(input);
+      return acceptedSubmitResult(input);
     };
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const actions = createSessionActions({ adapter, sessionsRef });
@@ -211,9 +293,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    const originalSendUserMessage = adapter.sendUserMessage;
+    const originalSubmitUserMessage = adapter.submitUserMessage;
     let sendInput: unknown;
-    adapter.sendUserMessage = async (input) => {
+    adapter.submitUserMessage = async (input) => {
       sendInput = input;
       const event: AcceptedAgentUserMessage = {
         type: "user_message",
@@ -227,7 +309,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       if (input.model) {
         event.model = input.model;
       }
-      return event;
+      return { kind: "accepted", acceptedMessage: event };
     };
     const sessionsRef = createSessionsRef([
       buildSession({
@@ -256,21 +338,24 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       });
       expect(sendInput).not.toHaveProperty("runtimePolicy");
     } finally {
-      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.submitUserMessage = originalSubmitUserMessage;
     }
   });
 
   test("does not store the Codex compaction send result as a user message", async () => {
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    const originalSendUserMessage = adapter.sendUserMessage;
-    adapter.sendUserMessage = async (input) => ({
-      type: "user_message",
-      externalSessionId: input.externalSessionId,
-      timestamp: "2026-02-22T08:00:01.000Z",
-      messageId: "accepted-user-message",
-      message: MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger,
-      parts: [],
-      state: "read",
+    const originalSubmitUserMessage = adapter.submitUserMessage;
+    adapter.submitUserMessage = async (input) => ({
+      kind: "accepted",
+      acceptedMessage: {
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp: "2026-02-22T08:00:01.000Z",
+        messageId: "accepted-user-message",
+        message: MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger,
+        parts: [],
+        state: "read",
+      },
     });
     const sessionsRef = createSessionsRef([
       buildSession({
@@ -298,7 +383,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         sessionMessagesToArray(getSession(sessionsRef)).some((message) => message.role === "user"),
       ).toBe(false);
     } finally {
-      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.submitUserMessage = originalSubmitUserMessage;
     }
   });
 
@@ -738,11 +823,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
   test("tells the runtime which history-restored background questions a send handles", async () => {
     const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    const originalSendUserMessage = adapter.sendUserMessage;
-    const inputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
-    adapter.sendUserMessage = async (input) => {
+    const originalSubmitUserMessage = adapter.submitUserMessage;
+    const inputs: Parameters<typeof adapter.submitUserMessage>[0][] = [];
+    adapter.submitUserMessage = async (input) => {
       inputs.push(input);
-      return acceptedUserMessage(input);
+      return acceptedSubmitResult(input);
     };
     const requestId = "history-question";
     const childRequest: AgentQuestionRequest = {
@@ -791,7 +876,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(inputs[0]).toMatchObject({ resolvedQuestionRequestIds: [requestId] });
       expect(getSession(sessionsRef)?.pendingQuestions).toEqual([childRequest]);
     } finally {
-      adapter.sendUserMessage = originalSendUserMessage;
+      adapter.submitUserMessage = originalSubmitUserMessage;
     }
   });
 
@@ -819,10 +904,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         },
         replyApproval: async () => {},
       };
-      const entered = Promise.withResolvers<Parameters<typeof adapter.sendUserMessage>[0]>();
+      const entered = Promise.withResolvers<Parameters<typeof adapter.submitUserMessage>[0]>();
       const admit = Promise.withResolvers<void>();
       const emittedEvents: AcceptedAgentUserMessage[] = [];
-      adapter.sendUserMessage = async (input) => {
+      adapter.submitUserMessage = async (input) => {
         entered.resolve(input);
         await admit.promise;
         const emittedEvent = acceptedUserMessage(input);
@@ -833,7 +918,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         for (const handler of handlers) {
           handler(emittedEvent);
         }
-        return emittedEvent;
+        return { kind: "accepted", acceptedMessage: emittedEvent };
       };
       const duringSend = {
         requestId: "question-during-send",

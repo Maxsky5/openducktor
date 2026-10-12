@@ -18,6 +18,7 @@ import {
   useMemo,
   useRef,
 } from "react";
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { toast } from "sonner";
 import { SpeedSelect } from "../speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
@@ -27,12 +28,9 @@ import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
-import {
-  buildComposerAttachmentFromFile,
-  CHAT_ATTACHMENT_ACCEPT,
-  readAttachmentFileName,
-  validateComposerAttachments,
-} from "./agent-chat-attachments";
+import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
+import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
+import { CHAT_ATTACHMENT_ACCEPT, validateComposerAttachments } from "./agent-chat-attachments";
 import {
   createComposerAutofocusState,
   resolveComposerAutofocus,
@@ -45,11 +43,21 @@ import {
   draftHasSlashCommandSegment,
   removeAttachmentFromDraft,
 } from "./agent-chat-composer-draft";
-import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
 import {
-  readEditableTextContent,
-  setCaretOffsetWithinElement,
-} from "./agent-chat-composer-selection";
+  AgentChatComposerEditor,
+  type AgentChatComposerEditorCatalog,
+} from "./agent-chat-composer-editor";
+import {
+  AgentChatMessageQueue,
+  AgentChatMessageQueuePauseNotice,
+} from "./agent-chat-message-queue";
+import {
+  ACTIVE_COMPOSER_CARD_CLASS_NAME,
+  COMPOSER_CARD_CLASS_NAME,
+  COMPOSER_QUIET_CONTROL_CLASS_NAME,
+} from "./agent-chat-composer-surface";
+import { steerShortcutLabel } from "@/lib/steer-shortcut";
+import { focusEditorEnd } from "./agent-chat-composer-selection";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 
@@ -77,23 +85,8 @@ type AgentChatComposerFormViewProps = {
   onDraftChange: (draft: AgentChatComposerDraft) => void;
   onPickAttachments: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
-  onSend: () => Promise<void>;
+  onSend: (mode: AgentMessageSubmitMode) => Promise<void>;
   submitAction: () => void;
-};
-
-const truncateAttachmentDisplayName = (name: string, maxLength = 80): string => {
-  if (name.length <= maxLength) {
-    return name;
-  }
-  return `${name.slice(0, maxLength - 3)}...`;
-};
-
-const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
-  return (
-    <span>
-      <code>{truncateAttachmentDisplayName(name)}</code> is not an image, audio file, video, or PDF.
-    </span>
-  );
 };
 
 const hasComposerSendContent = (
@@ -103,9 +96,6 @@ const hasComposerSendContent = (
   return draftHasMeaningfulContent(draft) || (pendingSendItems?.count ?? 0) > 0;
 };
 
-// The attach button and the selectors stay quiet, so they do not compete with the draft text.
-const COMPOSER_QUIET_CONTROL_CLASS_NAME =
-  "text-muted-foreground shadow-none hover:text-foreground data-[state=open]:text-foreground";
 // The selectors shrink and truncate their labels in a narrow pane.
 const COMPOSER_SELECTOR_TRIGGER_CLASS_NAME = cn(
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
@@ -358,12 +348,6 @@ function AgentChatComposerAttachments({
   );
 }
 
-// The card has no border. Its surface and shadow set it apart from the transcript.
-const COMPOSER_CARD_CLASS_NAME =
-  "relative rounded-xl transition-[background-color,box-shadow] duration-150";
-// Only the draft editor highlights the card. The other controls show their own focus ring.
-const COMPOSER_CARD_FOCUS_CLASS_NAME = "has-[[data-composer-editor]:focus]:shadow-chat-focus";
-
 const composerCardClassName = ({
   isWaitingInput,
   isInputMuted,
@@ -377,11 +361,7 @@ const composerCardClassName = ({
   if (isInputMuted) {
     return cn(COMPOSER_CARD_CLASS_NAME, "bg-chat-surface/60");
   }
-  return cn(
-    COMPOSER_CARD_CLASS_NAME,
-    "bg-chat-surface shadow-chat",
-    COMPOSER_CARD_FOCUS_CLASS_NAME,
-  );
+  return ACTIVE_COMPOSER_CARD_CLASS_NAME;
 };
 
 function AgentChatComposerFormView({
@@ -447,6 +427,49 @@ function AgentChatComposerFormView({
   const pendingItemsWarning = pendingSendItems?.warning ?? null;
   const showPendingItemsWarning =
     pendingItemsWarning !== null && (pendingSendItems?.count ?? 0) > 0;
+  // One object while the catalogs stay the same, so other model changes skip the editor.
+  const editorCatalog = useMemo<AgentChatComposerEditorCatalog>(
+    () => ({
+      supportsSlashCommands,
+      supportsFileSearch,
+      supportsSkillReferences,
+      supportsSubagentReferences,
+      slashCommands,
+      slashCommandsError,
+      isSlashCommandsLoading,
+      skills,
+      skillsError,
+      isSkillsLoading,
+      subagents,
+      subagentsError,
+      isSubagentsLoading,
+      retrySlashCommands,
+      retrySkills,
+      retrySubagents,
+      onCatalogMenuOpen,
+      searchFiles,
+    }),
+    [
+      supportsSlashCommands,
+      supportsFileSearch,
+      supportsSkillReferences,
+      supportsSubagentReferences,
+      slashCommands,
+      slashCommandsError,
+      isSlashCommandsLoading,
+      skills,
+      skillsError,
+      isSkillsLoading,
+      subagents,
+      subagentsError,
+      isSubagentsLoading,
+      retrySlashCommands,
+      retrySkills,
+      retrySubagents,
+      onCatalogMenuOpen,
+      searchFiles,
+    ],
+  );
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={submitAction}>
@@ -466,6 +489,10 @@ function AgentChatComposerFormView({
           event.currentTarget.value = "";
         }}
       />
+      {/* Queue controls stay available while the runtime cannot receive messages. */}
+      {model.messageQueue && !model.isReadOnly ? (
+        <AgentChatMessageQueue model={model.messageQueue} composer={model} />
+      ) : null}
       <div
         className={composerCardClassName({
           isWaitingInput,
@@ -480,6 +507,9 @@ function AgentChatComposerFormView({
           />
         ) : null}
         <div className="relative z-10">
+          {model.messageQueue && !model.isReadOnly ? (
+            <AgentChatMessageQueuePauseNotice model={model.messageQueue} />
+          ) : null}
           {showPendingItemsWarning ? (
             <div
               className="flex items-start gap-1.5 px-3 pt-2.5 text-[11px] text-amber-700 dark:text-amber-300"
@@ -505,24 +535,7 @@ function AgentChatComposerFormView({
             editorRef={composerEditorRef}
             onEditorInput={onComposerEditorInput}
             onSend={onSend}
-            supportsSlashCommands={supportsSlashCommands}
-            supportsFileSearch={supportsFileSearch}
-            supportsSkillReferences={supportsSkillReferences}
-            supportsSubagentReferences={supportsSubagentReferences}
-            slashCommands={slashCommands}
-            slashCommandsError={slashCommandsError}
-            isSlashCommandsLoading={isSlashCommandsLoading}
-            skills={skills}
-            skillsError={skillsError}
-            isSkillsLoading={isSkillsLoading}
-            subagents={subagents}
-            subagentsError={subagentsError}
-            isSubagentsLoading={isSubagentsLoading}
-            retrySlashCommands={retrySlashCommands}
-            retrySkills={retrySkills}
-            retrySubagents={retrySubagents}
-            onCatalogMenuOpen={onCatalogMenuOpen}
-            searchFiles={searchFiles}
+            catalog={editorCatalog}
           />
 
           <AgentChatComposerControls
@@ -571,22 +584,9 @@ function useAgentChatComposerFocus({
 
   const focusComposerEditor = useCallback(() => {
     const editor = composerEditorRef.current;
-    if (!editor) {
-      return;
+    if (editor) {
+      focusEditorEnd(editor);
     }
-
-    const textSegments = editor.querySelectorAll<HTMLElement>("[data-segment-id]");
-    for (let index = textSegments.length - 1; index >= 0; index -= 1) {
-      const segment = textSegments[index];
-      if (!segment?.isContentEditable) {
-        continue;
-      }
-
-      setCaretOffsetWithinElement(segment, readEditableTextContent(segment).length);
-      return;
-    }
-
-    editor.focus();
   }, [composerEditorRef]);
 
   const scheduleComposerFocus = useCallback(() => {
@@ -650,7 +650,6 @@ const composerPlaceholderFor = (model: AgentChatComposerModel): string => {
     supportsSkillReferences,
     isReadOnly,
     readOnlyReason,
-    busySendBlockedReason,
     isWaitingInput,
     waitingInputPlaceholder,
   } = model;
@@ -666,14 +665,12 @@ const composerPlaceholderFor = (model: AgentChatComposerModel): string => {
     referencePlaceholder,
     supportsSlashCommands ? "/ for commands" : null,
     supportsSkillReferences ? "$ for skills" : null,
+    ...queuePlaceholderParts(model),
   ].filter((part): part is string => Boolean(part));
   let composerPlaceholder =
     composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
-  }
-  if (busySendBlockedReason) {
-    composerPlaceholder = busySendBlockedReason;
   }
   if (isWaitingInput) {
     composerPlaceholder =
@@ -682,21 +679,36 @@ const composerPlaceholderFor = (model: AgentChatComposerModel): string => {
   return composerPlaceholder;
 };
 
+/** While a send would wait in the queue, the placeholder names the keys that queue or steer it. */
+const queuePlaceholderParts = ({
+  isSessionWorking,
+  messageQueue,
+  steerBlockedReason,
+}: AgentChatComposerModel): string[] => {
+  if (isSessionWorking) {
+    return steerBlockedReason
+      ? ["Enter to queue"]
+      : ["Enter to queue", `${steerShortcutLabel()} to steer`];
+  }
+  // An idle session with queued messages still queues, and steering sends at once.
+  return (messageQueue?.queue?.entries.length ?? 0) > 0
+    ? ["Enter to queue", `${steerShortcutLabel()} to send now`]
+    : [];
+};
+
 const composerInputDisabledFor = ({
   isInteractionEnabled,
   isReadOnly,
   isModelSelectionPending,
   isWaitingInput,
   isResumingSession,
-  busySendBlockedReason,
 }: AgentChatComposerModel): boolean => {
   return (
     !isInteractionEnabled ||
     isReadOnly ||
     isModelSelectionPending ||
     isWaitingInput ||
-    isResumingSession ||
-    Boolean(busySendBlockedReason)
+    isResumingSession
   );
 };
 
@@ -719,7 +731,6 @@ export function AgentChatComposer({
     isReadOnly,
     pendingSendItems,
     draftScope,
-    onSend,
     isSending,
     isStarting,
     isSessionWorking,
@@ -742,9 +753,9 @@ export function AgentChatComposer({
     scope: draftScope,
   });
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
-  const latestDraftScopeKeyRef = useRef(draftScope.key);
   const latestSendDisabledRef = useRef(false);
-  const latestOnSendRef = useRef(onSend);
+  const latestSteerDisabledRef = useRef(false);
+  const latestModelRef = useRef(model);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
   const isComposerInputDisabled = composerInputDisabledFor(model);
@@ -772,18 +783,7 @@ export function AgentChatComposer({
         return;
       }
 
-      const attachments = files.flatMap((file) => {
-        const attachment = buildComposerAttachmentFromFile(file);
-        if (!attachment) {
-          toast.error("Unsupported attachment type", {
-            description: renderUnsupportedAttachmentDescription(
-              readAttachmentFileName({ name: file.name, mime: file.type }),
-            ),
-          });
-          return [];
-        }
-        return [attachment];
-      });
+      const attachments = buildComposerAttachmentsFromFiles(files);
       if (attachments.length === 0) {
         return;
       }
@@ -819,19 +819,20 @@ export function AgentChatComposer({
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
   const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
 
-  const sendDisabled =
+  // A steer checks its attachments against the running turn model when it submits.
+  const steerDisabled =
     isSendOrModelPending ||
     isSendInputBlocked(model, isComposerInputDisabled) ||
-    hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, pendingSendItems);
+  const sendDisabled = steerDisabled || hasBlockingAttachments;
 
   useLayoutEffect(() => {
-    latestDraftScopeKeyRef.current = draftScope.key;
     latestDraftRef.current = draft;
-    latestOnSendRef.current = onSend;
     latestSendDisabledRef.current = sendDisabled;
-  }, [draft, draftScope.key, onSend, sendDisabled]);
+    latestSteerDisabledRef.current = steerDisabled;
+    latestModelRef.current = model;
+  }, [draft, model, sendDisabled, steerDisabled]);
 
   const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
@@ -843,55 +844,68 @@ export function AgentChatComposer({
     isSubmitting,
   });
 
-  const handleSubmit = useCallback(async (): Promise<void> => {
-    if (latestSendDisabledRef.current) {
-      return;
-    }
-    const submitDraft = latestOnSendRef.current;
-    const submittedDraft = latestDraftRef.current;
-    const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
-    clearSubmittedDraft(submittedSnapshot);
-    setDisplayedDraft(createEmptyComposerDraft());
-    onComposerEditorInput();
-    scheduleComposerFocus();
-    try {
-      const result = await submitDraft(submittedDraft);
-      if (result !== true && result !== false) {
-        restoreSubmittedDraft(submittedSnapshot, result);
-        if (!result.inAppFeedbackHandled)
-          toast.error("Unable to send message", { description: result.error.message });
+  const handleSubmit = useCallback(
+    async (mode: AgentMessageSubmitMode): Promise<void> => {
+      const steersTurn = steersRunningTurn(mode, latestModelRef.current.isSessionWorking);
+      if (steersTurn ? latestSteerDisabledRef.current : latestSendDisabledRef.current) {
         return;
       }
-      if (!result) {
+      const submitDraft = latestModelRef.current.onSend;
+      const submittedDraft = latestDraftRef.current;
+      // A blocked steer keeps the draft. It never becomes a queued send.
+      const steerBlockedReason = steersTurn
+        ? draftSteerBlockedReason(submittedDraft, latestModelRef.current)
+        : null;
+      if (steerBlockedReason) {
+        toast.error("Cannot steer this message", { description: steerBlockedReason });
+        return;
+      }
+      const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
+      clearSubmittedDraft(submittedSnapshot);
+      setDisplayedDraft(createEmptyComposerDraft());
+      onComposerEditorInput();
+      scheduleComposerFocus();
+      try {
+        const result = await submitDraft(submittedDraft, mode);
+        if (result !== true && result !== false) {
+          restoreSubmittedDraft(submittedSnapshot, result);
+          if (!result.inAppFeedbackHandled)
+            toast.error("Unable to send message", { description: result.error.message });
+          return;
+        }
+        if (!result) {
+          restoreSubmittedDraft(submittedSnapshot);
+          if (latestModelRef.current.draftScope.key === submittedSnapshot.key) {
+            onComposerEditorInput();
+            scheduleComposerFocus();
+          }
+          return;
+        }
+        if (latestModelRef.current.draftScope.key === submittedSnapshot.key)
+          scheduleComposerFocus();
+      } catch (error) {
+        const description = error instanceof Error ? error.message : String(error);
+        toast.error("Unable to send message", {
+          description,
+        });
         restoreSubmittedDraft(submittedSnapshot);
-        if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
+        if (latestModelRef.current.draftScope.key === submittedSnapshot.key) {
           onComposerEditorInput();
           scheduleComposerFocus();
         }
-        return;
       }
-      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) scheduleComposerFocus();
-    } catch (error) {
-      const description = error instanceof Error ? error.message : String(error);
-      toast.error("Unable to send message", {
-        description,
-      });
-      restoreSubmittedDraft(submittedSnapshot);
-      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
-        onComposerEditorInput();
-        scheduleComposerFocus();
-      }
-    }
-  }, [
-    clearSubmittedDraft,
-    createSubmittedDraftSnapshot,
-    onComposerEditorInput,
-    restoreSubmittedDraft,
-    scheduleComposerFocus,
-    setDisplayedDraft,
-  ]);
+    },
+    [
+      clearSubmittedDraft,
+      createSubmittedDraftSnapshot,
+      onComposerEditorInput,
+      restoreSubmittedDraft,
+      scheduleComposerFocus,
+      setDisplayedDraft,
+    ],
+  );
   const submitComposerAction = useCallback((): void => {
-    void handleSubmit();
+    void handleSubmit("default");
   }, [handleSubmit]);
   return (
     <AgentChatComposerFormView

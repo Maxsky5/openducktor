@@ -66,7 +66,7 @@ test.each([
         });
       if (canSend) {
         const receipt = await send();
-        expect(receipt?.acceptedMessage).toBeDefined();
+        expect(receipt?.outcome).toBe("accepted");
         expect(submissions).toBe(1);
       } else {
         await expect(send()).rejects.toThrow(fault.message);

@@ -3,6 +3,7 @@ import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import {
   AgentRuntimeQueryError,
+  AgentSessionTurnActiveError,
   assertAgentRuntimeQuerySession,
   withSummaryTitle,
 } from "@openducktor/core";
@@ -135,10 +136,10 @@ import {
 } from "./codex-tool-normalizer";
 import {
   type CodexTurnLifecycleContext,
-  flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
+  runningTurnOf,
   startCodexContinuationTurn,
-  startCodexTurnForSession,
-  startCodexTurnWithInputForSession,
+  sendCodexUserMessage,
+  sendCodexQuestionReply,
 } from "./codex-turn-lifecycle";
 import {
   assertCodexUserMessagePartsSupported,
@@ -237,7 +238,7 @@ const toLivePendingQuestion = (
   return liveRequest;
 };
 
-type CodexSendOptions = { requireNativeAdmission?: boolean; onSent?: () => void };
+type CodexSendOptions = { onSent?: () => void };
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -287,8 +288,6 @@ export class CodexAppServerAdapter
         threadId: string,
         status: CodexThreadStatusSnapshot,
       ) => this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
-      flushQueuedUserMessagesLater: (activeTurn: ActiveCodexTurn) =>
-        this.flushQueuedUserMessagesLater(activeTurn),
     };
     if (onLiveSessionMutation) {
       runtimeEventsDepsBase.onLiveSessionMutation = ({ changedSessionIds, ...mutation }) =>
@@ -818,8 +817,8 @@ export class CodexAppServerAdapter
   }
 
   /**
-   * With `requireNativeAdmission`, the send resolves only after Codex accepts the message.
-   * `onSent` runs when the native request that carries the message goes to Codex.
+   * The send resolves only after Codex admits the message. `onSent` runs when the native request
+   * that carries the message goes to Codex.
    */
   async sendUserMessage(
     input: SendAgentUserMessageInput,
@@ -868,8 +867,13 @@ export class CodexAppServerAdapter
       parts: input.parts,
       model: input.model ?? session.model ?? undefined,
       resolvedQuestionRequestIds,
+      submissionId: input.submissionId,
     });
     if (systemInvocation.kind === "manual_session_compaction") {
+      // Compaction is its own native operation, so it never joins running work.
+      if (runningTurnOf(this.activeTurnsBySessionId, session.threadId)) {
+        throw new AgentSessionTurnActiveError(session.threadId);
+      }
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
       try {
@@ -884,21 +888,17 @@ export class CodexAppServerAdapter
     }
     const context = this.turnLifecycleContext();
     if (options.onSent) context.onSent = options.onSent;
-    const accepted = await startCodexTurnForSession(
+    const accepted = await sendCodexUserMessage(
       context,
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
+      input.delivery,
       input.model,
-      options.requireNativeAdmission === true || resolvedQuestionRequestIds.length > 0,
       resolvedQuestionRequestIds,
     );
     this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);
     return accepted;
-  }
-
-  private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
-    flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
   async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
@@ -1481,7 +1481,6 @@ export class CodexAppServerAdapter
       input.answers,
     );
     if (backgroundReplies) {
-      let cancelExpectedEcho: (() => void) | undefined;
       const session = this.localSessions.get(input.externalSessionId);
       if (!session || session.runtimeId !== input.runtimeId) {
         this.asyncQuestions.releaseReplyClaim(
@@ -1504,19 +1503,13 @@ export class CodexAppServerAdapter
       const nativeInput = [toCodexAsyncQuestionReplyInput(backgroundReplies)];
       let accepted: AcceptedAgentUserMessage;
       try {
-        cancelExpectedEcho = this.runtimeEvents.expectUserMessageEcho(
-          acceptedUserMessage,
-          nativeInput,
-        );
-        accepted = await startCodexTurnWithInputForSession(
+        accepted = await sendCodexQuestionReply(
           this.turnLifecycleContext(),
           input.externalSessionId,
-          parts,
           nativeInput,
           acceptedUserMessage,
         );
       } catch (error) {
-        cancelExpectedEcho?.();
         this.asyncQuestions.releaseReplyClaim(
           input.runtimeId,
           input.externalSessionId,
@@ -1888,10 +1881,8 @@ export class CodexAppServerAdapter
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
       asyncQuestions: this.asyncQuestions,
-      hasActiveTurn: (externalSessionId: string) => {
-        const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
-        return Boolean(activeTurn && !activeTurn.isTurnSettled());
-      },
+      hasActiveTurn: (externalSessionId: string) =>
+        runningTurnOf(this.activeTurnsBySessionId, externalSessionId) !== null,
     };
   }
 
@@ -1923,8 +1914,6 @@ export class CodexAppServerAdapter
       expectUserMessageEcho: (event, sourceParts) =>
         this.runtimeEvents.expectUserMessageEcho(event, sourceParts),
       emitUserMessage: (event) => this.runtimeEvents.emitUserMessage(event),
-      emitSessionEvent: (externalSessionId, event) =>
-        this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
     };

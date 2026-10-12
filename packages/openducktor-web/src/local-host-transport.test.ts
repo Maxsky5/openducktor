@@ -84,7 +84,7 @@ class FakeEventSource {
 }
 
 const liveAttachBody = (repoPath: string, sequence = 0): string =>
-  JSON.stringify({ type: "snapshot", repoPath, sessions: [], sequence });
+  JSON.stringify({ type: "snapshot", messageQueues: [], repoPath, sessions: [], sequence });
 // Answers live attachments with an empty snapshot of the requested repository.
 const hostFetch = (sequence = 0) =>
   mock(async (url: string | URL | Request, init?: RequestInit) =>
@@ -374,9 +374,11 @@ describe("createLocalHostClient", () => {
       ),
     );
     await expect(
-      createLocalHostClient().agentSessionControlSend({
+      createLocalHostClient().agentSessionMessageSubmit({
         ...sessionRef,
         sessionScope: { kind: "repository" },
+        submissionId: "submission-1",
+        mode: "default",
         parts: [{ kind: "text", text: "Hello" }],
       }),
     ).rejects.toMatchObject({ name: "HostInvokeError", failure });
@@ -558,6 +560,7 @@ describe("local host SSE subscriptions", () => {
     expect(setupListener).toHaveBeenCalledWith(setupUpdate);
     emitHostEvent("openducktor://agent-session-live-event", {
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [],
       sequence: 1,
@@ -567,6 +570,7 @@ describe("local host SSE subscriptions", () => {
     expect(liveSessionListener).toHaveBeenCalledTimes(2);
     expect(liveSessionListener).toHaveBeenNthCalledWith(1, {
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [],
       sequence: 0,
@@ -574,6 +578,7 @@ describe("local host SSE subscriptions", () => {
     });
     expect(liveSessionListener).toHaveBeenNthCalledWith(2, {
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [],
       sequence: 1,
@@ -643,7 +648,7 @@ describe("local host SSE subscriptions", () => {
     const stopSecond = await observeLocalHostAgentSessions({ repoPath: "/second" }, second);
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(() => source.emit(liveSessionStreamEventName("/unobserved"), "not-json")).not.toThrow();
-    const snapshot = { type: "snapshot", repoPath: "/first", sessions: [] };
+    const snapshot = { type: "snapshot", messageQueues: [], repoPath: "/first", sessions: [] };
     source.emit(
       liveSessionStreamEventName("/first"),
       JSON.stringify({
@@ -879,6 +884,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       {
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [],
         sequence: 5,
@@ -904,6 +910,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       {
         type: "snapshot",
+        messageQueues: [],
         repoPath: "/repo",
         sessions: [],
         sequence: 9,
@@ -944,6 +951,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith({
       type: "snapshot",
+      messageQueues: [],
       repoPath: "/repo",
       sessions: [],
       sequence: 9,

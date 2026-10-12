@@ -1,3 +1,4 @@
+import type { AgentTurnOutcome } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeResultLifecycleOutcome } from "./claude-agent-sdk-result-lifecycle";
 import type {
@@ -13,6 +14,7 @@ export type ClaudeLifecycleSession = {
   pendingApprovals?: Map<string, PendingApproval>;
   pendingQuestions?: Map<string, PendingQuestion>;
   sdkInitiatedTurnActive?: boolean;
+  resultAwaitsSdkIdle?: boolean;
   sdkState?: "idle" | "requires_action" | "running";
   pendingUserTurnCount?: number;
 };
@@ -26,6 +28,8 @@ type ClaudeLifecycleInput = {
 type ClaudeLifecycleEvent =
   | { kind: "sdk_state"; state: "idle" | "requires_action" | "running" }
   | { kind: "sdk_turn_started" }
+  /** The CLI cancelled a local user turn before it ran, so the turn never starts. */
+  | { kind: "user_turn_cancelled" }
   | {
       kind: "result";
       outcome: ClaudeResultLifecycleOutcome;
@@ -42,6 +46,10 @@ export const applyClaudeLifecycleEvent = (
     applySdkTurnStartedLifecycleEvent(input);
     return;
   }
+  if (input.event.kind === "user_turn_cancelled") {
+    applyUserTurnCancelledLifecycleEvent(input);
+    return;
+  }
   applyResultLifecycleEvent({ ...input, outcome: input.event.outcome });
 };
 
@@ -55,27 +63,29 @@ const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
   session.activeSdkUserTurnCount ?? 0;
 
-const publishSessionIdle = ({
-  emit,
-  session,
-  timestamp,
-  turnCompleted,
-}: ClaudeLifecycleInput & { turnCompleted?: true }): void => {
+/** Only an idle state after a turn result names an outcome. A bare SDK idle state ends no turn. */
+const publishSessionIdle = (
+  { emit, session, timestamp }: ClaudeLifecycleInput,
+  turnOutcome: AgentTurnOutcome | undefined,
+): void => {
   session.activity = "idle";
   const event: Extract<AgentEvent, { type: "session_idle" }> = {
     type: "session_idle",
     externalSessionId: session.externalSessionId,
     timestamp,
   };
-  if (turnCompleted) event.turnCompleted = turnCompleted;
+  if (turnOutcome) event.turnOutcome = turnOutcome;
   emit(event);
 };
 
-const emitSessionIdle = (input: ClaudeLifecycleInput): void => {
+const emitSessionIdle = (
+  input: ClaudeLifecycleInput,
+  turnOutcome: AgentTurnOutcome | undefined,
+): void => {
   if (input.session.activity === "idle") {
     return;
   }
-  publishSessionIdle(input);
+  publishSessionIdle(input, turnOutcome);
 };
 
 const emitSessionBusy = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
@@ -119,7 +129,9 @@ const applySdkStateLifecycleEvent = (
       input.session.activity = "running";
       return;
     }
-    emitSessionIdle(input);
+    const resultAwaitedIdle = input.session.resultAwaitsSdkIdle === true;
+    delete input.session.resultAwaitsSdkIdle;
+    emitSessionIdle(input, resultAwaitedIdle ? "completed" : undefined);
     return;
   }
   if (input.state === "running") {
@@ -137,6 +149,24 @@ const applySdkStateLifecycleEvent = (
     return;
   }
   input.session.activity = "running";
+};
+
+/**
+ * A local turn counts as pending and active from its send. When the CLI cancels it before it
+ * runs, the CLI stays idle, and the turn ends with no outcome, so it releases no queued message.
+ */
+const applyUserTurnCancelledLifecycleEvent = (input: ClaudeLifecycleInput): void => {
+  const remainingPendingUserTurns = completePendingUserTurn(input.session);
+  const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
+  if (
+    remainingPendingUserTurns > 0 ||
+    remainingActiveSdkUserTurns > 0 ||
+    hasPendingInput(input.session)
+  ) {
+    return;
+  }
+  input.session.sdkState = "idle";
+  emitSessionIdle(input, undefined);
 };
 
 const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
@@ -166,6 +196,7 @@ const applyResultLifecycleEvent = (
 ): void => {
   const sdkInitiatedTurn = input.session.sdkInitiatedTurnActive === true;
   delete input.session.sdkInitiatedTurnActive;
+  delete input.session.resultAwaitsSdkIdle;
   if (input.outcome === "awaiting_sdk_idle") {
     const { remainingActiveSdkUserTurns, remainingPendingUserTurns } = completeResultUserTurns(
       input.session,
@@ -180,9 +211,10 @@ const applyResultLifecycleEvent = (
       return;
     }
     if (input.session.sdkState === "idle") {
-      emitSessionIdle(input);
+      emitSessionIdle(input, "completed");
       return;
     }
+    input.session.resultAwaitsSdkIdle = true;
     input.session.activity = "running";
     return;
   }
@@ -201,5 +233,5 @@ const applyResultLifecycleEvent = (
   input.session.sdkState = "idle";
   // Transcript activity can keep the renderer busy after the host goes idle.
   // Send completion even when the host already marks this session idle.
-  publishSessionIdle({ ...input, turnCompleted: true });
+  publishSessionIdle(input, input.outcome);
 };

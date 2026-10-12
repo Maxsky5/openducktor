@@ -154,7 +154,7 @@ describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
         }),
       ]);
       let sends = 0;
-      adapter.sendUserMessage = async (input) => {
+      adapter.submitUserMessage = async (input) => {
         sends += 1;
         const current = getSession(sessionsRef);
         sessionsRef.current = replaceAgentSession(sessionsRef.current, {

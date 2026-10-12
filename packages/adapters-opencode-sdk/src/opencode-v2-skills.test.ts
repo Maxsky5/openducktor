@@ -158,9 +158,11 @@ describe("OpenCode V2 skill references", () => {
           },
         ],
       };
-      expect(requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body).toEqual(
-        expectedBody,
-      );
+      expect(requests.find(({ url }) => url.pathname.endsWith("/prompt"))?.body).toEqual({
+        ...expectedBody,
+        id: expect.stringMatching(/^msg_/),
+        delivery: "queue",
+      });
       const history = await controller.loadSessionHistory({ ...ref, workingDirectory });
       expect(accepted.parts).toEqual(history[0]?.displayParts);
       expect(accepted.parts.filter((part) => part.kind === "skill_mention")).toEqual([
@@ -195,6 +197,7 @@ describe("OpenCode V2 skill references", () => {
       expect(requests.find(({ url }) => url.pathname.endsWith("/command"))?.body).toEqual({
         name: "review",
         ...expectedBody,
+        delivery: "queue",
       });
     },
   );

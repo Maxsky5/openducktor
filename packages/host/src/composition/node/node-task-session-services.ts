@@ -43,6 +43,7 @@ export const createNodeTaskSessionServices = ({
   canonicalizeRepoPath,
   repositoryPolicy,
   workflowLaunch,
+  pauseForStop,
 }: {
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<Parameters<typeof createNodeTaskEventServices>[0], "baseTaskService">;
@@ -52,6 +53,7 @@ export const createNodeTaskSessionServices = ({
   workflowLaunch: Pick<Parameters<typeof createWorkflowLaunchService>[0], "resolveParts"> & {
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
   };
+  pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
 }) => {
   const baseTaskService = createTaskServiceWithMutationProgress({
     ...taskServiceInput,
@@ -72,6 +74,7 @@ export const createNodeTaskSessionServices = ({
   > = {
     canonicalizeRepoPath,
     repositoryPolicy,
+    pauseForStop,
     taskReader: taskServiceInput.taskStore,
     persistTaskModel: (input) =>
       eventServices.taskService.agentSessionUpdateModelDeferredPublication(input).pipe(

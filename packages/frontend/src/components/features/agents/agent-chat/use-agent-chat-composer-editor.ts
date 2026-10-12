@@ -1,3 +1,4 @@
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -40,7 +41,7 @@ type UseAgentChatComposerEditorArgs = {
   editorRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   onEditorInput: () => void;
-  onSend: () => void;
+  onSend: (mode: AgentMessageSubmitMode) => void;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;

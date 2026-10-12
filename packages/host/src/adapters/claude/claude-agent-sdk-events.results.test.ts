@@ -70,7 +70,7 @@ describe("handleClaudeSdkMessage result events", () => {
     expect(session.lastSuccessfulResultTurnIndex).toBe(1);
     expect(session.lastAssistantTextFinal).toBeUndefined();
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "session_idle", turnCompleted: true }),
+      expect.objectContaining({ type: "session_idle", turnOutcome: "completed" }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -185,7 +185,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        turnCompleted: true,
+        turnOutcome: "completed",
       },
     ]);
   });
@@ -686,8 +686,55 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        turnCompleted: true,
+        turnOutcome: "completed",
       },
     ]);
+  });
+  test("completes a deferred-tool turn at the next SDK idle state, but a bare idle state ends no turn", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.activeSdkUserTurnCount = 1;
+    session.pendingUserTurnCount = 1;
+    session.sdkState = "running";
+    const handle = (message: Parameters<typeof claudeSdkMessageFixture>[0]) =>
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:00.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture(message),
+      });
+    const idleState = {
+      type: "system",
+      subtype: "session_state_changed",
+      state: "idle",
+      session_id: session.externalSessionId,
+    } as const;
+
+    handle({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "",
+      terminal_reason: "tool_deferred",
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
+    handle(idleState);
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([
+      expect.objectContaining({ turnOutcome: "completed" }),
+    ]);
+
+    events.length = 0;
+    session.activity = "running";
+    handle(idleState);
+    const [bareIdle] = events.filter((event) => event.type === "session_idle");
+    expect(bareIdle).toBeDefined();
+    expect(bareIdle).not.toHaveProperty("turnOutcome");
   });
 });

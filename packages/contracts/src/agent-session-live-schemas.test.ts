@@ -185,7 +185,13 @@ describe("agent-session live contracts", () => {
         liveSession: snapshot,
         sequence: 3,
       },
-      { type: "snapshot", repoPath: ref.repoPath, sessions: [snapshot], sequence: 0 },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        repoPath: ref.repoPath,
+        sessions: [snapshot],
+        sequence: 0,
+      },
       { type: "session_upsert", session: snapshot, sequence: 1 },
       { type: "session_removed", ref, sequence: 2 },
       {

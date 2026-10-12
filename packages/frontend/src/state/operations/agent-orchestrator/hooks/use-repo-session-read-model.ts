@@ -11,6 +11,7 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
+import type { AgentMessageQueuesStore } from "@/state/agent-message-queues-store";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import {
@@ -79,6 +80,7 @@ type UseRepoSessionReadModelArgs = {
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   applyLiveNotices: AgentSessionsStore["applyLiveNotices"];
+  messageQueues: Pick<AgentMessageQueuesStore, "replaceRepository" | "apply" | "removeAccepted">;
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   queryClient: QueryClient;
@@ -134,6 +136,7 @@ export const useRepoSessionReadModel = ({
   repoEpochRef,
   commitSessionCollection,
   applyLiveNotices,
+  messageQueues,
   liveSessionPort,
   transcriptEvents,
   queryClient,
@@ -783,6 +786,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "snapshot") {
+        messageQueues.replaceRepository(envelope.repoPath, envelope.messageQueues);
         retainLiveNotices(envelope);
         commitInitialSnapshot(envelope);
         return;
@@ -849,24 +853,21 @@ export const useRepoSessionReadModel = ({
         clearSessionFault(envelope.event.sessionRef);
         commitTranscriptActivity(envelope);
         handleTranscriptEvent(envelope.event, envelope.provenance);
+        // An accepted message leaves its queue after it joins the transcript, in the same step.
+        if (envelope.event.type === "user_message" && envelope.event.submissionId) {
+          messageQueues.removeAccepted(envelope.event.sessionRef, envelope.event.submissionId);
+        }
+        return;
+      }
+      if (envelope.type === "message_queue_updated") {
+        messageQueues.apply(envelope.queue);
         return;
       }
       if (envelope.type === "catalog_invalidated") {
-        const catalogScope =
-          envelope.scope.workingDirectory === undefined
-            ? {
-                repoPath: envelope.scope.repoPath,
-                runtimeKind: envelope.scope.runtimeKind,
-              }
-            : {
-                repoPath: envelope.scope.repoPath,
-                runtimeKind: envelope.scope.runtimeKind,
-                workingDirectory: envelope.scope.workingDirectory,
-              };
         runOrchestratorSideEffect(
           "agent-session-live-invalidate-catalog",
           queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(catalogScope),
+            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(envelope.scope),
           }),
           {
             tags: {
@@ -957,6 +958,7 @@ export const useRepoSessionReadModel = ({
     canObserveRepo,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
+    messageQueues,
     queryClient,
     reloadGeneration,
     repoEpochRef,

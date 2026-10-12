@@ -1,6 +1,7 @@
 import type { AgentEnginePort } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import {
+  AgentMessageQueuesContext,
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
@@ -23,7 +24,7 @@ export function AgentStudioStateProvider({
   const { activeWorkspace } = useRequiredContext(WorkspaceStateContext, "AgentStudioStateProvider");
   const { tasks, isLoadingTasks } = useTaskSnapshotContext();
   const { refreshTaskData } = useTaskControlContext();
-  const { sessionStore, operations, historyLoadActions, readModelState } =
+  const { sessionStore, messageQueues, operations, historyLoadActions, readModelState } =
     useAgentOrchestratorOperations({
       activeWorkspace,
       tasks,
@@ -37,7 +38,9 @@ export function AgentStudioStateProvider({
       <AgentSessionHistoryLoadContext.Provider value={historyLoadActions}>
         <AgentSessionReadModelStateContext.Provider value={readModelState}>
           <AgentSessionsContext.Provider value={sessionStore}>
-            {children}
+            <AgentMessageQueuesContext.Provider value={messageQueues}>
+              {children}
+            </AgentMessageQueuesContext.Provider>
           </AgentSessionsContext.Provider>
         </AgentSessionReadModelStateContext.Provider>
       </AgentSessionHistoryLoadContext.Provider>

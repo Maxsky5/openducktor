@@ -90,8 +90,7 @@ export type CodexServerRequestHandlerContext = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   subagents: CodexSubagentLinkState;
   sessionForThreadId(threadId: string): CodexSessionState | undefined;
-  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
-  flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
+  bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   emitRetainedSessionFailure(session: CodexSessionState, message: string): void;
   emitRoutedRequestEvent?(targetSession: CodexSessionState, event: AgentEvent): void;
@@ -240,12 +239,8 @@ export const handleCodexServerRequest = async (
     (routeContext.ownerThreadId === routeContext.policySession.threadId
       ? context.activeTurnsBySessionId.get(routeContext.policySession.threadId)
       : undefined);
-  if (
-    requestTurnId &&
-    activeTurn &&
-    context.bindActiveTurnId(activeTurn, requestTurnId, requestReceivedAtMs)
-  ) {
-    context.flushQueuedUserMessagesLater(activeTurn);
+  if (requestTurnId && activeTurn) {
+    context.bindActiveTurnId(activeTurn, requestTurnId, requestReceivedAtMs);
   }
 
   const mcpElicitationApproval = toMcpElicitationApprovalRequest(rawRequest);
@@ -343,8 +338,8 @@ export const handleCodexServerRequest = async (
         `Codex question request thread '${parsed.threadId}' does not match request owner '${routeContext.ownerThreadId}'.`,
       );
     }
-    if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId, requestReceivedAtMs)) {
-      context.flushQueuedUserMessagesLater(activeTurn);
+    if (activeTurn) {
+      context.bindActiveTurnId(activeTurn, parsed.turnId, requestReceivedAtMs);
     }
     const questions = toCodexToolQuestions(parsed.request.questions);
     const questionInput = { questions };

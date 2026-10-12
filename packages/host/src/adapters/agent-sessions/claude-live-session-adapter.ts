@@ -423,7 +423,9 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
               ),
               Effect.mapError((cause) =>
-                acceptedMessage ? messageAcceptedFailure(input, acceptedMessage)(cause) : cause,
+                acceptedMessage
+                  ? messageAcceptedFailure(input, acceptedMessage, "live_update")(cause)
+                  : cause,
               ),
             );
           }),

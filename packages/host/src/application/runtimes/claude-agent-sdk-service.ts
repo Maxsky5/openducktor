@@ -105,8 +105,8 @@ export type ClaudeAgentSdkService = {
     input: AgentSessionControlUpdateTitleInput,
   ): Effect.Effect<AgentSessionTitleUpdateResult, ClaudeAgentSdkServiceError>;
   /**
-   * `onSent` runs when the message enters the Claude SDK input queue or the host queue for a later
-   * turn.
+   * `onSent` runs when a message that starts a turn enters the Claude SDK input queue. A steer
+   * does not call it.
    */
   sendUserMessage(
     input: SendAgentUserMessageInput,

@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
 import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
 import { createRuntimeRegistryPort } from "../../tasks/test-support/task-workflow-harness";
@@ -240,6 +241,7 @@ export const createLaunchHarness = async (
   const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open(runtimeKind);
   const runtime = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission,
     publish: (event) => envelopes.push(event),
@@ -397,6 +399,7 @@ export const createLaunchHarness = async (
     taskLifecycle: lifecycle,
     taskSessionStart: preparation,
     persistTaskModel: unexpected("task model update"),
+    pauseForStop: () => Effect.void,
     repositoryPolicy: {
       run: unexpected("repository operation"),
       runSend: unexpected("repository send"),

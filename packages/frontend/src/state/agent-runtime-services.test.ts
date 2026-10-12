@@ -7,6 +7,7 @@ import {
   getAgentSessionResumeFailureNotice,
 } from "./agent-runtime-services";
 import { HostInvokeError } from "@openducktor/host-client";
+import { createAgentMessageQueueSnapshot } from "@/test-utils/agent-message-send-fixture";
 import { host } from "./operations/shared/host";
 
 const sessionSummary: AgentSessionSummary = {
@@ -142,14 +143,29 @@ describe("agent runtime services", () => {
     const originalStart = host.agentSessionControlStart;
     const originalResume = host.agentSessionControlResume;
     const originalFork = host.agentSessionControlFork;
-    const originalSend = host.agentSessionControlSend;
+    const originalSubmit = host.agentSessionMessageSubmit;
+    const originalManageQueue = host.agentSessionMessageQueueManage;
     const originalUpdateModel = host.agentSessionControlUpdateModel;
     const originalStop = host.agentSessionControlStop;
     const originalRelease = host.agentSessionControlRelease;
     const start = mock(async () => sessionSummary);
     const resume = mock(async () => sessionSummary);
     const fork = mock(async () => sessionSummary);
-    const send = mock(async () => acceptedUserMessage);
+    const submit = mock(async () => ({
+      kind: "accepted" as const,
+      acceptedMessage: acceptedUserMessage,
+    }));
+    const queue = createAgentMessageQueueSnapshot({
+      target: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: sessionSummary.externalSessionId,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      },
+      revision: 2,
+    });
+    const manageQueue = mock(async () => ({ queue, acceptedMessage: acceptedUserMessage }));
     const updateModel = mock(async () => undefined);
     const stop = mock(async () => undefined);
     const release = mock(async () => undefined);
@@ -157,7 +173,8 @@ describe("agent runtime services", () => {
     host.agentSessionControlStart = start;
     host.agentSessionControlResume = resume;
     host.agentSessionControlFork = fork;
-    host.agentSessionControlSend = send;
+    host.agentSessionMessageSubmit = submit;
+    host.agentSessionMessageQueueManage = manageQueue;
     host.agentSessionControlUpdateModel = updateModel;
     host.agentSessionControlStop = stop;
     host.agentSessionControlRelease = release;
@@ -199,13 +216,22 @@ describe("agent runtime services", () => {
         systemPrompt: "Build",
         parentExternalSessionId: "parent-1",
       });
-      await expect(
-        agentEngine.sendUserMessage({
+      expect(
+        await agentEngine.submitUserMessage({
           ...sessionRef,
           sessionScope,
+          submissionId: "submission-1",
+          mode: "default",
           parts: [{ kind: "text", text: "Continue" }],
         }),
-      ).resolves.toEqual(acceptedUserMessage);
+      ).toEqual({ kind: "accepted", acceptedMessage: acceptedUserMessage });
+      expect(
+        await agentEngine.manageMessageQueue({
+          ...sessionRef,
+          sessionScope,
+          action: { kind: "steer", submissionId: "submission-1" },
+        }),
+      ).toEqual({ queue, acceptedMessage: acceptedUserMessage });
       await agentEngine.updateSessionModel({ ...sessionRef, sessionScope, model: null });
       await agentEngine.stopSession(sessionRef);
       await agentEngine.releaseSession(sessionRef);
@@ -225,11 +251,19 @@ describe("agent runtime services", () => {
         resumeMode: "reattach",
       });
       expect(fork).toHaveBeenCalledTimes(1);
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(send).toHaveBeenCalledWith({
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(submit).toHaveBeenCalledWith({
         ...sessionRef,
         sessionScope,
+        submissionId: "submission-1",
+        mode: "default",
         parts: [{ kind: "text", text: "Continue" }],
+      });
+      expect(manageQueue).toHaveBeenCalledTimes(1);
+      expect(manageQueue).toHaveBeenCalledWith({
+        ...sessionRef,
+        sessionScope,
+        action: { kind: "steer", submissionId: "submission-1" },
       });
       expect(updateModel).toHaveBeenCalledTimes(1);
       expect(stop).toHaveBeenCalledTimes(1);
@@ -238,7 +272,8 @@ describe("agent runtime services", () => {
       host.agentSessionControlStart = originalStart;
       host.agentSessionControlResume = originalResume;
       host.agentSessionControlFork = originalFork;
-      host.agentSessionControlSend = originalSend;
+      host.agentSessionMessageSubmit = originalSubmit;
+      host.agentSessionMessageQueueManage = originalManageQueue;
       host.agentSessionControlUpdateModel = originalUpdateModel;
       host.agentSessionControlStop = originalStop;
       host.agentSessionControlRelease = originalRelease;

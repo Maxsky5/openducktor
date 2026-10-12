@@ -26,10 +26,10 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { taskWorktreeQueryKeys } from "../queries/build-runtime";
 import { autopilotSettingsQueryOptions } from "../queries/autopilot";
 import { AutopilotProvider } from "./autopilot-provider";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
 const beta = createWorkspaceRecordFixture({
@@ -75,30 +75,7 @@ const notifications: NotificationContextValue = {
   },
 };
 
-const agentOperations: AgentOperationsContextValue = {
-  readSessionTodos: async () => [],
-  readSessionHistory: async () => [],
-  describeGeneratedImages: async () => {
-    throw new Error("Unexpected image metadata read");
-  },
-  beginGeneratedImageBatch: async () => {
-    throw new Error("Unexpected beginGeneratedImageBatch");
-  },
-  releaseGeneratedImageBatch: async () => {
-    throw new Error("Unexpected releaseGeneratedImageBatch");
-  },
-  readGeneratedImage: async () => {
-    throw new Error("Unexpected generated image read.");
-  },
-  loadAgentSessionHistory: async () => null,
-  loadAgentSessionContext: async () => {},
-  sendAgentMessage: async () => null,
-  stopAgentSession: async () => {},
-  continueInterruptedTurn: async () => undefined,
-  updateAgentSessionModel: async () => {},
-  replyAgentApproval: async () => {},
-  answerAgentQuestion: async () => {},
-};
+const agentOperations = createAgentOperationsFixture();
 
 let originalBridge: ShellBridge;
 let info: ReturnType<typeof spyOn<typeof toast, "info">>;

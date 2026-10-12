@@ -8,6 +8,7 @@ import {
   createSessionMessagesState,
   getSessionMessageCount,
 } from "./operations/agent-orchestrator/support/messages";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const replaceStoreSessions = (
   store: ReturnType<typeof createAgentSessionsStore>,
@@ -84,7 +85,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       if (cleanup === "removed") {
         store.applyLiveNotices({ type: "session_removed", ref: snapshot.ref });
       } else if (cleanup === "snapshot") {
-        store.applyLiveNotices({ type: "snapshot", repoPath: "/repo", sessions: [] });
+        store.applyLiveNotices(createLiveSnapshotEnvelope({ sessions: [] }));
       } else {
         store.resetWorkspace("/other");
         // A late callback from the previous workspace must not retain feedback here.
@@ -126,7 +127,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       launchFailure,
     };
     // A browser that opens after the launch only receives the snapshot.
-    store.applyLiveNotices({ type: "snapshot", repoPath: "/repo", sessions: [snapshot] });
+    store.applyLiveNotices(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
     store.replaceSession({
       ...session,
       messages: createSessionMessagesState(session.externalSessionId, [

@@ -432,6 +432,37 @@ describe("useAgentStudioGitConflictController", () => {
     }
   });
 
+  test("reports a handoff that waits in the message queue while Builder works", async () => {
+    const receipt = createAgentMessageSendReceipt();
+    const onResolveGitConflict = mock(async () => ({
+      outcome: "queued" as const,
+      recipient: receipt.recipient,
+    }));
+    const harness = createHookHarness(
+      useAgentStudioGitConflictController,
+      createBaseArgs({
+        detectedConflict: createConflict({ conflictedFiles: ["AGENTS.md"] }),
+        detectedConflictedFiles: ["AGENTS.md"],
+        onResolveGitConflict,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.askBuilderToResolveGitConflict();
+      });
+
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        "Queued git conflict resolution request for Builder",
+      );
+      expect(toastErrorMock).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("silently resets ask-builder state when Builder declines the handoff", async () => {
     const clearActionErrors = mock(() => {});
     const onResolveGitConflict = mock(async () => false as const);

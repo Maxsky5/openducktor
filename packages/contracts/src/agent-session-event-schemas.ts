@@ -324,6 +324,9 @@ const eventBaseFields = {
   sessionRef: agentSessionLiveRefSchema.optional(),
 };
 
+export const agentTurnOutcomeSchema = z.enum(["completed", "interrupted", "failed"]);
+export type AgentTurnOutcome = z.infer<typeof agentTurnOutcomeSchema>;
+
 const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
   z.object({ ...eventBaseFields, ...fields }).strict();
 
@@ -335,6 +338,11 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   state: z.enum(["queued", "read"]),
   model: agentModelSelectionSchema.optional(),
   resolvedQuestionRequestIds: z.array(z.string().trim().min(1)).optional(),
+  /**
+   * The queue submission that sent this message. It lets a reader replace the pending card with
+   * the accepted message in one step. It is live only and never part of stored history.
+   */
+  submissionId: z.string().trim().min(1).optional(),
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
@@ -461,7 +469,11 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("session_idle"),
-    turnCompleted: z.literal(true).optional(),
+    /**
+     * Set when the idle state ends a turn. The queue sends its next message only after a
+     * `completed` turn. Other outcomes pause it.
+     */
+    turnOutcome: agentTurnOutcomeSchema.optional(),
     interruption: z.strictObject({ messageId: z.string().min(1), message: z.string() }).optional(),
   }),
   transcriptEventSchema({

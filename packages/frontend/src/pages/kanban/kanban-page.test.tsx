@@ -52,7 +52,6 @@ import {
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type {
-  AgentOperationsContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   RepoSettingsInput,
@@ -77,6 +76,7 @@ import type { KanbanPageModels } from "./kanban-page-model-types";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
 
 enableReactActEnvironment();
 
@@ -382,30 +382,11 @@ const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
   retryWorkspaces: async () => {},
 });
 
-const createAgentOperationsValue = (): AgentOperationsContextValue => ({
-  describeGeneratedImages: async () => {
-    throw new Error("Unexpected image metadata read");
-  },
-  beginGeneratedImageBatch: async () => {
-    throw new Error("Unexpected beginGeneratedImageBatch");
-  },
-  releaseGeneratedImageBatch: async () => {
-    throw new Error("Unexpected releaseGeneratedImageBatch");
-  },
-  readGeneratedImage: async () => {
-    throw new Error("Unexpected generated image read");
-  },
-  readSessionTodos: async () => [],
-  readSessionHistory: async () => [],
-  loadAgentSessionHistory: async () => null,
-  loadAgentSessionContext: async () => undefined,
-  sendAgentMessage: sendAgentMessageMock,
-  stopAgentSession: async () => {},
-  continueInterruptedTurn: async () => undefined,
-  updateAgentSessionModel: updateAgentSessionModelMock,
-  replyAgentApproval: async () => {},
-  answerAgentQuestion: async () => {},
-});
+const createAgentOperationsValue = () =>
+  createAgentOperationsFixture({
+    sendAgentMessage: sendAgentMessageMock,
+    updateAgentSessionModel: updateAgentSessionModelMock,
+  });
 
 const createTasksStateValue = (
   renderState: Pick<

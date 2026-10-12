@@ -89,9 +89,12 @@ export const lifecycleMapper: CodexEventMapper = {
       events.push(event);
     }
 
+    if (status === "inProgress") {
+      throw new Error(`Codex reported turn '${turn.id}' as completed while it is in progress.`);
+    }
     const idleEvent: CodexCanonicalSessionIdleEvent = {
       kind: "session_idle",
-      turnCompleted: true,
+      turnOutcome: status,
       source: ctx.source,
       mapper: "lifecycle",
       threadId: ctx.threadId,

@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentUserMessage,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
@@ -15,7 +16,11 @@ import { trimTrailingPathSeparators } from "@openducktor/path-support";
 import { HostValidationError } from "../../effect/host-errors";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
-import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
+import type {
+  ClaudeAcceptedUserMessage,
+  ClaudeSession,
+  ClaudeSessionInput,
+} from "./claude-agent-sdk-types";
 import { claudeSessionRef, claudeSessionScope } from "./claude-agent-sdk-utils";
 
 export const createClaudeSessionSummary = (
@@ -147,6 +152,26 @@ export const toClaudeDisplayParts = (
   return displayParts;
 };
 
+/** The live event of a user message that this adapter sent. */
+export const toClaudeUserMessageEvent = (
+  session: ClaudeSession,
+  message: ClaudeAcceptedUserMessage,
+  state: AcceptedAgentUserMessage["state"],
+): AcceptedAgentUserMessage => {
+  const event: AcceptedAgentUserMessage = {
+    type: "user_message",
+    externalSessionId: session.externalSessionId,
+    timestamp: message.timestamp,
+    messageId: message.messageId,
+    message: message.text,
+    parts: message.parts,
+    state,
+  };
+  if (message.model) event.model = message.model;
+  if (message.submissionId) event.submissionId = message.submissionId;
+  return event;
+};
+
 export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRuntimeSnapshot => {
   const ref = claudeSessionRef(session);
   if (session.activity === "stopped") {
@@ -155,8 +180,7 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
   const runtimeActivity =
     session.sdkState === "idle" &&
     session.activeSdkUserTurnCount === 0 &&
-    session.pendingUserTurnCount === 0 &&
-    session.queuedSdkMessages.length === 0
+    session.pendingUserTurnCount === 0
       ? "idle"
       : session.activity;
   const snapshot: NonNullable<Parameters<typeof toAgentSessionRuntimeSnapshot>[0]["snapshot"]> = {

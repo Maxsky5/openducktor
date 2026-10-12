@@ -7,6 +7,7 @@ import {
   createWorkspaceActivityObserver,
   type WorkspaceActivityArchivedSessionsPort,
 } from "./workspace-activity-observer";
+import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 
 const runtimeKind = "codex" as const;
 
@@ -162,7 +163,7 @@ describe("createWorkspaceActivityObserver", () => {
     const running = snapshot("/alpha", "root", { activity: "running" });
     const ref = running.ref;
 
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [running] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [running] }));
     expect(statusOfSession()).toEqual({ kind: "running" });
 
     harness.emit("/alpha", {
@@ -210,17 +211,19 @@ describe("createWorkspaceActivityObserver", () => {
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     expect(alphaLive()).toEqual({ kind: "unknown" });
 
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [
-        snapshot("/alpha", "root", { activity: "running" }),
-        snapshot("/alpha", "child", {
-          parentExternalSessionId: "root",
-          pendingQuestions: [{ requestId: "q", questions: [] }],
-        }),
-      ],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [
+          snapshot("/alpha", "root", { activity: "running" }),
+          snapshot("/alpha", "child", {
+            parentExternalSessionId: "root",
+            pendingQuestions: [{ requestId: "q", questions: [] }],
+          }),
+        ],
+      }),
+    );
     const rootKey = agentSessionIdentityKey({
       externalSessionId: "root",
       runtimeKind,
@@ -275,11 +278,13 @@ describe("createWorkspaceActivityObserver", () => {
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({ kind: "unknown" });
 
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a", { activity: "running" })],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [snapshot("/alpha", "a", { activity: "running" })],
+      }),
+    );
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({ kind: "unknown" });
 
     await harness.settle();
@@ -299,12 +304,14 @@ describe("createWorkspaceActivityObserver", () => {
     ]);
     await harness.settle();
 
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a", { activity: "running" })],
-    });
-    harness.emit("/beta", { type: "snapshot", repoPath: "/beta", sessions: [] });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [snapshot("/alpha", "a", { activity: "running" })],
+      }),
+    );
+    harness.emit("/beta", createLiveSnapshotEnvelope({ repoPath: "/beta", sessions: [] }));
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
@@ -324,11 +331,13 @@ describe("createWorkspaceActivityObserver", () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a", { activity: "running" })],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [snapshot("/alpha", "a", { activity: "running" })],
+      }),
+    );
     expect(harness.observer.getWorkspaceActivity("alpha")).toMatchObject({ active: true });
 
     harness.archived.set(
@@ -350,7 +359,7 @@ describe("createWorkspaceActivityObserver", () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
 
     harness.emit("/alpha", { type: "fault", repoPath: "/alpha", message: "stream closed" });
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
@@ -358,7 +367,7 @@ describe("createWorkspaceActivityObserver", () => {
       reason: "stream closed",
     });
 
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
       inputRequired: false,
@@ -371,11 +380,10 @@ describe("createWorkspaceActivityObserver", () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a")],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [snapshot("/alpha", "a")] }),
+    );
     const ready = harness.observer.getWorkspaceActivity("alpha");
 
     harness.emit("/alpha", {
@@ -409,7 +417,7 @@ describe("createWorkspaceActivityObserver", () => {
     const harness = createHarness({ failArchivedFor: new Set(["alpha"]) });
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "unavailable",
@@ -430,7 +438,7 @@ describe("createWorkspaceActivityObserver", () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
 
     harness.observer.setSessionRecordsError("Workspace Session updates are unavailable.");
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
@@ -449,7 +457,7 @@ describe("createWorkspaceActivityObserver", () => {
       { workspaceId: "beta", repoPath: "/beta" },
     ]);
     await harness.settle();
-    harness.emit("/alpha", { type: "snapshot", repoPath: "/alpha", sessions: [] });
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
     const first = harness.observer.getWorkspaceActivity("alpha");
 
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
@@ -468,11 +476,13 @@ describe("createWorkspaceActivityObserver", () => {
 
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a", { activity: "running" })],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [snapshot("/alpha", "a", { activity: "running" })],
+      }),
+    );
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
@@ -492,11 +502,13 @@ describe("createWorkspaceActivityObserver", () => {
     await harness.settle();
     const before = notifications;
 
-    harness.emit("/alpha", {
-      type: "snapshot",
-      repoPath: "/alpha",
-      sessions: [snapshot("/alpha", "a", { activity: "running" })],
-    });
+    harness.emit(
+      "/alpha",
+      createLiveSnapshotEnvelope({
+        repoPath: "/alpha",
+        sessions: [snapshot("/alpha", "a", { activity: "running" })],
+      }),
+    );
 
     expect(notifications).toBeGreaterThan(before);
     unsubscribe();

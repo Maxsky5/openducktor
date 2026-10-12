@@ -406,7 +406,13 @@ describe("HostClient", () => {
       pendingQuestions: [],
       contextUsage: null,
     };
-    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [session], sequence: 4 };
+    const snapshot = {
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [session],
+      sequence: 4,
+    };
     const { client, calls } = createClient((command) => {
       if (command === "agent_session_live_attach") {
         return snapshot;

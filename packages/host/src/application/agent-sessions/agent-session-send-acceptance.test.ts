@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import { hostInvokeFailureSchema, type AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -30,6 +31,7 @@ describe("message acceptance through the command and live adapter modules", () =
       const runtimeAdmission = createTestRuntimeAdmissionGate();
       runtimeAdmission.open(runtime.kind);
       const live = createAgentSessionLiveStateService({
+        messageQueues: noMessageQueues,
         adapterRegistry: createLiveSessionAdapterRegistry(),
         runtimeAdmission,
         faultLog: () => Effect.void,
@@ -88,6 +90,7 @@ describe("message acceptance through the command and live adapter modules", () =
         }),
       );
       const commands = createAgentSessionCommandService({
+        pauseForStop: () => Effect.void,
         runtime: live,
         repositoryPolicy: {
           run: (_ref, _operation, effect) => effect,
@@ -121,6 +124,7 @@ describe("message acceptance through the command and live adapter modules", () =
       const sending = Effect.runPromise(
         Effect.result(
           commands.sendUserMessage({
+            delivery: "new_turn",
             ...ref,
             sessionScope: { kind: "repository" },
             parts: [{ kind: "text", text: "Hello" }],

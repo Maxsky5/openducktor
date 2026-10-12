@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type {
   AgentSkillReference,
   AgentSlashCommand,
@@ -11,6 +12,7 @@ import {
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
+import { isApplePlatform } from "@/lib/steer-shortcut";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type {
   ReferenceMenuItem,
@@ -45,6 +47,9 @@ type KeyDownTestSetupOverrides = {
   shiftKey?: boolean;
   metaKey?: boolean;
   ctrlKey?: boolean;
+  altKey?: boolean;
+  repeat?: boolean;
+  isComposing?: boolean;
   repairedSelection?: ActiveTextSelection | null;
   selectedTextRange?: ActiveTextSelectionRange | null;
   lineBreakTarget?: TextSelectionTarget | null;
@@ -105,6 +110,9 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
     shiftKey: overrides.shiftKey ?? false,
     metaKey: overrides.metaKey ?? false,
     ctrlKey: overrides.ctrlKey ?? false,
+    altKey: overrides.altKey ?? false,
+    repeat: overrides.repeat ?? false,
+    nativeEvent: { isComposing: overrides.isComposing ?? false },
     preventDefault: mock(() => {}),
   };
   const lineBreakTarget = overrides.lineBreakTarget ?? { segmentId: "segment-1", offset: 5 };
@@ -127,7 +135,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   const closeSlashMenu = mock(() => {});
   const closeReferenceMenu = mock(() => {});
   const closeSkillMenu = mock(() => {});
-  const onSend = mock(() => {});
+  const onSend = mock((_mode: AgentMessageSubmitMode) => {});
   const clearComposerContents = mock(() => true);
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
@@ -192,7 +200,61 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   };
 };
 
+const steerModifier = (): Pick<KeyDownTestSetupOverrides, "metaKey" | "ctrlKey"> =>
+  isApplePlatform() ? { metaKey: true } : { ctrlKey: true };
+
 describe("agent-chat-composer-editor-keydown", () => {
+  test("sends a default message on enter", () => {
+    const setup = createKeyDownTestSetup();
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.onSend).toHaveBeenCalledWith("default");
+  });
+
+  test("steers on the platform shortcut before autocomplete selection", () => {
+    const setup = createKeyDownTestSetup({
+      ...steerModifier(),
+      slashMenuState: {
+        query: "sum",
+        textSegmentId: "segment-1",
+        rangeStart: 0,
+        rangeEnd: 4,
+      },
+      filteredSlashCommands: [slashCommand, slashCommandTwo],
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.onSend).toHaveBeenCalledTimes(1);
+    expect(setup.onSend).toHaveBeenCalledWith("steer");
+    expect(setup.selectSlashCommand).not.toHaveBeenCalled();
+  });
+
+  test("captures a repeated or disabled steer shortcut without sending", () => {
+    const repeated = createKeyDownTestSetup({ ...steerModifier(), repeat: true });
+    const disabled = createKeyDownTestSetup({ ...steerModifier(), disabled: true });
+
+    expect(repeated.handled()).toBe(true);
+    expect(disabled.handled()).toBe(true);
+    expect(repeated.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(disabled.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(repeated.onSend).not.toHaveBeenCalled();
+    expect(disabled.onSend).not.toHaveBeenCalled();
+  });
+
+  test("leaves enter to the input method editor while it composes text", () => {
+    const plain = createKeyDownTestSetup({ isComposing: true });
+    const steer = createKeyDownTestSetup({ ...steerModifier(), isComposing: true });
+
+    expect(plain.handled()).toBe(false);
+    expect(steer.handled()).toBe(false);
+    expect(plain.event.preventDefault).not.toHaveBeenCalled();
+    expect(steer.event.preventDefault).not.toHaveBeenCalled();
+    expect(plain.onSend).not.toHaveBeenCalled();
+    expect(steer.onSend).not.toHaveBeenCalled();
+  });
+
   test("prefers reference-menu file selection over send on enter", () => {
     const results = [
       buildFileSearchResult({ path: "src/a.ts", name: "a.ts" }),

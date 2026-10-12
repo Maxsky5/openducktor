@@ -27,6 +27,7 @@ type SessionActions = {
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
   ) => Promise<AgentMessageSendReceipt | null>;
+  manageAgentMessageQueue: AgentOperationsContextValue["manageAgentMessageQueue"];
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
@@ -96,6 +97,7 @@ export const createOrchestratorPublicOperations = ({
   ): Promise<AgentMessageSendReceipt | null> => {
     return sessionActions.sendAgentMessage(session, parts, options);
   },
+  manageAgentMessageQueue: sessionActions.manageAgentMessageQueue,
   stopAgentSession: (session): Promise<void> =>
     withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
   continueInterruptedTurn: sessionActions.continueInterruptedTurn,

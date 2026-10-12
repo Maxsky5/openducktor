@@ -1,0 +1,45 @@
+/*
+ * A presence item collapses its space, like an accordion, and fades. It does not scale its
+ * content. A feature class sets the durations, the easing, and the clip margin.
+ */
+.css-presence {
+  interpolate-size: allow-keywords;
+  height: auto;
+  min-height: 0;
+  overflow: clip;
+  overflow-clip-margin: var(--presence-clip-margin, 0px);
+  opacity: 1;
+  transition-property: height, opacity;
+  transition-duration: var(--presence-enter-dur);
+  transition-timing-function: var(--presence-ease);
+}
+
+.css-presence[data-presence="exiting"] {
+  height: 0;
+  opacity: 0;
+  transition-duration: var(--presence-exit-dur);
+}
+
+@starting-style {
+  .css-presence[data-animate-entry="true"] {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .css-presence {
+    transition-property: opacity;
+    transition-duration: var(--presence-exit-dur);
+  }
+
+  .css-presence[data-presence="exiting"] {
+    height: auto;
+  }
+
+  @starting-style {
+    .css-presence[data-animate-entry="true"] {
+      height: auto;
+    }
+  }
+}

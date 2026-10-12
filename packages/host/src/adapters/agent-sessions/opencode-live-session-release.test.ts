@@ -1,3 +1,4 @@
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
@@ -21,6 +22,7 @@ const setup = async (
   const harness = createRuntimeHarness({ release });
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
+    messageQueues: noMessageQueues,
     adapterRegistry,
     faultLog: () => Effect.void,
     runtimeAdmission: { admit: (_runtimeKind, effect) => effect },

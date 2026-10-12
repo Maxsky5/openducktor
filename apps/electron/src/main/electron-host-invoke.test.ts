@@ -63,7 +63,7 @@ describe("runElectronHostInvoke", () => {
     const invoke = createElectronHostInvoke({
       invoke: async () => ({ status: "success", payload: structuredClone(response) }),
     });
-    await expect(invoke("agent_session_control_send")).resolves.toMatchObject({
+    await expect(invoke("agent_session_message_submit")).resolves.toMatchObject({
       ok: false,
       error: { message: error.message, failure: error.failure },
     });

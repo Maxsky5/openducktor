@@ -1,9 +1,19 @@
-import { useAgentStudioSendAction } from "@/pages/agents/session-actions/use-agent-studio-send-action";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import { useAgentStudioSendTarget } from "@/pages/agents/session-actions/use-agent-studio-send-target";
+import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
+import {
+  AgentMessageQueuesContext,
+  AgentOperationsContext,
+  HostRuntimeStatusContext,
+} from "@/state/app-state-contexts";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-draft";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AgentChatComposer } from "./agent-chat-composer";
 import {
   type AgentChatDraftSessionIdentity,
@@ -716,6 +726,19 @@ describe("AgentChatComposer attachments", () => {
   });
 });
 
+/** The contexts that the shared send hook reads. */
+function SendProviders({ children }: { children: ReactNode }) {
+  return (
+    <AgentOperationsContext value={createAgentOperationsFixture()}>
+      <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+        <AgentMessageQueuesContext value={createAgentMessageQueuesStore()}>
+          {children}
+        </AgentMessageQueuesContext>
+      </HostRuntimeStatusContext>
+    </AgentOperationsContext>
+  );
+}
+
 describe("first-message composer recovery", () => {
   test.each([false, true])(
     "retries in the created session after navigation (switch task: %s)",
@@ -734,31 +757,35 @@ describe("first-message composer recovery", () => {
       function RecoveryComposer({ taskId }: { taskId: string }) {
         const [session, setSession] = useState<AgentSessionIdentity | null>(null);
         const selected = taskId === "task-1" ? session : null;
-        const sending = useAgentStudioSendAction({
+        const target = useAgentStudioSendTarget({
           workspaceId: "workspace-1",
           taskId,
           role: "build",
           selectedSessionIdentity: selected,
           selectedSessionModel: null,
-          sessionState: {
-            isWaitingInput: false,
-            canQueueBusyFollowups: false,
-            busySendBlockedReason: null,
-          },
           isSessionModelCatalogLoading: false,
           prepareSelectedSessionModelForSend: async () => true,
           agentStudioReady: true,
           canStartNewSession: true,
-          reusablePrompts: [],
           isStarting: false,
-          selectedModelDescriptor: null,
-          supportsAttachments: false,
-          sendAgentMessage: send,
           startSession: async (parts) => {
             const result = await start(parts);
             setSession(created);
             return result;
           },
+        });
+        const sending = useAgentChatSend({
+          identity: selected,
+          repoPath: "/repo",
+          runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          modelCatalog: null,
+          messages: [],
+          isSessionWorking: false,
+          isWaitingInput: false,
+          selectedModelDescriptor: null,
+          draftRules: { reusablePrompts: [], supportsAttachments: false },
+          sendAgentMessage: send,
+          target,
         });
         const key = agentStudioChatDraftScopeKey("workspace-1", {
           taskId,
@@ -777,7 +804,11 @@ describe("first-message composer recovery", () => {
           />
         );
       }
-      const { container, rerender, unmount } = render(<RecoveryComposer taskId="task-1" />);
+      const providers = { wrapper: SendProviders };
+      const { container, rerender, unmount } = render(
+        <RecoveryComposer taskId="task-1" />,
+        providers,
+      );
       try {
         typeIntoComposer(container, "retry my first message");
         fireEvent.click(screen.getByRole("button", { name: "Send message" }));
@@ -807,9 +838,11 @@ describe("first-message composer recovery", () => {
         fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
         await waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 300 });
         expect(start).toHaveBeenCalledTimes(1);
-        expect(send).toHaveBeenLastCalledWith(created, [
-          { kind: "text", text: "retry my first message" },
-        ]);
+        expect(send).toHaveBeenLastCalledWith(
+          created,
+          [{ kind: "text", text: "retry my first message" }],
+          { mode: "default" },
+        );
       } finally {
         unmount();
       }

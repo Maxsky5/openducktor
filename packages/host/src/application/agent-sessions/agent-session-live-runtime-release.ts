@@ -1,5 +1,4 @@
 import {
-  type AgentSessionLiveEnvelope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
   agentSessionLiveRefSchema,
@@ -13,6 +12,7 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
+import type { AgentSessionLiveEnvelopeDraft } from "./agent-session-live-envelope";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 import type { LiveStateCoordinator } from "./live-state-coordinator";
 
@@ -57,7 +57,9 @@ export const createLiveRuntimeRelease = ({
   readonly publishChanges: (
     changes: ReadonlyArray<AgentSessionLiveAdapterChange>,
   ) => Effect.Effect<void, HostError>;
-  readonly publishEnvelope: (envelope: AgentSessionLiveEnvelope) => Effect.Effect<void, HostError>;
+  readonly publishEnvelope: (
+    envelope: AgentSessionLiveEnvelopeDraft,
+  ) => Effect.Effect<void, HostError>;
   readonly listSnapshots: (
     repoPath: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;

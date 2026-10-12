@@ -1,3 +1,5 @@
+import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import { isSteerShortcut } from "@/lib/steer-shortcut";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -32,10 +34,13 @@ type KeyDownSelection = Pick<
 >;
 
 type ComposerKeyboardEvent = {
+  altKey: boolean;
   ctrlKey: boolean;
   key: string;
   metaKey: boolean;
+  repeat: boolean;
   shiftKey: boolean;
+  nativeEvent: { isComposing: boolean };
   preventDefault(): void;
 };
 
@@ -63,7 +68,7 @@ type HandleComposerEditorKeyDownArgs = {
   closeSlashMenu: () => void;
   closeReferenceMenu: () => void;
   closeSkillMenu: () => void;
-  onSend: () => void;
+  onSend: (mode: AgentMessageSubmitMode) => void;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
@@ -488,6 +493,20 @@ export const handleComposerEditorKeyDown = ({
   selectFileSearchResult,
   applyEditResult,
 }: HandleComposerEditorKeyDownArgs): boolean => {
+  // An input method editor owns keys while it composes text, including Enter.
+  if (event.nativeEvent.isComposing) {
+    return false;
+  }
+
+  // Steering sends the whole message, so it comes before autocomplete selection.
+  if (isSteerShortcut(event)) {
+    event.preventDefault();
+    if (!disabled && !event.repeat) {
+      onSend("steer");
+    }
+    return true;
+  }
+
   if (isSelectAllShortcut(event)) {
     if (selectComposerContents(root)) {
       event.preventDefault();
@@ -565,7 +584,7 @@ export const handleComposerEditorKeyDown = ({
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     if (!disabled) {
-      onSend();
+      onSend("default");
     }
     return true;
   }

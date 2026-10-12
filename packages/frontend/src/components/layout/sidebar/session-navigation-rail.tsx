@@ -23,7 +23,8 @@ import {
   SessionSelectionIndicator,
   SessionSourceIssues,
 } from "./session-navigation-parts";
-import { SessionPresence, SessionPresenceList } from "./session-navigation-presence";
+import { CssPresenceList } from "@/components/ui/css-presence";
+import { SessionPresence } from "./session-navigation-presence";
 import type { SessionSelection } from "./session-navigation-selection";
 import {
   SESSION_GROUP_COUNT_CLASSES,
@@ -55,7 +56,7 @@ export function SessionNavigationRail({
     <SessionPreviewProvider>
       <div className="flex w-full flex-col items-center gap-3">
         <div className="flex w-full flex-col">
-          <SessionPresenceList isLoading={model.isLoading}>
+          <CssPresenceList isLoading={model.isLoading}>
             {visibleGroups.map((group) => (
               <SessionRailGroup
                 key={group.id}
@@ -66,7 +67,7 @@ export function SessionNavigationRail({
                 onOpen={onOpen}
               />
             ))}
-          </SessionPresenceList>
+          </CssPresenceList>
         </div>
         {model.isLoading ? (
           <LoaderCircle
@@ -172,7 +173,7 @@ function SessionRailGroup({
           </span>
         </p>
         <ul className="w-full">
-          <SessionPresenceList isLoading={isLoading}>
+          <CssPresenceList isLoading={isLoading}>
             {group.entries.map((entry) => (
               <SessionPresence as="li" key={entry.key}>
                 <div className="flex justify-center px-1 pb-1.5 pt-1">
@@ -186,7 +187,7 @@ function SessionRailGroup({
                 </div>
               </SessionPresence>
             ))}
-          </SessionPresenceList>
+          </CssPresenceList>
         </ul>
       </div>
     </SessionPresence>

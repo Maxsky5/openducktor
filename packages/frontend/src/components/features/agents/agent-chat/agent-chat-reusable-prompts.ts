@@ -26,7 +26,7 @@ export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlash
   return command;
 };
 
-const isReusablePromptSlashCommand = (command: AgentSlashCommand): boolean =>
+export const isReusablePromptSlashCommand = (command: AgentSlashCommand): boolean =>
   command.source === "custom" && command.id.startsWith(REUSABLE_PROMPT_COMMAND_ID_PREFIX);
 
 const readReusablePromptId = (command: AgentSlashCommand): string | null => {

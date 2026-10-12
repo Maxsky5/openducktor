@@ -1,14 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import {
-  applyClaudeSessionModel,
-  consumeClaudeSession,
-  flushQueuedClaudeUserMessage,
-  sendClaudeUserMessage,
-} from "./claude-agent-sdk-session-io";
+import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
   createClaudeSession,
@@ -23,7 +18,6 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { ClaudeAgentSdkEventEmitter } from "./claude-agent-sdk-types";
 
 const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
-const QUEUED_MESSAGE_ID = "00000000-0000-4000-8000-000000000004";
 
 describe("consumeClaudeSession lifecycle", () => {
   test("sends the first resumed user message after an unattributed running replay", async () => {
@@ -70,6 +64,7 @@ describe("consumeClaudeSession lifecycle", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
+        delivery: "new_turn",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         parts: [{ kind: "text", text: "Hi" }],
       },
@@ -86,106 +81,6 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.sessions.delete(session.externalSessionId);
     openQuery.release();
     await consumePromise;
-  });
-
-  test("flushes a queued message when a terminal result follows a terminal assistant frame", async () => {
-    const events: AgentEvent[] = [];
-    const pushed: SDKUserMessage[] = [];
-    const queue = new AsyncInputQueue<SDKUserMessage>();
-    queue.push = (message) => {
-      pushed.push(message);
-    };
-    const sessionStore = createClaudeAgentSdkSessionStore();
-    const queuedMessage: SDKUserMessage = {
-      type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
-      session_id: "session-1",
-      timestamp: "2026-06-25T20:00:01.000Z",
-      parent_tool_use_id: null,
-      message: {
-        role: "user",
-        content: [{ type: "text", text: "queued follow-up" }],
-      },
-    };
-    const session = createClaudeSession({
-      acceptedUserMessages: [
-        {
-          messageId: MESSAGE_ID,
-          parts: [{ kind: "text", text: "first turn" }],
-          text: "first turn",
-          timestamp: "2026-06-25T20:00:00.000Z",
-        },
-        {
-          messageId: "00000000-0000-4000-8000-000000000002",
-          parts: [{ kind: "text", text: "queued follow-up" }],
-          text: "queued follow-up",
-          timestamp: "2026-06-25T20:00:01.000Z",
-        },
-      ],
-      activeSdkUserTurnCount: 1,
-      activity: "running",
-      pendingUserTurnCount: 2,
-      query: claudeQueryWithMessages([
-        claudeSdkMessageFixture({
-          type: "assistant",
-          uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          message: {
-            role: "assistant",
-            model: "claude-opus-4-6",
-            stop_reason: "end_turn",
-            content: [{ type: "text", text: "first turn done" }],
-          },
-        }),
-        claudeSdkMessageFixture({
-          type: "result",
-          subtype: "success",
-          uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
-          session_id: "session-1",
-          is_error: false,
-          result: "first turn done",
-          stop_reason: "end_turn",
-          terminal_reason: "completed",
-          usage: { input_tokens: 0, output_tokens: 0 },
-        }),
-        claudeSdkMessageFixture({
-          type: "system",
-          subtype: "session_state_changed",
-          state: "idle",
-          uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
-          session_id: "session-1",
-        }),
-      ]),
-      queue,
-      queuedSdkMessages: [queuedMessage],
-      sdkState: "running",
-    });
-    sessionStore.set(session);
-
-    await consumeClaudeSession({
-      session,
-      sessionStore,
-      now: () => "2026-06-25T20:00:02.000Z",
-      emit: (_session, event) => events.push(event),
-      onBackgroundFailure: ignoreClaudeBackgroundFailure,
-    });
-
-    expect(pushed).toEqual([queuedMessage]);
-    expect(events.map((event) => event.type)).toContain("assistant_message");
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "user_message",
-        messageId: "00000000-0000-4000-8000-000000000002",
-        state: "read",
-      }),
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "session_status",
-        status: { type: "busy", message: null },
-      }),
-    );
   });
 
   test("keeps terminal assistant frames running until the SDK result arrives", async () => {
@@ -240,217 +135,6 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.sessions.delete(session.externalSessionId);
     openQuery.release();
     await consumePromise;
-  });
-
-  test("flushes queued input when the SDK reports the completed turn idle", async () => {
-    const events: AgentEvent[] = [];
-    const pushed: SDKUserMessage[] = [];
-    const queue = new AsyncInputQueue<SDKUserMessage>();
-    queue.push = (message) => {
-      pushed.push(message);
-    };
-    const queuedMessage: SDKUserMessage = {
-      type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
-      session_id: "session-1",
-      timestamp: "2026-06-25T20:00:01.000Z",
-      parent_tool_use_id: null,
-      message: {
-        role: "user",
-        content: [{ type: "text", text: "queued follow-up" }],
-      },
-    };
-    const sessionStore = createClaudeAgentSdkSessionStore();
-    const openQuery = openClaudeQueryWithMessages([
-      claudeSdkMessageFixture({
-        type: "assistant",
-        uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
-        session_id: "session-1",
-        parent_tool_use_id: null,
-        message: {
-          role: "assistant",
-          model: "claude-opus-4-6",
-          stop_reason: "end_turn",
-          content: [{ type: "text", text: "first turn done" }],
-        },
-      }),
-      claudeSdkMessageFixture({
-        type: "result",
-        subtype: "success",
-        uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
-        session_id: "session-1",
-        is_error: false,
-        result: "first turn done",
-        stop_reason: "end_turn",
-        terminal_reason: "completed",
-        usage: { input_tokens: 0, output_tokens: 0 },
-      }),
-      claudeSdkMessageFixture({
-        type: "system",
-        subtype: "session_state_changed",
-        state: "idle",
-        uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
-        session_id: "session-1",
-      }),
-    ]);
-    const session = createClaudeSession({
-      acceptedUserMessages: [
-        {
-          messageId: MESSAGE_ID,
-          parts: [{ kind: "text", text: "first turn" }],
-          text: "first turn",
-          timestamp: "2026-06-25T20:00:00.000Z",
-        },
-        {
-          messageId: "00000000-0000-4000-8000-000000000002",
-          parts: [{ kind: "text", text: "queued follow-up" }],
-          text: "queued follow-up",
-          timestamp: "2026-06-25T20:00:01.000Z",
-        },
-      ],
-      activeSdkUserTurnCount: 1,
-      activity: "running",
-      pendingUserTurnCount: 2,
-      query: openQuery.query,
-      queue,
-      queuedSdkMessages: [queuedMessage],
-      sdkState: "running",
-    });
-    sessionStore.set(session);
-
-    const consumePromise = consumeClaudeSession({
-      session,
-      sessionStore,
-      now: () => "2026-06-25T20:00:02.000Z",
-      emit: (_session, event) => events.push(event),
-      onBackgroundFailure: ignoreClaudeBackgroundFailure,
-    });
-
-    await waitForTimers();
-
-    expect(pushed).toEqual([queuedMessage]);
-    expect(session.activity).toBe("running");
-    expect(session.activeSdkUserTurnCount).toBe(1);
-    expect(session.pendingUserTurnCount).toBe(1);
-    expect(session.queuedSdkMessages).toEqual([]);
-    expect(events.some((event) => event.type === "session_idle")).toBe(false);
-    expect(
-      events.some(
-        (event) =>
-          event.type === "user_message" &&
-          event.messageId === "00000000-0000-4000-8000-000000000002" &&
-          event.state === "read",
-      ),
-    ).toBe(true);
-
-    sessionStore.sessions.delete(session.externalSessionId);
-    openQuery.release();
-    await consumePromise;
-  });
-
-  test("restores the latest model after a queued turn completes", async () => {
-    const setModelCalls: Array<string | undefined> = [];
-    const pushed: SDKUserMessage[] = [];
-    const queue = new AsyncInputQueue<SDKUserMessage>();
-    queue.push = (message) => {
-      pushed.push(message);
-    };
-    const query = Object.assign(
-      claudeQueryWithMessages([
-        claudeSdkMessageFixture({
-          type: "result",
-          subtype: "success",
-          uuid: "76e2c747-c64e-4f25-85cc-9510188f8190",
-          session_id: "session-1",
-          is_error: false,
-          result: "queued turn done",
-          stop_reason: "end_turn",
-          terminal_reason: "completed",
-          usage: { input_tokens: 0, output_tokens: 0 },
-        }),
-        claudeSdkMessageFixture({
-          type: "system",
-          subtype: "session_state_changed",
-          state: "idle",
-          uuid: "f99a0487-29cb-4141-80fd-e86d1bedbd0b",
-          session_id: "session-1",
-        }),
-      ]),
-      {
-        setModel: async (model?: string) => {
-          setModelCalls.push(model);
-        },
-        applyFlagSettings: async (_settings: Parameters<Query["applyFlagSettings"]>[0]) => {},
-      },
-    );
-    const session = createClaudeSession({
-      activeSdkUserTurnCount: 1,
-      activity: "running",
-      model: {
-        providerId: "claude",
-        modelId: "claude-sonnet-4-6",
-        runtimeKind: "claude",
-        variant: "high",
-      },
-      query,
-      queue,
-      sdkState: "running",
-    });
-
-    await sendClaudeUserMessage({
-      session,
-      now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => QUEUED_MESSAGE_ID,
-      emit: () => {},
-      messageInput: {
-        externalSessionId: "session-1",
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/repo",
-        runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        model: {
-          providerId: "claude",
-          modelId: "claude-opus-4-6",
-          runtimeKind: "claude",
-          variant: "xhigh",
-        },
-        parts: [{ kind: "text", text: "use opus for this turn" }],
-      },
-    });
-    await applyClaudeSessionModel(session, {
-      providerId: "claude",
-      modelId: "claude-haiku-4-5",
-      runtimeKind: "claude",
-      variant: "low",
-    });
-
-    session.activeSdkUserTurnCount = 0;
-    session.sdkState = "idle";
-    await flushQueuedClaudeUserMessage({
-      emit: () => {},
-      now: () => "2026-06-25T20:00:01.000Z",
-      session,
-    });
-
-    const sessionStore = createClaudeAgentSdkSessionStore();
-    sessionStore.set(session);
-    await consumeClaudeSession({
-      session,
-      sessionStore,
-      now: () => "2026-06-25T20:00:02.000Z",
-      emit: () => {},
-      onBackgroundFailure: ignoreClaudeBackgroundFailure,
-    });
-
-    expect(pushed).toEqual([expect.objectContaining({ uuid: QUEUED_MESSAGE_ID })]);
-    expect(setModelCalls).toEqual(["claude-haiku-4-5", "claude-opus-4-6", "claude-haiku-4-5"]);
-    expect(session.model).toEqual({
-      providerId: "claude",
-      modelId: "claude-haiku-4-5",
-      runtimeKind: "claude",
-      variant: "low",
-    });
   });
 
   test("terminalizes a live session when the SDK iterator completes", async () => {
@@ -528,6 +212,7 @@ describe("consumeClaudeSession lifecycle", () => {
           runtimeKind: "claude",
           workingDirectory: "/repo",
           runtimePolicy: { kind: "claude" },
+          delivery: "new_turn",
           sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
           parts: [{ kind: "text", text: "retry" }],
         },

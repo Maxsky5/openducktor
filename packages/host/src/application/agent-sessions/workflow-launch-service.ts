@@ -143,6 +143,7 @@ export const createWorkflowLaunchService = (
         sessionScope,
         systemPrompt,
         parts,
+        delivery: "new_turn",
       };
       if (model) input.model = model;
       if (resolvedQuestionRequestIds.length > 0)

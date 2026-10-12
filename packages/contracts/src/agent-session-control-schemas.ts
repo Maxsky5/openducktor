@@ -139,26 +139,46 @@ export const agentSessionControlForkInputSchema = z
   .strict();
 export type AgentSessionControlForkInput = z.infer<typeof agentSessionControlForkInputSchema>;
 
+/** Rejects a message that combines a slash command with attachments. */
+export const refineAgentSessionUserMessageParts = (
+  { parts }: { parts: ReadonlyArray<AgentSessionUserMessagePart> },
+  ctx: z.RefinementCtx,
+): void => {
+  const hasAttachment = parts.some((part) => part.kind === "attachment");
+  const hasSlashCommand = parts.some((part) => part.kind === "slash_command");
+  if (hasAttachment && hasSlashCommand) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["parts"],
+      message: "Slash commands and attachments cannot be combined in one message.",
+    });
+  }
+};
+
+/**
+ * How a runtime receives a user message. `new_turn` starts a turn and fails while native work
+ * runs. `steer` joins the running turn, or starts a turn when the session is idle.
+ */
+export const agentUserMessageDeliverySchema = z.enum(["new_turn", "steer"]);
+export type AgentUserMessageDelivery = z.infer<typeof agentUserMessageDeliverySchema>;
+
+export const agentSessionMessageContentFields = {
+  parts: z.array(agentSessionUserMessagePartSchema).min(1),
+  resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
+  model: agentModelSelectionSchema.optional(),
+  systemPrompt: z.string().optional(),
+};
+
 export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionScopeSchema,
-    parts: z.array(agentSessionUserMessagePartSchema).min(1),
-    resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
-    model: agentModelSelectionSchema.optional(),
-    systemPrompt: z.string().optional(),
+    ...agentSessionMessageContentFields,
+    delivery: agentUserMessageDeliverySchema,
+    /** Correlates the accepted message with its queue submission. */
+    submissionId: nonEmptyStringSchema.optional(),
   })
   .strict()
-  .superRefine(({ parts }, ctx) => {
-    const hasAttachment = parts.some((part) => part.kind === "attachment");
-    const hasSlashCommand = parts.some((part) => part.kind === "slash_command");
-    if (hasAttachment && hasSlashCommand) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["parts"],
-        message: "Slash commands and attachments cannot be combined in one message.",
-      });
-    }
-  });
+  .superRefine(refineAgentSessionUserMessageParts);
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
 export const agentSessionModelSettingsSchema = z

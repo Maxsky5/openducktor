@@ -7,7 +7,7 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 import {
   claudeHistoryMessageFixtures,
@@ -22,6 +22,7 @@ const compactMessageInput = (): SendAgentUserMessageInput => ({
   runtimeKind: "claude",
   workingDirectory: "/repo",
   runtimePolicy: { kind: "claude" },
+  delivery: "new_turn",
   sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
   parts: [
     {
@@ -110,80 +111,19 @@ describe("Claude manual compaction", () => {
     ]);
   });
 
-  test("starts queued compaction only when Claude receives the queued command", async () => {
-    const events: AgentEvent[] = [];
-    const pushed: SDKUserMessage[] = [];
-    const queue = new AsyncInputQueue<SDKUserMessage>();
-    queue.push = (message) => pushed.push(message);
-    const session = createClaudeSession({
-      activeSdkUserTurnCount: 1,
-      activity: "running",
-      sdkState: "running",
-      queue,
-    });
-
-    await sendClaudeUserMessage({
-      session,
-      messageInput: compactMessageInput(),
-      now: () => "2026-07-23T10:00:00.000Z",
-      randomId: () => COMPACTION_MESSAGE_ID,
-      emit: (_session, event) => events.push(event),
-    });
-
-    expect(pushed).toEqual([]);
-    expect(events.some((event) => event.type === "session_compaction_started")).toBe(false);
-
-    session.activeSdkUserTurnCount = 0;
-    session.sdkState = "idle";
-    await flushQueuedClaudeUserMessage({
-      session,
-      now: () => "2026-07-23T10:00:03.000Z",
-      emit: (_session, event) => events.push(event),
-    });
-
-    expect(pushed).toHaveLength(1);
-    expect(events).toContainEqual({
-      type: "session_compaction_started",
-      externalSessionId: "session-1",
-      timestamp: "2026-07-23T10:00:03.000Z",
-      messageId: COMPACTION_MESSAGE_ID,
-      message: "Session compaction started.",
-    });
-    expect(events.some((event) => event.type === "user_message")).toBe(false);
-  });
-
-  test("keeps queued manual compaction visible while hiding delivered compaction", () => {
+  test("hides a live manual compaction request from history", () => {
     const compactPart = { kind: "text" as const, text: "/compact" };
     const history = toClaudeHistoryMessages([], () => "2026-07-23T11:00:00.000Z", [
       {
         isManualCompaction: true,
-        messageId: "queued-compact-request",
-        parts: [compactPart],
-        state: "queued",
-        text: "/compact",
-        timestamp: "2026-07-23T10:00:00.000Z",
-      },
-      {
-        isManualCompaction: true,
         messageId: "delivered-compact-request",
         parts: [compactPart],
-        state: "read",
         text: "/compact",
         timestamp: "2026-07-23T10:00:01.000Z",
       },
     ]);
 
-    expect(history).toEqual([
-      {
-        messageId: "queued-compact-request",
-        role: "user",
-        timestamp: "2026-07-23T10:00:00.000Z",
-        text: "/compact",
-        displayParts: [compactPart],
-        state: "queued",
-        parts: [],
-      },
-    ]);
+    expect(history).toEqual([]);
   });
 
   test("settles a successful no-op without exposing the SDK result as assistant output", () => {

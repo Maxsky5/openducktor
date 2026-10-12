@@ -3,7 +3,7 @@ import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentUserMessagePart } from "@openducktor/core";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
-import { acceptedUserMessage } from "./session-actions-send.test-support";
+import { acceptedSubmitResult, acceptedUserMessage } from "./session-actions-send.test-support";
 import {
   buildSession,
   createSessionActions,
@@ -32,10 +32,10 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     "routes repository $label without workflow side effects",
     async ({ parts }) => {
       const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-      const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
-      adapter.sendUserMessage = async (input) => {
+      const sendInputs: Parameters<typeof adapter.submitUserMessage>[0][] = [];
+      adapter.submitUserMessage = async (input) => {
         sendInputs.push(input);
-        return acceptedUserMessage(input);
+        return acceptedSubmitResult(input);
       };
       const sessionsRef = createSessionsRef([
         buildSession({
@@ -190,12 +190,12 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     "uses the same repository send handler for %s",
     async (runtimeKind) => {
       const baseAdapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-      const sendInputs: Parameters<AgentEnginePort["sendUserMessage"]>[0][] = [];
+      const sendInputs: Parameters<AgentEnginePort["submitUserMessage"]>[0][] = [];
       const adapter: AgentEnginePort = {
         ...baseAdapter,
-        sendUserMessage: async (input) => {
+        submitUserMessage: async (input) => {
           sendInputs.push(input);
-          return acceptedUserMessage(input);
+          return acceptedSubmitResult(input);
         },
       };
       const sessionsRef = createSessionsRef([

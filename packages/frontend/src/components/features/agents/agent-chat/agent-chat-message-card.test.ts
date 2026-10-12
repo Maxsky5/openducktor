@@ -440,7 +440,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(bubble.className).toContain("border-dashed border-pending-border bg-pending-surface");
     expect(bubble.className).not.toContain("bg-chat-surface");
     expect(bubble.textContent).toBe("Queued follow-up");
-    expect(metaRow?.textContent).toBe("Queued10:27:00 AM");
+    expect(metaRow?.textContent).toBe("Unread10:27:00 AM");
   });
 
   test("hides the meta row when the user message time is approximate", () => {
@@ -922,7 +922,7 @@ describe("AgentChatMessageCard messages", () => {
     const { bubble, metaRow } = parseUserMessageArticle(html);
     expect(bubble.children).toHaveLength(1);
     expect(bubble.textContent).toBe("check main.ts please");
-    expect(metaRow?.textContent).toBe("Queued10:30:00 AM");
+    expect(metaRow?.textContent).toBe("Unread10:30:00 AM");
   });
 
   test("renders attachment chips inside the bubble and queued metadata below it", () => {
@@ -961,7 +961,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(bubble.children).toHaveLength(2);
     expect(bubble.children[0]?.textContent).toBe("please review this screenshot");
     expect(bubble.children[1]?.textContent).toBe("screenshot.png");
-    expect(metaRow?.textContent).toBe("Queued10:31:00 AM");
+    expect(metaRow?.textContent).toBe("Unread10:31:00 AM");
   });
 
   test("renders an attachment-only user message as a bubble", () => {

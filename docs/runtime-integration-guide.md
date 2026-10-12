@@ -115,7 +115,6 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 | `sessionLifecycle.supportsSessionFork` | Can fork a session |
 | `sessionLifecycle.forkTargets` | Can fork at `session`, `message`, or `item` |
 | `sessionLifecycle.supportsListLiveSessions` | Can return live state for sessions that OpenDucktor registered |
-| `sessionLifecycle.supportsQueuedUserMessages` | Can keep a queued user message visible while busy |
 | `sessionLifecycle.supportsPendingInputSnapshots` | Can keep unresolved input in snapshots |
 | `sessionLifecycle.supportsInterruptedTurnResume` | Can continue an unfinished turn with no user message |
 
@@ -128,6 +127,14 @@ List each level above standard speed in `AgentModelDescriptor.speedLevels`, with
 `AgentModelSelection.speed` holds the selected level. A selection without `speed` uses standard speed. The speed follows the model through start, fork, model update, each turn, and the saved session record.
 
 Send an explicit standard value to the runtime, so a native default cannot select another speed. Put a runtime-reported account restriction in `AgentModelCatalog.speedAvailability`.
+
+### Message delivery
+
+| Field | Meaning |
+|---|---|
+| `messageDelivery.minimumSteeringRuntimeVersion` | Lowest runtime version that supports steering. Use `null` when no version supports it. |
+
+A runtime without steering can still use the host queue. See [Queue and steering](#queue-and-steering).
 
 ### History
 
@@ -222,7 +229,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | Policy | Capability keys |
 |---|---|
 | Required | ODT workflow tools, read-only auto-reject, start modes, and prompt parts |
-| Optional | Queued messages, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
+| Optional | Steering, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
 
 Capability classes record why a gate exists.
 
@@ -364,6 +371,29 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Subagents | Parent and child keep the description, mode, ID, transcript, pending input, and final state. |
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
+
+### Queue and steering
+
+The host owns the message queue. A runtime is eligible when its adapter can refuse a new turn while native work runs. Steering is optional.
+
+| Mode | Adapter rule |
+|---|---|
+| `new_turn` | Start a turn. Throw `AgentSessionTurnActiveError` while native work runs. |
+| `steer` | Add the message to the running turn, or start a turn when the session is idle. Keep the model and settings of the running turn. |
+
+- Return the accepted message only after the runtime admits it.
+- Throw `AgentSessionMessageRefusedError` when the runtime refuses the message.
+- Throw `AgentSessionMessageAcceptanceUnknownError` when the request left the host and no conclusive answer came back. Give it the message ID that the live `user_message` of that message will carry.
+- Copy the `submissionId` of the send input to the accepted message and to its live `user_message` events.
+- Set `turnOutcome` on the `session_idle` event that ends a turn. Leave it empty on an idle status that ends no turn, because only a `completed` outcome sends the next queued message.
+- Map the adapter errors at the runtime boundary with `toAgentSessionSendError`.
+- Never send a slash command as a steer.
+
+| Runtime | New turn | Steer | Admission | Turn outcome |
+|---|---|---|---|---|
+| Codex | `turn/start` | `turn/steer` with `expectedTurnId` | Request answer | `turn/completed` |
+| OpenCode | `session.prompt` with `delivery: "queue"` | `session.prompt` with `delivery: "steer"` | Request answer | `session.execution.*` events |
+| Claude | SDK user message | SDK user message with priority `now` | `command_lifecycle` frame or replay echo | SDK result |
 
 ## Import existing runtime sessions
 

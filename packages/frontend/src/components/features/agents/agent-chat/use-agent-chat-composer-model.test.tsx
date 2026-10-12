@@ -19,7 +19,9 @@ const buildComposerConfig = (
   isSessionWorking: false,
   isWaitingInput: false,
   waitingInputPlaceholder: null,
-  busySendBlockedReason: null,
+  steerBlockedReason: null,
+  runningTurnModel: null,
+  messageQueue: null,
   canStopSession: false,
   isResumingSession: false,
   stopAgentSession: async () => {},
@@ -136,7 +138,7 @@ describe("useAgentChatComposerModel", () => {
         if (!composerModel) {
           throw new Error("Expected a shared composer model.");
         }
-        await composerModel.onSend(callerDraft);
+        await composerModel.onSend(callerDraft, "default");
       });
 
       expect(sentDraftText.current).toBe("Repository-only question");

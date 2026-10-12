@@ -1,3 +1,4 @@
+import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
 import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import {
@@ -15,7 +16,6 @@ import { useAgentChatPresentation } from "@/components/features/agents/agent-cha
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
-import { getBusyAgentMessageBlockedReason } from "@/lib/agent-message-send-policy";
 import {
   getAgentSessionWaitingInputPlaceholder,
   isAgentSessionBlockedOnInput,
@@ -72,7 +72,7 @@ export function WorkspaceSessionChat({
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
-  const { isSending, isStarting, isSavingModel } = actions;
+  const { isStarting, isSavingModel } = actions;
   const draftPersistence = useMemo(
     () => createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id),
     [workspace.workspaceId, record.id],
@@ -176,7 +176,6 @@ export function WorkspaceSessionChat({
   });
   const descriptor =
     runtime.allRuntimeDefinitions.find((entry) => entry.kind === record.runtimeKind) ?? null;
-  const busySendBlockedReason = getBusyAgentMessageBlockedReason(chatState.isWorking, descriptor);
   const assertCanSubmit = useWorkspaceConflictChatActions({
     workspace,
     record,
@@ -213,16 +212,28 @@ export function WorkspaceSessionChat({
     answerAgentQuestion: operations.answerAgentQuestion,
     sessionScope: { kind: "repository" },
   });
+  const isWaitingInput = isAgentSessionBlockedOnInput(chatState);
+  const { sendTarget } = actions;
+  const target = useMemo(
+    () => sendTarget({ canSend: canInteract, assertCanSubmit }),
+    [assertCanSubmit, canInteract, sendTarget],
+  );
+  const messageDelivery = useAgentChatSend({
+    identity,
+    repoPath: workspace.repoPath,
+    runtimeDescriptor: descriptor,
+    modelCatalog,
+    messages: session?.messages.items,
+    isSessionWorking: chatState.isWorking,
+    isWaitingInput,
+    selectedModelDescriptor: picker.selectedModelEntry,
+    draftRules: { reusablePrompts, supportsAttachments: support.supportsAttachments },
+    sendAgentMessage: operations.sendAgentMessage,
+    target,
+  });
   const reviewComments = useReviewCommentComposer({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
-    onSend: (draft) =>
-      actions.sendDraft(draft, {
-        canSend: canInteract && !busySendBlockedReason,
-        assertCanSubmit,
-        reusablePrompts,
-        selectedModelDescriptor: picker.selectedModelEntry,
-        supportsAttachments: support.supportsAttachments,
-      }),
+    onSend: messageDelivery.onSend,
   });
   const surface = useAgentChatSurfaceModel({
     transcript,
@@ -274,13 +285,13 @@ export function WorkspaceSessionChat({
           }
         : undefined,
     composer: {
+      ...messageDelivery,
       displayedSessionKey: chatState.sessionKey,
       selectedSession: identity ? { ...identity, selectedModel: chatState.selectedModel } : null,
       isSessionModelCatalogLoading: isLoadingModelCatalog,
       isSessionWorking: chatState.isWorking,
-      isWaitingInput: isAgentSessionBlockedOnInput(chatState),
+      isWaitingInput,
       waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(chatState),
-      busySendBlockedReason,
       canStopSession: chatState.canStopSession,
       stopAgentSession: operations.stopAgentSession,
       isResumingSession: actions.isResumingSession,
@@ -289,7 +300,6 @@ export function WorkspaceSessionChat({
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
       onSend: reviewComments.onSend,
       pendingSendItems: reviewComments.pendingSendItems ?? undefined,
-      isSending,
       isStarting,
       isSavingModel,
       contextUsage,
