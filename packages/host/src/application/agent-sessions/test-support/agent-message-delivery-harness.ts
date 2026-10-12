@@ -42,7 +42,7 @@ type SendResult = "accept" | "busy" | "unknown" | HostError;
 
 const timestamp = "2026-10-08T10:00:00.000Z";
 
-export const accepted = (input: AgentSessionControlSendInput): AcceptedAgentUserMessage => ({
+const accepted = (input: AgentSessionControlSendInput): AcceptedAgentUserMessage => ({
   type: "user_message",
   externalSessionId: input.externalSessionId,
   timestamp,

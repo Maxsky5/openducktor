@@ -16,6 +16,8 @@ export const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependency
       "bun",
       "build",
       "--target=node",
+      "--minify",
+      "--keep-names",
       "--outfile",
       outputPath,
       "--banner",
