@@ -9,6 +9,7 @@ import { ArrowUpRight } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotificationCopy } from "./notification-copy";
+import { notificationCueSounds } from "./notification-sound";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 
 type SonnerNotificationOptions = {
@@ -69,30 +70,9 @@ export const createSonnerNotificationAdapter = ({
 
 type PlayCuelume = (sound?: SoundName, options?: { volume?: number }) => void;
 
-// Keep saved cue names compatible with Cuelume's canonical palette.
-const cuelumeSounds = {
-  chime: "success",
-  sparkle: "success",
-  droplet: "close",
-  bloom: "open",
-  whisper: "select",
-  tick: "select",
-  press: "tap",
-  release: "tap",
-  toggle: "toggle",
-  success: "success",
-  error: "error",
-  page: "navigate",
-  loading: "loading",
-  ready: "ready",
-  pulse: "tap",
-  scan: "select",
-  arrival: "navigate",
-} satisfies Record<NotificationCue, SoundName>;
-
 export const createCuelumeNotificationSoundAdapter = (play: PlayCuelume = playCuelume) => ({
   async play(cue: NotificationCue, volumePercent: number): Promise<void> {
-    play(cuelumeSounds[cue], { volume: volumePercent / 100 });
+    play(notificationCueSounds[cue], { volume: volumePercent / 100 });
   },
 });
 
