@@ -33,6 +33,10 @@ import {
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
+import {
+  sessionModelPreparationKey,
+  useSessionModelPreparation,
+} from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
@@ -80,11 +84,8 @@ type AgentStudioChatComposerState = {
   selectionForNewSession: AgentModelSelection | null;
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
-  /**
-   * Applies a needed session model change and tells whether the selected session can send.
-   * Only a send calls it, so viewing a session never changes or resumes it.
-   */
-  prepareSelectedSessionModelForSend: () => Promise<boolean>;
+  /** Repairs the saved choice and returns a guard to keep Send bound to this chat. */
+  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -119,71 +120,6 @@ type AgentStudioChatComposerState = {
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
-
-const useAgentStudioSpeed = ({
-  identity,
-  isLoaded,
-  draftKey,
-  isRuntimeReady,
-  ...input
-}: Omit<Parameters<typeof useSpeedControl>[0], "key" | "disabled"> & {
-  identity: AgentSessionIdentity | null;
-  isLoaded: boolean;
-  draftKey: string;
-  isRuntimeReady: boolean;
-}) =>
-  useSpeedControl({
-    ...input,
-    key: identity
-      ? `${identity.runtimeKind}|${identity.workingDirectory}|${identity.externalSessionId}`
-      : draftKey,
-    disabled: !isRuntimeReady || (identity !== null && !isLoaded),
-  });
-
-const canSelectProfile = (
-  runtimeKind: RuntimeDescriptor["kind"] | null | undefined,
-  runtimeDefinitions: RuntimeDescriptor[],
-): boolean => {
-  if (!runtimeKind) {
-    return true;
-  }
-  const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
-  return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
-};
-
-const listModelPickerRuntimes = (
-  hasSessionTarget: boolean,
-  availableRuntimeDefinitions: RuntimeDescriptor[],
-  allRuntimeDefinitions: RuntimeDescriptor[],
-  sessionRuntimeKind: AgentSessionIdentity["runtimeKind"] | undefined,
-): RuntimeDescriptor[] => {
-  if (!hasSessionTarget) {
-    return availableRuntimeDefinitions;
-  }
-  const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
-  return allRuntimeDefinitions.filter(
-    (runtime) => runtime.kind === sessionRuntimeKind || availableKinds.has(runtime.kind),
-  );
-};
-
-const listEnabledModelPickerRuntimes = (
-  hasSessionTarget: boolean,
-  isRuntimeReady: boolean,
-  isModelPickerOpen: boolean,
-  runtimeKinds: RuntimeDescriptor["kind"][],
-  selectedRuntimeKind: RuntimeDescriptor["kind"] | null | undefined,
-): RuntimeDescriptor["kind"][] => {
-  if (hasSessionTarget || !isRuntimeReady) {
-    return [];
-  }
-  if (isModelPickerOpen) {
-    return runtimeKinds;
-  }
-  return selectedRuntimeKind ? [selectedRuntimeKind] : [];
-};
-
-const pickLoader = <Loader>(load: Loader | undefined, defaultLoad: Loader): Loader =>
-  load ?? defaultLoad;
 
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
@@ -427,13 +363,7 @@ export function useAgentStudioChatComposer({
       supportsSubagentReferences,
       loadRuntimeCatalog,
     });
-  const {
-    selectionCatalog,
-    selectedModelSelection,
-    selectionForNewSession,
-    sessionModelRepairCommand,
-    isSelectedSessionModelSendable,
-  } = useMemo(() => {
+  const modelSelections = useMemo(() => {
     const source: ChatComposerModelSelectionSource = selectedSessionIdentity
       ? {
           kind: "session",
@@ -463,14 +393,16 @@ export function useAgentStudioChatComposer({
     sessionModelCatalog,
     loadedSessionIdentity,
   ]);
-  const prepareSelectedSessionModelForSend = useCallback(async (): Promise<boolean> => {
-    if (!sessionModelRepairCommand) return isSelectedSessionModelSendable;
-    await updateAgentSessionModel(
-      sessionModelRepairCommand.session,
-      sessionModelRepairCommand.selection,
-    );
-    return true;
-  }, [isSelectedSessionModelSendable, sessionModelRepairCommand, updateAgentSessionModel]);
+  const { selectionCatalog, selectedModelSelection, selectionForNewSession } = modelSelections;
+  const prepareModelForSend = useSessionModelPreparation(
+    sessionModelPreparationKey(workspaceRepoPath, selectedSessionIdentity),
+    modelSelections,
+    hasSessionTarget,
+  );
+  const prepareSelectedSessionModelForSend = useCallback(
+    () => prepareModelForSend(updateAgentSessionModel),
+    [prepareModelForSend, updateAgentSessionModel],
+  );
 
   const searchFiles = useMemo(
     () =>
@@ -613,3 +545,68 @@ export function useAgentStudioChatComposer({
     handleSelectVariant,
   };
 }
+
+const useAgentStudioSpeed = ({
+  identity,
+  isLoaded,
+  draftKey,
+  isRuntimeReady,
+  ...input
+}: Omit<Parameters<typeof useSpeedControl>[0], "key" | "disabled"> & {
+  identity: AgentSessionIdentity | null;
+  isLoaded: boolean;
+  draftKey: string;
+  isRuntimeReady: boolean;
+}) =>
+  useSpeedControl({
+    ...input,
+    key: identity
+      ? `${identity.runtimeKind}|${identity.workingDirectory}|${identity.externalSessionId}`
+      : draftKey,
+    disabled: !isRuntimeReady || (identity !== null && !isLoaded),
+  });
+
+const canSelectProfile = (
+  runtimeKind: RuntimeDescriptor["kind"] | null | undefined,
+  runtimeDefinitions: RuntimeDescriptor[],
+): boolean => {
+  if (!runtimeKind) {
+    return true;
+  }
+  const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+  return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
+};
+
+const listModelPickerRuntimes = (
+  hasSessionTarget: boolean,
+  availableRuntimeDefinitions: RuntimeDescriptor[],
+  allRuntimeDefinitions: RuntimeDescriptor[],
+  sessionRuntimeKind: AgentSessionIdentity["runtimeKind"] | undefined,
+): RuntimeDescriptor[] => {
+  if (!hasSessionTarget) {
+    return availableRuntimeDefinitions;
+  }
+  const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
+  return allRuntimeDefinitions.filter(
+    (runtime) => runtime.kind === sessionRuntimeKind || availableKinds.has(runtime.kind),
+  );
+};
+
+const listEnabledModelPickerRuntimes = (
+  hasSessionTarget: boolean,
+  isRuntimeReady: boolean,
+  isModelPickerOpen: boolean,
+  runtimeKinds: RuntimeDescriptor["kind"][],
+  selectedRuntimeKind: RuntimeDescriptor["kind"] | null | undefined,
+): RuntimeDescriptor["kind"][] => {
+  if (hasSessionTarget || !isRuntimeReady) {
+    return [];
+  }
+  if (isModelPickerOpen) {
+    return runtimeKinds;
+  }
+  return selectedRuntimeKind ? [selectedRuntimeKind] : [];
+};
+
+const pickLoader = <Loader>(load: Loader | undefined, defaultLoad: Loader): Loader =>
+  load ?? defaultLoad;

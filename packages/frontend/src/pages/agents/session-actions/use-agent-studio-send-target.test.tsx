@@ -116,9 +116,9 @@ const createBaseArgs = (): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-  selectedSessionModel: null,
   isSessionModelCatalogLoading: false,
-  prepareSelectedSessionModelForSend: async () => true,
+  prepareSelectedSessionModelForSend: async () => () => {},
+  assertCanPrepareSession: () => {},
   agentStudioReady: true,
   canStartNewSession: true,
   reusablePrompts: [],
@@ -136,6 +136,71 @@ describe("useAgentStudioSendTarget", () => {
 
   afterEach(() => {
     hostClient.workspaceStageLocalAttachment = originalWorkspaceStageLocalAttachment;
+  });
+
+  test("blocks task Send until the required catalog read completes", async () => {
+    const sendAgentMessage = mock(async () => null);
+    const prepare = mock(async () => () => {});
+    const args = {
+      ...createBaseArgs(),
+      isSessionModelCatalogLoading: true,
+      prepareSelectedSessionModelForSend: prepare,
+      sendAgentMessage,
+    };
+    const harness = createTaskHarness(args);
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
+      });
+      expect(prepare).not.toHaveBeenCalled();
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      await harness.update({ ...args, isSessionModelCatalogLoading: false });
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
+      });
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("checks the current send policy after attachment staging and before model preparation", async () => {
+    const staged =
+      createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+    const stage = mock(() => staged.promise);
+    hostClient.workspaceStageLocalAttachment = stage;
+    let blocked = false;
+    const prepare = mock(async () => () => {});
+    const send = mock(async () => null);
+    const harness = createTaskHarness({
+      ...createBaseArgs(),
+      assertCanPrepareSession: () => {
+        if (blocked) throw new Error("Answer the blocking question before sending.");
+      },
+      prepareSelectedSessionModelForSend: prepare,
+      sendAgentMessage: send,
+    });
+    let pending!: Promise<unknown>;
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        pending = state.onSend(createAttachmentDraft(), "default").catch((cause) => cause);
+      });
+      await harness.waitFor(() => stage.mock.calls.length === 1);
+      blocked = true;
+      await harness.run(async () => {
+        staged.resolve({ path: "/tmp/brief.pdf" });
+        await pending;
+      });
+      expect(await pending).toEqual(
+        expect.objectContaining({ message: "Answer the blocking question before sending." }),
+      );
+      expect(prepare).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("guard rejection does not start a session or send a message", async () => {
@@ -208,7 +273,7 @@ describe("useAgentStudioSendTarget", () => {
           command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
         },
       ],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
     await harness.unmount();
   });
@@ -271,7 +336,7 @@ describe("useAgentStudioSendTarget", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(
       sessionIdentity("session-existing"),
       [{ kind: "text", text: "follow up" }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();
@@ -282,47 +347,20 @@ describe("useAgentStudioSendTarget", () => {
     const sendAgentMessage = mock(async () => null);
     const harness = createTaskHarness({
       ...createBaseArgs(),
-      prepareSelectedSessionModelForSend: async () => false,
+      prepareSelectedSessionModelForSend: async () => {
+        throw new Error("No valid model is available");
+      },
       startSession,
       sendAgentMessage,
     });
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("hello"), "default")).resolves.toBe(false);
+      await expect(state.onSend(createDraft("hello"), "default")).rejects.toThrow("No valid model");
     });
 
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("changes a needed session model only when the user sends, and before the message", async () => {
-    const calls: string[] = [];
-    const prepareSelectedSessionModelForSend = mock(async () => {
-      calls.push("prepare model");
-      return true;
-    });
-    const sendAgentMessage = mock(async () => {
-      calls.push("send message");
-      return null;
-    });
-    const harness = createTaskHarness({
-      ...createBaseArgs(),
-      selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-      canStartNewSession: false,
-      prepareSelectedSessionModelForSend,
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    expect(prepareSelectedSessionModelForSend).not.toHaveBeenCalled();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("follow up"), "default")).resolves.toBe(true);
-    });
-
-    expect(calls).toEqual(["prepare model", "send message"]);
 
     await harness.unmount();
   });
@@ -407,12 +445,12 @@ describe("useAgentStudioSendTarget", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(
       sessionIdentity("session-existing"),
       [{ kind: "text", text: "first" }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
     expect(sendAgentMessage).toHaveBeenCalledWith(
       sessionIdentity("session-other"),
       [{ kind: "text", text: "second" }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();

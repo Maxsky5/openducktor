@@ -281,7 +281,8 @@ const createBaseArgs = (): HookArgs => {
     supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTask(),
-    prepareSelectedSessionModelForSend: async () => true,
+    prepareSelectedSessionModelForSend: async () => () => {},
+    assertCanPrepareSession: () => {},
     agentStudioReady: true,
     isActiveTaskReady: true,
     selectionForNewSession: {
@@ -833,7 +834,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(
       localSessionIdentity("session-existing"),
       [{ kind: "text", text: "  hello world  " }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();
@@ -864,7 +865,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(
       selectedSessionIdentity,
       [{ kind: "text", text: "  selected-session follow-up  " }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();
@@ -963,7 +964,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(
       localSessionIdentity("session-existing"),
       [{ kind: "text", text: "  hello world  " }],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
     expect(harness.getLatest().messageDelivery.isSending).toBe(true);
 

@@ -49,7 +49,11 @@ const useWorkspaceChat = (
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
   const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const delivery = useAgentChatSendForTarget(
-    actions.sendTarget({ canSend: true, assertCanSubmit: () => {} }),
+    actions.sendTarget({
+      canSend: true,
+      assertCanSubmit: () => {},
+      prepareModelForSend: async () => () => {},
+    }),
     {
       identity,
       repoPath: workspace.repoPath,
@@ -931,6 +935,9 @@ function renderChatPanes(
 ) {
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
+  const identity = workspaceSessionIdentity(record);
+  if (identity)
+    store.replaceSession(createAgentSessionFixture({ ...identity, historyLoadState: "loaded" }));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(
     settingsSnapshotQueryOptions().queryKey,

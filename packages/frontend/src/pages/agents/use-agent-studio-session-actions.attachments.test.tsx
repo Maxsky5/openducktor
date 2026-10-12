@@ -184,7 +184,8 @@ const createBaseArgs = (): HookArgs => {
     supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTaskCardFixture(),
-    prepareSelectedSessionModelForSend: async () => true,
+    prepareSelectedSessionModelForSend: async () => () => {},
+    assertCanPrepareSession: () => {},
     agentStudioReady: true,
     isActiveTaskReady: true,
     selectionForNewSession: {
@@ -264,7 +265,7 @@ describe("useAgentStudioSessionActions attachments", () => {
           },
         },
       ],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();
@@ -346,7 +347,7 @@ describe("useAgentStudioSessionActions attachments", () => {
           },
         },
       ],
-      { mode: "default" },
+      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
     );
 
     await harness.unmount();

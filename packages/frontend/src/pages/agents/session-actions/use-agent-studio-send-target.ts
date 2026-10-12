@@ -9,9 +9,9 @@ import type { AgentChatSendResult } from "@/components/features/agents/agent-cha
 import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import {
@@ -24,9 +24,9 @@ type UseAgentStudioSendTargetArgs = {
   taskId: string;
   role: AgentRole;
   selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
   isSessionModelCatalogLoading: boolean;
-  prepareSelectedSessionModelForSend: () => Promise<boolean>;
+  assertCanPrepareSession: (identity: AgentSessionIdentity) => void;
+  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   agentStudioReady: boolean;
   canStartNewSession: boolean;
   isStarting: boolean;
@@ -43,8 +43,8 @@ export function useAgentStudioSendTarget({
   taskId,
   role,
   selectedSessionIdentity,
-  selectedSessionModel,
   isSessionModelCatalogLoading,
+  assertCanPrepareSession,
   prepareSelectedSessionModelForSend,
   agentStudioReady,
   canStartNewSession,
@@ -77,13 +77,31 @@ export function useAgentStudioSendTarget({
         agentStudioReady &&
         taskId.length > 0 &&
         canResolveAgentStudioSendTargetSession({ selectedSessionIdentity, canStartNewSession }) &&
-        !(isSessionModelCatalogLoading && selectedSessionModel === null),
+        !isSessionModelCatalogLoading,
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
         requireCompactionTarget(parts, selectedSessionIdentity);
-        // A needed model change waits for this send, so viewing a session never resumes it.
-        if (!(await prepareSelectedSessionModelForSend())) return null;
-        if (selectedSessionIdentity) return { kind: "session", identity: selectedSessionIdentity };
+        if (selectedSessionIdentity) assertCanPrepareSession(selectedSessionIdentity);
+        const assertModelCurrent = await prepareSelectedSessionModelForSend();
+        if (!isCurrentContext()) return null;
+        if (selectedSessionIdentity)
+          return {
+            kind: "session",
+            identity: selectedSessionIdentity,
+            sendOptions: {
+              assertCanSubmit: (session) => {
+                assertModelCurrent();
+                if (
+                  !isCurrentContext() ||
+                  !matchesAgentSessionIdentity(session, selectedSessionIdentity)
+                )
+                  throw new Error(
+                    "The original chat is no longer selected. Reopen it to send your draft.",
+                  );
+                assertCanPrepareSession(selectedSessionIdentity);
+              },
+            },
+          };
         const started = await startSession(normalizeAgentUserMessageParts(parts));
         if (!started) return null;
         const identity = toAgentSessionIdentity(started);
@@ -99,6 +117,7 @@ export function useAgentStudioSendTarget({
   }, [
     activity,
     activityKey,
+    assertCanPrepareSession,
     agentStudioReady,
     canStartNewSession,
     isCurrentContext,
@@ -107,7 +126,6 @@ export function useAgentStudioSendTarget({
     prepareSelectedSessionModelForSend,
     role,
     selectedSessionIdentity,
-    selectedSessionModel,
     startSession,
     taskId,
     workspaceId,

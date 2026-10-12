@@ -9,6 +9,7 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { PrepareModelForSend } from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -63,9 +64,16 @@ export function useWorkspaceSessionChatActions(
   const [error, setError] = useState<string | null>(null);
   const latestRecord = useRef(record);
   const recipientVersion = useRef(0);
+  const latestWorkspace = useRef(workspace);
   const ownedStartup = useRef(false);
   useLayoutEffect(() => {
     const previous = latestRecord.current;
+    if (
+      latestWorkspace.current.workspaceId !== workspace.workspaceId ||
+      latestWorkspace.current.repoPath !== workspace.repoPath
+    )
+      recipientVersion.current += 1;
+    latestWorkspace.current = workspace;
     if (
       JSON.stringify([
         previous.id,
@@ -92,7 +100,7 @@ export function useWorkspaceSessionChatActions(
       if (!ownBinding) recipientVersion.current += 1;
     }
     latestRecord.current = record;
-  }, [record]);
+  }, [record, workspace]);
 
   /**
    * Another send can still run, so only the last send ends the startup. Activity stops effects
@@ -282,19 +290,57 @@ export function useWorkspaceSessionChatActions(
     ({
       canSend,
       assertCanSubmit,
+      prepareModelForSend,
     }: {
       canSend: boolean;
       assertCanSubmit: NonNullable<AgentMessageSendOptions["assertCanSubmit"]>;
+      prepareModelForSend: PrepareModelForSend;
     }): AgentChatSendTarget => ({
       activity,
       activityKey,
       canSend: () => canSend && !savingModel.current && !resuming.current && isMounted(),
       resolve: async (parts) => {
         setError(null);
-        if (!isMounted() || !isCurrentWorkspace()) throw new Error(CHAT_UNAVAILABLE);
+        const version = recipientVersion.current;
+        const assertCurrentRecipient = () => {
+          if (!isMounted() || !isCurrentWorkspace() || recipientVersion.current !== version)
+            throw new Error(CHAT_UNAVAILABLE);
+        };
+        assertCurrentRecipient();
         const identity = workspaceSessionIdentity(record);
         if (!identity) return { kind: "launched", result: await launchWithDraft(parts) };
-        return { kind: "session", identity, sendOptions: { assertCanSubmit } };
+        const session = store.getSessionSnapshot(identity);
+        if (!session)
+          throw new Error(
+            "The session is still loading. Wait for it to load, then send your draft.",
+          );
+        assertCanSubmit(session);
+        const assertModelCurrent = await prepareModelForSend((target, selection) => {
+          assertCurrentRecipient();
+          if (!matchesAgentSessionIdentity(target, identity))
+            throw new Error(
+              "The model repair does not belong to this chat. Reopen it before sending.",
+            );
+          // This Send owns the activity. Manual model changes still use their guard.
+          return updateAgentSessionModel(target, selection);
+        });
+        assertCurrentRecipient();
+        assertModelCurrent();
+        return {
+          kind: "session",
+          identity,
+          sendOptions: {
+            assertCanSubmit: (session) => {
+              assertCurrentRecipient();
+              assertModelCurrent();
+              if (!matchesAgentSessionIdentity(session, identity))
+                throw new Error(
+                  "The send recipient changed. Reopen the original chat to send your draft.",
+                );
+              assertCanSubmit(session);
+            },
+          },
+        };
       },
       onFailure: (cause) => {
         reportSendFailure(cause);
@@ -311,6 +357,8 @@ export function useWorkspaceSessionChatActions(
       record,
       reportSendFailure,
       settleSend,
+      store,
+      updateAgentSessionModel,
     ],
   );
 

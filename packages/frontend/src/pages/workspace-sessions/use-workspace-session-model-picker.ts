@@ -6,6 +6,14 @@ import {
   type ModelPickerValue,
 } from "@/components/features/agents/model-picker";
 import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
+import {
+  type ChatComposerModelSelectionSource,
+  resolveChatComposerModelSelections,
+} from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
+import {
+  sessionModelPreparationKey,
+  useSessionModelPreparation,
+} from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
@@ -63,7 +71,35 @@ export function useWorkspaceSessionModelPicker(
     }
     return coerceVisibleSelectionToCatalog(defaultCatalog, defaultSelection);
   }, [defaultSelection, resources]);
-  const selection = session ? session.selection : (draftSelection ?? creationDefaultSelection);
+  const modelSelections = useMemo(() => {
+    let source: ChatComposerModelSelectionSource;
+    if (session?.identity) {
+      source = {
+        kind: "session",
+        sessionIdentity: session.identity,
+        sessionRuntimeKind: session.identity.runtimeKind,
+        modelCatalog: session.catalog,
+        selectedSessionModel: session.selection,
+        draftSelection: null,
+      };
+    } else {
+      source = {
+        kind: "new_session",
+        composerCatalog: null,
+        draftSelection: session ? session.selection : (draftSelection ?? creationDefaultSelection),
+      };
+    }
+    return resolveChatComposerModelSelections({
+      source,
+      defaultSelection: liveSession ? (defaultSelection ?? null) : null,
+    });
+  }, [session, draftSelection, creationDefaultSelection, defaultSelection, liveSession]);
+  const selection = modelSelections.selectedModelSelection;
+  const prepareModelForSend = useSessionModelPreparation(
+    sessionModelPreparationKey(repoPath, session?.identity ?? null, session?.runtimeRef),
+    modelSelections,
+    liveSession,
+  );
   const creationResources = session ? noCreationResources : resources;
   const projected = useMemo(
     () =>
@@ -177,6 +213,7 @@ export function useWorkspaceSessionModelPicker(
   );
   return {
     selection,
+    prepareModelForSend,
     catalog,
     supportsProfiles,
     ...options,

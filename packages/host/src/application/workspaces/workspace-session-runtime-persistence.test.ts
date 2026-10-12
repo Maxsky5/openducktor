@@ -383,8 +383,19 @@ describe("Workspace Session persistence through the shared command module", () =
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
   });
 
-  test("persists an explicit profile change on an existing OpenCode session", async () => {
+  test("persists an explicit profile repair and uses it for the next send", async () => {
     const h = await setup();
+    await Effect.runPromise(
+      h.store.setSelectedModel({
+        ...h.storeRef,
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "provider",
+          modelId: "stored-model",
+          profileId: "removed",
+        },
+      }),
+    );
     const model = {
       providerId: "provider",
       modelId: "new-model",
@@ -396,6 +407,9 @@ describe("Workspace Session persistence through the shared command module", () =
     );
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
     expect(h.models).toEqual([model]);
+    expect(h.updates.at(-1)?.session.selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
+    await h.send("Continue after profile repair");
+    expect(h.inputs.at(-1)?.model).toEqual({ ...model, runtimeKind: "opencode" });
   });
 
   test.each([

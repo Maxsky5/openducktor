@@ -31,8 +31,6 @@ export const deriveAgentChatComposerModelState = ({
       runtimeKind,
     }),
     isInteractionEnabled,
-    isModelSelectionPending: Boolean(
-      selectedSession && isSessionModelCatalogLoading && !selectedSession.selectedModel,
-    ),
+    isModelSelectionPending: Boolean(selectedSession && isSessionModelCatalogLoading),
   };
 };

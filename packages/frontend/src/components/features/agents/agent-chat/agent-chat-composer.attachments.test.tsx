@@ -762,9 +762,9 @@ describe("first-message composer recovery", () => {
           taskId,
           role: "build",
           selectedSessionIdentity: selected,
-          selectedSessionModel: null,
           isSessionModelCatalogLoading: false,
-          prepareSelectedSessionModelForSend: async () => true,
+          prepareSelectedSessionModelForSend: async () => () => {},
+          assertCanPrepareSession: () => {},
           agentStudioReady: true,
           canStartNewSession: true,
           isStarting: false,
@@ -841,7 +841,7 @@ describe("first-message composer recovery", () => {
         expect(send).toHaveBeenLastCalledWith(
           created,
           [{ kind: "text", text: "retry my first message" }],
-          { mode: "default" },
+          expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
         );
       } finally {
         unmount();

@@ -6,48 +6,33 @@ import {
   pickDefaultVisibleSelectionForCatalog,
   resolvePreferredModelSelection,
 } from "@/features/model-selection/model-selection-state";
+import {
+  findCatalogModel,
+  normalizeCatalogSpeed,
+  normalizeVisibleCatalogProfileId,
+  pickVisibleCatalogDefaultProfileId,
+  STANDARD_SPEED,
+  withSpeed,
+} from "@/lib/model-catalog-selection";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
-const availableRuntimeKindFor = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeKind: RuntimeKind | null | undefined,
-): RuntimeKind | null => {
-  if (!runtimeKind) {
-    return null;
-  }
-  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? runtimeKind : null;
-};
+type SendBlockReason = "model" | "profile" | "session";
 
-export const resolveChatComposerSelectedRuntimeKind = ({
-  selectedSessionModel,
-  draftSelection,
-  defaultSelection,
-  runtimeDefinitions,
-}: {
-  selectedSessionModel: AgentModelSelection | null;
-  draftSelection: AgentModelSelection | null;
-  defaultSelection: AgentModelSelection | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-}): RuntimeKind | null => {
-  return (
-    selectedSessionModel?.runtimeKind ??
-    availableRuntimeKindFor(runtimeDefinitions, draftSelection?.runtimeKind) ??
-    availableRuntimeKindFor(runtimeDefinitions, defaultSelection?.runtimeKind) ??
-    null
-  );
-};
+type RepairChoice =
+  | { selection: AgentModelSelection; blockedReason: null }
+  | { selection: null; blockedReason: SendBlockReason };
 
 export type ChatComposerModelSelections = {
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   selectionForNewSession: AgentModelSelection | null;
-  sessionModelRepairCommand: ChatComposerSessionModelRepairCommand | null;
-  isSelectedSessionModelSendable: boolean;
+  repair: SessionModelRepair | null;
+  sendBlockReason: SendBlockReason | null;
 };
 
-/** A saved session model that the next send must change before it sends. */
-export type ChatComposerSessionModelRepairCommand = {
+type SessionModelRepair = {
   session: AgentSessionIdentity;
   selection: AgentModelSelection;
 };
@@ -76,26 +61,27 @@ export const resolveChatComposerModelSelections = ({
 }): ChatComposerModelSelections => {
   if (source.kind === "session") {
     const selectionCatalog = source.modelCatalog;
-    const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
-    const selectedSessionSelection = resolveLoadedSessionSelection({
+    const catalogChoice = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+    const sessionSelection = resolveLoadedSessionSelection({
       selectionCatalog,
       selectedSessionModel: source.selectedSessionModel,
       defaultSelection,
       sessionRuntimeKind: source.sessionRuntimeKind,
     });
+    const repair =
+      source.sessionIdentity && sessionSelection.repairSelection
+        ? { session: source.sessionIdentity, selection: sessionSelection.repairSelection }
+        : null;
 
     return {
       selectionCatalog,
-      selectedModelSelection: selectedSessionSelection.selectedModelSelection,
+      selectedModelSelection: sessionSelection.selectedModelSelection,
       selectionForNewSession:
-        selectedSessionSelection.selectedModelSelection ??
-        fallbackCatalogSelection ??
-        defaultSelection,
-      sessionModelRepairCommand: resolveSessionModelRepairCommand({
-        sessionIdentity: source.sessionIdentity,
-        repairSelection: selectedSessionSelection.repairSelection,
-      }),
-      isSelectedSessionModelSendable: selectedSessionSelection.isSendable,
+        sessionSelection.selectedModelSelection ?? catalogChoice ?? defaultSelection,
+      repair,
+      sendBlockReason:
+        sessionSelection.blockedReason ??
+        (sessionSelection.repairSelection && !repair ? "session" : null),
     };
   }
 
@@ -114,29 +100,117 @@ export const resolveChatComposerModelSelections = ({
     selectionCatalog,
     selectedModelSelection: selectionForNewSession,
     selectionForNewSession,
-    sessionModelRepairCommand: null,
-    isSelectedSessionModelSendable: true,
+    repair: null,
+    sendBlockReason: null,
   };
 };
 
-export const resolveSessionModelRepairCommand = ({
-  sessionIdentity,
-  repairSelection,
+export const resolveChatComposerSelectedRuntimeKind = ({
+  selectedSessionModel,
+  draftSelection,
+  defaultSelection,
+  runtimeDefinitions,
 }: {
-  sessionIdentity: AgentSessionIdentity | null;
-  repairSelection: AgentModelSelection | null;
-}): ChatComposerSessionModelRepairCommand | null => {
-  if (!sessionIdentity || !repairSelection) {
-    return null;
-  }
-
-  return { session: sessionIdentity, selection: repairSelection };
+  selectedSessionModel: AgentModelSelection | null;
+  draftSelection: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+}): RuntimeKind | null => {
+  return (
+    selectedSessionModel?.runtimeKind ??
+    availableRuntimeKindFor(runtimeDefinitions, draftSelection?.runtimeKind) ??
+    availableRuntimeKindFor(runtimeDefinitions, defaultSelection?.runtimeKind) ??
+    null
+  );
 };
 
 type LoadedSessionSelection = {
   selectedModelSelection: AgentModelSelection | null;
   repairSelection: AgentModelSelection | null;
-  isSendable: boolean;
+  blockedReason: SendBlockReason | null;
+};
+
+const resolveLoadedSessionSelection = ({
+  selectionCatalog,
+  selectedSessionModel,
+  defaultSelection,
+  sessionRuntimeKind,
+}: {
+  selectionCatalog: AgentModelCatalog | null;
+  selectedSessionModel: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
+  sessionRuntimeKind: RuntimeKind;
+}): LoadedSessionSelection => {
+  if (!selectedSessionModel) {
+    return {
+      selectedModelSelection: null,
+      repairSelection: null,
+      blockedReason: null,
+    };
+  }
+
+  if (!selectionCatalog) {
+    return {
+      selectedModelSelection: selectedSessionModel,
+      repairSelection: null,
+      blockedReason: null,
+    };
+  }
+
+  if (
+    selectedSessionModel.profileId &&
+    selectionCatalog.runtime?.capabilities.optionalSurfaces.supportsProfiles &&
+    selectionCatalog.profiles?.length === 0
+  ) {
+    return {
+      selectedModelSelection: null,
+      repairSelection: null,
+      blockedReason: selectionCatalog.models.length > 0 ? "profile" : "model",
+    };
+  }
+
+  const savedChoice = coerceSessionSelectionToCatalog({
+    selectionCatalog,
+    selection: selectedSessionModel,
+    sessionRuntimeKind,
+  });
+  const defaultChoice = coerceSessionSelectionToCatalog({
+    selectionCatalog,
+    selection: defaultSelection,
+    sessionRuntimeKind,
+  });
+  const catalogChoice = pickSessionCatalogDefaultSelection(selectionCatalog, sessionRuntimeKind);
+  if (savedChoice && isSameSelection(selectedSessionModel, savedChoice)) {
+    return {
+      selectedModelSelection: savedChoice,
+      repairSelection: null,
+      blockedReason: null,
+    };
+  }
+
+  let blockedReason: SendBlockReason = "model";
+  for (const selection of [savedChoice, defaultChoice, catalogChoice]) {
+    const repair = pickSessionRepair(selectionCatalog, selection, selectedSessionModel);
+    if (repair.selection) {
+      const model = findCatalogModel(selectionCatalog, repair.selection);
+      const savedSpeed = model
+        ? normalizeCatalogSpeed(model, selectedSessionModel.speed)
+        : undefined;
+      const repairSelection = withSpeed(repair.selection, savedSpeed ?? STANDARD_SPEED);
+      return {
+        selectedModelSelection: repairSelection,
+        repairSelection,
+        blockedReason: null,
+      };
+    }
+    if (repair.blockedReason === "profile") blockedReason = "profile";
+  }
+
+  return {
+    selectedModelSelection: null,
+    repairSelection: null,
+    blockedReason,
+  };
 };
 
 const coerceSessionSelectionToCatalog = ({
@@ -172,104 +246,53 @@ const pickSessionCatalogDefaultSelection = (
   return fallbackSelection;
 };
 
-const coerceLiveSessionRepairSelection = (
+const pickSessionRepair = (
   selectionCatalog: AgentModelCatalog,
   selection: AgentModelSelection | null,
-): AgentModelSelection | null => {
+  savedSelection: AgentModelSelection,
+): RepairChoice => {
   if (!selection) {
-    return null;
+    return { selection: null, blockedReason: "model" };
   }
-  const model = selectionCatalog.models.find(
-    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
-  );
-  if (!model?.liveSessionUpdates?.variants) {
-    return selection;
+  const model = findCatalogModel(selectionCatalog, selection);
+  const policy = resolveModelSelectionPolicy(model, true);
+  // The host keeps the saved profile when an update omits it.
+  const profileId = savedSelection.profileId
+    ? (normalizeVisibleCatalogProfileId(selectionCatalog, savedSelection.profileId) ??
+      selection.profileId ??
+      pickVisibleCatalogDefaultProfileId(selectionCatalog))
+    : selection.profileId;
+  if (
+    (savedSelection.profileId && !profileId) ||
+    (!policy.canChangeProfile && profileId !== savedSelection.profileId)
+  ) {
+    return { selection: null, blockedReason: "profile" };
   }
 
-  const liveVariants = new Set(model.liveSessionUpdates.variants);
   const variant =
-    selection.variant && liveVariants.has(selection.variant)
+    selection.variant && policy.variants.includes(selection.variant)
       ? selection.variant
-      : model.variants.find((entry) => liveVariants.has(entry));
-  if (model.variants.length > 0 && !variant) {
-    return null;
+      : policy.variants[0];
+  if (model && model.variants.length > 0 && !variant) {
+    return { selection: null, blockedReason: "model" };
   }
 
-  const repairedSelection: AgentModelSelection = { ...selection };
+  const repair: AgentModelSelection = { ...selection };
   if (variant) {
-    repairedSelection.variant = variant;
+    repair.variant = variant;
   }
-  return repairedSelection;
+  if (profileId) {
+    repair.profileId = profileId;
+  }
+  return { selection: repair, blockedReason: null };
 };
 
-const resolveLoadedSessionSelection = ({
-  selectionCatalog,
-  selectedSessionModel,
-  defaultSelection,
-  sessionRuntimeKind,
-}: {
-  selectionCatalog: AgentModelCatalog | null;
-  selectedSessionModel: AgentModelSelection | null;
-  defaultSelection: AgentModelSelection | null;
-  sessionRuntimeKind: RuntimeKind;
-}): LoadedSessionSelection => {
-  if (!selectedSessionModel) {
-    return {
-      selectedModelSelection: null,
-      repairSelection: null,
-      isSendable: true,
-    };
+const availableRuntimeKindFor = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeKind: RuntimeKind | null | undefined,
+): RuntimeKind | null => {
+  if (!runtimeKind) {
+    return null;
   }
-
-  if (!selectionCatalog) {
-    return {
-      selectedModelSelection: selectedSessionModel,
-      repairSelection: null,
-      isSendable: true,
-    };
-  }
-
-  const normalizedSessionSelection = coerceSessionSelectionToCatalog({
-    selectionCatalog,
-    selection: selectedSessionModel,
-    sessionRuntimeKind,
-  });
-  const fallbackDefaultSelection = coerceSessionSelectionToCatalog({
-    selectionCatalog,
-    selection: defaultSelection,
-    sessionRuntimeKind,
-  });
-  const fallbackCatalogSelection = pickSessionCatalogDefaultSelection(
-    selectionCatalog,
-    sessionRuntimeKind,
-  );
-  if (
-    normalizedSessionSelection &&
-    isSameSelection(selectedSessionModel, normalizedSessionSelection)
-  ) {
-    return {
-      selectedModelSelection: normalizedSessionSelection,
-      repairSelection: null,
-      isSendable: true,
-    };
-  }
-
-  const selectedModelSelection =
-    coerceLiveSessionRepairSelection(selectionCatalog, normalizedSessionSelection) ??
-    coerceLiveSessionRepairSelection(selectionCatalog, fallbackDefaultSelection) ??
-    coerceLiveSessionRepairSelection(selectionCatalog, fallbackCatalogSelection);
-
-  if (!selectedModelSelection) {
-    return {
-      selectedModelSelection: null,
-      repairSelection: null,
-      isSendable: false,
-    };
-  }
-
-  return {
-    selectedModelSelection,
-    repairSelection: selectedModelSelection,
-    isSendable: false,
-  };
+  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? runtimeKind : null;
 };
