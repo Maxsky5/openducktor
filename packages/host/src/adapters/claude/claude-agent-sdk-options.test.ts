@@ -324,8 +324,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         const options = await buildOptions(session, undefined, policy);
         expect(options.disallowedTools).toEqual(["Read", "Artifact", "AskUserQuestion", "Agent"]);
         const args = captureSdkLaunchArgs(options);
-        expect(args).toContain("--disallowedTools");
-        expect(args).toContain("Read,Artifact,AskUserQuestion,Agent");
+        expect(args).toContain("--disallowedTools=Read,Artifact,AskUserQuestion,Agent");
         expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
         expect(options).not.toHaveProperty("allowedTools");
         policy.toolAvailability = {};
@@ -486,7 +485,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         expect(options).not.toHaveProperty(field);
       const args = captureSdkLaunchArgs(options);
       expect(args).toContain("--resume=00000000-0000-4000-8000-000000000001");
-      expect(args).not.toContain("--permission-mode");
+      expect(args).not.toContainEqual(expect.stringMatching(/^--permission-mode=/));
     } finally {
       session.abortController.abort();
       await rm(workingDirectory, { recursive: true, force: true });
@@ -511,7 +510,9 @@ describe("buildClaudeAgentSdkOptions", () => {
             ? { resume: "00000000-0000-4000-8000-000000000001", forkSession: true }
             : {},
         );
-        expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
+        expect(captureSdkLaunchArgs(options)).not.toContainEqual(
+          expect.stringMatching(/^--permission-mode=/),
+        );
         expect(options.sandbox?.failIfUnavailable).toBe(true);
         expect(options.disallowedTools).toContain("Write");
         expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
@@ -533,7 +534,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         });
         expect(options.permissionMode).toBe(permissionMode);
         const args = captureSdkLaunchArgs(options);
-        expect(args[args.indexOf("--permission-mode") + 1]).toBe(permissionMode);
+        expect(args).toContain(`--permission-mode=${permissionMode}`);
         expect(options.sandbox?.enabled).toBe(true);
         expect(options.allowDangerouslySkipPermissions === true).toBe(
           permissionMode === "bypassPermissions",
@@ -732,7 +733,9 @@ describe("buildClaudeAgentSdkOptions", () => {
 
         const nativeSettings = await realClaudeSdk.resolveSettings({ cwd });
         expect(nativeSettings.effective.permissions?.defaultMode).toBe(mode);
-        expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
+        expect(captureSdkLaunchArgs(options)).not.toContainEqual(
+          expect.stringMatching(/^--permission-mode=/),
+        );
         expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
       } finally {
         session.abortController.abort();
@@ -759,7 +762,9 @@ describe("buildClaudeAgentSdkOptions", () => {
 
       const options = await buildOptions(session);
 
-      expect(captureSdkLaunchArgs(options)).not.toContain("--permission-mode");
+      expect(captureSdkLaunchArgs(options)).not.toContainEqual(
+        expect.stringMatching(/^--permission-mode=/),
+      );
       expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
       expect(
         await preToolUseHook(options, {

@@ -33,7 +33,7 @@ export const toCodexSendRequest = ({
   return request;
 };
 
-export const toCodexUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
+const toCodexUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
   if (part.kind !== "attachment") {
     return part;
   }

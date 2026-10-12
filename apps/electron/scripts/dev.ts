@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { signAsync, type SignOptions } from "@electron/osx-sign";
+import { sign, type SignOptions } from "@electron/osx-sign";
 import { resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
@@ -272,7 +272,7 @@ const signMacosDevAppEffect = (
   devAppPath: string,
 ): Effect.Effect<void, ElectronOperationError<ElectronDevCommandErrorDetails>> =>
   Effect.tryPromise({
-    try: () => signAsync(macosDevSignOptions(devAppPath)),
+    try: () => sign(macosDevSignOptions(devAppPath)),
     catch: (cause) =>
       new ElectronOperationError({
         operation: "electron.dev.sign-macos-app",

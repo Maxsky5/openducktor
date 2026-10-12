@@ -372,7 +372,11 @@ const listItemPrefix = (context: RenderContext): string => {
 
 export const TaskDescriptionListItem = ListItem.extend({
   parseMarkdown(token, helpers) {
-    const parsed = defaultListItemParseMarkdown(withLeadingListItemMathTokens(token), helpers);
+    const parsed = defaultListItemParseMarkdown.call(
+      this,
+      withLeadingListItemMathTokens(token),
+      helpers,
+    );
     return Array.isArray(parsed)
       ? parsed.map(ensureLeadingMathParagraph)
       : ensureLeadingMathParagraph(parsed);
@@ -385,7 +389,7 @@ export const TaskDescriptionListItem = ListItem.extend({
       content.some((child) => child.type === "blockMath" || child.type === "codeBlock");
     return needsDialectRenderer
       ? renderListItem(node, helpers, listItemPrefix(context))
-      : defaultListItemRenderMarkdown(node, helpers, context);
+      : defaultListItemRenderMarkdown.call(this, node, helpers, context);
   },
 });
 
@@ -394,7 +398,11 @@ export const TaskDescriptionOrderedList = OrderedList.extend({
 
   parseMarkdown(token, helpers) {
     const parsed = ensureOrderedListMathParagraphs(
-      defaultOrderedListParseMarkdown(withOrderedListItemParagraphTokens(token, helpers), helpers),
+      defaultOrderedListParseMarkdown.call(
+        this,
+        withOrderedListItemParagraphTokens(token, helpers),
+        helpers,
+      ),
     );
     return preserveOrderedListStart(parsed, orderedListStart(token));
   },
@@ -402,7 +410,10 @@ export const TaskDescriptionOrderedList = OrderedList.extend({
 
 export const TaskDescriptionTaskItem = TaskItem.extend({
   parseMarkdown(token, helpers) {
-    return parseLeadingTaskItemMath(token, helpers) ?? defaultTaskItemParseMarkdown(token, helpers);
+    return (
+      parseLeadingTaskItemMath(token, helpers) ??
+      defaultTaskItemParseMarkdown.call(this, token, helpers)
+    );
   },
 
   renderMarkdown(node, helpers) {

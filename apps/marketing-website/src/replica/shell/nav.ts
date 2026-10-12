@@ -7,7 +7,7 @@ import type { WorkspaceName } from "../../sample/workspace";
 import type { DotState, LaneId, RoleId } from "../vocabulary";
 
 /** The groups in the order of the list. */
-export const NAV_GROUPS = ["needs_you", "running", "recent"] as const;
+const NAV_GROUPS = ["needs_you", "running", "recent"] as const;
 export type NavGroupId = (typeof NAV_GROUPS)[number];
 
 const NAV_GROUP_LABELS = {

@@ -237,7 +237,7 @@ describe("electron dev script", () => {
       identityValidation: false,
       platform: "darwin",
     });
-    expect(options.optionsForFile?.(devAppPath)).toEqual({
+    expect(options.optionsForFile?.(devAppPath, { platform: "darwin" })).toEqual({
       hardenedRuntime: false,
       timestamp: "none",
     });
