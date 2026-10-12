@@ -193,7 +193,7 @@ async function selectModel(view: ReturnType<typeof renderCreation>) {
   );
 }
 
-test("matches the task modal width, separates footer actions and disables name autocomplete", () => {
+test("matches the task modal width and footer surface, separates actions and disables name autocomplete", () => {
   const view = renderCreation(async () => {
     throw new Error("Unexpected creation");
   });
@@ -206,6 +206,8 @@ test("matches the task modal width, separates footer actions and disables name a
     expect(cancel.parentElement?.firstElementChild).toBe(cancel);
     expect(cancel.parentElement?.classList.contains("justify-between")).toBe(true);
     expect(cancel.parentElement?.classList.contains("sm:justify-between")).toBe(true);
+    // Sticky actions need the same opaque surface as the dialog in both themes.
+    expect(cancel.parentElement?.classList.contains("bg-popover")).toBe(true);
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

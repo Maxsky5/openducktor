@@ -113,7 +113,7 @@ export function RuntimeImpactDialog({
           {impactError === null && impact !== null ? <ImpactSessions impact={impact} /> : null}
           {error !== null ? <ErrorText message={error} /> : null}
         </DialogBody>
-        <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"
