@@ -49,12 +49,6 @@ extraResources:
   - from: resources/icon.png
     to: icon.png
 
-extraMetadata:
-  main: dist/main.js
-  dependencies:
-    "@azure/msal-node-extensions": 5.5.1
-    node-pty: 1.2.0-beta.14
-
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   icon: resources/icon.icns

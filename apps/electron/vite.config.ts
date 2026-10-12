@@ -75,6 +75,7 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 500,
+    reportCompressedSize: false,
   },
   clearScreen: false,
   server: {

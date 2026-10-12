@@ -39,8 +39,10 @@ npx @openducktor/web --port 1420 --backend-port 14327
 
 The npm package must include:
 
-- `dist/cli.js`
+- `dist/cli.js` and its shared `dist/*.js` chunks
 - `dist/openducktor-mcp.js`
+- `dist/generated-image-worker.js` and the self-contained `dist/opencode-workflow-plugin.js`
+- `dist/drizzle/**`
 - `dist/web-shell/**`
 
 The release workflow builds the CLI and web shell, verifies package contents, dry-runs npm packaging, and publishes `@openducktor/web` with its Node runtime dependencies.
