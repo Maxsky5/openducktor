@@ -20,6 +20,8 @@ export type TaskIdInput = RepoPathInput & {
 
 export type ListTasksInput = RepoPathInput & {
   doneVisibleDays?: number;
+  /** Read these tasks and their parents for a committed change event. */
+  taskIds?: readonly string[];
 };
 
 export type ListAgentSessionsForTasksInput = RepoPathInput & {

@@ -1,3 +1,4 @@
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -39,7 +40,11 @@ const taskCard = (): TaskCard => ({
 });
 const fakeTaskService = (
   overrides: Partial<TaskServiceWithMutationProgress>,
-): TaskServiceWithMutationProgress => createTaskServiceWithMutationProgressTestDouble(overrides);
+): TaskServiceWithMutationProgress =>
+  createTaskServiceWithMutationProgressTestDouble({
+    listTasks: () => Effect.succeed([]),
+    ...overrides,
+  });
 const sync = (
   events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }>,
 ): Pick<
@@ -57,6 +62,7 @@ const sync = (
   publishTasksUpdated: (_repoPath, changes) =>
     Effect.sync(() => {
       events.push({ changes });
+      return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
     }),
   syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
 });
@@ -73,6 +79,7 @@ describe("createEventPublishingTaskService", () => {
         publishTasksUpdated: (_repoPath, changes, operation) =>
           Effect.sync(() => {
             publications.push({ operation, ...changes });
+            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
           }),
       },
     });
@@ -81,7 +88,10 @@ describe("createEventPublishingTaskService", () => {
       service.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
     );
 
-    expect(result).toBe(document);
+    expect(result).toEqual({
+      ...document,
+      cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 },
+    });
     expect(publications).toEqual([
       { operation: "set-spec", taskIds: ["task-1"], removedTaskIds: [] },
     ]);
@@ -101,6 +111,7 @@ describe("createEventPublishingTaskService", () => {
         publishTasksUpdated: (_repoPath, changes, operation) =>
           Effect.sync(() => {
             publications.push({ operation, ...changes });
+            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
           }),
       },
     });
@@ -115,7 +126,13 @@ describe("createEventPublishingTaskService", () => {
       }),
     );
 
-    expect(result).toBe(plan);
+    expect(result).toEqual({
+      ...plan,
+      document: {
+        ...plan.document,
+        cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 },
+      },
+    });
     expect(publications).toEqual([
       { operation: "set-plan", taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
     ]);
@@ -292,7 +309,10 @@ describe("createEventPublishingTaskService", () => {
         },
         publicationReporter: { report: () => Effect.void },
         onBackgroundFailure: () => Effect.void,
-        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+        workspaceSettingsService: {
+          listWorkspaces: () => Effect.succeed([]),
+          getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+        },
       });
       const service = createEventPublishingTaskService({ taskService: base, taskSyncService });
       const calls = {
@@ -344,6 +364,7 @@ describe("createEventPublishingTaskService", () => {
       publishTasksUpdated: () =>
         Effect.sync(() => {
           reports.push("acceptance failure reported");
+          return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
         }),
       syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
     };

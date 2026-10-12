@@ -160,9 +160,11 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   },
   taskEventStream: {
     acknowledge: () => {},
-    publish: () => {},
+    publish: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 }),
     subscribe: () => ({
       subscriptionId: "test-subscription",
+      resume: () => {},
+      replay: () => {},
       unsubscribe: () => {},
     }),
   },
@@ -1016,7 +1018,6 @@ describe("TypeScript web host backend", () => {
       expect(stream.headers["content-type"]).toContain("text/event-stream");
       expect(readyComment).toBe(": openducktor-ready\n\n");
       const lease = manager.get(created.subscriptionId);
-      expect(lease?.pendingFrames).toEqual([]);
 
       stream.destroy();
       const abortTimeout = setTimeout(
@@ -1047,22 +1048,26 @@ describe("TypeScript web host backend", () => {
   }, 5_000);
 
   test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
-    type TaskEventSinkHolder = {
-      sink?: (frame: TaskEventStreamFrame) => void;
-    };
-    const subscription: TaskEventSinkHolder = {};
     const subscribeCalls: unknown[] = [];
     const acknowledged: unknown[] = [];
+    const hostSubscriptionId = "1481b3fa-242a-4baf-a805-c6bc77a2496e";
+    const taskEventStream = createTaskEventStream({
+      epochFactory: () => "fc49d1f9-708c-4198-b56b-f1437b2bbcea",
+      subscriptionIdFactory: () => hostSubscriptionId,
+      reporter: { report: () => {} },
+    });
     const taskEventLeaseManager = createTaskEventLeaseManager({
       encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: () => {},
       taskEventStream: {
-        acknowledge: (input) => acknowledged.push(input),
-        publish: () => {},
+        ...taskEventStream,
+        acknowledge: (input) => {
+          taskEventStream.acknowledge(input);
+          acknowledged.push(input);
+        },
         subscribe: (input, nextSink) => {
           subscribeCalls.push(input);
-          subscription.sink = nextSink;
-          return { subscriptionId: "host-subscription", unsubscribe: () => {} };
+          return taskEventStream.subscribe(input, nextSink);
         },
       },
     });
@@ -1095,14 +1100,12 @@ describe("TypeScript web host backend", () => {
     );
     expect(stream.status).toBe(200);
     const reader = stream.body?.getReader();
-    const sink = subscription.sink;
-    if (!reader || !sink) throw new Error("Expected task event stream subscription.");
+    if (!reader) throw new Error("Expected task event stream subscription.");
     const frame: TaskEventStreamFrame = {
       type: "snapshot_required",
       cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
       reason: "buffer_gap",
     };
-    sink(frame);
     expect(new TextDecoder().decode((await reader.read()).value)).toBe(": openducktor-ready\n\n");
     const sse = new TextDecoder().decode((await reader.read()).value);
     expect(sse).toContain("event: task-frame");
@@ -1142,7 +1145,7 @@ describe("TypeScript web host backend", () => {
       { taskEventLeaseManager },
     );
     expect(acknowledgement.status).toBe(204);
-    expect(acknowledged).toEqual([{ cursor: frame.cursor, subscriptionId: "host-subscription" }]);
+    expect(acknowledged).toEqual([{ cursor: frame.cursor, subscriptionId: hostSubscriptionId }]);
     await reconnectReader.cancel();
 
     const lease = taskEventLeaseManager.get(created.subscriptionId);

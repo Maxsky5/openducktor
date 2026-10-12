@@ -308,7 +308,10 @@ export const createLaunchHarness = async (
             Effect.suspend(() => {
               if (publishFailure) return Effect.fail(failure("Ownership publication failed"));
               publications.push(operation);
-              return Effect.void;
+              return Effect.succeed({
+                epoch: "11111111-1111-4111-8111-111111111111",
+                sequence: publications.length,
+              });
             }),
           ),
         ),

@@ -1,8 +1,13 @@
 import { Effect } from "effect";
+import type { TaskCard } from "@openducktor/contracts";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import {
+  createEventBus,
+  createTaskSyncServiceForTest,
+} from "./sync/task-sync-service.test-support";
 import {
   createTaskService,
   createTaskServiceWithMutationProgress,
@@ -11,6 +16,110 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService planning", () => {
+  test.each([
+    { name: "complete replacement", oldChildren: 1, failCreation: false },
+    { name: "partial replacement", oldChildren: 1, failCreation: true },
+    { name: "partial initial creation", oldChildren: 0, failCreation: true },
+  ])(
+    "publishes complete committed child cards after $name",
+    async ({ oldChildren, failCreation }) => {
+      let tasks: TaskCard[] = [
+        task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
+        ...Array.from({ length: oldChildren }, () => task({ id: "old-child", parentId: "epic-1" })),
+      ];
+      const failure = new HostOperationError({
+        operation: "create-task",
+        message: "second creation failed",
+      });
+      let creates = 0;
+      const taskStore: TaskStorePort = {
+        listTasks: () => Effect.succeed(tasks),
+        setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+        deleteTask: ({ taskId }) =>
+          Effect.sync(() => {
+            tasks = tasks.filter((entry) => entry.id !== taskId);
+            return true;
+          }),
+        createTask: ({ task: input }) =>
+          Effect.suspend(() => {
+            creates += 1;
+            if (failCreation && creates === 2) return Effect.fail(failure);
+            const created = task({
+              id: `new-${creates}`,
+              title: input.title,
+              issueType: input.issueType,
+              priority: input.priority,
+              aiReviewEnabled: input.aiReviewEnabled,
+              description: input.description ?? "",
+              labels: input.labels ?? [],
+            });
+            if (input.parentId !== undefined) created.parentId = input.parentId;
+            tasks = [...tasks, created];
+            return Effect.succeed(created);
+          }),
+        transitionTask: ({ taskId, status }) =>
+          Effect.sync(() => {
+            tasks = tasks.map((entry) => (entry.id === taskId ? { ...entry, status } : entry));
+            return tasks.find((entry) => entry.id === taskId)!;
+          }),
+      };
+      const { eventBus, events } = createEventBus();
+      const taskSyncService = createTaskSyncServiceForTest({
+        eventBus,
+        taskService: {
+          listTasks: ({ taskIds }) =>
+            Effect.sync(() => {
+              if (!taskIds) throw new Error("Publication must request scoped cards.");
+              return tasks
+                .filter((entry) => taskIds.includes(entry.id))
+                .map((entry) =>
+                  entry.issueType === "epic"
+                    ? {
+                        ...entry,
+                        subtaskIds: tasks
+                          .filter((child) => child.parentId === entry.id)
+                          .map((child) => child.id),
+                      }
+                    : entry,
+                );
+            }),
+          repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+        },
+        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      });
+      const service = createEventPublishingTaskService({
+        taskService: createTaskServiceWithMutationProgress({ taskStore }),
+        taskSyncService,
+      });
+      const result = await Effect.runPromise(
+        Effect.result(
+          service.setPlan({
+            repoPath: "/repo",
+            taskId: "epic-1",
+            markdown: "# Replacement plan",
+            hasExplicitSubtasks: true,
+            subtasks: [
+              { title: "First", issueType: "task" },
+              { title: "Second", issueType: "task" },
+            ],
+          }),
+        ),
+      );
+      expect(result._tag).toBe(failCreation ? "Failure" : "Success");
+      if (result._tag === "Failure") expect(result.failure).toBe(failure);
+      expect(events).toHaveLength(1);
+      const event = events[0];
+      expect(event?.kind).toBe("tasks_updated");
+      if (event?.kind !== "tasks_updated") throw new Error("Expected committed plan event.");
+      const childIds = failCreation ? ["new-1"] : ["new-1", "new-2"];
+      expect(event.taskIds).toEqual(["epic-1", ...(oldChildren ? ["old-child"] : []), ...childIds]);
+      expect(event.removedTaskIds).toEqual(oldChildren ? ["old-child"] : []);
+      const [epic, ...children] = tasks;
+      if (!epic) throw new Error("Expected committed epic.");
+      expect(event.boardChanges?.cards).toEqual([{ ...epic, subtaskIds: childIds }, ...children]);
+    },
+  );
+
   test("sets spec markdown and promotes open tasks to spec_ready", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -305,7 +414,10 @@ describe("createTaskService planning", () => {
         updatedAt: "2026-05-10T10:00:00.000Z",
         revision: 2,
       },
-      changes: { taskIds: ["epic-1", "old-child"], removedTaskIds: ["old-child"] },
+      changes: {
+        taskIds: ["epic-1", "old-child", "created-Build UI", "created-Wire API"],
+        removedTaskIds: ["old-child"],
+      },
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
@@ -569,6 +681,7 @@ describe("createTaskService planning", () => {
         publishTasksUpdated: (_repoPath, changes) =>
           Effect.sync(() => {
             events.push(changes);
+            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
           }),
         syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },

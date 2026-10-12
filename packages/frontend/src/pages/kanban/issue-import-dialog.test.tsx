@@ -139,7 +139,6 @@ describe("Issue import dialog", () => {
                 reason: "The Git remote does not match this repository.",
               },
             }}
-            onImported={() => {}}
           />
         </SettingsModalProvider>
       </QueryClientProvider>,
@@ -175,7 +174,6 @@ describe("Issue import dialog", () => {
         { sourceId: "2", outcome: "created", taskId: "TASK-2" },
       ],
     });
-    const imported = mock(() => {});
     const onOpenChange = mock((_open: boolean) => {});
     const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
     try {
@@ -187,7 +185,6 @@ describe("Issue import dialog", () => {
               onOpenChange={onOpenChange}
               repoPath="/repo"
               provider={provider}
-              onImported={imported}
             />
           </SettingsModalProvider>
         </QueryClientProvider>,
@@ -197,7 +194,6 @@ describe("Issue import dialog", () => {
       fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
       await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-      expect(imported).toHaveBeenCalledTimes(1);
       expect(success).toHaveBeenCalledWith("2 Tasks created");
       view.unmount();
     } finally {
@@ -229,7 +225,6 @@ describe("Issue import dialog", () => {
               onOpenChange={onOpenChange}
               repoPath="/repo"
               provider={provider}
-              onImported={() => {}}
             />
           </SettingsModalProvider>
         </QueryClientProvider>,
@@ -269,13 +264,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -322,7 +311,6 @@ describe("Issue import dialog", () => {
             onOpenChange={() => {}}
             repoPath="/repo"
             provider={browseProvider}
-            onImported={() => {}}
           />
         </SettingsModalProvider>
       </QueryClientProvider>,
@@ -344,13 +332,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -372,13 +354,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -415,13 +391,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -473,7 +443,6 @@ describe("Issue import dialog", () => {
               onOpenChange={() => {}}
               repoPath="/repo"
               provider={current}
-              onImported={() => {}}
             />
           </SettingsModalProvider>
         </QueryClientProvider>
@@ -503,13 +472,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -548,13 +511,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -584,13 +541,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -636,13 +587,7 @@ describe("Issue import dialog", () => {
       const view = render(
         <QueryClientProvider client={createQueryClient()}>
           <SettingsModalProvider>
-            <IssueImportDialog
-              open
-              onOpenChange={() => {}}
-              repoPath="/repo"
-              provider={provider}
-              onImported={() => {}}
-            />
+            <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
           </SettingsModalProvider>
         </QueryClientProvider>,
       );
@@ -684,7 +629,6 @@ describe("Issue import dialog", () => {
             onOpenChange={() => {}}
             repoPath="/repo"
             provider={provider}
-            onImported={() => {}}
           />
         </SettingsModalProvider>
       </QueryClientProvider>
@@ -724,13 +668,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -774,13 +712,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -806,13 +738,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -843,7 +769,6 @@ describe("Issue import dialog", () => {
       },
       { results: [{ sourceId: "2", outcome: "created", taskId: "TASK-2" }] },
     ];
-    const imported = mock(async () => {});
     const onOpenChange = mock((_open: boolean) => {});
     const importItems = mock(async (_input: IssueItemsImportInput) => outcomes.shift()!);
     host.issueItemsList = list;
@@ -857,7 +782,6 @@ describe("Issue import dialog", () => {
             onOpenChange={onOpenChange}
             repoPath="/repo"
             provider={provider}
-            onImported={imported}
           />
         </SettingsModalProvider>
       </QueryClientProvider>,
@@ -890,8 +814,7 @@ describe("Issue import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await screen.findByText("Created Task TASK-2");
     expect(importItems.mock.calls[1]?.[0].items.map((item) => item.sourceId)).toEqual(["2"]);
-    await waitFor(() => expect(imported).toHaveBeenCalledTimes(2));
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(list.mock.calls.some(([input]) => input.search === "second")).toBe(true);
     view.unmount();
   }, 3_000);
@@ -929,13 +852,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -988,13 +905,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={createQueryClient()}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -1025,13 +936,7 @@ describe("Issue import dialog", () => {
     const view = render(
       <QueryClientProvider client={queryClient}>
         <SettingsModalProvider>
-          <IssueImportDialog
-            open
-            onOpenChange={() => {}}
-            repoPath="/repo"
-            provider={provider}
-            onImported={() => {}}
-          />
+          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
       </QueryClientProvider>,
     );
@@ -1072,7 +977,6 @@ describe("Issue import dialog", () => {
             onOpenChange={() => {}}
             repoPath="/repo"
             provider={azureProvider}
-            onImported={() => {}}
           />
         </SettingsModalProvider>
       </QueryClientProvider>

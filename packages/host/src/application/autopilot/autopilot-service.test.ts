@@ -177,10 +177,11 @@ const createAutopilotHarness = async ({
   });
   const backgroundFailures: HostError[] = [];
   let autopilot: AutopilotService | undefined;
+  let saved = configFor(rules);
   const sync = createTaskSyncService({
     taskService: base,
     taskEventStream: {
-      publish: () => {},
+      publish: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 }),
       subscribe: () => {
         throw new Error("Unexpected subscription");
       },
@@ -193,12 +194,14 @@ const createAutopilotHarness = async ({
       Effect.sync(() => {
         backgroundFailures.push(failure);
       }),
-    workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    workspaceSettingsService: {
+      getSettingsSnapshot: () => Effect.succeed(saved),
+      listWorkspaces: () => Effect.succeed([]),
+    },
     observeStatusChanges: (changes) => autopilot?.observe(changes),
   });
   const tasks = createEventPublishingTaskService({ taskService: base, taskSyncService: sync });
 
-  let saved = configFor(rules);
   let readFailure: HostOperationError | null = null;
   const settingsConfig: SettingsConfigPort = withConfigCommit(
     createSettingsConfigTestDouble({

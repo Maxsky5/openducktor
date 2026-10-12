@@ -28,9 +28,6 @@ export type TaskStreamController = {
   stop(): Promise<void>;
 };
 
-const cursorsEqual = (left: TaskEventCursor | null, right: TaskEventCursor | null): boolean =>
-  left !== null && right !== null && left.epoch === right.epoch && left.sequence === right.sequence;
-
 export const createTaskStreamController = ({
   transport,
   taskViewSync,
@@ -62,8 +59,7 @@ export const createTaskStreamController = ({
   let recoveryUsed = false;
   let subscriptionGeneration = 0;
   let operationGeneration = 0;
-  type Acknowledgement = { cursor: TaskEventCursor; owner: OwnedSubscription };
-  let acknowledging: Acknowledgement | null = null;
+  let acknowledgementPromise: Promise<void> | null = null;
   let awaitingReplayCursor: TaskEventCursor | null = null;
   let pendingSnapshot: Extract<TaskStreamFrame, { type: "snapshot_required" }> | null = null;
   const pendingChanges = new Map<string, ChangeFrame>();
@@ -125,20 +121,38 @@ export const createTaskStreamController = ({
     if (!owner.subscription) {
       throw new Error("Task stream frame arrived before subscription setup completed.");
     }
-    acknowledging = { cursor, owner };
-    try {
-      await owner.subscription.acknowledge(cursor);
-    } finally {
-      if (acknowledging?.owner === owner && cursorsEqual(acknowledging.cursor, cursor)) {
-        acknowledging = null;
-      }
-    }
+    await owner.subscription.acknowledge(cursor);
     if (!isActive(owner, frameGeneration)) return false;
     acknowledgedCursor = cursor;
     return true;
   };
 
-  /** Reconcile consecutive changes together, so their session reads share requests. */
+  const acknowledgeProgress = (owner: OwnedSubscription, frameGeneration: number): void => {
+    if (
+      acknowledgementPromise ||
+      !processedCursor ||
+      cursorsEqual(processedCursor, acknowledgedCursor) ||
+      awaitingReplayCursor
+    )
+      return;
+    const cursor = processedCursor;
+    acknowledgementPromise = (async () => {
+      try {
+        if (await acknowledge(owner, cursor, frameGeneration)) {
+          markRecovered();
+        }
+      } catch (error) {
+        if (isActive(owner, frameGeneration)) await startRecovery(error, acknowledgedCursor, true);
+      }
+    })()
+      .catch(reportDegraded)
+      .finally(() => {
+        acknowledgementPromise = null;
+        requestDrain();
+      });
+  };
+
+  /** Apply consecutive changes together so their session reads share requests. */
   const applyChanges = async (
     owner: OwnedSubscription,
     frames: ChangeFrame[],
@@ -151,7 +165,7 @@ export const createTaskStreamController = ({
           if (!isActive(owner, frameGeneration)) return;
           // Task views apply in event order and read the active workspace when each event starts.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath());
+          await taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath(), frame.cursor);
         }
       })(),
       agentSessionViewSync.completeExternalEvents(
@@ -163,7 +177,15 @@ export const createTaskStreamController = ({
         () => isActive(owner, frameGeneration),
       ),
     ]);
-    if (isActive(owner, frameGeneration)) processedCursor = frames[frames.length - 1]!.cursor;
+    if (isActive(owner, frameGeneration)) {
+      processedCursor = frames[frames.length - 1]!.cursor;
+      // Replay uses the cursor. Release completed cards while acknowledgement is pending.
+      for (const frame of frames) {
+        const key = frameKey(frame.cursor);
+        pendingChanges.delete(key);
+        admittedChanges.delete(key);
+      }
+    }
   };
 
   const applySnapshot = async (
@@ -281,7 +303,6 @@ export const createTaskStreamController = ({
           return;
         }
         if (comparison === 0) {
-          pendingChanges.set(frameKey(frame.cursor), frame);
           if (cursorsEqual(frame.cursor, awaitingReplayCursor)) awaitingReplayCursor = null;
           requestDrain();
           return;
@@ -354,7 +375,9 @@ export const createTaskStreamController = ({
     if (stopped) return false;
 
     if (awaitReplay) {
-      awaitingReplayCursor = processedCursor;
+      awaitingReplayCursor = cursorsEqual(processedCursor, acknowledgedCursor)
+        ? null
+        : processedCursor;
     } else {
       awaitingReplayCursor = null;
       pendingChanges.clear();
@@ -396,6 +419,10 @@ export const createTaskStreamController = ({
         const owner = current;
         const frameGeneration = operationGeneration;
         const snapshot = pendingSnapshot;
+        if (snapshot && acknowledgementPromise) {
+          await acknowledgementPromise;
+          continue;
+        }
         if (
           snapshot &&
           cursorsEqual(processedCursor, snapshot.cursor) &&
@@ -440,32 +467,18 @@ export const createTaskStreamController = ({
           }
         }
 
-        if (processedCursor && !cursorsEqual(processedCursor, acknowledgedCursor)) {
-          if (cursorsEqual(processedCursor, awaitingReplayCursor)) return;
-          // The host requires one acknowledgement per frame, without a skipped sequence.
-          const replay = nextChange(acknowledgedCursor);
-          if (!replay) return;
-          try {
-            const acknowledged = await acknowledge(owner, replay.cursor, frameGeneration);
-            if (!acknowledged) continue;
-            pendingChanges.delete(frameKey(replay.cursor));
-            admittedChanges.delete(frameKey(replay.cursor));
-            markRecovered();
-            continue;
-          } catch (error) {
-            if (isActive(owner, frameGeneration)) {
-              if (!(await startRecovery(error, acknowledgedCursor, true))) return;
-            }
-            continue;
-          }
-        }
+        if (awaitingReplayCursor) return;
 
         admitChanges();
         const changes = nextChanges();
-        if (changes.length === 0) return;
+        if (changes.length === 0) {
+          acknowledgeProgress(owner, frameGeneration);
+          return;
+        }
         try {
-          // The next pass acknowledges each processed change in cursor order.
+          // Apply the next run while the previous cumulative acknowledgement is in flight.
           await applyChanges(owner, changes, frameGeneration);
+          if (isActive(owner, frameGeneration)) acknowledgeProgress(owner, frameGeneration);
         } catch (error) {
           if (!isActive(owner, frameGeneration)) continue;
           if (!(await startRecovery(error, null, false))) return;
@@ -504,3 +517,6 @@ export const createTaskStreamController = ({
     },
   };
 };
+
+const cursorsEqual = (left: TaskEventCursor | null, right: TaskEventCursor | null): boolean =>
+  left !== null && right !== null && left.epoch === right.epoch && left.sequence === right.sequence;

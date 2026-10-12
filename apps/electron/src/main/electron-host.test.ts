@@ -445,54 +445,64 @@ const createTaskStore = (): TaskStorePort => ({
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
     }),
-  listTasks: () =>
-    Effect.succeed([
-      {
-        id: "task-1",
-        title: "Task 1",
-        description: "",
-        status: "open",
-        priority: 2,
-        issueType: "task",
-        aiReviewEnabled: true,
-        availableActions: [],
-        labels: [],
-        subtaskIds: [],
-        documentSummary: {
-          spec: { has: false },
-          plan: { has: false },
-          qaReport: { has: false, verdict: "not_reviewed" },
+  listTasks: (input) =>
+    Effect.succeed(
+      [
+        {
+          id: "task-1",
+          title: "Task 1",
+          description: "",
+          status: "open",
+          priority: 2,
+          issueType: "task",
+          aiReviewEnabled: true,
+          availableActions: [],
+          labels: [],
+          subtaskIds: [],
+          documentSummary: {
+            spec: { has: false },
+            plan: { has: false },
+            qaReport: { has: false, verdict: "not_reviewed" },
+          },
+          agentWorkflows: {
+            spec: {
+              required: false,
+              canSkip: true,
+              available: false,
+              completed: false,
+            },
+            planner: {
+              required: false,
+              canSkip: true,
+              available: false,
+              completed: false,
+            },
+            builder: {
+              required: true,
+              canSkip: false,
+              available: false,
+              completed: false,
+            },
+            qa: {
+              required: true,
+              canSkip: false,
+              available: false,
+              completed: false,
+            },
+          },
+          updatedAt: "2026-01-02T00:00:00Z",
+          createdAt: "2026-01-01T00:00:00Z",
         },
-        agentWorkflows: {
-          spec: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          planner: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          builder: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-          qa: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-        },
-        updatedAt: "2026-01-02T00:00:00Z",
-        createdAt: "2026-01-01T00:00:00Z",
-      },
-    ]),
+      ].flatMap((task) =>
+        input.taskIds === undefined
+          ? [task]
+          : input.taskIds.map((id) => ({
+              ...task,
+              id,
+              title: id === "task-2" ? "Task 2" : task.title,
+            })),
+      ),
+    ),
   updateTask: () =>
     Effect.succeed({
       id: "task-1",
@@ -1609,6 +1619,7 @@ describe("createElectronHostCommandRouter", () => {
       markdown: "# Spec",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
+      cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     expect(
       await router.invoke("spec_save_document", {
@@ -1620,6 +1631,7 @@ describe("createElectronHostCommandRouter", () => {
       markdown: "# Spec v2",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
+      cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     expect(
       await router.invoke("set_plan", {
@@ -1631,6 +1643,7 @@ describe("createElectronHostCommandRouter", () => {
       markdown: "# Plan",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
+      cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     expect(
       await router.invoke("plan_save_document", {
@@ -1642,6 +1655,7 @@ describe("createElectronHostCommandRouter", () => {
       markdown: "# Plan v2",
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
+      cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     const deleteRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),

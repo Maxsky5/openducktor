@@ -85,6 +85,7 @@ const transition = (
   repoPath = "/alpha",
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   kind: "tasks_updated",
+  boardChanges: null,
   eventId: id,
   repoPath,
   taskIds: ["task"],

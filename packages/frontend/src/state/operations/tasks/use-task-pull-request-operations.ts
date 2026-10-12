@@ -215,7 +215,6 @@ export function useTaskPullRequestOperations({
       try {
         try {
           await runTaskMutation({
-            refreshStrategy: { kind: "task", taskId },
             run: async (repoPath) => {
               await pullRequestHostPort.unlinkPullRequest(repoPath, taskId);
             },

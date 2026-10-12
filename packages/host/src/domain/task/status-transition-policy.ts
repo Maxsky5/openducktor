@@ -101,10 +101,12 @@ export const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatu
   return false;
 };
 
+export type TaskCompletionContext = Pick<TaskCard, "id" | "parentId" | "status">;
+
 const findBlockingEpicCompletionSubtask = (
   task: TaskCard,
-  allTasks: TaskCard[],
-): TaskCard | undefined => {
+  allTasks: TaskCompletionContext[],
+): TaskCompletionContext | undefined => {
   if (task.issueType !== "epic") {
     return undefined;
   }
@@ -114,16 +116,19 @@ const findBlockingEpicCompletionSubtask = (
   );
 };
 
-const canCloseEpic = (task: TaskCard, allTasks: TaskCard[]): boolean =>
+const canCloseEpic = (task: TaskCard, allTasks: TaskCompletionContext[]): boolean =>
   findBlockingEpicCompletionSubtask(task, allTasks) === undefined;
 
-export const canTransitionToClosed = (task: TaskCard, allTasks: TaskCard[]): boolean =>
+export const canTransitionToClosed = (task: TaskCard, allTasks: TaskCompletionContext[]): boolean =>
   allowsTransition(task, task.status, "closed") && canCloseEpic(task, allTasks);
 
-export const canManuallyCloseTask = (task: TaskCard, allTasks: TaskCard[]): boolean =>
+export const canManuallyCloseTask = (task: TaskCard, allTasks: TaskCompletionContext[]): boolean =>
   task.status !== "closed" && canCloseEpic(task, allTasks);
 
-export const validateManualCloseTask = (task: TaskCard, allTasks: TaskCard[]): void => {
+export const validateManualCloseTask = (
+  task: TaskCard,
+  allTasks: TaskCompletionContext[],
+): void => {
   if (task.status === "closed") {
     throw TaskPolicyError.policy(`Task ${task.id} is already closed.`);
   }
@@ -138,7 +143,7 @@ export const validateManualCloseTask = (task: TaskCard, allTasks: TaskCard[]): v
 
 export const validateTransition = (
   task: TaskCard,
-  allTasks: TaskCard[],
+  allTasks: TaskCompletionContext[],
   from: TaskStatus,
   to: TaskStatus,
 ): void => {

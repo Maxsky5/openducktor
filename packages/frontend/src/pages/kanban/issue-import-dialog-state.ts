@@ -105,7 +105,6 @@ export function useIssueImportSubmission({
   repoPath,
   providerId,
   providerScope,
-  onImported,
   onComplete,
   onRefreshed,
 }: {
@@ -114,7 +113,6 @@ export function useIssueImportSubmission({
   repoPath: string;
   providerId: string;
   providerScope: NonNullable<RepositoryGitProviderContext>["config"];
-  onImported: () => void;
   onComplete: (createdCount: number) => void;
   onRefreshed: (item: SourceIssue) => void;
 }) {
@@ -158,7 +156,6 @@ export function useIssueImportSubmission({
       ]);
       setOutcomes(nextOutcomes);
       if (result.results.some((item) => item.outcome === "created")) {
-        onImported();
         void invalidateRepoIssueItemsQueries(queryClient, repoPath);
       }
       if (

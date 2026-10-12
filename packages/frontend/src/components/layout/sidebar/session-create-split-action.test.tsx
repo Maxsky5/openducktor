@@ -256,7 +256,7 @@ describe("SessionCreateSplitAction", () => {
     }
   });
 
-  test("reports a task list refresh failure after a provider import", async () => {
+  test("imports provider tasks without a second board read", async () => {
     const settings = spyOn(settingsModal, "useSettingsModal").mockReturnValue({
       openSettings: () => {},
     });
@@ -304,13 +304,9 @@ describe("SessionCreateSplitAction", () => {
       fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
 
-      await waitFor(() =>
-        expect(error).toHaveBeenCalledWith(
-          "Tasks were imported, but the task list did not refresh.",
-          { description: "The task store is locked. Refresh the Kanban board to see them." },
-        ),
-      );
-      expect(refreshTaskData).toHaveBeenCalledWith("/repos/alpha");
+      await waitFor(() => expect(success).toHaveBeenCalledWith("1 Task created"));
+      expect(refreshTaskData).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
     } finally {
       error.mockRestore();
       success.mockRestore();

@@ -71,6 +71,7 @@ export const createTaskDocumentUseCases = ({
           return yield* Effect.fail(
             new TaskMutationProgressFailure({
               operation: "set-spec",
+              documentChanges: [{ taskId, sections: ["spec"] }],
               changes: { taskIds: [taskId], removedTaskIds: [] },
               failure: transition.failure,
             }),

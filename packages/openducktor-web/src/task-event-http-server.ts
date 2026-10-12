@@ -118,6 +118,10 @@ const createTaskEventSseResponse = (
       signal.addEventListener("abort", detach, { once: true });
       if (signal.aborted) detach();
     },
+    pull() {
+      const lease = leaseManager.get(subscriptionId);
+      if (lease) leaseManager.resume(lease, generation);
+    },
     cancel: detach,
   });
   return new Response(body, {

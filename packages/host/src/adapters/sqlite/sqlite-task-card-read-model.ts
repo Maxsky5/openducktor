@@ -6,8 +6,9 @@ import {
   type TaskDocumentSummary,
   taskCardSchema,
 } from "@openducktor/contracts";
-import { gte, ne, or } from "drizzle-orm";
+import { type SQL, inArray, gte, ne, or } from "drizzle-orm";
 import { Effect } from "effect";
+import { deriveAvailableActions } from "../../domain/task/task-action-policy";
 import type { TaskStoreListTasksInput } from "../../ports/task-repository-ports";
 import {
   decodeWithSchema,
@@ -19,6 +20,101 @@ import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-docume
 import { requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+
+export const getTaskCard = (
+  session: TaskStoreSession,
+  taskId: string,
+  repoPath: string,
+): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const row = yield* requireTaskRow(session, taskId, repoPath);
+    return yield* rowToTaskCard(session, row);
+  });
+
+export const listTasksInDatabase = (
+  session: TaskStoreSession,
+  input: TaskStoreListTasksInput,
+  now: () => Date,
+): Effect.Effect<TaskCard[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    if (input.taskIds !== undefined) {
+      return yield* readChangedCards(session, input.taskIds, input.doneVisibleDays, now);
+    }
+    let where: SQL | undefined;
+    if (input.doneVisibleDays !== undefined) {
+      const cutoff = new Date(now().getTime() - input.doneVisibleDays * 24 * 60 * 60 * 1000);
+      where =
+        input.doneVisibleDays > 0
+          ? or(ne(tasks.status, "closed"), gte(tasks.updatedAt, cutoff))
+          : ne(tasks.status, "closed");
+    }
+    const rows = yield* taskRows(session, where);
+    const summaries = yield* documentSummariesByTaskId(
+      session,
+      rows.map((row) => row.id),
+    );
+    const cards = yield* Effect.forEach(rows, (row) =>
+      rowToTaskCard(session, row, summaries.get(row.id)),
+    );
+    return finalizeTaskCards(cards);
+  });
+
+/** Read full cards for changed tasks and parents, but only child fields needed for actions. */
+const readChangedCards = (
+  session: TaskStoreSession,
+  taskIds: readonly string[],
+  doneVisibleDays: number | undefined,
+  now: () => Date,
+): Effect.Effect<TaskCard[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    if (taskIds.length === 0) return [];
+    const changedRows = yield* taskRows(session, inArray(tasks.id, [...taskIds]));
+    const cardIds = [
+      ...new Set([
+        ...taskIds,
+        ...changedRows.flatMap((row) => (row.parentId ? [row.parentId] : [])),
+      ]),
+    ];
+    const rows = yield* taskRows(session, inArray(tasks.id, cardIds));
+    const children = yield* session.execute(
+      (database) =>
+        database
+          .select({
+            id: tasks.id,
+            parentId: tasks.parentId,
+            status: tasks.status,
+            updatedAt: tasks.updatedAt,
+          })
+          .from(tasks)
+          .where(inArray(tasks.parentId, cardIds)),
+      "sqliteTaskStore.listChangedCards.selectChildren",
+    );
+    const summaries = yield* documentSummariesByTaskId(session, cardIds);
+    const cards = yield* Effect.forEach(rows, (row) =>
+      rowToTaskCard(session, row, summaries.get(row.id)),
+    );
+    const cutoff =
+      doneVisibleDays === undefined ? null : now().getTime() - doneVisibleDays * 86400000;
+    const childStatuses = children.map((child) => ({
+      id: child.id,
+      status: child.status,
+      parentId: child.parentId ?? undefined,
+    }));
+    return cards.map((card) => ({
+      ...card,
+      subtaskIds: children
+        .filter(
+          (child) =>
+            child.parentId === card.id &&
+            (cutoff === null ||
+              child.status !== "closed" ||
+              (doneVisibleDays! > 0 && child.updatedAt.getTime() >= cutoff)),
+        )
+        .map((child) => child.id)
+        .sort(),
+      availableActions: deriveAvailableActions(card, childStatuses),
+    }));
+  });
 
 const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
   const subtasksByParent = new Map<string, string[]>();
@@ -38,7 +134,7 @@ const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
 const rowToTaskCard = (
   session: TaskStoreSession,
   row: TaskRow,
-  documentSummaryOverride?: TaskDocumentSummary,
+  savedSummary?: TaskDocumentSummary,
 ): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const targetBranch = yield* optionalJsonFromRow(row, "targetBranchJson", (value) =>
@@ -63,7 +159,7 @@ const rowToTaskCard = (
             { taskId: row.id },
           );
     const labels = yield* labelsFromRow(row);
-    const summary = documentSummaryOverride ?? (yield* documentSummary(session, row.id));
+    const summary = savedSummary ?? (yield* documentSummary(session, row.id));
     const taskCard: TaskCard = {
       aiReviewEnabled: row.qaRequired === 1,
       agentWorkflows: {
@@ -92,47 +188,4 @@ const rowToTaskCard = (
     return yield* validateWithSchema(taskCardSchema, taskCard, "task card read model", {
       taskId: row.id,
     });
-  });
-
-export const getTaskCard = (
-  session: TaskStoreSession,
-  taskId: string,
-  repoPath: string,
-): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    const row = yield* requireTaskRow(session, taskId, repoPath);
-    return yield* rowToTaskCard(session, row);
-  });
-
-export const listTasksInDatabase = (
-  session: TaskStoreSession,
-  input: TaskStoreListTasksInput,
-  now: () => Date,
-): Effect.Effect<TaskCard[], SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    if (input.doneVisibleDays === undefined) {
-      const rows = yield* taskRows(session);
-      const summaries = yield* documentSummariesByTaskId(
-        session,
-        rows.map((row) => row.id),
-      );
-      const cards = yield* Effect.forEach(rows, (row) =>
-        rowToTaskCard(session, row, summaries.get(row.id)),
-      );
-      return finalizeTaskCards(cards);
-    }
-    const cutoff = new Date(now().getTime() - input.doneVisibleDays * 24 * 60 * 60 * 1000);
-    const where =
-      input.doneVisibleDays > 0
-        ? or(ne(tasks.status, "closed"), gte(tasks.updatedAt, cutoff))
-        : ne(tasks.status, "closed");
-    const rows = yield* taskRows(session, where);
-    const summaries = yield* documentSummariesByTaskId(
-      session,
-      rows.map((row) => row.id),
-    );
-    const cards = yield* Effect.forEach(rows, (row) =>
-      rowToTaskCard(session, row, summaries.get(row.id)),
-    );
-    return finalizeTaskCards(cards);
   });

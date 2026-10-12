@@ -39,6 +39,8 @@ export type TaskStoreError =
 export type TaskStoreListTasksInput = {
   repoPath: string;
   doneVisibleDays?: number;
+  /** Read these tasks and their parents for a committed change event. */
+  taskIds?: readonly string[];
 };
 export type PullRequestSyncCandidate = {
   id: string;

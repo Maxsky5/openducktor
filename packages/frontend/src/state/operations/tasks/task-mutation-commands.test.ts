@@ -41,33 +41,35 @@ const createCacheImpact = (): TaskMutationCommandCacheImpact => ({
 });
 
 describe("createTaskMutationCommands", () => {
-  test("publishes the saved task target before a later view refresh fails", async () => {
+  test("a delayed target-branch response does not overwrite a newer committed card", async () => {
     const client = createQueryClient();
     const previous = createTaskCardFixture({ id: "task-1", targetBranch: { branch: "main" } });
     const saved = { ...previous, targetBranch: { branch: "release" } };
+    const latest = { ...saved, title: "Newer title", priority: 1 };
+    let resolveUpdate!: (card: TaskCard) => void;
+    const response = new Promise<TaskCard>((resolve) => {
+      resolveUpdate = resolve;
+    });
+    client.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [previous] });
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
       tasks: [previous],
       queryClient: client,
-      hostPort: { ...createHostPort(), taskUpdate: async () => saved },
+      hostPort: { ...createHostPort(), taskUpdate: () => response },
       runTaskMutation: async (options) => {
         await options.run("/repo");
-        throw new Error("View refresh failed after save.");
       },
       cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     try {
-      let failure: unknown;
-      try {
-        await commands.setTaskTargetBranch("task-1", saved.targetBranch);
-      } catch (error) {
-        failure = error;
-      }
-      expect(failure).toBeInstanceOf(Error);
+      const mutation = commands.setTaskTargetBranch("task-1", saved.targetBranch);
+      client.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [latest] });
+      resolveUpdate(saved);
+      await mutation;
       expect(client.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))).toEqual({
-        tasks: [saved],
+        tasks: [latest],
       });
     } finally {
       client.clear();
@@ -160,16 +162,12 @@ describe("createTaskMutationCommands", () => {
     expect(received).toEqual([]);
   });
 
-  test("refreshes only the task list after a successful create", async () => {
+  test("runs a task create once and reports its result", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const refreshImpacts: string[] = [];
     const taskCreate = mock(async () => undefined);
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
       await options.run("/current-repo");
-      if (options.refreshStrategy.kind === "repo") {
-        refreshImpacts.push("task-list-only");
-      }
     };
     const commands = createTaskMutationCommands({
       activeRepoPath: "/current-repo",
@@ -189,8 +187,6 @@ describe("createTaskMutationCommands", () => {
       priority: 2,
     });
 
-    expect(received[0]?.refreshStrategy).toEqual({ kind: "repo" });
-    expect(refreshImpacts).toEqual(["task-list-only"]);
     expect(taskCreate).toHaveBeenCalledWith(
       "/current-repo",
       {
@@ -206,7 +202,6 @@ describe("createTaskMutationCommands", () => {
   test("does not report success or refresh after a create host failure", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const outcomes: string[] = [];
-    const refreshImpacts: string[] = [];
     const taskCreate = mock(async () => {
       throw new Error("Create failed");
     });
@@ -214,7 +209,6 @@ describe("createTaskMutationCommands", () => {
       received.push(options);
       try {
         await options.run("/repo");
-        refreshImpacts.push(options.refreshStrategy.kind);
         if (options.successTitle) {
           outcomes.push(`success:${options.successTitle}`);
         }
@@ -254,7 +248,6 @@ describe("createTaskMutationCommands", () => {
       undefined,
     );
     expect(outcomes).toEqual(["failure:Failed to create task"]);
-    expect(refreshImpacts).toEqual([]);
   });
 
   test("forwards staged description assets through create and update", async () => {
@@ -336,10 +329,6 @@ describe("createTaskMutationCommands", () => {
     expect(taskDelete).toHaveBeenCalledWith("/repo", "parent", true);
     expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
     expect(cleanupTaskIds).toEqual([["parent", "child", "grandchild"]]);
-    expect(received[0]?.refreshStrategy).toEqual({
-      kind: "remove-task",
-      taskIds: ["parent", "child", "grandchild"],
-    });
     expect(removeDeletedTaskCaches).toHaveBeenCalledWith("/repo", [
       "parent",
       "child",
@@ -424,11 +413,6 @@ describe("createTaskMutationCommands", () => {
       "cleanup:task-3:before",
       "approve",
       "cleanup:task-3:after",
-    ]);
-    expect(received.map((options) => options.refreshStrategy)).toEqual([
-      { kind: "task", taskId: "task-1" },
-      { kind: "task", taskId: "task-2" },
-      { kind: "task", taskId: "task-3" },
     ]);
   });
 

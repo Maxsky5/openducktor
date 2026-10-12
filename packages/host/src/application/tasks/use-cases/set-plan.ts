@@ -77,14 +77,13 @@ export const createSetPlanUseCase =
       const postDocument = yield* Effect.result(
         Effect.gen(function* () {
           if (shouldReplaceEpicSubtasks) {
-            const removedTaskIds = yield* replaceEpicPlanSubtasks(
+            changes = yield* replaceEpicPlanSubtasks(
               taskStore,
               repoPath,
               current,
               currentTasks,
               effectiveSubtaskCreates,
             );
-            changes = { taskIds: [taskId, ...removedTaskIds], removedTaskIds };
           }
 
           if (current.status === "open" || current.status === "spec_ready") {
@@ -94,12 +93,20 @@ export const createSetPlanUseCase =
       );
       if (postDocument._tag === "Failure") {
         if (postDocument.failure instanceof TaskMutationProgressFailure) {
-          return yield* Effect.fail(postDocument.failure);
+          return yield* Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: postDocument.failure.operation,
+              changes: postDocument.failure.changes,
+              failure: postDocument.failure.failure,
+              documentChanges: [{ taskId, sections: ["plan"] }],
+            }),
+          );
         }
         return yield* Effect.fail(
           new TaskMutationProgressFailure({
             operation: "set-plan",
             changes,
+            documentChanges: [{ taskId, sections: ["plan"] }],
             failure: postDocument.failure,
           }),
         );

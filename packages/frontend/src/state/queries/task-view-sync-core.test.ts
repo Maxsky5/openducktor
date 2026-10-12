@@ -1,10 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { CancelledError, QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
+import { QueryProvider } from "@/lib/query-provider";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { documentQueryKeys } from "./documents";
+import { documentQueryKeys, taskDocumentQueryOptions } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
-import { taskQueryKeys } from "./tasks";
+import { boardEvent, eventCursor } from "./task-view-sync.test-support";
+import { type RepoTaskData, taskQueryKeys } from "./tasks";
 import { workspaceQueryKeys } from "./workspace";
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
@@ -27,10 +32,32 @@ const observeDocument = (queryClient: QueryClient, queryKey: readonly unknown[])
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>((resolvePromise) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
+};
+
+type DocumentActionCapture = {
+  current?: { queryClient: QueryClient; actions: ReturnType<typeof useTaskDocuments> };
+};
+
+const documentActions = (open = false) => {
+  const result: DocumentActionCapture = {};
+  const Harness = () => {
+    result.current = {
+      queryClient: useQueryClient(),
+      actions: useTaskDocuments("task-1", open, "/repo"),
+    };
+    return null;
+  };
+  renderToStaticMarkup(
+    createElement(QueryProvider, { useIsolatedClient: true }, createElement(Harness)),
+  );
+  if (!result.current) throw new Error("Document actions did not render");
+  return result.current;
 };
 
 const recordQueryOperations = (queryClient: QueryClient): string[] => {
@@ -62,322 +89,600 @@ const recordQueryOperations = (queryClient: QueryClient): string[] => {
 };
 
 describe("TaskViewSync", () => {
-  test("reconciles active external updates with fresh cached documents", async () => {
-    const loadFreshDocument = mock(async () => ({
-      markdown: "# Updated",
-      updatedAt: "2026-04-10T13:10:00.000Z",
+  test.each(["spec", "plan", "qa"] as const)(
+    "reads an observed %s write once when its timestamp ties",
+    async (section) => {
+      const timestamp = "2026-04-10T13:10:00.000Z";
+      const card = createTaskCardFixture({ id: "task-1" });
+      if (section === "qa")
+        card.documentSummary.qaReport = { has: true, updatedAt: timestamp, verdict: "approved" };
+      else card.documentSummary[section] = { has: true, updatedAt: timestamp };
+      const payload = { markdown: "# Later commit", updatedAt: timestamp };
+      const loadFreshDocument = mock(async () => payload);
+      const listTasks = mock(async () => [card]);
+      const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [card] });
+      const options = taskDocumentQueryOptions(
+        queryClient,
+        "/repo",
+        card.id,
+        section,
+        loadFreshDocument,
+      );
+      queryClient.setQueryData(options.queryKey, {
+        markdown: "# Earlier commit",
+        updatedAt: timestamp,
+      });
+      const unsubscribe = new QueryObserver(queryClient, options).subscribe(() => {});
+      try {
+        const event = boardEvent("/repo", [card]);
+        event.boardChanges!.documentChanges = [{ taskId: card.id, sections: [section] }];
+        await sync.reconcileExternalEvent(event, "/repo", eventCursor(1));
+        await sync.reconcileExternalEvent(event, "/repo", eventCursor(1));
+        expect(queryClient.getQueryData<typeof payload>(options.queryKey)).toEqual(payload);
+        expect(loadFreshDocument).toHaveBeenCalledTimes(1);
+        expect(listTasks).not.toHaveBeenCalled();
+      } finally {
+        unsubscribe();
+        queryClient.clear();
+      }
+    },
+  );
+
+  test.each(["/repo", "/inactive"])(
+    "patches complete cards in %s without board or unchanged document reads",
+    async (repoPath) => {
+      const card = createTaskCardFixture({
+        id: "task-1",
+        description: "New description",
+        status: "blocked",
+      });
+      const other = createTaskCardFixture({ id: "task-2" });
+      const listTasks = mock(async () => []);
+      const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
+      const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+      queryClient.setQueryData(taskQueryKeys.repoData(repoPath), {
+        tasks: [createTaskCardFixture({ id: "task-1" }), other],
+      });
+      queryClient.setQueryData(documentQueryKeys.spec(repoPath, "task-1"), {
+        markdown: "",
+        updatedAt: null,
+      });
+      const readObservedTasks = mock(async () => ({ tasks: [] }));
+      const unsubscribe = new QueryObserver(queryClient, {
+        queryKey: taskQueryKeys.repoData(repoPath),
+        queryFn: readObservedTasks,
+        staleTime: Infinity,
+      }).subscribe(() => {});
+      try {
+        await sync.reconcileExternalEvent(boardEvent(repoPath, [card]), "/repo", eventCursor());
+        const data = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath))!;
+        expect(data.tasks).toContainEqual(card);
+        expect(data.tasks).toContainEqual(other);
+        expect(listTasks).not.toHaveBeenCalled();
+        expect(readObservedTasks).not.toHaveBeenCalled();
+        expect(loadFreshDocument).not.toHaveBeenCalled();
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  test("refreshes only observed documents with changed summary timestamps", async () => {
+    const updatedAt = "2026-04-10T13:10:00.000Z";
+    const card = createTaskCardFixture({
+      id: "task-1",
+      documentSummary: {
+        spec: { has: true, updatedAt },
+        plan: { has: true, updatedAt },
+        qaReport: { has: false, verdict: "not_reviewed" },
+      },
+    });
+    const loadFreshDocument = mock(async (_repo: string, _task: string, _section: string) => ({
+      markdown: "# Fresh",
+      updatedAt,
     }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-1",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-    expect(
-      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
-        documentQueryKeys.spec("/repo", "task-1"),
-      ),
-    ).toEqual({
-      markdown: "# Updated",
-      updatedAt: "2026-04-10T13:10:00.000Z",
-    });
-  });
-
-  test("invalidates retained active documents once before refreshing them", async () => {
-    const { queryClient, sync } = createSync(createPorts());
-    const invalidateQueries = mock(queryClient.invalidateQueries.bind(queryClient));
-    queryClient.invalidateQueries = invalidateQueries;
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-1b",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    const documentInvalidations = invalidateQueries.mock.calls.filter(
-      ([filters]) => filters?.queryKey?.[0] === documentQueryKeys.all[0],
-    );
-    expect(documentInvalidations).toHaveLength(1);
-  });
-
-  test("cancels active event documents and task lists before removing or invalidating", async () => {
-    const { queryClient, sync } = createSync(createPorts());
-    const calls = recordQueryOperations(queryClient);
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Retained",
-      updatedAt: null,
-    });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "removed-task"), {
-      markdown: "# Removed",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-cancel-active",
-        repoPath: "/repo",
-        taskIds: ["task-1", "removed-task"],
-        removedTaskIds: ["removed-task"],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(calls.indexOf("cancel:documents")).toBeLessThan(calls.indexOf("remove:documents"));
-    expect(calls.indexOf("cancel:documents")).toBeLessThan(calls.indexOf("invalidate:documents"));
-    expect(calls.indexOf("cancel:tasks")).toBeLessThan(calls.indexOf("invalidate:tasks"));
-  });
-
-  test("removes explicit external deletions without inferring from the task list", async () => {
-    const { queryClient, sync } = createSync(createPorts());
-    queryClient.setQueryData(documentQueryKeys.plan("/repo", "task-1"), {
-      markdown: "# Removed",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-2",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: ["task-1"],
-        statusChanges: [],
-        taskSnapshots: [],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "task-1"))).toBeUndefined();
-  });
-
-  test("does not refresh metadata for an event task absent from the fresh task list", async () => {
-    const loadFreshDocument = mock(async () => {
-      throw new Error("Task not found: task-1");
-    });
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => [],
-        loadFreshDocument,
-      }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Cached",
-      updatedAt: null,
-    });
-
-    await expect(
-      sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-before-delete",
-          repoPath: "/repo",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          statusChanges: [],
-          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-          emittedAt: "2026-04-10T13:10:00.000Z",
-        },
-        "/repo",
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(loadFreshDocument).not.toHaveBeenCalled();
-    expect(
-      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
-    ).toBe(true);
-  });
-
-  test("invalidates inactive repository caches without fetching", async () => {
-    const listTasks = mock(async () => [] satisfies TaskCard[]);
-    const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
-    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.spec("/inactive", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-3",
-        repoPath: "/inactive",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(listTasks).not.toHaveBeenCalled();
-    expect(loadFreshDocument).not.toHaveBeenCalled();
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/inactive"))?.isInvalidated).toBe(
-      true,
-    );
-    expect(
-      queryClient.getQueryState(documentQueryKeys.spec("/inactive", "task-1"))?.isInvalidated,
-    ).toBe(true);
-  });
-
-  test("refetches an observed task list of an inactive repository", async () => {
-    const { queryClient, sync } = createSync(createPorts());
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
-    const refreshed = [createTaskCardFixture({ id: "task-1", status: "blocked" })];
-    const readObservedTasks = mock(async () => ({ tasks: refreshed }));
-    const unsubscribe = new QueryObserver(queryClient, {
-      queryKey: taskQueryKeys.repoData("/inactive"),
-      queryFn: readObservedTasks,
-      staleTime: Infinity,
-    }).subscribe(() => {});
-
+    const specKey = documentQueryKeys.spec("/repo", "task-1");
+    const planKey = documentQueryKeys.plan("/repo", "task-1");
+    queryClient.setQueryData(specKey, { markdown: "# Old", updatedAt: null });
+    queryClient.setQueryData(planKey, { markdown: "# Old", updatedAt: null });
+    const unsubscribe = observeDocument(queryClient, specKey);
     try {
-      await sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-observed-inactive",
-          repoPath: "/inactive",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          statusChanges: [],
-          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "blocked" }],
-          emittedAt: "2026-04-10T13:10:00.000Z",
-        },
-        "/repo",
-      );
-
-      expect(readObservedTasks).toHaveBeenCalledTimes(1);
+      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor());
+      expect(loadFreshDocument.mock.calls).toEqual([["/repo", "task-1", "spec"]]);
       expect(
-        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/inactive")),
-      ).toEqual({ tasks: refreshed });
-
-      await sync.reconcileStreamSnapshot("/repo");
-      expect(readObservedTasks).toHaveBeenCalledTimes(2);
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(specKey),
+      ).toEqual({ markdown: "# Fresh", updatedAt });
+      expect(queryClient.getQueryState(planKey)?.isInvalidated).toBe(true);
+      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor());
+      expect(loadFreshDocument).toHaveBeenCalledTimes(1);
     } finally {
       unsubscribe();
     }
   });
 
-  test("cancels inactive event documents and task lists before invalidation", async () => {
-    const { queryClient, sync } = createSync(createPorts());
-    const calls = recordQueryOperations(queryClient);
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.spec("/inactive", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
+  test("session-only events leave all board and document reads alone", async () => {
+    const listTasks = mock(async () => []);
+    const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    const card = createTaskCardFixture({ id: "task-1" });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [card] });
     await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-cancel-inactive",
-        repoPath: "/inactive",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
+      { ...boardEvent("/repo", [card]), boardChanges: null },
       "/repo",
+      eventCursor(),
     );
-
-    expect(calls.indexOf("cancel:documents")).toBeLessThan(calls.indexOf("invalidate:documents"));
-    expect(calls.indexOf("cancel:tasks")).toBeLessThan(calls.indexOf("invalidate:tasks"));
-  });
-
-  test("normalizes task-created events to one affected task", async () => {
-    const loadFreshDocument = mock(async () => ({ markdown: "# Created", updatedAt: null }));
-    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
+    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))).toEqual({
+      tasks: [card],
     });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "external_task_created",
-        eventId: "event-4",
-        repoPath: "/repo",
-        taskId: "task-1",
-        taskSnapshot: { id: "task-1", title: "Task", status: "open" },
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-  });
-
-  test("leaves retained cached documents invalidated when active task-list refresh fails", async () => {
-    const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => {
-          throw new Error("task list unavailable");
-        },
-        loadFreshDocument,
-      }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await expect(
-      sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-7",
-          repoPath: "/repo",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          statusChanges: [],
-          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-          emittedAt: "2026-04-10T13:10:00.000Z",
-        },
-        "/repo",
-      ),
-    ).rejects.toThrow("task list unavailable");
-
+    expect(listTasks).not.toHaveBeenCalled();
     expect(loadFreshDocument).not.toHaveBeenCalled();
-    expect(
-      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
-    ).toBe(true);
   });
+
+  test("an older reset event does not reread a newer local document save", async () => {
+    const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
+    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
+    const key = documentQueryKeys.spec("/repo", "task-1");
+    const saved = { markdown: "# Saved after reset", updatedAt: "2026-04-10T13:11:00.000Z" };
+    queryClient.setQueryData(key, saved);
+    const unsubscribe = observeDocument(queryClient, key);
+    try {
+      await sync.reconcileExternalEvent(
+        boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
+        "/repo",
+        eventCursor(),
+      );
+      expect(queryClient.getQueryData<typeof saved>(key)).toEqual(saved);
+      expect(loadFreshDocument).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("applies parent cards, deletion, and the closed-task window without deleting hidden task IDs", async () => {
+    const { queryClient, sync } = createSync(createPorts());
+    const parent = createTaskCardFixture({
+      id: "epic",
+      issueType: "epic",
+      subtaskIds: ["child"],
+      availableActions: ["close_task"],
+    });
+    const expired = createTaskCardFixture({
+      id: "expired",
+      status: "closed",
+      updatedAt: "2026-04-01T00:00:00Z",
+    });
+    const closed = createTaskCardFixture({
+      id: "closed",
+      status: "closed",
+      updatedAt: "2026-04-10T13:09:00Z",
+    });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+      tasks: [
+        expired,
+        createTaskCardFixture({ id: "deleted" }),
+        createTaskCardFixture({ id: "epic" }),
+        closed,
+      ],
+    });
+    queryClient.setQueryData(taskQueryKeys.ids("/repo"), ["expired", "deleted", "epic", "closed"]);
+    const removedKey = documentQueryKeys.spec("/repo", "deleted");
+    queryClient.setQueryData(removedKey, { markdown: "# Old", updatedAt: null });
+    const event = boardEvent("/repo", [parent]);
+    if (event.kind !== "tasks_updated") throw new Error("Expected update");
+    await sync.reconcileExternalEvent(
+      { ...event, taskIds: ["epic", "deleted"], removedTaskIds: ["deleted"] },
+      "/repo",
+      eventCursor(),
+    );
+    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))?.tasks).toEqual([
+      parent,
+      closed,
+    ]);
+    expect(queryClient.getQueryData<string[]>(taskQueryKeys.ids("/repo"))).toEqual([
+      "expired",
+      "epic",
+      "closed",
+    ]);
+    expect(queryClient.getQueryState(removedKey)).toBeUndefined();
+  });
+
+  test("does not seed an unread board with a partial event", async () => {
+    const { queryClient, sync } = createSync(createPorts());
+    await sync.reconcileExternalEvent(
+      boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
+      "/repo",
+      eventCursor(),
+    );
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+  });
+
+  test("does not restore a removed document from a pending first read", async () => {
+    const result = deferred<{ markdown: string; updatedAt: string | null }>();
+    const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
+    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
+    const key = documentQueryKeys.spec("/repo", "task-1");
+    const read = queryClient.fetchQuery(
+      taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => result.promise),
+    );
+    await sync.reconcileExternalEvent(
+      boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
+      "/repo",
+      eventCursor(),
+    );
+    result.resolve({ markdown: "# Removed spec", updatedAt: "2026-04-10T13:09:00.000Z" });
+    expect(await read).toEqual({ markdown: "", updatedAt: null });
+    expect(queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(key)).toEqual({
+      markdown: "",
+      updatedAt: null,
+    });
+    expect(loadFreshDocument).not.toHaveBeenCalled();
+  });
+
+  test("a restored document supersedes a pending reset without clearing the fresh result", async () => {
+    const oldRead = deferred<{ markdown: string; updatedAt: string | null }>();
+    const restored = { markdown: "# Restored", updatedAt: "2026-04-10T13:11:00.000Z" };
+    const loadFreshDocument = mock(async () => restored);
+    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
+    const key = documentQueryKeys.spec("/repo", "task-1");
+    const read = queryClient
+      .fetchQuery(
+        taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => oldRead.promise),
+      )
+      .catch(() => undefined);
+    const unsubscribe = observeDocument(queryClient, key);
+    try {
+      await sync.reconcileExternalEvent(
+        boardEvent("/repo", [createTaskCardFixture()]),
+        "/repo",
+        eventCursor(),
+      );
+      const card = createTaskCardFixture({
+        documentSummary: {
+          spec: { has: true, updatedAt: restored.updatedAt },
+          plan: { has: false },
+          qaReport: { has: false, verdict: "not_reviewed" },
+        },
+      });
+      await sync.reconcileExternalEvent(
+        { ...boardEvent("/repo", [card]), emittedAt: restored.updatedAt },
+        "/repo",
+        eventCursor(),
+      );
+      oldRead.resolve({ markdown: "# Removed", updatedAt: "2026-04-10T13:09:00.000Z" });
+      await read;
+      expect(queryClient.getQueryData<typeof restored>(key)).toEqual(restored);
+      expect(loadFreshDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+      queryClient.clear();
+    }
+  });
+
+  test("a save after a pending reset reaches the cache and the imperative reader", async () => {
+    const oldRead = deferred<{ markdown: string; updatedAt: string | null }>();
+    const { queryClient, sync } = createSync(createPorts());
+    const key = documentQueryKeys.spec("/repo", "task-1");
+    const read = queryClient.fetchQuery(
+      taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => oldRead.promise),
+    );
+    await sync.reconcileExternalEvent(
+      boardEvent("/repo", [createTaskCardFixture()]),
+      "/repo",
+      eventCursor(),
+    );
+    const saved = { markdown: "# Saved", updatedAt: "2026-04-10T13:11:00.000Z" };
+    queryClient.setQueryData(key, saved);
+    oldRead.resolve({ markdown: "# Removed", updatedAt: "2026-04-10T13:09:00.000Z" });
+    expect(await read).toEqual(saved);
+    expect(queryClient.getQueryData<typeof saved>(key)).toEqual(saved);
+    queryClient.clear();
+  });
+
+  for (const baseline of ["cached", "pending"] as const) {
+    test.each(["spec", "plan", "qa"] as const)(
+      `an ordinary task edit keeps an unchanged first %s read with a ${baseline} board`,
+      async (section) => {
+        const result = deferred<{ markdown: string; updatedAt: string | null }>();
+        const boardResult = deferred<TaskCard[]>();
+        const updatedAt = "2026-04-10T13:09:00.000Z";
+        const card = createTaskCardFixture({
+          updatedAt,
+          documentSummary: {
+            spec: { has: true, updatedAt },
+            plan: { has: true, updatedAt },
+            qaReport: { has: true, updatedAt, verdict: "approved" },
+          },
+        });
+        const changed = { ...card, title: "Renamed", updatedAt: "2026-04-10T13:10:00.000Z" };
+        const other = createTaskCardFixture({ id: "task-2" });
+        const loadFreshDocument = mock(() => result.promise);
+        const listTasks = mock(() => boardResult.promise);
+        const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+        const boardKey = taskQueryKeys.repoData("/repo");
+        if (baseline === "cached") queryClient.setQueryData(boardKey, { tasks: [card, other] });
+        const boardRead =
+          baseline === "pending"
+            ? queryClient.fetchQuery({
+                queryKey: boardKey,
+                queryFn: async () => ({ tasks: await listTasks() }),
+              })
+            : undefined;
+        const options = taskDocumentQueryOptions(
+          queryClient,
+          "/repo",
+          card.id,
+          section,
+          loadFreshDocument,
+        );
+        const read = queryClient.fetchQuery(options).then(
+          (value) => ({ value }),
+          () => ({ cancelled: true }),
+        );
+        const unsubscribe = new QueryObserver(queryClient, options).subscribe(() => {});
+        try {
+          const reconciliation = sync.reconcileExternalEvent(
+            boardEvent("/repo", [changed]),
+            "/repo",
+            eventCursor(),
+          );
+          // Let the event reach the pending document before releasing its first read.
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          const payload = { markdown: "# Existing", updatedAt };
+          result.resolve(payload);
+          await reconciliation;
+          expect(await read).toEqual({ value: payload });
+          expect(loadFreshDocument).toHaveBeenCalledTimes(1);
+          expect(queryClient.getQueryData<typeof payload>(options.queryKey)).toEqual(payload);
+          boardResult.resolve([card, other]);
+          await boardRead;
+          expect(queryClient.getQueryData<RepoTaskData>(boardKey)?.tasks).toEqual(
+            expect.arrayContaining([changed, other]),
+          );
+          expect(listTasks).toHaveBeenCalledTimes(baseline === "pending" ? 1 : 0);
+        } finally {
+          boardResult.resolve([card, other]);
+          result.resolve({ markdown: "# Existing", updatedAt });
+          await boardRead;
+          unsubscribe();
+          queryClient.clear();
+        }
+      },
+    );
+  }
+
+  for (const section of ["spec", "plan", "qa"] as const) {
+    test.each([
+      "older",
+      "newer",
+      "cache-write",
+      "replacement",
+      "failure",
+      "updated-matching",
+      "updated-newer",
+      "updated-older",
+      "cancelled",
+      "failure-with-data",
+      "reload-matching",
+      "reload-newer",
+      "reload-older",
+      "reload-failure",
+      "reload-removed",
+      "reload-replaced",
+      "reload-cancelled",
+      "reload-twice",
+      "reload-updated-failure",
+    ] as const)(
+      `an unknown board baseline preserves first ${section} read ownership across %s`,
+      async (change) => {
+        let finishRead!: (value: { markdown: string; updatedAt: string | null }) => void;
+        let failRead!: (error: Error) => void;
+        const firstRead = new Promise<{ markdown: string; updatedAt: string | null }>(
+          (resolve, reject) => {
+            finishRead = resolve;
+            failRead = reject;
+          },
+        );
+        const boardResult = deferred<TaskCard[]>();
+        const reloading = change.startsWith("reload-");
+        const replacementRead = deferred<{ markdown: string; updatedAt: string | null }>();
+        const finalRead = deferred<{ markdown: string; updatedAt: string | null }>();
+        const committedAt = "2026-04-10T13:10:00.000Z";
+        const committed = { markdown: "# Committed", updatedAt: committedAt };
+        const later = { markdown: "# Later", updatedAt: "2026-04-10T13:11:00.000Z" };
+        const initial = { markdown: "# Earlier", updatedAt: "2026-04-10T13:09:00.000Z" };
+        const loadFreshDocument = mock<TaskViewSyncPorts["loadFreshDocument"]>(() =>
+          Promise.resolve(committed),
+        ).mockImplementationOnce(() => firstRead);
+        if (reloading) loadFreshDocument.mockImplementationOnce(() => replacementRead.promise);
+        if (change === "reload-twice")
+          loadFreshDocument.mockImplementationOnce(() => finalRead.promise);
+        const listTasks = mock(() => boardResult.promise);
+        const { queryClient, actions } = documentActions(reloading);
+        const sync = createTaskViewSync({
+          queryClient,
+          ports: createPorts({ listTasks, loadFreshDocument }),
+        });
+        const boardKey = taskQueryKeys.repoData("/repo");
+        const boardRead = queryClient.fetchQuery({
+          queryKey: boardKey,
+          queryFn: async () => ({ tasks: await listTasks() }),
+        });
+        const options = taskDocumentQueryOptions(
+          queryClient,
+          "/repo",
+          "task-1",
+          section,
+          loadFreshDocument,
+        );
+        if (reloading) {
+          const readQuery = options.queryFn;
+          if (!readQuery) throw new Error("Expected a document query function");
+          // Inject only this isolated query's reader; keep the real reload and fetch lifecycle.
+          queryClient.setQueryDefaults(options.queryKey, {
+            behavior: {
+              onFetch: (_context, query) => {
+                query.setOptions({
+                  ...query.options,
+                  queryFn: (context) => readQuery({ ...context, queryKey: options.queryKey }),
+                });
+              },
+            },
+          });
+        }
+        const read = queryClient.fetchQuery(options).then(
+          (value) => ({ value }),
+          (error: Error) => ({ error }),
+        );
+        const observer = new QueryObserver(queryClient, options);
+        const unsubscribe = observer.subscribe(() => {});
+        const card = createTaskCardFixture({
+          documentSummary: {
+            spec: { has: true, updatedAt: committedAt },
+            plan: { has: true, updatedAt: committedAt },
+            qaReport: { has: true, updatedAt: committedAt, verdict: "approved" },
+          },
+        });
+        const error = new Error("document read unavailable");
+        let settlement: Error | null | undefined;
+        const completion = sync
+          .reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor())
+          .then(
+            () => {
+              settlement = null;
+              return null;
+            },
+            (error: Error) => {
+              settlement = error;
+              return error;
+            },
+          );
+        try {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          if (reloading) {
+            if (change === "reload-updated-failure") actions.applyDocumentUpdate(section, later);
+            const owner = queryClient
+              .getQueryCache()
+              .find({ queryKey: options.queryKey, exact: true })!;
+            const firstPromise = owner.promise;
+            expect(actions.reloadDocument(section)).toBe(true);
+            expect(
+              queryClient.getQueryCache().find({ queryKey: options.queryKey, exact: true }),
+            ).toBe(owner);
+            expect(owner.promise).not.toBe(firstPromise);
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            expect(settlement).toBeUndefined();
+            if (change === "reload-twice") {
+              expect(actions.reloadDocument(section)).toBe(true);
+              await new Promise<void>((resolve) => setTimeout(resolve, 0));
+              expect(settlement).toBeUndefined();
+              finalRead.resolve(committed);
+            } else if (change === "reload-failure" || change === "reload-updated-failure") {
+              replacementRead.reject(error);
+            } else {
+              if (change === "reload-removed" || change === "reload-replaced")
+                queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
+              if (change === "reload-replaced") queryClient.setQueryData(options.queryKey, later);
+              if (change === "reload-cancelled")
+                await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+              let incoming = committed;
+              if (change === "reload-newer") incoming = later;
+              else if (change === "reload-older") incoming = initial;
+              replacementRead.resolve(incoming);
+            }
+          }
+          if (change === "replacement")
+            queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
+          if (
+            change === "replacement" ||
+            change === "cache-write" ||
+            change === "failure-with-data"
+          )
+            queryClient.setQueryData(options.queryKey, later);
+          if (change === "updated-matching") actions.applyDocumentUpdate(section, committed);
+          if (change === "updated-newer") actions.applyDocumentUpdate(section, later);
+          if (change === "updated-older") actions.applyDocumentUpdate(section, initial);
+          if (change === "cancelled")
+            await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+          if (change === "failure" || change === "failure-with-data") failRead(error);
+          else finishRead(change === "newer" ? later : initial);
+          const completed = await completion;
+          const failed =
+            change === "failure" ||
+            change === "failure-with-data" ||
+            change === "reload-failure" ||
+            change === "reload-updated-failure";
+          if (change === "cancelled" || change === "reload-cancelled")
+            expect(completed).toBeInstanceOf(CancelledError);
+          else expect(completed).toEqual(failed ? error : null);
+          const outcome = await read;
+          if (reloading) {
+            if (change === "reload-updated-failure") expect(outcome).toEqual({ value: later });
+            else expect(outcome).toHaveProperty("error", expect.any(CancelledError));
+            if (
+              change === "reload-removed" ||
+              change === "reload-cancelled" ||
+              change === "reload-failure"
+            )
+              expect(queryClient.getQueryData(options.queryKey)).toBeUndefined();
+            else {
+              const expected =
+                change === "reload-newer" ||
+                change === "reload-replaced" ||
+                change === "reload-updated-failure"
+                  ? later
+                  : committed;
+              expect(queryClient.getQueryData<typeof committed>(options.queryKey)).toEqual(
+                expected,
+              );
+              if (change !== "reload-replaced")
+                expect(observer.getCurrentResult().data).toEqual(expected);
+            }
+            if (failed) expect(observer.getCurrentResult().error).toEqual(error);
+          } else if (change === "failure" || change === "failure-with-data") {
+            expect(outcome).toEqual({ error });
+            expect(observer.getCurrentResult().error).toEqual(error);
+            const cached = queryClient.getQueryData<typeof later>(options.queryKey);
+            if (change === "failure-with-data") expect(cached).toEqual(later);
+            else expect(cached).toBeUndefined();
+          } else if (change === "cancelled") {
+            expect(outcome).toHaveProperty("error", expect.any(CancelledError));
+            expect(queryClient.getQueryData(options.queryKey)).toBeUndefined();
+          } else if (change === "replacement") {
+            expect(outcome).toHaveProperty("error");
+            expect(queryClient.getQueryData<typeof later>(options.queryKey)).toEqual(later);
+          } else {
+            const older = change === "older" || change === "updated-older";
+            const expectedCache = older || change === "updated-matching" ? committed : later;
+            expect(outcome).toEqual({ value: older ? initial : expectedCache });
+            expect(queryClient.getQueryData<typeof committed>(options.queryKey)).toEqual(
+              expectedCache,
+            );
+            expect(observer.getCurrentResult().data).toEqual(expectedCache);
+          }
+          let expectedReads = reloading ? 2 : 1;
+          if (
+            change === "older" ||
+            change === "updated-older" ||
+            change === "reload-older" ||
+            change === "reload-twice"
+          )
+            expectedReads++;
+          expect(loadFreshDocument).toHaveBeenCalledTimes(expectedReads);
+          expect(listTasks).toHaveBeenCalledTimes(1);
+        } finally {
+          finishRead(initial);
+          replacementRead.resolve(committed);
+          finalRead.resolve(committed);
+          boardResult.resolve([card]);
+          await Promise.all([read, completion, boardRead]);
+          unsubscribe();
+          queryClient.clear();
+        }
+      },
+    );
+  }
 
   test("propagates real refresh failures", async () => {
     const { sync } = createSync(

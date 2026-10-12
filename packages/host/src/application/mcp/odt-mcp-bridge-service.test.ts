@@ -1,3 +1,4 @@
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService as createRealTaskService } from "../tasks/task-service";
@@ -495,7 +496,10 @@ describe("createOdtMcpBridgeService", () => {
       },
       publicationReporter: { report: () => Effect.void },
       onBackgroundFailure: () => Effect.void,
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([]),
+        getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+      },
     });
     const service = createOdtMcpBridgeServiceForTest({
       taskService: createEventPublishingTaskService({ taskService: base, taskSyncService }),
@@ -546,6 +550,7 @@ describe("createOdtMcpBridgeService", () => {
       publishTasksUpdated(_repoPath, changes) {
         return Effect.sync(() => {
           events.push({ kind: "updated", taskIds: changes.taskIds });
+          return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
         });
       },
       syncRepoPullRequests() {

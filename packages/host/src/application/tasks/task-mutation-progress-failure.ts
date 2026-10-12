@@ -1,4 +1,8 @@
-import type { TaskChangeSet, TaskEventTaskSnapshot } from "@openducktor/contracts";
+import type {
+  TaskChangeSet,
+  TaskEventTaskSnapshot,
+  TaskDocumentChange,
+} from "@openducktor/contracts";
 import { Data } from "effect";
 import type { TaskServiceError } from "./task-service";
 
@@ -17,17 +21,20 @@ export class TaskMutationProgressFailure extends Data.TaggedError("TaskMutationP
     | "repo-pull-request-sync";
   readonly changes: TaskChangeSet;
   readonly failure: TaskServiceError;
+  readonly documentChanges?: TaskDocumentChange[];
 }> {}
 
 export const createTaskMutationProgressFailure = (
   operation: TaskMutationProgressFailure["operation"],
   taskId: string,
   failure: TaskMutationProgressFailure["failure"],
+  documentChanges: TaskDocumentChange[] = [],
 ): TaskMutationProgressFailure =>
   new TaskMutationProgressFailure({
     operation,
     changes: { taskIds: [taskId], removedTaskIds: [] },
     failure,
+    documentChanges,
   });
 
 export class TaskCreationProgressFailure extends TaskMutationProgressFailure {

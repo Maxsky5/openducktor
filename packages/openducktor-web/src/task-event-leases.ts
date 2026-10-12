@@ -15,7 +15,6 @@ export type TaskEventLease = {
   connection: TaskEventLeaseConnection | null;
   expiryTimer: ReturnType<typeof setTimeout> | null;
   hostSubscription: HostSubscription;
-  pendingFrames: TaskEventStreamFrame[];
   nextGeneration: number;
 };
 
@@ -32,6 +31,7 @@ export type TaskEventLeaseManager = {
   detach(lease: TaskEventLease, generation: number): void;
   dispose(): void;
   get(subscriptionId: string): TaskEventLease | undefined;
+  resume(lease: TaskEventLease, generation: number): void;
 };
 
 export type CreateTaskEventLeaseManagerOptions = {
@@ -42,42 +42,6 @@ export type CreateTaskEventLeaseManagerOptions = {
   scheduleExpiry?(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
   taskEventStream: TaskEventStreamPort;
 };
-
-const freezeCursor = (cursor: TaskEventCursor): TaskEventCursor => Object.freeze({ ...cursor });
-
-const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame => {
-  if (frame.type === "snapshot_required") {
-    return Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
-  }
-  const event = (() => {
-    if (frame.event.kind === "external_task_created") {
-      return Object.freeze({
-        ...frame.event,
-        taskSnapshot: Object.freeze({ ...frame.event.taskSnapshot }),
-      });
-    }
-    const taskIds = [...frame.event.taskIds];
-    const removedTaskIds = [...frame.event.removedTaskIds];
-    const taskSnapshots = frame.event.taskSnapshots.map((task) => Object.freeze({ ...task }));
-    const statusChanges = frame.event.statusChanges.map((change) =>
-      Object.freeze({ ...change, task: Object.freeze({ ...change.task }) }),
-    );
-    Object.freeze(taskIds);
-    Object.freeze(removedTaskIds);
-    Object.freeze(taskSnapshots);
-    Object.freeze(statusChanges);
-    return Object.freeze({ ...frame.event, removedTaskIds, taskIds, taskSnapshots, statusChanges });
-  })();
-  const frozenFrame: TaskEventStreamFrame = Object.freeze({
-    ...frame,
-    cursor: freezeCursor(frame.cursor),
-    event,
-  });
-  return frozenFrame;
-};
-
-const cursorIsAcknowledged = (frame: TaskEventStreamFrame, cursor: TaskEventCursor): boolean =>
-  frame.cursor.epoch === cursor.epoch && frame.cursor.sequence <= cursor.sequence;
 
 export const createTaskEventLeaseManager = ({
   clearExpiryTimer = clearTimeout,
@@ -110,7 +74,6 @@ export const createTaskEventLeaseManager = ({
     leases.delete(lease.subscriptionId);
     const connection = lease.connection;
     lease.connection = null;
-    lease.pendingFrames = [];
     if (connection) {
       try {
         connection.controller.close();
@@ -137,7 +100,12 @@ export const createTaskEventLeaseManager = ({
 
   const write = (lease: TaskEventLease, frame: TaskEventStreamFrame): boolean => {
     const connection = lease.connection;
-    if (!connection) return false;
+    if (
+      !connection ||
+      connection.controller.desiredSize === null ||
+      connection.controller.desiredSize <= 0
+    )
+      return false;
     try {
       connection.controller.enqueue(encodeFrame(frame));
       return true;
@@ -148,47 +116,20 @@ export const createTaskEventLeaseManager = ({
     }
   };
 
-  const flush = (lease: TaskEventLease): void => {
-    for (const frame of lease.pendingFrames) {
-      if (!write(lease, frame)) return;
-    }
-  };
-
-  const acceptFrame = (lease: TaskEventLease, frame: TaskEventStreamFrame): void => {
-    try {
-      const immutableFrame = freezeFrame(frame);
-      if (immutableFrame.type === "snapshot_required") {
-        lease.pendingFrames = [immutableFrame];
-      } else {
-        lease.pendingFrames.push(immutableFrame);
-      }
-      write(lease, immutableFrame);
-    } catch (cause) {
-      report(lease, cause);
-    }
-  };
-
   const create = (input: TaskEventStreamSubscribe, subscriptionId: string): TaskEventLease => {
     let lease: TaskEventLease | null = null;
-    const initialFrames: TaskEventStreamFrame[] = [];
-    const hostSubscription = taskEventStream.subscribe(input, (frame) => {
-      if (lease) {
-        acceptFrame(lease, frame);
-      } else {
-        initialFrames.push(frame);
-      }
-    });
+    const hostSubscription = taskEventStream.subscribe(input, (frame) =>
+      lease ? write(lease, frame) : false,
+    );
     lease = {
       connection: null,
       expiryTimer: null,
       hostSubscription,
       nextGeneration: 0,
-      pendingFrames: [],
       subscriptionId,
     };
     leases.set(subscriptionId, lease);
     armExpiry(lease);
-    for (const frame of initialFrames) acceptFrame(lease, frame);
     return lease;
   };
 
@@ -198,9 +139,6 @@ export const createTaskEventLeaseManager = ({
         cursor,
         subscriptionId: lease.hostSubscription.subscriptionId,
       });
-      lease.pendingFrames = lease.pendingFrames.filter(
-        (frame) => !cursorIsAcknowledged(frame, cursor),
-      );
     },
     attach(lease, controller) {
       clearExpiry(lease);
@@ -214,8 +152,12 @@ export const createTaskEventLeaseManager = ({
           report(lease, cause);
         }
       }
-      flush(lease);
+      if (generation === 1) lease.hostSubscription.resume();
+      else lease.hostSubscription.replay();
       return generation;
+    },
+    resume(lease, generation) {
+      if (lease.connection?.generation === generation) lease.hostSubscription.resume();
     },
     create,
     delete: deleteLease,

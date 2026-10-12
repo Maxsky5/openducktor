@@ -1,3 +1,4 @@
+import { task } from "../application/tasks/sync/task-sync-service.test-support";
 import { describe, expect, test } from "bun:test";
 import type {
   ExternalTaskSyncEvent,
@@ -11,9 +12,10 @@ const otherEpoch = "2f24a820-463a-4cf7-b75c-3db3393b7d51";
 const firstSubscriptionId = "78a3be5c-f828-4bb7-b219-390b7306bc07";
 const secondSubscriptionId = "5630586c-4a12-4580-a158-229d3bb96cb6";
 
-const event = (id: string): ExternalTaskSyncEvent => ({
+const event = (id: string): Extract<ExternalTaskSyncEvent, { kind: "external_task_created" }> => ({
   eventId: `event-${id}`,
   kind: "external_task_created",
+  boardChanges: null,
   repoPath: "/repo",
   taskId: `task-${id}`,
   taskSnapshot: { id: `task-${id}`, title: "Task", status: "open" },
@@ -43,6 +45,108 @@ const acknowledge = (
 ) => stream.acknowledge({ subscriptionId, cursor });
 
 describe("createTaskEventStream", () => {
+  test("recovers a future subscription cursor through its delivered snapshot boundary", async () => {
+    const { stream } = createStream();
+    const frames: TaskEventStreamFrame[] = [];
+    const subscription = stream.subscribe({ cursor: { epoch, sequence: 1 } }, (frame) =>
+      frames.push(frame),
+    );
+    await flush();
+    expect(frames).toMatchObject([
+      { type: "snapshot_required", cursor: { epoch, sequence: 0 }, reason: "buffer_gap" },
+    ]);
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 0 });
+    stream.publish(event("1"));
+    await flush();
+    expect(frames[1]).toMatchObject({ type: "change", cursor: { epoch, sequence: 1 } });
+    subscription.unsubscribe();
+  });
+
+  test("refused frames stay undelivered until an explicit resume", async () => {
+    const { stream } = createStream();
+    let accepting = false;
+    let attempts = 0;
+    const frames: TaskEventStreamFrame[] = [];
+    const subscription = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) => {
+      attempts += 1;
+      if (!accepting) return false;
+      frames.push(frame);
+    });
+    stream.publish(event("1"));
+    await flush();
+    expect(attempts).toBe(1);
+    expect(() => acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 })).toThrow(
+      "beyond delivered frames",
+    );
+    await flush();
+    expect(attempts).toBe(1);
+    accepting = true;
+    subscription.resume();
+    subscription.resume();
+    await flush();
+    expect(frames).toMatchObject([{ type: "change", cursor: { epoch, sequence: 1 } }]);
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 });
+    subscription.unsubscribe();
+  });
+
+  test("an in-flight acknowledgement removes replayed prefixes without regressing delivery", async () => {
+    const { stream } = createStream();
+    let accepting = true;
+    const frames: TaskEventStreamFrame[] = [];
+    const subscription = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) => {
+      if (!accepting) return false;
+      frames.push(frame);
+    });
+    stream.publish(event("1"));
+    stream.publish(event("2"));
+    await flush();
+    accepting = false;
+    subscription.replay();
+    await flush();
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 2 });
+    accepting = true;
+    subscription.resume();
+    stream.publish(event("3"));
+    await flush();
+    expect(frames.map((frame) => frame.cursor.sequence)).toEqual([1, 2, 3]);
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 3 });
+    subscription.unsubscribe();
+  });
+
+  test("a paused subscriber's gap does not interrupt another subscriber's ordered delivery", async () => {
+    const { failures, stream } = createStream();
+    let accepting = false;
+    const pausedFrames: TaskEventStreamFrame[] = [];
+    const paused = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) => {
+      if (!accepting) return false;
+      pausedFrames.push(frame);
+    });
+    const healthyFrames: TaskEventStreamFrame[] = [];
+    const healthy = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) => {
+      healthyFrames.push(frame);
+    });
+    for (let sequence = 1; sequence <= 300; sequence += 1) {
+      stream.publish(event(String(sequence)));
+      await flush();
+    }
+    expect(healthyFrames.map((frame) => frame.cursor.sequence)).toEqual(
+      Array.from({ length: 300 }, (_, index) => index + 1),
+    );
+    acknowledge(stream, healthy.subscriptionId, { epoch, sequence: 300 });
+    accepting = true;
+    paused.resume();
+    await flush();
+    expect(pausedFrames).toMatchObject([
+      { type: "snapshot_required", cursor: { epoch, sequence: 257 }, reason: "buffer_gap" },
+    ]);
+    acknowledge(stream, paused.subscriptionId, { epoch, sequence: 257 });
+    await flush();
+    expect(pausedFrames.at(-1)?.cursor.sequence).toBe(300);
+    expect(failures).toEqual([]);
+    paused.unsubscribe();
+    healthy.unsubscribe();
+  });
+
   test("protects created task snapshots across subscribers and replay", async () => {
     const { stream } = createStream();
     const received: TaskEventStreamFrame[] = [];
@@ -164,6 +268,33 @@ describe("createTaskEventStream", () => {
     ]);
   });
 
+  test("requires a snapshot when a card exceeds the retained byte budget", async () => {
+    const { stream } = createStream();
+    const frames: TaskEventStreamFrame[] = [];
+    const subscription = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) =>
+      frames.push(frame),
+    );
+    const large = event("large");
+    stream.publish({
+      ...large,
+      boardChanges: {
+        documentChanges: [],
+        cards: [
+          task({ id: large.taskId, title: "Task", description: "x".repeat(8 * 1024 * 1024) }),
+        ],
+        doneVisibleDays: 1,
+      },
+    });
+    await flush();
+    expect(frames).toMatchObject([
+      { type: "snapshot_required", cursor: { epoch, sequence: 1 }, reason: "buffer_gap" },
+    ]);
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 });
+    stream.publish(event("small"));
+    await flush();
+    expect(frames[1]).toMatchObject({ type: "change", cursor: { epoch, sequence: 2 } });
+  });
+
   test("rejects invalid acknowledgements while accepting the exact snapshot boundary", async () => {
     const { stream } = createStream();
     const frames: TaskEventStreamFrame[] = [];
@@ -180,18 +311,16 @@ describe("createTaskEventStream", () => {
     stream.publish(event("2"));
     await flush();
 
-    expect(() => acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 2 })).toThrow(
-      "skipped a frame",
-    );
+    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 2 });
     expect(() => acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 3 })).toThrow(
       "beyond delivered",
     );
-    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 });
     expect(() => acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 0 })).toThrow(
       "regressed",
     );
-    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 });
-    acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 2 });
+    expect(() => acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 1 })).toThrow(
+      "regressed",
+    );
   });
 
   test("does not let slow or throwing sinks block healthy delivery", async () => {
@@ -233,6 +362,7 @@ describe("createTaskEventStream", () => {
     const published: ExternalTaskSyncEvent = {
       eventId: "event-1",
       kind: "tasks_updated",
+      boardChanges: null,
       repoPath: "/repo",
       taskIds: ["task-1"],
       removedTaskIds: [],
@@ -304,6 +434,7 @@ describe("createTaskEventStream", () => {
     const published: ExternalTaskSyncEvent = {
       eventId: "event-1",
       kind: "external_task_created" as const,
+      boardChanges: null,
       get repoPath() {
         repoPathReads += 1;
         return repoPathReads === 1 ? "/validated-repo" : "/unchecked-repo";

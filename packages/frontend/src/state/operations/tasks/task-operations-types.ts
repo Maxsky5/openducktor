@@ -51,9 +51,3 @@ export type UseTaskOperationsResult = {
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
-
-export type TaskMutationRefreshStrategy =
-  | { kind: "repo" }
-  | { kind: "task"; taskId: string }
-  | { kind: "invalidate-task"; taskId: string }
-  | { kind: "remove-task"; taskIds: string[] };

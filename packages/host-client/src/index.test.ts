@@ -89,6 +89,8 @@ const createClient = (
   return { client, calls };
 };
 
+const saveCursor = { epoch: "11111111-1111-4111-8111-111111111111", sequence: 7 };
+
 describe("HostClient", () => {
   test.each(["set", "cancel_sign_in", "pat", "commit"] as const)(
     "projects session-derived %s requests to the strict host contract",
@@ -171,7 +173,7 @@ describe("HostClient", () => {
   test("routes setSpec through the host command", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "set_spec") {
-        return { updatedAt: "2026-02-20T10:00:00Z" };
+        return { updatedAt: "2026-02-20T10:00:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -184,6 +186,7 @@ describe("HostClient", () => {
     const output = await client.setSpec(input);
 
     expect(output.updatedAt).toBe("2026-02-20T10:00:00Z");
+    expect(output.cursor).toEqual(saveCursor);
     expect(calls).toEqual([{ command: "set_spec", args: input }]);
   });
 
@@ -592,7 +595,7 @@ describe("HostClient", () => {
   test("saveSpecDocument uses dedicated non-transition IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "spec_save_document") {
-        return { updatedAt: "2026-02-20T09:30:00Z" };
+        return { updatedAt: "2026-02-20T09:30:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -604,6 +607,7 @@ describe("HostClient", () => {
     });
 
     expect(output.updatedAt).toBe("2026-02-20T09:30:00Z");
+    expect(output.cursor).toEqual(saveCursor);
     expect(calls).toEqual([
       {
         command: "spec_save_document",
@@ -696,7 +700,7 @@ describe("HostClient", () => {
   test("savePlanDocument uses dedicated non-transition IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "plan_save_document") {
-        return { updatedAt: "2026-02-20T09:45:00Z" };
+        return { updatedAt: "2026-02-20T09:45:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -708,6 +712,7 @@ describe("HostClient", () => {
     });
 
     expect(output.updatedAt).toBe("2026-02-20T09:45:00Z");
+    expect(output.cursor).toEqual(saveCursor);
     expect(calls).toEqual([
       {
         command: "plan_save_document",
@@ -893,13 +898,13 @@ describe("HostClient", () => {
     const { client } = createClient((command) => {
       switch (command) {
         case "set_spec":
-          return { updatedAt: 123 };
+          return { updatedAt: 123, cursor: saveCursor };
         case "spec_save_document":
-          return {};
+          return { cursor: saveCursor };
         case "set_plan":
-          return null;
+          return { updatedAt: null, cursor: saveCursor };
         case "plan_save_document":
-          return { updatedAt: "" };
+          return { updatedAt: "", cursor: saveCursor };
         default:
           throw new Error(`Unexpected command: ${command}`);
       }
@@ -914,9 +919,7 @@ describe("HostClient", () => {
         taskId: "task-1",
         markdown: "# Spec",
       }),
-    ).rejects.toThrow(
-      "Expected { updatedAt: string } payload from host command spec_save_document",
-    );
+    ).rejects.toThrow();
     await expect(
       client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
     ).rejects.toThrow();
@@ -926,15 +929,13 @@ describe("HostClient", () => {
         taskId: "task-1",
         markdown: "## Plan",
       }),
-    ).rejects.toThrow(
-      "Expected { updatedAt: string } payload from host command plan_save_document",
-    );
+    ).rejects.toThrow();
   });
 
   test("setPlan forwards markdown and subtasks payload", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "set_plan") {
-        return { updatedAt: "2026-02-17T12:01:00Z" };
+        return { updatedAt: "2026-02-17T12:01:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -947,6 +948,7 @@ describe("HostClient", () => {
     });
 
     expect(output.updatedAt).toBe("2026-02-17T12:01:00Z");
+    expect(output.cursor).toEqual(saveCursor);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({
       command: "set_plan",

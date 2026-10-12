@@ -1,23 +1,43 @@
 import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
+import { createDefaultGlobalConfig } from "../../../config/global-config";
 import { Effect } from "effect";
-import type { TaskEventStreamPort } from "../../../events/task-event-stream";
+import { createTaskEventStream } from "../../../events/task-event-stream";
 import { createTaskSyncService } from "./task-sync-service";
 
 type TaskSyncServiceTestInput = Omit<
   Parameters<typeof createTaskSyncService>[0],
-  "onBackgroundFailure" | "publicationReporter" | "taskEventStream" | "taskService"
+  | "onBackgroundFailure"
+  | "publicationReporter"
+  | "taskEventStream"
+  | "taskService"
+  | "workspaceSettingsService"
 > &
   Partial<
     Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure" | "publicationReporter">
   > & {
-    eventBus: Pick<TaskEventStreamPort, "publish">;
+    workspaceSettingsService: Pick<
+      Parameters<typeof createTaskSyncService>[0]["workspaceSettingsService"],
+      "listWorkspaces"
+    > &
+      Partial<
+        Pick<
+          Parameters<typeof createTaskSyncService>[0]["workspaceSettingsService"],
+          "getSettingsSnapshot"
+        >
+      >;
+    eventBus: { publish(event: ExternalTaskSyncEvent): void };
     taskService: Omit<Parameters<typeof createTaskSyncService>[0]["taskService"], "listTasks"> &
       Partial<Pick<Parameters<typeof createTaskSyncService>[0]["taskService"], "listTasks">>;
   };
 
-export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
-  createTaskSyncService({
+export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) => {
+  const stream = createTaskEventStream({ reporter: { report: () => {} } });
+  return createTaskSyncService({
     ...input,
+    workspaceSettingsService: {
+      getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+      ...input.workspaceSettingsService,
+    },
     taskService: {
       listTasks: () => Effect.succeed([task(), task({ id: "task-2", title: "Task 2" })]),
       ...input.taskService,
@@ -25,7 +45,10 @@ export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     publicationReporter: input.publicationReporter ?? { report: () => Effect.void },
     taskEventStream: {
-      publish: input.eventBus.publish,
+      publish: (event) => {
+        input.eventBus.publish(event);
+        return stream.publish(event);
+      },
       subscribe: () => {
         throw new Error("unexpected task event stream subscription");
       },
@@ -34,10 +57,11 @@ export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
       },
     },
   });
+};
 export const createEventBus = () => {
   const events: ExternalTaskSyncEvent[] = [];
-  const eventBus: TaskEventStreamPort = {
-    publish(event) {
+  const eventBus = {
+    publish(event: ExternalTaskSyncEvent) {
       events.push(event);
     },
     subscribe() {

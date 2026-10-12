@@ -32,7 +32,6 @@ type IssueImportDialogProps = {
   onOpenChange: (open: boolean) => void;
   repoPath: string;
   provider: NonNullable<RepositoryGitProviderContext>;
-  onImported: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 };
 
@@ -44,7 +43,6 @@ function IssueImportDialogSession({
   onOpenChange,
   repoPath,
   provider,
-  onImported,
   onCloseAutoFocus,
 }: Omit<IssueImportDialogProps, "open">): ReactElement {
   const { openSettings } = useSettingsModal();
@@ -92,7 +90,6 @@ function IssueImportDialogSession({
     repoPath,
     providerId: provider.config.id,
     providerScope: provider.config,
-    onImported,
     onComplete: (createdCount) => {
       onOpenChange(false);
       toast.success(`${createdCount} ${createdCount === 1 ? "Task" : "Tasks"} created`);
