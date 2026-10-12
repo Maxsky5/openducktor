@@ -384,6 +384,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.starts).toEqual([]);
   });
 
+  // Real Git worktree creation, a commit, archive checks, and SQLite writes can exceed 5 seconds on Windows.
   test("archives a from_name session and removes its worktree and branch", async () => {
     const h = setup({ actions: false });
     const branchName = "feature/archive-review";
@@ -442,7 +443,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(
       await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
     ).toEqual([result]);
-  });
+  }, 15_000);
 
   test("restores an archived removed-worktree session from the current default branch", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
