@@ -103,6 +103,12 @@ describe("SettingsNotificationsSection", () => {
       label,
     );
     expect(onUpdate).not.toHaveBeenCalled();
+    for (const name of ["Default sound", "Sound for Permission Prompt"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      const menu = screen.getByRole("dialog", { name: `${name} menu` });
+      fireEvent.click(within(menu).getByRole("button", { name: label }));
+    }
+    expect(onUpdate).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByRole("slider", { name: "Volume" }), { key: "ArrowRight" });
     const updated = onUpdate.mock.calls[0]?.[0](notifications);
     expect(updated?.globalCue).toBe(cue);
