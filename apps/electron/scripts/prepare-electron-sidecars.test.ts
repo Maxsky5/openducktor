@@ -64,6 +64,8 @@ describe("prepareElectronSidecars", () => {
         "bun",
         "build",
         "--compile",
+        "--minify",
+        "--keep-names",
         "--target=bun-darwin-arm64",
         "--outfile",
         join(electronPackageDirectory, "build", "sidecars", "openducktor-mcp"),

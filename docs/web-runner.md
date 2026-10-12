@@ -106,7 +106,12 @@ The browser shell requires `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_
 The published `@openducktor/web` package contains:
 
 - `dist/cli.js` for the launcher and TypeScript host.
+- Shared `dist/*.js` chunks, `dist/generated-image-worker.js`, `dist/opencode-workflow-plugin.js`, and `dist/openducktor-mcp.js`.
+- `dist/drizzle/**` for the SQLite task-store migration files.
 - `dist/web-shell/**` for the built browser UI.
+
+The package retains native runtime dependencies and bundles the host's JavaScript dependencies.
+See [build and packaging](build-and-packaging.md) for the dependency rules and size measurements.
 
 `.github/workflows/publish-web.yml` builds and checks the package. It runs `scripts/prepare-web-publish-packages.ts` and `npm publish --dry-run`, then publishes through npm Trusted Publisher.
 

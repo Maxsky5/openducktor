@@ -652,7 +652,7 @@ function DirectMergeCompletionFooter({
     : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
 
   return (
-    <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
       <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
 
       <div className="flex items-center justify-end gap-2">
@@ -683,7 +683,7 @@ function MissingBuilderWorktreeFooter({
   model: TaskApprovalMissingBuilderWorktreeModalModel;
 }): ReactElement {
   return (
-    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
       <Button
         type="button"
         variant="outline"
@@ -718,7 +718,7 @@ function ApprovalActionsFooter({ model }: { model: TaskApprovalApprovalModalMode
   const { confirmDisabled, confirmLabel } = getApprovalSubmitValidation(model);
 
   return (
-    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
       <Button
         type="button"
         variant="outline"

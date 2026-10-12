@@ -15,6 +15,7 @@ if (!workerPath) {
   );
   for (const [runtime, artifact] of [
     [process.execPath, "apps/electron/dist/generated-image-worker.js"],
+    [process.execPath, "packages/openducktor-web/dist/generated-image-worker.js"],
     ["bun", "packages/openducktor-web/dist/generated-image-worker.js"],
     [electron, "apps/electron/dist/generated-image-worker.js"],
   ]) {

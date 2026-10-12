@@ -130,7 +130,7 @@ export function SettingsCustomAgentRolesSection({
             <DialogBody className="px-6 py-4 text-sm text-muted-foreground">
               Existing chats keep their original role. Save Settings to apply this deletion.
             </DialogBody>
-            <DialogFooter className="mt-0 border-t border-border bg-muted/20 px-6 py-4">
+            <DialogFooter className="mt-0 border-t border-border px-6 py-4">
               <Button type="button" variant="outline" onClick={() => setDeleteRoleId(null)}>
                 Cancel
               </Button>

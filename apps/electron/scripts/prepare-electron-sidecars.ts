@@ -68,6 +68,8 @@ export const resolveElectronSidecarBuildPlan = ({
       "bun",
       "build",
       "--compile",
+      "--minify",
+      "--keep-names",
       `--target=bun-${platform === "macos" ? "darwin" : platform}-${arch}`,
       "--outfile",
       outputPaths["openducktor-mcp"],

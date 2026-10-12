@@ -70,7 +70,7 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
           {children}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
+        <DialogFooter className="mt-0 flex flex-col-reverse gap-3 border-t border-border px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
           <Button
             type="button"
             variant="outline"

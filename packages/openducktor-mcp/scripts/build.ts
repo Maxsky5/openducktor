@@ -13,6 +13,8 @@ export const buildMcpPackage = async (): Promise<void> => {
       "bun",
       "build",
       "--target=bun",
+      "--minify",
+      "--keep-names",
       "--outfile",
       outputPath,
       "--banner",
