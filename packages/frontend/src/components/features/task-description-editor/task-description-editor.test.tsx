@@ -103,7 +103,8 @@ describe("TaskDescriptionEditor", () => {
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(updatedDescription));
     expect(content.textContent).toBe(updatedDescription);
-  });
+    // This test mounts the full Visual editor and waits for its DOM observer to emit Markdown.
+  }, 5_000);
 
   test("locks Visual input and image paths until the form unlocks", async () => {
     const onChange = mock((_value: string) => {});
