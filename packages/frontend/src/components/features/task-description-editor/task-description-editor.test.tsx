@@ -82,6 +82,30 @@ describe("TaskDescriptionEditor", () => {
     await import("./task-description-visual-editor");
   }, 10_000);
 
+  test("updates Markdown when text changes in an existing Visual description", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="We need to rework the git panel."
+        onChange={onChange}
+      />,
+    );
+    const content = await waitFor(() => requireElement(view.container, ".tiptap"));
+    const paragraph = requireElement(content, "p");
+    const updatedDescription = "We need to rework the git panel. Updated";
+
+    // Typing changes the DOM before ProseMirror reads it into the document model.
+    await act(async () => {
+      paragraph.textContent = updatedDescription;
+      fireEvent.input(content, { inputType: "insertText", data: " Updated" });
+    });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(updatedDescription));
+    expect(content.textContent).toBe(updatedDescription);
+    // This test mounts the full Visual editor and waits for its DOM observer to emit Markdown.
+  }, 5_000);
+
   test("locks Visual input and image paths until the form unlocks", async () => {
     const onChange = mock((_value: string) => {});
     const onUpload = mock(createProps().onUpload);
