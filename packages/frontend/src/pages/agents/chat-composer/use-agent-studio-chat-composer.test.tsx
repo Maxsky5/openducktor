@@ -2548,8 +2548,8 @@ test.each([
         taskId: "task-1",
         role: props.role,
         selectedSessionIdentity: props.selectedSession.identity,
-        selectedSessionModel: props.selectedSession.selectedModel,
         isSessionModelCatalogLoading: false,
+        assertCanPrepareSession: () => {},
         prepareSelectedSessionModelForSend: composer.prepareSelectedSessionModelForSend,
         agentStudioReady: true,
         canStartNewSession: false,
@@ -2601,6 +2601,7 @@ test.each([
       await pending;
       expect(failure).toBeInstanceOf(Error);
       let message = "No valid model";
+      if (scenario === "session not loaded") message = "session is still loading";
       if (scenario === "unavailable") message = "catalog is unavailable";
       if (scenario === "empty profiles")
         message = "saved Runtime Profile is unavailable or cannot change";

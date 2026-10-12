@@ -123,11 +123,7 @@ export function WorkspaceSessionChat({
     updateSpeed: actions.updateSpeed,
     update: actions.updateSessionModel,
   });
-  const {
-    catalog: modelCatalog,
-    error: catalogError,
-    isLoading: isLoadingModelCatalog,
-  } = modelTarget;
+  const { catalog: modelCatalog, error: catalogError } = modelTarget;
   const sessionLoad = {
     session: isStarting ? null : session,
     runtimeReadinessState: runtimeReadiness.state,
@@ -216,8 +212,13 @@ export function WorkspaceSessionChat({
   const { sendTarget } = actions;
   const { prepareModelForSend } = picker;
   const target = useMemo(
-    () => sendTarget({ canSend: canInteract, assertCanSubmit, prepareModelForSend }),
-    [assertCanSubmit, canInteract, sendTarget, prepareModelForSend],
+    () =>
+      sendTarget({
+        canSend: canInteract && !picker.isLoading,
+        assertCanSubmit,
+        prepareModelForSend,
+      }),
+    [assertCanSubmit, canInteract, picker.isLoading, sendTarget, prepareModelForSend],
   );
   const messageDelivery = useAgentChatSend({
     identity,
@@ -289,7 +290,7 @@ export function WorkspaceSessionChat({
       ...messageDelivery,
       displayedSessionKey: chatState.sessionKey,
       selectedSession: identity ? { ...identity, selectedModel: chatState.selectedModel } : null,
-      isSessionModelCatalogLoading: isLoadingModelCatalog,
+      isSessionModelCatalogLoading: picker.isLoading,
       isSessionWorking: chatState.isWorking,
       isWaitingInput,
       waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(chatState),

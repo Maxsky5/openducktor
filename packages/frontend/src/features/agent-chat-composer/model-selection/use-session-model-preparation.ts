@@ -1,6 +1,5 @@
 import type { AgentModelSelection, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { useCallback } from "react";
-import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ChatComposerModelSelections } from "./model-selection-preferences";
@@ -14,6 +13,7 @@ export type PrepareModelForSend = (update: UpdateSessionModel) => Promise<() => 
 
 /**
  * The caller must track Send activity because model writes can resume an idle session.
+ * Scope adapters check owner lifetime. Activity can hide a pane without changing its target.
  * Check the returned guard before transport to catch a target change.
  */
 export function useSessionModelPreparation(
@@ -21,12 +21,16 @@ export function useSessionModelPreparation(
   selections: ChatComposerModelSelections,
   hasSessionTarget: boolean,
 ): PrepareModelForSend {
-  const isCurrentTarget = useSessionStartContext(targetKey);
+  const target = useMemo(() => ({ key: targetKey }), [targetKey]);
+  const currentTarget = useRef(target);
+  useLayoutEffect(() => {
+    currentTarget.current = target;
+  }, [target]);
   const assertCurrent = useCallback(() => {
-    if (!isCurrentTarget()) {
+    if (currentTarget.current !== target) {
       throw new Error("The model target changed. Reopen the original chat to send your draft.");
     }
-  }, [isCurrentTarget]);
+  }, [target]);
   return useCallback<PrepareModelForSend>(
     async (update) => {
       assertCurrent();
@@ -39,11 +43,14 @@ export function useSessionModelPreparation(
       if (repair) {
         await update(repair.session, repair.selection);
       } else if (sendBlockReason) {
-        throw new Error(
-          sendBlockReason === "profile"
-            ? "The saved Runtime Profile is unavailable or cannot change in this chat. Refresh the catalog and select a Runtime Profile, or start a new chat."
-            : "No valid model is available for this chat. Refresh the catalog and select a model before sending.",
-        );
+        const messages = {
+          model:
+            "No valid model is available for this chat. Refresh the catalog and select a model before sending.",
+          profile:
+            "The saved Runtime Profile is unavailable or cannot change in this chat. Refresh the catalog and select a Runtime Profile, or start a new chat.",
+          session: "The session is still loading. Wait for it to load, then send your draft.",
+        };
+        throw new Error(messages[sendBlockReason]);
       }
       assertCurrent();
       return assertCurrent;

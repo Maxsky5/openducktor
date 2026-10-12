@@ -42,6 +42,9 @@ type AgentStudioOrchestrationActionsContext = {
   openTaskDetails: () => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  assertCanPrepareSession: Parameters<
+    typeof useAgentStudioSessionActions
+  >[0]["assertCanPrepareSession"];
   continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
@@ -323,6 +326,7 @@ export function useAgentStudioOrchestrationController({
     selectedTask: view.selectedTask,
     prepareSelectedSessionModelForSend,
     agentStudioReady,
+    assertCanPrepareSession: actions.assertCanPrepareSession,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
     newSessionCatalog,

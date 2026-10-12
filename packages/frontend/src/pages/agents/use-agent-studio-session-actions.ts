@@ -61,6 +61,9 @@ type UseAgentStudioSessionActionsArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   prepareSelectedSessionModelForSend: () => Promise<() => void>;
+  assertCanPrepareSession: Parameters<
+    typeof useAgentStudioSendTarget
+  >[0]["assertCanPrepareSession"];
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
@@ -122,6 +125,7 @@ export function useAgentStudioSessionActions({
   sessionsForTask,
   selectedTask,
   prepareSelectedSessionModelForSend,
+  assertCanPrepareSession,
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
@@ -193,8 +197,10 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     selectedSessionIdentity: stableSelectedSessionIdentity,
-    selectedSessionModel: selectedSession.selectedModel,
-    isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
+    isSessionModelCatalogLoading:
+      selectedSession.runtimeData.isLoadingModelCatalog &&
+      selectedSession.runtimeData.modelCatalog === null,
+    assertCanPrepareSession,
     prepareSelectedSessionModelForSend,
     agentStudioReady,
     canStartNewSession,

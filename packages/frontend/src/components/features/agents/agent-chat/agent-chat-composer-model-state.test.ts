@@ -3,28 +3,31 @@ import { CLAUDE_SESSION_ACCENT_COLOR, CODEX_SESSION_ACCENT_COLOR } from "../agen
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
 
 describe("agent-chat-composer-model-state", () => {
-  test("derives selected-session accent and pending model state from the selected session", () => {
-    expect(
-      deriveAgentChatComposerModelState({
-        selectedSession: {
-          runtimeKind: "opencode",
-          selectedModel: null,
-        },
-        selectedModelSelection: {
-          runtimeKind: "codex",
-          providerId: "openai",
-          modelId: "gpt-5",
-          profileId: "ignored-selection",
-        },
-        isSessionModelCatalogLoading: true,
+  test.each([null, { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" }])(
+    "waits for the first session catalog with saved selection %j",
+    (selectedModel) => {
+      expect(
+        deriveAgentChatComposerModelState({
+          selectedSession: {
+            runtimeKind: "opencode",
+            selectedModel,
+          },
+          selectedModelSelection: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "ignored-selection",
+          },
+          isSessionModelCatalogLoading: true,
+          isInteractionEnabled: false,
+        }),
+      ).toEqual({
+        accentColor: "var(--odt-runtime-accent-opencode)",
         isInteractionEnabled: false,
-      }),
-    ).toEqual({
-      accentColor: "var(--odt-runtime-accent-opencode)",
-      isInteractionEnabled: false,
-      isModelSelectionPending: true,
-    });
-  });
+        isModelSelectionPending: true,
+      });
+    },
+  );
 
   test("uses selected model accent before a session exists", () => {
     expect(

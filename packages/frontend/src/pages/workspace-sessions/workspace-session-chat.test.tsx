@@ -10,7 +10,7 @@ import {
   type WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import { act, type ReactElement, type ReactNode, useState } from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
 import { buildMessage } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
@@ -55,6 +55,11 @@ import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
 import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
+import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
+import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
+import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import { createComposerAttachment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 
 function QueryStatus() {
   const pending = useIsFetching();
@@ -488,6 +493,7 @@ test.each(["model", "effort", "profile"] as const)(
     );
     try {
       await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      await view.findByRole("button", { name: "Send message" });
       const editor = view.getByRole("combobox", { name: "Message composer" });
       const resume = view.queryByRole("button", { name: "Resume" });
       if (control === "profile") expect(resume).toBeNull();
@@ -507,8 +513,8 @@ test.each(["model", "effort", "profile"] as const)(
       await act(async () => fireEvent.click(view.getByRole("button", { name: triggerName })));
       const option =
         control === "model"
-          ? view.getByRole("button", { name: `Select ${nextModel} model` })
-          : view.getByRole("option", { name: control === "effort" ? "high" : "review" });
+          ? await view.findByRole("button", { name: `Select ${nextModel} model` })
+          : await view.findByRole("option", { name: control === "effort" ? "high" : "review" });
       await act(async () => fireEvent.click(option));
       expect(updateModel).toHaveBeenCalledTimes(1);
       expect(updateModel.mock.calls[0]?.[0]).toMatchObject({
@@ -1228,6 +1234,194 @@ function createPreparationScenario(selection: AgentModelSelection = savedModel) 
   );
   return h;
 }
+
+// Full chat renders and catalog reads need more than the suite's one-second timeout.
+test("workspace Send waits for its first catalog with a saved model", async () => {
+  const h = createPreparationScenario();
+  const catalog =
+    Promise.withResolvers<Awaited<ReturnType<typeof h.definitions.loadRepoRuntimeCatalog>>>();
+  h.definitions.loadRepoRuntimeCatalog = () => catalog.promise;
+  const send = mock(async () => null);
+  h.operations.sendAgentMessage = send;
+  const persistence = createWorkspaceSessionChatDraftPersistence(
+    h.workspace.workspaceId,
+    h.entry.id,
+  );
+  persistence.set({ segments: [createTextSegment("Wait for the catalog")] });
+  const view = render(<h.Harness />);
+  try {
+    await view.findByLabelText("Message composer");
+    expect(view.getByRole("button", { name: "Preparing message" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(send).not.toHaveBeenCalled();
+    await act(async () =>
+      catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } }),
+    );
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  } finally {
+    catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } });
+    view.unmount();
+    createWorkspaceSessionChatDraftPersistence(h.workspace.workspaceId, h.entry.id).clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+}, 5000);
+
+test("workspace checks a new blocking question before repairing a staged attachment send", async () => {
+  const h = createPreparationScenario({ ...savedModel, variant: "removed" });
+  const staging = Promise.withResolvers<{ path: string; mime: string }>();
+  const stage = mock(() => staging.promise);
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        workspaceStageLocalAttachment: stage,
+      },
+    }),
+  );
+  const update = mock(async () => {});
+  const send = mock(async () => null);
+  h.operations.updateAgentSessionModel = update;
+  h.operations.sendAgentMessage = send;
+  const catalog = preparationCatalog();
+  catalog.models[0]!.attachmentSupport = { image: false, audio: false, video: false, pdf: true };
+  const view = renderHook(
+    () => {
+      const actions = useWorkspaceSessionChatActions(h.workspace, h.entry, () => true);
+      const picker = useWorkspaceSessionModelPicker(h.workspace.repoPath, {
+        identity: h.session,
+        selection: h.session.selectedModel,
+        catalog,
+        isLoading: false,
+        error: null,
+        retry: async () => {},
+        update: actions.updateSessionModel,
+      });
+      const assertCanSubmit = useAgentMessageSendPolicy();
+      return useAgentChatSendForTarget(
+        actions.sendTarget({
+          canSend: true,
+          assertCanSubmit,
+          prepareModelForSend: picker.prepareModelForSend,
+        }),
+        {
+          identity: h.session,
+          selectedModelDescriptor: catalog.models[0],
+          draftRules: { reusablePrompts: [], supportsAttachments: true },
+        },
+      );
+    },
+    { wrapper: h.Harness },
+  );
+  let pending!: Promise<unknown>;
+  try {
+    act(() => {
+      pending = view.result.current.onSend(
+        {
+          segments: [createTextSegment("Review the PDF")],
+          attachments: [
+            createComposerAttachment(
+              {
+                name: "brief.pdf",
+                kind: "pdf",
+                mime: "application/pdf",
+                file: new File(["pdf"], "brief.pdf", { type: "application/pdf" }),
+              },
+              "brief",
+            ),
+          ],
+        },
+        "default",
+      );
+    });
+    await waitFor(() => expect(stage).toHaveBeenCalledTimes(1));
+    act(() => h.store.replaceSession({ ...h.session, pendingQuestions: [buildQuestionRequest()] }));
+    await act(async () => {
+      staging.resolve({ path: "/tmp/brief.pdf", mime: "application/pdf" });
+      await pending;
+    });
+    expect(await pending).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+// These cases render retained panes with real catalog reads, preparation, and owner lifetime.
+test.each(["hidden", "removed"] as const)(
+  "workspace repair with its pane %s",
+  async (change) => {
+    const h = createPreparationScenario({ ...savedModel, variant: "removed" });
+    const repair = Promise.withResolvers<void>();
+    const update = mock(async () => repair.promise);
+    const accepted = mock(() => {});
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(
+      async (identity, _parts, options) => {
+        options?.assertCanSubmit?.(h.store.getSessionSnapshot(identity)!);
+        accepted();
+        return createAgentMessageSendReceipt(identity);
+      },
+    );
+    h.operations.updateAgentSessionModel = update;
+    h.operations.sendAgentMessage = send;
+    const pane = (record: WorkspaceSession, sessionIds: string[]) => (
+      <h.Harness>
+        <WorkspaceSessionChatPanes
+          workspace={h.workspace}
+          record={record}
+          sessionIds={sessionIds}
+          workingDirectory="/repo"
+          branchKey="main"
+          onToolRefresh={() => {}}
+          onSelectFile={() => {}}
+        />
+      </h.Harness>
+    );
+    const other = { ...h.entry, id: "other", externalSessionId: null };
+    const view = render(pane(h.entry, [h.entry.id, other.id]));
+    const persistence = createWorkspaceSessionChatDraftPersistence(
+      h.workspace.workspaceId,
+      h.entry.id,
+    );
+    try {
+      await view.findByRole("button", { name: "low" });
+      typeIntoComposer(view.container, "Send to the original pane");
+      fireEvent.click(view.getByRole("button", { name: "Send message" }));
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      view.rerender(pane(other, change === "hidden" ? [h.entry.id, other.id] : [other.id]));
+      await act(async () => repair.resolve());
+      await waitFor(() => {
+        if (change === "hidden") expect(accepted).toHaveBeenCalledTimes(1);
+        else
+          expect(persistence.hydrate().segments?.[0]).toMatchObject({
+            text: "Send to the original pane",
+          });
+      });
+      expect(send).toHaveBeenCalledTimes(change === "hidden" ? 1 : 0);
+      if (change === "hidden")
+        expect(send.mock.calls[0]?.[0]).toMatchObject({
+          externalSessionId: h.session.externalSessionId,
+          workingDirectory: h.session.workingDirectory,
+        });
+      else expect(accepted).not.toHaveBeenCalled();
+    } finally {
+      repair.resolve();
+      view.unmount();
+      persistence.clear();
+      createWorkspaceSessionChatDraftPersistence(h.workspace.workspaceId, other.id).clear();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  },
+  5000,
+);
 
 // Each theme renders the full chat and waits for catalog reads and model writes.
 test.each(["light", "dark"] as const)(

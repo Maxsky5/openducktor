@@ -11,7 +11,7 @@ import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/s
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import {
@@ -24,8 +24,8 @@ type UseAgentStudioSendTargetArgs = {
   taskId: string;
   role: AgentRole;
   selectedSessionIdentity: AgentSessionIdentity | null;
-  selectedSessionModel: AgentSessionState["selectedModel"];
   isSessionModelCatalogLoading: boolean;
+  assertCanPrepareSession: (identity: AgentSessionIdentity) => void;
   prepareSelectedSessionModelForSend: () => Promise<() => void>;
   agentStudioReady: boolean;
   canStartNewSession: boolean;
@@ -43,8 +43,8 @@ export function useAgentStudioSendTarget({
   taskId,
   role,
   selectedSessionIdentity,
-  selectedSessionModel,
   isSessionModelCatalogLoading,
+  assertCanPrepareSession,
   prepareSelectedSessionModelForSend,
   agentStudioReady,
   canStartNewSession,
@@ -77,10 +77,11 @@ export function useAgentStudioSendTarget({
         agentStudioReady &&
         taskId.length > 0 &&
         canResolveAgentStudioSendTargetSession({ selectedSessionIdentity, canStartNewSession }) &&
-        !(isSessionModelCatalogLoading && selectedSessionModel === null),
+        !isSessionModelCatalogLoading,
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
         requireCompactionTarget(parts, selectedSessionIdentity);
+        if (selectedSessionIdentity) assertCanPrepareSession(selectedSessionIdentity);
         const assertModelCurrent = await prepareSelectedSessionModelForSend();
         if (!isCurrentContext()) return null;
         if (selectedSessionIdentity)
@@ -97,6 +98,7 @@ export function useAgentStudioSendTarget({
                   throw new Error(
                     "The original chat is no longer selected. Reopen it to send your draft.",
                   );
+                assertCanPrepareSession(selectedSessionIdentity);
               },
             },
           };
@@ -115,6 +117,7 @@ export function useAgentStudioSendTarget({
   }, [
     activity,
     activityKey,
+    assertCanPrepareSession,
     agentStudioReady,
     canStartNewSession,
     isCurrentContext,
@@ -123,7 +126,6 @@ export function useAgentStudioSendTarget({
     prepareSelectedSessionModelForSend,
     role,
     selectedSessionIdentity,
-    selectedSessionModel,
     startSession,
     taskId,
     workspaceId,

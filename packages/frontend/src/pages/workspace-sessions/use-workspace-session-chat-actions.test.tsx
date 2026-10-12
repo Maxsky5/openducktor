@@ -935,6 +935,9 @@ function renderChatPanes(
 ) {
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
+  const identity = workspaceSessionIdentity(record);
+  if (identity)
+    store.replaceSession(createAgentSessionFixture({ ...identity, historyLoadState: "loaded" }));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(
     settingsSnapshotQueryOptions().queryKey,

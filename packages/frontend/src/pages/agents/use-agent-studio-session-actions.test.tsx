@@ -282,6 +282,7 @@ const createBaseArgs = (): HookArgs => {
     sessionsForTask: [],
     selectedTask: createTask(),
     prepareSelectedSessionModelForSend: async () => () => {},
+    assertCanPrepareSession: () => {},
     agentStudioReady: true,
     isActiveTaskReady: true,
     selectionForNewSession: {

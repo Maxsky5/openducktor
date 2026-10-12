@@ -116,9 +116,9 @@ const createBaseArgs = (): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-  selectedSessionModel: null,
   isSessionModelCatalogLoading: false,
   prepareSelectedSessionModelForSend: async () => () => {},
+  assertCanPrepareSession: () => {},
   agentStudioReady: true,
   canStartNewSession: true,
   reusablePrompts: [],
@@ -136,6 +136,71 @@ describe("useAgentStudioSendTarget", () => {
 
   afterEach(() => {
     hostClient.workspaceStageLocalAttachment = originalWorkspaceStageLocalAttachment;
+  });
+
+  test("blocks task Send until the required catalog read completes", async () => {
+    const sendAgentMessage = mock(async () => null);
+    const prepare = mock(async () => () => {});
+    const args = {
+      ...createBaseArgs(),
+      isSessionModelCatalogLoading: true,
+      prepareSelectedSessionModelForSend: prepare,
+      sendAgentMessage,
+    };
+    const harness = createTaskHarness(args);
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
+      });
+      expect(prepare).not.toHaveBeenCalled();
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      await harness.update({ ...args, isSessionModelCatalogLoading: false });
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
+      });
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("checks the current send policy after attachment staging and before model preparation", async () => {
+    const staged =
+      createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+    const stage = mock(() => staged.promise);
+    hostClient.workspaceStageLocalAttachment = stage;
+    let blocked = false;
+    const prepare = mock(async () => () => {});
+    const send = mock(async () => null);
+    const harness = createTaskHarness({
+      ...createBaseArgs(),
+      assertCanPrepareSession: () => {
+        if (blocked) throw new Error("Answer the blocking question before sending.");
+      },
+      prepareSelectedSessionModelForSend: prepare,
+      sendAgentMessage: send,
+    });
+    let pending!: Promise<unknown>;
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        pending = state.onSend(createAttachmentDraft(), "default").catch((cause) => cause);
+      });
+      await harness.waitFor(() => stage.mock.calls.length === 1);
+      blocked = true;
+      await harness.run(async () => {
+        staged.resolve({ path: "/tmp/brief.pdf" });
+        await pending;
+      });
+      expect(await pending).toEqual(
+        expect.objectContaining({ message: "Answer the blocking question before sending." }),
+      );
+      expect(prepare).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("guard rejection does not start a session or send a message", async () => {

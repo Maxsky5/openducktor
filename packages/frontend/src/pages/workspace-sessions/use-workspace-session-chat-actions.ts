@@ -309,6 +309,12 @@ export function useWorkspaceSessionChatActions(
         assertCurrentRecipient();
         const identity = workspaceSessionIdentity(record);
         if (!identity) return { kind: "launched", result: await launchWithDraft(parts) };
+        const session = store.getSessionSnapshot(identity);
+        if (!session)
+          throw new Error(
+            "The session is still loading. Wait for it to load, then send your draft.",
+          );
+        assertCanSubmit(session);
         const assertModelCurrent = await prepareModelForSend((target, selection) => {
           assertCurrentRecipient();
           if (!matchesAgentSessionIdentity(target, identity))
@@ -351,6 +357,7 @@ export function useWorkspaceSessionChatActions(
       record,
       reportSendFailure,
       settleSend,
+      store,
       updateAgentSessionModel,
     ],
   );

@@ -18,7 +18,7 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
-type SendBlockReason = "model" | "profile";
+type SendBlockReason = "model" | "profile" | "session";
 
 type RepairChoice =
   | { selection: AgentModelSelection; blockedReason: null }
@@ -81,7 +81,7 @@ export const resolveChatComposerModelSelections = ({
       repair,
       sendBlockReason:
         sessionSelection.blockedReason ??
-        (sessionSelection.repairSelection && !repair ? "model" : null),
+        (sessionSelection.repairSelection && !repair ? "session" : null),
     };
   }
 

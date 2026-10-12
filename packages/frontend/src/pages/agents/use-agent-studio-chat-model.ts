@@ -329,7 +329,9 @@ export function useAgentStudioChatModel({
             selectedModel: selectedSessionModel,
           }
         : null,
-      isSessionModelCatalogLoading: selectedSessionRuntimeData.isLoadingModelCatalog,
+      isSessionModelCatalogLoading:
+        selectedSessionRuntimeData.isLoadingModelCatalog &&
+        selectedSessionRuntimeData.modelCatalog === null,
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
       waitingInputPlaceholder: selectedSession.pendingInput.waitingInputPlaceholder,
@@ -426,6 +428,7 @@ export function useAgentStudioChatModel({
     selectedSessionModel,
     selectedSessionKey,
     selectedSessionRuntimeData.isLoadingModelCatalog,
+    selectedSessionRuntimeData.modelCatalog,
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
     sessionActions.canStopSession,

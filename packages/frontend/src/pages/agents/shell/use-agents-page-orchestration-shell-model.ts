@@ -1,5 +1,5 @@
 import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { useAgentOperations } from "@/state/app-state-provider";
@@ -8,6 +8,8 @@ import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
+import { useAgentSessionsContext } from "@/state/app-state-contexts";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type UseAgentsPageOrchestrationShellModelArgs = {
   activeWorkspaceId: string | null;
@@ -58,6 +60,17 @@ export function useAgentsPageOrchestrationShellModel({
   agentOperations,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
   const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
+  const sessions = useAgentSessionsContext();
+  const assertSessionCanSend = useAgentMessageSendPolicy();
+  const assertCanPrepareSession = useCallback(
+    (identity: AgentSessionIdentity) => {
+      const session = sessions.getSessionSnapshot(identity);
+      if (!session)
+        throw new Error("The session is still loading. Wait for it to load, then send your draft.");
+      assertSessionCanSend(session);
+    },
+    [sessions, assertSessionCanSend],
+  );
 
   const composer = useMemo(
     () =>
@@ -102,6 +115,7 @@ export function useAgentsPageOrchestrationShellModel({
       openTaskDetails,
       runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
+      assertCanPrepareSession,
       continueInterruptedTurn: agentOperations.continueInterruptedTurn,
       stopAgentSession: agentOperations.stopAgentSession,
       loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
@@ -112,7 +126,6 @@ export function useAgentsPageOrchestrationShellModel({
     },
   });
 
-  const assertSessionCanSend = useAgentMessageSendPolicy();
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     workspaceId: activeWorkspaceId,
     assertSessionCanSend,
